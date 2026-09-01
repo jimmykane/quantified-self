@@ -4,7 +4,36 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader, DistanceUnits } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
-import { DataAltitudeAvg, DataAltitudeMax, DataAltitudeMin, DataAscent, DataBeginningPotentialStamina, DataDepthMax, DataDescent, DataDuration, DataGradeAvg, DataGradeMax, DataGradeMin, DataPaceAvg, DataPotentialStaminaAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataStaminaAvg, DataStaminaMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
+import {
+    DataAltitudeAvg,
+    DataAltitudeMax,
+    DataAltitudeMin,
+    DataAscent,
+    DataBeginningPotentialStamina,
+    DataContactTimeToFlightTimeRatioAvg,
+    DataContactTimeToFlightTimeRatioMax,
+    DataContactTimeToFlightTimeRatioMin,
+    DataDepthMax,
+    DataDescent,
+    DataDuration,
+    DataGradeAvg,
+    DataGradeMax,
+    DataGradeMin,
+    DataGroundContactTimePercentageAvg,
+    DataGroundContactTimePercentageMax,
+    DataGroundContactTimePercentageMin,
+    DataPaceAvg,
+    DataPotentialStaminaAvg,
+    DataPowerAvg,
+    DataPowerMax,
+    DataPowerMin,
+    DataRunningFlightTimeAvg,
+    DataRunningFlightTimeMax,
+    DataRunningFlightTimeMin,
+    DataStaminaAvg,
+    DataStaminaMin,
+    DataTemperatureMax,
+} from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 import { afterEach, vi } from 'vitest';
@@ -725,6 +754,42 @@ describe('EventCardStatsGridComponent', () => {
             DataPotentialStaminaAvg.type,
             DataBeginningPotentialStamina.type,
         ]);
+    });
+
+    it('should surface Sports Lib running-dynamics summaries in the Performance tab', () => {
+        const runningDynamicsTypes = [
+            DataGroundContactTimePercentageAvg.type,
+            DataGroundContactTimePercentageMin.type,
+            DataGroundContactTimePercentageMax.type,
+            DataRunningFlightTimeAvg.type,
+            DataRunningFlightTimeMin.type,
+            DataRunningFlightTimeMax.type,
+            DataContactTimeToFlightTimeRatioAvg.type,
+            DataContactTimeToFlightTimeRatioMin.type,
+            DataContactTimeToFlightTimeRatioMax.type,
+        ];
+        const runningDynamicsStats = runningDynamicsTypes.map(type => createStat(type));
+        const activity = {
+            type: ActivityTypes.Running,
+            getStats: () => new Map(runningDynamicsStats.map(stat => [stat.getType(), stat])),
+        } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = undefined;
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+        });
+
+        expect(component.metricTabs.map(tab => tab.id)).toEqual(['performance']);
+        expect(component.metricTabs[0].metricTypes).toEqual(runningDynamicsTypes);
     });
 
     it('should fallback to first visible tab when Overall is not available', () => {

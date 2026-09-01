@@ -1,6 +1,12 @@
 import {
   DataAltitudeAvg,
   DataCadenceAvg,
+  DataContactTimeToFlightTimeRatioAvg,
+  DataContactTimeToFlightTimeRatioMax,
+  DataContactTimeToFlightTimeRatioMin,
+  DataGroundContactTimePercentageAvg,
+  DataGroundContactTimePercentageMax,
+  DataGroundContactTimePercentageMin,
   DataHeartRateAvg,
   DataJumpHeightAvg,
   DataJumpHeightMax,
@@ -12,6 +18,9 @@ import {
   DataPotentialStaminaAvg,
   DataPotentialStaminaMax,
   DataPotentialStaminaMin,
+  DataRunningFlightTimeAvg,
+  DataRunningFlightTimeMax,
+  DataRunningFlightTimeMin,
   DataSpeedAvg,
   DataSpeedAvgKilometersPerHour,
   DataStaminaAvg,
@@ -47,6 +56,9 @@ describe('header-stats-composite.helper', () => {
       resolveMetricFamilyTypes(DataSpeedAvgKilometersPerHour.type),
       resolveMetricFamilyTypes(DataPaceAvgMinutesPerMile.type),
       resolveMetricFamilyTypes('Average Ground Contact Time'),
+      resolveMetricFamilyTypes(DataGroundContactTimePercentageAvg.type),
+      resolveMetricFamilyTypes(DataRunningFlightTimeAvg.type),
+      resolveMetricFamilyTypes(DataContactTimeToFlightTimeRatioAvg.type),
       resolveMetricFamilyTypes(DataJumpHeightAvg.type),
       resolveMetricFamilyTypes(DataStaminaAvg.type),
       resolveMetricFamilyTypes(DataPotentialStaminaAvg.type),
@@ -80,6 +92,61 @@ describe('header-stats-composite.helper', () => {
     expect(expanded).toContain('Average Ground Contact Time');
     expect(expanded).toContain('Minimum Ground Contact Time');
     expect(expanded).toContain('Maximum Ground Contact Time');
+  });
+
+  it('should build composite cards for Sports Lib 20.4 running-dynamics families', () => {
+    const stats = [
+      new DataGroundContactTimePercentageAvg(49.5),
+      new DataGroundContactTimePercentageMin(47),
+      new DataGroundContactTimePercentageMax(52),
+      new DataRunningFlightTimeAvg(118),
+      new DataRunningFlightTimeMin(105),
+      new DataRunningFlightTimeMax(132),
+      new DataContactTimeToFlightTimeRatioAvg(175),
+      new DataContactTimeToFlightTimeRatioMin(160),
+      new DataContactTimeToFlightTimeRatioMax(190),
+    ];
+    const expandedStats = new Map(stats.map(stat => [stat.getType(), stat]));
+
+    const cards = buildHeaderStatCards([
+      stats[0],
+      stats[3],
+      stats[6],
+    ], expandedStats);
+
+    expect(cards.map(card => ({
+      label: card.label,
+      isComposite: card.isComposite,
+      valueTypes: card.valueItems.map(item => item.type),
+    }))).toEqual([
+      {
+        label: 'Ground Contact Time Percentage',
+        isComposite: true,
+        valueTypes: [
+          DataGroundContactTimePercentageAvg.type,
+          DataGroundContactTimePercentageMin.type,
+          DataGroundContactTimePercentageMax.type,
+        ],
+      },
+      {
+        label: 'Running Flight Time',
+        isComposite: true,
+        valueTypes: [
+          DataRunningFlightTimeAvg.type,
+          DataRunningFlightTimeMin.type,
+          DataRunningFlightTimeMax.type,
+        ],
+      },
+      {
+        label: 'Contact Time to Flight Time Ratio',
+        isComposite: true,
+        valueTypes: [
+          DataContactTimeToFlightTimeRatioAvg.type,
+          DataContactTimeToFlightTimeRatioMin.type,
+          DataContactTimeToFlightTimeRatioMax.type,
+        ],
+      },
+    ]);
   });
 
   it('should resolve jump height family with avg/min/max triplet', () => {

@@ -449,6 +449,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Routes, terrain, sensors, laps, swim lengths, jumps, charts, and sport-specific details appear only when the imported activity includes that data. We do not add missing information.
 - When you open an activity, you can see **Laps** when it includes lap data, **Swim Lengths** when the data includes individual pool lengths, and **Jumps** when the activity includes jump events. Charts and overlays need data recorded over time in the activity.
+- Compatible FIT running data can provide ground contact time and ground contact time percentage. Compatible Suunto JSON can also provide running flight time, contact-time-to-flight-time ratio, and left/right ground-contact balance. Event Details groups recorded average, minimum, and maximum running-dynamics summaries under **Performance** when available; a metric absent from both source summaries and recorded samples remains hidden.
 - Groups help you browse, but the activity type and its data determine the charts. Activities in the same group can show different charts. For example, Boating is listed in Motorized but can use sailing-oriented charts when the activity includes the data those charts need. Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts when the activity includes the data those charts need.
 - Hand Cycle and Velomobile are grouped with Cycling. They appear in Cycling Training analysis only when the activity contains enough relevant data.
 

@@ -114,10 +114,19 @@ import { DataVerticalOscillationBalanceRight } from '@sports-alliance/sports-lib
 import { DataVerticalOscillationMax } from '@sports-alliance/sports-lib';
 import { DataVerticalOscillationMin } from '@sports-alliance/sports-lib';
 import {
+  DataContactTimeToFlightTimeRatioAvg,
+  DataContactTimeToFlightTimeRatioMax,
+  DataContactTimeToFlightTimeRatioMin,
+  DataGroundContactTimePercentageAvg,
+  DataGroundContactTimePercentageMax,
+  DataGroundContactTimePercentageMin,
   DataImpactLoadingRateBalanceLeft,
   DataImpactLoadingRateBalanceRight,
   DataLegSpringStiffnessBalanceLeft,
   DataLegSpringStiffnessBalanceRight,
+  DataRunningFlightTimeAvg,
+  DataRunningFlightTimeMax,
+  DataRunningFlightTimeMin,
 } from '@sports-alliance/sports-lib';
 import {
   DataBeginningPotentialStamina,
@@ -484,6 +493,15 @@ export class DataTypeIconComponent {
       case 'Average Ground Contact Time':
       case 'Minimum Ground Contact Time':
       case 'Maximum Ground Contact Time':
+      case DataGroundContactTimePercentageAvg.type:
+      case DataGroundContactTimePercentageMin.type:
+      case DataGroundContactTimePercentageMax.type:
+      case DataRunningFlightTimeAvg.type:
+      case DataRunningFlightTimeMin.type:
+      case DataRunningFlightTimeMax.type:
+      case DataContactTimeToFlightTimeRatioAvg.type:
+      case DataContactTimeToFlightTimeRatioMin.type:
+      case DataContactTimeToFlightTimeRatioMax.type:
       case 'Stance Time':
       case 'Stance Time Balance Left':
       case 'Stance Time Balance Right':

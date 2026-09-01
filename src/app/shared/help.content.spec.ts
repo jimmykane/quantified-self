@@ -20,6 +20,9 @@ describe('help.content', () => {
     expect(supportedActivitiesSection?.content).toContain('We do not add missing information.');
     expect(supportedActivitiesSection?.content).toContain('Swim Lengths** when the data includes individual pool lengths');
     expect(supportedActivitiesSection?.content).toContain('Jumps** when the activity includes jump events');
+    expect(supportedActivitiesSection?.content).toContain('running flight time');
+    expect(supportedActivitiesSection?.content).toContain('contact-time-to-flight-time ratio');
+    expect(supportedActivitiesSection?.content).toContain('summaries under **Performance** when available');
     expect(supportedActivitiesSection?.content).toContain('Boating is listed in Motorized but can use sailing-oriented charts');
     expect(supportedActivitiesSection?.content).toContain('Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts');
     expect(supportedActivitiesSection?.content).toContain('We do not estimate or fill in missing dive data.');
