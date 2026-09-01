@@ -139,6 +139,8 @@ describe('HomeComponent', () => {
         expect(aiSectionText).not.toContain('Read-only MCP Server');
         expect(aiSectionText).toContain('Explore the Assistant');
         expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid app-compact-feature-row').length).toBe(3);
+        expect(fixture.nativeElement.querySelector('.mcp-access-row').classList)
+            .toContain('compact-feature-row-host--without-divider');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('.ai-insights-section a[routerlink="/features/mcp-server"], .ai-insights-section a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
