@@ -1200,6 +1200,16 @@ export const grantAdminSubscriptionGift = onAdminCall<
         );
         return buildResponse(input.operationId, existingOperation, 'succeeded', notificationStatus);
     }
+    if (existingOperation?.status === 'failed') {
+        await validateTargetIdentity(db, input.uid, actorUid, true);
+        return buildResponse(
+            input.operationId,
+            existingOperation,
+            'failed',
+            existingOperation.notificationStatus,
+            'This gift operation previously failed. Nothing was changed.',
+        );
+    }
 
     const stripe = await getAdminBillingStripe();
     let target: GiftTarget;

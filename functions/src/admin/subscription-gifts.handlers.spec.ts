@@ -779,6 +779,45 @@ describe('admin subscription gift callables', () => {
         expect(second.status).toBe('succeeded');
     });
 
+    it('keeps a definitive failed operation terminal when its response is retried', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const request = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+        mockStripeUpdate.mockRejectedValueOnce({
+            type: 'StripeInvalidRequestError',
+            statusCode: 400,
+        });
+        expect((await grantGift(request)).status).toBe('failed');
+
+        currentSubscription = buildSubscription({ status: 'canceled' });
+        db.store.set('customers/target-user/subscriptions/sub_basic', {
+            status: 'canceled',
+            role: 'basic',
+        });
+        mockAuthGetUser.mockImplementation(async (uid: string) => ({
+            uid,
+            email: `${uid}@example.com`,
+            disabled: uid === 'target-user',
+            customClaims: { stripeRole: 'basic' },
+        }));
+
+        const retried = await grantGift(request);
+
+        expect(retried.status).toBe('failed');
+        expect(retried.message).toBe('This gift operation previously failed. Nothing was changed.');
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({ status: 'failed', resultCode: 'stripe_request_rejected' });
+        expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock'))
+            .toMatchObject({ status: 'idle', operationId });
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps the exact operation retryable when its failure status cannot be finalized', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         mockStripeUpdate.mockRejectedValueOnce({
@@ -1048,7 +1087,7 @@ describe('admin subscription gift callables', () => {
         expect(mockStripeUpdate).not.toHaveBeenCalled();
     });
 
-    it('does not overwrite another operation lock when an old retry cannot reload Stripe state', async () => {
+    it('does not overwrite another operation lock when returning a terminal failure', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const request = callableRequest({
             uid: 'target-user',
@@ -1070,9 +1109,12 @@ describe('admin subscription gift callables', () => {
             leaseToken: 'other-operation-lease',
             leaseExpiresAt: new Date('2026-08-30T11:59:00Z'),
         });
-        mockStripeRetrieve.mockRejectedValueOnce({ type: 'StripeConnectionError' });
+        const stripeReadsBeforeRetry = mockStripeRetrieve.mock.calls.length;
 
-        await expect(grantGift(request)).rejects.toMatchObject({ code: 'aborted' });
+        const retried = await grantGift(request);
+
+        expect(retried.status).toBe('failed');
+        expect(mockStripeRetrieve).toHaveBeenCalledTimes(stripeReadsBeforeRetry);
         expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock')).toEqual({
             status: 'applying',
             operationId: secondOperationId,
