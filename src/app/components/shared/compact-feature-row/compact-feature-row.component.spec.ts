@@ -13,6 +13,7 @@ import { CompactFeatureRowComponent } from './compact-feature-row.component';
       summary="Shared summary"
       icon="query_stats"
       iconTone="secondary"
+      [showDivider]="false"
     >
       <div class="projected-content">Projected content</div>
       <a compactFeatureRowAction href="/details">View details</a>
@@ -49,6 +50,9 @@ describe('CompactFeatureRowComponent', () => {
     expect(
       row.querySelector('.compact-feature-row__icon[data-nosnippet]'),
     ).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('app-compact-feature-row').classList,
+    ).toContain('compact-feature-row-host--without-divider');
   });
 
   it('projects rich content and an optional action into separate regions', () => {

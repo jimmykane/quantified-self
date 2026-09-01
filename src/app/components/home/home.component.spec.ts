@@ -22,6 +22,7 @@ import { signal } from '@angular/core';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 
 describe('HomeComponent', () => {
@@ -220,6 +221,12 @@ describe('HomeComponent', () => {
         expect(text).toContain('Upload Your Own Files');
         expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
         expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');
+        const integrationDividerRows = fixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))
+            .filter(row => row.nativeElement.classList.contains('integration-capability'));
+        expect(integrationDividerRows).toHaveLength(3);
+        expect(integrationDividerRows[0].componentInstance.showDivider()).toBe(true);
+        expect(integrationDividerRows[1].componentInstance.showDivider()).toBe(true);
+        expect(integrationDividerRows[2].componentInstance.showDivider()).toBe(false);
         expect(fixture.nativeElement.querySelector('mat-icon[svgIcon="wahoo"], mat-icon[ng-reflect-svg-icon="wahoo"]')).toBeTruthy();
         expect(text).toContain('Explore Integrations');
         expect(text).not.toContain('Explore Wahoo');

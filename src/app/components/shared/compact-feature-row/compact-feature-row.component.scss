@@ -4,6 +4,10 @@
   border-bottom: 1px solid var(--mat-sys-outline-variant);
 }
 
+:host(.compact-feature-row-host--without-divider) {
+  border-bottom: 0;
+}
+
 .compact-feature-row {
   display: grid;
   grid-template-columns: 48px minmax(180px, 240px) minmax(0, 1fr) auto;
