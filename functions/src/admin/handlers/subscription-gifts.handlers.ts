@@ -253,6 +253,7 @@ async function validateTargetIdentity(
     db: admin.firestore.Firestore,
     uid: string,
     actorUid: string,
+    allowDisabledForRecovery = false,
 ): Promise<admin.auth.UserRecord> {
     if (uid === actorUid) {
         throw new HttpsError('failed-precondition', 'Admins cannot gift subscription time to themselves.');
@@ -278,6 +279,9 @@ async function validateTargetIdentity(
     }
     if (targetUser.customClaims?.admin === true) {
         throw new HttpsError('failed-precondition', 'Admin accounts are not eligible for subscription gifts.');
+    }
+    if (targetUser.disabled && !allowDisabledForRecovery) {
+        throw new HttpsError('failed-precondition', 'Disabled accounts are not eligible for new subscription gifts.');
     }
     return targetUser;
 }
@@ -1088,7 +1092,7 @@ export const previewAdminSubscriptionGift = onAdminCall<
         getResumableOperation(db, input.uid),
     ]);
     if (resumableOperation) {
-        await validateTargetIdentity(db, input.uid, request.auth!.uid);
+        await validateTargetIdentity(db, input.uid, request.auth!.uid, true);
         const operation = resumableOperation.operation;
         return {
             uid: input.uid,
@@ -1149,7 +1153,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
         throw new HttpsError('already-exists', 'The operation ID is already associated with another request.');
     }
     if (existingOperation?.status === 'succeeded') {
-        await validateTargetIdentity(db, input.uid, actorUid);
+        await validateTargetIdentity(db, input.uid, actorUid, true);
         const notificationStatus = await queueGiftNotification(
             db,
             input.uid,

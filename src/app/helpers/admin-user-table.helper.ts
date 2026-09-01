@@ -18,6 +18,7 @@ export interface AdminUserTableRow {
     role: string;
     isAdmin: boolean;
     isSubscriptionGiftEligible: boolean;
+    canOpenSubscriptionGiftDialog: boolean;
     subscriptionState: AdminSubscriptionHistoryState;
     subscriptionLabel: string;
     subscriptionDetails: string | null;
@@ -33,14 +34,17 @@ export function buildAdminUserTableRows(users: readonly AdminUser[], locale: str
         const role = user.customClaims?.stripeRole || 'free';
         const isAdmin = user.customClaims?.admin === true;
         const subscriptionStatus = user.subscription?.status?.toLowerCase();
+        const isSubscriptionGiftEligible = !isAdmin
+            && !user.disabled
+            && (role === 'basic' || role === 'pro')
+            && (subscriptionStatus === 'active' || subscriptionStatus === 'trialing');
         return {
             user,
             role,
             isAdmin,
-            isSubscriptionGiftEligible: !isAdmin
-                && !user.disabled
-                && (role === 'basic' || role === 'pro')
-                && (subscriptionStatus === 'active' || subscriptionStatus === 'trialing'),
+            isSubscriptionGiftEligible,
+            canOpenSubscriptionGiftDialog: isSubscriptionGiftEligible
+                || (!isAdmin && user.hasSubscribedOnce === true),
             subscriptionState,
             subscriptionLabel: subscriptionHistoryLabel(subscriptionState),
             subscriptionDetails: subscriptionHistoryDetails(user, subscriptionState, normalizedLocale),

@@ -165,10 +165,12 @@
                 <ng-container matColumnDef="actions">
                     <th mat-header-cell *matHeaderCellDef>Actions</th>
                     <td mat-cell *matCellDef="let row">
-                        @if (row.isSubscriptionGiftEligible) {
-                        <button mat-icon-button class="qs-mat-primary" matTooltip="Gift subscription time"
-                            aria-label="Gift subscription time" (click)="onGiftSubscriptionTime(row.user)">
-                            <mat-icon>redeem</mat-icon>
+                        @if (row.canOpenSubscriptionGiftDialog) {
+                        <button mat-icon-button class="qs-mat-primary"
+                            [matTooltip]="row.isSubscriptionGiftEligible ? 'Gift subscription time' : 'Review subscription gift operation'"
+                            [attr.aria-label]="row.isSubscriptionGiftEligible ? 'Gift subscription time' : 'Review subscription gift operation'"
+                            (click)="onGiftSubscriptionTime(row.user)">
+                            <mat-icon>{{ row.isSubscriptionGiftEligible ? 'redeem' : 'manage_history' }}</mat-icon>
                         </button>
                         }
                         @if (!row.isAdmin) {

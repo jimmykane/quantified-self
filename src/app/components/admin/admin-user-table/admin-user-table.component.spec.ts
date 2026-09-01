@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Subject, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
@@ -165,6 +167,17 @@ describe('AdminUserTableComponent', () => {
             undefined,
             { duration: 5000 },
         );
+    });
+
+    it('wires the gift dialog action to eligible and recovery-candidate rows', () => {
+        const template = readFileSync(resolve(
+            process.cwd(),
+            'src/app/components/admin/admin-user-table/admin-user-table.component.html',
+        ), 'utf8');
+
+        expect(template).toContain('@if (row.canOpenSubscriptionGiftDialog)');
+        expect(template).toContain("'Review subscription gift operation'");
+        expect(template).toContain("row.isSubscriptionGiftEligible ? 'redeem' : 'manage_history'");
     });
 
     it('clearly reports an email failure without treating the gift as failed', () => {

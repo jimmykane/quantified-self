@@ -26,6 +26,7 @@ describe('admin user table helper', () => {
             role: 'pro',
             isAdmin: false,
             isSubscriptionGiftEligible: true,
+            canOpenSubscriptionGiftDialog: true,
             subscriptionState: 'scheduled',
             subscriptionLabel: 'Cancel Scheduled',
             subscriptionDetails: expect.stringContaining('Ends'),
@@ -56,5 +57,23 @@ describe('admin user table helper', () => {
         ], 'en-US');
 
         expect(rows.map(row => row.isSubscriptionGiftEligible)).toEqual([true, false, false, false, false]);
+    });
+
+    it('keeps a recovery entry point for previously subscribed non-admin users', () => {
+        const rows = buildAdminUserTableRows([
+            user({ uid: 'canceled', hasSubscribedOnce: true }),
+            user({
+                uid: 'disabled',
+                disabled: true,
+                hasSubscribedOnce: true,
+                customClaims: { stripeRole: 'pro' },
+                subscription: { status: 'active' },
+            }),
+            user({ uid: 'never-paid' }),
+            user({ uid: 'admin', hasSubscribedOnce: true, customClaims: { admin: true } }),
+        ], 'en-US');
+
+        expect(rows.map(row => row.canOpenSubscriptionGiftDialog)).toEqual([true, true, false, false]);
+        expect(rows.map(row => row.isSubscriptionGiftEligible)).toEqual([false, false, false, false]);
     });
 });

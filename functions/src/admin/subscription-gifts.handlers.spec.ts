@@ -333,6 +333,22 @@ describe('admin subscription gift callables', () => {
             .rejects.toMatchObject({ code: 'failed-precondition' });
     });
 
+    it('rejects a fresh gift preview for a disabled account', async () => {
+        mockAuthGetUser.mockResolvedValueOnce({
+            uid: 'target-user',
+            email: 'target-user@example.com',
+            disabled: true,
+            customClaims: { stripeRole: 'basic' },
+        });
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .rejects.toMatchObject({
+                code: 'failed-precondition',
+                message: 'Disabled accounts are not eligible for new subscription gifts.',
+            });
+        expect(mockStripeRetrieve).not.toHaveBeenCalled();
+    });
+
     it('rejects multiple paid subscriptions', async () => {
         db.store.set('customers/target-user/subscriptions/sub_second', {
             status: 'trialing', role: 'pro', created: 2,
@@ -852,6 +868,12 @@ describe('admin subscription gift callables', () => {
             status: 'canceled',
             role: 'basic',
         });
+        mockAuthGetUser.mockImplementation(async (uid: string) => ({
+            uid,
+            email: `${uid}@example.com`,
+            disabled: uid === 'target-user',
+            customClaims: { stripeRole: 'basic' },
+        }));
         const stripeClientReadsBeforeRecovery = mockGetAdminBillingStripe.mock.calls.length;
 
         const reopened = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
