@@ -197,6 +197,9 @@ describe('EventIntensityZonesComponent', () => {
     ]);
     expect(option.legend.show).toBe(false);
     expect(fixture.nativeElement.querySelector('.intensity-zones-helper-text')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.intensity-zones-chart').getAttribute('role')).toBe('img');
+    expect(fixture.nativeElement.querySelector('.intensity-zones-chart').getAttribute('aria-label'))
+      .toContain('Intensity zones');
   });
 
   it('should sanitize nullish activities input before conversion', async () => {

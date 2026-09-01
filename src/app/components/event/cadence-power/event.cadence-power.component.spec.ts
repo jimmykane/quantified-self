@@ -139,6 +139,9 @@ describe('EventCadencePowerComponent', () => {
     expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].type).toBe('scatter');
     expect(option.visualMap).toBeDefined();
+    expect(fixture.nativeElement.querySelector('.cadence-power-chart').getAttribute('role')).toBe('img');
+    expect(fixture.nativeElement.querySelector('.cadence-power-chart').getAttribute('aria-label'))
+      .toContain('Cadence versus power');
     expect(mockLoader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(
       mockChart,
       DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,

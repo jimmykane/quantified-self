@@ -175,6 +175,9 @@ describe('EventDurabilityCurveComponent', () => {
     expect(option.yAxis.type).toBe('value');
     expect(option.grid.left).toBe(54);
     expect(option.grid.bottom).toBe(16);
+    expect(fixture.nativeElement.querySelector('.durability-curve-chart').getAttribute('role')).toBe('img');
+    expect(fixture.nativeElement.querySelector('.durability-curve-chart').getAttribute('aria-label'))
+      .toContain('aerobic efficiency');
     expect(mockLoader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(
       mockChart,
       DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
