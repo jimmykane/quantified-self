@@ -182,8 +182,8 @@ describe('HomeComponent', () => {
             'performance',
             'ai-insights',
             'footprint',
-            'sovereignty',
             'hardware',
+            'sovereignty',
         ]);
     });
 
@@ -358,7 +358,10 @@ describe('HomeComponent', () => {
         const mapStage = fixture.nativeElement.querySelector('.footprint-map-stage') as HTMLElement;
         const mapCta = fixture.nativeElement.querySelector('.footprint-cta') as HTMLElement;
         expect(mapStage.compareDocumentPosition(mapCta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(text).toContain('Own Your Data');
+        expect(text).toContain('Your Data. Yours to Keep.');
+        expect(text).toContain('Download your original activity files whenever you want');
+        expect(text).toContain('creating a backup, changing services');
+        expect(text).not.toContain('No hidden mining');
         expect(text).toContain('Compare Your Devices');
         expect(text).toContain('Merge same-session recordings, choose a reference device');
         expect(text).toContain('Benchmark Merge Workflow');
