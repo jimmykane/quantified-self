@@ -1,11 +1,15 @@
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Subject, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppImpersonationService } from '../../../services/app.impersonation.service';
 import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AdminUserTableComponent } from './admin-user-table.component';
+import { AdminSubscriptionGiftDialogComponent } from '../admin-subscription-gift-dialog/admin-subscription-gift-dialog.component';
 
 const firstUser = {
     uid: 'user-1',
@@ -21,6 +25,7 @@ describe('AdminUserTableComponent', () => {
     let adminService: { getUsers: ReturnType<typeof vi.fn> };
     let impersonation: { startImpersonation: ReturnType<typeof vi.fn> };
     let dialog: { open: ReturnType<typeof vi.fn> };
+    let snackBar: { open: ReturnType<typeof vi.fn> };
 
     beforeEach(async () => {
         adminService = {
@@ -28,6 +33,7 @@ describe('AdminUserTableComponent', () => {
         };
         impersonation = { startImpersonation: vi.fn(() => Promise.resolve()) };
         dialog = { open: vi.fn(() => ({ afterClosed: () => of(true) })) };
+        snackBar = { open: vi.fn() };
 
         await TestBed.configureTestingModule({
             imports: [AdminUserTableComponent],
@@ -35,12 +41,14 @@ describe('AdminUserTableComponent', () => {
                 { provide: AdminService, useValue: adminService },
                 { provide: AppImpersonationService, useValue: impersonation },
                 { provide: MatDialog, useValue: dialog },
+                { provide: MatSnackBar, useValue: snackBar },
                 { provide: LoggerService, useValue: { error: vi.fn() } },
             ],
         }).overrideComponent(AdminUserTableComponent, { set: { template: '' } }).compileComponents();
 
         component = TestBed.createComponent(AdminUserTableComponent).componentInstance;
         (component as unknown as { dialog: typeof dialog }).dialog = dialog;
+        (component as unknown as { snackBar: typeof snackBar }).snackBar = snackBar;
         component.ngOnInit();
     });
 
@@ -124,5 +132,75 @@ describe('AdminUserTableComponent', () => {
             email: firstUser.email,
             displayName: firstUser.displayName,
         });
+    });
+
+    it('opens the subscription gift dialog and refreshes the current row page after success', () => {
+        const paidUser: AdminUser = {
+            ...firstUser,
+            customClaims: { stripeRole: 'pro' },
+            subscription: { status: 'active' },
+        };
+        adminService.getUsers.mockClear();
+        dialog.open.mockReturnValueOnce({
+            afterClosed: () => of({
+                uid: paidUser.uid,
+                response: {
+                    operationId: '123e4567-e89b-42d3-a456-426614174000',
+                    status: 'succeeded',
+                    previousAccessEnd: '2026-09-01T00:00:00.000Z',
+                    newAccessEnd: '2026-10-01T00:00:00.000Z',
+                    cancelAtPeriodEnd: false,
+                    notificationStatus: 'queued',
+                },
+            }),
+        });
+
+        component.onGiftSubscriptionTime(paidUser);
+
+        expect(dialog.open).toHaveBeenCalledWith(AdminSubscriptionGiftDialogComponent, expect.objectContaining({
+            disableClose: true,
+            data: { user: paidUser },
+        }));
+        expect(adminService.getUsers).toHaveBeenCalledTimes(1);
+        expect(snackBar.open).toHaveBeenCalledWith(
+            'Subscription time was granted; email delivery is still pending.',
+            undefined,
+            { duration: 5000 },
+        );
+    });
+
+    it('wires the gift dialog action to eligible and recovery-candidate rows', () => {
+        const template = readFileSync(resolve(
+            process.cwd(),
+            'src/app/components/admin/admin-user-table/admin-user-table.component.html',
+        ), 'utf8');
+
+        expect(template).toContain('@if (row.canOpenSubscriptionGiftDialog)');
+        expect(template).toContain("'Review subscription gift operation'");
+        expect(template).toContain("row.isSubscriptionGiftEligible ? 'redeem' : 'manage_history'");
+    });
+
+    it('clearly reports an email failure without treating the gift as failed', () => {
+        dialog.open.mockReturnValueOnce({
+            afterClosed: () => of({
+                uid: firstUser.uid,
+                response: {
+                    operationId: '123e4567-e89b-42d3-a456-426614174000',
+                    status: 'succeeded',
+                    previousAccessEnd: '2026-09-01T00:00:00.000Z',
+                    newAccessEnd: '2026-10-01T00:00:00.000Z',
+                    cancelAtPeriodEnd: false,
+                    notificationStatus: 'failed',
+                },
+            }),
+        });
+
+        component.onGiftSubscriptionTime(firstUser);
+
+        expect(snackBar.open).toHaveBeenCalledWith(
+            'Subscription time was granted, but the optional email needs retrying.',
+            undefined,
+            { duration: 5000 },
+        );
     });
 });

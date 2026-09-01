@@ -75,9 +75,27 @@ describe('getFinancialStats Cloud Function', () => {
         mockStripeClient.invoices.list.mockResolvedValue({
             has_more: false,
             data: [
-                { id: 'inv_1', currency: 'usd', amount_paid: 2000, tax: 200, lines: { data: [{ amount: 1800, price: { product: 'prod_valid_1' } }] } },
-                { id: 'inv_2', currency: 'usd', amount_paid: 3000, tax: null, lines: { data: [{ amount: 3000, price: { product: 'prod_valid_2' } }] } },
-                { id: 'inv_3', currency: 'usd', amount_paid: 5000, tax: null, lines: { data: [{ amount: 5000, price: { product: 'prod_invalid' } }] } }
+                {
+                    id: 'inv_1',
+                    currency: 'usd',
+                    amount_paid: 2000,
+                    total_taxes: [{ amount: 125 }, { amount: 75 }],
+                    lines: { data: [{ amount: 1800, pricing: { price_details: { product: 'prod_valid_1' } } }] },
+                },
+                {
+                    id: 'inv_2',
+                    currency: 'usd',
+                    amount_paid: 3000,
+                    total_taxes: null,
+                    lines: { data: [{ amount: 3000, pricing: { price_details: { product: 'prod_valid_2' } } }] },
+                },
+                {
+                    id: 'inv_3',
+                    currency: 'usd',
+                    amount_paid: 5000,
+                    total_taxes: null,
+                    lines: { data: [{ amount: 5000, pricing: { price_details: { product: 'prod_invalid' } } }] },
+                }
             ]
         });
 
@@ -158,11 +176,23 @@ describe('getFinancialStats Cloud Function', () => {
             .mockResolvedValueOnce({
                 has_more: true,
                 next_page: 'page2',
-                data: [{ id: 'inv_1', currency: 'eur', amount_paid: 1000, tax: 0, lines: { data: [{ amount: 1000, price: { product: 'prod_valid_1' } }] } }]
+                data: [{
+                    id: 'inv_1',
+                    currency: 'eur',
+                    amount_paid: 1000,
+                    total_taxes: [],
+                    lines: { data: [{ amount: 1000, pricing: { price_details: { product: 'prod_valid_1' } } }] },
+                }]
             })
             .mockResolvedValueOnce({
                 has_more: false,
-                data: [{ id: 'inv_2', currency: 'eur', amount_paid: 2000, tax: 0, lines: { data: [{ amount: 2000, price: { product: 'prod_valid_1' } }] } }]
+                data: [{
+                    id: 'inv_2',
+                    currency: 'eur',
+                    amount_paid: 2000,
+                    total_taxes: [],
+                    lines: { data: [{ amount: 2000, pricing: { price_details: { product: 'prod_valid_1' } } }] },
+                }]
             });
 
         mockGetProjectBillingInfo.mockResolvedValue([{}]);
@@ -182,7 +212,13 @@ describe('getFinancialStats Cloud Function', () => {
         mockStripeClient.invoices.list.mockResolvedValue({
             has_more: false,
             data: [
-                { id: 'inv_1', currency: 'eur', amount_paid: 2000, tax: 0, lines: { data: [{ amount: 2000, price: { product: 'prod_valid_1' } }] } }
+                {
+                    id: 'inv_1',
+                    currency: 'eur',
+                    amount_paid: 2000,
+                    total_taxes: [],
+                    lines: { data: [{ amount: 2000, pricing: { price_details: { product: 'prod_valid_1' } } }] },
+                }
             ]
         });
 

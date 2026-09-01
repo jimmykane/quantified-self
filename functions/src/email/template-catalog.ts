@@ -187,6 +187,25 @@ export const REFRESHED_EMAIL_TEMPLATE_CATALOG: readonly EmailTemplateCatalogEntr
         ],
     },
     {
+        id: 'subscription_time_gift',
+        subject: 'We’ve added {{gifted_period_label}} to your {{role}} membership',
+        htmlFile: 'subscription_time_gift.hbs',
+        textFile: 'subscription_time_gift.txt.hbs',
+        partials: TRANSACTIONAL_PARTIALS,
+        previewCases: [
+            {
+                name: 'basic-three-months',
+                data: {
+                    role: 'Basic',
+                    gifted_months: 3,
+                    gifted_period_label: '3 months',
+                    new_access_date: '30 November 2026',
+                    membership_url: 'https://quantified-self.io/pricing',
+                },
+            },
+        ],
+    },
+    {
         id: 'subscription_expiring_soon',
         subject: 'Reminder: your {{role}} membership ends on {{expiration_date}}',
         htmlFile: 'subscription_expiring_soon.hbs',

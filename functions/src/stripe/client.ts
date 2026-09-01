@@ -11,8 +11,10 @@
  * - **Dynamic Import**: Uses `await import('stripe')` to defer loading until needed
  *
  * ## Environment Variables
- * The client reads `STRIPE_SECRET_KEY`, which deployed Functions receive only
- * when their declaration binds the matching Secret Manager parameter.
+ * The default client reads `STRIPE_SECRET_KEY`. Admin subscription gifting
+ * uses a separate, restricted `STRIPE_ADMIN_BILLING_KEY`. Deployed Functions
+ * receive either credential only when their declaration binds the matching
+ * Secret Manager parameter.
  *
  * ## Usage
  * ```typescript
@@ -33,6 +35,21 @@ import type Stripe from 'stripe';
  * @internal
  */
 let stripeInstance: Stripe | undefined;
+let adminBillingStripeInstance: Stripe | undefined;
+
+export const STRIPE_API_VERSION = '2026-07-29.dahlia' as const;
+
+async function createStripeClient(secretName: 'STRIPE_SECRET_KEY' | 'STRIPE_ADMIN_BILLING_KEY'): Promise<Stripe> {
+    const stripeKey = process.env[secretName];
+    if (!stripeKey) {
+        throw new Error(`${secretName} is unavailable to this Function invocation.`);
+    }
+
+    const { default: StripeClient } = await import('stripe');
+    return new StripeClient(stripeKey, {
+        apiVersion: STRIPE_API_VERSION,
+    });
+}
 
 /**
  * Returns a configured Stripe client instance.
@@ -47,9 +64,8 @@ let stripeInstance: Stripe | undefined;
  * ~100-200ms overhead of loading the Stripe SDK.
  *
  * ## API Version
- * Currently configured to use Stripe API version `2024-04-10`. The version is
- * cast to `any` to avoid TypeScript strict version checking which may cause
- * issues when the types package is out of sync with the desired version.
+ * Configured to use Stripe API version `2026-07-29.dahlia`, matching the
+ * repository's Stripe Node SDK version.
  *
  * @returns A Promise resolving to the initialized Stripe client
  * @throws Error if `STRIPE_SECRET_KEY` is not available to the invocation
@@ -62,18 +78,21 @@ let stripeInstance: Stripe | undefined;
  */
 export async function getStripe() {
     if (!stripeInstance) {
-        const stripeKey = process.env.STRIPE_SECRET_KEY;
-        if (!stripeKey) {
-            throw new Error('STRIPE_SECRET_KEY is unavailable to this Function invocation.');
-        }
-
-        const { default: Stripe } = await import('stripe');
-
-        stripeInstance = new Stripe(stripeKey, {
-            apiVersion: '2024-04-10' as any, // Cast to any to avoid strict version mismatch in some envs
-        });
+        stripeInstance = await createStripeClient('STRIPE_SECRET_KEY');
     }
     return stripeInstance as Stripe;
+}
+
+/**
+ * Returns the Stripe client used only by admin subscription-gift callables.
+ * Its restricted key should have Subscription read/write access and no other
+ * Stripe permissions.
+ */
+export async function getAdminBillingStripe(): Promise<Stripe> {
+    if (!adminBillingStripeInstance) {
+        adminBillingStripeInstance = await createStripeClient('STRIPE_ADMIN_BILLING_KEY');
+    }
+    return adminBillingStripeInstance;
 }
 
 /**
@@ -106,4 +125,9 @@ export async function getStripe() {
  */
 export function setStripeInstanceForTesting(instance: unknown) {
     stripeInstance = instance as Stripe;
+}
+
+/** @internal Test-only override for the restricted admin billing client. */
+export function setAdminBillingStripeInstanceForTesting(instance: unknown): void {
+    adminBillingStripeInstance = instance as Stripe;
 }

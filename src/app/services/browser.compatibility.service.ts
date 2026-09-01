@@ -42,6 +42,16 @@ export class BrowserCompatibilityService {
         }
     }
 
+    public createRandomUUID(): string | null {
+        try {
+            return typeof globalThis.crypto?.randomUUID === 'function'
+                ? globalThis.crypto.randomUUID()
+                : null;
+        } catch {
+            return null;
+        }
+    }
+
     private openBrowserUpgradeDialog(): void {
         void import('../components/browser-upgrade-dialog/browser-upgrade-dialog.component')
             .then(({ BrowserUpgradeDialogComponent }) => {

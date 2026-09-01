@@ -32,6 +32,7 @@ interface SubscriptionSummary {
     cancelAtPeriodEnd: boolean;
     currentPeriodEnd: Date | null;
     isTrialing: boolean;
+    isComplimentaryExtension: boolean;
     billingCadenceDisplay: string;
     isRenewalAmountLoading: boolean;
     renewalAmountDisplay: string;
@@ -755,6 +756,8 @@ export class PricingComponent implements OnInit, OnDestroy {
             cancelAtPeriodEnd: !!primary.sub.cancel_at_period_end,
             currentPeriodEnd: primary.periodEnd,
             isTrialing: primary.sub.status === 'trialing',
+            isComplimentaryExtension: primary.sub.status === 'trialing'
+                && primary.sub.metadata?.['qs_gift_type'] === 'subscription_time',
             billingCadenceDisplay: this.getSubscriptionBillingCadenceDisplay(primary.sub)
         };
     }

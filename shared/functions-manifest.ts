@@ -18,6 +18,8 @@ export const FUNCTIONS_MANIFEST = {
     impersonateUser: { name: 'impersonateUser', region: 'europe-west2' },
     stopImpersonation: { name: 'stopImpersonation', region: 'europe-west2' },
     getFinancialStats: { name: 'getFinancialStats', region: 'europe-west2' },
+    previewAdminSubscriptionGift: { name: 'previewAdminSubscriptionGift', region: 'europe-west2' },
+    grantAdminSubscriptionGift: { name: 'grantAdminSubscriptionGift', region: 'europe-west2' },
 
     // User Functions
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },

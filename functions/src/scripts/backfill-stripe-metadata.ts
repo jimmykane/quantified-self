@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import Stripe from 'stripe';
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
+import { STRIPE_API_VERSION } from '../stripe/client';
 
 // Load environment variables
 dotenv.config({ path: resolve(__dirname, '../../../extensions/firestore-stripe-payments.env') });
@@ -12,9 +13,9 @@ if (!stripeKey) {
     process.exit(1);
 }
 
-// Initialize Stripe (use the version from package.json or latest)
+// Keep operational scripts on the same API contract as custom Functions.
 const stripe = new Stripe(stripeKey, {
-    apiVersion: '2025-12-15.clover' as any, // Cast to any to avoid strict typing issues if SDK types are fickle
+    apiVersion: STRIPE_API_VERSION,
 });
 
 // Initialize Firebase Admin
@@ -94,8 +95,9 @@ async function backfillMetadata() {
                     updatedCount++;
                 }
 
-            } catch (err: any) {
-                console.error(`[ERROR] Processing user ${email}:`, err.message);
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                console.error(`[ERROR] Processing user ${email}:`, message);
                 errorCount++;
             }
         }
