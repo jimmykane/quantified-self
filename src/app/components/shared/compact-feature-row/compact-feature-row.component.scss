@@ -52,7 +52,10 @@
 }
 
 .compact-feature-row__title {
-  align-self: center;
+  display: flex;
+  min-height: 48px;
+  align-self: start;
+  align-items: center;
   margin: 0;
   color: var(--mat-sys-on-surface);
   font-size: 1.25rem;
