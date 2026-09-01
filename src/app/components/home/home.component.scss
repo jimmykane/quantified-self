@@ -847,7 +847,7 @@
     border-top: 1px solid var(--mat-sys-outline-variant);
 
     .footprint-content {
-        max-width: 700px;
+        max-width: 1040px;
         margin: 0 auto;
     }
 
@@ -855,6 +855,8 @@
         display: flex;
         flex-direction: column;
         align-items: center;
+        max-width: 700px;
+        margin: 0 auto;
     }
 
     .footprint-icon {
@@ -885,6 +887,29 @@
         &:hover {
             transform: translateY(-2px);
         }
+    }
+
+    .footprint-map-stage {
+        height: clamp(320px, 48vw, 520px);
+        margin-top: 2.5rem;
+        overflow: hidden;
+        border: 1px solid var(--mat-sys-outline-variant);
+        border-radius: var(--mat-sys-corner-large, 16px);
+        background: var(--mat-sys-surface-container-low);
+    }
+
+    .footprint-map-placeholder {
+        width: 100%;
+        height: 100%;
+        background:
+            linear-gradient(135deg, transparent 28%, color-mix(in srgb, var(--mat-sys-primary) 5%, transparent) 52%, transparent 76%),
+            var(--mat-sys-surface-container-low);
+    }
+
+    .footprint-map-caption {
+        margin: 0.75rem 0 0;
+        font-size: 0.85rem;
+        line-height: 1.4;
     }
 }
 

@@ -282,14 +282,24 @@
         <mat-icon class="footprint-icon">map</mat-icon>
         <h2>Map Your Activities</h2>
         <p>
-          Every run, ride, and hike — visualized on a single map.
-          Explore your entire athletic history.
+          See every GPS activity together, then filter by date or activity type and explore the trips across your
+          history.
         </p>
-        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
+        <button mat-stroked-button (click)="navigateToMyTracksOrLogin()">
           Explore MyTracks
           <mat-icon iconPositionEnd>explore</mat-icon>
         </button>
       </div>
+      <div class="footprint-map-stage" data-nosnippet>
+        @defer (on viewport) {
+          <app-home-my-tracks-preview></app-home-my-tracks-preview>
+        } @placeholder {
+          <div class="footprint-map-placeholder" aria-hidden="true"></div>
+        }
+      </div>
+      <p class="footprint-map-caption" data-nosnippet>
+        Sample activities · the live MyTracks view uses your connected GPS history.
+      </p>
     </div>
   </section>
 

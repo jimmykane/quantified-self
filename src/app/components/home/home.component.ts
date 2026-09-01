@@ -22,6 +22,7 @@ import type {
 import { HomeSignalChartsPreviewComponent } from './home-signal-charts-preview.component';
 import { HomeDashboardPreviewComponent } from './home-dashboard-preview.component';
 import { HomeWorkoutPreviewComponent } from './home-workout-preview.component';
+import { HomeMyTracksPreviewComponent } from './home-my-tracks-preview.component';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 import { buildPublicProviderDataFlowRows } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.helper';
 
@@ -45,6 +46,7 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
     HomeDashboardPreviewComponent,
     HomeSignalChartsPreviewComponent,
     HomeWorkoutPreviewComponent,
+    HomeMyTracksPreviewComponent,
     TrainingSummaryCardsComponent,
     TrainingMetricGridComponent,
     TypedPromptRotatorComponent,
@@ -189,6 +191,11 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     } else {
       await this.router.navigate(['/login']);
     }
+  }
+
+  async navigateToMyTracksOrLogin() {
+    const user = await this.authService.getUser();
+    await this.router.navigate([user ? '/mytracks' : '/login']);
   }
 
 }

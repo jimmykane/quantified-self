@@ -1,0 +1,9 @@
+<div
+  #mapContainer
+  class="home-my-tracks-preview__map"
+  role="region"
+  aria-label="Interactive MyTracks preview with sample running, cycling, hiking, trail-running, and mountain-bike activities"
+></div>
+@if (initializationFailed()) {
+  <p class="home-my-tracks-preview__fallback">Map preview unavailable.</p>
+}

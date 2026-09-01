@@ -334,7 +334,7 @@ describe('HomeComponent', () => {
     it('should render the shared signal charts when the deferred section completes', async () => {
         const deferBlocks = await fixture.getDeferBlocks();
 
-        expect(deferBlocks.length).toBe(3);
+        expect(deferBlocks.length).toBe(4);
         await deferBlocks[0].render(DeferBlockState.Complete);
         await fixture.whenStable();
 
@@ -350,6 +350,11 @@ describe('HomeComponent', () => {
 
         expect(analysisCards.length).toBe(3);
         expect(text).toContain('Map Your Activities');
+        expect(text).toContain('See every GPS activity together');
+        expect(text).toContain('filter by date or activity type');
+        expect(text).toContain('Sample activities');
+        expect(fixture.nativeElement.querySelector('.footprint-map-placeholder')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('app-home-my-tracks-preview')).toBeNull();
         expect(text).toContain('Own Your Data');
         expect(text).toContain('Compare Your Devices');
         expect(text).toContain('Merge same-session recordings, choose a reference device');
@@ -477,6 +482,24 @@ describe('HomeComponent', () => {
         it('should navigate to login if user is not logged in', async () => {
             mockAuthService.getUser.mockResolvedValue(null);
             await component.navigateToDashboardOrLogin();
+            expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
+        });
+    });
+
+    describe('navigateToMyTracksOrLogin', () => {
+        it('should navigate authenticated users to MyTracks', async () => {
+            mockAuthService.getUser.mockResolvedValue({ uid: '123' });
+
+            await component.navigateToMyTracksOrLogin();
+
+            expect(mockRouter.navigate).toHaveBeenCalledWith(['/mytracks']);
+        });
+
+        it('should navigate anonymous users to login', async () => {
+            mockAuthService.getUser.mockResolvedValue(null);
+
+            await component.navigateToMyTracksOrLogin();
+
             expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
         });
     });

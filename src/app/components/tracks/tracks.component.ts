@@ -5,7 +5,6 @@ import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
 import { take, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
-import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
 import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
@@ -22,7 +21,6 @@ import { Overlay } from '@angular/cdk/overlay';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserService } from '../../services/app.user.service';
 import { WhereFilterOp } from 'firebase/firestore';
-import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -37,10 +35,6 @@ import { TrackStartPoint, TrackStartSelection, TracksMapManager, TripAreaOverlay
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { MapStyleName } from '../../services/map/map-style.types';
-import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
-import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
-import { MapboxStartPointLayerService } from '../../services/map/mapbox-start-point-layer.service';
-import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
 import {
   MapboxLayersControlHandle,
   MapboxLayersControlInputs,
@@ -79,6 +73,10 @@ import {
   correctPopupPositionToViewport,
   resolvePopupAnchorPosition,
 } from '../../services/map/mapbox-popup-positioning.utils';
+import {
+  MyTracksMapViewFactory,
+  type MyTracksMapViewHandle,
+} from '../shared/my-tracks-map-view/my-tracks-map-view.factory';
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
@@ -189,6 +187,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private mapSignal = signal<any>(null); // Signal to hold map instance for reactive synchronization
   private userSignal = signal<AppUserInterface | undefined>(undefined);
   private tracksMapManager: TracksMapManager;
+  private mapViewHandle: MyTracksMapViewHandle | null = null;
   private scrolled = false;
   private hasTrackBoundsBeenApplied = false;
   private shouldPreserveMapViewForCurrentLoad = false;
@@ -257,32 +256,19 @@ export class TracksComponent implements OnInit, OnDestroy {
     private eventService: AppEventService,
     private authService: AppAuthService,
     private router: Router,
-    private eventColorService: AppEventColorService,
     private zone: NgZone,
     private fileService: AppFileService,
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
     private userService: AppUserService,
-    private mapboxLoader: MapboxLoaderService,
     private themeService: AppThemeService,
     private mapStyleService: MapStyleService,
-    private mapboxHeatmapLayerService: MapboxHeatmapLayerService,
-    private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
-    private mapboxStartPointLayerService: MapboxStartPointLayerService,
-    private mapboxAutoResizeService: MapboxAutoResizeService,
     private mapboxLayersControlService: MapboxLayersControlService,
     private polylineSimplificationService: PolylineSimplificationService,
     private popupContentService: MapEventPopupContentService,
+    private myTracksMapViewFactory: MyTracksMapViewFactory,
   ) {
-    this.tracksMapManager = new TracksMapManager(
-      this.zone,
-      this.eventColorService,
-      this.mapStyleService,
-      this.mapboxHeatmapLayerService,
-      this.jumpHeatmapWeightingService,
-      this.mapboxStartPointLayerService,
-      this.logger
-    );
+    this.tracksMapManager = this.myTracksMapViewFactory.createManager();
     this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
 
     const platformId = inject(PLATFORM_ID);
@@ -407,67 +393,55 @@ export class TracksComponent implements OnInit, OnDestroy {
         mapOptions.config = { basemap: { lightPreset: resolved.preset } };
       }
 
-      // Run Mapbox initialization entirely outside Angular to prevent Map events from triggering CD
-      await this.zone.runOutsideAngular(async () => {
-        const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
-        this.mapSignal.set(mapInstance);
-
-        // Initialize Synchronizer
-        this.mapSynchronizer.set(this.mapStyleService.createSynchronizer(mapInstance, resolved));
-        // We don't call update(resolved) here because the effect will trigger automatically 
-        // as soon as mapSignal and mapSynchronizer are both set.
-
-        const mapboxgl = await this.mapboxLoader.loadMapbox();
-        this.tracksMapManager.setMap(mapInstance, mapboxgl);
-        this.bindMapViewInteractionListeners(mapInstance);
-        this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
-        this.tracksMapManager.setStartMarkerSelectionHandler((selection) => {
-          this.zone.run(() => {
-            if (!selection) {
-              this.closeSelectedStartPointPopup();
-              return;
-            }
-            this.searchPeekExpanded.set(false);
-            this.detectedTripsPanelExpanded.set(false);
-            this.selectedStartPoint.set(selection);
-            this.updateSelectedStartPointScreenPosition();
-            this.centerMapOnStartPoint(selection);
-          });
-        });
-        this.bindStartPointPopupMapListeners(mapInstance);
-        this.mapboxAutoResizeService.bind(mapInstance, {
-          container: this.mapDiv?.nativeElement,
+      this.mapViewHandle?.destroy();
+      this.mapViewHandle = await this.myTracksMapViewFactory.initialize(
+        this.tracksMapManager,
+        this.mapDiv.nativeElement,
+        mapOptions,
+        {
+          controlMode: 'workspace',
           onResize: () => {
             if (!this.selectedStartPoint()) return;
             this.zone.run(() => this.updateSelectedStartPointScreenPosition());
+          },
+        },
+      );
+      const mapInstance = this.mapViewHandle.map;
+      this.mapSignal.set(mapInstance);
+
+      // Initialize Synchronizer. The reactive effect applies later style changes.
+      this.mapSynchronizer.set(this.mapStyleService.createSynchronizer(mapInstance, resolved));
+
+      this.bindMapViewInteractionListeners(mapInstance);
+      this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+      this.tracksMapManager.setStartMarkerSelectionHandler((selection) => {
+        this.zone.run(() => {
+          if (!selection) {
+            this.closeSelectedStartPointPopup();
+            return;
           }
+          this.searchPeekExpanded.set(false);
+          this.detectedTripsPanelExpanded.set(false);
+          this.selectedStartPoint.set(selection);
+          this.updateSelectedStartPointScreenPosition();
+          this.centerMapOnStartPoint(selection);
         });
-
-        mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
-
-        // Standard Navigation Control for Zoom and Rotation (Pitch)
-        const navControl = new mapboxgl.NavigationControl({
-          visualizePitch: true,
-          showCompass: true,
-          showZoom: true
-        });
-        mapInstance.addControl(navControl, 'bottom-right');
-        this.zone.run(() => this.attachMapLayersControl(mapInstance));
-
-        this.centerMapToStartingLocation(mapInstance);
-        this.eventsSubscription.add(
-          this.authService.user$
-            .pipe(
-              filter((authUser): authUser is AppUserInterface => !!authUser),
-              take(1),
-            )
-            .subscribe((authUser) => {
-              this.user = authUser;
-              this.userSignal.set(authUser);
-            })
-        );
-
       });
+      this.bindStartPointPopupMapListeners(mapInstance);
+      this.zone.run(() => this.attachMapLayersControl(mapInstance));
+
+      this.centerMapToStartingLocation(mapInstance);
+      this.eventsSubscription.add(
+        this.authService.user$
+          .pipe(
+            filter((authUser): authUser is AppUserInterface => !!authUser),
+            take(1),
+          )
+          .subscribe((authUser) => {
+            this.user = authUser;
+            this.userSignal.set(authUser);
+          })
+      );
 
     } catch (error) {
       this.logger.error('Failed to initialize Mapbox:', error);
@@ -534,11 +508,10 @@ export class TracksComponent implements OnInit, OnDestroy {
       cancelAnimationFrame(this.pendingStartPointPopupCorrectionRaf);
       this.pendingStartPointPopupCorrectionRaf = null;
     }
-    this.mapboxAutoResizeService.unbind(this.tracksMapManager.getMap());
     this.destroyMapLayersControl();
-    if (this.mapSignal()) {
-      this.mapSignal().remove();
-    }
+    this.mapViewHandle?.destroy();
+    this.mapViewHandle = null;
+    this.mapSignal.set(null);
   }
 
   private attachMapLayersControl(map: any): void {
