@@ -360,7 +360,13 @@ async function getCanonicalUserPage(
     };
   }
   let query: admin.firestore.Query = db.collection('users').orderBy(FieldPath.documentId());
-  if (options.startAfterUID) query = query.startAfter(options.startAfterUID);
+  if (options.startAfterUID) {
+    // Initialize Firestore's lazily resolved project metadata before the SDK
+    // converts a document-ID cursor into its internal reference value. Without
+    // this read, a fresh Admin client can fail before issuing the page query.
+    await db.collection('users').doc(options.startAfterUID).get();
+    query = query.startAfter(options.startAfterUID);
+  }
   const snapshot = await query.limit(options.userLimit + 1).get();
   const docs = snapshot.docs.slice(0, options.userLimit);
   return {

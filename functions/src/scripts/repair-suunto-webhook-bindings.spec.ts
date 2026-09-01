@@ -247,6 +247,44 @@ describe('repair-suunto-webhook-bindings script', () => {
     expect(hoisted.addToQueueForSuunto).not.toHaveBeenCalled();
   });
 
+  it('continues canonical-user discovery from a document-ID cursor', async () => {
+    for (const userID of ['user-1', 'user-2']) {
+      hoisted.documents.set(`users/${userID}`, { active: true });
+      hoisted.documents.set(`users/${userID}/meta/${ServiceNames.SuuntoApp}`, {
+        connectionState: 'connected',
+        connectionStateGeneration: `connection-${userID}`,
+      });
+      hoisted.documents.set(`suuntoAppAccessTokens/${userID}/tokens/provider-${userID}`, {
+        serviceName: ServiceNames.SuuntoApp,
+        userName: `provider-${userID}`,
+        refreshToken: `refresh-${userID}`,
+        accessToken: `access-${userID}`,
+      });
+    }
+
+    const firstPage = await runSuuntoLegacyWebhookRepairScript([
+      '--stage=audit',
+      '--through=2026-08-30T12:00:00.000Z',
+      '--limit=1',
+    ]);
+    expect(firstPage.page).toEqual({
+      hasMoreUsers: true,
+      nextStartAfterUID: 'user-1',
+    });
+
+    const secondPage = await runSuuntoLegacyWebhookRepairScript([
+      '--stage=audit',
+      '--through=2026-08-30T12:00:00.000Z',
+      '--limit=1',
+      '--start-after-uid=user-1',
+    ]);
+    expect(secondPage).toMatchObject({
+      scannedUsers: 1,
+      repairCandidates: 1,
+      page: { hasMoreUsers: false, nextStartAfterUID: null },
+    });
+  });
+
   it('contacts only users whose provider refresh is terminally rejected', async () => {
     for (const userID of ['user-1', 'user-2']) {
       hoisted.documents.set(`users/${userID}`, { active: true });
