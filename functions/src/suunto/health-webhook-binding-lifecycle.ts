@@ -39,6 +39,12 @@ import { SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH } from './health';
  * account identity through a forced provider refresh.
  */
 export type SuuntoWebhookBindingStatus = 'created' | 'current' | 'unverified' | 'inactive';
+export const SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_VERSION = 1;
+export const SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_FIELDS = {
+  Version: 'suuntoLegacyWebhookBindingRepairVersion',
+  RepairedAtMs: 'suuntoLegacyWebhookBindingRepairedAtMs',
+  IncidentStartMs: 'suuntoLegacyWebhookBindingRepairIncidentStartMs',
+} as const;
 export type SuuntoWebhookWriteLifecycleGuards = Required<Pick<
   SleepLifecycleWriterDependencies,
   | 'requiredExistingDocumentRef'
@@ -138,7 +144,13 @@ async function evaluateSuuntoHealthWebhookAccountBinding(
   userID: string,
   providerUserId: string,
   nowMs: number,
-  authorizationSource?: SuuntoWebhookBindingAuthorizationSource,
+  options: {
+    authorizationSource?: SuuntoWebhookBindingAuthorizationSource;
+    expectedTokenCredential?: ReturnType<typeof getTokenCredentialSnapshot>;
+    verifiedTokenPatch?: Record<string, unknown>;
+    requireExistingConnectedServiceMeta?: boolean;
+    allowLifecycleMigration?: boolean;
+  } = {},
 ): Promise<SuuntoWebhookBindingStatus> {
   const bindingRef = getSuuntoHealthWebhookAccountBindingRef(db, providerUserId, userID);
   const tokenRootRef = getServiceTokenRootDocumentRef(userID, ServiceNames.SuuntoApp);
@@ -169,9 +181,16 @@ async function evaluateSuuntoHealthWebhookAccountBinding(
     );
     if (deletionGuard.shouldSkip
       || !tokenSnapshot.exists
-      || !tokenRootSnapshot.exists
       || tokenData?.userName !== providerUserId
       || (tokenData.serviceName && tokenData.serviceName !== ServiceNames.SuuntoApp)
+      || (options.expectedTokenCredential
+        && !areTokenCredentialSnapshotsEqual(
+          getTokenCredentialSnapshot(tokenData),
+          options.expectedTokenCredential,
+        ))
+      || (options.requireExistingConnectedServiceMeta
+        && (!serviceMetaSnapshot.exists
+          || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected))
       || isServiceUnavailableForSyncConnection(serviceMeta)
       || (serviceMeta?.connectionState !== undefined
         && serviceMeta?.connectionState !== null
@@ -198,22 +217,24 @@ async function evaluateSuuntoHealthWebhookAccountBinding(
       );
     const requiresIndependentProviderVerification = tokenCredentialGeneration.kind === 'valid'
       && rootOAuthCredentialGeneration.kind === 'missing';
-    const canMigrateLegacyLifecycle = Boolean(authorizationSource)
+    const canMigrateLegacyLifecycle = Boolean(options.authorizationSource)
       || (hasCurrentAuthorizedBinding && !requiresIndependentProviderVerification);
     const requiresLifecycleMigration = !serviceMetaSnapshot.exists
+      || !tokenRootSnapshot.exists
       || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected
       || tokenCredentialGeneration.kind === 'missing'
       || rootOAuthCredentialGeneration.kind === 'missing'
       || connectionStateGeneration.kind === 'missing';
 
-    if (requiresLifecycleMigration && !canMigrateLegacyLifecycle) {
+    if (requiresLifecycleMigration
+      && (!canMigrateLegacyLifecycle || options.allowLifecycleMigration === false)) {
       return 'unverified';
     }
 
     const nextTokenCredentialGeneration = tokenCredentialGeneration.value || crypto.randomUUID();
     const nextRootOAuthCredentialGeneration = rootOAuthCredentialGeneration.value || crypto.randomUUID();
     const nextConnectionStateGeneration = connectionStateGeneration.value || crypto.randomUUID();
-    const bindingAuthorizationSource = current?.authorizationSource || authorizationSource;
+    const bindingAuthorizationSource = current?.authorizationSource || options.authorizationSource;
     if (!bindingAuthorizationSource) return 'unverified';
 
     if (requiresLifecycleMigration) {
@@ -237,6 +258,9 @@ async function evaluateSuuntoHealthWebhookAccountBinding(
       }
     }
 
+    if (options.verifiedTokenPatch) {
+      transaction.set(tokenRef, options.verifiedTokenPatch, { merge: true });
+    }
     if (hasCurrentAuthorizedBinding
       && current.tokenCredentialGeneration === nextTokenCredentialGeneration) {
       return 'current';
@@ -254,11 +278,16 @@ async function evaluateSuuntoHealthWebhookAccountBinding(
   });
 }
 
-export async function ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+async function ensureSuuntoWebhookAccountBindingForProviderVerifiedTokenInternal(
   db: admin.firestore.Firestore,
   userID: string,
   tokenSnapshot: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
-  nowMs = Date.now(),
+  nowMs: number,
+  options: {
+    forceProviderVerification?: boolean;
+    verifiedTokenPatch?: Record<string, unknown>;
+    requireExistingConnectedServiceMeta?: boolean;
+  } = {},
 ): Promise<SuuntoWebhookBindingStatus> {
   const providerUserId = tokenSnapshot.id.trim();
   const tokenData = tokenSnapshot.data() as Record<string, unknown> | undefined;
@@ -275,8 +304,17 @@ export async function ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
     userID,
     providerUserId,
     nowMs,
+    {
+      requireExistingConnectedServiceMeta:
+        options.requireExistingConnectedServiceMeta === true,
+      // A forced repair must not create any lifecycle authority before the
+      // provider identity is independently verified. The final credential-
+      // fenced transaction performs all migration writes atomically.
+      allowLifecycleMigration: options.forceProviderVerification !== true,
+    },
   );
-  if (existingStatus === 'current' || existingStatus === 'inactive') {
+  if (existingStatus === 'inactive'
+    || (existingStatus === 'current' && !options.forceProviderVerification)) {
     return existingStatus;
   }
 
@@ -296,12 +334,81 @@ export async function ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
     return 'unverified';
   }
 
+  // The refresh coordinator persists rotating credentials before this
+  // lifecycle transaction. Re-read that exact result and require it to remain
+  // unchanged while the missing root/generations/binding are created. A
+  // concurrent reconnect or disconnect therefore wins instead of letting an
+  // older provider proof authorize a replacement credential.
+  const refreshedTokenSnapshot = await tokenSnapshot.ref.get();
+  const refreshedTokenData = refreshedTokenSnapshot.data() as Record<string, unknown> | undefined;
+  if (!refreshedTokenSnapshot.exists
+    || refreshedTokenSnapshot.id !== providerUserId
+    || refreshedTokenData?.userName !== providerUserId
+    || refreshedTokenData.serviceName !== ServiceNames.SuuntoApp) {
+    return 'unverified';
+  }
+
   return evaluateSuuntoHealthWebhookAccountBinding(
     db,
     userID,
     providerUserId,
     nowMs,
-    SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES.ProviderRefresh,
+    {
+      authorizationSource: SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES.ProviderRefresh,
+      expectedTokenCredential: getTokenCredentialSnapshot(refreshedTokenData),
+      verifiedTokenPatch: options.verifiedTokenPatch,
+      requireExistingConnectedServiceMeta:
+        options.requireExistingConnectedServiceMeta === true,
+    },
+  );
+}
+
+export function ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+  db: admin.firestore.Firestore,
+  userID: string,
+  tokenSnapshot: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
+  nowMs = Date.now(),
+): Promise<SuuntoWebhookBindingStatus> {
+  return ensureSuuntoWebhookAccountBindingForProviderVerifiedTokenInternal(
+    db,
+    userID,
+    tokenSnapshot,
+    nowMs,
+  );
+}
+
+/**
+ * One-time child-only legacy repair. The provider refresh, exact credential
+ * fence, lifecycle creation, binding creation, and resumable repair marker are
+ * one authorization decision. A partial write cannot make the connection look
+ * repaired while leaving the binding or its lifecycle incomplete (or vice
+ * versa).
+ */
+export function repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
+  db: admin.firestore.Firestore,
+  userID: string,
+  tokenSnapshot: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
+  incidentStartMs: number,
+  nowMs = Date.now(),
+): Promise<SuuntoWebhookBindingStatus> {
+  if (!Number.isFinite(incidentStartMs) || incidentStartMs <= 0) {
+    return Promise.resolve('unverified');
+  }
+  return ensureSuuntoWebhookAccountBindingForProviderVerifiedTokenInternal(
+    db,
+    userID,
+    tokenSnapshot,
+    nowMs,
+    {
+      forceProviderVerification: true,
+      requireExistingConnectedServiceMeta: true,
+      verifiedTokenPatch: {
+        [SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_FIELDS.Version]:
+          SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_VERSION,
+        [SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_FIELDS.RepairedAtMs]: nowMs,
+        [SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_FIELDS.IncidentStartMs]: incidentStartMs,
+      },
+    },
   );
 }
 

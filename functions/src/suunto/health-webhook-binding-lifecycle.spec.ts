@@ -7,7 +7,15 @@ const PROVIDER_ACCOUNT_DIGEST = createHash('sha256').update('provider-1').digest
 const hoisted = vi.hoisted(() => {
   const state: Record<string, Record<string, unknown> | undefined> = {};
   const bindingRef = { path: 'suuntoHealthWebhookAccountBindings/digest' };
-  const tokenRef = { path: 'suuntoAppAccessTokens/user-1/tokens/provider-1' };
+  const tokenRef = {
+    path: 'suuntoAppAccessTokens/user-1/tokens/provider-1',
+    get: vi.fn(async () => ({
+      id: 'provider-1',
+      ref: tokenRef,
+      exists: state.token !== undefined,
+      data: () => state.token,
+    })),
+  };
   const tokenSnapshot = {
     id: 'provider-1',
     ref: tokenRef,
@@ -69,12 +77,12 @@ vi.mock('../shared/user-deletion-guard', () => ({
 vi.mock('../service-token-store', () => ({
   getServiceTokenRootDocumentRef: vi.fn(() => hoisted.tokenRootRef),
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
-  doesServiceDisconnectOperationPermitTokenUse: vi.fn((data: Record<string, unknown>) =>
-    !data.disconnectOperationGeneration),
+  doesServiceDisconnectOperationPermitTokenUse: vi.fn((data?: Record<string, unknown>) =>
+    !data?.disconnectOperationGeneration),
 }));
 vi.mock('../service-disconnect-pending-state', () => ({
-  isServiceDisconnectPendingData: vi.fn((data: Record<string, unknown>) =>
-    data.disconnectState === 'disconnect_pending'),
+  isServiceDisconnectPendingData: vi.fn((data?: Record<string, unknown>) =>
+    data?.disconnectState === 'disconnect_pending'),
 }));
 vi.mock('../tokens', () => ({
   getTokenData: (...args: unknown[]) => hoisted.getTokenData(...args),
@@ -85,6 +93,7 @@ import {
   captureCurrentSuuntoWebhookWriteLifecycleGuards,
   ensureSuuntoWebhookAccountBindingForProviderVerifiedToken,
   getSuuntoWebhookWriteLifecycleAuthorityDigest,
+  repairSuuntoLegacyWebhookBindingForProviderVerifiedToken,
 } from './health-webhook-binding-lifecycle';
 
 describe('Suunto Health webhook account binding lifecycle', () => {
@@ -269,6 +278,183 @@ describe('Suunto Health webhook account binding lifecycle', () => {
       { activeOAuthCredentialGeneration: expect.any(String) },
       { merge: true },
     );
+  });
+
+  it('provider-verifies and repairs a child-only legacy token whose parent root is missing', async () => {
+    hoisted.state.token = {
+      ...hoisted.state.token,
+      tokenCredentialGeneration: undefined,
+    };
+    hoisted.state.tokenRoot = undefined;
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('created');
+
+    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.tokenRootRef,
+      { activeOAuthCredentialGeneration: expect.any(String) },
+      { merge: true },
+    );
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.bindingRef,
+      expect.objectContaining({
+        authorizationSource: 'provider_refresh',
+        userID: 'user-1',
+      }),
+    );
+  });
+
+  it('atomically records the resumable repair marker with a provider-verified child-only repair', async () => {
+    hoisted.state.token = {
+      ...hoisted.state.token,
+      tokenCredentialGeneration: undefined,
+    };
+    hoisted.state.tokenRoot = undefined;
+    const repairedAtMs = 1_777_777_777_000;
+    const incidentStartMs = 1_777_500_000_000;
+
+    await expect(repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+      incidentStartMs,
+      repairedAtMs,
+    )).resolves.toBe('created');
+
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.tokenRef,
+      {
+        suuntoLegacyWebhookBindingRepairVersion: 1,
+        suuntoLegacyWebhookBindingRepairedAtMs: repairedAtMs,
+        suuntoLegacyWebhookBindingRepairIncidentStartMs: incidentStartMs,
+      },
+      { merge: true },
+    );
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.bindingRef,
+      expect.objectContaining({ authorizationSource: 'provider_refresh' }),
+    );
+  });
+
+  it('force-verifies an already current binding before recording the repair marker', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+    const repairedAtMs = 1_777_777_777_000;
+
+    await expect(repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+      1_777_500_000_000,
+      repairedAtMs,
+    )).resolves.toBe('current');
+
+    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.tokenRef,
+      expect.objectContaining({
+        suuntoLegacyWebhookBindingRepairVersion: 1,
+        suuntoLegacyWebhookBindingRepairedAtMs: repairedAtMs,
+      }),
+      { merge: true },
+    );
+  });
+
+  it('does not migrate legacy lifecycle state before forced provider verification', async () => {
+    hoisted.state.binding = {
+      schemaVersion: 3,
+      authorizationSource: 'oauth_callback',
+      userID: 'user-1',
+      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
+      tokenCredentialGeneration: 'token-generation-1',
+    };
+    hoisted.state.serviceMeta = { connectionState: 'connected' };
+    hoisted.getTokenData.mockImplementationOnce(async () => {
+      expect(hoisted.transactionSet).not.toHaveBeenCalled();
+      return { userName: 'provider-1' };
+    });
+
+    await expect(repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+      1_777_500_000_000,
+    )).resolves.toBe('current');
+
+    expect(hoisted.transactionSet).toHaveBeenCalledWith(
+      hoisted.serviceMetaRef,
+      {
+        connectionState: 'connected',
+        connectionStateGeneration: expect.any(String),
+      },
+      { merge: true },
+    );
+  });
+
+  it('fails closed when connected service metadata disappears during provider verification', async () => {
+    hoisted.state.token = {
+      ...hoisted.state.token,
+      tokenCredentialGeneration: undefined,
+    };
+    hoisted.state.tokenRoot = undefined;
+    hoisted.tokenRef.get.mockImplementationOnce(async () => {
+      hoisted.state.serviceMeta = undefined;
+      return {
+        id: 'provider-1',
+        ref: hoisted.tokenRef,
+        exists: true,
+        data: () => hoisted.state.token,
+      };
+    });
+
+    await expect(repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+      1_777_500_000_000,
+    )).resolves.toBe('inactive');
+
+    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
+  });
+
+  it('does not apply provider proof after the refreshed credential is replaced', async () => {
+    hoisted.state.token = {
+      ...hoisted.state.token,
+      tokenCredentialGeneration: undefined,
+    };
+    hoisted.state.tokenRoot = undefined;
+    const providerVerifiedCredential = { ...hoisted.state.token };
+    hoisted.tokenRef.get.mockImplementationOnce(async () => {
+      hoisted.state.token = {
+        ...providerVerifiedCredential,
+        accessToken: 'replacement-access-token',
+      };
+      return {
+        id: 'provider-1',
+        ref: hoisted.tokenRef,
+        exists: true,
+        data: () => providerVerifiedCredential,
+      };
+    });
+
+    await expect(ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
+      hoisted.db as never,
+      'user-1',
+      hoisted.tokenSnapshot as never,
+    )).resolves.toBe('inactive');
+
+    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
+    expect(hoisted.transactionSet).not.toHaveBeenCalled();
   });
 
   it('backfills a retained legacy account without rotating the newer root revision', async () => {
