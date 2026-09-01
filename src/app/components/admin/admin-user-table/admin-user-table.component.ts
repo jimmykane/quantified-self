@@ -235,7 +235,9 @@ export class AdminUserTableComponent implements OnInit, OnDestroy {
             this.fetchUsers();
             const message = result.response.notificationStatus === 'failed'
                 ? 'Subscription time was granted, but the optional email needs retrying.'
-                : 'Subscription time was granted successfully.';
+                : result.response.notificationStatus === 'queued'
+                    ? 'Subscription time was granted; email delivery is still pending.'
+                    : 'Subscription time was granted successfully.';
             this.snackBar.open(message, undefined, { duration: 5000 });
         });
     }

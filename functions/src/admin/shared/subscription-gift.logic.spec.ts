@@ -191,6 +191,15 @@ describe('admin subscription gift logic', () => {
         ['unpaid status', { status: 'unpaid' }, 'subscription-status'],
         ['canceled status', { status: 'canceled' }, 'subscription-status'],
         ['subscription schedule', { schedule: 'sub_sched_1' }, 'subscription-schedule'],
+        ['pending billing update', {
+            pending_update: {
+                billing_cycle_anchor: null,
+                expires_at: unixSeconds('2026-01-02T00:00:00Z'),
+                subscription_items: null,
+                trial_end: null,
+                trial_from_plan: null,
+            },
+        }, 'pending-update'],
         ['billing schedule', { billing_schedules: [{ key: 'phase' }] }, 'billing-schedule'],
         ['flexible billing', { billing_mode: { type: 'flexible', flexible: {} } }, 'flexible-billing'],
         ['paused collection', { pause_collection: { behavior: 'keep_as_draft' } }, 'paused'],
@@ -217,6 +226,15 @@ describe('admin subscription gift logic', () => {
             automatic_tax: { enabled: false, disabled_reason: null, liability: null },
         });
         const discountChanged = subscription({ discounts: ['di_new'] });
+        const pendingUpdateAdded = subscription({
+            pending_update: {
+                billing_cycle_anchor: null,
+                expires_at: unixSeconds('2026-01-02T00:00:00Z'),
+                subscription_items: null,
+                trial_end: null,
+                trial_from_plan: null,
+            },
+        });
         const itemListTruncated = subscription({
             items: { ...before.items, has_more: true },
         });
@@ -229,6 +247,8 @@ describe('admin subscription gift logic', () => {
             .not.toBe(buildSubscriptionGiftPreviewVersion(taxChanged, 'basic', 1));
         expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
             .not.toBe(buildSubscriptionGiftPreviewVersion(discountChanged, 'basic', 1));
+        expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
+            .not.toBe(buildSubscriptionGiftPreviewVersion(pendingUpdateAdded, 'basic', 1));
         expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
             .not.toBe(buildSubscriptionGiftPreviewVersion(itemListTruncated, 'basic', 1));
     });
@@ -280,6 +300,10 @@ describe('admin subscription gift logic', () => {
 
         expect(subscriptionHasAppliedGift(candidate, operationId, target)).toBe(true);
         expect(subscriptionHasAppliedGift(candidate, operationId, target + 1)).toBe(false);
+        expect(subscriptionHasAppliedGift(subscription({
+            ...candidate,
+            status: 'active',
+        }), operationId, target)).toBe(false);
     });
 
     it('classifies network and server failures as ambiguous but validation failures as definitive', () => {

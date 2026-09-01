@@ -21,6 +21,7 @@ export class SubscriptionGiftEligibilityError extends Error {
         public readonly reason:
             | 'subscription-status'
             | 'subscription-schedule'
+            | 'pending-update'
             | 'billing-schedule'
             | 'flexible-billing'
             | 'paused'
@@ -163,6 +164,7 @@ export function buildSubscriptionGiftInvariantVersion(subscription: Stripe.Subsc
         cancellation: subscription.cancel_at_period_end,
         cancelAt: requireUnixSeconds(subscription.cancel_at),
         schedule: objectId(subscription.schedule),
+        pendingUpdate: subscription.pending_update || null,
         billingMode: subscription.billing_mode?.type || null,
         automaticTax: subscription.automatic_tax,
         defaultTaxRates: taxRateIds(subscription.default_tax_rates),
@@ -246,6 +248,12 @@ export function buildCurrentSubscriptionGiftState(
             'Subscriptions managed by a Subscription Schedule are not eligible.',
         );
     }
+    if (subscription.pending_update) {
+        throw new SubscriptionGiftEligibilityError(
+            'pending-update',
+            'Subscriptions with a pending billing update are not eligible.',
+        );
+    }
     if ((subscription.billing_schedules || []).length > 0) {
         throw new SubscriptionGiftEligibilityError(
             'billing-schedule',
@@ -314,7 +322,8 @@ export function subscriptionHasAppliedGift(
     operationId: string,
     targetAccessEndSeconds: number,
 ): boolean {
-    return subscription.trial_end === targetAccessEndSeconds
+    return subscription.status === 'trialing'
+        && subscription.trial_end === targetAccessEndSeconds
         && subscription.metadata?.[ADMIN_SUBSCRIPTION_GIFT_METADATA.type] === 'subscription_time'
         && subscription.metadata?.[ADMIN_SUBSCRIPTION_GIFT_METADATA.operationId] === operationId
         && subscription.metadata?.[ADMIN_SUBSCRIPTION_GIFT_METADATA.accessUntil] === `${targetAccessEndSeconds}`;

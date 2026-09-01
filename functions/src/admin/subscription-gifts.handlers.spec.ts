@@ -421,6 +421,38 @@ describe('admin subscription gift callables', () => {
             .rejects.toMatchObject({ code: 'failed-precondition' });
     });
 
+    it('rejects an unclassified subscription instead of trusting a stale paid Auth claim', async () => {
+        db.store.set('customers/target-user/subscriptions/sub_basic', {
+            status: 'active',
+            created: unixSeconds('2026-08-01T00:00:00Z'),
+        });
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+    });
+
+    it('rejects conflicting current-subscription plan roles', async () => {
+        currentSubscription = buildSubscription({
+            metadata: { ...currentSubscription.metadata, role: 'pro' },
+        });
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+    });
+
+    it('accepts a paid role from current Stripe metadata when the local role is absent', async () => {
+        db.store.set('customers/target-user/subscriptions/sub_basic', {
+            status: 'active',
+            created: unixSeconds('2026-08-01T00:00:00Z'),
+        });
+        currentSubscription = buildSubscription({
+            metadata: { ...currentSubscription.metadata, firebaseRole: 'basic' },
+        });
+
+        await expect(previewGift(callableRequest({ uid: 'target-user', months: 1 })))
+            .resolves.toMatchObject({ role: 'basic' });
+    });
+
     it('rejects a subscription that does not belong to the target linked Stripe customer', async () => {
         currentSubscription = buildSubscription({ customer: 'cus_another_user' });
 
@@ -687,6 +719,35 @@ describe('admin subscription gift callables', () => {
             previewVersion: secondPreview.previewVersion,
         }));
         expect(second.status).toBe('succeeded');
+    });
+
+    it('keeps the exact operation retryable when its failure status cannot be finalized', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        mockStripeUpdate.mockRejectedValueOnce({
+            type: 'StripeInvalidRequestError',
+            statusCode: 400,
+        });
+        mockTransactionDeletionGuard
+            .mockResolvedValueOnce({ userExists: true, deletionInProgress: false, shouldSkip: false })
+            .mockResolvedValueOnce({ userExists: false, deletionInProgress: true, shouldSkip: true });
+
+        await expect(grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        }))).rejects.toMatchObject({
+            code: 'unavailable',
+            message: 'The gift operation status could not be finalized safely. Retry the same operation.',
+        });
+
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({ status: 'applying', leaseToken: expect.any(String) });
+        expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock'))
+            .toMatchObject({ status: 'applying', operationId, leaseToken: expect.any(String) });
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
     it('fails safely when Stripe cannot verify the subscription after acquiring the lock', async () => {

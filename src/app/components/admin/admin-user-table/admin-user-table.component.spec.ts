@@ -161,7 +161,7 @@ describe('AdminUserTableComponent', () => {
         }));
         expect(adminService.getUsers).toHaveBeenCalledTimes(1);
         expect(snackBar.open).toHaveBeenCalledWith(
-            'Subscription time was granted successfully.',
+            'Subscription time was granted; email delivery is still pending.',
             undefined,
             { duration: 5000 },
         );

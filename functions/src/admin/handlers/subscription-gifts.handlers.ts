@@ -179,14 +179,16 @@ function asPaidRole(value: unknown): AdminSubscriptionGiftRole | null {
 function resolveGiftRole(
     local: Record<string, unknown>,
     subscription: Stripe.Subscription,
-    authClaim: unknown,
 ): AdminSubscriptionGiftRole | null {
-    for (const candidate of [local.role, subscription.metadata?.role, subscription.metadata?.firebaseRole]) {
-        if (typeof candidate === 'string' && candidate.trim()) {
-            return asPaidRole(candidate);
-        }
+    const specifiedRoles = [local.role, subscription.metadata?.role, subscription.metadata?.firebaseRole]
+        .filter((candidate): candidate is string => typeof candidate === 'string' && !!candidate.trim())
+        .map(candidate => asPaidRole(candidate));
+    const paidRoles = specifiedRoles.filter((role): role is AdminSubscriptionGiftRole => role !== null);
+    if (paidRoles.length === 0 || paidRoles.length !== specifiedRoles.length) {
+        return null;
     }
-    return asPaidRole(authClaim);
+    const distinctRoles = new Set(paidRoles);
+    return distinctRoles.size === 1 ? paidRoles[0] : null;
 }
 
 function resolveSubscriptionId(documentId: string, data: Record<string, unknown>): string | null {
@@ -319,7 +321,7 @@ async function loadGiftTarget(
         if (subscription.id !== currentSubscriptionIds[0]) {
             return null;
         }
-        const role = resolveGiftRole(local, subscription, user.customClaims?.stripeRole);
+        const role = resolveGiftRole(local, subscription);
         if (!role || (subscription.status !== 'active' && subscription.status !== 'trialing')) {
             return null;
         }
@@ -705,6 +707,30 @@ async function finalizeGiftOperation(
         }, { merge: true });
         return true;
     });
+}
+
+async function finalizeGiftOperationOrThrow(
+    db: admin.firestore.Firestore,
+    uid: string,
+    operationId: string,
+    leaseToken: string,
+    status: 'failed' | 'needs_review',
+    resultCode: string,
+): Promise<void> {
+    const finalized = await finalizeGiftOperation(
+        db,
+        uid,
+        operationId,
+        leaseToken,
+        status,
+        resultCode,
+    );
+    if (!finalized) {
+        throw new HttpsError(
+            'unavailable',
+            'The gift operation status could not be finalized safely. Retry the same operation.',
+        );
+    }
 }
 
 function buildResponse(
@@ -1162,15 +1188,9 @@ export const grantAdminSubscriptionGift = onAdminCall<
     try {
         currentSubscription = await stripe.subscriptions.retrieve(acquired.operation.subscriptionId);
     } catch (error) {
-        const status: AdminSubscriptionGiftOperationStatus = existingOperation ? 'needs_review' : 'failed';
-        await finalizeGiftOperation(
-            db,
-            input.uid,
-            input.operationId,
-            leaseToken,
-            status,
-            existingOperation ? 'stripe_reconciliation_unavailable' : 'stripe_subscription_read_failed',
-        );
+        const status: Extract<AdminSubscriptionGiftOperationStatus, 'failed' | 'needs_review'> = existingOperation
+            ? 'needs_review'
+            : 'failed';
         logger.warn('[admin-subscription-gift] Stripe subscription verification failed.', {
             uid: input.uid,
             operationId: input.operationId,
@@ -1178,6 +1198,14 @@ export const grantAdminSubscriptionGift = onAdminCall<
             type: (error as { type?: unknown })?.type || 'unknown',
             statusCode: (error as { statusCode?: unknown })?.statusCode || null,
         });
+        await finalizeGiftOperationOrThrow(
+            db,
+            input.uid,
+            input.operationId,
+            leaseToken,
+            status,
+            existingOperation ? 'stripe_reconciliation_unavailable' : 'stripe_subscription_read_failed',
+        );
         return buildResponse(
             input.operationId,
             acquired.operation,
@@ -1198,7 +1226,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
             input.operationId,
             acquired.operation,
         )) {
-            await finalizeGiftOperation(
+            await finalizeGiftOperationOrThrow(
                 db,
                 input.uid,
                 input.operationId,
@@ -1240,7 +1268,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
         || target.role !== acquired.operation.role
         || currentPreviewVersion !== acquired.operation.previewVersion
     ) {
-        await finalizeGiftOperation(
+        await finalizeGiftOperationOrThrow(
             db,
             input.uid,
             input.operationId,
@@ -1275,14 +1303,6 @@ export const grantAdminSubscriptionGift = onAdminCall<
     } catch (error) {
         const ambiguous = stripeGiftOutcomeIsAmbiguous(error);
         const status = ambiguous ? 'needs_review' : 'failed';
-        await finalizeGiftOperation(
-            db,
-            input.uid,
-            input.operationId,
-            leaseToken,
-            status,
-            ambiguous ? 'stripe_outcome_ambiguous' : 'stripe_request_rejected',
-        );
         logger.warn('[admin-subscription-gift] Stripe did not return a successful gift response.', {
             uid: input.uid,
             operationId: input.operationId,
@@ -1290,6 +1310,14 @@ export const grantAdminSubscriptionGift = onAdminCall<
             type: (error as { type?: unknown })?.type || 'unknown',
             statusCode: (error as { statusCode?: unknown })?.statusCode || null,
         });
+        await finalizeGiftOperationOrThrow(
+            db,
+            input.uid,
+            input.operationId,
+            leaseToken,
+            status,
+            ambiguous ? 'stripe_outcome_ambiguous' : 'stripe_request_rejected',
+        );
         return buildResponse(
             input.operationId,
             acquired.operation,
@@ -1307,7 +1335,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
         acquired.operation,
     );
     if (!applicationPreserved) {
-        await finalizeGiftOperation(
+        await finalizeGiftOperationOrThrow(
             db,
             input.uid,
             input.operationId,
