@@ -60,6 +60,32 @@ type StripeCouponsApi = {
     retrieve: (couponId: string) => Promise<StripeCouponShape>;
 };
 
+async function hasLongRunningDiscount(
+    discounts: StripeDiscountShape[],
+    couponsApi: StripeCouponsApi,
+): Promise<boolean> {
+    for (const discount of discounts) {
+        if (typeof discount === 'string' || discount.deleted === true) {
+            continue;
+        }
+        const coupon = discount.source?.coupon;
+        if (!coupon) {
+            continue;
+        }
+        const resolvedCoupon = typeof coupon === 'string'
+            ? await couponsApi.retrieve(coupon)
+            : coupon;
+        if (resolvedCoupon.deleted === true) {
+            continue;
+        }
+        if (resolvedCoupon.duration === 'forever' || resolvedCoupon.duration === 'repeating') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function normalizeToDate(value: unknown): Date | null {
     if (!value) {
         return null;
@@ -185,28 +211,16 @@ async function resolveNextPaymentAmountForZeroDueInvoice(
         const subscription = await subscriptionsApi.retrieve(subscriptionId, {
             expand: ['discounts.source.coupon', 'items.data.discounts']
         });
-        const discounts = [
-            ...(subscription.discounts || []),
-            ...(subscription.items?.data || []).flatMap(item => item.discounts || []),
-        ];
-        for (const discount of discounts) {
-            if (typeof discount === 'string') {
-                throw new Error('Stripe returned an unexpanded discount.');
-            }
-            if (discount.deleted === true) {
-                continue;
-            }
-            const coupon = discount.source?.coupon;
-            if (!coupon) {
-                continue;
-            }
-            const resolvedCoupon = typeof coupon === 'string'
-                ? await couponsApi.retrieve(coupon)
-                : coupon;
-            if (resolvedCoupon.deleted === true) {
-                continue;
-            }
-            if (resolvedCoupon.duration === 'forever' || resolvedCoupon.duration === 'repeating') {
+        if (await hasLongRunningDiscount(subscription.discounts || [], couponsApi)) {
+            return 0;
+        }
+
+        const subscriptionItems = subscription.items?.data || [];
+        if (subscriptionItems.length > 0) {
+            const itemCoverage = await Promise.all(subscriptionItems.map(item =>
+                hasLongRunningDiscount(item.discounts || [], couponsApi)
+            ));
+            if (itemCoverage.every(Boolean)) {
                 return 0;
             }
         }
@@ -215,7 +229,6 @@ async function resolveNextPaymentAmountForZeroDueInvoice(
             subscriptionId,
             error
         });
-        return 0;
     }
 
     return Math.round(subtotal);

@@ -249,6 +249,76 @@ describe('getUpcomingRenewalAmount', () => {
         expect(mockRetrieveCoupon).toHaveBeenCalledWith('coupon_item_forever');
     });
 
+    it('should not treat one discounted item as covering a multi-item subscription', async () => {
+        mockCreatePreview.mockResolvedValueOnce({
+            amount_due: 0,
+            subtotal: 899,
+            currency: 'eur'
+        });
+        mockRetrieveSubscription.mockResolvedValueOnce({
+            discounts: [],
+            items: {
+                data: [
+                    { discounts: [{ source: { coupon: { duration: 'forever' } } }] },
+                    { discounts: [] },
+                ],
+            },
+        });
+
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
+        const result = await handler(baseRequest);
+
+        expect(result).toEqual({
+            status: 'ready',
+            amountMinor: 899,
+            currency: 'EUR'
+        });
+    });
+
+    it('should keep zero when every item has a long-running discount', async () => {
+        mockCreatePreview.mockResolvedValueOnce({
+            amount_due: 0,
+            subtotal: 899,
+            currency: 'eur'
+        });
+        mockRetrieveSubscription.mockResolvedValueOnce({
+            discounts: [],
+            items: {
+                data: [
+                    { discounts: [{ source: { coupon: { duration: 'forever' } } }] },
+                    { discounts: [{ source: { coupon: { duration: 'repeating' } } }] },
+                ],
+            },
+        });
+
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
+        const result = await handler(baseRequest);
+
+        expect(result).toEqual({
+            status: 'ready',
+            amountMinor: 0,
+            currency: 'EUR'
+        });
+    });
+
+    it('should fall back to the subtotal when Stripe discount inspection fails', async () => {
+        mockCreatePreview.mockResolvedValueOnce({
+            amount_due: 0,
+            subtotal: 399,
+            currency: 'eur'
+        });
+        mockRetrieveSubscription.mockRejectedValueOnce(new Error('Transient Stripe failure'));
+
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
+        const result = await handler(baseRequest);
+
+        expect(result).toEqual({
+            status: 'ready',
+            amountMinor: 399,
+            currency: 'EUR'
+        });
+    });
+
     it('should return unavailable when no resolvable Stripe subscription id exists', async () => {
         mockGet.mockResolvedValueOnce({
             empty: false,

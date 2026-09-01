@@ -939,6 +939,142 @@ async function updateNotificationFailure(
     }
 }
 
+type GiftNotificationResolution =
+    | { type: 'recipient'; recipient: string }
+    | { type: 'failure'; resultCode: string }
+    | null;
+
+type GiftNotificationTransactionResult = AdminSubscriptionGiftNotificationStatus | 'needs_recipient';
+
+async function runGiftNotificationTransaction(
+    db: admin.firestore.Firestore,
+    uid: string,
+    operationId: string,
+    resolution: GiftNotificationResolution,
+): Promise<GiftNotificationTransactionResult> {
+    return db.runTransaction(async transaction => {
+        const giftOperationRef = operationRef(db, uid, operationId);
+        const [guard, operationSnapshot] = await Promise.all([
+            getUserDeletionGuardStateInTransaction(db, transaction, uid),
+            transaction.get(giftOperationRef),
+        ]);
+        if (guard.shouldSkip || !operationSnapshot.exists) {
+            return 'failed' as const;
+        }
+        const latestOperation = parseStoredGiftOperation(
+            operationSnapshot.data() as Record<string, unknown> | undefined,
+        );
+        if (!latestOperation || latestOperation.status !== 'succeeded') {
+            return 'failed' as const;
+        }
+        if (latestOperation.notificationStatus === 'delivered') {
+            return 'delivered' as const;
+        }
+
+        const currentAttempt = Math.min(latestOperation.notificationAttempt, MAX_NOTIFICATION_ATTEMPTS);
+        const currentMailRef = db.collection('mail').doc(mailDocumentId(uid, operationId, currentAttempt));
+        const currentMail = await transaction.get(currentMailRef);
+        const currentMailData = currentMail.data() as Record<string, unknown> | undefined;
+        if (currentMail.exists && isDeliverySuccess(currentMailData)) {
+            transaction.set(giftOperationRef, {
+                notificationStatus: 'delivered',
+                notificationResultCode: 'delivered',
+                updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+            return 'delivered' as const;
+        }
+        if (currentMail.exists && !isDeliveryError(currentMailData)) {
+            transaction.set(giftOperationRef, {
+                notificationStatus: 'queued',
+                notificationResultCode: 'already_queued',
+                updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+            return 'queued' as const;
+        }
+        if (!currentMail.exists && latestOperation.notificationStatus === 'queued') {
+            transaction.set(giftOperationRef, {
+                notificationStatus: 'queued',
+                notificationResultCode: 'mail_receipt_expired',
+                updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+            return 'queued' as const;
+        }
+        if (
+            !currentMail.exists
+            && latestOperation.notificationStatus === 'failed'
+            && currentAttempt >= MAX_NOTIFICATION_ATTEMPTS
+        ) {
+            transaction.set(giftOperationRef, {
+                notificationStatus: 'failed',
+                notificationResultCode: 'retry_limit_reached',
+                updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+            return 'failed' as const;
+        }
+
+        const nextAttempt = currentMail.exists ? currentAttempt + 1 : currentAttempt;
+        if (nextAttempt > MAX_NOTIFICATION_ATTEMPTS) {
+            transaction.set(giftOperationRef, {
+                notificationStatus: 'failed',
+                notificationResultCode: 'retry_limit_reached',
+                updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+            return 'failed' as const;
+        }
+        if (!resolution) {
+            return 'needs_recipient' as const;
+        }
+        if (resolution.type === 'failure') {
+            transaction.set(giftOperationRef, {
+                notificationStatus: 'failed',
+                notificationAttempt: Math.min(
+                    latestOperation.notificationAttempt + 1,
+                    MAX_NOTIFICATION_ATTEMPTS,
+                ),
+                notificationResultCode: resolution.resultCode,
+                updatedAt: FieldValue.serverTimestamp(),
+            }, { merge: true });
+            return 'failed' as const;
+        }
+
+        const nextMailRef = db.collection('mail').doc(mailDocumentId(uid, operationId, nextAttempt));
+        const nextMail = nextAttempt === currentAttempt ? currentMail : await transaction.get(nextMailRef);
+        if (!nextMail.exists) {
+            transaction.create(nextMailRef, {
+                to: resolution.recipient,
+                toUids: [uid],
+                from: TRANSACTIONAL_EMAIL_FROM,
+                replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
+                template: {
+                    name: 'subscription_time_gift',
+                    data: {
+                        role: getRoleDisplayName(latestOperation.role),
+                        gifted_months: latestOperation.months,
+                        gifted_period_label: latestOperation.months === 1
+                            ? '1 month'
+                            : `${latestOperation.months} months`,
+                        new_access_date: formatEmailDate(new Date(latestOperation.targetAccessEndSeconds * 1000)),
+                        membership_url: EMAIL_LINKS.membership,
+                    },
+                },
+                adminSubscriptionGift: {
+                    uid,
+                    operationId,
+                    attempt: nextAttempt,
+                },
+                expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
+            });
+        }
+        transaction.set(giftOperationRef, {
+            notificationStatus: 'queued',
+            notificationAttempt: nextAttempt,
+            notificationResultCode: nextMail.exists ? 'already_queued' : 'queued',
+            updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return 'queued' as const;
+    });
+}
+
 async function queueGiftNotification(
     db: admin.firestore.Firestore,
     uid: string,
@@ -952,108 +1088,27 @@ async function queueGiftNotification(
         return 'delivered';
     }
 
-    let recipient: string | undefined;
     try {
-        recipient = (await admin.auth().getUser(uid)).email;
-    } catch {
-        return updateNotificationFailure(db, uid, operationId, 'recipient_unavailable');
-    }
-    if (!recipient) {
-        return updateNotificationFailure(db, uid, operationId, 'recipient_missing_email');
-    }
+        const inspected = await runGiftNotificationTransaction(db, uid, operationId, null);
+        if (inspected !== 'needs_recipient') {
+            return inspected;
+        }
 
-    try {
-        return await db.runTransaction(async transaction => {
-            const giftOperationRef = operationRef(db, uid, operationId);
-            const [guard, operationSnapshot] = await Promise.all([
-                getUserDeletionGuardStateInTransaction(db, transaction, uid),
-                transaction.get(giftOperationRef),
-            ]);
-            if (guard.shouldSkip || !operationSnapshot.exists) {
-                return 'failed' as const;
-            }
-            const latestOperation = parseStoredGiftOperation(
-                operationSnapshot.data() as Record<string, unknown> | undefined,
-            );
-            if (!latestOperation || latestOperation.status !== 'succeeded') {
-                return 'failed' as const;
-            }
-            if (latestOperation.notificationStatus === 'delivered') {
-                return 'delivered' as const;
-            }
+        let resolution: GiftNotificationResolution;
+        try {
+            const recipient = (await admin.auth().getUser(uid)).email;
+            resolution = recipient
+                ? { type: 'recipient', recipient }
+                : { type: 'failure', resultCode: 'recipient_missing_email' };
+        } catch {
+            resolution = { type: 'failure', resultCode: 'recipient_unavailable' };
+        }
 
-            const currentAttempt = Math.min(latestOperation.notificationAttempt, MAX_NOTIFICATION_ATTEMPTS);
-            const currentMailRef = db.collection('mail').doc(mailDocumentId(uid, operationId, currentAttempt));
-            const currentMail = await transaction.get(currentMailRef);
-            const currentMailData = currentMail.data() as Record<string, unknown> | undefined;
-            if (currentMail.exists && isDeliverySuccess(currentMailData)) {
-                transaction.set(giftOperationRef, {
-                    notificationStatus: 'delivered',
-                    notificationResultCode: 'delivered',
-                    updatedAt: FieldValue.serverTimestamp(),
-                }, { merge: true });
-                return 'delivered' as const;
-            }
-            if (currentMail.exists && !isDeliveryError(currentMailData)) {
-                transaction.set(giftOperationRef, {
-                    notificationStatus: 'queued',
-                    notificationResultCode: 'already_queued',
-                    updatedAt: FieldValue.serverTimestamp(),
-                }, { merge: true });
-                return 'queued' as const;
-            }
-            if (!currentMail.exists && latestOperation.notificationStatus === 'queued') {
-                transaction.set(giftOperationRef, {
-                    notificationStatus: 'queued',
-                    notificationResultCode: 'mail_receipt_expired',
-                    updatedAt: FieldValue.serverTimestamp(),
-                }, { merge: true });
-                return 'queued' as const;
-            }
-
-            const nextAttempt = currentMail.exists ? currentAttempt + 1 : currentAttempt;
-            if (nextAttempt > MAX_NOTIFICATION_ATTEMPTS) {
-                transaction.set(giftOperationRef, {
-                    notificationStatus: 'failed',
-                    notificationResultCode: 'retry_limit_reached',
-                    updatedAt: FieldValue.serverTimestamp(),
-                }, { merge: true });
-                return 'failed' as const;
-            }
-            const nextMailRef = db.collection('mail').doc(mailDocumentId(uid, operationId, nextAttempt));
-            const nextMail = nextAttempt === currentAttempt ? currentMail : await transaction.get(nextMailRef);
-            if (!nextMail.exists) {
-                transaction.create(nextMailRef, {
-                    to: recipient,
-                    toUids: [uid],
-                    from: TRANSACTIONAL_EMAIL_FROM,
-                    replyTo: TRANSACTIONAL_EMAIL_REPLY_TO,
-                    template: {
-                        name: 'subscription_time_gift',
-                        data: {
-                            role: getRoleDisplayName(operation.role),
-                            gifted_months: operation.months,
-                            gifted_period_label: operation.months === 1 ? '1 month' : `${operation.months} months`,
-                            new_access_date: formatEmailDate(new Date(operation.targetAccessEndSeconds * 1000)),
-                            membership_url: EMAIL_LINKS.membership,
-                        },
-                    },
-                    adminSubscriptionGift: {
-                        uid,
-                        operationId,
-                        attempt: nextAttempt,
-                    },
-                    expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-                });
-            }
-            transaction.set(giftOperationRef, {
-                notificationStatus: 'queued',
-                notificationAttempt: nextAttempt,
-                notificationResultCode: nextMail.exists ? 'already_queued' : 'queued',
-                updatedAt: FieldValue.serverTimestamp(),
-            }, { merge: true });
-            return 'queued' as const;
-        });
+        const resolved = await runGiftNotificationTransaction(db, uid, operationId, resolution);
+        if (resolved === 'needs_recipient') {
+            return updateNotificationFailure(db, uid, operationId, 'queue_state_unresolved');
+        }
+        return resolved;
     } catch (error) {
         logger.warn('[admin-subscription-gift] Could not queue the optional notification.', {
             uid,

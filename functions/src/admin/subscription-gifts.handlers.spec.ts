@@ -755,7 +755,7 @@ describe('admin subscription gift callables', () => {
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
-    it('does not downgrade a concurrently delivered notification when recipient lookup fails', async () => {
+    it('does not resolve the recipient again while deterministic mail is queued', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const request = callableRequest({
             uid: 'target-user',
@@ -768,27 +768,15 @@ describe('admin subscription gift callables', () => {
         expect((await grantGift(request)).notificationStatus).toBe('queued');
 
         const operationPath = `users/target-user/adminSubscriptionGifts/${operationId}`;
-        mockAuthGetUser
-            .mockResolvedValueOnce({
-                uid: 'target-user',
-                email: 'target-user@example.com',
-                customClaims: { stripeRole: 'basic' },
-            })
-            .mockImplementationOnce(async () => {
-                db.store.set(operationPath, {
-                    ...db.store.get(operationPath),
-                    notificationStatus: 'delivered',
-                    notificationResultCode: 'delivered',
-                });
-                throw new Error('Transient Auth lookup failure');
-            });
+        const authReadsBeforeRetry = mockAuthGetUser.mock.calls.length;
 
         const retried = await grantGift(request);
 
-        expect(retried.notificationStatus).toBe('delivered');
+        expect(retried.notificationStatus).toBe('queued');
+        expect(mockAuthGetUser).toHaveBeenCalledTimes(authReadsBeforeRetry + 1);
         expect(db.store.get(operationPath)).toMatchObject({
-            notificationStatus: 'delivered',
-            notificationResultCode: 'delivered',
+            notificationStatus: 'queued',
+            notificationResultCode: 'already_queued',
         });
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
@@ -1407,12 +1395,15 @@ describe('admin subscription gift callables', () => {
 
         expect((await grantGift(request)).notificationStatus).toBe('failed');
         expect((await grantGift(request)).notificationStatus).toBe('failed');
+        const authReadsBeforeExhaustedRetry = mockAuthGetUser.mock.calls.length;
+        expect((await grantGift(request)).notificationStatus).toBe('failed');
+        expect(mockAuthGetUser).toHaveBeenCalledTimes(authReadsBeforeExhaustedRetry + 1);
         expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
             .toMatchObject({
                 status: 'succeeded',
                 notificationStatus: 'failed',
                 notificationAttempt: 3,
-                notificationResultCode: 'recipient_missing_email',
+                notificationResultCode: 'retry_limit_reached',
             });
 
         const nextPreview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
