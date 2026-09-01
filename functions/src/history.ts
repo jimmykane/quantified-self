@@ -38,6 +38,7 @@ import { getActiveRevisionProcessingLease } from './queue/revision-processing-le
 import { toSuuntoAuthorizationHeader } from './suunto/authorization-header';
 
 const BATCH_SIZE = 450;
+const SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT = 1_000_000;
 
 // Define result interface
 export interface HistoryImportResult {
@@ -298,11 +299,14 @@ export async function getWorkoutQueueItems(
     default:
       throw new Error('Not implemented');
     case ServiceNames.SuuntoApp: {
-      const requestedLimit = options.suuntoResultLimit ?? 1_000_000;
+      const requestedLimit = options.suuntoResultLimit
+        ?? SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT;
       if (!Number.isSafeInteger(requestedLimit)
         || requestedLimit <= 0
-        || requestedLimit > 1_000_000) {
-        throw new Error('Suunto workout result limit must be between 1 and 1000000.');
+        || requestedLimit > SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT) {
+        throw new Error(
+          `Suunto workout result limit must be between 1 and ${SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT}.`,
+        );
       }
       result = await requestPromise.get({
         headers: {
