@@ -12,6 +12,7 @@ import {
     HEALTH_SCHEMA_VERSION,
     HEALTH_SYNC_STATE_COLLECTION_ID,
     HEALTH_SYNC_STATUSES,
+    HealthMetricEntry,
     HealthProvider,
     HealthSampleChunk,
     HealthSourceRecord,
@@ -127,6 +128,20 @@ export interface BuiltHealthSourceRecordWrite {
 
 function cleanUndefined<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function encodeHealthMetricFirestoreData(entry: HealthMetricEntry): HealthMetricEntry {
+    const encoded = encodeHealthMetricSportsLibData(entry);
+    if (encoded.kind !== 'value' || !encoded.sportsLibData) return encoded;
+
+    const payload: HealthMetricEntry = { ...encoded };
+    delete payload.canonical;
+    if (payload.goal) {
+        const goal = { ...payload.goal };
+        delete goal.canonical;
+        payload.goal = Object.keys(goal).length > 0 ? goal : undefined;
+    }
+    return cleanUndefined(payload);
 }
 
 function stableComparableValue(value: unknown): unknown {
@@ -374,7 +389,7 @@ export async function buildHealthSourceRecordWrite(
         startTimeMs: input.startTimeMs,
         endTimeMs: input.endTimeMs,
         timezoneOffsetSeconds: input.timezoneOffsetSeconds,
-        metrics: input.metrics.map(encodeHealthMetricSportsLibData),
+        metrics: input.metrics.map(encodeHealthMetricFirestoreData),
         metricIds,
         coverage: input.coverage,
         device: input.device,
