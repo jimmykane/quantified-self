@@ -28,21 +28,63 @@ type UpcomingInvoiceShape = {
 };
 
 type StripeInvoicesApi = {
-    createPreview?: (params: { subscription: string }) => Promise<UpcomingInvoiceShape>;
-    retrieveUpcoming?: (params: { subscription: string }) => Promise<UpcomingInvoiceShape>;
+    createPreview: (params: { subscription: string }) => Promise<UpcomingInvoiceShape>;
+};
+
+type StripeCouponShape = {
+    deleted?: unknown;
+    duration?: unknown;
+};
+
+type StripeDiscountShape = string | {
+    deleted?: unknown;
+    source?: {
+        coupon?: string | StripeCouponShape | null;
+    };
 };
 
 type StripeSubscriptionShape = {
-    discount?: {
-        coupon?: {
-            duration?: unknown;
-        };
-    } | null;
+    discounts?: StripeDiscountShape[];
+    items?: {
+        data?: Array<{
+            discounts?: StripeDiscountShape[];
+        }>;
+    };
 };
 
 type StripeSubscriptionsApi = {
     retrieve: (subscriptionId: string, options?: unknown) => Promise<StripeSubscriptionShape>;
 };
+
+type StripeCouponsApi = {
+    retrieve: (couponId: string) => Promise<StripeCouponShape>;
+};
+
+async function hasLongRunningDiscount(
+    discounts: StripeDiscountShape[],
+    couponsApi: StripeCouponsApi,
+): Promise<boolean> {
+    for (const discount of discounts) {
+        if (typeof discount === 'string' || discount.deleted === true) {
+            continue;
+        }
+        const coupon = discount.source?.coupon;
+        if (!coupon) {
+            continue;
+        }
+        const resolvedCoupon = typeof coupon === 'string'
+            ? await couponsApi.retrieve(coupon)
+            : coupon;
+        if (resolvedCoupon.deleted === true) {
+            continue;
+        }
+        if (resolvedCoupon.duration === 'forever' || resolvedCoupon.duration === 'repeating') {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 function normalizeToDate(value: unknown): Date | null {
     if (!value) {
@@ -149,19 +191,12 @@ async function fetchUpcomingInvoicePreview(
     invoicesApi: StripeInvoicesApi,
     subscriptionId: string
 ): Promise<UpcomingInvoiceShape> {
-    if (typeof invoicesApi.createPreview === 'function') {
-        return invoicesApi.createPreview({ subscription: subscriptionId });
-    }
-
-    if (typeof invoicesApi.retrieveUpcoming === 'function') {
-        return invoicesApi.retrieveUpcoming({ subscription: subscriptionId });
-    }
-
-    throw new Error('Stripe invoices API does not support createPreview or retrieveUpcoming.');
+    return invoicesApi.createPreview({ subscription: subscriptionId });
 }
 
 async function resolveNextPaymentAmountForZeroDueInvoice(
     subscriptionsApi: StripeSubscriptionsApi,
+    couponsApi: StripeCouponsApi,
     subscriptionId: string,
     upcomingInvoice: UpcomingInvoiceShape
 ): Promise<number> {
@@ -174,19 +209,26 @@ async function resolveNextPaymentAmountForZeroDueInvoice(
 
     try {
         const subscription = await subscriptionsApi.retrieve(subscriptionId, {
-            expand: ['discount.coupon']
+            expand: ['discounts.source.coupon', 'items.data.discounts']
         });
-        const couponDuration = subscription.discount?.coupon?.duration;
-        const hasLongRunningDiscount = couponDuration === 'forever' || couponDuration === 'repeating';
-        if (hasLongRunningDiscount) {
+        if (await hasLongRunningDiscount(subscription.discounts || [], couponsApi)) {
             return 0;
+        }
+
+        const subscriptionItems = subscription.items?.data || [];
+        if (subscriptionItems.length > 0) {
+            const itemCoverage = await Promise.all(subscriptionItems.map(item =>
+                hasLongRunningDiscount(item.discounts || [], couponsApi)
+            ));
+            if (itemCoverage.every(Boolean)) {
+                return 0;
+            }
         }
     } catch (error) {
         logger.warn('[getUpcomingRenewalAmount] Could not inspect subscription discount while resolving zero-due invoice.', {
             subscriptionId,
             error
         });
-        return 0;
     }
 
     return Math.round(subtotal);
@@ -247,6 +289,7 @@ export const getUpcomingRenewalAmount = onCall({
         const stripe = await getStripe();
         const invoicesApi = stripe.invoices as unknown as StripeInvoicesApi;
         const subscriptionsApi = stripe.subscriptions as unknown as StripeSubscriptionsApi;
+        const couponsApi = stripe.coupons as unknown as StripeCouponsApi;
         try {
             const upcomingInvoice = await fetchUpcomingInvoicePreview(invoicesApi, subscriptionId);
 
@@ -267,6 +310,7 @@ export const getUpcomingRenewalAmount = onCall({
             if (amountDue <= 0) {
                 amountDue = await resolveNextPaymentAmountForZeroDueInvoice(
                     subscriptionsApi,
+                    couponsApi,
                     subscriptionId,
                     upcomingInvoice
                 );

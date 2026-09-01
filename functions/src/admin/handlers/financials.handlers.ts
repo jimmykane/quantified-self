@@ -73,16 +73,14 @@ export const getFinancialStats = onAdminCall<void, FinancialStatsResponse>({
                 if (!detectedCurrency && invoice.currency) detectedCurrency = invoice.currency.toLowerCase();
 
                 const amountPaid = invoice.amount_paid || 0;
-                // Use a narrow inline shape for optional Stripe invoice tax fields.
-                const taxAmount = (invoice as { tax?: number }).tax || 0;
+                const taxAmount = invoice.total_taxes?.reduce((total, tax) => total + tax.amount, 0) || 0;
                 const netAmount = amountPaid - taxAmount;
 
                 // Check if the invoice contains valid products
                 let hasValidProduct = false;
                 const lineItems = invoice.lines?.data || [];
                 for (const line of lineItems) {
-                    const price = (line as { price?: { product?: string | { id?: string } } }).price;
-                    const productId = typeof price?.product === 'string' ? price.product : price?.product?.id;
+                    const productId = line.pricing?.price_details?.product;
 
                     if (productId && validProductIds.has(productId)) {
                         hasValidProduct = true;

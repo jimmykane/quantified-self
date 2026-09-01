@@ -6,3 +6,7 @@ export { setSportsLibReparseSettings } from './handlers/reparse-settings.handler
 export { setMaintenanceMode, getMaintenanceStatus } from './handlers/maintenance.handlers';
 export { impersonateUser, stopImpersonation } from './handlers/impersonation.handlers';
 export { getFinancialStats } from './handlers/financials.handlers';
+export {
+    grantAdminSubscriptionGift,
+    previewAdminSubscriptionGift,
+} from './handlers/subscription-gifts.handlers';

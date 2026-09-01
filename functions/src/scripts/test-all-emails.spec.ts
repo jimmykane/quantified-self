@@ -112,7 +112,7 @@ describe('test-all-emails', () => {
             }))
         );
 
-        expect(documents).toHaveLength(13);
+        expect(documents).toHaveLength(14);
         for (const { template, document } of documents) {
             expect(document.template).toBeUndefined();
             expect(document.message?.subject).toBeTruthy();

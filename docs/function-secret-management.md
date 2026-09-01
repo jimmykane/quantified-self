@@ -10,7 +10,7 @@ Quantified Self deploys backend credentials through Google Cloud Secret Manager 
 | Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
-| Stripe | `STRIPE_SECRET_KEY` |
+| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend geocoding | `MAPBOX_ACCESS_TOKEN` |
 
@@ -33,6 +33,12 @@ firebase emulators:start --only auth,functions,firestore,storage
 ```
 
 Firebase's Functions emulator uses `.secret.local` for bound secret parameters. Never copy production credentials into an emulator checkout: provider calls and background workers can still reach real external services.
+
+### Stripe key separation
+
+`STRIPE_SECRET_KEY` remains the general server key used by the existing custom Stripe Functions. `STRIPE_ADMIN_BILLING_KEY` is a separate restricted key used only by `previewAdminSubscriptionGift` and `grantAdminSubscriptionGift`. In Stripe Dashboard, create one environment-specific restricted key with subscription read/write access (`Subscriptions: Write`, which permits the retrieve and update calls) and leave every unrelated resource permission disabled. Do not reuse the Invertase extension key or the general server key for this admin path.
+
+Create distinct restricted keys for Stripe test and live mode, and put only the matching key in each Firebase project's `STRIPE_ADMIN_BILLING_KEY` secret. The preview and grant callables must be deployed together after the `subscription_time_gift` email template is available. No other Function may bind this secret; `functions/src/secrets.spec.ts` and `npm --prefix functions run secrets:check` enforce that isolation.
 
 Firebase Admin uses keyless Application Default Credentials in every environment. Auth, Firestore, and Storage emulator traffic does not require Google credentials, so local emulator startup must not depend on a `service-account.json` file. Scripts that intentionally access managed Google Cloud or Firebase resources use local user ADC (`gcloud auth application-default login`) or an approved least-privilege service-account impersonation flow. Such scripts must select their target project explicitly; `.secret.local` is only for application/provider secrets and is not an Admin SDK credential store.
 
@@ -94,6 +100,8 @@ The non-dry-run Firebase command requires explicit production approval. Firebase
 This project previously stored provider credentials in deprecated Firebase Runtime Config under `suuntoapp`, `corosapi`, and `garminhealthapi`; empty `garminconnect` and `suunto-app` aliases also existed. All five namespaces were removed after the Secret Manager cutover. `disallowLegacyRuntimeConfig` prevents Runtime Config from entering new Function packages. Do not recreate those namespaces or add new `functions.config()` consumers.
 
 After deployment, verify representative OAuth, webhook, background-worker, Stripe, Assistant, MCP geocoding, sleep, cleanup, and subscription-enforcement paths. Also confirm the deployed source archive contains no `.env`, `.secret.local`, service-account JSON, debug log, or emulator export.
+
+For the subscription-time gift path, use Stripe sandbox subscriptions and test clocks before any live use. Cover monthly Basic, annual Pro, an existing trial, and a subscription with `cancel_at_period_end`. Confirm the update sends only an absolute `trial_end`, `proration_behavior: none`, and gift metadata; it must not change price items, tax settings, or the cancellation flag. A live restricted key, template seed, Function deployment, or live gift remains a separately approved production action.
 
 ## Rollback and rotation
 

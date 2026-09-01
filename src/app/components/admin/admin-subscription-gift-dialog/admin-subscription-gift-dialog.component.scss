@@ -1,0 +1,135 @@
+:host {
+    display: block;
+}
+
+.gift-dialog-content {
+    display: grid;
+    gap: 1rem;
+    width: min(42rem, 100%);
+    min-width: 0;
+}
+
+.identity-block,
+.message-block,
+.loading-block,
+.section-title-row,
+.history-heading,
+.action-content {
+    display: flex;
+    align-items: center;
+}
+
+.identity-block {
+    gap: 0.75rem;
+}
+
+.identity-block > mat-icon {
+    color: var(--mat-sys-primary);
+}
+
+.identity-block h3,
+.identity-block p,
+.preview-section h3,
+.history-section h3,
+.history-item p {
+    margin: 0;
+}
+
+.identity-block p,
+.uid,
+.preview-note,
+.history-item span,
+.empty-history {
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.uid {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.75rem;
+}
+
+.message-block,
+.loading-block {
+    gap: 0.6rem;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    background: var(--mat-sys-surface-container);
+}
+
+.error-message {
+    color: var(--mat-sys-error);
+}
+
+.retry-message {
+    color: var(--mat-sys-primary);
+}
+
+.gift-form-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+}
+
+.preview-section,
+.history-section {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.section-title-row,
+.history-heading {
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.preview-grid > div,
+.history-item {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 0.75rem;
+}
+
+.preview-grid span,
+.history-reason {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.8rem;
+}
+
+.preview-grid .gifted-date {
+    border-color: var(--mat-sys-primary);
+}
+
+.preview-note,
+.empty-history {
+    margin: 0;
+}
+
+.history-item + .history-item {
+    margin-top: 0.25rem;
+}
+
+.reason-field {
+    width: 100%;
+}
+
+.action-content {
+    justify-content: center;
+    gap: 0.4rem;
+    line-height: 1;
+}
+
+@media (max-width: 38rem) {
+    .gift-form-grid,
+    .preview-grid {
+        grid-template-columns: 1fr;
+    }
+}

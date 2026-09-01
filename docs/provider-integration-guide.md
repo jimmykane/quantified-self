@@ -71,6 +71,12 @@ Use the existing provider structure before inventing a parallel abstraction:
 - `shared/functions-manifest.ts` owns callable names and regions used by browser and Functions code.
 - `shared/provider-presentation.ts` owns display labels, branding variants, and icon keys.
 
+### Stripe billing provider boundary
+
+Stripe is an infrastructure provider rather than a user-connected activity source. The Invertase Stripe extension remains the owner of Checkout/customer records and webhook synchronization into Firestore. Custom Functions use Stripe Node `22.4.0` with API `2026-07-29.dahlia`; integration changes must regression-test the custom claims, subscription lifecycle, email, cleanup, price-maintenance, and renewal-amount paths while leaving extension configuration unchanged unless a separate migration explicitly requires it.
+
+Privileged admin billing mutations use a dedicated `STRIPE_ADMIN_BILLING_KEY` restricted to subscription read/write access and bound only to `previewAdminSubscriptionGift` and `grantAdminSubscriptionGift`. The general `STRIPE_SECRET_KEY` remains isolated from that workflow. Subscription-time gifts use an absolute future `trial_end` with no proration, preserve price items, tax configuration, metadata unrelated to the gift, and `cancel_at_period_end`, and rely on the extension webhook to synchronize the result. Reject Subscription Schedules, billing schedules, pending billing updates, and flexible-billing subscriptions instead of competing with future Stripe state. Validate monthly Basic, annual Pro, existing-trial, and scheduled-cancellation cases with Stripe sandbox subscriptions and test clocks before requesting any live rollout.
+
 ## 3. Foundation and shared contracts
 
 Complete these shared changes early. Exhaustive unions and switch statements are deliberate: they force every cross-cutting surface to acknowledge the provider.

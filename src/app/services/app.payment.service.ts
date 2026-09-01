@@ -52,6 +52,7 @@ export interface StripeSubscription {
     current_period_start: any;
     cancel_at_period_end: boolean;
     created?: any;
+    metadata?: Record<string, string>;
 }
 
 type CheckoutMode = 'subscription' | 'payment';

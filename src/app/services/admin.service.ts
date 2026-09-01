@@ -11,6 +11,12 @@ import type {
     SetSportsLibReparseSettingsRequest,
     SetSportsLibReparseSettingsResponse,
 } from '../../../shared/admin-queue-stats';
+import type {
+    GrantAdminSubscriptionGiftRequest,
+    GrantAdminSubscriptionGiftResponse,
+    PreviewAdminSubscriptionGiftRequest,
+    PreviewAdminSubscriptionGiftResponse,
+} from '../../../shared/admin-subscription-gifts';
 
 export interface CountStats {
     total: number | null;
@@ -313,6 +319,24 @@ export class AdminService {
         })).pipe(
             map(result => result.data)
         );
+    }
+
+    previewSubscriptionGift(
+        request: PreviewAdminSubscriptionGiftRequest,
+    ): Observable<PreviewAdminSubscriptionGiftResponse> {
+        return from(this.functionsService.call<PreviewAdminSubscriptionGiftRequest, PreviewAdminSubscriptionGiftResponse>(
+            'previewAdminSubscriptionGift',
+            request,
+        )).pipe(map(result => result.data));
+    }
+
+    grantSubscriptionGift(
+        request: GrantAdminSubscriptionGiftRequest,
+    ): Observable<GrantAdminSubscriptionGiftResponse> {
+        return from(this.functionsService.call<GrantAdminSubscriptionGiftRequest, GrantAdminSubscriptionGiftResponse>(
+            'grantAdminSubscriptionGift',
+            request,
+        )).pipe(map(result => result.data));
     }
 
     getQueueStats(includeAnalysis = true): Observable<QueueStats> {

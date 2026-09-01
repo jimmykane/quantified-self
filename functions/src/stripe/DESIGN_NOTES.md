@@ -1,5 +1,17 @@
 # Stripe Subscription Handling - Design Notes
 
+## API and ownership boundary
+
+Custom Functions use Stripe Node `22.4.0` with API `2026-07-29.dahlia`. Dahlia exposes subscription discounts through `discounts[]`; custom renewal calculations must not reintroduce the removed singular discount shape. The Invertase Stripe extension is unchanged and remains responsible for Checkout/customer document flows and webhook synchronization.
+
+The normal custom Stripe paths use `STRIPE_SECRET_KEY`. Admin subscription-time gifts use the separately cached `STRIPE_ADMIN_BILLING_KEY`, restricted to subscription read/write access and bound only to the preview and grant callables.
+
+## Admin subscription-time gifts
+
+An authenticated, App Check-verified admin can preview and grant 1–12 UTC calendar months to exactly one active or trialing Basic/Pro subscription. The target date starts from the later of the paid item-period end or existing trial end, clamps month-end dates, and must remain within Stripe's limit of two UTC calendar years from the subscription's `billing_cycle_anchor`. End-of-period cancellation through `cancel_at_period_end` is supported and must remain scheduled; a separate fixed `cancel_at` timestamp is rejected for manual review because it could end access before the gifted trial.
+
+Grant operations persist the absolute target before Stripe, lock per user, use a deterministic Stripe idempotency key, and reconcile retries against gift metadata. The Stripe update is intentionally limited to `trial_end`, `proration_behavior: 'none'`, and namespaced gift metadata. It must not send price items, tax configuration, or cancellation fields. Ambiguous outcomes become `needs_review` and block a new operation until the same operation is reconciled. Preview returns the exact server-stored retry fields for the lock owner so reopening the admin dialog can resume that operation without constructing a new target. Audit records and locks are server-only descendants of the user and are removed by normal recursive account deletion.
+
 ## Subscription Status Handling
 
 ### Why `past_due` is NOT included in active subscription checks
