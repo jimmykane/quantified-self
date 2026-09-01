@@ -53,6 +53,12 @@ const GARMIN_HEALTH_WEBHOOK_MAX_DESCRIPTORS = 10_000;
 const GARMIN_HEALTH_WEBHOOK_QUEUE_CONCURRENCY = 64;
 const GARMIN_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH = 512;
 const SUUNTO_TIMESTAMP_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:?\d{2})$/;
+// Temporary diagnostic requested for reconciling callbacks with Suunto. Keep
+// the raw provider username narrowly scoped to disconnected callback outcomes
+// and stop emitting it automatically after the investigation window.
+const SUUNTO_DISCONNECTED_USERNAME_LOGGING_EXPIRES_AT = '2026-09-08T00:00:00.000Z';
+const SUUNTO_DISCONNECTED_USERNAME_LOGGING_EXPIRES_AT_MS =
+    Date.parse(SUUNTO_DISCONNECTED_USERNAME_LOGGING_EXPIRES_AT);
 
 type GarminWebhookFamilyCounts = Record<GarminSupportedSummaryType, number>;
 const GARMIN_UNSUPPORTED_WEBHOOK_SUMMARY_TYPES = ['epochs'] as const;
@@ -165,6 +171,22 @@ function asArray(value: unknown): unknown[] {
 
 function asString(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function temporarySuuntoDisconnectedUsernameLogFields(
+    providerUserId: string,
+    notificationType: string,
+    nowMs = Date.now(),
+): Record<string, string> {
+    const fields: Record<string, string> = {
+        diagnostic: 'suunto-disconnected-username-investigation',
+        notificationType,
+        usernameLoggingExpiresAt: SUUNTO_DISCONNECTED_USERNAME_LOGGING_EXPIRES_AT,
+    };
+    if (nowMs < SUUNTO_DISCONNECTED_USERNAME_LOGGING_EXPIRES_AT_MS) {
+        fields.suuntoUsername = providerUserId;
+    }
+    return fields;
 }
 
 function asDedupePart(value: unknown): string | null {
@@ -625,7 +647,10 @@ async function handleSuunto247DataWebhook(
                 windows,
             });
             if (ingressResult === 'permanent_skip') {
-                logger.info('[HealthSync][Suunto] Dropped signed webhook without an active binding.');
+                logger.info(
+                    '[HealthSync][Suunto] Dropped signed webhook without an active binding.',
+                    temporarySuuntoDisconnectedUsernameLogFields(providerUserId, notificationType),
+                );
             } else {
                 logger.info('[HealthSync][Suunto] Durably accepted webhook ingress', {
                     ingressResult,
@@ -638,7 +663,10 @@ async function handleSuunto247DataWebhook(
 
         const scopedUserIDs = await resolveScopedSuuntoWebhookUserIDs(providerUserId);
         if (scopedUserIDs.length === 0) {
-            logger.info('[SleepSync][Suunto] Ignoring webhook without a connected Suunto token or outside SLEEP_SYNC_ALLOWED_USER_IDS');
+            logger.info(
+                '[SleepSync][Suunto] Ignoring webhook without a connected Suunto token or outside SLEEP_SYNC_ALLOWED_USER_IDS',
+                temporarySuuntoDisconnectedUsernameLogFields(providerUserId, notificationType),
+            );
             res.status(200).send();
             return;
         }
@@ -714,5 +742,6 @@ export const receiveSuunto247Data = createSuunto247DataWebhook(
 export const suuntoWebhookTestInternals = {
     buildSuuntoHealthWebhookWindows,
     parseSuuntoWebhookLocalDayBounds,
+    temporarySuuntoDisconnectedUsernameLogFields,
     SUUNTO_HEALTH_WEBHOOK_MAX_BYTES,
 };

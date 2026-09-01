@@ -38,6 +38,7 @@ import { getActiveRevisionProcessingLease } from './queue/revision-processing-le
 import { toSuuntoAuthorizationHeader } from './suunto/authorization-header';
 
 const BATCH_SIZE = 450;
+const SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT = 1_000_000;
 
 // Define result interface
 export interface HistoryImportResult {
@@ -286,19 +287,34 @@ export async function addHistoryToQueue(
   };
 }
 
-export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<SuuntoAppWorkoutQueueItemInterface | COROSAPIWorkoutQueueItemInterface[]> {
+export async function getWorkoutQueueItems(
+  serviceName: ServiceNames,
+  serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface,
+  startDate: Date,
+  endDate: Date,
+  options: { suuntoResultLimit?: number } = {},
+): Promise<SuuntoAppWorkoutQueueItemInterface | COROSAPIWorkoutQueueItemInterface[]> {
   let result;
   switch (serviceName) {
     default:
       throw new Error('Not implemented');
-    case ServiceNames.SuuntoApp:
+    case ServiceNames.SuuntoApp: {
+      const requestedLimit = options.suuntoResultLimit
+        ?? SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT;
+      if (!Number.isSafeInteger(requestedLimit)
+        || requestedLimit <= 0
+        || requestedLimit > SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT) {
+        throw new Error(
+          `Suunto workout result limit must be between 1 and ${SUUNTO_WORKOUT_HISTORY_MAX_RESULT_LIMIT}.`,
+        );
+      }
       result = await requestPromise.get({
         headers: {
           'Authorization': toSuuntoAuthorizationHeader(serviceToken.accessToken),
           'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           'json': true,
         },
-        url: `https://cloudapi.suunto.com/v3/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000&filter-by-modification-time=false`,
+        url: `https://cloudapi.suunto.com/v3/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=${requestedLimit}&filter-by-modification-time=false`,
       });
       result = JSON.parse(result);
       if (result.error) {
@@ -318,6 +334,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
             dispatchedToCloudTask: null,
           };
         }));
+    }
     case ServiceNames.COROSAPI: {
       const accessToken = typeof serviceToken.accessToken === 'string' ? serviceToken.accessToken.trim() : '';
       const openId = normalizeCOROSOpenId((serviceToken as COROSAPIAuth2ServiceTokenInterface).openId);

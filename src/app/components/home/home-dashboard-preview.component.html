@@ -1,4 +1,4 @@
-<section class="dashboard-preview" role="img"
+<section class="dashboard-preview"
   aria-label="Dashboard preview with Fitness, Form, Easy intensity, and clustered activity map tiles">
   <header class="dashboard-preview__header">
     <div>
@@ -7,21 +7,21 @@
     <span class="dashboard-preview__arrange"><mat-icon>drag_indicator</mat-icon>Arrange</span>
   </header>
 
-  <div class="dashboard-preview__tiles" inert aria-hidden="true" data-nosnippet>
+  <div class="dashboard-preview__tiles" data-nosnippet>
     <article class="dashboard-preview__tile">
       <mat-icon class="dashboard-preview__handle">drag_indicator</mat-icon>
       <app-kpi-chart [compactRow]="true" [darkTheme]="darkTheme()" [chartType]="fitnessChartType"
-        [fitnessCtl]="fitnessCtl"></app-kpi-chart>
+        [fitnessCtl]="fitnessCtl" [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-kpi-chart>
     </article>
     <article class="dashboard-preview__tile">
       <mat-icon class="dashboard-preview__handle">drag_indicator</mat-icon>
       <app-kpi-chart [compactRow]="true" [darkTheme]="darkTheme()" [chartType]="formChartType"
-        [formNow]="formNow"></app-kpi-chart>
+        [formNow]="formNow" [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-kpi-chart>
     </article>
     <article class="dashboard-preview__tile">
       <mat-icon class="dashboard-preview__handle">drag_indicator</mat-icon>
       <app-kpi-chart [compactRow]="true" [darkTheme]="darkTheme()" [chartType]="easyChartType"
-        [easyPercent]="easyPercent"></app-kpi-chart>
+        [easyPercent]="easyPercent" [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-kpi-chart>
     </article>
 
     <div class="dashboard-preview__detail-tiles">

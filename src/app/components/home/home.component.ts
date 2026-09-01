@@ -3,7 +3,6 @@ import { isPlatformBrowser } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import {
   MAT_TOOLTIP_DEFAULT_OPTIONS,
@@ -13,6 +12,7 @@ import {
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 import { TypedPromptRotatorComponent } from '../shared/typed-prompt-rotator/typed-prompt-rotator.component';
+import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
 import { TrainingSummaryCardsComponent } from '../shared/training-summary/training-summary-cards.component';
 import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
 import type {
@@ -22,6 +22,8 @@ import type {
 import { HomeSignalChartsPreviewComponent } from './home-signal-charts-preview.component';
 import { HomeDashboardPreviewComponent } from './home-dashboard-preview.component';
 import { HomeWorkoutPreviewComponent } from './home-workout-preview.component';
+import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
+import { buildPublicProviderDataFlowRows } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.helper';
 
 const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
   showDelay: 0,
@@ -38,7 +40,6 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
   imports: [
     RouterLink,
     MatButtonModule,
-    MatCardModule,
     MatIconModule,
     MatTooltipModule,
     HomeDashboardPreviewComponent,
@@ -47,12 +48,16 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
     TrainingSummaryCardsComponent,
     TrainingMetricGridComponent,
     TypedPromptRotatorComponent,
+    CompactFeatureRowComponent,
+    ProviderDataFlowMatrixComponent,
   ],
   providers: [
     { provide: MAT_TOOLTIP_DEFAULT_OPTIONS, useValue: HOME_TOOLTIP_DEFAULT_OPTIONS },
   ],
 })
 export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
+
+  public readonly providerDataFlowRows = buildPublicProviderDataFlowRows();
 
   public readonly trainingPreviewCards: readonly TrainingSummaryCard[] = [
     {
@@ -158,18 +163,15 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-visible');
-        } else {
-          // Remove class when out of view to reset animation
-          entry.target.classList.remove('is-visible');
+        if (!entry.isIntersecting) {
+          return;
         }
+
+        entry.target.classList.add('is-visible');
+        this.observer?.unobserve(entry.target);
       });
     }, {
       threshold: 0.1,
-      // rootMargin: '0px 0px -50px 0px'
-      // Adjusting rootMargin might be needed if they "pop" out too quickly,
-      // but default intersection logic is safer for replay.
       rootMargin: '0px 0px -50px 0px'
     });
 

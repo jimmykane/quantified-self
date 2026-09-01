@@ -691,6 +691,34 @@ describe('history', () => {
             expect(items[1].id).toBe('user-1-keep-2');
         });
 
+        it('bounds Suunto workout history when a caller supplies a repair limit', async () => {
+            (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: [] }));
+
+            await history.getWorkoutQueueItems(
+                ServiceNames.SuuntoApp,
+                { accessToken: 't', userName: 'user-1' } as any,
+                new Date('2026-08-28T00:00:00.000Z'),
+                new Date('2026-09-01T00:00:00.000Z'),
+                { suuntoResultLimit: 1001 },
+            );
+
+            expect(requestHelper.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('limit=1001'),
+            }));
+        });
+
+        it('rejects invalid Suunto workout history limits before provider I/O', async () => {
+            await expect(history.getWorkoutQueueItems(
+                ServiceNames.SuuntoApp,
+                { accessToken: 't', userName: 'user-1' } as any,
+                new Date(),
+                new Date(),
+                { suuntoResultLimit: 1_000_001 },
+            )).rejects.toThrow('between 1 and 1000000');
+
+            expect(requestHelper.get).not.toHaveBeenCalled();
+        });
+
         it('should throw when Suunto response contains error field', async () => {
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({
                 error: 'Rate limited'

@@ -15,6 +15,7 @@ import { ServiceConnectionStatusComponent } from '../components/services/service
 import { ActivitySyncRouteControlComponent } from '../components/services/activity-sync-route-control/activity-sync-route-control.component';
 import { RouteDeliverySyncRouteControlComponent } from '../components/services/route-delivery-sync-route-control/route-delivery-sync-route-control.component';
 import { McpConnectionsComponent } from '../components/mcp-connections/mcp-connections.component';
+import { ProviderDataFlowMatrixComponent } from '../components/shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 
 @NgModule({
     imports: [
@@ -23,6 +24,7 @@ import { McpConnectionsComponent } from '../components/mcp-connections/mcp-conne
         MaterialModule,
         ServicesRoutingModule,
         McpConnectionsComponent,
+        ProviderDataFlowMatrixComponent,
     ],
     exports: [],
     declarations: [

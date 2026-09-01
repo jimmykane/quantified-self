@@ -10,7 +10,6 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { MatIconModule } from '@angular/material/icon';
-import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltip, MatTooltipModule } from '@angular/material/tooltip';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
@@ -23,6 +22,8 @@ import { signal } from '@angular/core';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
+import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -60,7 +61,6 @@ describe('HomeComponent', () => {
                 RouterTestingModule.withRoutes([]),
                 MatIconModule,
                 MatIconTestingModule,
-                MatCardModule,
                 MatButtonModule,
                 MatTooltipModule,
                 BrowserAnimationsModule
@@ -130,15 +130,19 @@ describe('HomeComponent', () => {
         expect(aiSectionText).toContain('when your question needs the broader context.');
         expect(aiSectionText).toContain('Check the Evidence');
         expect(aiSectionText).toContain('see exactly what supports it.');
-        expect(aiSectionText).toContain('Connect Other AI Tools');
-        expect(aiSectionText).toContain('Grant access to the training, sleep, measurements, activity charts, and routes you choose.');
-        expect(aiSectionText).toContain('Location access remains a separate permission.');
-        expect(aiSectionText).toContain('Explore MCP Access');
+        expect(aiSectionText).toContain('Analyze with ChatGPT or Claude');
+        expect(aiSectionText).toContain('analyze your training, review your season, plan your next workout, or draft a longer training-plan proposal');
+        expect(aiSectionText).toContain('load, fatigue, readiness, sleep, measurements, workout charts, and routes');
+        expect(aiSectionText).toContain('neither tool can add workouts or change your account');
+        expect(aiSectionText).toContain('Location access remains separate.');
+        expect(aiSectionText).toContain('Connect ChatGPT or Claude');
         expect(aiSectionText).not.toContain('read-only sleep, readiness');
         expect(aiSectionText).not.toContain('complete training history');
         expect(aiSectionText).not.toContain('Read-only MCP Server');
         expect(aiSectionText).toContain('Explore the Assistant');
-        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid .feature-icon-container[data-nosnippet]').length).toBe(3);
+        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid app-compact-feature-row').length).toBe(3);
+        expect(fixture.nativeElement.querySelector('.mcp-access-row').classList)
+            .toContain('compact-feature-row-host--without-divider');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('.ai-insights-section a[routerlink="/features/mcp-server"], .ai-insights-section a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
@@ -204,12 +208,29 @@ describe('HomeComponent', () => {
         expect(text).toContain('Move Workouts and Routes');
         expect(text).toContain('automatic delivery between supported providers');
         expect(text).toContain('send past activities by date range');
-        expect(text).toContain('Garmin → Suunto, Wahoo, or COROS');
-        expect(text).toContain('Import Suunto routes');
-        expect(text).toContain('Send saved FIT/GPX routes manually');
+        expect(text).toContain('Supported provider paths');
+        expect(text).toContain('Activity paths:');
+        expect(text).toContain('backfill past activities by date range');
+        expect(text).toContain('Route paths:');
+        expect(text).toContain('Deliver imported Suunto routes automatically or on demand');
+        expect(text).toContain('Saved FIT/GPX routes');
+        const providerMatrix = fixture.debugElement.query(By.directive(ProviderDataFlowMatrixComponent));
+        expect(providerMatrix).toBeTruthy();
+        expect(providerMatrix.componentInstance.rows()).toBe(component.providerDataFlowRows);
+        expect(providerMatrix.componentInstance.compact()).toBe(true);
+        expect(providerMatrix.componentInstance.interactive()).toBe(false);
+        expect(providerMatrix.nativeElement.hasAttribute('data-nosnippet')).toBe(true);
+        expect(providerMatrix.nativeElement.querySelector('.provider-data-flow-matrix__mobile')).toBeNull();
+        expect(providerMatrix.nativeElement.querySelectorAll('button')).toHaveLength(0);
         expect(text).toContain('Upload Your Own Files');
         expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
         expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');
+        const integrationDividerRows = fixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))
+            .filter(row => row.nativeElement.classList.contains('integration-capability'));
+        expect(integrationDividerRows).toHaveLength(3);
+        expect(integrationDividerRows[0].componentInstance.showDivider()).toBe(true);
+        expect(integrationDividerRows[1].componentInstance.showDivider()).toBe(true);
+        expect(integrationDividerRows[2].componentInstance.showDivider()).toBe(false);
         expect(fixture.nativeElement.querySelector('mat-icon[svgIcon="wahoo"], mat-icon[ng-reflect-svg-icon="wahoo"]')).toBeTruthy();
         expect(text).toContain('Explore Integrations');
         expect(text).not.toContain('Explore Wahoo');
@@ -224,16 +245,16 @@ describe('HomeComponent', () => {
         const performanceCards = fixture.nativeElement.querySelectorAll(
             '.features-section:not(.ai-insights-section) .features-grid .feature-card'
         );
-        const trainingPreview = fixture.nativeElement.querySelector('.training-preview-card');
+        const trainingPreview = fixture.nativeElement.querySelector('.training-preview-row');
         const trainingPreviewIndicators = fixture.nativeElement.querySelectorAll(
-            '.training-preview-card app-metric-indicator'
+            '.training-preview-row app-metric-indicator'
         );
         const signalPreviews = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
         const deferredPreviewPlaceholders = fixture.nativeElement.querySelectorAll('.home-preview-placeholder');
 
         expect(performanceCards.length).toBe(3);
         expect(trainingPreview).toBeTruthy();
-        expect(trainingPreview.querySelector('.training-preview-content[data-nosnippet]')).toBeTruthy();
+        expect(trainingPreview.querySelector('.training-preview-data[data-nosnippet]')).toBeTruthy();
         expect(trainingPreview.querySelector('app-training-summary-cards')).toBeTruthy();
         expect(trainingPreview.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
         expect(trainingPreviewIndicators.length).toBe(3);
@@ -283,11 +304,12 @@ describe('HomeComponent', () => {
         expect(text).toContain('marker-clustering controls');
         expect(text).toContain('Analyze Every Workout');
         expect(text).toContain('Compare heart rate, power, altitude, depth, pace, and more in synchronized charts');
-        expect(text).toContain('View zones');
+        expect(text).toContain('Inspect intensity zones');
         expect(text).toContain('grade-colored elevation');
         expect(text).toContain('inverse depth');
         expect(text).toContain('distance, duration, or time where supported');
         expect(text).toContain('select a range for stats or zoom in');
+        expect(text).toContain('aerobic durability, and cadence versus power');
         expect(text).not.toContain('7 chart types');
         expect(text).not.toContain('12 map styles');
         expect(text).not.toContain('recorded streams');
@@ -298,6 +320,15 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('Read-only MCP Server');
         expect(text).not.toContain('KPI Lane for Fast Decisions');
         expect(text).not.toContain('Connected Training Data');
+    });
+
+    it('uses the shared compact row primitive for every top-level homepage card', () => {
+        const compactRows = fixture.nativeElement.querySelectorAll('app-compact-feature-row');
+
+        expect(compactRows.length).toBe(14);
+        expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(6);
+        expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-feature-row'))).toBe(true);
     });
 
     it('should render the shared signal charts when the deferred section completes', async () => {
@@ -371,6 +402,67 @@ describe('HomeComponent', () => {
             Object.defineProperty(globalThis, 'IntersectionObserver', {
                 value: originalIntersectionObserver,
                 configurable: true,
+            });
+        }
+    });
+
+    it('should reveal scroll content once without hiding it after viewport changes', () => {
+        fixture.destroy();
+        const originalIntersectionObserver = globalThis.IntersectionObserver;
+        const observerRecords: Array<{
+            callback: IntersectionObserverCallback;
+            observe: ReturnType<typeof vi.fn>;
+            unobserve: ReturnType<typeof vi.fn>;
+            disconnect: ReturnType<typeof vi.fn>;
+        }> = [];
+
+        Object.defineProperty(globalThis, 'IntersectionObserver', {
+            configurable: true,
+            value: vi.fn((callback: IntersectionObserverCallback) => {
+                const record = {
+                    callback,
+                    observe: vi.fn(),
+                    unobserve: vi.fn(),
+                    disconnect: vi.fn(),
+                };
+                observerRecords.push(record);
+                return {
+                    ...record,
+                    takeRecords: vi.fn(() => []),
+                    root: null,
+                    rootMargin: '',
+                    thresholds: [0.1],
+                } as IntersectionObserver;
+            }),
+        });
+
+        try {
+            fixture = TestBed.createComponent(HomeComponent);
+            component = fixture.componentInstance;
+            fixture.detectChanges();
+
+            const target = fixture.nativeElement.querySelector('.animate-on-scroll') as Element;
+            const homeObserver = observerRecords.find(record =>
+                record.observe.mock.calls.some(([observedTarget]) => observedTarget === target)
+            );
+            expect(homeObserver).toBeTruthy();
+            expect(target.classList.contains('is-visible')).toBe(false);
+
+            homeObserver?.callback([
+                { isIntersecting: true, target } as IntersectionObserverEntry,
+            ], {} as IntersectionObserver);
+            expect(target.classList.contains('is-visible')).toBe(true);
+            expect(homeObserver?.unobserve).toHaveBeenCalledWith(target);
+
+            homeObserver?.callback([
+                { isIntersecting: false, target } as IntersectionObserverEntry,
+            ], {} as IntersectionObserver);
+            expect(target.classList.contains('is-visible')).toBe(true);
+        } finally {
+            fixture.destroy();
+            Object.defineProperty(globalThis, 'IntersectionObserver', {
+                configurable: true,
+                value: originalIntersectionObserver,
             });
         }
     });

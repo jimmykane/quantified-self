@@ -24,6 +24,7 @@ import {
   EChartsHostController
 } from '../../../../helpers/echarts-host-controller';
 import {
+  type EChartsMobileTapFeedbackOptions,
   EChartsTooltipSurfaceConfig,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
@@ -229,6 +230,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   @Input() sharedZoomRange: EventChartRange | null = null;
   @Input() userUnitSettings: UserUnitSettingsInterface | null = null;
   @Input() previewMode = false;
+  @Input() previewInteractions = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
   @Input() showGradeLegend = true;
   @Input() showZoneLegend = false;
 
@@ -323,7 +326,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       initOptions: {
         useDirtyRect: true,
       },
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
+  }
+
+  private get interactionsEnabled(): boolean {
+    return !this.previewMode || this.previewInteractions;
   }
 
   public get hasSelection(): boolean {
@@ -510,6 +518,8 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.syncFullscreenState();
       this.bindWheelPassThrough();
       this.bindNonPrimaryMouseButtonGuard();
+    }
+    if (this.interactionsEnabled) {
       this.bindChartEvents();
     }
     this.queueChartRefresh('ngAfterViewInit');
@@ -615,11 +625,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.chartRefreshSequence = this.chartRefreshSequence
       .then(async () => {
         await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
-        if (!this.previewMode) {
+        if (this.interactionsEnabled) {
           this.bindChartEvents();
         }
         this.refreshChart();
-        if (!this.previewMode) {
+        if (this.interactionsEnabled) {
           this.syncViewportObserver();
         }
       })
@@ -786,7 +796,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         emphasis: {
           disabled: true,
         },
-        silent: this.previewMode,
+        silent: !this.interactionsEnabled,
         dimensions: ['x', 'y'],
         data: this.getSeriesLineData(series),
       });
@@ -1036,7 +1046,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       emphasis: {
         disabled: true,
       },
-      silent: this.previewMode,
+      silent: !this.interactionsEnabled,
       dimensions: ['x', 'y'],
       data: this.getSeriesLineData(series),
     }));
@@ -1085,7 +1095,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
         emphasis: {
           disabled: true,
         },
-        silent: this.previewMode,
+        silent: !this.interactionsEnabled,
         dimensions: ['x', 'y'],
         data: new Float64Array(group.data) as unknown as ChartLineSeriesOption['data'],
       }));
@@ -1296,7 +1306,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private bindChartEvents(): void {
     const chart = this.chartHost.getChart();
-    if (this.previewMode || !chart || this.eventsBound || (!this.panel && !this.showZoomBar)) {
+    if (!this.interactionsEnabled || !chart || this.eventsBound || (!this.panel && !this.showZoomBar)) {
       return;
     }
 
@@ -2850,7 +2860,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private isInteractionArmed(): boolean {
-    return !this.previewMode && (!this.isMobile || this.mobileInteractionsArmed);
+    return this.interactionsEnabled && (!this.isMobile || this.mobileInteractionsArmed);
   }
 
   private bindMobileInteractionArm(chart: EChartsType): void {

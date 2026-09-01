@@ -689,6 +689,7 @@ describe('sleep webhooks', () => {
     it('acknowledges all-user Suunto sleep webhooks without queueing when no connected token exists', async () => {
         hoisted.allowedUserIDs = [];
         hoisted.suuntoWebhookTokenMatches = false;
+        const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-01T12:00:00.000Z'));
         const rawBody = Buffer.from(JSON.stringify({ type: 'SUUNTO_247_SLEEP_CREATED' }));
         const signature = createHmac('sha256', process.env.SUUNTOAPP_NOTIFICATION_SECRET || '')
             .update(rawBody)
@@ -704,9 +705,31 @@ describe('sleep webhooks', () => {
             },
             get: vi.fn((header: string) => header === 'X-HMAC-SHA256-Signature' ? signature : undefined),
         } as any, response as any);
+        nowSpy.mockRestore();
 
         expect(response.status).toHaveBeenCalledWith(200);
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(
+            '[SleepSync][Suunto] Ignoring webhook without a connected Suunto token or outside SLEEP_SYNC_ALLOWED_USER_IDS',
+            {
+                diagnostic: 'suunto-disconnected-username-investigation',
+                notificationType: 'SUUNTO_247_SLEEP_CREATED',
+                suuntoUsername: 'unknown-suunto-user',
+                usernameLoggingExpiresAt: '2026-09-08T00:00:00.000Z',
+            },
+        );
+    });
+
+    it('automatically omits disconnected Suunto usernames after the diagnostic expires', () => {
+        expect(suuntoWebhookTestInternals.temporarySuuntoDisconnectedUsernameLogFields(
+            'suunto-user-1',
+            'SUUNTO_247_SLEEP_CREATED',
+            Date.parse('2026-09-08T00:00:00.000Z'),
+        )).toEqual({
+            diagnostic: 'suunto-disconnected-username-investigation',
+            notificationType: 'SUUNTO_247_SLEEP_CREATED',
+            usernameLoggingExpiresAt: '2026-09-08T00:00:00.000Z',
+        });
     });
 
     it('uses nested Suunto sleep identifiers for webhook dedupe keys', async () => {
@@ -870,6 +893,7 @@ describe('sleep webhooks', () => {
 
     it('acknowledges a signed Health notification discarded before ingress persistence', async () => {
         hoisted.persistSuuntoHealthWebhookIngress.mockResolvedValueOnce('permanent_skip');
+        const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-01T12:00:00.000Z'));
         const body = {
             type: 'SUUNTO_247_ACTIVITY_CREATED',
             username: 'suunto-user-1',
@@ -886,10 +910,20 @@ describe('sleep webhooks', () => {
             body,
             get: vi.fn(() => signature),
         } as any, response as any);
+        nowSpy.mockRestore();
 
         expect(response.status).toHaveBeenCalledWith(200);
         expect(hoisted.persistSuuntoHealthWebhookIngress).toHaveBeenCalledOnce();
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(
+            '[HealthSync][Suunto] Dropped signed webhook without an active binding.',
+            {
+                diagnostic: 'suunto-disconnected-username-investigation',
+                notificationType: 'SUUNTO_247_ACTIVITY_CREATED',
+                suuntoUsername: 'suunto-user-1',
+                usernameLoggingExpiresAt: '2026-09-08T00:00:00.000Z',
+            },
+        );
     });
 
     it('does not fill unnotified gaps between sparse webhook days', () => {

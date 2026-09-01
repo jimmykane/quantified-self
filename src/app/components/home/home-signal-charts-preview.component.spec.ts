@@ -11,6 +11,7 @@ import { ChartsPowerCurveComponent } from '../charts/power-curve/charts.power-cu
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { HomeSignalChartsPreviewComponent } from './home-signal-charts-preview.component';
 
 describe('HomeSignalChartsPreviewComponent', () => {
@@ -82,13 +83,20 @@ describe('HomeSignalChartsPreviewComponent', () => {
     expect(powerCurveComponent.title).toBe('Cycling Power Curve');
     expect(powerCurveComponent.powerCurve?.series).toHaveLength(2);
     expect(powerCurveComponent.primaryBenchmark?.durationLabel).toBe('20m');
-    expect(freshnessComponent.showMobileAxisPointerHandle).toBe(false);
-    expect(intensityComponent.showMobileAxisPointerHandle).toBe(false);
+    expect(freshnessComponent.showMobileAxisPointerHandle).toBe(true);
+    expect(intensityComponent.showMobileAxisPointerHandle).toBe(true);
     expect(intensityComponent.weekContextTextOverride).toBe('Example training week');
     expect(intensityComponent.weekContextText).toBe('Example training week');
-    expect(efficiencyComponent.showMobileAxisPointerHandle).toBe(false);
-    expect(powerCurveComponent.showMobileAxisPointerHandle).toBe(false);
-    expect(formComponent.showMobileAxisPointerHandle).toBe(false);
+    expect(efficiencyComponent.showMobileAxisPointerHandle).toBe(true);
+    expect(powerCurveComponent.showMobileAxisPointerHandle).toBe(true);
+    expect(formComponent.showMobileAxisPointerHandle).toBe(true);
+    expect([
+      freshnessComponent,
+      intensityComponent,
+      efficiencyComponent,
+      powerCurveComponent,
+      formComponent,
+    ].every(component => component.mobileTapFeedbackOptions === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS)).toBe(true);
     expect(formComponent.hasData()).toBe(true);
     expect(formComponent.useAnimations).toBe(true);
     expect(formComponent.headlineStats().tss.value).not.toBe('--');
@@ -102,6 +110,15 @@ describe('HomeSignalChartsPreviewComponent', () => {
     const options = loader.setOption.mock.calls
       .map(call => call[1] as { animation?: boolean });
     expect(options.some(option => option.animation === true)).toBe(true);
+    expect(loader.attachMobileSeriesTapFeedback.mock.calls.filter(
+      call => call[1] === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    ).length).toBeGreaterThanOrEqual(5);
+    expect(loader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(
+      chart,
+      DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    );
+    expect(getComputedStyle(fixture.nativeElement.querySelector('.signal-preview-widget')).pointerEvents).not.toBe('none');
+    expect(fixture.nativeElement.querySelector('.signal-preview-form-chart')?.getAttribute('role')).toBe('group');
   });
 
   it('disables the homepage Form animation when reduced motion is requested', async () => {

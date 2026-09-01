@@ -51,6 +51,7 @@ import { AppChartSharedModule } from './app-chart-shared.module';
         PageHeaderComponent,
         MetricIndicatorComponent,
         AppChartSharedModule,
+        EventIntensityZonesComponent,
     ],
     declarations: [
         PrivacyIconComponent,
@@ -72,7 +73,6 @@ import { AppChartSharedModule } from './app-chart-shared.module';
         MapLayersActionsComponent,
         MyTracksMapLayersControlComponent,
         MapLayersMenuPanelComponent,
-        EventIntensityZonesComponent,
         MenuRadioListComponent,
         EventCardChartPanelComponent,
         DashboardActionPromptComponent,

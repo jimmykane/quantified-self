@@ -1,0 +1,153 @@
+<div class="provider-data-flow-matrix" [class.provider-data-flow-matrix--compact]="compact()">
+  <div class="provider-data-flow-matrix__scroll">
+    <table class="provider-data-flow-matrix__table">
+      <caption>{{ caption() }}</caption>
+      <thead>
+        <tr>
+          <th scope="col">From · To</th>
+          @for (provider of rows(); track provider.sourceServiceName) {
+          <th scope="col">
+            <span class="provider-data-flow-matrix__provider-label">
+              {{ provider.sourceLabel }}
+              @if (provider.sourceConnected) {
+              <mat-icon class="provider-data-flow-matrix__provider-status"
+                aria-label="Connected">check_circle</mat-icon>
+              }
+            </span>
+          </th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track row.sourceServiceName) {
+        <tr>
+          <th scope="row">
+            <span class="provider-data-flow-matrix__provider-label">
+              {{ row.sourceLabel }}
+              @if (row.sourceConnected) {
+              <mat-icon class="provider-data-flow-matrix__provider-status"
+                aria-label="Connected">check_circle</mat-icon>
+              }
+            </span>
+          </th>
+          @for (provider of rows(); track provider.sourceServiceName; let columnIndex = $index) {
+          @let cell = row.cells[columnIndex];
+          @if (provider.sourceServiceName === row.sourceServiceName) {
+          <td class="provider-data-flow-matrix__cell provider-data-flow-matrix__cell--same"
+            aria-label="Same provider">—</td>
+          } @else {
+          <td class="provider-data-flow-matrix__cell">
+            @if (cell.routes.length) {
+            <div class="provider-data-flow-matrix__routes">
+              @for (route of cell.routes; track route.id) {
+                @if (interactive()) {
+                <button mat-button type="button"
+                  class="provider-data-flow-matrix__route"
+                  [class.provider-data-flow-matrix__route--activity]="route.kind === 'activity'"
+                  [class.provider-data-flow-matrix__route--route]="route.kind === 'route'"
+                  [class.provider-data-flow-matrix__route--active]="route.state === 'active'"
+                  [class.provider-data-flow-matrix__route--attention]="route.state === 'attention'"
+                  [attr.aria-label]="'Manage ' + (route.kind === 'activity' ? 'activity' : 'route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel"
+                  (click)="selectRoute(route)">
+                  <ng-container [ngTemplateOutlet]="routeContent"
+                    [ngTemplateOutletContext]="{ $implicit: route }"></ng-container>
+                </button>
+                } @else {
+                <span class="provider-data-flow-matrix__route"
+                  [class.provider-data-flow-matrix__route--activity]="route.kind === 'activity'"
+                  [class.provider-data-flow-matrix__route--route]="route.kind === 'route'"
+                  [attr.aria-label]="(route.kind === 'activity' ? 'Activity' : 'Route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel">
+                  <ng-container [ngTemplateOutlet]="routeContent"
+                    [ngTemplateOutletContext]="{ $implicit: route }"></ng-container>
+                </span>
+                }
+              }
+            </div>
+            } @else {
+            <span class="provider-data-flow-matrix__empty">—</span>
+            }
+          </td>
+          }
+          }
+        </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (!compact()) {
+  <div class="provider-data-flow-matrix__mobile"
+    [attr.aria-label]="caption()">
+    @for (row of rows(); track row.sourceServiceName) {
+    <section class="provider-data-flow-matrix__mobile-group">
+      <h2>
+        <span class="provider-data-flow-matrix__provider-label">
+          From {{ row.sourceLabel }}
+          @if (row.sourceConnected) {
+          <mat-icon class="provider-data-flow-matrix__provider-status"
+            aria-label="Connected">check_circle</mat-icon>
+          }
+        </span>
+      </h2>
+      @for (cell of row.cells; track cell.id) {
+      @if (cell.routes.length) {
+      <div class="provider-data-flow-matrix__mobile-target">
+        <h3>
+          <span class="provider-data-flow-matrix__provider-label">
+            To {{ cell.destinationLabel }}
+            @if (cell.destinationConnected) {
+            <mat-icon class="provider-data-flow-matrix__provider-status"
+              aria-label="Connected">check_circle</mat-icon>
+            }
+          </span>
+        </h3>
+        <div class="provider-data-flow-matrix__routes">
+          @for (route of cell.routes; track route.id) {
+            @if (interactive()) {
+            <button mat-button type="button"
+              class="provider-data-flow-matrix__route"
+              [class.provider-data-flow-matrix__route--activity]="route.kind === 'activity'"
+              [class.provider-data-flow-matrix__route--route]="route.kind === 'route'"
+              [class.provider-data-flow-matrix__route--active]="route.state === 'active'"
+              [class.provider-data-flow-matrix__route--attention]="route.state === 'attention'"
+              [attr.aria-label]="'Manage ' + (route.kind === 'activity' ? 'activity' : 'route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel"
+              (click)="selectRoute(route)">
+              <ng-container [ngTemplateOutlet]="routeContent"
+                [ngTemplateOutletContext]="{ $implicit: route }"></ng-container>
+            </button>
+            } @else {
+            <span class="provider-data-flow-matrix__route"
+              [class.provider-data-flow-matrix__route--activity]="route.kind === 'activity'"
+              [class.provider-data-flow-matrix__route--route]="route.kind === 'route'"
+              [attr.aria-label]="(route.kind === 'activity' ? 'Activity' : 'Route') + ' delivery from ' + row.sourceLabel + ' to ' + cell.destinationLabel">
+              <ng-container [ngTemplateOutlet]="routeContent"
+                [ngTemplateOutletContext]="{ $implicit: route }"></ng-container>
+            </span>
+            }
+          }
+        </div>
+      </div>
+      }
+      }
+    </section>
+    }
+  </div>
+  }
+</div>
+
+<ng-template #routeContent let-route>
+  <span class="provider-data-flow-matrix__route-content">
+    <span class="provider-data-flow-matrix__route-label">
+      {{ route.kind === 'activity' ? 'Activity' : 'Route' }}
+    </span>
+    @if (showRouteState()) {
+      @if (route.state === 'active') {
+      <small>On</small>
+      } @else if (route.state === 'attention') {
+      <small><mat-icon aria-hidden="true">sync_problem</mat-icon> Needs connection</small>
+      } @else {
+      <small>Available</small>
+      }
+    }
+  </span>
+</ng-template>

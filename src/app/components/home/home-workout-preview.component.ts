@@ -1,9 +1,10 @@
 import { isPlatformBrowser } from '@angular/common';
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   OnDestroy,
-  OnInit,
   PLATFORM_ID,
   computed,
   inject,
@@ -24,11 +25,16 @@ import type {
   EventChartZoneColorPiece,
 } from '../../helpers/event-echarts-data.helper';
 import type { EventChartRange } from '../../helpers/event-chart-range.helper';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { SharedModule } from '../../modules/shared.module';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppActivityTypeGroupGradients } from '../../services/color/app.activity-type-group.gradients';
 import { AppColors } from '../../services/color/app.colors';
 import { AppDataColors } from '../../services/color/app.data.colors';
+import { EventCadencePowerComponent } from '../event/cadence-power/event.cadence-power.component';
+import { EventDurabilityCurveComponent } from '../event/durability-curve/event.durability-curve.component';
+import { EventIntensityZonesComponent } from '../event/intensity-zones/event.intensity-zones.component';
+import { buildHomeWorkoutPerformancePreviewActivity } from './home-workout-performance-preview.data';
 
 const PREVIEW_DURATION_SECONDS = 3_258;
 const PREVIEW_ZOOM_RANGE: EventChartRange = { start: 1_040, end: 2_260 };
@@ -36,7 +42,6 @@ const PREVIEW_SELECTION_DELAY_MS = 900;
 const PREVIEW_SELECTION_DURATION_MS = 850;
 const PREVIEW_ZOOM_DURATION_MS = 720;
 const PREVIEW_ZOOM_HOLD_MS = 1_000;
-const PREVIEW_LOOP_PAUSE_MS = 1_000;
 const PREVIEW_ZOOM_STEPS = 8;
 const DIVE_PROFILE_COLORS = AppActivityTypeGroupGradients[ActivityTypeGroups.DivingGroup];
 const INTENSITY_ZONE_COLORS = [
@@ -150,14 +155,28 @@ function buildPanel(
   styleUrls: ['./home-workout-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [SharedModule],
+  imports: [
+    SharedModule,
+    EventCadencePowerComponent,
+    EventDurabilityCurveComponent,
+    EventIntensityZonesComponent,
+  ],
 })
-export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
+export class HomeWorkoutPreviewComponent implements AfterViewInit, OnDestroy {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly themeService = inject(AppThemeService);
+  private readonly elementRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly animationTimers = new Set<ReturnType<typeof setTimeout>>();
+  private viewportObserver: IntersectionObserver | undefined;
+  private hasPlayedAnimation = false;
 
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
+  readonly mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
+  readonly performancePreviewActivities = [buildHomeWorkoutPerformancePreviewActivity({
+    durationSeconds: PREVIEW_DURATION_SECONDS,
+    heartRateBins: RIDE_HEART_RATE,
+    powerBins: RIDE_POWER,
+  })];
   readonly animationsEnabled = isPlatformBrowser(this.platformId)
     && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   readonly xAxisType = XAxisTypes.Duration;
@@ -205,20 +224,41 @@ export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
     [0.5, 1.5, 4, 8, 13, 18, 21, 20, 16, 10, 4, 0.5],
   );
 
-  ngOnInit(): void {
+  ngAfterViewInit(): void {
     if (!this.animationsEnabled) {
       return;
     }
 
-    this.startAnimationLoop();
+    if (typeof IntersectionObserver === 'undefined') {
+      this.startAnimationOnce();
+      return;
+    }
+
+    this.viewportObserver = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) {
+        return;
+      }
+
+      this.viewportObserver?.disconnect();
+      this.viewportObserver = undefined;
+      this.startAnimationOnce();
+    }, { threshold: 0.1 });
+    this.viewportObserver.observe(this.elementRef.nativeElement);
   }
 
   ngOnDestroy(): void {
+    this.viewportObserver?.disconnect();
+    this.viewportObserver = undefined;
     this.animationTimers.forEach(timer => clearTimeout(timer));
     this.animationTimers.clear();
   }
 
-  private startAnimationLoop(): void {
+  private startAnimationOnce(): void {
+    if (this.hasPlayedAnimation) {
+      return;
+    }
+
+    this.hasPlayedAnimation = true;
     this.previewRange.set(null);
     this.sharedZoomRange.set(null);
 
@@ -241,10 +281,6 @@ export class HomeWorkoutPreviewComponent implements OnInit, OnDestroy {
         + PREVIEW_ZOOM_HOLD_MS,
       () => {
         this.animateZoomRange(PREVIEW_ZOOM_RANGE, null, PREVIEW_ZOOM_DURATION_MS);
-        this.scheduleAnimationStep(
-          PREVIEW_ZOOM_DURATION_MS + PREVIEW_LOOP_PAUSE_MS,
-          () => this.startAnimationLoop(),
-        );
       },
     );
   }

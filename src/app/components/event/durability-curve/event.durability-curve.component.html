@@ -1,6 +1,6 @@
 <div class="durability-curve-container">
   <div class="chart-intro">
-    @if (isMobile && summaryViewModels.length) {
+    @if (!previewMode && isMobile && summaryViewModels.length) {
       <button type="button" mat-icon-button class="durability-summary-toggle"
         [attr.aria-expanded]="summaryDetailsExpanded"
         [attr.aria-label]="summaryDetailsExpanded ? 'Hide durability details' : 'Show durability details'"
@@ -11,12 +11,14 @@
     <div class="chart-intro-copy">
       <div class="chart-title-row">
         <div class="chart-title">Durability</div>
-        <app-durability-reading-guide context="event"></app-durability-reading-guide>
+        @if (!previewMode) {
+          <app-durability-reading-guide context="event"></app-durability-reading-guide>
+        }
       </div>
       <div class="chart-description">{{ chartDescription }}</div>
     </div>
   </div>
-  @if (summaryViewModels.length && (!isMobile || summaryDetailsExpanded)) {
+  @if (!previewMode && summaryViewModels.length && (!isMobile || summaryDetailsExpanded)) {
     <div class="durability-summary-list" aria-label="Durability eligibility summary">
       @for (summary of summaryViewModels; track summary.activityId) {
         <article class="durability-summary" [class.durability-summary-eligible]="summary.isEligible">
@@ -27,5 +29,6 @@
       }
     </div>
   }
-  <div class="durability-curve-chart" #chartDiv [style.min-width.%]="100"></div>
+  <div class="durability-curve-chart" #chartDiv [style.min-width.%]="100" role="img"
+    aria-label="Durability line chart showing aerobic efficiency over elapsed duration."></div>
 </div>

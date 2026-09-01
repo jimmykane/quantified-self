@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppSignalChartsModule } from '../../modules/app-signal-charts.module';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { AppThemeService } from '../../services/app.theme.service';
 import {
   HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS,
@@ -31,6 +32,7 @@ export class HomeSignalChartsPreviewComponent {
   readonly animationsEnabled = isPlatformBrowser(this.platformId)
     && (typeof window.matchMedia !== 'function'
       || !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  readonly mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
   readonly freshnessForecast = this.previewData.freshnessForecast;
   readonly intensityDistribution = this.previewData.intensityDistribution;
   readonly intensityWeekContext = 'Example training week';

@@ -114,7 +114,7 @@
               aria-label="Health range"
               (change)="selectRange($event.value)">
               @for (option of ranges; track option.range) {
-                <mat-button-toggle [value]="option.range">{{ option.range }}</mat-button-toggle>
+                <mat-button-toggle [value]="option.range">{{ option.buttonLabel }}</mat-button-toggle>
               }
             </mat-button-toggle-group>
             <button
@@ -232,7 +232,7 @@
             <mat-icon aria-hidden="true">timeline</mat-icon>
             <div>
               <strong>This metric is stored as detailed samples</strong>
-              <span>Detailed samples load only for 14-day and 30-day windows. Choose a shorter range to view them.</span>
+              <span>Detailed samples load only for Today, 14-day, and 30-day windows. Choose a shorter range to view them.</span>
               <button mat-stroked-button type="button" (click)="selectRange('30d')">View 30 days</button>
             </div>
           </div>
@@ -251,7 +251,7 @@
               [darkTheme]="isDarkTheme()"
               [isLoading]="false"
               [sleepTrend]="sleepTrend()"
-              [sleepRange]="routeState().range"
+              [sleepRange]="sleepChartRange()"
               [sleepWindowLabel]="selectedWindow().label"
               [canNavigateOlder]="true"
               [canNavigateNewer]="selectedWindow().canNavigateNewer"

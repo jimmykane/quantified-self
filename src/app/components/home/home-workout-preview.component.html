@@ -1,22 +1,40 @@
-<div class="workout-preview__charts" role="img"
+<div class="workout-preview__charts" role="group"
   aria-label="Workout charts with zone-colored Heart Rate and Power, grade-colored Altitude, and an inverse Depth profile"
   data-nosnippet>
   <app-event-card-chart-panel [panel]="heartRatePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
     [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="animationsEnabled"
     [previewRange]="previewRange()" [sharedZoomRange]="sharedZoomRange()" [showLaps]="false"
-    [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
+    [showSwimLengths]="false" [previewMode]="true" [previewInteractions]="true"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-card-chart-panel>
   <app-event-card-chart-panel [panel]="altitudePanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
     [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="animationsEnabled"
     [previewRange]="previewRange()" [sharedZoomRange]="sharedZoomRange()" [showLaps]="false"
     [showSwimLengths]="false" [colorAltitudeByGrade]="true" [showGradeLegend]="false"
-    [previewMode]="true"></app-event-card-chart-panel>
+    [previewMode]="true" [previewInteractions]="true"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-card-chart-panel>
   <app-event-card-chart-panel [panel]="powerPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
     [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="animationsEnabled"
     [previewRange]="previewRange()" [sharedZoomRange]="sharedZoomRange()" [showLaps]="false"
-    [showSwimLengths]="false" [previewMode]="true"></app-event-card-chart-panel>
+    [showSwimLengths]="false" [previewMode]="true" [previewInteractions]="true"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-card-chart-panel>
   <app-event-card-chart-panel [panel]="depthPanel" [xAxisType]="xAxisType" [xDomain]="xDomain"
     [cursorBehaviour]="cursorBehaviour" [darkTheme]="darkTheme()" [useAnimations]="animationsEnabled"
     [previewRange]="previewRange()" [sharedZoomRange]="sharedZoomRange()" [showLaps]="false"
     [showSwimLengths]="false" [fillOpacity]="1" [areaFillOrigin]="depthAreaFillOrigin"
-    [areaFillColor]="depthFillColor()" [previewMode]="true"></app-event-card-chart-panel>
+    [areaFillColor]="depthFillColor()" [previewMode]="true" [previewInteractions]="true"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-card-chart-panel>
+</div>
+
+<div class="workout-preview__performance" role="group"
+  aria-label="Workout performance charts for durability, intensity zones, and cadence versus power"
+  data-nosnippet>
+  <app-event-durability-curve [activities]="performancePreviewActivities" [darkTheme]="darkTheme()"
+    [useAnimations]="animationsEnabled" [previewMode]="true"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-durability-curve>
+  <app-event-intensity-zones [activities]="performancePreviewActivities" [darkTheme]="darkTheme()"
+    [useAnimations]="animationsEnabled"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-intensity-zones>
+  <app-event-cadence-power [activities]="performancePreviewActivities" [darkTheme]="darkTheme()"
+    [useAnimations]="animationsEnabled"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-cadence-power>
 </div>

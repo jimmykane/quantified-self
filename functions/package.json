@@ -57,6 +57,7 @@
     "purge-retired-ai-insights-data": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/purge-retired-ai-insights-data.ts",
     "cleanup-orphaned-users": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/cleanup-orphaned-users.ts",
     "recover-suunto-outage": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/recover-suunto-outage.ts",
+    "repair-suunto-webhook-bindings": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/repair-suunto-webhook-bindings.ts",
     "reparse-sports-lib-events": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/reparse-sports-lib-events.ts",
     "migrate-storage-users-bucket": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-storage-users-bucket.ts",
     "backfill-sports-lib-processing-code": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-sports-lib-processing-code.ts",

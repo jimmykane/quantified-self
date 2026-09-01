@@ -44,7 +44,7 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
 
 export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';
 
-export const APP_HEALTH_WORKSPACE_RANGES = ['14d', '30d', '90d', '1y'] as const;
+export const APP_HEALTH_WORKSPACE_RANGES = ['today', '14d', '30d', '90d', '1y'] as const;
 export type AppHealthWorkspaceRange = typeof APP_HEALTH_WORKSPACE_RANGES[number];
 
 export interface AppHealthWorkspaceSettingsInterface {

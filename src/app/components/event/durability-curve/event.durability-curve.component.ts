@@ -41,10 +41,12 @@ import {
   toFiniteEventEChartsNumber
 } from '../../../helpers/event-echarts-common.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
 } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY, resolveEChartsThemeName } from '../../../helpers/echarts-theme.helper';
+import { SharedModule } from '../../../modules/shared.module';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -68,13 +70,16 @@ interface EventDurabilitySummaryViewModel {
   templateUrl: './event.durability-curve.component.html',
   styleUrls: ['./event.durability-curve.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
+  imports: [SharedModule],
 })
 export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[] = [];
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
+  @Input() previewMode = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -101,6 +106,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       initOptions: {
         useDirtyRect: true,
       },
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
 
     this.breakpointSubscription = this.breakpointObserver

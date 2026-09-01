@@ -245,8 +245,11 @@ describe('sleep writer', () => {
 
         expect(result).toEqual({ written: 1, skipped: 0 });
         expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
-            durationSeconds: 33300,
-            inBedDurationSeconds: 34260,
+            durationSeconds: hoisted.deleteField,
+            inBedDurationSeconds: hoisted.deleteField,
+            stageDurationsSeconds: hoisted.deleteField,
+            score: { value: hoisted.deleteField },
+            vitals: hoisted.deleteField,
             isNap: false,
             sportsLibData: {
                 schemaVersion: 1,
@@ -304,11 +307,57 @@ describe('sleep writer', () => {
         const writePayload = hoisted.docSet.mock.calls[0][1] as Record<string, unknown>;
         const sportsLibData = writePayload.sportsLibData as Record<string, unknown>;
         const metrics = sportsLibData.metrics as Record<string, unknown>;
+        expect(writePayload.durationSeconds).toBe(hoisted.deleteField);
+        expect(writePayload.inBedDurationSeconds).toBe(hoisted.deleteField);
+        expect(writePayload.stageDurationsSeconds).toBe(hoisted.deleteField);
+        expect(writePayload.score).toBe(hoisted.deleteField);
+        expect(writePayload.vitals).toBe(hoisted.deleteField);
         expect(metrics.inBedDuration).toBe(hoisted.deleteField);
         expect(metrics.score).toBe(hoisted.deleteField);
         expect(metrics.averageHrv).toBe(hoisted.deleteField);
         expect(metrics).not.toHaveProperty('overnightHrv');
         expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), writePayload, { merge: true });
+    });
+
+    it('keeps non-scalar score metadata while removing duplicate aggregate storage', async () => {
+        const result = await upsertSleepSession('user-1', buildMapperResult({
+            score: { value: 88, qualifier: 'good', components: { recovery: 90 } },
+            vitals: { averageHrvMs: 61, averageHeartRateBpm: 54 },
+        }), 3000);
+
+        expect(result.written).toBe(true);
+        const writePayload = hoisted.docSet.mock.calls[0][1] as Record<string, unknown>;
+        expect(writePayload.score).toEqual({
+            value: hoisted.deleteField,
+            qualifier: 'good',
+            components: { recovery: 90 },
+        });
+        expect(writePayload.vitals).toBe(hoisted.deleteField);
+        expect(writePayload.sportsLibData).toEqual({
+            schemaVersion: 1,
+            metrics: expect.objectContaining({
+                score: { 'Sleep Score': 88 },
+                averageHrv: { 'Average Sleep HRV': 61 },
+                averageHeartRate: { 'Average Sleep Heart Rate': 54 },
+            }),
+        });
+    });
+
+    it('preserves existing score metadata when a partial update omits the score', async () => {
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => encodeSleepSessionSportsLibData(buildExistingSuuntoSession({
+                score: { value: 88, qualifier: 'good', components: { recovery: 90 } },
+            })),
+        });
+
+        const result = await upsertSleepSession('user-1', buildMapperResult({
+            durationSeconds: 33_420,
+        }), 3000);
+
+        expect(result.written).toBe(true);
+        const writePayload = hoisted.docSet.mock.calls[0][1] as Record<string, unknown>;
+        expect(writePayload.score).toEqual({ value: hoisted.deleteField });
     });
 
     it('skips unchanged duplicate Garmin sessions even when callback metadata differs', async () => {
@@ -367,7 +416,7 @@ describe('sleep writer', () => {
 
         expect(result).toEqual({ written: 1, skipped: 0 });
         expect(hoisted.docSet).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
-            durationSeconds: 33420,
+            durationSeconds: hoisted.deleteField,
             createdAtMs: 1000,
             updatedAtMs: 3000,
         }), { merge: true });

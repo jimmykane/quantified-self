@@ -189,6 +189,20 @@ describe('Health and sleep Sports Lib data migration', () => {
         expect(buildHealthSportsLibDataMigrationDecision(first.update)).toEqual({ status: 'unchanged' });
     });
 
+    it('keeps Sports-Lib-only Health metrics unchanged after legacy-write cleanup', () => {
+        const first = buildHealthSportsLibDataMigrationDecision(healthDocument());
+        if (first.status !== 'update') throw new Error('Expected a Health migration update.');
+        const metrics = first.update.metrics as Array<Record<string, unknown>>;
+        const sportsLibOnly = metrics.map(metric => {
+            const copy = { ...metric };
+            delete copy.canonical;
+            return copy;
+        });
+
+        expect(buildHealthSportsLibDataMigrationDecision({ metrics: sportsLibOnly }))
+            .toEqual({ status: 'unchanged' });
+    });
+
     it('treats a valid series-only Health record with no scalar metrics as unchanged', () => {
         expect(buildHealthSportsLibDataMigrationDecision({ metrics: [] })).toEqual({ status: 'unchanged' });
     });

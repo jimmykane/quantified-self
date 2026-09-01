@@ -187,6 +187,20 @@ function parseCalendarDate(value: unknown): number | null {
     : null;
 }
 
+function localCalendarDateStartMs(value: string): number | null {
+  const utcTimestamp = parseCalendarDate(value);
+  if (utcTimestamp === null) {
+    return null;
+  }
+  const utcDate = new Date(utcTimestamp);
+  const localDate = new Date(
+    utcDate.getUTCFullYear(),
+    utcDate.getUTCMonth(),
+    utcDate.getUTCDate(),
+  );
+  return Number.isFinite(localDate.getTime()) ? localDate.getTime() : null;
+}
+
 export function localCalendarDate(nowMs = Date.now()): string {
   const date = new Date(nowMs);
   const year = date.getFullYear();
@@ -203,6 +217,7 @@ export function normalizeHealthWorkspaceRange(value: unknown): HealthWorkspaceRa
 
 export function healthWorkspaceRangeDays(range: HealthWorkspaceRange): number {
   switch (range) {
+    case 'today': return 1;
     case '14d': return 14;
     case '30d': return 30;
     case '90d': return 90;
@@ -217,16 +232,21 @@ export function resolveHealthWorkspaceWindow(
   const dayCount = healthWorkspaceRangeDays(state.range);
   const endDayMs = parseCalendarDate(state.endDate) ?? parseCalendarDate(todayDate) ?? Date.now();
   const startDayMs = endDayMs - ((dayCount - 1) * DAY_MS);
-  const endTimeMs = endDayMs + DAY_MS - 1;
+  const startDate = new Date(startDayMs).toISOString().slice(0, 10);
+  const nextEndDate = new Date(endDayMs + DAY_MS).toISOString().slice(0, 10);
+  const startTimeMs = localCalendarDateStartMs(startDate) ?? startDayMs;
+  const endTimeMs = (localCalendarDateStartMs(nextEndDate) ?? (endDayMs + DAY_MS)) - 1;
   return {
     ...state,
-    startDate: new Date(startDayMs).toISOString().slice(0, 10),
-    startTimeMs: startDayMs,
+    startDate,
+    startTimeMs,
     endTimeMs,
     dayCount,
     includeSamples: dayCount <= 30,
     canNavigateNewer: state.endDate < todayDate,
-    label: formatWindowLabel(startDayMs, endDayMs),
+    label: state.range === 'today' && state.endDate === todayDate
+      ? 'Today'
+      : formatWindowLabel(startDayMs, endDayMs),
   };
 }
 
@@ -788,7 +808,9 @@ function humanize(value: string): string {
 
 function formatWindowLabel(startMs: number, endMs: number): string {
   const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  return `${formatter.format(new Date(startMs))} – ${formatter.format(new Date(endMs))}`;
+  const startLabel = formatter.format(new Date(startMs));
+  const endLabel = formatter.format(new Date(endMs));
+  return startLabel === endLabel ? startLabel : `${startLabel} – ${endLabel}`;
 }
 
 function formatDate(timestampMs: number): string {
