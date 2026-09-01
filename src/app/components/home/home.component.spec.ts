@@ -130,10 +130,12 @@ describe('HomeComponent', () => {
         expect(aiSectionText).toContain('when your question needs the broader context.');
         expect(aiSectionText).toContain('Check the Evidence');
         expect(aiSectionText).toContain('see exactly what supports it.');
-        expect(aiSectionText).toContain('Connect Other AI Tools');
-        expect(aiSectionText).toContain('Grant access to the training, sleep, measurements, activity charts, and routes you choose.');
-        expect(aiSectionText).toContain('Location access remains a separate permission.');
-        expect(aiSectionText).toContain('Explore MCP Access');
+        expect(aiSectionText).toContain('Analyze with ChatGPT or Claude');
+        expect(aiSectionText).toContain('training analysis, season review, or draft training plan');
+        expect(aiSectionText).toContain('load, fatigue, readiness, sleep, measurements, workout charts, and routes');
+        expect(aiSectionText).toContain('neither tool can change your account');
+        expect(aiSectionText).toContain('Location access remains separate.');
+        expect(aiSectionText).toContain('Connect ChatGPT or Claude');
         expect(aiSectionText).not.toContain('read-only sleep, readiness');
         expect(aiSectionText).not.toContain('complete training history');
         expect(aiSectionText).not.toContain('Read-only MCP Server');
