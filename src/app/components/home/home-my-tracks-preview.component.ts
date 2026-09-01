@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
@@ -20,10 +21,7 @@ import {
   MyTracksMapViewFactory,
   type MyTracksMapViewHandle,
 } from '../shared/my-tracks-map-view/my-tracks-map-view.factory';
-import {
-  HOME_MY_TRACKS_PREVIEW_COORDINATES,
-  HOME_MY_TRACKS_PREVIEW_TRACKS,
-} from './home-my-tracks-preview.data';
+import { HOME_MY_TRACKS_PREVIEW_TRACKS } from './home-my-tracks-preview.data';
 
 @Component({
   selector: 'app-home-my-tracks-preview',
@@ -35,8 +33,15 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
   @ViewChild('mapContainer', { static: true }) private mapContainer!: ElementRef<HTMLDivElement>;
 
   readonly initializationFailed = signal(false);
+  readonly selectedPreviewIndex = signal(2);
+  readonly previewOptions = Object.freeze([
+    { label: 'Open water', accessibleLabel: 'Show open-water swimming activity' },
+    { label: 'Trail run', accessibleLabel: 'Show trail-running activity' },
+    { label: 'MTB', accessibleLabel: 'Show mountain-biking activity' },
+  ]);
 
   private readonly platformId = inject(PLATFORM_ID);
+  private readonly hapticsService = inject(AppHapticsService);
   private readonly themeService = inject(AppThemeService);
   private readonly mapStyleService = inject(MapStyleService);
   private readonly mapViewFactory = inject(MyTracksMapViewFactory);
@@ -61,8 +66,8 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
     const theme = this.themeService.appTheme();
     const resolvedStyle = this.mapStyleService.resolve('default', theme);
     const mapOptions: Omit<MapOptions, 'container'> = {
-      center: [11.39, 47.275],
-      zoom: 10,
+      center: [20.82, 39.42],
+      zoom: 8.5,
       style: resolvedStyle.styleUrl,
       cooperativeGestures: true,
       attributionControl: true,
@@ -92,15 +97,21 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
       this.manager.setMapStyle('default');
       this.manager.setIsDarkTheme(currentTheme === AppThemes.Dark);
       this.styleSynchronizer.update(this.mapStyleService.resolve('default', currentTheme));
-      this.manager.setTracksFromPrepared(HOME_MY_TRACKS_PREVIEW_TRACKS);
-      this.manager.fitBoundsToCoordinates(HOME_MY_TRACKS_PREVIEW_COORDINATES, {
-        padding: 36,
-        animate: false,
-      });
+      this.renderSelectedTrack();
     } catch (error) {
       if (this.destroyed) return;
       this.initializationFailed.set(true);
       this.logger.error('[HomeMyTracksPreviewComponent] Failed to initialize sample MyTracks map.', error);
+    }
+  }
+
+  selectPreview(index: number): void {
+    if (!HOME_MY_TRACKS_PREVIEW_TRACKS[index] || index === this.selectedPreviewIndex()) return;
+
+    this.selectedPreviewIndex.set(index);
+    this.hapticsService.selection();
+    if (this.mapViewHandle) {
+      this.renderSelectedTrack();
     }
   }
 
@@ -109,5 +120,16 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
     this.mapViewHandle?.destroy();
     this.mapViewHandle = null;
     this.styleSynchronizer = null;
+  }
+
+  private renderSelectedTrack(): void {
+    const track = HOME_MY_TRACKS_PREVIEW_TRACKS[this.selectedPreviewIndex()];
+    if (!track) return;
+
+    this.manager.setTracksFromPrepared([track]);
+    this.manager.fitBoundsToCoordinates(track.coordinates, {
+      padding: 42,
+      animate: false,
+    });
   }
 }

@@ -352,7 +352,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('Map Your Activities');
         expect(text).toContain('See every GPS activity together');
         expect(text).toContain('filter by date or activity type');
-        expect(text).toContain('Sample activities');
+        expect(text).toContain('Real activity traces');
         expect(fixture.nativeElement.querySelector('.footprint-map-placeholder')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('app-home-my-tracks-preview')).toBeNull();
         expect(text).toContain('Own Your Data');

@@ -1,8 +1,22 @@
+<div class="home-my-tracks-preview__selector" role="group" aria-label="Choose a real activity trace">
+  @for (option of previewOptions; track option.label; let index = $index) {
+    <button
+      type="button"
+      class="home-my-tracks-preview__option"
+      [class.is-active]="selectedPreviewIndex() === index"
+      [attr.aria-label]="option.accessibleLabel"
+      [attr.aria-pressed]="selectedPreviewIndex() === index"
+      (click)="selectPreview(index)"
+    >
+      {{ option.label }}
+    </button>
+  }
+</div>
 <div
   #mapContainer
   class="home-my-tracks-preview__map"
   role="region"
-  aria-label="Interactive MyTracks preview with sample running, cycling, hiking, trail-running, and mountain-bike activities"
+  aria-label="Interactive MyTracks preview showing a real activity trace"
 ></div>
 @if (initializationFailed()) {
   <p class="home-my-tracks-preview__fallback">Map preview unavailable.</p>
