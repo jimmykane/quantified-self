@@ -285,10 +285,6 @@
           See every GPS activity together, then filter by date or activity type and explore the trips across your
           history.
         </p>
-        <button mat-stroked-button (click)="navigateToMyTracksOrLogin()">
-          Explore MyTracks
-          <mat-icon iconPositionEnd>explore</mat-icon>
-        </button>
       </div>
       <div class="footprint-map-stage" data-nosnippet>
         @defer (on viewport) {
@@ -300,6 +296,10 @@
       <p class="footprint-map-caption" data-nosnippet>
         Real activity traces · open-water swimming, trail running, and mountain biking.
       </p>
+      <button class="footprint-cta" mat-stroked-button (click)="navigateToMyTracksOrLogin()">
+        Explore MyTracks
+        <mat-icon iconPositionEnd>explore</mat-icon>
+      </button>
     </div>
   </section>
 

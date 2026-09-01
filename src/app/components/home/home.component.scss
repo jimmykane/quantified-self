@@ -857,6 +857,10 @@
         align-items: center;
         max-width: 700px;
         margin: 0 auto;
+
+        > p {
+            margin-bottom: 0;
+        }
     }
 
     .footprint-icon {
@@ -910,6 +914,10 @@
         margin: 0.75rem 0 0;
         font-size: 0.85rem;
         line-height: 1.4;
+    }
+
+    .footprint-cta {
+        margin-top: 1.5rem;
     }
 }
 

@@ -355,6 +355,9 @@ describe('HomeComponent', () => {
         expect(text).toContain('Real activity traces');
         expect(fixture.nativeElement.querySelector('.footprint-map-placeholder')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('app-home-my-tracks-preview')).toBeNull();
+        const mapStage = fixture.nativeElement.querySelector('.footprint-map-stage') as HTMLElement;
+        const mapCta = fixture.nativeElement.querySelector('.footprint-cta') as HTMLElement;
+        expect(mapStage.compareDocumentPosition(mapCta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(text).toContain('Own Your Data');
         expect(text).toContain('Compare Your Devices');
         expect(text).toContain('Merge same-session recordings, choose a reference device');
