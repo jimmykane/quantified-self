@@ -209,6 +209,11 @@ describe('dashboard-manager-presets.helper', () => {
       order: 1,
       size: { columns: 1, rows: 1 },
     });
+    const weeklyTrainingTime = buildDashboardManagerPresetTile({
+      presetId: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_WEEKLY_TRAINING_TIME,
+      order: 3,
+      size: { columns: 1, rows: 1 },
+    });
     const weeklyDistance = buildDashboardManagerPresetTile({
       presetId: DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_WEEKLY_DISTANCE_TREND,
       order: 2,
@@ -237,6 +242,15 @@ describe('dashboard-manager-presets.helper', () => {
       type: TileTypes.Chart,
       chartType: ChartTypes.LinesVertical,
       dataType: DataDistance.type,
+      dataTimeInterval: TimeIntervals.Weekly,
+      eventFilters: { range: '90d', activityTypes: [] },
+    });
+    expect(weeklyTrainingTime).toMatchObject({
+      type: TileTypes.Chart,
+      chartType: ChartTypes.ColumnsVertical,
+      dataType: DataDuration.type,
+      dataValueType: ChartDataValueTypes.Total,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
       dataTimeInterval: TimeIntervals.Weekly,
       eventFilters: { range: '90d', activityTypes: [] },
     });
