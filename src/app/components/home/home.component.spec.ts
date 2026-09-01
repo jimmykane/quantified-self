@@ -362,8 +362,10 @@ describe('HomeComponent', () => {
         expect(text).toContain('Download your original activity files whenever you want');
         expect(text).toContain('creating a backup, changing services');
         expect(text).not.toContain('No hidden mining');
-        expect(text).toContain('Compare Your Devices');
-        expect(text).toContain('Merge same-session recordings, choose a reference device');
+        expect(text).toContain('Built for Device Reviewers');
+        expect(text).toContain('Compare same-session recordings from watches, bike computers, and sensors');
+        expect(text).toContain('turn GNSS and sensor differences into repeatable evidence');
+        expect(fixture.nativeElement.querySelector('.analysis-header-icon')?.textContent?.trim()).toBe('rate_review');
         expect(text).toContain('Benchmark Merge Workflow');
         expect(text).toContain('keep it out of normal training totals');
         expect(text).toContain('Ref / Test');
@@ -375,7 +377,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('dropouts, stuck values, and cadence-lock');
         expect(text).toContain('Save / Share');
         expect(text).toContain('Compare Workout Data');
-        expect(text).toContain('Device Benchmarks');
+        expect(text).toContain('Explore Reviewer Benchmarks');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-data-comparison"], a[ng-reflect-router-link="/features/workout-data-comparison"]')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/sports-watch-benchmark"], a[ng-reflect-router-link="/features/sports-watch-benchmark"]')).toBeTruthy();
         expect(text).not.toContain('Benchmark your devices with high-fidelity trace comparison.');
