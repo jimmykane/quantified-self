@@ -1383,7 +1383,7 @@ describe('admin subscription gift callables', () => {
         expect(mockStripeUpdate).not.toHaveBeenCalled();
     });
 
-    it('does not roll back a successful gift when the user has no notification email', async () => {
+    it('does not roll back a successful gift and bounds retries when the user has no notification email', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         mockAuthGetUser.mockImplementation(async (uid: string) => ({
             uid,
@@ -1391,17 +1391,41 @@ describe('admin subscription gift callables', () => {
             customClaims: { stripeRole: 'basic' },
         }));
 
-        const response = await grantGift(callableRequest({
+        const request = callableRequest({
             uid: 'target-user',
             months: 1,
             reason: 'Thank-you gift',
             notifyUser: true,
             operationId,
             previewVersion: preview.previewVersion,
-        }));
+        });
+        const response = await grantGift(request);
 
         expect(response.status).toBe('succeeded');
         expect(response.notificationStatus).toBe('failed');
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+
+        expect((await grantGift(request)).notificationStatus).toBe('failed');
+        expect((await grantGift(request)).notificationStatus).toBe('failed');
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({
+                status: 'succeeded',
+                notificationStatus: 'failed',
+                notificationAttempt: 3,
+                notificationResultCode: 'recipient_missing_email',
+            });
+
+        const nextPreview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        expect(nextPreview.resumableOperation).toBeNull();
+        const nextGift = await grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Later gift',
+            notifyUser: false,
+            operationId: secondOperationId,
+            previewVersion: nextPreview.previewVersion,
+        }));
+        expect(nextGift.status).toBe('succeeded');
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(2);
     });
 });

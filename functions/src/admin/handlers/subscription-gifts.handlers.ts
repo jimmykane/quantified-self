@@ -920,6 +920,10 @@ async function updateNotificationFailure(
             }
             transaction.set(giftOperationRef, {
                 notificationStatus: 'failed',
+                notificationAttempt: Math.min(
+                    latestOperation.notificationAttempt + 1,
+                    MAX_NOTIFICATION_ATTEMPTS,
+                ),
                 notificationResultCode: resultCode,
                 updatedAt: FieldValue.serverTimestamp(),
             }, { merge: true });
