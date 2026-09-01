@@ -624,6 +624,21 @@ async function acquireGiftOperation(
         ) {
             throw new HttpsError('failed-precondition', 'The subscription gift lock requires manual review.');
         }
+        if (lockStatus === 'idle' && lockOperationId && lockOperationId !== request.operationId) {
+            const priorOperationSnapshot = await transaction.get(operationRef(db, request.uid, lockOperationId));
+            const priorOperation = priorOperationSnapshot.exists
+                ? parseStoredGiftOperation(priorOperationSnapshot.data() as Record<string, unknown> | undefined)
+                : null;
+            if (priorOperationSnapshot.exists && !priorOperation) {
+                throw new HttpsError('failed-precondition', 'A previous gift operation requires manual review.');
+            }
+            if (priorOperation && hasResumableNotification(priorOperation)) {
+                throw new HttpsError(
+                    'failed-precondition',
+                    'A previous gift notification must be reconciled before granting more time.',
+                );
+            }
+        }
         if (lockStatus === 'needs_review' && lockOperationId !== request.operationId) {
             throw new HttpsError('failed-precondition', 'A previous gift operation requires manual review.');
         }

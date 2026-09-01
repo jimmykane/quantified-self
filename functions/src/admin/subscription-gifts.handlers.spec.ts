@@ -632,6 +632,49 @@ describe('admin subscription gift callables', () => {
         expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(1);
     });
 
+    it('does not replace an idle lock while its prior operation has resumable notification work', async () => {
+        const stalePreview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        expect((await grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'First gift',
+            notifyUser: true,
+            operationId,
+            previewVersion: stalePreview.previewVersion,
+        }))).notificationStatus).toBe('queued');
+
+        currentSubscription = buildSubscription();
+        const secondRequest = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Concurrent gift',
+            notifyUser: false,
+            operationId: secondOperationId,
+            previewVersion: stalePreview.previewVersion,
+        });
+
+        await expect(grantGift(secondRequest)).rejects.toMatchObject({
+            code: 'failed-precondition',
+            message: 'A previous gift notification must be reconciled before granting more time.',
+        });
+        expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock'))
+            .toMatchObject({ status: 'idle', operationId });
+        expect(db.store.has(`users/target-user/adminSubscriptionGifts/${secondOperationId}`)).toBe(false);
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+
+        const firstOperationPath = `users/target-user/adminSubscriptionGifts/${operationId}`;
+        db.store.set(firstOperationPath, {
+            ...db.store.get(firstOperationPath),
+            notificationStatus: 'delivered',
+            notificationResultCode: 'delivered',
+        });
+
+        expect((await grantGift(secondRequest)).status).toBe('succeeded');
+        expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock'))
+            .toMatchObject({ status: 'idle', operationId: secondOperationId });
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(2);
+    });
+
     it('does not resend a queued notification after its deterministic mail receipt expires', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const request = callableRequest({
