@@ -21,6 +21,7 @@ import {
   formatDashboardAxisNumericValue,
   formatDashboardAxisNumericValueWithoutUnit,
   formatDashboardDataDisplay,
+  formatDashboardDurationLabel,
   formatDashboardDateByInterval,
   formatDashboardDateRange,
   formatDashboardWeeklyAxisLabel,
@@ -165,6 +166,11 @@ describe('dashboard-chart-data.helper', () => {
     const value = formatDashboardNumericValue(DataDuration.type, (2 * 60 * 60) + (15 * 60) + 30);
 
     expect(value).toBe('02h 15m 30s');
+  });
+
+  it('should format persistent dashboard duration labels without seconds', () => {
+    expect(formatDashboardDurationLabel((21 * 60 * 60) + (23 * 60) + 4)).toBe('21h 23m');
+    expect(formatDashboardDurationLabel(42)).toBe('<1m');
   });
 
   it('should format pace values using the provided unit settings', () => {

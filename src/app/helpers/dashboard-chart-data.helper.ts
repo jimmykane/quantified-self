@@ -431,6 +431,29 @@ export function formatDashboardNumericValue(
   return formatDashboardDataDisplay(data, unitSettings);
 }
 
+/**
+ * Formats duration values for persistent chart labels, where seconds make the
+ * visual treatment unnecessarily dense. Tooltips retain the full dashboard
+ * numeric formatter for the exact value.
+ */
+export function formatDashboardDurationLabel(value: unknown): string {
+  const seconds = toFiniteNumber(value);
+  if (seconds === null || seconds < 0) {
+    return '--';
+  }
+  if (seconds < 60) {
+    return seconds === 0 ? '0m' : '<1m';
+  }
+
+  const totalMinutes = Math.round(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) {
+    return `${minutes}m`;
+  }
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+}
+
 export function formatDashboardAxisNumericValue(
   chartDataType: string | undefined,
   value: unknown,
