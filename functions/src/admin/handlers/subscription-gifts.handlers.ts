@@ -516,9 +516,14 @@ async function markExistingOperationNeedsReview(
         const lock = lockSnapshot.data() as Record<string, unknown> | undefined;
         const lockStatus = lock?.status;
         const lockOperationId = typeof lock?.operationId === 'string' ? lock.operationId : null;
+        const lockLeaseExpiresAtMs = timestampToMillis(lock?.leaseExpiresAt);
+        const isExpiredSameOperationLease = lockStatus === 'applying'
+            && lockOperationId === operationId
+            && lockLeaseExpiresAtMs !== null
+            && lockLeaseExpiresAtMs <= Date.now();
         if (
             (lockSnapshot.exists && lockStatus !== 'idle' && lockStatus !== 'applying' && lockStatus !== 'needs_review')
-            || lockStatus === 'applying'
+            || (lockStatus === 'applying' && !isExpiredSameOperationLease)
             || (lockStatus === 'needs_review' && lockOperationId !== operationId)
         ) {
             return 'lock-conflict' as const;
