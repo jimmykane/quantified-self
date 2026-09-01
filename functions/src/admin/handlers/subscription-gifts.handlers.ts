@@ -99,6 +99,7 @@ interface AcquiredGiftOperation {
     leaseToken: string | null;
     alreadySucceeded: boolean;
     alreadyFailed: boolean;
+    wasExisting: boolean;
 }
 
 interface ResumableGiftOperation {
@@ -637,10 +638,22 @@ async function acquireGiftOperation(
             throw new HttpsError('already-exists', 'The operation ID is already associated with another request.');
         }
         if (existing?.status === 'succeeded') {
-            return { operation: existing, leaseToken: null, alreadySucceeded: true, alreadyFailed: false };
+            return {
+                operation: existing,
+                leaseToken: null,
+                alreadySucceeded: true,
+                alreadyFailed: false,
+                wasExisting: true,
+            };
         }
         if (existing?.status === 'failed') {
-            return { operation: existing, leaseToken: null, alreadySucceeded: false, alreadyFailed: true };
+            return {
+                operation: existing,
+                leaseToken: null,
+                alreadySucceeded: false,
+                alreadyFailed: true,
+                wasExisting: true,
+            };
         }
 
         const lockData = lockSnapshot.data() as Record<string, unknown> | undefined;
@@ -758,6 +771,7 @@ async function acquireGiftOperation(
             leaseToken,
             alreadySucceeded: false,
             alreadyFailed: false,
+            wasExisting: existing !== null,
         };
     });
 }
@@ -1384,7 +1398,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
     try {
         currentSubscription = await stripe.subscriptions.retrieve(acquired.operation.subscriptionId);
     } catch (error) {
-        const status: Extract<AdminSubscriptionGiftOperationStatus, 'failed' | 'needs_review'> = existingOperation
+        const status: Extract<AdminSubscriptionGiftOperationStatus, 'failed' | 'needs_review'> = acquired.wasExisting
             ? 'needs_review'
             : 'failed';
         logger.warn('[admin-subscription-gift] Stripe subscription verification failed.', {
@@ -1400,14 +1414,14 @@ export const grantAdminSubscriptionGift = onAdminCall<
             input.operationId,
             leaseToken,
             status,
-            existingOperation ? 'stripe_reconciliation_unavailable' : 'stripe_subscription_read_failed',
+            acquired.wasExisting ? 'stripe_reconciliation_unavailable' : 'stripe_subscription_read_failed',
         );
         return buildResponse(
             input.operationId,
             acquired.operation,
             status,
             acquired.operation.notificationStatus,
-            existingOperation
+            acquired.wasExisting
                 ? 'Stripe could not verify whether the prior operation was applied. Review or retry the same operation.'
                 : 'Stripe could not verify the current subscription. Nothing was changed.',
         );
@@ -1464,20 +1478,25 @@ export const grantAdminSubscriptionGift = onAdminCall<
         || target.role !== acquired.operation.role
         || currentPreviewVersion !== acquired.operation.previewVersion
     ) {
+        const status: Extract<AdminSubscriptionGiftOperationStatus, 'failed' | 'needs_review'> = acquired.wasExisting
+            ? 'needs_review'
+            : 'failed';
         await finalizeGiftOperationOrThrow(
             db,
             input.uid,
             input.operationId,
             leaseToken,
-            'needs_review',
+            status,
             'subscription_state_changed',
         );
         return buildResponse(
             input.operationId,
             acquired.operation,
-            'needs_review',
+            status,
             acquired.operation.notificationStatus,
-            'The subscription changed and requires manual review.',
+            acquired.wasExisting
+                ? 'The subscription changed and requires manual review.'
+                : 'The subscription changed before the gift was applied. Nothing was changed.',
         );
     }
 

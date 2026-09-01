@@ -1326,7 +1326,7 @@ describe('admin subscription gift callables', () => {
             .toMatchObject({ status: 'needs_review', resultCode: 'stripe_reconciliation_invariant_failed' });
     });
 
-    it('moves to review when the subscription changes between locking and Stripe update', async () => {
+    it('fails and releases a new operation when the subscription changes before Stripe update', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const changed = buildSubscription({ trial_end: unixSeconds('2026-10-15T12:00:00Z') });
         mockStripeRetrieve
@@ -1342,11 +1342,26 @@ describe('admin subscription gift callables', () => {
             previewVersion: preview.previewVersion,
         }));
 
-        expect(response.status).toBe('needs_review');
+        expect(response.status).toBe('failed');
+        expect(response.message).toContain('Nothing was changed');
+        expect(mockStripeUpdate).not.toHaveBeenCalled();
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({ status: 'failed', resultCode: 'subscription_state_changed' });
+        expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock'))
+            .toMatchObject({ status: 'idle', operationId });
+
+        expect((await grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        }))).status).toBe('failed');
         expect(mockStripeUpdate).not.toHaveBeenCalled();
     });
 
-    it('does not mutate Stripe when the subscription item list becomes truncated after locking', async () => {
+    it('fails and releases a new operation when the subscription item list becomes truncated after locking', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const truncated = buildSubscription({
             items: {
@@ -1367,8 +1382,12 @@ describe('admin subscription gift callables', () => {
             previewVersion: preview.previewVersion,
         }));
 
-        expect(response.status).toBe('needs_review');
+        expect(response.status).toBe('failed');
         expect(mockStripeUpdate).not.toHaveBeenCalled();
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({ status: 'failed', resultCode: 'subscription_state_changed' });
+        expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock'))
+            .toMatchObject({ status: 'idle', operationId });
     });
 
     it('does not roll back a successful gift and bounds retries when the user has no notification email', async () => {
