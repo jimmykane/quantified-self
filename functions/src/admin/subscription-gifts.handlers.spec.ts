@@ -565,6 +565,10 @@ describe('admin subscription gift callables', () => {
                 notificationAttempt: 0,
                 notificationResultCode: 'mail_receipt_expired',
             });
+        expect((await previewGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+        }))).resumableOperation).toBeNull();
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
@@ -584,6 +588,17 @@ describe('admin subscription gift callables', () => {
             .find(([path]) => path.startsWith('mail/'))!;
         db.store.set(firstMailPath, { ...firstMail, delivery: { state: 'ERROR' } });
 
+        const reopened = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        expect(reopened.resumableOperation).toMatchObject({
+            operationId,
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: true,
+            previewVersion: preview.previewVersion,
+            status: 'succeeded',
+            notificationStatus: 'queued',
+        });
+
         expect((await grantGift(request)).notificationStatus).toBe('queued');
         const mailEntriesAfterRetry = [...db.store.entries()].filter(([path]) => path.startsWith('mail/'));
         expect(mailEntriesAfterRetry).toHaveLength(2);
@@ -598,6 +613,8 @@ describe('admin subscription gift callables', () => {
 
         expect((await grantGift(request)).notificationStatus).toBe('delivered');
         expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(2);
+        const settledPreview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        expect(settledPreview.resumableOperation).toBeNull();
 
         db.store.delete(secondMailPath);
         expect((await grantGift(request)).notificationStatus).toBe('delivered');

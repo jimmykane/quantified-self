@@ -84,6 +84,21 @@ export class AdminSubscriptionGiftDialogComponent implements OnInit, OnDestroy {
         this.outcome()?.status === 'needs_review'
         || this.resumableOperation()?.status === 'needs_review'
     ));
+    readonly notificationRetryStatus = computed((): 'queued' | 'failed' | null => {
+        const outcome = this.outcome();
+        if (
+            outcome?.status === 'succeeded'
+            && (outcome.notificationStatus === 'queued' || outcome.notificationStatus === 'failed')
+        ) {
+            return outcome.notificationStatus;
+        }
+        const resumableOperation = this.resumableOperation();
+        return resumableOperation?.status === 'succeeded'
+            && (resumableOperation.notificationStatus === 'queued' || resumableOperation.notificationStatus === 'failed')
+            ? resumableOperation.notificationStatus
+            : null;
+    });
+    readonly retryingNotification = computed(() => this.notificationRetryStatus() !== null);
     readonly closeResult = computed<AdminSubscriptionGiftDialogResult | null>(() => {
         const outcome = this.outcome();
         return outcome?.status === 'succeeded'
@@ -105,6 +120,19 @@ export class AdminSubscriptionGiftDialogComponent implements OnInit, OnDestroy {
             || (this.hasFreshPreview() && this.reasonValid() && !this.requiresReview())
         )
     ));
+    readonly primaryActionLabel = computed(() => {
+        if (this.requiresReview()) {
+            return 'Reconcile same gift';
+        }
+        const notificationStatus = this.notificationRetryStatus();
+        if (notificationStatus === 'failed') {
+            return 'Retry email';
+        }
+        if (notificationStatus === 'queued') {
+            return 'Check email delivery';
+        }
+        return this.requestLockedForRetry() ? 'Retry same gift' : 'Grant time';
+    });
 
     ngOnInit(): void {
         void this.refreshPreview();
@@ -228,9 +256,12 @@ export class AdminSubscriptionGiftDialogComponent implements OnInit, OnDestroy {
                 return;
             }
             if (response.status === 'succeeded') {
+                this.outcome.set(response);
                 if (response.notificationStatus === 'failed') {
-                    this.outcome.set(response);
                     this.error.set('Subscription time was granted, but the optional email could not be queued. Retry this same operation or close the dialog.');
+                    return;
+                }
+                if (response.notificationStatus === 'queued') {
                     return;
                 }
                 this.dialogRef.close({ uid: this.data.user.uid, response });

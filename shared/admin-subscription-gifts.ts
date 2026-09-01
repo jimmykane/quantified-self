@@ -29,7 +29,7 @@ export interface AdminSubscriptionGiftResumableOperation {
     previewVersion: string;
     role: AdminSubscriptionGiftRole;
     cadence: AdminSubscriptionGiftCadence;
-    status: Extract<AdminSubscriptionGiftOperationStatus, 'applying' | 'needs_review'>;
+    status: Extract<AdminSubscriptionGiftOperationStatus, 'applying' | 'succeeded' | 'needs_review'>;
     previousAccessEnd: string;
     newAccessEnd: string;
     cancelAtPeriodEnd: boolean;

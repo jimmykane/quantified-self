@@ -87,6 +87,7 @@ interface StoredGiftOperation {
     status: AdminSubscriptionGiftOperationStatus;
     notificationStatus: AdminSubscriptionGiftNotificationStatus;
     notificationAttempt: number;
+    notificationResultCode: string | null;
     leaseToken: string | null;
     leaseExpiresAtMs: number | null;
 }
@@ -438,6 +439,9 @@ function parseStoredGiftOperation(data: Record<string, unknown> | undefined): St
         notificationAttempt: typeof data.notificationAttempt === 'number' && Number.isSafeInteger(data.notificationAttempt)
             ? Math.max(0, data.notificationAttempt)
             : 0,
+        notificationResultCode: typeof data.notificationResultCode === 'string'
+            ? data.notificationResultCode
+            : null,
         leaseToken: typeof data.leaseToken === 'string' ? data.leaseToken : null,
         leaseExpiresAtMs: timestampToMillis(data.leaseExpiresAt),
     };
@@ -602,6 +606,7 @@ async function acquireGiftOperation(
             status: 'applying',
             notificationStatus: 'not_requested',
             notificationAttempt: 0,
+            notificationResultCode: null,
             leaseToken,
             leaseExpiresAtMs: nowMs + GIFT_LEASE_MS,
         };
@@ -958,29 +963,13 @@ async function getRecentHistory(
     });
 }
 
-async function getResumableOperation(
-    db: admin.firestore.Firestore,
-    uid: string,
-): Promise<AdminSubscriptionGiftResumableOperation | null> {
-    const giftLockSnapshot = await lockRef(db, uid).get();
-    if (!giftLockSnapshot.exists) {
-        return null;
+function buildResumableOperation(
+    operationId: string,
+    operation: StoredGiftOperation,
+): AdminSubscriptionGiftResumableOperation {
+    if (operation.status === 'failed') {
+        throw new HttpsError('failed-precondition', 'The subscription gift operation cannot be resumed.');
     }
-
-    const lock = giftLockSnapshot.data() as Record<string, unknown> | undefined;
-    if (lock?.status === 'idle') {
-        return null;
-    }
-    const operationId = typeof lock?.operationId === 'string' ? lock.operationId : null;
-    if ((lock?.status !== 'applying' && lock?.status !== 'needs_review') || !operationId) {
-        throw new HttpsError('failed-precondition', 'The subscription gift lock requires manual review.');
-    }
-
-    const operation = await readStoredOperation(db, uid, operationId);
-    if (!operation || operation.status !== lock.status) {
-        throw new HttpsError('failed-precondition', 'The subscription gift operation requires manual review.');
-    }
-
     return {
         operationId,
         months: operation.months,
@@ -995,6 +984,49 @@ async function getResumableOperation(
         cancelAtPeriodEnd: operation.cancelAtPeriodEnd,
         notificationStatus: operation.notificationStatus,
     };
+}
+
+function hasResumableNotification(operation: StoredGiftOperation): boolean {
+    if (operation.status !== 'succeeded' || !operation.notifyUser) {
+        return false;
+    }
+    if (operation.notificationStatus === 'queued') {
+        return operation.notificationResultCode !== 'mail_receipt_expired';
+    }
+    return operation.notificationStatus === 'failed'
+        && operation.notificationAttempt < MAX_NOTIFICATION_ATTEMPTS;
+}
+
+async function getResumableOperation(
+    db: admin.firestore.Firestore,
+    uid: string,
+): Promise<AdminSubscriptionGiftResumableOperation | null> {
+    const giftLockSnapshot = await lockRef(db, uid).get();
+    if (!giftLockSnapshot.exists) {
+        return null;
+    }
+
+    const lock = giftLockSnapshot.data() as Record<string, unknown> | undefined;
+    const operationId = typeof lock?.operationId === 'string' ? lock.operationId : null;
+    if (lock?.status === 'idle') {
+        if (!operationId) {
+            return null;
+        }
+        const operation = await readStoredOperation(db, uid, operationId);
+        return operation && hasResumableNotification(operation)
+            ? buildResumableOperation(operationId, operation)
+            : null;
+    }
+    if ((lock?.status !== 'applying' && lock?.status !== 'needs_review') || !operationId) {
+        throw new HttpsError('failed-precondition', 'The subscription gift lock requires manual review.');
+    }
+
+    const operation = await readStoredOperation(db, uid, operationId);
+    if (!operation || operation.status !== lock.status) {
+        throw new HttpsError('failed-precondition', 'The subscription gift operation requires manual review.');
+    }
+
+    return buildResumableOperation(operationId, operation);
 }
 
 export const previewAdminSubscriptionGift = onAdminCall<

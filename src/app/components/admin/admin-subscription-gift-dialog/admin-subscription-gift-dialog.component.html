@@ -23,7 +23,11 @@
         <span>
             {{ requiresReview()
                 ? 'Reconcile this same operation before starting another gift.'
-                : 'The original request is locked for a safe, idempotent retry.' }}
+                : notificationRetryStatus() === 'failed'
+                    ? 'Subscription time was granted, but the email needs a retry. The gift will not be applied again.'
+                    : notificationRetryStatus() === 'queued'
+                        ? 'Subscription time was granted. Email delivery is pending; check it using this same operation.'
+                        : 'The original request is locked for a safe, idempotent retry.' }}
         </span>
     </div>
     }
@@ -54,8 +58,8 @@
     @if (giftPreview.resumableOperation; as resumableOperation) {
     <section class="preview-section" aria-labelledby="gift-recovery-title">
         <div class="section-title-row">
-            <h3 id="gift-recovery-title">Operation to reconcile</h3>
-            <mat-chip selected>{{ resumableOperation.status | titlecase }}</mat-chip>
+            <h3 id="gift-recovery-title">{{ resumableOperation.status === 'succeeded' ? 'Notification to reconcile' : 'Operation to reconcile' }}</h3>
+            <mat-chip selected>{{ (resumableOperation.status === 'succeeded' ? resumableOperation.notificationStatus : resumableOperation.status) | titlecase }}</mat-chip>
         </div>
         <div class="preview-grid">
             <div>
@@ -83,7 +87,11 @@
                 <strong>{{ resumableOperation.newAccessEnd | date:'medium':'UTC' }} UTC</strong>
             </div>
         </div>
-        <p class="preview-note">This exact server-stored operation was restored. Reconcile it before starting another gift.</p>
+        <p class="preview-note">
+            {{ resumableOperation.status === 'succeeded'
+                ? 'Subscription time was already granted. Use this same stored operation to check or retry only the notification.'
+                : 'This exact server-stored operation was restored. Reconcile it before starting another gift.' }}
+        </p>
     </section>
     } @else {
     <section class="preview-section" aria-labelledby="gift-preview-title">
@@ -159,7 +167,7 @@
             @if (submitting()) {
             <mat-progress-spinner diameter="18" mode="indeterminate"></mat-progress-spinner>
             }
-            <span>{{ requiresReview() ? 'Reconcile same gift' : (requestLockedForRetry() ? 'Retry same gift' : 'Grant time') }}</span>
+            <span>{{ primaryActionLabel() }}</span>
         </span>
     </button>
 </mat-dialog-actions>

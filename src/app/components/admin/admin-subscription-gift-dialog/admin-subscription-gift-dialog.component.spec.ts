@@ -54,13 +54,13 @@ describe('AdminSubscriptionGiftDialogComponent', () => {
     beforeEach(async () => {
         adminService = {
             previewSubscriptionGift: vi.fn(() => of(preview)),
-            grantSubscriptionGift: vi.fn(() => of({
+            grantSubscriptionGift: vi.fn((request: { notifyUser: boolean }) => of({
                 operationId: '123e4567-e89b-42d3-a456-426614174000',
                 status: 'succeeded',
                 previousAccessEnd: preview.currentAccessEnd,
                 newAccessEnd: preview.proposedGiftedEnd,
                 cancelAtPeriodEnd: true,
-                notificationStatus: 'queued',
+                notificationStatus: request.notifyUser ? 'queued' : 'not_requested',
             })),
         };
         dialogRef = { close: vi.fn() };
@@ -132,15 +132,24 @@ describe('AdminSubscriptionGiftDialogComponent', () => {
     });
 
     it('surfaces needs-review outcomes and allows only the same operation to reconcile', async () => {
-        adminService.grantSubscriptionGift.mockReturnValueOnce(of({
-            operationId: '123e4567-e89b-42d3-a456-426614174000',
-            status: 'needs_review',
-            previousAccessEnd: preview.currentAccessEnd,
-            newAccessEnd: preview.proposedGiftedEnd,
-            cancelAtPeriodEnd: true,
-            notificationStatus: 'not_requested',
-            message: 'Stripe outcome needs review.',
-        }));
+        adminService.grantSubscriptionGift
+            .mockReturnValueOnce(of({
+                operationId: '123e4567-e89b-42d3-a456-426614174000',
+                status: 'needs_review',
+                previousAccessEnd: preview.currentAccessEnd,
+                newAccessEnd: preview.proposedGiftedEnd,
+                cancelAtPeriodEnd: true,
+                notificationStatus: 'not_requested',
+                message: 'Stripe outcome needs review.',
+            }))
+            .mockReturnValueOnce(of({
+                operationId: '123e4567-e89b-42d3-a456-426614174000',
+                status: 'succeeded',
+                previousAccessEnd: preview.currentAccessEnd,
+                newAccessEnd: preview.proposedGiftedEnd,
+                cancelAtPeriodEnd: true,
+                notificationStatus: 'delivered',
+            }));
         fixture.detectChanges();
         await fixture.whenStable();
         component.reason.set('Community thank-you');
@@ -205,6 +214,56 @@ describe('AdminSubscriptionGiftDialogComponent', () => {
         });
     });
 
+    it('restores a successful gift with a queued notification after the dialog is reopened', async () => {
+        adminService.previewSubscriptionGift.mockReturnValueOnce(of({
+            ...preview,
+            resumableOperation: {
+                operationId: '123e4567-e89b-42d3-a456-426614174098',
+                months: 2,
+                reason: 'Thank-you for the detailed feedback',
+                notifyUser: true,
+                previewVersion: 'pv1_notificationabcdefghijklmnop',
+                role: 'pro',
+                cadence: 'yearly',
+                status: 'succeeded',
+                previousAccessEnd: '2026-09-30T00:00:00.000Z',
+                newAccessEnd: '2026-11-30T00:00:00.000Z',
+                cancelAtPeriodEnd: true,
+                notificationStatus: 'queued',
+            },
+        }));
+        adminService.grantSubscriptionGift.mockReturnValueOnce(of({
+            operationId: '123e4567-e89b-42d3-a456-426614174098',
+            status: 'succeeded',
+            previousAccessEnd: '2026-09-30T00:00:00.000Z',
+            newAccessEnd: '2026-11-30T00:00:00.000Z',
+            cancelAtPeriodEnd: true,
+            notificationStatus: 'delivered',
+        }));
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(component.retryingNotification()).toBe(true);
+        expect(component.primaryActionLabel()).toBe('Check email delivery');
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Notification to reconcile');
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Subscription time was already granted');
+
+        await component.grant();
+
+        expect(adminService.grantSubscriptionGift).toHaveBeenCalledWith({
+            uid: user.uid,
+            months: 2,
+            reason: 'Thank-you for the detailed feedback',
+            notifyUser: true,
+            operationId: '123e4567-e89b-42d3-a456-426614174098',
+            previewVersion: 'pv1_notificationabcdefghijklmnop',
+        });
+        expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({
+            response: expect.objectContaining({ notificationStatus: 'delivered' }),
+        }));
+    });
+
     it('reuses the same operation after an uncertain callable response', async () => {
         adminService.grantSubscriptionGift
             .mockReturnValueOnce(throwError(() => ({ code: 'functions/unavailable' })))
@@ -214,7 +273,7 @@ describe('AdminSubscriptionGiftDialogComponent', () => {
                 previousAccessEnd: preview.currentAccessEnd,
                 newAccessEnd: preview.proposedGiftedEnd,
                 cancelAtPeriodEnd: true,
-                notificationStatus: 'queued',
+                notificationStatus: 'delivered',
             }));
         fixture.detectChanges();
         await fixture.whenStable();
@@ -247,6 +306,14 @@ describe('AdminSubscriptionGiftDialogComponent', () => {
                 newAccessEnd: preview.proposedGiftedEnd,
                 cancelAtPeriodEnd: true,
                 notificationStatus: 'queued',
+            }))
+            .mockReturnValueOnce(of({
+                operationId: '123e4567-e89b-42d3-a456-426614174000',
+                status: 'succeeded',
+                previousAccessEnd: preview.currentAccessEnd,
+                newAccessEnd: preview.proposedGiftedEnd,
+                cancelAtPeriodEnd: true,
+                notificationStatus: 'delivered',
             }));
         fixture.detectChanges();
         await fixture.whenStable();
@@ -264,8 +331,33 @@ describe('AdminSubscriptionGiftDialogComponent', () => {
         await component.grant();
 
         expect(adminService.grantSubscriptionGift.mock.calls[1][0]).toEqual(originalRequest);
+        expect(dialogRef.close).not.toHaveBeenCalled();
+        expect(component.primaryActionLabel()).toBe('Check email delivery');
+
+        await component.grant();
+
+        expect(adminService.grantSubscriptionGift.mock.calls[2][0]).toEqual(originalRequest);
         expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({
+            response: expect.objectContaining({ notificationStatus: 'delivered' }),
+        }));
+    });
+
+    it('keeps a newly queued notification recoverable instead of closing the dialog', async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        component.reason.set('Community thank-you');
+
+        await component.grant();
+        fixture.detectChanges();
+
+        expect(dialogRef.close).not.toHaveBeenCalled();
+        expect(component.closeResult()).toEqual(expect.objectContaining({
             response: expect.objectContaining({ notificationStatus: 'queued' }),
         }));
+        expect(component.requestLockedForRetry()).toBe(true);
+        expect(component.retryingNotification()).toBe(true);
+        expect(component.canGrant()).toBe(true);
+        expect(component.primaryActionLabel()).toBe('Check email delivery');
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Email delivery is pending');
     });
 });
