@@ -99,6 +99,16 @@ describe('HomeComponent', () => {
         expect(mockRouter.navigate).not.toHaveBeenCalled();
     });
 
+    it('keeps every homepage CTA on an auth entry or public product page', () => {
+        const ctaLinks = Array.from(fixture.nativeElement.querySelectorAll('.landing-page a[href]')) as HTMLAnchorElement[];
+        const paths = ctaLinks.map(link => new URL(link.href).pathname);
+        const privateWorkspacePaths = ['/dashboard', '/mytracks', '/training', '/calendar', '/health', '/routes', '/services', '/settings'];
+
+        expect(paths.filter(path => path === '/login')).toHaveLength(3);
+        expect(paths.some(path => privateWorkspacePaths.includes(path))).toBe(false);
+        expect(paths.every(path => path === '/login' || path === '/integrations' || path.startsWith('/features/'))).toBe(true);
+    });
+
     it('should keep passive homepage tooltips from claiming touch gestures', () => {
         const tooltipHosts = fixture.debugElement.queryAll(By.directive(MatTooltip));
 
@@ -480,35 +490,4 @@ describe('HomeComponent', () => {
         }
     });
 
-    describe('navigateToDashboardOrLogin', () => {
-        it('should navigate to dashboard if user is logged in', async () => {
-            mockAuthService.getUser.mockResolvedValue({ uid: '123' });
-            await component.navigateToDashboardOrLogin();
-            expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
-        });
-
-        it('should navigate to login if user is not logged in', async () => {
-            mockAuthService.getUser.mockResolvedValue(null);
-            await component.navigateToDashboardOrLogin();
-            expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
-        });
-    });
-
-    describe('navigateToMyTracksOrLogin', () => {
-        it('should navigate authenticated users to MyTracks', async () => {
-            mockAuthService.getUser.mockResolvedValue({ uid: '123' });
-
-            await component.navigateToMyTracksOrLogin();
-
-            expect(mockRouter.navigate).toHaveBeenCalledWith(['/mytracks']);
-        });
-
-        it('should navigate anonymous users to login', async () => {
-            mockAuthService.getUser.mockResolvedValue(null);
-
-            await component.navigateToMyTracksOrLogin();
-
-            expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
-        });
-    });
 });

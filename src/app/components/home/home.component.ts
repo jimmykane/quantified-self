@@ -184,18 +184,4 @@ export class HomeComponent implements OnInit, AfterViewInit, OnDestroy {
     this.observer?.disconnect();
   }
 
-  async navigateToDashboardOrLogin() {
-    const user = await this.authService.getUser();
-    if (user) {
-      await this.router.navigate(['/dashboard']);
-    } else {
-      await this.router.navigate(['/login']);
-    }
-  }
-
-  async navigateToMyTracksOrLogin() {
-    const user = await this.authService.getUser();
-    await this.router.navigate([user ? '/mytracks' : '/login']);
-  }
-
 }

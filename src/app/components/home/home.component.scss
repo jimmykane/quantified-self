@@ -891,9 +891,10 @@
         margin-bottom: 2rem;
     }
 
-    button {
+    .footprint-cta {
         border-radius: 999px;
         padding: 0.75rem 1.5rem;
+        margin-top: 1.5rem;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
 
         &:hover {
@@ -924,9 +925,6 @@
         line-height: 1.4;
     }
 
-    .footprint-cta {
-        margin-top: 1.5rem;
-    }
 }
 
 // 4. Sovereignty Section

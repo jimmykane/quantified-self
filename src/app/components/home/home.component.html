@@ -20,10 +20,10 @@
       </p>
 
       <div class="hero-actions" data-nosnippet>
-        <button mat-flat-button class="cta-button primary qs-mat-primary"  (click)="navigateToDashboardOrLogin()">
+        <a mat-flat-button class="cta-button primary qs-mat-primary" routerLink="/login">
           Get Started Free
           <mat-icon iconPositionEnd>arrow_forward</mat-icon>
-        </button>
+        </a>
         <a mat-stroked-button routerLink="/features/training-analysis">
           Explore Training Analysis
           <mat-icon iconPositionEnd>monitoring</mat-icon>
@@ -293,10 +293,10 @@
       <p class="footprint-map-caption" data-nosnippet>
         Real activity traces · open-water swimming, trail running, and mountain biking.
       </p>
-      <button class="footprint-cta" mat-stroked-button (click)="navigateToMyTracksOrLogin()">
+      <a class="footprint-cta" mat-stroked-button routerLink="/login">
         Explore MyTracks
         <mat-icon iconPositionEnd>explore</mat-icon>
-      </button>
+      </a>
     </div>
   </section>
 
@@ -472,9 +472,9 @@
           Download your original activity files whenever you want—whether you’re creating a backup, changing services,
           or analyzing them elsewhere.
         </p>
-        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
+        <a mat-stroked-button routerLink="/login">
           Start Analyzing Now
-        </button>
+        </a>
       </div>
     </div>
   </section>
