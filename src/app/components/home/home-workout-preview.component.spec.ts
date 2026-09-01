@@ -261,13 +261,12 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(Math.min(...powerPoints.map(point => point.y))).toBe(55);
   });
 
-  it('plays the production selection and synchronized zoom once after entering the viewport', async () => {
+  it('plays only the synchronized zoom once after entering the viewport without changing chart height', async () => {
     vi.useFakeTimers();
     fixture.detectChanges();
     const component = fixture.componentInstance;
 
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(component.previewRange()).toBeNull();
     expect(component.sharedZoomRange()).toBeNull();
 
     viewportObserverCallback?.([
@@ -278,24 +277,25 @@ describe('HomeWorkoutPreviewComponent', () => {
     await vi.advanceTimersByTimeAsync(900);
     fixture.detectChanges();
 
-    expect(component.previewRange()).toEqual({ start: 1_040, end: 2_260 });
     expect(component.sharedZoomRange()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__stats')).toBeNull();
 
-    await vi.advanceTimersByTimeAsync(1_200);
+    await vi.advanceTimersByTimeAsync(500);
     fixture.detectChanges();
 
     const activeZoomRange = component.sharedZoomRange();
-    expect(component.previewRange()).toBeNull();
     expect(activeZoomRange?.start).toBeGreaterThan(0);
     expect(activeZoomRange?.end).toBeLessThan(component.xDomain.end);
 
     const panels = fixture.debugElement
       .queryAll(By.directive(EventCardChartPanelComponent))
       .map(debugElement => debugElement.componentInstance as EventCardChartPanelComponent);
+    expect(panels.every(panel => panel.previewRange === null)).toBe(true);
     expect(panels.every(panel => panel.sharedZoomRange?.start === activeZoomRange?.start)).toBe(true);
     expect(panels.every(panel => panel.sharedZoomRange?.end === activeZoomRange?.end)).toBe(true);
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__stats')).toBeNull();
 
-    await vi.advanceTimersByTimeAsync(2_700);
+    await vi.advanceTimersByTimeAsync(2_000);
     fixture.detectChanges();
 
     expect(component.sharedZoomRange()).toBeNull();
@@ -303,7 +303,7 @@ describe('HomeWorkoutPreviewComponent', () => {
     await vi.advanceTimersByTimeAsync(4_000);
     fixture.detectChanges();
 
-    expect(component.previewRange()).toBeNull();
     expect(component.sharedZoomRange()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.event-chart-panel__stats')).toBeNull();
   });
 });
