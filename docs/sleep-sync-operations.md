@@ -35,11 +35,12 @@ The reference validator requires the stable health metric ID to match the refere
 Provider disconnect retains both normalized Sleep sessions and imported unified health history.
 Account deletion recursively removes both because they remain below `users/{uid}`.
 
-Sports Lib 20.3 is the canonical scalar JSON boundary for normalized Health values and Sleep aggregates. New server
-writes persist its versioned `toJSON()` envelope alongside the current legacy scalar fields, while Dashboard, Health,
-Training, derived-metric, and MCP readers strictly rehydrate it through the matching `fromJSON()` class and continue to
-accept legacy-only documents. Session structure, timestamps, stages, samples, provenance, and provider fields remain in
-the existing Sleep model. This storage transition changes no provider polling, OAuth, callback, or disconnect behavior.
+Sports Lib 20.3 is the canonical scalar JSON boundary for normalized Health values and Sleep aggregates. After the
+guarded migration and zero-candidate production dry run, new server writes persist its versioned `toJSON()` envelope
+without a second legacy canonical scalar copy. Dashboard, Health, Training, derived-metric, and MCP readers strictly
+rehydrate it through the matching `fromJSON()` class and continue to accept legacy-only documents. Session structure,
+timestamps, stages, samples, provenance, provider-native values, non-scalar score metadata, and provider fields remain
+in their existing models. This storage transition changes no provider polling, OAuth, callback, or disconnect behavior.
 
 Suunto Activity, daily-statistics, and Recovery values are separate Health source records. They do not
 modify `sleepSessions`, workout events, FIT activity metrics, readiness, Training, or MCP output. Signed
@@ -344,6 +345,11 @@ the returned checkpoint after resolving the cause. Checkpoint resolution complet
 checkpoint user root was deleted between cohorts, restart without `--start-after` and let the idempotent postchecks
 advance through already-current users again. Start with 5 users, review logs and the derived-metrics queues, then increase
 to 25 before processing the remainder.
+
+After the global execution and a complete zero-candidate dry run, deploy the legacy-write cleanup separately. It removes
+duplicate Health `canonical` values and normalized Sleep aggregate paths from new or changed documents while preserving
+the Sports Lib envelope and every non-scalar/source field. Keep dual readers in place through the observation window;
+reader removal is not part of the writer cleanup and requires another reviewed release.
 
 ## Temporarily Disable A Provider
 

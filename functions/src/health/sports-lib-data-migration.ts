@@ -190,7 +190,16 @@ export function buildHealthSportsLibDataMigrationDecision(value: unknown): Sport
     try {
         const decoded = metrics.map(metric => decodeHealthMetricSportsLibData(metric as HealthMetricEntry));
         const encoded = decoded.map(encodeHealthMetricSportsLibData);
-        if (stableValueKey(metrics) === stableValueKey(encoded)) return { status: 'unchanged' };
+        const storedSportsLibData = metrics.map(metric => asRecord(metric).sportsLibData);
+        const canonicalSportsLibData = encoded.map(metric => (
+            metric.kind === 'value' ? metric.sportsLibData : undefined
+        ));
+        // The migration remains safe to re-run after the writer cleanup has
+        // removed duplicate canonical scalars. Only the derived Sports Lib
+        // envelope determines whether a record still needs migration.
+        if (stableValueKey(storedSportsLibData) === stableValueKey(canonicalSportsLibData)) {
+            return { status: 'unchanged' };
+        }
         return { status: 'update', update: { metrics: encoded } };
     } catch (error) {
         if (error instanceof SportsLibDataValidationError) return { status: 'invalid' };

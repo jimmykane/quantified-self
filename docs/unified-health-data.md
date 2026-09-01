@@ -166,11 +166,16 @@ Readers accept legacy scalar-only documents and the versioned representation. Wh
 require the exact envelope version, allowlisted semantic key, canonical Sports Lib type key, one finite scalar, matching
 value type, and an exact `fromJSON()`/`toJSON()` round trip. Unknown, alias, additional, ambiguous, non-finite, or
 legacy-conflicting values fail closed. Successful reads consume and remove the internal envelope before projecting the
-existing domain/result shape. New writers derive the envelope server-side after provider validation; adapters cannot
-supply or override it.
+existing domain/result shape. After the guarded production migration reached a zero-candidate dry run, new writers use
+the Sports Lib envelope as the only persisted canonical scalar copy. Health retains provider-native values and goal
+metadata but omits duplicate `canonical` values; Sleep retains session structure, stages, samples, provenance, and
+non-scalar score metadata but removes the duplicate aggregate paths on changed documents. Adapters cannot supply or
+override the server-derived envelope. Legacy scalar readers remain available for rollback and untouched historical
+documents during the observation window.
 
-Legacy canonical fields remain beside the new representation during the rollback window. Quantified Self still owns
-timestamps, provider/source attribution, opaque account identity, revisions, quality, coverage, conflicts, stages,
+Existing legacy canonical fields may remain beside the new representation on untouched documents during the rollback
+window; new and changed documents do not create another copy. Quantified Self still owns timestamps, provider/source
+attribution, opaque account identity, revisions, quality, coverage, conflicts, stages,
 bounded sample series, and raw provider fields. Sports Lib JSON never wraps a complete source record or Sleep session,
 and no JSON object is added per sample point. Native-only and non-comparable values remain outside this canonical scalar
 boundary.
@@ -343,8 +348,9 @@ Every execution transaction re-reads the document and account-deletion guard, up
 `sportsLibData` for Sleep, and is idempotent. An opaque document ID returned as `nextStartAfter` resumes the next page.
 After execution, repeat the dry run and require zero candidates and zero invalid documents before beginning the
 observation window. The `sleepSessions.sportsLibData` map is excluded from automatic indexing; Health already disables
-automatic indexing for the whole source-record document. A later reviewed cleanup must stop legacy writes first and
-remove legacy reads only after migration and rollback verification.
+automatic indexing for the whole source-record document. Once that verification passes, the reviewed writer cleanup
+stops persisting duplicate canonical scalars while retaining legacy readers. Removing those readers remains a separate
+later change after the observation and rollback window.
 
 Useful local verification:
 

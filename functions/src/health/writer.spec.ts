@@ -184,6 +184,7 @@ describe('health writer', () => {
                 metrics: { value: { Steps: 100 } },
             },
         });
+        expect(built.sourceRecord.metrics[0]).not.toHaveProperty('canonical');
         expect(JSON.stringify(built)).not.toContain('secret-provider-account');
         expect(built.sourceRecord.source.accountKey).toMatch(/^[a-f0-9]{64}$/);
     });
@@ -199,14 +200,35 @@ describe('health writer', () => {
         const baseline = await buildHealthSourceRecordWrite('user-1', validInput(), 10_000, fakeId);
 
         expect(built.sourceRecord.metrics[0]).toMatchObject({
-            canonical: { value: 100, unit: HEALTH_UNITS.Count },
             sportsLibData: {
                 schemaVersion: 1,
                 metrics: { value: { Steps: 100 } },
             },
         });
+        expect(built.sourceRecord.metrics[0]).not.toHaveProperty('canonical');
         expect(JSON.stringify(built.sourceRecord)).not.toContain('999999');
         expect(built.sourceRecord.source.revision).toEqual(baseline.sourceRecord.source.revision);
+    });
+
+    it('retains native goal metadata without persisting a duplicate canonical goal scalar', async () => {
+        const input = validInput();
+        (input.metrics as Array<Record<string, unknown>>)[0].goal = {
+            native: { metric: 'goalSteps', value: 10_000, unit: 'count' },
+            canonical: { value: 10_000, unit: HEALTH_UNITS.Count },
+        };
+
+        const built = await buildHealthSourceRecordWrite('user-1', input, 10_000, fakeId);
+
+        expect(built.sourceRecord.metrics[0]).toMatchObject({
+            goal: {
+                native: { metric: 'goalSteps', value: 10_000, unit: 'count' },
+            },
+            sportsLibData: {
+                schemaVersion: 1,
+                metrics: { goal: { Steps: 10_000 } },
+            },
+        });
+        expect(built.sourceRecord.metrics[0]).not.toHaveProperty('goal.canonical');
     });
 
     it('persists an opaque source key when an adapter key contains the raw provider account ID', async () => {
