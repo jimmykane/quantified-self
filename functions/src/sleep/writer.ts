@@ -117,6 +117,23 @@ function sleepSessionFirestoreWritePayload(session: SleepSession): Record<string
             metrics[field] = FieldValue.delete();
         }
     }
+
+    // Sports Lib JSON is now the only persisted copy of normalized Sleep
+    // scalars. Delete legacy aggregate paths on merge writes while retaining
+    // non-scalar score metadata and the rest of the session envelope.
+    payload.durationSeconds = FieldValue.delete();
+    payload.inBedDurationSeconds = FieldValue.delete();
+    payload.stageDurationsSeconds = FieldValue.delete();
+    const score = payload.score;
+    if (score && typeof score === 'object' && !Array.isArray(score)) {
+        payload.score = {
+            ...score as Record<string, unknown>,
+            value: FieldValue.delete(),
+        };
+    } else {
+        payload.score = FieldValue.delete();
+    }
+    payload.vitals = FieldValue.delete();
     return payload;
 }
 

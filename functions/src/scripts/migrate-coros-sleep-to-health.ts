@@ -6,6 +6,10 @@ import {
     type HealthMetricEntry,
 } from '../../../shared/health';
 import { SLEEP_PROVIDERS, SLEEP_SESSIONS_COLLECTION_ID } from '../../../shared/sleep';
+import {
+    decodeHealthMetricSportsLibData,
+    SportsLibDataValidationError,
+} from '../../../shared/sports-lib-health-data';
 import { COROSDailyHealthResult, mapCOROSDailyHealth } from '../coros/daily-health';
 import { COROS_DAILY_MAX_HRV_POINTS } from '../coros/constants';
 import {
@@ -165,10 +169,19 @@ function supersedingMetricsMatch(
             return stableValueKey(existingMetric) === stableValueKey(candidateMetric);
         }
         if (candidateMetric.kind !== 'value' || existingMetric.kind !== 'value') return false;
+        let decodedExistingMetric: HealthMetricEntry;
+        try {
+            decodedExistingMetric = decodeHealthMetricSportsLibData(
+                existingMetric as unknown as HealthMetricEntry,
+            );
+        } catch (error) {
+            if (error instanceof SportsLibDataValidationError) return false;
+            throw error;
+        }
         // A newly fetched daily record supersedes the stale scalar retained in
         // Sleep. Only the provider value may differ; its metric semantics and
         // units must remain identical.
-        return stableValueKey(providerValueMetricDefinition(existingMetric))
+        return stableValueKey(providerValueMetricDefinition(decodedExistingMetric))
             === stableValueKey(providerValueMetricDefinition(candidateMetric));
     });
 }

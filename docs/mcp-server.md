@@ -980,8 +980,8 @@ resting sleep heart rate; average and overnight HRV plus HRV sample count; maxim
 The field masks also read only the exact internal Sports Lib 20.3 aggregate slots needed by each projection. The loader
 strictly rehydrates their allowlisted scalar classes and projects the same legacy-safe response fields; the envelope,
 Sports Lib canonical type keys, and unified Health source records never enter MCP output. Legacy-only and migrated
-sessions therefore produce the
-same structured content. Negative fixtures cover both formats and prove the storage envelope cannot leak. No tool,
+sessions therefore produce the same structured content as new Sports-Lib-only writes. Negative fixtures cover both
+formats and prove the storage envelope cannot leak. No tool,
 registered output schema, scope, plugin instruction, or starter prompt changes, so this storage transition causes no
 additional registered ChatGPT app rescan or local plugin sync.
 
