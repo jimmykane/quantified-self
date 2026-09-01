@@ -106,7 +106,11 @@ interface ResumableGiftOperation {
     response: AdminSubscriptionGiftResumableOperation;
 }
 
-type NeedsReviewMarkResult = 'marked' | 'target-unavailable' | 'lock-conflict';
+type NeedsReviewMarkResult =
+    | { outcome: 'marked' }
+    | { outcome: 'target-unavailable' }
+    | { outcome: 'lock-conflict' }
+    | { outcome: 'terminal'; operation: StoredGiftOperation };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -504,14 +508,17 @@ async function markExistingOperationNeedsReview(
             transaction.get(giftLockRef),
         ]);
         if (guard.shouldSkip) {
-            return 'target-unavailable' as const;
+            return { outcome: 'target-unavailable' } as const;
         }
 
         const operation = operationSnapshot.exists
             ? parseStoredGiftOperation(operationSnapshot.data() as Record<string, unknown> | undefined)
             : null;
         if (!operation) {
-            return 'lock-conflict' as const;
+            return { outcome: 'lock-conflict' } as const;
+        }
+        if (operation.status === 'succeeded' || operation.status === 'failed') {
+            return { outcome: 'terminal', operation } as const;
         }
 
         const lock = lockSnapshot.data() as Record<string, unknown> | undefined;
@@ -527,7 +534,7 @@ async function markExistingOperationNeedsReview(
             || (lockStatus === 'applying' && !isExpiredSameOperationLease)
             || (lockStatus === 'needs_review' && lockOperationId !== operationId)
         ) {
-            return 'lock-conflict' as const;
+            return { outcome: 'lock-conflict' } as const;
         }
 
         transaction.set(giftOperationRef, {
@@ -544,7 +551,7 @@ async function markExistingOperationNeedsReview(
             leaseExpiresAt: FieldValue.delete(),
             updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
-        return 'marked' as const;
+        return { outcome: 'marked' } as const;
     });
 }
 
@@ -553,6 +560,7 @@ async function transitionExistingOperationToNeedsReview(
     uid: string,
     operationId: string,
     operation: StoredGiftOperation,
+    actorUid: string,
 ): Promise<GrantAdminSubscriptionGiftResponse> {
     const markResult = await markExistingOperationNeedsReview(
         db,
@@ -560,13 +568,32 @@ async function transitionExistingOperationToNeedsReview(
         operationId,
         'subscription_state_changed',
     );
-    if (markResult === 'target-unavailable') {
+    if (markResult.outcome === 'target-unavailable') {
         throw new HttpsError('failed-precondition', 'The target account is missing or pending deletion.');
     }
-    if (markResult === 'lock-conflict') {
+    if (markResult.outcome === 'lock-conflict') {
         throw new HttpsError(
             'aborted',
             'Another subscription gift operation is in progress or requires review. Retry the original operation.',
+        );
+    }
+    if (markResult.outcome === 'terminal') {
+        await validateTargetIdentity(db, uid, actorUid, true);
+        if (markResult.operation.status === 'succeeded') {
+            const notificationStatus = await queueGiftNotification(
+                db,
+                uid,
+                operationId,
+                markResult.operation,
+            );
+            return buildResponse(operationId, markResult.operation, 'succeeded', notificationStatus);
+        }
+        return buildResponse(
+            operationId,
+            markResult.operation,
+            'failed',
+            markResult.operation.notificationStatus,
+            'This gift operation previously failed. Nothing was changed.',
         );
     }
     return buildResponse(
@@ -1242,6 +1269,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
                 input.uid,
                 input.operationId,
                 existingOperation,
+                actorUid,
             );
         }
         throw error;
@@ -1258,6 +1286,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
                     input.uid,
                     input.operationId,
                     existingOperation,
+                    actorUid,
                 );
             }
             throw mapGiftEligibilityError(error);
