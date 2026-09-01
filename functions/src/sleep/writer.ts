@@ -125,13 +125,17 @@ function sleepSessionFirestoreWritePayload(session: SleepSession): Record<string
     payload.inBedDurationSeconds = FieldValue.delete();
     payload.stageDurationsSeconds = FieldValue.delete();
     const score = payload.score;
-    if (score && typeof score === 'object' && !Array.isArray(score)) {
+    if (session.score === null) {
+        payload.score = FieldValue.delete();
+    } else if (score && typeof score === 'object' && !Array.isArray(score)) {
         payload.score = {
             ...score as Record<string, unknown>,
             value: FieldValue.delete(),
         };
     } else {
-        payload.score = FieldValue.delete();
+        // Undefined mapper fields retain existing merge-owned metadata while
+        // removing only the duplicated normalized scalar.
+        payload.score = { value: FieldValue.delete() };
     }
     payload.vitals = FieldValue.delete();
     return payload;

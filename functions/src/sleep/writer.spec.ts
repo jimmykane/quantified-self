@@ -248,7 +248,7 @@ describe('sleep writer', () => {
             durationSeconds: hoisted.deleteField,
             inBedDurationSeconds: hoisted.deleteField,
             stageDurationsSeconds: hoisted.deleteField,
-            score: hoisted.deleteField,
+            score: { value: hoisted.deleteField },
             vitals: hoisted.deleteField,
             isNap: false,
             sportsLibData: {
@@ -341,6 +341,23 @@ describe('sleep writer', () => {
                 averageHeartRate: { 'Average Sleep Heart Rate': 54 },
             }),
         });
+    });
+
+    it('preserves existing score metadata when a partial update omits the score', async () => {
+        hoisted.docGet.mockResolvedValue({
+            exists: true,
+            data: () => encodeSleepSessionSportsLibData(buildExistingSuuntoSession({
+                score: { value: 88, qualifier: 'good', components: { recovery: 90 } },
+            })),
+        });
+
+        const result = await upsertSleepSession('user-1', buildMapperResult({
+            durationSeconds: 33_420,
+        }), 3000);
+
+        expect(result.written).toBe(true);
+        const writePayload = hoisted.docSet.mock.calls[0][1] as Record<string, unknown>;
+        expect(writePayload.score).toEqual({ value: hoisted.deleteField });
     });
 
     it('skips unchanged duplicate Garmin sessions even when callback metadata differs', async () => {
