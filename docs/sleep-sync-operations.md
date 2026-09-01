@@ -301,15 +301,17 @@ npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --u
 npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind health --limit 100 --concurrency 5 --start-after <opaque-document-id>
 ```
 
-For each candidate, execution rechecks account deletion and re-reads the exact document in the update transaction. It
-updates only the derived canonical field and never changes provider revisions, receipt timestamps, source metadata,
-stage/session structure, or raw provider fields. A concurrent delete becomes `skipped_missing`; a deletion race becomes
-`skipped_deleted_user`; malformed or conflicting Sports Lib JSON is counted and left untouched. A retryable failure
-stops new transaction batches, exits nonzero, and returns the cursor immediately before the earliest failed document;
-already-started transactions in that bounded batch may finish, and rerunning from the returned cursor safely rechecks
-them. `--concurrency` defaults to 5 and is capped at 10; start at 5 and increase only after a clean pilot while keeping
-users and Health/Sleep collections sequential. Re-running the same page is safe. Finish by repeating both dry runs and
-require `candidates: 0`, `skippedInvalid: 0`, and `failed: 0`.
+In additive mode, execution rechecks account deletion for each candidate and re-reads the exact document in the update
+transaction. It updates only the derived canonical field and never changes provider revisions, receipt timestamps,
+source metadata, stage/session structure, or raw provider fields. A concurrent delete becomes `skipped_missing`; a
+deletion race becomes
+`skipped_deleted_user`; malformed or conflicting Sports Lib JSON becomes `skippedInvalid` and is left untouched. Any
+of those blocking outcomes or a retryable failure stops new transaction batches, exits nonzero, and returns the cursor
+immediately before the earliest document that was not safely handled. Already-started transactions in that bounded
+batch may finish, and rerunning from the returned cursor safely rechecks them. `--concurrency` defaults to 5 and is
+capped at 10; start at 5 and increase only after a clean pilot while keeping users and Health/Sleep collections
+sequential. Re-running the same page is safe. Finish by repeating both dry runs and require `candidates: 0`,
+`skippedInvalid: 0`, `skippedDeletedUser: 0`, `skippedMissing: 0`, and `failed: 0`.
 
 The migration does not require provider reconnects or history refetches. Ordinary disconnect intentionally retains
 imported history, so disconnecting during the migration does not remove a valid historical candidate. Account deletion

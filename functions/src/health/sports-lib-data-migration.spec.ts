@@ -34,6 +34,7 @@ import {
     buildHealthSportsLibDataMigrationDecision,
     buildSleepSportsLibLegacyScalarCleanupDecision,
     buildSleepSportsLibDataMigrationDecision,
+    hasBlockingSportsLibDataMigrationResult,
     migrateSportsLibDataDocument,
     parseSportsLibDataMigrationOptions,
     runSportsLibDataMigration,
@@ -403,6 +404,45 @@ describe('Health and sleep Sports Lib data migration', () => {
         expect(JSON.stringify(hoisted.loggerError.mock.calls)).not.toContain('private-user-id');
     });
 
+    it.each([
+        { flags: [] as string[] },
+        { flags: ['--remove-legacy-scalars'] },
+    ])('stops before an invalid document and every unexecuted candidate with flags $flags', async ({ flags }) => {
+        const migration = buildHealthSportsLibDataMigrationDecision(healthDocument());
+        if (migration.status !== 'update') throw new Error('Expected a Health migration update.');
+        const candidate = flags.includes('--remove-legacy-scalars')
+            ? migration.update
+            : healthDocument();
+        const invalid = healthDocument();
+        (invalid.metrics[0] as Record<string, unknown>).sportsLibData = {
+            schemaVersion: 1,
+            metrics: { value: { Steps: 999 } },
+        };
+        const fake = fakeQueryDatabase([
+            candidate,
+            invalid,
+            candidate,
+        ]);
+
+        const summary = await runSportsLibDataMigration([
+            '--execute',
+            ...flags,
+            '--uid', 'private-user-id',
+            '--kind', 'health',
+            '--start-after', 'opaque-prior',
+        ], { db: fake.db });
+
+        expect(summary).toMatchObject({
+            scanned: 2,
+            candidates: 1,
+            migrated: 0,
+            skippedInvalid: 1,
+            nextStartAfter: 'opaque-prior',
+        });
+        expect(hasBlockingSportsLibDataMigrationResult(summary)).toBe(true);
+        expect(fake.dbMock.runTransaction).not.toHaveBeenCalled();
+    });
+
     it('retains the incoming cursor when the first document fails', async () => {
         const fake = fakeQueryDatabase([healthDocument(), healthDocument()]);
         fake.dbMock.runTransaction.mockRejectedValueOnce(new Error('transient'));
@@ -481,6 +521,41 @@ describe('Health and sleep Sports Lib data migration', () => {
             failed: 1,
             nextStartAfter: 'opaque-1',
         });
+        expect(fake.dbMock.runTransaction).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+        'invalid',
+        'skipped_deleted_user',
+        'skipped_missing',
+    ] as const)('resumes before a transactional %s cleanup outcome', async outcome => {
+        const migration = buildHealthSportsLibDataMigrationDecision(healthDocument());
+        if (migration.status !== 'update') throw new Error('Expected a Health migration update.');
+        const fake = fakeQueryDatabase([
+            migration.update,
+            migration.update,
+            migration.update,
+        ]);
+        fake.dbMock.runTransaction
+            .mockResolvedValueOnce('migrated')
+            .mockResolvedValueOnce(outcome);
+
+        const summary = await runSportsLibDataMigration([
+            '--execute',
+            '--remove-legacy-scalars',
+            '--uid', 'private-user-id',
+            '--kind', 'health',
+            '--concurrency', '2',
+        ], { db: fake.db });
+
+        expect(summary).toMatchObject({
+            scanned: 2,
+            candidates: 2,
+            migrated: 1,
+            failed: 0,
+            nextStartAfter: 'opaque-1',
+        });
+        expect(hasBlockingSportsLibDataMigrationResult(summary)).toBe(true);
         expect(fake.dbMock.runTransaction).toHaveBeenCalledTimes(2);
     });
 
