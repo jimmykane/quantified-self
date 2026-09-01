@@ -352,6 +352,13 @@ automatic indexing for the whole source-record document. Once that verification 
 stops persisting duplicate canonical scalars while retaining legacy readers. Removing those readers remains a separate
 later change after the observation and rollback window.
 
+After that window, the same bounded migration supports an explicit `--remove-legacy-scalars` cleanup mode. It first
+strictly decodes and round-trips the stored Sports Lib envelope, then removes only duplicate Health canonical value/goal
+maps and normalized Sleep aggregate paths. Cleanup is dry-run-first, deletion-guarded, idempotent, cohort-resumable, and
+uses checkpoints that cannot be reused across additive migration, cleanup, dry-run, or execution modes. It preserves
+provider-native Health values, Sleep/session structure, non-scalar score metadata, source fields, and legacy readers;
+unexpected or conflicting data is left untouched and blocks cohort advancement.
+
 Useful local verification:
 
 ```bash

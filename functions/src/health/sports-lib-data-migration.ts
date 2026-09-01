@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { FieldPath } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
     HEALTH_MAX_METRICS_PER_SOURCE_RECORD,
@@ -9,6 +9,7 @@ import {
 } from '../../../shared/health';
 import {
     SLEEP_SESSIONS_COLLECTION_ID,
+    SLEEP_STAGES,
     type SleepSession,
 } from '../../../shared/sleep';
 import {
@@ -38,6 +39,18 @@ const SLEEP_FIELD_MASK = [
     'vitals',
     'sportsLibData',
 ] as const;
+const SLEEP_VITAL_FIELDS: ReadonlySet<string> = new Set([
+    'averageHeartRateBpm',
+    'minimumHeartRateBpm',
+    'restingHeartRateBpm',
+    'averageHrvMs',
+    'hrvSampleCount',
+    'overnightHrvMs',
+    'maxSpo2Percent',
+    'averageRespirationBrpm',
+]);
+const SLEEP_STAGE_FIELDS: ReadonlySet<string> = new Set(Object.values(SLEEP_STAGES));
+const HEALTH_CANONICAL_FIELDS: ReadonlySet<string> = new Set(['value', 'unit']);
 
 export const SPORTS_LIB_DATA_MIGRATION_KINDS = {
     Health: 'health',
@@ -50,6 +63,7 @@ export type SportsLibDataMigrationKind = typeof SPORTS_LIB_DATA_MIGRATION_KINDS[
 
 export interface SportsLibDataMigrationOptions {
     execute: boolean;
+    removeLegacyScalars: boolean;
     userID: string;
     kind: SportsLibDataMigrationKind;
     limit: number;
@@ -59,6 +73,7 @@ export interface SportsLibDataMigrationOptions {
 
 export interface SportsLibDataMigrationSummary {
     dryRun: boolean;
+    removeLegacyScalars: boolean;
     kind: SportsLibDataMigrationKind;
     concurrency: number;
     scanned: number;
@@ -114,7 +129,7 @@ function isSafeDocumentId(value: string): boolean {
 
 export function parseSportsLibDataMigrationOptions(argv: readonly string[]): SportsLibDataMigrationOptions {
     const knownValueArguments = new Set(['--uid', '--kind', '--limit', '--concurrency', '--start-after']);
-    const knownBooleanArguments = new Set(['--execute']);
+    const knownBooleanArguments = new Set(['--execute', '--remove-legacy-scalars']);
     const values = new Map<string, string>();
     const booleans = new Set<string>();
     for (let index = 0; index < argv.length; index += 1) {
@@ -168,12 +183,138 @@ export function parseSportsLibDataMigrationOptions(argv: readonly string[]): Spo
     }
     return {
         execute: booleans.has('--execute'),
+        removeLegacyScalars: booleans.has('--remove-legacy-scalars'),
         userID,
         kind: kindValue,
         limit,
         concurrency,
         startAfter,
     };
+}
+
+function hasOwn(value: Record<string, unknown>, field: string): boolean {
+    return Object.prototype.hasOwnProperty.call(value, field);
+}
+
+function isPlainRecordOrNull(value: unknown): boolean {
+    if (value === null) return true;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+}
+
+function hasOnlyFields(value: unknown, fields: ReadonlySet<string>): boolean {
+    return isPlainRecordOrNull(value)
+        && (value === null || Object.keys(asRecord(value)).every(field => fields.has(field)));
+}
+
+export function buildHealthSportsLibLegacyScalarCleanupDecision(
+    value: unknown,
+): SportsLibDataMigrationDecision {
+    const metrics = asRecord(value).metrics;
+    if (!Array.isArray(metrics)
+        || metrics.length > HEALTH_MAX_METRICS_PER_SOURCE_RECORD
+        || metrics.some(metric => !metric || typeof metric !== 'object' || Array.isArray(metric))) {
+        return { status: 'invalid' };
+    }
+    if (metrics.length === 0) return { status: 'unchanged' };
+    for (const metric of metrics) {
+        const storedMetric = asRecord(metric);
+        const goal = storedMetric.goal;
+        if ((hasOwn(storedMetric, 'canonical')
+                && !hasOnlyFields(storedMetric.canonical, HEALTH_CANONICAL_FIELDS))
+            || (hasOwn(storedMetric, 'goal') && !isPlainRecordOrNull(goal))
+            || (goal !== null
+                && hasOwn(asRecord(goal), 'canonical')
+                && !hasOnlyFields(asRecord(goal).canonical, HEALTH_CANONICAL_FIELDS))) {
+            return { status: 'invalid' };
+        }
+    }
+    try {
+        const decoded = metrics.map(metric => decodeHealthMetricSportsLibData(metric as HealthMetricEntry));
+        const encoded = decoded.map(encodeHealthMetricSportsLibData);
+        const storedSportsLibData = metrics.map(metric => asRecord(metric).sportsLibData);
+        const canonicalSportsLibData = encoded.map(metric => (
+            metric.kind === 'value' ? metric.sportsLibData : undefined
+        ));
+        // Cleanup is destructive and must never substitute for the additive
+        // migration. Every canonical value must already have an exact,
+        // round-tripped Sports Lib envelope before its legacy copy is removed.
+        if (stableValueKey(storedSportsLibData) !== stableValueKey(canonicalSportsLibData)) {
+            return { status: 'invalid' };
+        }
+        const cleanedMetrics = metrics.map((metric, index) => {
+            const storedMetric = { ...asRecord(metric) };
+            const canonicalMetric = encoded[index];
+            if (canonicalMetric.kind !== 'value' || !canonicalMetric.sportsLibData) {
+                return storedMetric;
+            }
+            delete storedMetric.canonical;
+            const storedGoal = storedMetric.goal;
+            if (storedGoal && typeof storedGoal === 'object' && !Array.isArray(storedGoal)) {
+                const goal = { ...storedGoal as Record<string, unknown> };
+                delete goal.canonical;
+                if (Object.keys(goal).length === 0) delete storedMetric.goal;
+                else storedMetric.goal = goal;
+            }
+            return storedMetric;
+        });
+        return stableValueKey(metrics) === stableValueKey(cleanedMetrics)
+            ? { status: 'unchanged' }
+            : { status: 'update', update: { metrics: cleanedMetrics } };
+    } catch (error) {
+        if (error instanceof SportsLibDataValidationError) return { status: 'invalid' };
+        throw error;
+    }
+}
+
+export function buildSleepSportsLibLegacyScalarCleanupDecision(
+    value: unknown,
+): SportsLibDataMigrationDecision {
+    const data = asRecord(value);
+    if (!hasOwn(data, 'sportsLibData')
+        || (hasOwn(data, 'score') && !isPlainRecordOrNull(data.score))
+        || (hasOwn(data, 'vitals') && !isPlainRecordOrNull(data.vitals))
+        || (hasOwn(data, 'stageDurationsSeconds') && !isPlainRecordOrNull(data.stageDurationsSeconds))) {
+        return { status: 'invalid' };
+    }
+    const stageDurations = asRecord(data.stageDurationsSeconds);
+    const vitals = asRecord(data.vitals);
+    if (Object.keys(stageDurations).some(field => !SLEEP_STAGE_FIELDS.has(field))
+        || Object.keys(vitals).some(field => !SLEEP_VITAL_FIELDS.has(field))) {
+        return { status: 'invalid' };
+    }
+    try {
+        const decoded = decodeSleepSessionSportsLibData(data as unknown as SleepSession);
+        const encoded = encodeSleepSessionSportsLibData(decoded);
+        if (stableValueKey(data.sportsLibData) !== stableValueKey(encoded.sportsLibData)) {
+            return { status: 'invalid' };
+        }
+    } catch (error) {
+        if (error instanceof SportsLibDataValidationError) return { status: 'invalid' };
+        throw error;
+    }
+
+    const update: Record<string, unknown> = {};
+    for (const field of [
+        'durationSeconds',
+        'inBedDurationSeconds',
+        'stageDurationsSeconds',
+        'vitals',
+    ]) {
+        if (hasOwn(data, field)) update[field] = FieldValue.delete();
+    }
+    if (hasOwn(data, 'score')) {
+        const score = asRecord(data.score);
+        if (data.score === null || Object.keys(score).every(field => field === 'value')) {
+            update.score = FieldValue.delete();
+        } else if (hasOwn(score, 'value')) {
+            update['score.value'] = FieldValue.delete();
+        }
+    }
+    return Object.keys(update).length === 0
+        ? { status: 'unchanged' }
+        : { status: 'update', update };
 }
 
 export function buildHealthSportsLibDataMigrationDecision(value: unknown): SportsLibDataMigrationDecision {
@@ -222,7 +363,16 @@ export function buildSleepSportsLibDataMigrationDecision(value: unknown): Sports
     }
 }
 
-function migrationDecision(kind: SportsLibDataMigrationKind, value: unknown): SportsLibDataMigrationDecision {
+function migrationDecision(
+    kind: SportsLibDataMigrationKind,
+    value: unknown,
+    removeLegacyScalars: boolean,
+): SportsLibDataMigrationDecision {
+    if (removeLegacyScalars) {
+        return kind === SPORTS_LIB_DATA_MIGRATION_KINDS.Health
+            ? buildHealthSportsLibLegacyScalarCleanupDecision(value)
+            : buildSleepSportsLibLegacyScalarCleanupDecision(value);
+    }
     return kind === SPORTS_LIB_DATA_MIGRATION_KINDS.Health
         ? buildHealthSportsLibDataMigrationDecision(value)
         : buildSleepSportsLibDataMigrationDecision(value);
@@ -246,6 +396,7 @@ export async function migrateSportsLibDataDocument(
     userID: string,
     documentRef: admin.firestore.DocumentReference,
     kind: SportsLibDataMigrationKind,
+    removeLegacyScalars = false,
 ): Promise<SportsLibDataMigrationWriteStatus> {
     return db.runTransaction(async transaction => {
         let deletionGuard;
@@ -259,7 +410,7 @@ export async function migrateSportsLibDataDocument(
         const snapshot = await transaction.get(documentRef);
         if (!snapshot.exists) return 'skipped_missing';
         const storedDocument = snapshot.data() as Record<string, unknown>;
-        const decision = migrationDecision(kind, storedDocument);
+        const decision = migrationDecision(kind, storedDocument, removeLegacyScalars);
         if (decision.status !== 'update') return decision.status;
         if (kind === SPORTS_LIB_DATA_MIGRATION_KINDS.Health
             && !healthMigrationUpdateFitsDocumentBound(storedDocument, decision.update)) {
@@ -302,6 +453,7 @@ export async function runSportsLibDataMigration(
     const { documents, hasMore } = await documentsToInspect(db, options);
     const summary: SportsLibDataMigrationSummary = {
         dryRun: !options.execute,
+        removeLegacyScalars: options.removeLegacyScalars,
         kind: options.kind,
         concurrency: options.concurrency,
         scanned: 0,
@@ -329,7 +481,11 @@ export async function runSportsLibDataMigration(
             nextDocumentIndex += 1;
             summary.scanned += 1;
             try {
-                const initialDecision = migrationDecision(options.kind, document.data());
+                const initialDecision = migrationDecision(
+                    options.kind,
+                    document.data(),
+                    options.removeLegacyScalars,
+                );
                 if (initialDecision.status === 'invalid') {
                     summary.skippedInvalid += 1;
                     continue;
@@ -367,6 +523,7 @@ export async function runSportsLibDataMigration(
                     options.userID,
                     candidate.document.ref,
                     options.kind,
+                    options.removeLegacyScalars,
                 );
                 return { ...candidate, status };
             } catch {

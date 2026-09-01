@@ -346,10 +346,33 @@ checkpoint user root was deleted between cohorts, restart without `--start-after
 advance through already-current users again. Start with 5 users, review logs and the derived-metrics queues, then increase
 to 25 before processing the remainder.
 
-After the global execution and a complete zero-candidate dry run, deploy the legacy-write cleanup separately. It removes
-duplicate Health `canonical` values and normalized Sleep aggregate paths from new or changed documents while preserving
-the Sports Lib envelope and every non-scalar/source field. Keep dual readers in place through the observation window;
-reader removal is not part of the writer cleanup and requires another reviewed release.
+After the additive migration, writer cleanup, and observation window are complete, the same runners can remove the
+historical duplicate scalar fields. This is an explicit, destructive mode and remains a dry run unless `--execute` is
+also present:
+
+```bash
+# Read-only pilot: report historical documents whose duplicate scalars are safe to remove.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --remove-legacy-scalars --max-users 5
+
+# Execute one bounded cleanup cohort.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --remove-legacy-scalars --max-users 5 --document-concurrency 5
+
+# Resume only with the checkpoint returned by the same cleanup/execution mode.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --remove-legacy-scalars --max-users 25 --document-concurrency 5 --start-after <opaque-checkpoint>
+```
+
+Cleanup checkpoints use a separate domain from additive-migration checkpoints and remain separately bound to dry-run
+or execution mode. The runner refuses to remove anything unless the existing Sports Lib envelope strictly decodes and
+round-trips to the legacy values. Health cleanup removes only duplicate `canonical` value/goal maps while retaining
+provider-native values and other goal metadata. Sleep cleanup removes only the duplicate duration, in-bed duration,
+stage-duration, vital, and numeric score paths while retaining session structure, stages, samples, provenance, score
+qualifiers/components, and provider fields. Unexpected legacy map fields, malformed/conflicting envelopes, deletion
+races, and failures stop the cohort before its checkpoint advances. Repeat the cleanup dry run through the entire user
+inventory and require zero candidates, invalid records, and failures. Because `--execute --remove-legacy-scalars`
+deletes historical Firestore fields, running it in production requires separate approval for the exact cohort.
+
+Keep dual readers in place through the rollback window. Removing legacy readers is not part of this migration and
+requires another reviewed release.
 
 ## Temporarily Disable A Provider
 

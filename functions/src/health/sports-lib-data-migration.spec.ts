@@ -30,7 +30,9 @@ vi.mock('firebase-functions/logger', () => ({
 
 import {
     SPORTS_LIB_DATA_MIGRATION_KINDS,
+    buildHealthSportsLibLegacyScalarCleanupDecision,
     buildHealthSportsLibDataMigrationDecision,
+    buildSleepSportsLibLegacyScalarCleanupDecision,
     buildSleepSportsLibDataMigrationDecision,
     migrateSportsLibDataDocument,
     parseSportsLibDataMigrationOptions,
@@ -137,6 +139,7 @@ describe('Health and sleep Sports Lib data migration', () => {
             '--start-after', 'opaque-document-id',
         ])).toEqual({
             execute: false,
+            removeLegacyScalars: false,
             userID: 'user-1',
             kind: SPORTS_LIB_DATA_MIGRATION_KINDS.Sleep,
             limit: 25,
@@ -144,8 +147,8 @@ describe('Health and sleep Sports Lib data migration', () => {
             startAfter: 'opaque-document-id',
         });
         expect(parseSportsLibDataMigrationOptions([
-            '--execute', '--uid=user-1', '--kind=health',
-        ])).toMatchObject({ execute: true, concurrency: 5 });
+            '--execute', '--remove-legacy-scalars', '--uid=user-1', '--kind=health',
+        ])).toMatchObject({ execute: true, removeLegacyScalars: true, concurrency: 5 });
     });
 
     it.each([
@@ -164,6 +167,8 @@ describe('Health and sleep Sports Lib data migration', () => {
         ['--uid=user-1', '--uid=user-1', '--kind=health'],
         ['--execute', '--execute', '--uid=user-1', '--kind=health'],
         ['--execute=true', '--uid', 'user-1', '--kind', 'health'],
+        ['--remove-legacy-scalars=true', '--uid', 'user-1', '--kind', 'health'],
+        ['--remove-legacy-scalars', '--remove-legacy-scalars', '--uid', 'user-1', '--kind', 'health'],
         ['--uid', 'user-1', '--kind', 'health', '--unknown'],
     ])('rejects unsafe or unbounded migration arguments %#', argv => {
         expect(() => parseSportsLibDataMigrationOptions(argv)).toThrow();
@@ -203,6 +208,65 @@ describe('Health and sleep Sports Lib data migration', () => {
             .toEqual({ status: 'unchanged' });
     });
 
+    it('removes only validated duplicate Health canonical scalars', () => {
+        const legacy = healthDocument();
+        legacy.metrics[0].goal = {
+            native: { metric: 'goalSteps', value: 12_000, unit: 'count' },
+            canonical: { value: 12_000, unit: HEALTH_UNITS.Count },
+        };
+        const migration = buildHealthSportsLibDataMigrationDecision(legacy);
+        if (migration.status !== 'update') throw new Error('Expected a Health migration update.');
+
+        const cleanup = buildHealthSportsLibLegacyScalarCleanupDecision(migration.update);
+
+        expect(cleanup).toMatchObject({
+            status: 'update',
+            update: {
+                metrics: [{
+                    native: { metric: 'steps', value: 10_000, unit: 'count' },
+                    goal: {
+                        native: { metric: 'goalSteps', value: 12_000, unit: 'count' },
+                    },
+                    sportsLibData: {
+                        schemaVersion: 1,
+                        metrics: {
+                            value: { Steps: 10_000 },
+                            goal: { Steps: 12_000 },
+                        },
+                    },
+                }],
+            },
+        });
+        if (cleanup.status !== 'update') return;
+        const cleanedMetric = (cleanup.update.metrics as Array<Record<string, unknown>>)[0];
+        expect(cleanedMetric).not.toHaveProperty('canonical');
+        expect(cleanedMetric.goal).not.toHaveProperty('canonical');
+        expect(buildHealthSportsLibLegacyScalarCleanupDecision(cleanup.update))
+            .toEqual({ status: 'unchanged' });
+    });
+
+    it('refuses Health cleanup before the additive Sports Lib migration is complete', () => {
+        expect(buildHealthSportsLibLegacyScalarCleanupDecision(healthDocument()))
+            .toEqual({ status: 'invalid' });
+    });
+
+    it('refuses Health cleanup when a legacy scalar contains unrecognized data', () => {
+        const migration = buildHealthSportsLibDataMigrationDecision(healthDocument());
+        if (migration.status !== 'update') throw new Error('Expected a Health migration update.');
+        const migrated = migration.update as ReturnType<typeof healthDocument>;
+
+        expect(buildHealthSportsLibLegacyScalarCleanupDecision({
+            metrics: [{
+                ...migrated.metrics[0],
+                canonical: {
+                    value: 10_000,
+                    unit: HEALTH_UNITS.Count,
+                    providerNote: 'retain-me',
+                },
+            }],
+        })).toEqual({ status: 'invalid' });
+    });
+
     it('treats a valid series-only Health record with no scalar metrics as unchanged', () => {
         expect(buildHealthSportsLibDataMigrationDecision({ metrics: [] })).toEqual({ status: 'unchanged' });
     });
@@ -230,6 +294,53 @@ describe('Health and sleep Sports Lib data migration', () => {
         })).toEqual({ status: 'unchanged' });
     });
 
+    it('removes validated duplicate Sleep aggregates while preserving score metadata', () => {
+        const legacy = sleepDocument();
+        const migration = buildSleepSportsLibDataMigrationDecision(legacy);
+        if (migration.status !== 'update') throw new Error('Expected a Sleep migration update.');
+        const migrated = { ...legacy, ...migration.update };
+
+        const cleanup = buildSleepSportsLibLegacyScalarCleanupDecision(migrated);
+
+        expect(cleanup.status).toBe('update');
+        if (cleanup.status !== 'update') return;
+        expect(cleanup.update).toEqual({
+            durationSeconds: expect.anything(),
+            inBedDurationSeconds: expect.anything(),
+            stageDurationsSeconds: expect.anything(),
+            'score.value': expect.anything(),
+            vitals: expect.anything(),
+        });
+        const newOnly = {
+            sportsLibData: migrated.sportsLibData,
+            score: { qualifier: 'excellent' },
+        };
+        expect(buildSleepSportsLibLegacyScalarCleanupDecision(newOnly))
+            .toEqual({ status: 'unchanged' });
+    });
+
+    it('refuses Sleep cleanup before migration or when a deleted map has unknown fields', () => {
+        expect(buildSleepSportsLibLegacyScalarCleanupDecision(sleepDocument()))
+            .toEqual({ status: 'invalid' });
+        const migration = buildSleepSportsLibDataMigrationDecision(sleepDocument());
+        if (migration.status !== 'update') throw new Error('Expected a Sleep migration update.');
+        expect(buildSleepSportsLibLegacyScalarCleanupDecision({
+            ...sleepDocument(),
+            ...migration.update,
+            vitals: { averageHrvMs: 60, providerSecret: 1 },
+        })).toEqual({ status: 'invalid' });
+        expect(buildSleepSportsLibLegacyScalarCleanupDecision({
+            ...sleepDocument(),
+            ...migration.update,
+            stageDurationsSeconds: { [SLEEP_STAGES.Deep]: 4_000, providerStage: 1 },
+        })).toEqual({ status: 'invalid' });
+        expect(buildSleepSportsLibLegacyScalarCleanupDecision({
+            ...sleepDocument(),
+            ...migration.update,
+            score: new Date(),
+        })).toEqual({ status: 'invalid' });
+    });
+
     it('keeps dry runs bounded, cursor-resumable, and free of user IDs in logs', async () => {
         const fake = fakeQueryDatabase([healthDocument(), healthDocument(), healthDocument()]);
 
@@ -243,6 +354,7 @@ describe('Health and sleep Sports Lib data migration', () => {
 
         expect(summary).toEqual({
             dryRun: true,
+            removeLegacyScalars: false,
             kind: SPORTS_LIB_DATA_MIGRATION_KINDS.Health,
             concurrency: 1,
             scanned: 2,
@@ -454,6 +566,28 @@ describe('Health and sleep Sports Lib data migration', () => {
         )).resolves.toBe('migrated');
         expect(fake.update).toHaveBeenCalledWith(documentRef, {
             sportsLibData: expect.objectContaining({ schemaVersion: 1 }),
+        });
+    });
+
+    it('revalidates Sports Lib data before deleting legacy Sleep fields in a transaction', async () => {
+        const migration = buildSleepSportsLibDataMigrationDecision(sleepDocument());
+        if (migration.status !== 'update') throw new Error('Expected a Sleep migration update.');
+        const fake = fakeTransactionDatabase({ ...sleepDocument(), ...migration.update });
+        const documentRef = {} as admin.firestore.DocumentReference;
+
+        await expect(migrateSportsLibDataDocument(
+            fake.db,
+            'user-1',
+            documentRef,
+            SPORTS_LIB_DATA_MIGRATION_KINDS.Sleep,
+            true,
+        )).resolves.toBe('migrated');
+        expect(fake.update).toHaveBeenCalledWith(documentRef, {
+            durationSeconds: expect.anything(),
+            inBedDurationSeconds: expect.anything(),
+            stageDurationsSeconds: expect.anything(),
+            'score.value': expect.anything(),
+            vitals: expect.anything(),
         });
     });
 
