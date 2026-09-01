@@ -15,6 +15,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import type { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
+import type { MapOptions } from 'mapbox-gl';
 import {
   MyTracksMapViewFactory,
   type MyTracksMapViewHandle,
@@ -43,6 +44,7 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
   private readonly manager = this.mapViewFactory.createManager();
   private mapViewHandle: MyTracksMapViewHandle | null = null;
   private styleSynchronizer: MapboxStyleSynchronizer | null = null;
+  private destroyed = false;
 
   constructor() {
     effect(() => {
@@ -58,7 +60,7 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
 
     const theme = this.themeService.appTheme();
     const resolvedStyle = this.mapStyleService.resolve('default', theme);
-    const mapOptions: any = {
+    const mapOptions: Omit<MapOptions, 'container'> = {
       center: [11.39, 47.275],
       zoom: 10,
       style: resolvedStyle.styleUrl,
@@ -70,30 +72,40 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
     }
 
     try {
-      this.mapViewHandle = await this.mapViewFactory.initialize(
+      const mapViewHandle = await this.mapViewFactory.initialize(
         this.manager,
         this.mapContainer.nativeElement,
         mapOptions,
         { controlMode: 'preview' },
       );
+      if (this.destroyed) {
+        mapViewHandle.destroy();
+        return;
+      }
+
+      this.mapViewHandle = mapViewHandle;
       this.styleSynchronizer = this.mapStyleService.createSynchronizer(
-        this.mapViewHandle.map,
+        mapViewHandle.map,
         resolvedStyle,
       );
+      const currentTheme = this.themeService.appTheme();
       this.manager.setMapStyle('default');
-      this.manager.setIsDarkTheme(theme === AppThemes.Dark);
+      this.manager.setIsDarkTheme(currentTheme === AppThemes.Dark);
+      this.styleSynchronizer.update(this.mapStyleService.resolve('default', currentTheme));
       this.manager.setTracksFromPrepared(HOME_MY_TRACKS_PREVIEW_TRACKS);
       this.manager.fitBoundsToCoordinates(HOME_MY_TRACKS_PREVIEW_COORDINATES, {
         padding: 36,
         animate: false,
       });
     } catch (error) {
+      if (this.destroyed) return;
       this.initializationFailed.set(true);
       this.logger.error('[HomeMyTracksPreviewComponent] Failed to initialize sample MyTracks map.', error);
     }
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.mapViewHandle?.destroy();
     this.mapViewHandle = null;
     this.styleSynchronizer = null;

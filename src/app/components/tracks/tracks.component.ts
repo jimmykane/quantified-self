@@ -77,6 +77,7 @@ import {
   MyTracksMapViewFactory,
   type MyTracksMapViewHandle,
 } from '../shared/my-tracks-map-view/my-tracks-map-view.factory';
+import type { MapOptions } from 'mapbox-gl';
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
@@ -188,6 +189,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private userSignal = signal<AppUserInterface | undefined>(undefined);
   private tracksMapManager: TracksMapManager;
   private mapViewHandle: MyTracksMapViewHandle | null = null;
+  private destroyed = false;
   private scrolled = false;
   private hasTrackBoundsBeenApplied = false;
   private shouldPreserveMapViewForCurrentLoad = false;
@@ -384,7 +386,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // Removed manualStyleOverride logic
 
-      const mapOptions: any = {
+      const mapOptions: Omit<MapOptions, 'container'> = {
         zoom: 1.5,
         center: [0, 20],
         style: initialStyleUrl // Pass user's preferred style directly
@@ -394,7 +396,10 @@ export class TracksComponent implements OnInit, OnDestroy {
       }
 
       this.mapViewHandle?.destroy();
-      this.mapViewHandle = await this.myTracksMapViewFactory.initialize(
+      this.mapViewHandle = null;
+      this.mapSignal.set(null);
+      this.mapSynchronizer.set(undefined);
+      const mapViewHandle = await this.myTracksMapViewFactory.initialize(
         this.tracksMapManager,
         this.mapDiv.nativeElement,
         mapOptions,
@@ -406,7 +411,13 @@ export class TracksComponent implements OnInit, OnDestroy {
           },
         },
       );
-      const mapInstance = this.mapViewHandle.map;
+      if (this.destroyed) {
+        mapViewHandle.destroy();
+        return;
+      }
+
+      this.mapViewHandle = mapViewHandle;
+      const mapInstance = mapViewHandle.map;
       this.mapSignal.set(mapInstance);
 
       // Initialize Synchronizer. The reactive effect applies later style changes.
@@ -444,6 +455,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       );
 
     } catch (error) {
+      if (this.destroyed) return;
       this.logger.error('Failed to initialize Mapbox:', error);
     }
   }
@@ -499,6 +511,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public ngOnDestroy() {
+    this.destroyed = true;
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
     this.tracksMapManager.setStartMarkerSelectionHandler(null);

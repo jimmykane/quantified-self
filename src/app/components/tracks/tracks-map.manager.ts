@@ -35,7 +35,7 @@ import {
     removeMapSearchScopeOverlay,
     upsertMapSearchScopeOverlay,
 } from '../../services/map/map-search-scope-overlay.utils';
-import { DetectedHomeArea, TripBounds } from '../../services/my-tracks-trip-detection.service';
+import type { DetectedHomeArea, TripBounds } from '../../services/my-tracks-trip-detection.service';
 
 type TrackStyleMode = 'dark-glow' | 'light-contrast';
 type TrackLayerRole = 'glow' | 'casing' | 'main';

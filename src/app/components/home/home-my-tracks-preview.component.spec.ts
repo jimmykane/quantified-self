@@ -11,6 +11,7 @@ import { HomeMyTracksPreviewComponent } from './home-my-tracks-preview.component
 
 describe('HomeMyTracksPreviewComponent', () => {
   let fixture: ComponentFixture<HomeMyTracksPreviewComponent>;
+  const appTheme = signal(AppThemes.Normal);
   const map = {};
   const handle = { map, mapboxgl: {}, manager: {}, destroy: vi.fn() };
   const manager = {
@@ -36,13 +37,14 @@ describe('HomeMyTracksPreviewComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    appTheme.set(AppThemes.Normal);
     factory.initialize.mockResolvedValue(handle);
 
     await TestBed.configureTestingModule({
       imports: [HomeMyTracksPreviewComponent],
       providers: [
         { provide: PLATFORM_ID, useValue: 'browser' },
-        { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
+        { provide: AppThemeService, useValue: { appTheme } },
         { provide: MapStyleService, useValue: mapStyle },
         { provide: MyTracksMapViewFactory, useValue: factory },
         { provide: LoggerService, useValue: { error: vi.fn() } },
@@ -80,5 +82,40 @@ describe('HomeMyTracksPreviewComponent', () => {
     fixture.destroy();
 
     expect(handle.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('destroys a map handle that resolves after the deferred preview is gone', async () => {
+    let resolveHandle!: (value: typeof handle) => void;
+    factory.initialize.mockReturnValueOnce(new Promise((resolve) => {
+      resolveHandle = resolve;
+    }));
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    fixture.destroy();
+    resolveHandle(handle);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(handle.destroy).toHaveBeenCalledTimes(1);
+    expect(manager.setTracksFromPrepared).not.toHaveBeenCalled();
+  });
+
+  it('applies the latest theme when it changes during map initialization', async () => {
+    let resolveHandle!: (value: typeof handle) => void;
+    factory.initialize.mockReturnValueOnce(new Promise((resolve) => {
+      resolveHandle = resolve;
+    }));
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    appTheme.set(AppThemes.Dark);
+    fixture.detectChanges();
+    resolveHandle(handle);
+    await fixture.whenStable();
+
+    expect(manager.setIsDarkTheme).toHaveBeenLastCalledWith(true);
+    expect(mapStyle.resolve).toHaveBeenCalledWith('default', AppThemes.Dark);
+    expect(synchronizer.update).toHaveBeenCalled();
   });
 });

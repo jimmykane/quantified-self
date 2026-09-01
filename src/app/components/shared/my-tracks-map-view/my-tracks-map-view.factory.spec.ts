@@ -75,4 +75,41 @@ describe('MyTracksMapViewFactory', () => {
     )).rejects.toThrow('module unavailable');
     expect(map.remove).toHaveBeenCalledTimes(1);
   });
+
+  it('unbinds resize handling when preview control setup fails', async () => {
+    const { factory, map, autoResize } = createFactory();
+    map.addControl
+      .mockImplementationOnce(() => undefined)
+      .mockImplementationOnce(() => {
+        throw new Error('control failed');
+      });
+
+    await expect(factory.initialize(
+      { setMap: vi.fn() } as never,
+      document.createElement('div'),
+      {},
+      { controlMode: 'preview' },
+    )).rejects.toThrow('control failed');
+
+    expect(autoResize.unbind).toHaveBeenCalledWith(map);
+    expect(map.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('unbinds a partial resize binding when resize setup throws', async () => {
+    const { factory, map, autoResize } = createFactory();
+    autoResize.bind.mockImplementationOnce(() => {
+      throw new Error('resize binding failed');
+    });
+
+    await expect(factory.initialize(
+      { setMap: vi.fn() } as never,
+      document.createElement('div'),
+      {},
+      { controlMode: 'preview' },
+    )).rejects.toThrow('resize binding failed');
+
+    expect(autoResize.unbind).toHaveBeenCalledWith(map);
+    expect(map.remove).toHaveBeenCalledTimes(1);
+    expect(map.addControl).not.toHaveBeenCalled();
+  });
 });

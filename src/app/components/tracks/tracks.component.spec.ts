@@ -510,6 +510,28 @@ describe('TracksComponent', () => {
     expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(false);
   });
 
+  it('removes a shared map that finishes initializing after the workspace is destroyed', async () => {
+    let resolveMapbox!: (value: any) => void;
+    mockMapboxLoader.loadMapbox.mockReturnValueOnce(new Promise((resolve) => {
+      resolveMapbox = resolve;
+    }));
+    const initialization = component.ngOnInit();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    component.ngOnDestroy();
+    resolveMapbox({
+      FullscreenControl: class {},
+      NavigationControl: class {},
+      ScaleControl: class {},
+      LngLatBounds: class { extend = vi.fn(); },
+    });
+    await initialization;
+
+    expect(mockMap.remove).toHaveBeenCalledTimes(1);
+    expect(mockMapboxLayersControlService.create).not.toHaveBeenCalled();
+  });
+
   describe('Initialization robustness', () => {
     it('should tolerate getLayer throwing while waiting for the start layer during style transitions', async () => {
       const trackManager = (component as any).tracksMapManager;
@@ -1033,9 +1055,9 @@ describe('TracksComponent', () => {
 
     it('should add mapbox-dem source before setting terrain', async () => {
       mockMap.isStyleLoaded.mockReturnValue(true);
-      await component.ngOnInit();
       fixture.detectChanges();
       await waitForAsyncWork();
+      fixture.detectChanges();
 
       expect(mockMap.addSource).toHaveBeenCalledWith('mapbox-dem', expect.anything());
       expect(mockMap.setTerrain).toHaveBeenCalled();
@@ -1045,17 +1067,17 @@ describe('TracksComponent', () => {
       mockMap.isStyleLoaded.mockReturnValue(true);
       mockMap.getSource.mockReturnValue({});
 
-      await component.ngOnInit();
       fixture.detectChanges();
       await waitForAsyncWork();
+      fixture.detectChanges();
 
       expect(mockMap.addSource).not.toHaveBeenCalledWith('mapbox-dem', expect.anything());
     });
 
     it('should initialize map synchronizer on init', async () => {
-      await component.ngOnInit();
       fixture.detectChanges();
       await waitForAsyncWork();
+      fixture.detectChanges();
 
       expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(mockMap, expect.objectContaining({
         styleUrl: 'mapbox://styles/mapbox/standard',
@@ -1071,9 +1093,9 @@ describe('TracksComponent', () => {
         .spyOn(component as any, 'loadTracksMapForUserByDateRange')
         .mockResolvedValue(undefined);
 
-      await component.ngOnInit();
       fixture.detectChanges();
       await waitForAsyncWork();
+      fixture.detectChanges();
 
       const loadCallsBefore = loadTracksSpy.mock.calls.length;
       expect(loadCallsBefore).toBeGreaterThan(0);

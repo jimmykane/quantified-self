@@ -64,10 +64,12 @@ export class MyTracksMapViewFactory {
     config: MyTracksMapViewConfig = {},
   ): Promise<MyTracksMapViewHandle> {
     const map = await this.mapboxLoader.createMap(container, options);
+    let resizeBindingAttempted = false;
 
     try {
       const mapboxgl = await this.mapboxLoader.loadMapbox();
       manager.setMap(map, mapboxgl);
+      resizeBindingAttempted = true;
       this.mapboxAutoResizeService.bind(map, {
         container,
         onResize: config.onResize,
@@ -87,6 +89,9 @@ export class MyTracksMapViewFactory {
         },
       };
     } catch (error) {
+      if (resizeBindingAttempted) {
+        this.mapboxAutoResizeService.unbind(map);
+      }
       map.remove();
       throw error;
     }
