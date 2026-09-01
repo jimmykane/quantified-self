@@ -7,7 +7,7 @@
     "test": "node --test plugin-tool.test.mjs"
   },
   "dependencies": {
-    "@openai/codex": "0.145.0",
+    "@openai/codex": "0.151.0",
     "yaml": "2.9.0"
   }
 }
