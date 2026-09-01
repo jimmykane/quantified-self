@@ -22,6 +22,7 @@ function subscription(overrides: Record<string, unknown> = {}): Stripe.Subscript
         id: 'sub_gift',
         object: 'subscription',
         status: 'active',
+        billing_cycle_anchor: unixSeconds('2026-01-31T10:15:30Z'),
         trial_end: null,
         cancel_at_period_end: false,
         schedule: null,
@@ -69,7 +70,6 @@ describe('admin subscription gift logic', () => {
             subscription({ status: 'trialing', trial_end: existingTrialEnd }),
             'basic',
             2,
-            unixSeconds('2026-01-01T00:00:00Z'),
         );
 
         expect(snapshot.currentAccessEndSeconds).toBe(existingTrialEnd);
@@ -107,7 +107,6 @@ describe('admin subscription gift logic', () => {
             }),
             'pro',
             1,
-            unixSeconds('2026-01-01T00:00:00Z'),
         );
 
         expect(result.currentAccessEndSeconds).toBe(unixSeconds('2026-03-01T00:00:00Z'));
@@ -115,10 +114,10 @@ describe('admin subscription gift logic', () => {
     });
 
     it('supports repeated grants by extending the existing gifted trial end', () => {
-        const now = unixSeconds('2026-01-01T00:00:00Z');
-        const first = buildEligibleSubscriptionGiftSnapshot(subscription(), 'basic', 1, now);
+        const first = buildEligibleSubscriptionGiftSnapshot(subscription(), 'basic', 1);
         const second = buildEligibleSubscriptionGiftSnapshot(subscription({
             status: 'trialing',
+            billing_cycle_anchor: first.targetAccessEndSeconds,
             trial_end: first.targetAccessEndSeconds,
             items: {
                 object: 'list',
@@ -133,7 +132,7 @@ describe('admin subscription gift logic', () => {
                 has_more: false,
                 url: '/v1/subscription_items',
             },
-        }), 'basic', 2, now);
+        }), 'basic', 2);
 
         expect(first.targetAccessEndSeconds).toBe(unixSeconds('2026-02-28T10:15:30Z'));
         expect(second.targetAccessEndSeconds).toBe(unixSeconds('2026-04-28T10:15:30Z'));
@@ -155,23 +154,47 @@ describe('admin subscription gift logic', () => {
                 has_more: false,
                 url: '/v1/subscription_items',
             },
-        }), 'pro', 1, unixSeconds('2026-01-01T00:00:00Z'));
+        }), 'pro', 1);
 
         expect(result.cadence).toBe('yearly');
         expect(result.cancelAtPeriodEnd).toBe(true);
     });
 
-    it('rejects targets beyond the absolute 730-day Stripe limit', () => {
-        const now = unixSeconds('2026-01-01T00:00:00Z');
-        const currentAccessEnd = maximumGiftTrialEndSeconds(now);
+    it('accepts exactly two calendar years from the billing-cycle anchor across a leap day', () => {
+        const result = buildEligibleSubscriptionGiftSnapshot(subscription({
+            billing_cycle_anchor: unixSeconds('2026-09-01T00:00:00Z'),
+            items: {
+                object: 'list',
+                data: [{
+                    id: 'si_yearly',
+                    current_period_start: unixSeconds('2026-09-01T00:00:00Z'),
+                    current_period_end: unixSeconds('2027-09-01T00:00:00Z'),
+                    price: { id: 'price_yearly', recurring: { interval: 'year', interval_count: 1 } },
+                    quantity: 1,
+                    tax_rates: [],
+                }],
+                has_more: false,
+                url: '/v1/subscription_items',
+            },
+        }), 'pro', 12);
+
+        expect(result.targetAccessEndSeconds).toBe(unixSeconds('2028-09-01T00:00:00Z'));
+        expect(result.targetAccessEndSeconds)
+            .toBe(maximumGiftTrialEndSeconds(unixSeconds('2026-09-01T00:00:00Z')));
+    });
+
+    it('rejects targets beyond two calendar years from the billing-cycle anchor', () => {
+        const billingCycleAnchor = unixSeconds('2026-01-01T00:00:00Z');
+        const currentAccessEnd = maximumGiftTrialEndSeconds(billingCycleAnchor);
         const candidate = subscription({
             status: 'trialing',
+            billing_cycle_anchor: billingCycleAnchor,
             trial_end: currentAccessEnd,
             items: {
                 object: 'list',
                 data: [{
                     id: 'si_1',
-                    current_period_start: now,
+                    current_period_start: billingCycleAnchor,
                     current_period_end: currentAccessEnd,
                     price: { id: 'price_1', recurring: { interval: 'month', interval_count: 1 } },
                     quantity: 1,
@@ -182,7 +205,7 @@ describe('admin subscription gift logic', () => {
             },
         });
 
-        expect(() => buildEligibleSubscriptionGiftSnapshot(candidate, 'basic', 1, now))
+        expect(() => buildEligibleSubscriptionGiftSnapshot(candidate, 'basic', 1))
             .toThrowError(expect.objectContaining<Partial<SubscriptionGiftEligibilityError>>({ reason: 'trial-too-long' }));
     });
 
@@ -210,12 +233,12 @@ describe('admin subscription gift logic', () => {
         ['missing item period', {
             items: { object: 'list', data: [], has_more: false, url: '/v1/subscription_items' },
         }, 'missing-period'],
+        ['missing billing-cycle anchor', { billing_cycle_anchor: null }, 'missing-anchor'],
     ])('rejects %s', (_label, overrides, reason) => {
         expect(() => buildEligibleSubscriptionGiftSnapshot(
             subscription(overrides),
             'basic',
             1,
-            unixSeconds('2026-01-01T00:00:00Z'),
         )).toThrowError(expect.objectContaining<Partial<SubscriptionGiftEligibilityError>>({ reason }));
     });
 
@@ -224,6 +247,9 @@ describe('admin subscription gift logic', () => {
         const after = subscription({ trial_end: unixSeconds('2026-02-15T00:00:00Z') });
         const taxChanged = subscription({
             automatic_tax: { enabled: false, disabled_reason: null, liability: null },
+        });
+        const anchorChanged = subscription({
+            billing_cycle_anchor: unixSeconds('2026-02-01T10:15:30Z'),
         });
         const discountChanged = subscription({ discounts: ['di_new'] });
         const pendingUpdateAdded = subscription({
@@ -245,6 +271,8 @@ describe('admin subscription gift logic', () => {
             .not.toBe(buildSubscriptionGiftPreviewVersion(before, 'basic', 2));
         expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
             .not.toBe(buildSubscriptionGiftPreviewVersion(taxChanged, 'basic', 1));
+        expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
+            .not.toBe(buildSubscriptionGiftPreviewVersion(anchorChanged, 'basic', 1));
         expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))
             .not.toBe(buildSubscriptionGiftPreviewVersion(discountChanged, 'basic', 1));
         expect(buildSubscriptionGiftPreviewVersion(before, 'basic', 1))

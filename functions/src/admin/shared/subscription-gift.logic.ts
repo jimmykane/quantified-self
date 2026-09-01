@@ -8,7 +8,7 @@ import type {
 
 export const ADMIN_SUBSCRIPTION_GIFT_MIN_MONTHS = 1;
 export const ADMIN_SUBSCRIPTION_GIFT_MAX_MONTHS = 12;
-export const ADMIN_SUBSCRIPTION_GIFT_MAX_TRIAL_DAYS = 730;
+export const ADMIN_SUBSCRIPTION_GIFT_MAX_TRIAL_MONTHS = 24;
 export const ADMIN_SUBSCRIPTION_GIFT_METADATA = {
     type: 'qs_gift_type',
     operationId: 'qs_gift_operation_id',
@@ -28,6 +28,7 @@ export class SubscriptionGiftEligibilityError extends Error {
             | 'custom-cancellation'
             | 'incomplete-items'
             | 'missing-period'
+            | 'missing-anchor'
             | 'trial-too-long',
         message: string,
     ) {
@@ -95,11 +96,14 @@ export function addUtcCalendarMonthsClamped(unixSeconds: number, months: number)
     return Math.floor(targetMonthStart.getTime() / 1000);
 }
 
-export function maximumGiftTrialEndSeconds(nowSeconds: number): number {
-    if (!Number.isSafeInteger(nowSeconds) || nowSeconds <= 0) {
-        throw new Error('A positive current Unix timestamp is required.');
+export function maximumGiftTrialEndSeconds(billingCycleAnchorSeconds: number): number {
+    if (!Number.isSafeInteger(billingCycleAnchorSeconds) || billingCycleAnchorSeconds <= 0) {
+        throw new Error('A positive billing-cycle anchor timestamp is required.');
     }
-    return nowSeconds + (ADMIN_SUBSCRIPTION_GIFT_MAX_TRIAL_DAYS * 24 * 60 * 60);
+    return addUtcCalendarMonthsClamped(
+        billingCycleAnchorSeconds,
+        ADMIN_SUBSCRIPTION_GIFT_MAX_TRIAL_MONTHS,
+    );
 }
 
 function resolveCurrentPaidPeriodEnd(subscription: Stripe.Subscription): number {
@@ -190,6 +194,7 @@ export function buildSubscriptionGiftPreviewVersion(
         role,
         months,
         status: subscription.status,
+        billingCycleAnchor: requireUnixSeconds(subscription.billing_cycle_anchor),
         trialEnd: subscription.trial_end,
         cancellation: subscription.cancel_at_period_end,
         cancelAt: requireUnixSeconds(subscription.cancel_at),
@@ -214,11 +219,17 @@ export function buildEligibleSubscriptionGiftSnapshot(
     subscription: Stripe.Subscription,
     role: AdminSubscriptionGiftRole,
     months: number,
-    nowSeconds = Math.floor(Date.now() / 1000),
 ): EligibleSubscriptionGiftSnapshot {
     const current = buildCurrentSubscriptionGiftState(subscription, role);
+    const billingCycleAnchor = requireUnixSeconds(subscription.billing_cycle_anchor);
+    if (billingCycleAnchor === null) {
+        throw new SubscriptionGiftEligibilityError(
+            'missing-anchor',
+            'The subscription does not have a valid billing-cycle anchor.',
+        );
+    }
     const targetAccessEnd = addUtcCalendarMonthsClamped(current.currentAccessEndSeconds, months);
-    if (targetAccessEnd > maximumGiftTrialEndSeconds(nowSeconds)) {
+    if (targetAccessEnd > maximumGiftTrialEndSeconds(billingCycleAnchor)) {
         throw new SubscriptionGiftEligibilityError(
             'trial-too-long',
             'The requested extension would exceed Stripe’s two-year trial limit.',

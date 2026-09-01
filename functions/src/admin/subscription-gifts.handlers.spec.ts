@@ -179,6 +179,7 @@ function buildSubscription(overrides: Record<string, unknown> = {}): Stripe.Subs
         object: 'subscription',
         customer: 'cus_target_user',
         status: 'active',
+        billing_cycle_anchor: unixSeconds('2026-08-31T12:00:00Z'),
         trial_end: null,
         cancel_at_period_end: false,
         schedule: null,
@@ -265,6 +266,7 @@ describe('admin subscription gift callables', () => {
             const target = params.trial_end as number;
             currentSubscription = buildSubscription({
                 status: 'trialing',
+                billing_cycle_anchor: target,
                 trial_end: target,
                 cancel_at_period_end: currentSubscription.cancel_at_period_end,
                 metadata: {
@@ -831,6 +833,39 @@ describe('admin subscription gift callables', () => {
             operationId,
             status: 'needs_review',
         });
+    });
+
+    it('restores a locked operation before requiring fresh subscription eligibility', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 3 }));
+        mockStripeUpdate.mockRejectedValueOnce({ type: 'StripeConnectionError' });
+        expect((await grantGift(callableRequest({
+            uid: 'target-user',
+            months: 3,
+            reason: 'Service recovery credit',
+            notifyUser: true,
+            operationId,
+            previewVersion: preview.previewVersion,
+        }))).status).toBe('needs_review');
+
+        currentSubscription = buildSubscription({ status: 'canceled' });
+        db.store.set('customers/target-user/subscriptions/sub_basic', {
+            status: 'canceled',
+            role: 'basic',
+        });
+        const stripeClientReadsBeforeRecovery = mockGetAdminBillingStripe.mock.calls.length;
+
+        const reopened = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+
+        expect(reopened.resumableOperation).toMatchObject({
+            operationId,
+            months: 3,
+            status: 'needs_review',
+            previewVersion: preview.previewVersion,
+        });
+        expect(reopened.subscriptionId).toBe('sub_basic');
+        expect(reopened.currentAccessEnd).toBe('2026-09-30T12:00:00.000Z');
+        expect(reopened.proposedGiftedEnd).toBe('2026-12-30T12:00:00.000Z');
+        expect(mockGetAdminBillingStripe).toHaveBeenCalledTimes(stripeClientReadsBeforeRecovery);
     });
 
     it('blocks a new operation behind an expired applying lock until the original operation is reconciled', async () => {

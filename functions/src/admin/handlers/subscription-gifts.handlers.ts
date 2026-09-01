@@ -11,6 +11,7 @@ import type {
     AdminSubscriptionGiftOperationStatus,
     AdminSubscriptionGiftResumableOperation,
     AdminSubscriptionGiftRole,
+    AdminSubscriptionGiftSubscriptionStatus,
     GrantAdminSubscriptionGiftRequest,
     GrantAdminSubscriptionGiftResponse,
     PreviewAdminSubscriptionGiftRequest,
@@ -79,6 +80,7 @@ interface StoredGiftOperation {
     subscriptionId: string;
     role: AdminSubscriptionGiftRole;
     cadence: AdminSubscriptionGiftCadence;
+    subscriptionStatus: AdminSubscriptionGiftSubscriptionStatus;
     previewVersion: string;
     invariantVersion: string;
     previousAccessEndSeconds: number;
@@ -96,6 +98,11 @@ interface AcquiredGiftOperation {
     operation: StoredGiftOperation;
     leaseToken: string | null;
     alreadySucceeded: boolean;
+}
+
+interface ResumableGiftOperation {
+    operation: StoredGiftOperation;
+    response: AdminSubscriptionGiftResumableOperation;
 }
 
 type NeedsReviewMarkResult = 'marked' | 'target-unavailable' | 'lock-conflict';
@@ -406,10 +413,14 @@ function parseStoredGiftOperation(data: Record<string, unknown> | undefined): St
     const cadence = data.cadence === 'monthly' || data.cadence === 'yearly' || data.cadence === 'unknown'
         ? data.cadence
         : null;
+    const subscriptionStatus = data.subscriptionStatus === 'active' || data.subscriptionStatus === 'trialing'
+        ? data.subscriptionStatus
+        : null;
     if (
         !role
         || !status
         || !cadence
+        || !subscriptionStatus
         || typeof data.actorUid !== 'string'
         || typeof data.months !== 'number'
         || typeof data.reason !== 'string'
@@ -431,6 +442,7 @@ function parseStoredGiftOperation(data: Record<string, unknown> | undefined): St
         subscriptionId: data.subscriptionId,
         role,
         cadence,
+        subscriptionStatus,
         previewVersion: data.previewVersion,
         invariantVersion: data.invariantVersion,
         previousAccessEndSeconds,
@@ -600,6 +612,7 @@ async function acquireGiftOperation(
             subscriptionId: target.subscription.id,
             role: preview.role,
             cadence: preview.cadence,
+            subscriptionStatus: preview.status,
             previewVersion: preview.previewVersion,
             invariantVersion: preview.invariantVersion,
             previousAccessEndSeconds: preview.currentAccessEndSeconds,
@@ -623,6 +636,7 @@ async function acquireGiftOperation(
             subscriptionId: storedOperation.subscriptionId,
             role: storedOperation.role,
             cadence: storedOperation.cadence,
+            subscriptionStatus: storedOperation.subscriptionStatus,
             previewVersion: storedOperation.previewVersion,
             invariantVersion: storedOperation.invariantVersion,
             previousAccessEnd: Timestamp.fromMillis(storedOperation.previousAccessEndSeconds * 1000),
@@ -1026,7 +1040,7 @@ function hasResumableNotification(operation: StoredGiftOperation): boolean {
 async function getResumableOperation(
     db: admin.firestore.Firestore,
     uid: string,
-): Promise<AdminSubscriptionGiftResumableOperation | null> {
+): Promise<ResumableGiftOperation | null> {
     const giftLockSnapshot = await lockRef(db, uid).get();
     if (!giftLockSnapshot.exists) {
         return null;
@@ -1039,9 +1053,10 @@ async function getResumableOperation(
             return null;
         }
         const operation = await readStoredOperation(db, uid, operationId);
-        return operation && hasResumableNotification(operation)
-            ? buildResumableOperation(operationId, operation)
-            : null;
+        return operation && hasResumableNotification(operation) ? {
+            operation,
+            response: buildResumableOperation(operationId, operation),
+        } : null;
     }
     if ((lock?.status !== 'applying' && lock?.status !== 'needs_review') || !operationId) {
         throw new HttpsError('failed-precondition', 'The subscription gift lock requires manual review.');
@@ -1052,7 +1067,10 @@ async function getResumableOperation(
         throw new HttpsError('failed-precondition', 'The subscription gift operation requires manual review.');
     }
 
-    return buildResumableOperation(operationId, operation);
+    return {
+        operation,
+        response: buildResumableOperation(operationId, operation),
+    };
 }
 
 export const previewAdminSubscriptionGift = onAdminCall<
@@ -1065,6 +1083,28 @@ export const previewAdminSubscriptionGift = onAdminCall<
 }, async request => {
     const input = validatePreviewRequest(request.data);
     const db = admin.firestore();
+    const [recentHistory, resumableOperation] = await Promise.all([
+        getRecentHistory(db, input.uid),
+        getResumableOperation(db, input.uid),
+    ]);
+    if (resumableOperation) {
+        await validateTargetIdentity(db, input.uid, request.auth!.uid);
+        const operation = resumableOperation.operation;
+        return {
+            uid: input.uid,
+            subscriptionId: operation.subscriptionId,
+            role: operation.role,
+            cadence: operation.cadence,
+            status: operation.subscriptionStatus,
+            currentAccessEnd: secondsToIso(operation.previousAccessEndSeconds),
+            proposedGiftedEnd: secondsToIso(operation.targetAccessEndSeconds),
+            cancelAtPeriodEnd: operation.cancelAtPeriodEnd,
+            previewVersion: operation.previewVersion,
+            recentHistory,
+            resumableOperation: resumableOperation.response,
+        };
+    }
+
     const stripe = await getAdminBillingStripe();
     const target = await loadGiftTarget(db, stripe, input.uid, request.auth!.uid);
 
@@ -1077,11 +1117,6 @@ export const previewAdminSubscriptionGift = onAdminCall<
         }
         throw error;
     }
-    const [recentHistory, resumableOperation] = await Promise.all([
-        getRecentHistory(db, input.uid),
-        getResumableOperation(db, input.uid),
-    ]);
-
     return {
         uid: input.uid,
         subscriptionId: preview.subscriptionId,
@@ -1093,7 +1128,7 @@ export const previewAdminSubscriptionGift = onAdminCall<
         cancelAtPeriodEnd: preview.cancelAtPeriodEnd,
         previewVersion: preview.previewVersion,
         recentHistory,
-        resumableOperation,
+        resumableOperation: null,
     };
 });
 
