@@ -70,6 +70,10 @@ import type {
 import { AppUserUtilities } from '../../../../utils/app.user.utilities';
 import type { LineSeriesOption } from 'echarts/charts';
 import { resolveUnitAwareDisplayFromValue } from '@shared/unit-aware-display';
+import {
+  EChartsHorizontalTouchGestureController,
+  type EChartsHorizontalTouchGesture,
+} from '../../../../helpers/echarts-horizontal-touch-gesture.controller';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartAction = Parameters<EChartsType['dispatchAction']>[0];
@@ -136,6 +140,21 @@ type TooltipResolvedPoint = {
   point: EventChartPoint;
   index: number;
 };
+type PanelTouchInteraction = {
+  kind: 'panel';
+  startValue: number;
+  lastRange: EventChartRange | null;
+};
+type ZoomBarTouchDragMode = 'start' | 'end' | 'pan';
+type ZoomBarTouchInteraction = {
+  kind: 'zoomBar';
+  dragMode: ZoomBarTouchDragMode;
+  domain: EventChartRange;
+  initialRange: EventChartRange;
+  startValue: number;
+  lastRange: EventChartRange;
+};
+type EventChartTouchInteraction = PanelTouchInteraction | ZoomBarTouchInteraction;
 
 const PROGRESSIVE_THRESHOLD = 6000;
 const PROGRESSIVE_STEP = 900;
@@ -166,6 +185,7 @@ const ZOOM_BAR_SLIDER_RIGHT = 44;
 const ZOOM_BAR_SLIDER_TOP = 8;
 const ZOOM_BAR_SLIDER_HEIGHT = 24;
 const ZOOM_BAR_HANDLE_SIZE = 24;
+const ZOOM_BAR_TOUCH_HANDLE_HIT_RADIUS = 20;
 const ZOOM_BAR_GRID_BOTTOM = Math.max(0, ZOOM_BAR_PANEL_HEIGHT - (ZOOM_BAR_SLIDER_TOP + ZOOM_BAR_SLIDER_HEIGHT));
 const NON_PRIMARY_MOUSE_GUARD_EVENT_TYPES = [
   'pointerdown',
@@ -179,6 +199,8 @@ const NON_PRIMARY_MOUSE_GUARD_EVENT_TYPES = [
 const SELECTION_BRUSH_SOURCE = 'event-chart-selection-sync';
 const SHARED_ZOOM_DATAZOOM_SOURCE = 'event-chart-zoom-sync';
 const BRUSH_ZOOM_DATAZOOM_SOURCE = 'event-chart-brush-zoom';
+const TOUCH_GESTURE_BRUSH_SOURCE = 'event-chart-touch-gesture';
+const TOUCH_GESTURE_DATAZOOM_SOURCE = 'event-chart-touch-zoom';
 export const ENABLE_LIVE_SELECTION_SYNC = true;
 export const ENABLE_LIVE_SELECTION_PREVIEW_STATS = false;
 const TOOLTIP_MAX_DURATION_DISTANCE_SECONDS = 120;
@@ -263,13 +285,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private applyingSharedSelectionRange = false;
   private applyingSharedZoomRange = false;
   private selectionBrushActive = false;
-  private mobileInteractionsArmed = false;
+  private touchInteraction: EventChartTouchInteraction | null = null;
   private chartRefreshSequence: Promise<void> = Promise.resolve();
   private pendingAxisScaleFrame: number | null = null;
   private lastKnownVisibleZoomRange: EventChartRange | null = null;
   private pendingFullscreenZoomRange: EventChartRange | null | undefined = undefined;
   private axisPointerCursorBoundChart: EChartsType | null = null;
-  private mobileArmBoundChart: EChartsType | null = null;
   private copyingPanelImage = false;
   private readonly axisPointerCursorHandler = (params: AxisPointerEvent) => {
     const value = Number(params?.axesInfo?.[0]?.value);
@@ -277,9 +298,12 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.cursorPositionChange.emit(value);
     }
   };
-  private readonly mobileArmClickHandler = () => {
-    this.armMobileInteractions();
-  };
+  private readonly touchGestureController = new EChartsHorizontalTouchGestureController({
+    onHorizontalStart: (gesture) => this.startHorizontalTouchInteraction(gesture),
+    onHorizontalMove: (gesture) => this.updateHorizontalTouchInteraction(gesture),
+    onHorizontalEnd: (gesture) => this.finishHorizontalTouchInteraction(gesture),
+    onHorizontalCancel: () => this.cancelHorizontalTouchInteraction(),
+  });
   private readonly nonPrimaryMouseButtonGuard = (event: Event) => {
     if (!this.isNonPrimaryMouseButtonEvent(event)) {
       return;
@@ -513,6 +537,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   async ngAfterViewInit(): Promise<void> {
     await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
+    this.bindTouchGestureController();
     if (!this.previewMode) {
       this.bindFullscreenEvents();
       this.syncFullscreenState();
@@ -592,7 +617,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     this.teardownViewportObserver();
     this.unbindWheelPassThrough();
     this.unbindNonPrimaryMouseButtonGuard();
-    this.unbindMobileInteractionArm();
+    this.touchGestureController.dispose();
     this.unbindAxisPointerCursorEmit();
     this.chartHost.dispose();
   }
@@ -707,7 +732,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private buildOption(): ChartOption {
     const panel = this.panel as EventChartPanelModel;
     const hoverTooltipEnabled = this.isHoverTooltipEnabled();
-    const interactionArmed = this.isInteractionArmed();
+    const interactionEnabled = this.interactionsEnabled;
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
     const textColor = chartStyle.textColor;
     const axisLabelColor = textColor;
@@ -746,7 +771,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       ? (yAxisConfig.inverse ? 'end' : 'start')
       : this.areaFillOrigin;
     const tooltipSurfaceConfig = this.buildTooltipSurfaceConfig();
-    const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionArmed, this.isMobile);
+    const tooltipTriggerOn = resolveEChartsTooltipTriggerOn(hoverTooltipEnabled && interactionEnabled, this.isMobile);
 
     const seriesOptions: ChartLineSeriesOption[] = [];
     const seriesVisualMaps: Record<string, unknown>[] = [];
@@ -858,7 +883,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       },
       tooltip: {
         trigger: 'axis',
-        show: this.tooltipVisibleForViewport && hoverTooltipEnabled && interactionArmed,
+        show: this.tooltipVisibleForViewport && hoverTooltipEnabled && interactionEnabled,
         triggerOn: tooltipTriggerOn,
         renderMode: 'html',
         ...tooltipSurfaceConfig,
@@ -923,7 +948,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           xAxisIndex: 0,
           startValue: restoredZoomRange?.start,
           endValue: restoredZoomRange?.end,
-          disabled: !interactionArmed || this.cursorBehaviour === ChartCursorBehaviours.SelectX,
+          disabled: !interactionEnabled || this.cursorBehaviour === ChartCursorBehaviours.SelectX,
           filterMode: 'filter',
           throttle: DATA_ZOOM_THROTTLE_MS,
           zoomOnMouseWheel: false,
@@ -1310,8 +1335,6 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.bindMobileInteractionArm(chart);
-
     if (this.panel) {
       chart.on('mousemove', (params: ECElementEvent) => {
         if (params?.componentType === 'markLine') {
@@ -1509,7 +1532,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.chartHost.setOption({
       tooltip: {
-        show: isVisible && this.isHoverTooltipEnabled() && this.isInteractionArmed(),
+        show: isVisible && this.isHoverTooltipEnabled() && this.interactionsEnabled,
       },
     }, {
       notMerge: false,
@@ -1586,7 +1609,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   private buildZoomBarOnlyOption(): ChartOption {
     const chartStyle = buildEventEChartsVisualTokens(this.darkTheme, this.isMobile);
-    const interactionArmed = this.isInteractionArmed();
+    const interactionEnabled = this.interactionsEnabled;
     const axisColor = chartStyle.axisColor;
     const sliderTrackColor = chartStyle.dataZoomTrackColor;
     const sliderSelectionColor = chartStyle.dataZoomSelectionColor;
@@ -1642,7 +1665,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
             { includeDateForTime: this.showDateOnTimeAxis, unitSettings: this.userUnitSettings }
           ),
           handleSize: ZOOM_BAR_HANDLE_SIZE,
-          disabled: !interactionArmed,
+          disabled: !interactionEnabled,
           borderColor: axisColor,
           backgroundColor: sliderTrackColor,
           fillerColor: sliderSelectionColor,
@@ -2155,19 +2178,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
 
     const selectModeActive = this.cursorBehaviour === ChartCursorBehaviours.SelectX;
-    const interactionArmed = this.isInteractionArmed();
+    const interactionEnabled = this.interactionsEnabled;
     if (!selectModeActive) {
       this.updateSelectionBrushState(false);
     }
 
     this.chartHost.setOption({
       tooltip: {
-        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled() && interactionArmed,
-        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled() && interactionArmed, this.isMobile),
+        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled() && interactionEnabled,
+        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled() && interactionEnabled, this.isMobile),
       },
       dataZoom: [
         {
-          disabled: !interactionArmed || selectModeActive,
+          disabled: !interactionEnabled || selectModeActive,
         }
       ],
     }, {
@@ -2180,7 +2203,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       type: 'takeGlobalCursor',
       key: 'brush',
       brushOption: {
-        brushType: interactionArmed ? 'lineX' : false,
+        brushType: interactionEnabled ? 'lineX' : false,
         brushMode: 'single',
         removeOnClick: true,
       },
@@ -2197,11 +2220,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private handleBrushEvent(params: BrushEventParams): void {
-    if (this.showZoomBar || !this.isInteractionArmed() || this.cursorBehaviour !== ChartCursorBehaviours.SelectX) {
+    if (this.showZoomBar || !this.interactionsEnabled || this.cursorBehaviour !== ChartCursorBehaviours.SelectX) {
       return;
     }
 
-    if (this.applyingSharedSelectionRange || params?.$from === SELECTION_BRUSH_SOURCE) {
+    if (
+      this.applyingSharedSelectionRange
+      || params?.$from === SELECTION_BRUSH_SOURCE
+      || params?.$from === TOUCH_GESTURE_BRUSH_SOURCE
+    ) {
       return;
     }
 
@@ -2224,11 +2251,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   private handleBrushEnd(params: BrushEventParams): void {
-    if (this.showZoomBar || !this.isInteractionArmed()) {
+    if (this.showZoomBar || !this.interactionsEnabled) {
       return;
     }
 
-    if (params?.$from === SELECTION_BRUSH_SOURCE) {
+    if (params?.$from === SELECTION_BRUSH_SOURCE || params?.$from === TOUCH_GESTURE_BRUSH_SOURCE) {
       return;
     }
 
@@ -2680,11 +2707,11 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       this.safeHideTip(chart);
     }
 
-    const interactionArmed = this.isInteractionArmed();
+    const interactionEnabled = this.interactionsEnabled;
     this.chartHost.setOption({
       tooltip: {
-        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled() && interactionArmed,
-        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled() && interactionArmed, this.isMobile),
+        show: this.tooltipVisibleForViewport && this.isHoverTooltipEnabled() && interactionEnabled,
+        triggerOn: resolveEChartsTooltipTriggerOn(this.isHoverTooltipEnabled() && interactionEnabled, this.isMobile),
       },
     }, {
       notMerge: false,
@@ -2859,68 +2886,304 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
   }
 
-  private isInteractionArmed(): boolean {
-    return this.interactionsEnabled && (!this.isMobile || this.mobileInteractionsArmed);
+  private bindTouchGestureController(): void {
+    const element = this.chartDiv?.nativeElement;
+    if (!element) {
+      return;
+    }
+
+    this.touchGestureController.bind(element);
   }
 
-  private bindMobileInteractionArm(chart: EChartsType): void {
-    if (!this.isMobile) {
-      this.unbindMobileInteractionArm();
+  private startHorizontalTouchInteraction(gesture: EChartsHorizontalTouchGesture): void {
+    this.touchInteraction = null;
+    if (!this.interactionsEnabled) {
       return;
     }
 
-    if (this.mobileArmBoundChart === chart) {
+    if (!this.panel && this.showZoomBar) {
+      this.startZoomBarTouchInteraction(gesture);
       return;
     }
 
-    this.unbindMobileInteractionArm();
-    const zr = chart.getZr?.();
-    if (!zr || typeof zr.on !== 'function') {
+    if (
+      !this.panel
+      || (this.cursorBehaviour !== ChartCursorBehaviours.SelectX
+        && this.cursorBehaviour !== ChartCursorBehaviours.ZoomX)
+    ) {
       return;
     }
 
-    zr.on('click', this.mobileArmClickHandler);
-    this.mobileArmBoundChart = chart;
+    const startValue = this.resolvePanelTouchValue(gesture.start.clientX);
+    if (!Number.isFinite(startValue)) {
+      return;
+    }
+
+    this.touchInteraction = {
+      kind: 'panel',
+      startValue,
+      lastRange: null,
+    };
   }
 
-  private unbindMobileInteractionArm(): void {
-    if (!this.mobileArmBoundChart) {
+  private updateHorizontalTouchInteraction(gesture: EChartsHorizontalTouchGesture): void {
+    const touchInteraction = this.touchInteraction;
+    if (!touchInteraction) {
       return;
     }
 
-    const zr = this.mobileArmBoundChart.getZr?.();
-    if (zr && typeof zr.off === 'function') {
-      zr.off('click', this.mobileArmClickHandler);
+    if (touchInteraction.kind === 'zoomBar') {
+      this.updateZoomBarTouchInteraction(touchInteraction, gesture.current.clientX);
+      return;
     }
-    this.mobileArmBoundChart = null;
+
+    this.updatePanelTouchInteraction(touchInteraction, gesture.current.clientX);
   }
 
-  private armMobileInteractions(): void {
-    if (!this.isMobile || this.mobileInteractionsArmed) {
+  private finishHorizontalTouchInteraction(gesture: EChartsHorizontalTouchGesture): void {
+    const touchInteraction = this.touchInteraction;
+    if (!touchInteraction) {
       return;
     }
 
-    this.mobileInteractionsArmed = true;
+    this.updateHorizontalTouchInteraction(gesture);
+    this.touchInteraction = null;
+    if (touchInteraction.kind === 'zoomBar') {
+      return;
+    }
+
+    const nextRange = touchInteraction.lastRange;
+    this.updateSelectionBrushState(false);
+    if (!nextRange) {
+      this.clearSelectionOverlay();
+      return;
+    }
+
+    if (this.cursorBehaviour === ChartCursorBehaviours.SelectX) {
+      this.previewRangeChange.emit(nextRange);
+      this.selectedRangeChange.emit(nextRange);
+      return;
+    }
+
+    if (this.cursorBehaviour !== ChartCursorBehaviours.ZoomX) {
+      this.clearSelectionOverlay();
+      return;
+    }
+
+    const chart = this.chartHost.getChart();
+    this.clearSelectionOverlay();
+    if (!chart) {
+      return;
+    }
+
+    this.previewRangeChange.emit(nextRange);
+    this.zoomRangeChange.emit(this.normalizeZoomRange(nextRange));
+    const dataZoomAction: ChartAction = {
+      type: 'dataZoom',
+      startValue: nextRange.start,
+      endValue: nextRange.end,
+      $from: TOUCH_GESTURE_DATAZOOM_SOURCE,
+    };
+    chart.dispatchAction(dataZoomAction);
+  }
+
+  private cancelHorizontalTouchInteraction(): void {
+    const touchInteraction = this.touchInteraction;
+    this.touchInteraction = null;
+    if (touchInteraction?.kind !== 'panel') {
+      return;
+    }
+
+    this.updateSelectionBrushState(false);
+    this.clearSelectionOverlay();
+    if (this.cursorBehaviour === ChartCursorBehaviours.SelectX) {
+      this.previewRangeChange.emit(null);
+    }
+  }
+
+  private updatePanelTouchInteraction(
+    touchInteraction: PanelTouchInteraction,
+    currentClientX: number,
+  ): void {
+    const currentValue = this.resolvePanelTouchValue(currentClientX);
+    const nextRange = normalizeEventRange({
+      start: Math.min(touchInteraction.startValue, currentValue),
+      end: Math.max(touchInteraction.startValue, currentValue),
+    });
+    if (!nextRange || this.areRangesEqual(touchInteraction.lastRange, nextRange)) {
+      return;
+    }
+
+    touchInteraction.lastRange = nextRange;
+    this.updateSelectionBrushState(true);
     const chart = this.chartHost.getChart();
     if (!chart) {
       return;
     }
 
-    if (this.showZoomBar) {
-      this.chartHost.setOption({
-        dataZoom: [
-          {
-            disabled: false,
-          }
-        ]
-      }, {
-        notMerge: false,
-        lazyUpdate: true,
-        silent: true,
-      });
+    const brushAction: ChartAction = {
+      type: 'brush',
+      areas: [this.buildBrushArea(nextRange)],
+      $from: TOUCH_GESTURE_BRUSH_SOURCE,
+    };
+    chart.dispatchAction(brushAction);
+
+    if (this.cursorBehaviour !== ChartCursorBehaviours.SelectX || !ENABLE_LIVE_SELECTION_SYNC) {
       return;
     }
 
-    this.syncInteractionMode();
+    const currentRange = this.getActiveSelectionRange();
+    if (this.areRangesEqual(currentRange, nextRange)) {
+      return;
+    }
+
+    this.previewRangeChange.emit(nextRange);
+  }
+
+  private resolvePanelTouchValue(clientX: number): number {
+    const chart = this.chartHost.getChart();
+    const element = this.chartDiv?.nativeElement;
+    if (!chart || !element) {
+      return Number.NaN;
+    }
+
+    const bounds = element.getBoundingClientRect();
+    const offsetX = Math.max(0, Math.min(bounds.width, clientX - bounds.left));
+    const convertedValue = chart.convertFromPixel({ xAxisIndex: 0 }, offsetX);
+    if (convertedValue == null) {
+      return Number.NaN;
+    }
+    const value = Array.isArray(convertedValue) ? Number(convertedValue[0]) : Number(convertedValue);
+    const domain = this.getActiveDomain();
+    return Number.isFinite(value)
+      ? Math.max(domain.start, Math.min(domain.end, value))
+      : Number.NaN;
+  }
+
+  private startZoomBarTouchInteraction(gesture: EChartsHorizontalTouchGesture): void {
+    const domain = this.getActiveDomain();
+    const initialRange = this.getVisibleXAxisRange();
+    const startValue = this.resolveZoomBarTouchValue(gesture.start.clientX, domain);
+    if (!Number.isFinite(startValue)) {
+      return;
+    }
+
+    this.touchInteraction = {
+      kind: 'zoomBar',
+      dragMode: this.resolveZoomBarTouchDragMode(gesture.start.clientX, initialRange, domain),
+      domain,
+      initialRange,
+      startValue,
+      lastRange: initialRange,
+    };
+  }
+
+  private updateZoomBarTouchInteraction(
+    touchInteraction: ZoomBarTouchInteraction,
+    currentClientX: number,
+  ): void {
+    const chart = this.chartHost.getChart();
+    if (!chart) {
+      return;
+    }
+
+    const currentValue = this.resolveZoomBarTouchValue(currentClientX, touchInteraction.domain);
+    const nextRange = this.resolveZoomBarTouchRange(touchInteraction, currentValue);
+    if (this.areRangesEqual(touchInteraction.lastRange, nextRange)) {
+      return;
+    }
+
+    touchInteraction.lastRange = nextRange;
+    const dataZoomAction: ChartAction = {
+      type: 'dataZoom',
+      startValue: nextRange.start,
+      endValue: nextRange.end,
+      $from: TOUCH_GESTURE_DATAZOOM_SOURCE,
+    };
+    chart.dispatchAction(dataZoomAction);
+  }
+
+  private resolveZoomBarTouchRange(
+    touchInteraction: ZoomBarTouchInteraction,
+    currentValue: number,
+  ): EventChartRange {
+    const { domain, initialRange, dragMode, startValue } = touchInteraction;
+    if (dragMode === 'start') {
+      return {
+        start: Math.max(domain.start, Math.min(initialRange.end, currentValue)),
+        end: initialRange.end,
+      };
+    }
+
+    if (dragMode === 'end') {
+      return {
+        start: initialRange.start,
+        end: Math.min(domain.end, Math.max(initialRange.start, currentValue)),
+      };
+    }
+
+    const rangeSpan = initialRange.end - initialRange.start;
+    const requestedStart = initialRange.start + (currentValue - startValue);
+    const nextStart = Math.max(domain.start, Math.min(domain.end - rangeSpan, requestedStart));
+    return {
+      start: nextStart,
+      end: nextStart + rangeSpan,
+    };
+  }
+
+  private resolveZoomBarTouchDragMode(
+    clientX: number,
+    range: EventChartRange,
+    domain: EventChartRange,
+  ): ZoomBarTouchDragMode {
+    const bounds = this.getZoomBarTrackBounds();
+    if (!bounds) {
+      return 'pan';
+    }
+
+    const domainSpan = domain.end - domain.start;
+    const startHandleX = bounds.left + ((range.start - domain.start) / domainSpan) * bounds.width;
+    const endHandleX = bounds.left + ((range.end - domain.start) / domainSpan) * bounds.width;
+    const startDistance = Math.abs(clientX - startHandleX);
+    const endDistance = Math.abs(clientX - endHandleX);
+    if (Math.min(startDistance, endDistance) <= ZOOM_BAR_TOUCH_HANDLE_HIT_RADIUS) {
+      return startDistance <= endDistance ? 'start' : 'end';
+    }
+
+    if (clientX < startHandleX) {
+      return 'start';
+    }
+    if (clientX > endHandleX) {
+      return 'end';
+    }
+    return 'pan';
+  }
+
+  private resolveZoomBarTouchValue(clientX: number, domain: EventChartRange): number {
+    const bounds = this.getZoomBarTrackBounds();
+    if (!bounds) {
+      return Number.NaN;
+    }
+
+    const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
+    return domain.start + ratio * (domain.end - domain.start);
+  }
+
+  private getZoomBarTrackBounds(): { left: number; width: number } | null {
+    const element = this.chartDiv?.nativeElement;
+    if (!element) {
+      return null;
+    }
+
+    const bounds = element.getBoundingClientRect();
+    const width = bounds.width - ZOOM_BAR_SLIDER_LEFT - ZOOM_BAR_SLIDER_RIGHT;
+    if (!(width > 0)) {
+      return null;
+    }
+
+    return {
+      left: bounds.left + ZOOM_BAR_SLIDER_LEFT,
+      width,
+    };
   }
 }

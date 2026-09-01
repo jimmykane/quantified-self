@@ -130,6 +130,9 @@
 .event-chart-panel__chart {
   width: 100%;
   height: var(--event-chart-panel-height, 360px);
+  // Keep vertical flings and pinch zoom browser-owned. Horizontal touch
+  // gestures are direction-locked by the chart gesture controller.
+  touch-action: pan-y pinch-zoom;
 }
 
 .event-chart-panel__chart--zoom-only {
