@@ -861,6 +861,51 @@ describe('admin subscription gift callables', () => {
         expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps a failure terminal when acquisition re-reads a concurrent finalization', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const request = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+        mockStripeUpdate.mockRejectedValueOnce({
+            type: 'StripeInvalidRequestError',
+            statusCode: 400,
+        });
+        mockTransactionDeletionGuard
+            .mockResolvedValueOnce({ userExists: true, deletionInProgress: false, shouldSkip: false })
+            .mockResolvedValueOnce({ userExists: false, deletionInProgress: true, shouldSkip: true });
+        await expect(grantGift(request)).rejects.toMatchObject({ code: 'unavailable' });
+
+        const operationPath = `users/target-user/adminSubscriptionGifts/${operationId}`;
+        const lockPath = 'users/target-user/adminSubscriptionGiftState/lock';
+        mockStripeRetrieve.mockImplementationOnce(async () => {
+            db.store.set(operationPath, {
+                ...db.store.get(operationPath),
+                status: 'failed',
+                resultCode: 'stripe_request_rejected',
+                leaseToken: undefined,
+                leaseExpiresAt: undefined,
+            });
+            db.store.set(lockPath, { status: 'idle', operationId });
+            return currentSubscription;
+        });
+
+        const retried = await grantGift(request);
+
+        expect(retried.status).toBe('failed');
+        expect(retried.message).toBe('This gift operation previously failed. Nothing was changed.');
+        expect(db.store.get(operationPath)).toMatchObject({
+            status: 'failed',
+            resultCode: 'stripe_request_rejected',
+        });
+        expect(db.store.get(lockPath)).toEqual({ status: 'idle', operationId });
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps the exact operation retryable when its failure status cannot be finalized', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         mockStripeUpdate.mockRejectedValueOnce({

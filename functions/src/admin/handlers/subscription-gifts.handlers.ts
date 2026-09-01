@@ -98,6 +98,7 @@ interface AcquiredGiftOperation {
     operation: StoredGiftOperation;
     leaseToken: string | null;
     alreadySucceeded: boolean;
+    alreadyFailed: boolean;
 }
 
 interface ResumableGiftOperation {
@@ -609,7 +610,10 @@ async function acquireGiftOperation(
             throw new HttpsError('already-exists', 'The operation ID is already associated with another request.');
         }
         if (existing?.status === 'succeeded') {
-            return { operation: existing, leaseToken: null, alreadySucceeded: true };
+            return { operation: existing, leaseToken: null, alreadySucceeded: true, alreadyFailed: false };
+        }
+        if (existing?.status === 'failed') {
+            return { operation: existing, leaseToken: null, alreadySucceeded: false, alreadyFailed: true };
         }
 
         const lockData = lockSnapshot.data() as Record<string, unknown> | undefined;
@@ -726,6 +730,7 @@ async function acquireGiftOperation(
             },
             leaseToken,
             alreadySucceeded: false,
+            alreadyFailed: false,
         };
     });
 }
@@ -1272,6 +1277,15 @@ export const grantAdminSubscriptionGift = onAdminCall<
             acquired.operation,
         );
         return buildResponse(input.operationId, acquired.operation, 'succeeded', notificationStatus);
+    }
+    if (acquired.alreadyFailed) {
+        return buildResponse(
+            input.operationId,
+            acquired.operation,
+            'failed',
+            acquired.operation.notificationStatus,
+            'This gift operation previously failed. Nothing was changed.',
+        );
     }
     const leaseToken = acquired.leaseToken;
     if (!leaseToken) {
