@@ -572,6 +572,46 @@ describe('admin subscription gift callables', () => {
         expect([...db.store.keys()].some(path => path.startsWith('mail/'))).toBe(false);
     });
 
+    it('restores a requested notification after success was finalized before mail was queued', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const operationPath = `users/target-user/adminSubscriptionGifts/${operationId}`;
+        expect((await grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        }))).status).toBe('succeeded');
+        db.store.set(operationPath, {
+            ...db.store.get(operationPath),
+            notifyUser: true,
+            notificationStatus: 'not_requested',
+        });
+
+        const reopened = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        expect(reopened.resumableOperation).toMatchObject({
+            operationId,
+            status: 'succeeded',
+            notifyUser: true,
+            notificationStatus: 'not_requested',
+        });
+
+        const retried = await grantGift(callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: true,
+            operationId,
+            previewVersion: preview.previewVersion,
+        }));
+
+        expect(retried.status).toBe('succeeded');
+        expect(retried.notificationStatus).toBe('queued');
+        expect([...db.store.keys()].filter(path => path.startsWith('mail/'))).toHaveLength(1);
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+    });
+
     it('deduplicates Stripe updates and mail when the same successful operation is retried', async () => {
         const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
         const request = callableRequest({
@@ -800,6 +840,39 @@ describe('admin subscription gift callables', () => {
             message: 'Another subscription gift operation is in progress or requires review. Retry the original operation.',
         });
 
+        vi.setSystemTime(new Date('2026-08-30T12:02:01Z'));
+        const response = await grantGift(request);
+
+        expect(response.status).toBe('needs_review');
+        expect(response.message).toBe('The subscription changed and requires manual review.');
+        expect(db.store.get(`users/target-user/adminSubscriptionGifts/${operationId}`))
+            .toMatchObject({ status: 'needs_review', resultCode: 'subscription_state_changed' });
+        expect(db.store.get('users/target-user/adminSubscriptionGiftState/lock'))
+            .toMatchObject({ status: 'needs_review', operationId });
+        expect(mockStripeUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it('moves an expired same-operation lease to review when fresh eligibility cannot be rebuilt', async () => {
+        const preview = await previewGift(callableRequest({ uid: 'target-user', months: 1 }));
+        const request = callableRequest({
+            uid: 'target-user',
+            months: 1,
+            reason: 'Thank-you gift',
+            notifyUser: false,
+            operationId,
+            previewVersion: preview.previewVersion,
+        });
+        mockStripeUpdate.mockRejectedValueOnce({
+            type: 'StripeInvalidRequestError',
+            statusCode: 400,
+        });
+        mockTransactionDeletionGuard
+            .mockResolvedValueOnce({ userExists: true, deletionInProgress: false, shouldSkip: false })
+            .mockResolvedValueOnce({ userExists: false, deletionInProgress: true, shouldSkip: true });
+
+        await expect(grantGift(request)).rejects.toMatchObject({ code: 'unavailable' });
+
+        currentSubscription = buildSubscription({ billing_cycle_anchor: null });
         vi.setSystemTime(new Date('2026-08-30T12:02:01Z'));
         const response = await grantGift(request);
 

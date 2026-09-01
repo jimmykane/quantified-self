@@ -547,6 +547,36 @@ async function markExistingOperationNeedsReview(
     });
 }
 
+async function transitionExistingOperationToNeedsReview(
+    db: admin.firestore.Firestore,
+    uid: string,
+    operationId: string,
+    operation: StoredGiftOperation,
+): Promise<GrantAdminSubscriptionGiftResponse> {
+    const markResult = await markExistingOperationNeedsReview(
+        db,
+        uid,
+        operationId,
+        'subscription_state_changed',
+    );
+    if (markResult === 'target-unavailable') {
+        throw new HttpsError('failed-precondition', 'The target account is missing or pending deletion.');
+    }
+    if (markResult === 'lock-conflict') {
+        throw new HttpsError(
+            'aborted',
+            'Another subscription gift operation is in progress or requires review. Retry the original operation.',
+        );
+    }
+    return buildResponse(
+        operationId,
+        operation,
+        'needs_review',
+        operation.notificationStatus,
+        'The subscription changed and requires manual review.',
+    );
+}
+
 async function acquireGiftOperation(
     db: admin.firestore.Firestore,
     actorUid: string,
@@ -1039,6 +1069,9 @@ function hasResumableNotification(operation: StoredGiftOperation): boolean {
     if (operation.status !== 'succeeded' || !operation.notifyUser) {
         return false;
     }
+    if (operation.notificationStatus === 'not_requested') {
+        return true;
+    }
     if (operation.notificationStatus === 'queued') {
         return operation.notificationResultCode !== 'mail_receipt_expired';
     }
@@ -1174,27 +1207,11 @@ export const grantAdminSubscriptionGift = onAdminCall<
         target = await loadGiftTarget(db, stripe, input.uid, actorUid);
     } catch (error) {
         if (existingOperation) {
-            const markResult = await markExistingOperationNeedsReview(
+            return transitionExistingOperationToNeedsReview(
                 db,
                 input.uid,
                 input.operationId,
-                'subscription_state_changed',
-            );
-            if (markResult === 'target-unavailable') {
-                throw new HttpsError('failed-precondition', 'The target account is missing or pending deletion.');
-            }
-            if (markResult === 'lock-conflict') {
-                throw new HttpsError(
-                    'aborted',
-                    'Another subscription gift operation is in progress or requires review. Retry the original operation.',
-                );
-            }
-            return buildResponse(
-                input.operationId,
                 existingOperation,
-                'needs_review',
-                existingOperation.notificationStatus,
-                'The subscription changed and requires manual review.',
             );
         }
         throw error;
@@ -1205,6 +1222,14 @@ export const grantAdminSubscriptionGift = onAdminCall<
         preview = buildEligibleSubscriptionGiftSnapshot(target.subscription, target.role, input.months);
     } catch (error) {
         if (error instanceof SubscriptionGiftEligibilityError) {
+            if (existingOperation) {
+                return transitionExistingOperationToNeedsReview(
+                    db,
+                    input.uid,
+                    input.operationId,
+                    existingOperation,
+                );
+            }
             throw mapGiftEligibilityError(error);
         }
         throw error;
