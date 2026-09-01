@@ -7,6 +7,21 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 20.4.0 canonical running-dynamics transition
+
+Sports Lib 20.4.0 adds canonical Ground Contact Time Percentage, Running Flight Time, and Contact Time to Flight Time
+Ratio streams plus average/minimum/maximum summaries. Suunto JSON flight time is converted from seconds to milliseconds;
+the percentage metrics retain percent units, and contact-time-to-flight-time ratios may legitimately exceed 100. FIT
+`stance_time` continues to map to canonical Ground Contact Time, while new FIT imports no longer duplicate that value
+under the deprecated Stance Time family. Historical Stance Time JSON remains readable for compatibility.
+
+New FIT and Suunto imports persist these metrics through the existing sanitized event/activity writer. Use an ordinary
+targeted source-backed reparse when a retained historical source needs the new summaries or canonical duplicate removal.
+The installed package version advances the strict reparse target automatically; there is no Firestore schema migration
+and the MCP read path must not synthesize missing values. Keep both automatic scanners disabled and do not start a global
+campaign solely for this release. Saved routes, Training disciplines, durability, and Training-derived schemas are
+unchanged.
+
 ### FIT creator device metadata correction
 
 When Quantified Self adopts the Sports Lib release that recovers a FIT activity creator from an explicitly local or

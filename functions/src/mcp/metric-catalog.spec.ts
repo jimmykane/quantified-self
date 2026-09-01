@@ -2,15 +2,27 @@ import {
   DataActivityTypes,
   DataActiveEnergy,
   DataAirTimeRemaining,
+  DataContactTimeToFlightTimeRatio,
+  DataContactTimeToFlightTimeRatioAvg,
+  DataContactTimeToFlightTimeRatioMax,
+  DataContactTimeToFlightTimeRatioMin,
   DataDepthAvg,
   DataDepthAvgFeet,
   DataDistance,
   DataDiveAscentRateAvg,
   DataDiveAscentRateAvgFeetPerSecond,
+  DataGroundContactTimePercentage,
+  DataGroundContactTimePercentageAvg,
+  DataGroundContactTimePercentageMax,
+  DataGroundContactTimePercentageMin,
   DataLatitudeDegrees,
   DataMetabolicCalories,
   DataPressureSACAvg,
   DataRestingCalories,
+  DataRunningFlightTime,
+  DataRunningFlightTimeAvg,
+  DataRunningFlightTimeMax,
+  DataRunningFlightTimeMin,
   DataSleepDuration,
   DataStrokeRate,
   DynamicDataLoader,
@@ -67,6 +79,29 @@ describe('MCP Sports Lib metric catalog', () => {
     expect(resolveSportsLibNumericMetric(DataRestingCalories.type)?.type).not.toBe(
       DataMetabolicCalories.type,
     );
+
+    const runningDynamicsFamilies = [
+      DataGroundContactTimePercentage,
+      DataGroundContactTimePercentageAvg,
+      DataGroundContactTimePercentageMin,
+      DataGroundContactTimePercentageMax,
+      DataRunningFlightTime,
+      DataRunningFlightTimeAvg,
+      DataRunningFlightTimeMin,
+      DataRunningFlightTimeMax,
+      DataContactTimeToFlightTimeRatio,
+      DataContactTimeToFlightTimeRatioAvg,
+      DataContactTimeToFlightTimeRatioMin,
+      DataContactTimeToFlightTimeRatioMax,
+    ];
+    for (const DataClass of runningDynamicsFamilies) {
+      expect(resolveSportsLibNumericMetric(DataClass.type)).toEqual({
+        type: DataClass.type,
+        displayType: DataClass.type,
+        unit: DataClass.unit,
+        unitSystem: 'metric',
+      });
+    }
   });
 
   it('canonicalizes Sports Lib aliases through DynamicDataLoader', () => {
@@ -104,6 +139,19 @@ describe('MCP Sports Lib metric catalog', () => {
       DataAirTimeRemaining.type,
       4_294_961_197,
     )).toBe(4_294_961_197);
+    expect(projectSportsLibNumericMetricValue(
+      DataGroundContactTimePercentage.type,
+      49.5,
+    )).toBe(49.5);
+    expect(projectSportsLibNumericMetricValue(
+      DataGroundContactTimePercentage.type,
+      101,
+    )).toBeNull();
+    expect(projectSportsLibNumericMetricValue(DataRunningFlightTime.type, 118)).toBe(118);
+    expect(projectSportsLibNumericMetricValue(
+      DataContactTimeToFlightTimeRatio.type,
+      175,
+    )).toBe(175);
     expect(projectSportsLibNumericMetricValue('unknown metric', 42)).toBeNull();
   });
 

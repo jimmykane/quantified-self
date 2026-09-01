@@ -352,6 +352,35 @@ describe('EventJSONSanitizer', () => {
         ]));
     });
 
+    it('should retain Sports Lib 20.4 running-dynamics stats registered by the real bundle', () => {
+        // Keep persisted type literals here so this verifies eager registry coverage.
+        const runningDynamicsStats = {
+            'Ground Contact Time Percentage': 49.5,
+            'Average Running Flight Time': 118,
+            'Average Contact Time to Flight Time Ratio': 175,
+        };
+        const json = {
+            stats: runningDynamicsStats,
+            activities: [{ stats: runningDynamicsStats }],
+        };
+
+        for (const type of Object.keys(runningDynamicsStats)) {
+            expect(DynamicDataLoader.getDataClassFromDataType(type)?.type).toBe(type);
+        }
+
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(sanitizedJson.stats).toMatchObject(runningDynamicsStats);
+        expect(sanitizedJson.activities[0].stats).toMatchObject(runningDynamicsStats);
+        expect(unknownTypes).not.toEqual(expect.arrayContaining(Object.keys(runningDynamicsStats)));
+        expect(issues).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'unknown_data_type',
+                type: expect.stringMatching(/Ground Contact Time Percentage|Running Flight Time|Contact Time to Flight Time Ratio/),
+            }),
+        ]));
+    });
+
     it('should retain Intensity lap stats registered by the real sports-lib bundle', () => {
         // Keep the persisted type literal here so this detects a registry regression.
         const intensityType = 'Intensity';

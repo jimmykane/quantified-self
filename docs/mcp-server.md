@@ -662,6 +662,16 @@ documents. They remain excluded from DataStore metric discovery and every MCP re
 mixtures, gas-to-tank associations, or consumption. This persistence and presentation change remains outside the
 registered MCP contract, so no registered MCP tool or output-schema change is required.
 
+Sports Lib 20.4.0 adds canonical Ground Contact Time Percentage (`%`), Running Flight Time (`ms`), and Contact Time to
+Flight Time Ratio (`%`) streams plus average/minimum/maximum summaries for FIT and Suunto sources. The ratio can exceed
+100. Each numeric summary becomes discoverable through the existing catalog only after it is actually persisted; MCP
+does not derive a missing summary from a stream. FIT `stance_time` remains canonical Ground Contact Time, while new FIT
+imports no longer emit duplicate deprecated Stance Time metrics. Historical Stance Time tokens remain readable as
+recorded compatibility data until an ordinary targeted source reparse replaces them. A targeted reparse is also how an
+existing retained Suunto or FIT source gains the new metrics. This changes neither MCP tool names, strict output schemas,
+scopes, nor bundled plugin instructions, so it does not itself add a registered-app refresh, contract promotion, or local
+plugin-sync requirement beyond any independently pending contract update.
+
 `query_metric` selects only the requested canonical stat and the activity-type stat from Firestore before applying its
 cumulative work budgets, imports that bounded projection through `EventImporterJSON`, and reuses the shared event-stat
 aggregation engine. It excludes benchmark-merge events and accepts an explicit IANA timezone for date buckets. Existing
