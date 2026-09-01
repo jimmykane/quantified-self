@@ -305,12 +305,6 @@ export class AppUserSettingsQueryService {
      * Updates Chart settings by merging the provided partial settings.
      */
     public async updateChartSettings(settings: Partial<AppChartSettingsInterface>): Promise<void> {
-        const currentSettings = this.chartSettings();
-        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof AppChartSettingsInterface], currentSettings[key as keyof AppChartSettingsInterface]));
-        if (!hasChanges) {
-            return;
-        }
-
         this.logger.info(`[AppUserSettingsQueryService] Updating Chart Settings:`, settings);
         const user = await this.getCurrentUser();
         if (!user) {
@@ -324,7 +318,10 @@ export class AppUserSettingsQueryService {
 
         return this.userService.updateUserProperties(user, { settings: updatedSettings })
             .then(() => this.logger.info(`[AppUserSettingsQueryService] Chart Settings updated successfully.`))
-            .catch(err => this.logger.error(`[AppUserSettingsQueryService] Failed to update Chart Settings:`, err));
+            .catch(err => {
+                this.logger.error(`[AppUserSettingsQueryService] Failed to update Chart Settings:`, err);
+                throw err;
+            });
     }
 
     /**

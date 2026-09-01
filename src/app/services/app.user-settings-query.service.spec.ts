@@ -144,6 +144,31 @@ describe('AppUserSettingsQueryService', () => {
         });
     });
 
+    describe('updateChartSettings', () => {
+        it('persists an explicit value even while the read signal still has that value', async () => {
+            const user = createMockUser();
+            mockUserSubject.next(user);
+            TestBed.flushEffects();
+
+            await service.updateChartSettings({ strokeWidth: 2 });
+
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: {
+                    chartSettings: { strokeWidth: 2 },
+                },
+            });
+        });
+
+        it('propagates chart settings write failures to the caller', async () => {
+            const user = createMockUser();
+            const error = new Error('write failed');
+            mockUserSubject.next(user);
+            mockUserService.updateUserProperties.mockRejectedValueOnce(error);
+
+            await expect(service.updateChartSettings({ strokeWidth: 3 })).rejects.toBe(error);
+        });
+    });
+
     describe('appThemeSetting', () => {
         it('should track app theme changes', () => {
             const user = createMockUser();

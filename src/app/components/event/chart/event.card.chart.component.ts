@@ -205,17 +205,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
     this.cursorBehaviourOverride = value;
     this.cdr.markForCheck();
-
-    void this.userSettingsQuery.updateChartSettings({ chartCursorBehaviour: value })
-      .then(() => {
-        this.cursorBehaviourOverride = null;
-        this.cdr.markForCheck();
-      })
-      .catch((error) => {
-        this.logger.error('[EventCardChart] Failed to persist chartCursorBehaviour setting', error);
-        this.cursorBehaviourOverride = null;
-        this.cdr.markForCheck();
-      });
+    this.queueCursorBehaviourPersist(value);
   }
 
   public get syncChartHoverToMap(): boolean {
@@ -371,6 +361,9 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
   private cursorPositionSubject = new Subject<number>();
   private xAxisTypeOverride: XAxisTypes | null = null;
   private cursorBehaviourOverride: ChartCursorBehaviours | null = null;
+  private cursorBehaviourPersistRequestID = 0;
+  private cursorBehaviourConfirmedRequestID = 0;
+  private cursorBehaviourPersistQueue: Promise<void> = Promise.resolve();
   private syncChartHoverToMapOverride: boolean | null = null;
   private colorAltitudeByGradeOverride: boolean | null = null;
   private fillOpacityOverride: number | null = null;
@@ -395,6 +388,14 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     effect(() => {
       const chartSettings = this.userSettingsQuery.chartSettings();
       this.userSettingsQuery.unitSettings();
+      if (
+        this.cursorBehaviourOverride !== null
+        && this.cursorBehaviourConfirmedRequestID === this.cursorBehaviourPersistRequestID
+        && chartSettings?.chartCursorBehaviour === this.cursorBehaviourOverride
+      ) {
+        this.cursorBehaviourOverride = null;
+        this.cdr.markForCheck();
+      }
       if (
         this.eventChartOverlayDataTypeByPrimaryOverride !== null
         && areEventChartOverlayMapsEqual(
@@ -961,6 +962,38 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         }
         this.eventChartOverlayDataTypeByPrimaryOverride = null;
         this.applyDataTypeVisibility();
+        this.cdr.markForCheck();
+      });
+  }
+
+  private queueCursorBehaviourPersist(value: ChartCursorBehaviours): void {
+    const requestID = ++this.cursorBehaviourPersistRequestID;
+    this.cursorBehaviourConfirmedRequestID = 0;
+    this.cursorBehaviourPersistQueue = this.cursorBehaviourPersistQueue
+      .catch(() => undefined)
+      .then(() => this.userSettingsQuery.updateChartSettings({ chartCursorBehaviour: value }))
+      .then(() => {
+        if (requestID !== this.cursorBehaviourPersistRequestID) {
+          return;
+        }
+
+        this.cursorBehaviourConfirmedRequestID = requestID;
+        if (this.userSettingsQuery.chartSettings()?.chartCursorBehaviour === this.cursorBehaviourOverride) {
+          this.cursorBehaviourOverride = null;
+          this.cdr.markForCheck();
+        }
+      })
+      .catch((error) => {
+        this.logger.error('[EventCardChart] Failed to persist chartCursorBehaviour setting', error);
+        if (
+          requestID !== this.cursorBehaviourPersistRequestID
+          || this.cursorBehaviourOverride !== value
+        ) {
+          return;
+        }
+
+        this.cursorBehaviourConfirmedRequestID = 0;
+        this.cursorBehaviourOverride = null;
         this.cdr.markForCheck();
       });
   }
