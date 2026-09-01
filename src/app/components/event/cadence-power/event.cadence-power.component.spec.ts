@@ -10,6 +10,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { PerformanceCurveDataService } from '../../../services/performance-curve-data.service';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
 
 describe('EventCadencePowerComponent', () => {
   let fixture: ComponentFixture<EventCadencePowerComponent>;
@@ -86,7 +87,7 @@ describe('EventCadencePowerComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [EventCadencePowerComponent],
+      imports: [EventCadencePowerComponent],
       providers: [
         {
           provide: BreakpointObserver,
@@ -124,6 +125,7 @@ describe('EventCadencePowerComponent', () => {
   });
 
   it('should render cadence-power scatter with visual map', async () => {
+    component.mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
     fixture.detectChanges();
     await waitForChartStabilization();
 
@@ -137,6 +139,10 @@ describe('EventCadencePowerComponent', () => {
     expect(option.tooltip.position).toBe(getViewportConstrainedTooltipPosition);
     expect(option.series[0].type).toBe('scatter');
     expect(option.visualMap).toBeDefined();
+    expect(mockLoader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(
+      mockChart,
+      DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    );
   });
 
   it('should use standardized cadence x-axis bounds and interval', async () => {

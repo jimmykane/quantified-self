@@ -39,6 +39,8 @@ import { BenchmarkModule } from './benchmark.module';
         MaterialModule,
         BenchmarkModule,
         EventRoutingModule,
+        EventDurabilityCurveComponent,
+        EventCadencePowerComponent,
     ],
     exports: [
         EventSummaryComponent
@@ -62,8 +64,6 @@ import { BenchmarkModule } from './benchmark.module';
         ActivitiesTogglesComponent,
         ActivityToggleComponent,
         EventPowerCurveComponent,
-        EventDurabilityCurveComponent,
-        EventCadencePowerComponent,
         EventPerformanceChartsComponent,
         EventDiveProfileComponent,
         EventDiveGasTanksComponent,

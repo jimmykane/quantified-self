@@ -128,7 +128,7 @@ describe('EventIntensityZonesComponent', () => {
     });
 
     await TestBed.configureTestingModule({
-      declarations: [EventIntensityZonesComponent],
+      imports: [EventIntensityZonesComponent],
       providers: [
         {
           provide: BreakpointObserver,

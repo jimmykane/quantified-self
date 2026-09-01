@@ -24,3 +24,17 @@
     [areaFillColor]="depthFillColor()" [previewMode]="true" [previewInteractions]="true"
     [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-card-chart-panel>
 </div>
+
+<div class="workout-preview__performance" role="group"
+  aria-label="Workout performance charts for durability, intensity zones, and cadence versus power"
+  data-nosnippet>
+  <app-event-durability-curve [activities]="performancePreviewActivities" [darkTheme]="darkTheme()"
+    [useAnimations]="animationsEnabled" [previewMode]="true"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-durability-curve>
+  <app-event-intensity-zones [activities]="performancePreviewActivities" [darkTheme]="darkTheme()"
+    [useAnimations]="animationsEnabled"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-intensity-zones>
+  <app-event-cadence-power [activities]="performancePreviewActivities" [darkTheme]="darkTheme()"
+    [useAnimations]="animationsEnabled"
+    [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"></app-event-cadence-power>
+</div>

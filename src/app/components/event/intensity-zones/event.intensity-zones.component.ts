@@ -47,7 +47,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
   templateUrl: './event.intensity-zones.component.html',
   styleUrls: ['./event.intensity-zones.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false
+  standalone: true,
 })
 export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: StatsClassInterface[] = [];

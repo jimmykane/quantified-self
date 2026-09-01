@@ -24,8 +24,38 @@
   }
 }
 
+.workout-preview__performance {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+
+  app-event-durability-curve,
+  app-event-intensity-zones,
+  app-event-cadence-power {
+    --performance-chart-height: 180px;
+    --performance-chart-min-height: 180px;
+    box-sizing: border-box;
+    display: block;
+    min-width: 0;
+    padding: 0.55rem 0.65rem 0.35rem;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 12px;
+    background: var(--mat-sys-surface-container-lowest);
+  }
+
+  app-event-durability-curve {
+    grid-column: 1 / -1;
+  }
+}
+
 @container (max-width: 440px) {
-  .workout-preview__charts {
+  .workout-preview__charts,
+  .workout-preview__performance {
     grid-template-columns: 1fr;
+  }
+
+  .workout-preview__performance app-event-durability-curve {
+    grid-column: auto;
   }
 }

@@ -11,8 +11,8 @@ import { LoggerService } from '../../../services/logger.service';
 import { PerformanceCurveDataService } from '../../../services/performance-curve-data.service';
 import { getOrCreateEChartsTooltipHost } from '../../../helpers/echarts-tooltip-host.helper';
 import { getViewportConstrainedTooltipPosition } from '../../../helpers/echarts-tooltip-position.helper';
-import { SharedModule } from '../../../modules/shared.module';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
 
 describe('EventDurabilityCurveComponent', () => {
   let fixture: ComponentFixture<EventDurabilityCurveComponent>;
@@ -117,8 +117,7 @@ describe('EventDurabilityCurveComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      imports: [SharedModule, NoopAnimationsModule],
-      declarations: [EventDurabilityCurveComponent],
+      imports: [EventDurabilityCurveComponent, NoopAnimationsModule],
       providers: [
         {
           provide: BreakpointObserver,
@@ -157,6 +156,7 @@ describe('EventDurabilityCurveComponent', () => {
   });
 
   it('should render durability lines and best-effort markers', async () => {
+    component.mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
     fixture.detectChanges();
     await waitForChartStabilization();
 
@@ -175,6 +175,21 @@ describe('EventDurabilityCurveComponent', () => {
     expect(option.yAxis.type).toBe('value');
     expect(option.grid.left).toBe(54);
     expect(option.grid.bottom).toBe(16);
+    expect(mockLoader.attachMobileSeriesTapFeedback).toHaveBeenCalledWith(
+      mockChart,
+      DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    );
+  });
+
+  it('keeps the shared chart but omits Event Details guidance in preview mode', async () => {
+    component.previewMode = true;
+    fixture.detectChanges();
+    await waitForChartStabilization();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.durability-curve-chart')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('app-durability-reading-guide')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.durability-summary-list')).toBeNull();
   });
 
   it('explains eligible cycling evidence without implementation-facing durability jargon', async () => {

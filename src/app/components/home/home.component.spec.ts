@@ -302,11 +302,12 @@ describe('HomeComponent', () => {
         expect(text).toContain('marker-clustering controls');
         expect(text).toContain('Analyze Every Workout');
         expect(text).toContain('Compare heart rate, power, altitude, depth, pace, and more in synchronized charts');
-        expect(text).toContain('View zones');
+        expect(text).toContain('Inspect intensity zones');
         expect(text).toContain('grade-colored elevation');
         expect(text).toContain('inverse depth');
         expect(text).toContain('distance, duration, or time where supported');
         expect(text).toContain('select a range for stats or zoom in');
+        expect(text).toContain('aerobic durability, and cadence versus power');
         expect(text).not.toContain('7 chart types');
         expect(text).not.toContain('12 map styles');
         expect(text).not.toContain('recorded streams');

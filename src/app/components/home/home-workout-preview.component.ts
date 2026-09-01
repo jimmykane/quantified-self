@@ -31,6 +31,10 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppActivityTypeGroupGradients } from '../../services/color/app.activity-type-group.gradients';
 import { AppColors } from '../../services/color/app.colors';
 import { AppDataColors } from '../../services/color/app.data.colors';
+import { EventCadencePowerComponent } from '../event/cadence-power/event.cadence-power.component';
+import { EventDurabilityCurveComponent } from '../event/durability-curve/event.durability-curve.component';
+import { EventIntensityZonesComponent } from '../event/intensity-zones/event.intensity-zones.component';
+import { buildHomeWorkoutPerformancePreviewActivity } from './home-workout-performance-preview.data';
 
 const PREVIEW_DURATION_SECONDS = 3_258;
 const PREVIEW_ZOOM_RANGE: EventChartRange = { start: 1_040, end: 2_260 };
@@ -151,7 +155,12 @@ function buildPanel(
   styleUrls: ['./home-workout-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: true,
-  imports: [SharedModule],
+  imports: [
+    SharedModule,
+    EventCadencePowerComponent,
+    EventDurabilityCurveComponent,
+    EventIntensityZonesComponent,
+  ],
 })
 export class HomeWorkoutPreviewComponent implements AfterViewInit, OnDestroy {
   private readonly platformId = inject(PLATFORM_ID);
@@ -163,6 +172,11 @@ export class HomeWorkoutPreviewComponent implements AfterViewInit, OnDestroy {
 
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   readonly mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
+  readonly performancePreviewActivities = [buildHomeWorkoutPerformancePreviewActivity({
+    durationSeconds: PREVIEW_DURATION_SECONDS,
+    heartRateBins: RIDE_HEART_RATE,
+    powerBins: RIDE_POWER,
+  })];
   readonly animationsEnabled = isPlatformBrowser(this.platformId)
     && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   readonly xAxisType = XAxisTypes.Duration;

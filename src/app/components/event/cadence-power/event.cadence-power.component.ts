@@ -38,6 +38,7 @@ import {
   toFiniteEventEChartsNumber
 } from '../../../helpers/event-echarts-common.helper';
 import {
+  type EChartsMobileTapFeedbackOptions,
   resolveEChartsTooltipSurfaceConfig,
   resolveEChartsTooltipTriggerOn
 } from '../../../helpers/echarts-tooltip-interaction.helper';
@@ -52,13 +53,14 @@ const CADENCE_SYMBOLS = ['circle', 'diamond', 'triangle', 'rect', 'roundRect'];
   templateUrl: './event.cadence-power.component.html',
   styleUrls: ['./event.cadence-power.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
 })
 export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[] = [];
   @Input() darkTheme = false;
   @Input() useAnimations = false;
   @Input() isMerge = false;
+  @Input() mobileTapFeedbackOptions?: EChartsMobileTapFeedbackOptions | null;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -80,6 +82,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       initOptions: {
         useDirtyRect: true,
       },
+      mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
 
     this.breakpointSubscription = this.breakpointObserver

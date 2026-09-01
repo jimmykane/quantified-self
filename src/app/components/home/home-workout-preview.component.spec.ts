@@ -4,6 +4,8 @@ import { By } from '@angular/platform-browser';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivityTypeGroups, AppThemes } from '@sports-alliance/sports-lib';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventCardChartPanelComponent } from '../event/chart/panel/event.card.chart.panel.component';
 import { AppShareService } from '../../services/app.share.service';
@@ -15,6 +17,10 @@ import { AppColors } from '../../services/color/app.colors';
 import { AppDataColors } from '../../services/color/app.data.colors';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { HomeWorkoutPreviewComponent } from './home-workout-preview.component';
+import { EventCadencePowerComponent } from '../event/cadence-power/event.cadence-power.component';
+import { EventDurabilityCurveComponent } from '../event/durability-curve/event.durability-curve.component';
+import { EventIntensityZonesComponent } from '../event/intensity-zones/event.intensity-zones.component';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 describe('HomeWorkoutPreviewComponent', () => {
   let fixture: ComponentFixture<HomeWorkoutPreviewComponent>;
@@ -75,6 +81,14 @@ describe('HomeWorkoutPreviewComponent', () => {
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Normal) } },
         { provide: EChartsLoaderService, useValue: loader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
+        { provide: BreakpointObserver, useValue: { observe: vi.fn(() => of({ matches: false, breakpoints: {} })) } },
+        {
+          provide: AppEventColorService,
+          useValue: {
+            getActivityColor: vi.fn(() => AppColors.Blue),
+            getColorForZoneHex: vi.fn(() => AppColors.Blue),
+          },
+        },
         { provide: AppShareService, useValue: { copyElementImageToClipboard: vi.fn() } },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
       ],
@@ -91,7 +105,7 @@ describe('HomeWorkoutPreviewComponent', () => {
 
   it('renders compact workout charts with the production tooltip and haptic interactions', async () => {
     fixture.detectChanges();
-    await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(7));
 
     const panels = fixture.debugElement
       .queryAll(By.directive(EventCardChartPanelComponent))
@@ -112,7 +126,7 @@ describe('HomeWorkoutPreviewComponent', () => {
           areaStyle?: { color?: string; opacity?: number; origin?: string };
         }>;
       })
-      .filter(option => !!option.tooltip && !!option.series?.length) as Array<{
+      .filter(option => option.series?.some(series => series.id?.includes('preview-ride::'))) as Array<{
         tooltip: { show: boolean };
         visualMap?: Array<{
           pieces: Array<{ color: string; label: string }>;
@@ -136,6 +150,21 @@ describe('HomeWorkoutPreviewComponent', () => {
 
     expect(panels).toHaveLength(4);
     expect(options).toHaveLength(4);
+    const durability = fixture.debugElement.query(By.directive(EventDurabilityCurveComponent))
+      .componentInstance as EventDurabilityCurveComponent;
+    const intensityZones = fixture.debugElement.query(By.directive(EventIntensityZonesComponent))
+      .componentInstance as EventIntensityZonesComponent;
+    const cadencePower = fixture.debugElement.query(By.directive(EventCadencePowerComponent))
+      .componentInstance as EventCadencePowerComponent;
+    expect(durability.activities).toBe(fixture.componentInstance.performancePreviewActivities);
+    expect(durability.previewMode).toBe(true);
+    expect(intensityZones.activities).toBe(fixture.componentInstance.performancePreviewActivities);
+    expect(cadencePower.activities).toBe(fixture.componentInstance.performancePreviewActivities);
+    expect([
+      durability.mobileTapFeedbackOptions,
+      intensityZones.mobileTapFeedbackOptions,
+      cadencePower.mobileTapFeedbackOptions,
+    ].every(options => options === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS)).toBe(true);
     expect(panels.every(panel => panel.previewMode)).toBe(true);
     expect(panels.every(panel => panel.previewInteractions)).toBe(true);
     expect(panels.every(panel => panel.mobileTapFeedbackOptions === DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS)).toBe(true);
@@ -197,6 +226,9 @@ describe('HomeWorkoutPreviewComponent', () => {
     expect(text).toContain('Altitude');
     expect(text).toContain('Power');
     expect(text).toContain('Depth');
+    expect(text).toContain('Durability');
+    expect(text).toContain('Intensity Zones');
+    expect(text).toContain('Cadence vs Power');
     expect(text).not.toContain('Recorded streams');
     expect(text).not.toContain('7 chart types');
   });
