@@ -60,7 +60,6 @@
     "repair-suunto-webhook-bindings": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/repair-suunto-webhook-bindings.ts",
     "correct-wahoo-workout-types": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/correct-wahoo-workout-types.ts",
     "reparse-sports-lib-events": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/reparse-sports-lib-events.ts",
-    "migrate-weekly-training-time-columns": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-weekly-training-time-columns.ts",
     "migrate-storage-users-bucket": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-storage-users-bucket.ts",
     "backfill-sports-lib-processing-code": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-sports-lib-processing-code.ts",
     "migrate-health-sleep-sports-lib-data": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-health-sleep-sports-lib-data.ts",
