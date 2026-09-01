@@ -313,6 +313,12 @@
             font-size: 0.9rem;
             line-height: 1.5;
         }
+
+        app-provider-data-flow-matrix {
+            display: block;
+            min-width: 0;
+            margin-bottom: 0.4rem;
+        }
     }
 
     .integrations-cta {

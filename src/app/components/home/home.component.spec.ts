@@ -22,6 +22,7 @@ import { signal } from '@angular/core';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
+import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -202,9 +203,20 @@ describe('HomeComponent', () => {
         expect(text).toContain('Move Workouts and Routes');
         expect(text).toContain('automatic delivery between supported providers');
         expect(text).toContain('send past activities by date range');
-        expect(text).toContain('Garmin → Suunto, Wahoo, or COROS');
-        expect(text).toContain('Import Suunto routes');
-        expect(text).toContain('Send saved FIT/GPX routes manually');
+        expect(text).toContain('Supported provider paths');
+        expect(text).toContain('Activity paths:');
+        expect(text).toContain('backfill past activities by date range');
+        expect(text).toContain('Route paths:');
+        expect(text).toContain('Deliver imported Suunto routes automatically or on demand');
+        expect(text).toContain('Saved FIT/GPX routes');
+        const providerMatrix = fixture.debugElement.query(By.directive(ProviderDataFlowMatrixComponent));
+        expect(providerMatrix).toBeTruthy();
+        expect(providerMatrix.componentInstance.rows()).toBe(component.providerDataFlowRows);
+        expect(providerMatrix.componentInstance.compact()).toBe(true);
+        expect(providerMatrix.componentInstance.interactive()).toBe(false);
+        expect(providerMatrix.nativeElement.hasAttribute('data-nosnippet')).toBe(true);
+        expect(providerMatrix.nativeElement.querySelector('.provider-data-flow-matrix__mobile')).toBeNull();
+        expect(providerMatrix.nativeElement.querySelectorAll('button')).toHaveLength(0);
         expect(text).toContain('Upload Your Own Files');
         expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
         expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');

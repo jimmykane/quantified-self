@@ -71,15 +71,20 @@
         summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync."
       >
         <div class="integration-capability-details">
+          <app-provider-data-flow-matrix
+            data-nosnippet
+            caption="Supported provider paths"
+            [rows]="providerDataFlowRows"
+            [interactive]="false"
+            [compact]="true"
+            [showRouteState]="false">
+          </app-provider-data-flow-matrix>
           <p>
-            <strong>Examples:</strong> Garmin → Suunto, Wahoo, or COROS · COROS
-            → Suunto or Wahoo · Suunto → Wahoo or COROS · Wahoo → Suunto or
-            COROS.
+            <strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.
           </p>
           <p>
-            <strong>Routes:</strong> Import Suunto routes and send them to
-            Garmin Connect, Wahoo, or COROS automatically or on demand. Send
-            saved FIT/GPX routes manually to any of the four providers.
+            <strong>Route paths:</strong> Deliver imported Suunto routes automatically or on demand. Saved FIT/GPX routes
+            can also be sent manually to Garmin, Suunto, COROS, or Wahoo.
           </p>
         </div>
       </app-compact-feature-row>

@@ -23,6 +23,7 @@ import { SharedModule } from '../../modules/shared.module';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -84,7 +85,14 @@ describe('ServicesComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [ServicesComponent],
-            imports: [HttpClientTestingModule, MatSnackBarModule, MaterialModule, SharedModule, NoopAnimationsModule],
+            imports: [
+                HttpClientTestingModule,
+                MatSnackBarModule,
+                MaterialModule,
+                SharedModule,
+                NoopAnimationsModule,
+                ProviderDataFlowMatrixComponent,
+            ],
             providers: [
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppAuthService, useValue: mockAuthService },
@@ -327,7 +335,7 @@ describe('ServicesComponent', () => {
         expect(dataFlow.textContent).toContain('Your data flow');
         expect(dataFlow.textContent).toContain('No services connected');
         expect(dataFlow.textContent).toContain('Connect a service below');
-        expect(dataFlow.querySelector('.service-data-flow__matrix')).toBeNull();
+        expect(dataFlow.querySelector('.provider-data-flow-matrix__table')).toBeNull();
     });
 
     it('shows a direct Pro data-flow action instead of a connection prompt to non-Pro users', () => {
@@ -395,7 +403,7 @@ describe('ServicesComponent', () => {
 
         expect(dataFlow.textContent).toContain('Activities are importing into Quantified Self');
         expect(dataFlow.textContent).toContain('Connect another compatible service');
-        expect(dataFlow.querySelector('.service-data-flow__matrix')).toBeNull();
+        expect(dataFlow.querySelector('.provider-data-flow-matrix__table')).toBeNull();
     });
 
     it('shows connected imports and flags an enabled delivery when a provider needs connection', () => {
@@ -414,13 +422,13 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
-        const matrix = dataFlow.querySelector('.service-data-flow__matrix');
+        const matrix = dataFlow.querySelector('.provider-data-flow-matrix__table');
 
         expect(dataFlow.textContent).toContain('Connected services import new activities into Quantified Self');
         expect(matrix.textContent).toContain('Garmin');
         expect(matrix.textContent).toContain('Suunto');
         expect(matrix.textContent).toContain('Needs connection');
-        expect(matrix.querySelectorAll('.service-data-flow__matrix-route--attention')).toHaveLength(1);
+        expect(matrix.querySelectorAll('.provider-data-flow-matrix__route--attention')).toHaveLength(1);
     });
 
     it('shows supported matrix routes and marks enabled delivery as active', () => {
@@ -438,28 +446,28 @@ describe('ServicesComponent', () => {
         component.setServiceConnectionState('garmin', true);
         fixture.detectChanges();
 
-        const matrix = fixture.nativeElement.querySelector('.service-data-flow__matrix');
+        const matrix = fixture.nativeElement.querySelector('.provider-data-flow-matrix__table');
 
         expect(matrix.textContent).toContain('Activity');
         expect(matrix.textContent).toContain('Route');
         expect(matrix.textContent).toContain('Available');
         expect(matrix.textContent).toContain('On');
-        expect(matrix.querySelectorAll('.service-data-flow__matrix-route--active')).toHaveLength(1);
+        expect(matrix.querySelectorAll('.provider-data-flow-matrix__route--active')).toHaveLength(1);
     });
 
     it('keeps each matrix route label and state in an app-owned vertical layout wrapper', () => {
         const template = readFileSync(
-            resolve(process.cwd(), 'src/app/components/services/services.component.html'),
+            resolve(process.cwd(), 'src/app/components/shared/provider-data-flow-matrix/provider-data-flow-matrix.component.html'),
             'utf8',
         );
         const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            resolve(process.cwd(), 'src/app/components/shared/provider-data-flow-matrix/provider-data-flow-matrix.component.scss'),
             'utf8',
         );
-        const routeContentRule = styles.match(/\.service-data-flow__matrix-route-content\s*\{[^}]*\}/)?.[0] ?? '';
+        const routeContentRule = styles.match(/\.provider-data-flow-matrix__route-content\s*\{[^}]*\}/)?.[0] ?? '';
 
-        expect(template).toContain('class="service-data-flow__matrix-route-content"');
-        expect(template).toContain('class="service-data-flow__matrix-route-label"');
+        expect(template).toContain('class="provider-data-flow-matrix__route-content"');
+        expect(template).toContain('class="provider-data-flow-matrix__route-label"');
         expect(routeContentRule).toContain('display: grid');
         expect(routeContentRule).toContain('gap: 3px');
     });
@@ -470,11 +478,11 @@ describe('ServicesComponent', () => {
         component.setServiceConnectionState('suunto', true);
         fixture.detectChanges();
 
-        const matrix = fixture.nativeElement.querySelector('.service-data-flow__matrix');
-        const columnStatuses = matrix.querySelectorAll('thead .service-data-flow__provider-status');
-        const rowStatuses = matrix.querySelectorAll('tbody .service-data-flow__provider-status');
+        const matrix = fixture.nativeElement.querySelector('.provider-data-flow-matrix__table');
+        const columnStatuses = matrix.querySelectorAll('thead .provider-data-flow-matrix__provider-status');
+        const rowStatuses = matrix.querySelectorAll('tbody .provider-data-flow-matrix__provider-status');
         const mobileSourceStatuses = fixture.nativeElement.querySelectorAll(
-            '.service-data-flow__mobile-matrix-group > h2 .service-data-flow__provider-status',
+            '.provider-data-flow-matrix__mobile-group > h2 .provider-data-flow-matrix__provider-status',
         );
 
         expect(columnStatuses).toHaveLength(2);
@@ -502,10 +510,10 @@ describe('ServicesComponent', () => {
         fixture.detectChanges();
 
         const activityRoute = fixture.nativeElement.querySelector(
-            '.service-data-flow__matrix-route--activity',
+            '.provider-data-flow-matrix__route--activity',
         ) as HTMLButtonElement;
         const routeDelivery = fixture.nativeElement.querySelector(
-            '.service-data-flow__matrix-route--route',
+            '.provider-data-flow-matrix__route--route',
         ) as HTMLButtonElement;
 
         expect(activityRoute.getAttribute('aria-label')).toBe('Manage activity delivery from Garmin to Suunto App');
@@ -535,17 +543,17 @@ describe('ServicesComponent', () => {
         component.setServiceConnectionState('suunto', true);
         fixture.detectChanges();
 
-        const mobileMatrix = fixture.nativeElement.querySelector('.service-data-flow__mobile-matrix');
+        const mobileMatrix = fixture.nativeElement.querySelector('.provider-data-flow-matrix__mobile');
         const styles = readFileSync(
-            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            resolve(process.cwd(), 'src/app/components/shared/provider-data-flow-matrix/provider-data-flow-matrix.component.scss'),
             'utf8'
         );
 
         expect(mobileMatrix.textContent).toContain('From Garmin');
         expect(mobileMatrix.textContent).toContain('To Suunto');
         expect(mobileMatrix.textContent).toContain('Activity');
-        expect(styles).toContain('.service-data-flow__matrix-scroll {\n        display: none;');
-        expect(styles).toContain('.service-data-flow__mobile-matrix {\n        display: grid;');
+        expect(styles).toContain('.provider-data-flow-matrix__scroll {\n    display: none;');
+        expect(styles).toContain('.provider-data-flow-matrix__mobile {\n    display: grid;');
     });
 
     it('keeps service panels mounted and hides inactive panels during tab switches', () => {
