@@ -314,9 +314,9 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('12 map styles');
         expect(text).not.toContain('recorded streams');
         expect(text).not.toContain('routes with heatmaps');
-        expect(text).toContain('Open Your Dashboard');
+        expect(text).not.toContain('Open Your Dashboard');
         expect(text).not.toContain('Explore Activity Calendar');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/dashboard"], a[ng-reflect-router-link="/dashboard"]')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('a[routerlink="/dashboard"], a[ng-reflect-router-link="/dashboard"]')).toBeNull();
         expect(text).not.toContain('Read-only MCP Server');
         expect(text).not.toContain('KPI Lane for Fast Decisions');
         expect(text).not.toContain('Connected Training Data');
