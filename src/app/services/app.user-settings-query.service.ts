@@ -303,13 +303,31 @@ export class AppUserSettingsQueryService {
 
     /**
      * Updates Chart settings by merging the provided partial settings.
+     * Serialized same-setting callers can force a write when the read signal may
+     * still represent an earlier queued value.
      */
-    public async updateChartSettings(settings: Partial<AppChartSettingsInterface>): Promise<void> {
+    public async updateChartSettings(
+        settings: Partial<AppChartSettingsInterface>,
+        options: { force?: boolean } = {},
+    ): Promise<void> {
+        if (!options.force) {
+            const currentSettings = this.chartSettings();
+            const hasChanges = Object.keys(settings).some(key =>
+                !equal(
+                    settings[key as keyof AppChartSettingsInterface],
+                    currentSettings[key as keyof AppChartSettingsInterface],
+                )
+            );
+            if (!hasChanges) {
+                return;
+            }
+        }
+
         this.logger.info(`[AppUserSettingsQueryService] Updating Chart Settings:`, settings);
         const user = await this.getCurrentUser();
         if (!user) {
             this.logger.warn(`[AppUserSettingsQueryService] Cannot update Chart Settings. No user logged in.`);
-            return;
+            throw new Error('Sign in to save chart settings.');
         }
 
         const updatedSettings = {

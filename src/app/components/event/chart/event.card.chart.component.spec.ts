@@ -577,7 +577,10 @@ describe('EventCardChartComponent', () => {
 
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
     await flushCursorBehaviourPersistQueue();
-    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.SelectX });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith(
+      { chartCursorBehaviour: ChartCursorBehaviours.SelectX },
+      { force: true },
+    );
 
     vi.clearAllMocks();
     component.previewSelectedRange = { start: 10, end: 20 };
@@ -585,7 +588,10 @@ describe('EventCardChartComponent', () => {
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
     await flushCursorBehaviourPersistQueue();
 
-    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.ZoomX });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith(
+      { chartCursorBehaviour: ChartCursorBehaviours.ZoomX },
+      { force: true },
+    );
     expect(component.previewSelectedRange).toEqual({ start: 10, end: 20 });
     expect(component.selectedRange).toEqual({ start: 10, end: 20 });
   });
@@ -665,6 +671,34 @@ describe('EventCardChartComponent', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(
       '[EventCardChart] Failed to persist chartCursorBehaviour setting',
       error,
+    );
+  });
+
+  it('keeps the latest cursor mode when an older queued write fails', async () => {
+    const firstError = new Error('first write failed');
+    let rejectFirst: ((error: Error) => void) | null = null;
+    mockUserSettingsQuery.updateChartSettings
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
+        rejectFirst = reject;
+      }))
+      .mockResolvedValueOnce(undefined);
+    fixture.detectChanges();
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    await flushMicrotasks();
+
+    rejectFirst?.(firstError);
+    await flushCursorBehaviourPersistQueue();
+
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.ZoomX);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenLastCalledWith(
+      { chartCursorBehaviour: ChartCursorBehaviours.ZoomX },
+      { force: true },
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      '[EventCardChart] Failed to persist chartCursorBehaviour setting',
+      firstError,
     );
   });
 
@@ -1362,7 +1396,7 @@ describe('EventCardChartComponent', () => {
         speed: 'power',
         power: 'speed',
       },
-    });
+    }, { force: true });
     expect((component as any).eventChartOverlayDataTypeByPrimaryOverride).toEqual({
       speed: 'power',
       power: 'speed',
@@ -1387,7 +1421,7 @@ describe('EventCardChartComponent', () => {
       eventChartOverlayDataTypeByPrimary: {
         speed: 'power',
       },
-    });
+    }, { force: true });
   });
 
   it('keeps the latest optimistic overlay choice when an older persist request fails later', async () => {

@@ -393,8 +393,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         && this.cursorBehaviourConfirmedRequestID === this.cursorBehaviourPersistRequestID
         && chartSettings?.chartCursorBehaviour === this.cursorBehaviourOverride
       ) {
-        this.cursorBehaviourOverride = null;
-        this.cdr.markForCheck();
+        this.clearConfirmedCursorBehaviourOverride();
       }
       if (
         this.eventChartOverlayDataTypeByPrimaryOverride !== null
@@ -951,7 +950,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
       .catch(() => undefined)
       .then(() => this.userSettingsQuery.updateChartSettings({
         eventChartOverlayDataTypeByPrimary: overlayMap,
-      }))
+      }, { force: true }))
       .catch((error) => {
         this.logger.error('[EventCardChart] Failed to persist event chart overlay setting', error);
         if (
@@ -971,7 +970,10 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
     this.cursorBehaviourConfirmedRequestID = 0;
     this.cursorBehaviourPersistQueue = this.cursorBehaviourPersistQueue
       .catch(() => undefined)
-      .then(() => this.userSettingsQuery.updateChartSettings({ chartCursorBehaviour: value }))
+      .then(() => this.userSettingsQuery.updateChartSettings(
+        { chartCursorBehaviour: value },
+        { force: true },
+      ))
       .then(() => {
         if (requestID !== this.cursorBehaviourPersistRequestID) {
           return;
@@ -979,8 +981,7 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
 
         this.cursorBehaviourConfirmedRequestID = requestID;
         if (this.userSettingsQuery.chartSettings()?.chartCursorBehaviour === this.cursorBehaviourOverride) {
-          this.cursorBehaviourOverride = null;
-          this.cdr.markForCheck();
+          this.clearConfirmedCursorBehaviourOverride();
         }
       })
       .catch((error) => {
@@ -996,6 +997,12 @@ export class EventCardChartComponent implements OnInit, OnChanges, OnDestroy {
         this.cursorBehaviourOverride = null;
         this.cdr.markForCheck();
       });
+  }
+
+  private clearConfirmedCursorBehaviourOverride(): void {
+    this.cursorBehaviourConfirmedRequestID = 0;
+    this.cursorBehaviourOverride = null;
+    this.cdr.markForCheck();
   }
 
   private updateZoomBarOverviewData(domain: EventChartRange | null = this.xDomain ?? this.resolveGlobalDomain(this.allChartPanels)): void {

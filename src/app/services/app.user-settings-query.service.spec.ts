@@ -145,12 +145,16 @@ describe('AppUserSettingsQueryService', () => {
     });
 
     describe('updateChartSettings', () => {
-        it('persists an explicit value even while the read signal still has that value', async () => {
+        it('skips an unchanged value unless a serialized caller forces the write', async () => {
             const user = createMockUser();
             mockUserSubject.next(user);
             TestBed.flushEffects();
 
             await service.updateChartSettings({ strokeWidth: 2 });
+
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+
+            await service.updateChartSettings({ strokeWidth: 2 }, { force: true });
 
             expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
                 settings: {
@@ -166,6 +170,16 @@ describe('AppUserSettingsQueryService', () => {
             mockUserService.updateUserProperties.mockRejectedValueOnce(error);
 
             await expect(service.updateChartSettings({ strokeWidth: 3 })).rejects.toBe(error);
+        });
+
+        it('rejects a forced chart settings write when the user signed out', async () => {
+            mockUserSubject.next(null);
+
+            await expect(service.updateChartSettings(
+                { strokeWidth: 3 },
+                { force: true },
+            )).rejects.toThrow('Sign in to save chart settings.');
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
         });
     });
 
