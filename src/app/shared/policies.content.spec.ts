@@ -62,7 +62,9 @@ describe('Wahoo connected-service policy', () => {
     expect(topic?.title).toBe('Wahoo Data');
     expect(content).toContain('Only workouts with an available FIT file are imported');
     expect(content).toContain('OAuth credentials are stored server-side');
-    expect(content).toContain('does not currently supply the daily wellness measurements shown in the Health workspace');
+    expect(content).toContain('does not currently supply daily wellness records for Health');
+    expect(content).toContain('Weight profile context or an activity-level VO₂ max estimate');
+    expect(content).toContain('it is not stored as a Health record');
     expect(content).toContain('Activities already imported into Quantified Self are retained');
     expect(content).toContain('send a selected FIT activity file or GPX/FIT course/route file directly to Wahoo');
     expect(content).toContain('converts selected GPX routes to FIT in memory');
@@ -217,5 +219,18 @@ describe('Garmin Health policy', () => {
     expect(content).toContain('authenticated Health workspace');
     expect(content).toContain('replaces opaque account keys with local account ordinals');
     expect(content).toContain('does not save a preferred source or calculate a cross-provider average');
+  });
+});
+
+describe('workout context Health policy', () => {
+  it('documents the on-demand, separated, identity-free workout projection', () => {
+    const content = CONNECTED_SERVICES_POLICY_SECTION.content.join(' ');
+
+    expect(content).toContain('Workout context in Health');
+    expect(content).toContain('profile context rather than a weigh-in');
+    expect(content).toContain('hidden when a real Health Weight measurement exists');
+    expect(content).toContain('separate by provider, local account label, and discipline');
+    expect(content).toContain('do not copy workout values into Health storage');
+    expect(content).toContain('excludes workout identifiers, names, locations, provider account IDs, and raw creator details');
   });
 });
