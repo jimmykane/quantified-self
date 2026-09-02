@@ -261,6 +261,8 @@ describe('HomeComponent', () => {
 
         expect(performanceCards.length).toBe(3);
         expect(trainingPreview).toBeTruthy();
+        expect(trainingPreview.classList).toContain('compact-feature-row-host--without-divider');
+        expect(performanceCards[0].classList).not.toContain('compact-feature-row-host--without-divider');
         expect(trainingPreview.querySelector('.training-preview-data[data-nosnippet]')).toBeTruthy();
         expect(signalPreviews.length).toBe(0);
         expect(previewKeys).toContain('training-snapshot');
