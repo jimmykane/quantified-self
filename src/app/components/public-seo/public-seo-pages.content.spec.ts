@@ -59,7 +59,8 @@ describe('public-seo-pages.content', () => {
   it('keeps the new pages focused on separate search intents', () => {
     expect(PUBLIC_SEO_PAGES.featuresHub.h1).toBe('Features for endurance training data');
     expect(PUBLIC_SEO_PAGES.featuresHub.intro).toContain('compare recordings');
-    expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('sports watch benchmark reports');
+    expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('Garmin, Suunto, COROS, Wahoo');
+    expect(PUBLIC_SEO_PAGES.featuresHub.description).toContain('AI answers');
 
     expect(PUBLIC_SEO_PAGES.activityCalendar.h1).toBe('Activity calendar for endurance training');
     expect(PUBLIC_SEO_PAGES.activityCalendar.description).toContain('Week, Month, and Year calendar views');
@@ -75,7 +76,8 @@ describe('public-seo-pages.content', () => {
     ))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.h1).toBe('Training analysis for endurance athletes');
-    expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('readiness, load trends, intensity, durability, sleep context, and historical build comparisons');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('training load, readiness, intensity, durability');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.description).toContain('sport-specific trends');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.intro).toContain('recent training compares with your usual workload');
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.some(section => (
       section.copy.includes('Multisport legs')
@@ -93,7 +95,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => section.preview === 'activity-map')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.mcpServer.h1).toBe('Connect ChatGPT or Claude to your training data');
-    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('compatible MCP clients');
+    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('ChatGPT, Claude, or another MCP client');
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
       section.items?.some(item => item.title === 'Sleep, readiness, and daily context')
     ))).toBe(true);
@@ -103,7 +105,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
       section.items?.some(item => item.copy.includes('recent training trends'))
     ))).toBe(true);
-    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('body-weight history');
+    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurement, and route data you approve');
     expect(PUBLIC_SEO_PAGES.mcpServer.intro).toContain('plan your next workout');
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.title === 'Ask about training, workouts, sleep, measurements, and routes')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.copy.includes('disconnect it from Connections'))).toBe(true);
@@ -117,10 +119,8 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.assistant.h1).toBe('If you could ask your training history one question, what would it be?');
     expect(PUBLIC_SEO_PAGES.assistant.h1).not.toContain('complete training history');
-    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('grounded in read-only Quantified Self tools');
-    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('Free accounts include');
-    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('saved-route summaries');
-    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('interactive charts or activity maps');
+    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('sleep, readiness, training, measurements, activities, and routes');
+    expect(PUBLIC_SEO_PAGES.assistant.description).toContain('answers grounded in your recorded data');
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => (
       section.items.some(item => item.title === 'Grounded every turn')
     ))).toBe(true);
@@ -160,7 +160,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => section.preview === 'assistant-example')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.h1).toBe('Analyze FIT, GPX, and TCX workout files');
-    expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.description).toContain('FIT file analyzer');
+    expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.description).toContain('Upload FIT, GPX, TCX, JSON, or SML workouts');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.chips).toContain('GPX file analyzer');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.intro).toContain('maps, charts, stats, exports');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.faqItems.some(item => item.question === 'Can I analyze FIT files?')).toBe(true);
@@ -171,13 +171,12 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.sections.some(section => section.preview === 'workout-analysis')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.routeFiles.h1).toBe('Save FIT and GPX route files, then send them to connected services');
-    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('FIT course files and GPX route or track files');
-    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('send saved routes to Suunto');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('Save FIT courses and GPX routes');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('send saved routes to Garmin Connect, Suunto');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('Garmin Connect');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('Wahoo');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('COROS');
-    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('import Suunto routes into Routes');
-    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('up to 10 saved routes');
+    expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('import Suunto routes');
     expect(PUBLIC_SEO_PAGES.routeFiles.sections.some(section => section.title === 'Move routes between Quantified Self and connected services')).toBe(true);
     const wahooCorosRouteItem = PUBLIC_SEO_PAGES.routeFiles.sections
       .flatMap(section => section.items || [])
@@ -276,6 +275,24 @@ describe('public-seo-pages.content', () => {
       const actionRoutes = [...page.actions, ...page.closingActions].map(action => action.routerLink);
 
       expect(actionRoutes.some(route => protectedWorkspaceRoutes.has(route)), page.path).toBe(false);
+    }
+  });
+
+  it('keeps public feature meta descriptions concise', () => {
+    const featurePages = [
+      PUBLIC_SEO_PAGES.featuresHub,
+      PUBLIC_SEO_PAGES.activityCalendar,
+      PUBLIC_SEO_PAGES.trainingAnalysis,
+      PUBLIC_SEO_PAGES.trainingDashboard,
+      PUBLIC_SEO_PAGES.activityMap,
+      PUBLIC_SEO_PAGES.mcpServer,
+      PUBLIC_SEO_PAGES.assistant,
+      PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer,
+      PUBLIC_SEO_PAGES.routeFiles,
+    ];
+
+    for (const page of featurePages) {
+      expect(page.description.length, page.path).toBeLessThanOrEqual(160);
     }
   });
 
