@@ -89,8 +89,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
     expect(healthSection?.content).toContain('**Today**, **14d**, **30d**, **90d**, or **1y**');
-    expect(healthSection?.content).toContain('range is saved to your account without adding URL query parameters');
-    expect(healthSection?.content).toContain('selected metric and older/newer position remain local');
+    expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
+    expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
     expect(healthSection?.content).toContain('Detailed sample streams load for Today, 14-day, and 30-day windows');
@@ -222,6 +222,22 @@ describe('help.content', () => {
       expect(action.label.trim().length).toBeGreaterThan(0);
       expect(action.icon.trim().length).toBeGreaterThan(0);
       expect(action.target.trim().length).toBeGreaterThan(0);
+    });
+  });
+
+  it('classifies every email destination separately from new-tab web links', () => {
+    const links = [
+      ...HELP_ACTIONS,
+      ...HELP_SECTIONS.flatMap(section => section.links),
+    ];
+
+    links.forEach(link => {
+      if (link.target.startsWith('mailto:')) {
+        expect(link.kind).toBe('email');
+      }
+      if (link.kind === 'email') {
+        expect(link.target).toMatch(/^mailto:/);
+      }
     });
   });
 
@@ -507,7 +523,7 @@ describe('help.content', () => {
     expect(trainingSection?.links).toContainEqual({
       label: 'Email Training Feedback',
       icon: 'email',
-      kind: 'external',
+      kind: 'email',
       target: expect.stringMatching(/^mailto:.*subject=Training%20feedback$/),
     });
   });

@@ -28,14 +28,14 @@ export interface HelpAction {
   id: 'email-support' | 'report-bug' | 'release-notes' | 'policies';
   label: string;
   icon: string;
-  kind: 'route' | 'external';
+  kind: 'route' | 'external' | 'email';
   target: string;
 }
 
 export interface HelpSectionLink {
   label: string;
   icon: string;
-  kind: 'route' | 'external';
+  kind: 'route' | 'external' | 'email';
   target: string;
   fragment?: string;
   queryParams?: Record<string, string>;
@@ -62,7 +62,7 @@ const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
 
 ## Explore a metric
 
-- Health opens on **Resting heart rate · 30d** when that metric is available. The explorer shows metrics found anywhere in your imported history, regardless of the currently selected date window; Weight and VO₂ max also remain available because they can exist only inside imported workouts. Sleep appears when a normalized Sleep session exists. Health and Sleep availability are checked independently. If either check fails, only that domain stays unfiltered rather than risking hidden valid data. Use **Today**, **14d**, **30d**, **90d**, or **1y** and the older/newer controls. Your range is saved to your account without adding URL query parameters. The selected metric and older/newer position remain local to the open workspace and reset when you return later.
+- Health opens on **Resting heart rate · 30d** when that metric is available. The explorer shows metrics found anywhere in your imported history, regardless of the currently selected date window; Weight and VO₂ max also remain available because they can exist only inside imported workouts. Sleep appears when a normalized Sleep session exists. Health and Sleep availability are checked independently. If either check fails, only that domain stays unfiltered rather than risking hidden valid data. Use **Today**, **14d**, **30d**, **90d**, or **1y** and the older/newer controls. Your selected metric and range are saved to your account without adding URL query parameters. The older/newer position and provider filters remain local to the open workspace and reset when you return later.
 - Detailed sample streams load for Today, 14-day, and 30-day windows. Longer windows use stored summary observations. If a metric exists only as samples, Health asks you to choose a shorter range instead of showing an empty or misleading aggregate. Today shows available intra-day samples and daily summaries; it does not imply that every metric is continuous. Provider support and delivery cadence determine whether a metric is continuous, intermittent, or summary-only.
 - Totals use bars, scalar readings use lines or points, and categorical states use stepped series. Every provider, connected account, aggregation, semantic variant, origin, recording method, and unit stays in a separate series. Provider-native or non-comparable readings are labeled and isolated from canonical readings.
 - Use the local source filters to focus on one or more providers. Filters are not saved as a preferred source. When one provider has multiple connected accounts, Health shows local labels such as **Garmin account 1** instead of an account identifier.
@@ -187,7 +187,7 @@ export const HELP_ACTIONS: HelpAction[] = [
     id: 'email-support',
     label: 'Email Support',
     icon: 'email',
-    kind: 'external',
+    kind: 'email',
     target: SUPPORT_MAILTO,
   },
   {
@@ -538,7 +538,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     links: [
       { label: 'Open Training', icon: 'monitoring', kind: 'route', target: '/training' },
       { label: 'Training Analysis Overview', icon: 'travel_explore', kind: 'route', target: '/features/training-analysis' },
-      { label: 'Email Training Feedback', icon: 'email', kind: 'external', target: `${SUPPORT_MAILTO}?subject=Training%20feedback` },
+      { label: 'Email Training Feedback', icon: 'email', kind: 'email', target: `${SUPPORT_MAILTO}?subject=Training%20feedback` },
     ],
   },
   {
@@ -625,7 +625,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],
   },
@@ -710,7 +710,7 @@ Contact support if:
       { label: 'My Tracks', icon: 'layers', kind: 'route', target: '/mytracks' },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Policies', icon: 'policy', kind: 'route', target: '/policies' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -771,7 +771,7 @@ From an activity action menu you can also:
       { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -1005,7 +1005,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -1107,7 +1107,7 @@ This action cannot be undone.
       { label: 'MCP Server', icon: 'devices', kind: 'route', target: '/features/mcp-server' },
       { label: 'MCP Client Access', icon: 'devices', kind: 'route', target: '/policies', fragment: POLICIES_MCP_CLIENTS_FRAGMENT },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
-      { label: 'Privacy Email', icon: 'shield', kind: 'external', target: PRIVACY_MAILTO },
+      { label: 'Privacy Email', icon: 'shield', kind: 'email', target: PRIVACY_MAILTO },
     ],
   },
   {
@@ -1153,7 +1153,7 @@ Send these if possible:
 - a screenshot,
 - and an event link or event ID if the problem is tied to one activity.`,
     links: [
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
       { label: 'Report a Bug', icon: 'bug_report', kind: 'external', target: GITHUB_ISSUES_URL },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],

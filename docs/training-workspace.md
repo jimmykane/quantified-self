@@ -7,7 +7,7 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `18`
-- `@sports-alliance/sports-lib`: `20.3.0`
+- `@sports-alliance/sports-lib`: `21.0.3`
 - Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -1969,8 +1969,11 @@ sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes;
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
 and do not require a Training snapshot rebuild solely for this storage transition.
 
-The repository now pins Sports Lib `20.3.0`; `20.0.3` introduced the FIT parser `5.0.2` transition. New FIT imports
-persist session field 196 as canonical `Metabolic Calories`; they do not emit a replacement `Resting Calories` stat.
+The repository now pins Sports Lib `21.0.3`. This release changes package emission to module-preserving ESM and
+per-module CommonJS without changing parser results, serialized data, or persisted metrics. It requires no source-file
+reparse, derived-snapshot rebuild, or data migration. Sports Lib `20.0.3` introduced the FIT parser `5.0.2` transition.
+New FIT imports persist session field 196 as canonical `Metabolic Calories`; they do not emit a replacement
+`Resting Calories` stat.
 Existing persisted Resting Calories values remain historical values until a source reparse replaces their source stats.
 They are neither renamed nor used to infer Metabolic Calories. The same parser transition corrects FIT `Average VAM`
 from its source meters-per-second representation to Sports Lib's public meters-per-hour metric. Sports Lib also removes

@@ -91,7 +91,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.hub,
     eyebrow: 'Features',
     title: 'Features for Endurance Training Data',
-    description: 'Explore an activity calendar, training analysis, the grounded Quantified Self Assistant, read-only MCP access, workout file comparison, FIT/GPX/TCX tools, sports watch benchmark reports, and a unified dashboard.',
+    description: 'Bring Garmin, Suunto, COROS, Wahoo, and workout files together for training analysis, maps, dashboards, comparisons, and AI answers.',
     h1: 'Features for endurance training data',
     intro: 'Use Quantified Self to centralize provider activities, uploaded files, and saved routes, review workout history in an activity calendar, analyze training context, compare recordings, benchmark devices, and ask questions through the built-in Assistant or an MCP client you explicitly authorize.',
     chips: ['Activity calendar', 'Training analysis', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
@@ -111,7 +111,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Analysis',
         title: 'Turn scattered training data into usable analysis',
-        copy: 'The feature pages cover the workflows people search for after their data is spread across watches, services, and exported activity files.',
+        copy: 'Bring workouts, routes, and files into one place, then choose the calendar, map, analysis, comparison, or AI view that answers your next question.',
         items: [
           {
             icon: 'calendar_month',
@@ -126,12 +126,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'auto_awesome',
             title: 'Grounded Assistant',
-            copy: `Ask follow-up questions about sleep, readiness, Training, measurements, and activities through the same validated read-only tools used by MCP. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+            copy: `Ask follow-up questions about sleep, readiness, Training, measurements, activities, and routes, with the supporting data shown alongside each answer. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
           },
           {
             icon: 'devices',
             title: 'Read-only MCP access',
-            copy: 'Authorize ChatGPT or another compatible MCP client to read only the activity metrics, Training analysis, activity details, sleep summaries, or saved routes you approve.',
+            copy: 'Connect ChatGPT, Claude, or another compatible MCP client to analyze your training using only the data categories you approve.',
           },
           {
             icon: 'compare_arrows',
@@ -140,8 +140,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'dashboard_customize',
-            title: 'Unified training dashboard',
-            copy: 'Keep activities, files, maps, exports, derived charts, sleep context, and cross-service sync workflows in one account.',
+            title: 'One training archive',
+            copy: 'Keep provider activities, uploaded files, saved routes, maps, exports, training insights, and cross-service sync in one account.',
           },
         ],
       },
@@ -196,8 +196,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: `Manual uploads, core analysis, benchmark comparisons, and ${FREE_ASSISTANT_REQUEST_LIMIT} Assistant requests per calendar month are available on the free plan. Automatic provider sync and higher limits require a paid plan.`,
       },
     ],
-    closingTitle: 'Choose the feature that matches the data problem',
-    closingCopy: 'Use the hub when you are deciding between a visual activity calendar, curated training analysis, built-in AI analysis, read-only MCP access, file comparison, device benchmarks, provider sync, and centralized workout history.',
+    closingTitle: 'Choose what you want to understand next',
+    closingCopy: 'Explore your history in a calendar or map, analyze training, compare recordings, connect an AI tool, or bring another data source into your archive.',
     closingActions: [
       routeAction('Explore Integrations', '/integrations', 'flat', 'arrow_forward'),
       routeAction('Training Guides', '/guides'),
@@ -214,7 +214,6 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     chips: ['Week view', 'Month view', 'Year view', 'Duration circles', 'Distance and ascent', 'Account activity data'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Open Calendar', '/calendar', 'stroked', 'calendar_month'),
       routeAction('Calendar Help', '/help', 'stroked', undefined, 'activity-calendar'),
     ],
     sections: [
@@ -285,7 +284,6 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingCopy: 'Start with the current month, open a day for individual workouts, then move to Week or Year when you need a tighter or broader view of training consistency.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Open Calendar', '/calendar', 'stroked', 'calendar_month'),
       routeAction('Training Analysis', '/features/training-analysis'),
     ],
   },
@@ -294,13 +292,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
     eyebrow: 'Training Analysis',
     title: 'Training Analysis for Endurance Athletes',
-    description: 'Analyze eight sport families—from running, cycling, swimming, and rowing to walking and hiking, Nordic skiing, strength, and paddling—with readiness, load trends, intensity, durability, sleep context, and historical build comparisons, all through context-aware summaries.',
+    description: 'Understand training load, readiness, intensity, durability, sleep, power, and sport-specific trends from your recorded activities.',
     h1: 'Training analysis for endurance athletes',
-    intro: 'Training is a curated workspace for understanding your current workload in context. Start with one All training overview, then switch to a focused sport destination for its historical build, performance, power, and durability evidence without losing any global totals.',
+    intro: 'See how your recent training compares with your usual workload, then explore readiness, load, intensity, durability, sleep, power, and sport-specific trends in one curated workspace.',
     chips: ['Training readiness', 'Eight sport families', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Open Training', '/training'),
       routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
     ],
     sections: [
@@ -312,7 +309,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'compare_arrows',
             title: '28-day training comparison',
-            copy: 'Compare current sessions and training time with a normalized preceding 84-day reference, with unavailable data kept explicit instead of shown as zero.',
+            copy: 'Compare the last 28 days with your recent baseline across workout count, training time, load, and sport mix. Missing data stays unavailable instead of becoming zero.',
           },
           {
             icon: 'monitor_heart',
@@ -322,7 +319,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'account_tree',
             title: 'What drove the change',
-            copy: 'See parent-event load, top contributors, sport-specific load changes, and training rhythm without hiding other eligible sports from the overall explanation.',
+            copy: 'See which workouts and sports changed your training load, alongside the rhythm of your recent training.',
           },
         ],
         preview: 'training-snapshot',
@@ -330,12 +327,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
-        copy: 'Use account-saved sport shortcuts or the complete selector to open one of eight conservative sport families. Every sport stays available, and materially different contexts—including registered legs from multisport activities—remain separate.',
+        copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, or paddling. Multisport legs stay attributed to their recorded disciplines.',
         items: [
           {
             icon: 'directions_run',
             title: 'Power and capacity evidence',
-            copy: 'Inspect imported Running and Cycling FTP/VO₂ max provenance, power-profile retention, and exact-type CP, W′, and Pmax capacity from the preceding 42 completed UTC days where stored power curves support it.',
+            copy: 'Track running and cycling FTP, VO₂ max, critical power, W′, Pmax, and recent power curves when your recorded data supports them.',
           },
           {
             icon: 'pool',
@@ -345,24 +342,24 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'show_chart',
             title: 'Context-aware sport summaries',
-            copy: 'Switch to one sport for its detailed current-versus-usual summary while All training keeps the compact cross-sport mix. Indoor and on-water rowing, snow and roller skiing, walking and hiking, paddling types, and gravity MTB contexts remain separate. Downhill and Enduro use recorded volume, descent, jump count, and longest-jump evidence without invented run segmentation.',
+            copy: 'Focus on one sport while the All training view keeps your complete mix visible. Distinct disciplines such as pool and open-water swimming, indoor and outdoor rowing, skiing, paddling, and gravity MTB keep the context that fits their recorded data.',
           },
         ],
       },
       {
         eyebrow: 'Historical Evidence',
-        title: 'Compare a build deliberately, then keep limitations visible',
-        copy: 'The workspace favors comparable evidence over oversized charts or invented estimates, so a historical reference and long-session trend remain understandable.',
+        title: 'Compare your current training with your strongest builds',
+        copy: 'Compare your current training with a matching historical build, then use long-session trends to see how performance holds up as duration increases.',
         items: [
           {
             icon: 'history',
             title: 'Best build vs now',
-            copy: 'Choose one 8-, 10-, or 12-week historical benchmark per sport and compare workload, intensity, available sleep context, and matching durability evidence.',
+            copy: 'Compare your current 8-, 10-, or 12-week block with a strong matching build from your history across workload, intensity, sleep context, and durability.',
           },
           {
             icon: 'trending_down',
             title: 'Long-session durability',
-            copy: 'Track eligible steady aerobic sessions with matching output and heart-rate evidence. Weeks without comparable sessions explain why they are unavailable.',
+            copy: 'See whether pace or power holds steady as heart rate changes during comparable longer sessions. When a week has no usable session, Training says so.',
           },
           {
             icon: 'visibility_off',
@@ -376,11 +373,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What data does Training use?',
-        answer: 'Training uses derived snapshots built from activities already imported or uploaded to your Quantified Self account. The browser does not reparse source files or query raw activity history to calculate the workspace.',
+        answer: 'Training uses activities already imported or uploaded to your account, plus recorded sleep and recovery signals when they are available. Missing metrics remain unavailable rather than being estimated.',
       },
       {
         question: 'Which sports does Training support?',
-        answer: 'Training supports eight conservative families: Running; Cycling including road, indoor, virtual, e-bike, standard MTB, Enduro, and Downhill; Pool and Open Water Swimming; indoor and on-water Rowing; Walking and Hiking; Nordic and Roller Skiing; Strength; and Paddling. Multisport files are split into their registered activity legs when available. Nearby unlisted sports remain Other rather than being guessed into a family.',
+        answer: 'Training has focused views for Running; Cycling including road, indoor, virtual, e-bike, MTB, Enduro, and Downhill; Pool and Open Water Swimming; indoor and on-water Rowing; Walking and Hiking; Nordic and Roller Skiing; Strength; and Paddling. Multisport activities use their recorded legs when available, while other activities remain visible in All training.',
       },
       {
         question: 'Does Training tell me what workout to do?',
@@ -388,7 +385,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'How is Training different from the Dashboard?',
-        answer: 'Dashboard remains the configurable place for charts, maps, and tiles. Training is a fixed, curated analytical workspace with one global overview and focused sport destinations. Account-saved shortcuts speed up navigation but never hide a sport or change the calculations.',
+        answer: 'Dashboard is the configurable place for charts, maps, and tiles. Training is a fixed, curated analytical workspace with one complete overview and focused sport views.',
       },
     ],
     closingTitle: 'Start with the work you already recorded',
@@ -404,7 +401,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.trainingDashboard,
     eyebrow: 'Training Dashboard',
     title: 'Custom Training Dashboard for Endurance Athletes',
-    description: 'Build a custom endurance training dashboard with Curated, KPI, Custom, and Map tiles, independent filters, training-load charts, activity summaries, and clustered maps.',
+    description: 'Build a custom training dashboard with KPI, chart, and map tiles, independent filters, training trends, and flexible layouts.',
     h1: 'Build the training dashboard you need',
     intro: 'Start from a dashboard preset or arrange Curated, KPI, Custom, and Map tiles around the questions you track. Each tile keeps its own filters, while shared chart and map components keep the same interaction and styling used throughout Quantified Self.',
     chips: ['Curated charts', 'KPI tiles', 'Custom charts', 'Map tiles', 'Independent filters', 'Drag and arrange'],
@@ -453,7 +450,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.activityMap,
     eyebrow: 'Activity Map',
     title: 'Map Your Running, Cycling, Swimming, and Outdoor Activities',
-    description: 'See GPS activities together on an interactive activity map, filter the visible history by date or activity type, and explore running, cycling, swimming, hiking, and other recorded routes.',
+    description: 'See GPS workouts together on one interactive map, then filter running, cycling, swimming, hiking, and other activities by date or sport.',
     h1: 'See your activity history on one map',
     intro: 'Bring GPS activities from connected providers and uploaded files into one interactive map. Filter by date or activity type, inspect dense areas without losing the wider history, and open the workout behind a recorded trace.',
     chips: ['Activity traces', 'Runs and rides', 'Open-water swims', 'Date filters', 'Activity filters', 'Interactive map'],
@@ -502,10 +499,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     eyebrow: 'MCP Server',
     title: 'Read-only MCP Server for Training Data',
-    description: 'Connect ChatGPT and compatible MCP clients to activity metrics, body-weight history, Training analysis, sleep summaries, activity details, and saved routes through a read-only MCP server.',
-    h1: 'Connect ChatGPT to your training data with a read-only MCP server',
-    intro: 'Connect ChatGPT or another compatible Model Context Protocol client to Quantified Self, approve only the read-only data categories you want it to use, and ask questions about your training history without exposing your entire account by default.',
-    chips: ['MCP server', 'ChatGPT', 'Read-only', 'Activity metrics', 'Body weight', 'Sleep summaries', 'Saved routes'],
+    description: 'Connect ChatGPT, Claude, or another MCP client to the training, activity, sleep, measurement, and route data you approve.',
+    h1: 'Connect ChatGPT or Claude to your training data',
+    intro: 'Use the read-only Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze your training, review your season, or plan your next workout using only the data categories you approve.',
+    chips: ['MCP server', 'ChatGPT', 'Claude', 'Read-only', 'Training', 'Sleep', 'Activities', 'Routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Set Up MCP', '/help', 'stroked', undefined, 'data-and-privacy'),
@@ -514,28 +511,28 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     sections: [
       {
         eyebrow: 'Training Questions',
-        title: 'Ask about metrics, individual activities, sleep, and routes',
-        copy: 'The server exposes bounded tools for discovery and analysis. Every result is projected through the permissions you approve instead of returning raw account documents.',
+        title: 'Ask about training, workouts, sleep, measurements, and routes',
+        copy: 'Use the parts of your Quantified Self account you approve to investigate a training question, inspect a workout, or build a longer analysis in your preferred AI client.',
         items: [
           {
             icon: 'monitoring',
-            title: 'Activity, body measurement, and Training analysis',
-            copy: 'Discover available activity metrics, query bounded identity-free body-weight history by day, week, or month, and inspect ready Training analysis such as load, readiness, intensity, durability, and sport-specific evidence.',
+            title: 'Training and measurement trends',
+            copy: 'Review load, readiness, intensity, durability, sport-specific evidence, and body-weight history across the period you ask about.',
           },
           {
             icon: 'directions_run',
-            title: 'Individual activity details and charts',
-            copy: 'Discover canonical Sports Lib activity types, filter bounded newest-first scans for requests such as your latest run, resolve today or yesterday in an explicit IANA timezone, and inspect summaries, laps, swim lengths, MTB jumps, app links, selected numeric metrics, or bounded chart-ready data. Metric ranking supports explicit periods or a processing-bounded all-history scan, so a client can use the relevant persisted maximum-jump metric as the authoritative record and request individual jump details only when needed.',
+            title: 'Workout details and charts',
+            copy: 'Find recent activities, compare recorded metrics, and inspect workout summaries, laps, swim lengths, MTB jumps, and chart-ready data.',
           },
           {
             icon: 'bedtime',
-            title: 'Sleep trends, live readiness, and a daily report',
-            copy: 'Ask for one bounded sleep trend that combines recorded-vital coverage with duration, score, stages, HRV, heart rate, blood oxygen, and respiration across daily, weekly, or monthly buckets. With both sleep and Training-metrics permission, ask for one daily report with your latest completed sleep, recorded aggregate HRV and sleep heart rate, Dashboard Today’s live UTC-day Readiness, and current-versus-usual 28-day Training totals and sport mix. It keeps readiness concise and exposes safe same-provider baselines and evidence states without returning provider identity, raw physiological samples, a workout plan, diagnosis, or medical advice.',
+            title: 'Sleep, readiness, and daily context',
+            copy: 'Review sleep duration, score, stages, HRV, sleeping heart rate, blood oxygen, respiration, readiness, and recent training trends when those signals are available.',
           },
           {
             icon: 'route',
-            title: 'Saved-route summaries and optional locations',
-            copy: 'Filter bounded newest-first route scans by canonical activity type or route-name text, then read names, metrics, counts, and timestamps. A separate saved-route location permission enables exact bounds, simplified geometry, nearby search, segment endpoints, and waypoints.',
+            title: 'Saved routes and optional locations',
+            copy: 'Find saved routes by sport, name, or recency. A separate location permission adds route geometry, nearby search, segment endpoints, and waypoints.',
           },
         ],
         preview: 'mcp-flow',
@@ -543,12 +540,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Access Boundaries',
         title: 'Read-only by design, with separate permissions',
-        copy: 'MCP access uses an authorization flow designed for external clients. The client receives only the scopes you approve and can be disconnected from Connections.',
+        copy: 'Choose which data categories an external client can read, then review or disconnect it from Connections at any time.',
         items: [
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Activity and Training metrics, body measurements, individual activity details, activity locations, sleep summaries, saved-route summaries, and saved-route locations are explicit grants. Each location scope depends on its matching data scope, and the activity and route location domains remain independent.',
+            copy: 'Approve training metrics, measurements, workout details, sleep, routes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
           },
           {
             icon: 'lock',
@@ -557,13 +554,13 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'shield',
-            title: 'Safe projections and location warnings',
-            copy: 'Original files, full-resolution recordings, absolute sample timestamps, unrequested streams, provider credentials, source keys, and device provenance are excluded. Exact coordinates appear only under the matching location permission.',
+            title: 'Only the requested data is returned',
+            copy: 'Original files, full-resolution recordings, provider credentials, source keys, and unrequested streams are excluded. Exact coordinates require the matching location permission.',
           },
           {
             icon: 'location_searching',
-            title: 'Coordinate or place-name search',
-            copy: 'Direct-coordinate searches stay within Quantified Self. For a place-name search, only the supplied location text is sent to Mapbox for geocoding—not your activity, route, account, or unrelated prompt data.',
+            title: 'Location access stays separate',
+            copy: 'Activity and route locations are never implied by another permission. Place-name searches send only the location text to Mapbox for geocoding.',
           },
         ],
       },
@@ -571,11 +568,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What does the Quantified Self MCP server do?',
-        answer: 'It gives a compatible external client a bounded, read-only way to discover and query approved Quantified Self activity metrics, body-weight history, Training analysis, individual activity details, sleep summaries, and saved routes.',
+        answer: 'It lets a compatible external AI client answer questions using the Quantified Self training metrics, body-weight history, workout details, sleep summaries, and saved routes you approve. Access remains read-only.',
       },
       {
-        question: 'Can I use the MCP server with ChatGPT?',
-        answer: 'Yes. Add https://quantified-self.io/mcp as a custom app endpoint in ChatGPT, sign in to Quantified Self, and approve the read-only permissions you want to grant. ChatGPT is an external client with its own privacy and retention practices.',
+        question: 'Can I use the MCP server with ChatGPT or Claude?',
+        answer: 'Yes. Add https://quantified-self.io/mcp as a custom MCP connection in a compatible ChatGPT or Claude client, sign in to Quantified Self, and approve the read-only permissions you want to grant. External clients have their own privacy and retention practices.',
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
@@ -590,8 +587,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Only if you separately approve Activity locations or Saved-route locations and geometry. Activity location covers starts, ends, MTB jumps, nearby activity search, and optional breadcrumbs. Route location covers bounds, previews, segment endpoints, nearby route search, and waypoints. Granting one never exposes the other.',
       },
     ],
-    closingTitle: 'Choose the data scopes, then keep control',
-    closingCopy: 'Create an account, connect the training sources you use, and authorize only the MCP permissions needed for the questions you want to ask. Review or revoke completed client connections at any time.',
+    closingTitle: 'Choose what your AI client can use',
+    closingCopy: 'Create an account, connect your training sources, and approve only the data categories needed for the questions you want to ask. Review or revoke the connection at any time.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('MCP Setup Guide', '/help', 'stroked', undefined, 'data-and-privacy'),
@@ -603,12 +600,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.assistant,
     eyebrow: 'Quantified Self Assistant',
     title: 'AI Training Assistant Grounded in Your Fitness Data',
-    description: `Chat with the built-in fitness-data Assistant grounded in read-only Quantified Self tools for sleep, HRV, readiness, Training, body measurements, activities, saved-route summaries, and optional interactive charts or activity maps. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+    description: 'Ask about sleep, readiness, training, measurements, activities, and routes, with answers grounded in your recorded data.',
     h1: 'If you could ask your training history one question, what would it be?',
-    intro: `Ask follow-up questions about sleep, overnight HRV, readiness, Training load, body measurements, recent activities, or saved routes. The Assistant chooses bounded read-only tools, shows the results that grounded each answer, and can add a deterministic chart or opt-in activity map when it clarifies the result. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
+    intro: `Ask about sleep, readiness, training load, measurements, activities, or saved routes. Follow up naturally and see the data, chart, or map behind each answer. Free accounts include ${FREE_ASSISTANT_REQUEST_LIMIT} requests per calendar month.`,
     chips: ['Sleep & HRV', 'Readiness', 'Training', 'Measurements', 'Activities', 'Charts & maps', 'Saved routes'],
     actions: [
-      routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('View Membership', '/pricing'),
       routeAction('Assistant Help', '/help', 'stroked', undefined, 'ai-insights'),
     ],
@@ -616,7 +613,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Conversational analysis',
         title: 'Ask naturally, then follow up',
-        copy: 'The built-in Assistant uses the same validated MCP server foundation without making you install another client. It is coordinate-free by default, with explicit per-chat access to precise activity locations.',
+        copy: 'Ask naturally about the data in your Quantified Self account without installing another client. Exact activity locations stay off until you explicitly enable them for a new chat.',
         items: [
           {
             icon: 'bedtime',
@@ -626,45 +623,45 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitoring',
             title: 'Training and activity context',
-            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts with the ready Training snapshots already used in the app. For MTB jump records, the Assistant ranks the relevant persisted maximum-jump metric across matching activities instead of guessing from jump count or a recent sample, and reads individual jump details only when requested.',
+            copy: 'Compare current load, Form, ramp, volume, intensity, and recent workouts. You can also ask about recorded details such as laps, swim lengths, and MTB jump records.',
           },
           {
             icon: 'scale',
             title: 'Measurements and trends',
-            copy: 'Query first-class body measurements such as weight over explicit date ranges instead of hiding them among activity metrics.',
+            copy: 'Review body measurements such as weight over the date range you choose and compare how they change over time.',
           },
           {
             icon: 'route',
             title: 'Saved-route summaries',
-            copy: 'Find recent saved routes by sport, name, or recency while coordinate fields, saved bounds, geometry, and waypoints stay unavailable. Route names may contain place information.',
+            copy: 'Find recent saved routes by sport, name, or recency. Exact route geometry and waypoints stay unavailable to the built-in Assistant.',
           },
           {
             icon: 'monitoring',
-            title: 'Deterministic charts and activity maps',
-            copy: 'When a visual materially helps, the answer can include an interactive chart built from validated measurement, sleep, Training, metric, ranking, jump, or workout-chart results. A map rendered with the user’s separate Assistant map style can use only activity coordinates already allowed by the current precise-location chat; Gemini selects a safe source while Quantified Self owns every plotted value, coordinate, label, and renderer setting.',
+            title: 'Charts and activity maps',
+            copy: 'When a visual helps, the Assistant can add an interactive chart using the results behind the answer. Activity maps are available only in chats where you enabled precise activity locations.',
           },
         ],
         preview: 'assistant-example',
       },
       {
         eyebrow: 'Grounding and privacy',
-        title: 'Bounded tools, visible evidence, short retention',
-        copy: 'Each current answer must use at least one validated read-only result. The app shows compact evidence instead of asking you to trust an unsupported narrative.',
+        title: 'Grounded answers, clear permissions, short retention',
+        copy: 'Every answer uses current read-only results from your account, and the app shows the evidence behind it.',
         items: [
           {
             icon: 'fact_check',
             title: 'Grounded every turn',
-            copy: 'Answers must call a current Quantified Self tool. Missing values remain missing, and the response must distinguish recorded facts from interpretation.',
+            copy: 'Each answer checks current Quantified Self data. Missing values remain missing, and recorded facts stay distinct from interpretation.',
           },
           {
             icon: 'location_on',
             title: 'Precise activity locations stay opt-in',
-            copy: 'Activity start/end, chart breadcrumbs, and MTB jump coordinates stay redacted by default. You can start a fresh chat with precise activity locations enabled for location-relevant questions, activity maps, and nearby activity searches. Opening a map sends the displayed tile area to Mapbox, regardless of the selected Assistant map style. Saved-route bounds, route geometry, waypoints, original files, write tools, and dashboard settings remain unavailable.',
+            copy: 'Activity coordinates stay hidden by default. Enable precise activity locations for a new chat only when you want nearby activity searches, location-aware questions, or activity maps.',
           },
           {
             icon: 'timer',
             title: 'Short-lived conversation',
-            copy: 'Only the latest six completed turns are retained in one server-owned active conversation. It becomes unavailable about seven days after the latest completed turn or reset; a response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL deletes it asynchronously, and New chat clears it immediately.',
+            copy: 'The Assistant keeps only the latest six completed turns in the active conversation. It expires about seven days after the latest completed turn, and New chat clears it immediately.',
           },
         ],
       },
@@ -672,7 +669,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What can the Quantified Self Assistant answer?',
-        answer: 'It can use bounded read-only tools for daily reports, readiness, sleep and recorded vitals, Training metrics, body measurements, activity metrics, recent activities, laps, jumps, swim lengths, bounded workout charts, and coordinate-free saved-route summaries. It can show deterministic charts from those results. Exact activity start/end, chart breadcrumbs, MTB jump locations, nearby activity search, and activity maps are available only after you explicitly enable precise activity locations for a fresh chat.',
+        answer: 'It can answer questions about daily readiness, sleep and recorded vitals, Training metrics, body measurements, recent activities, laps, jumps, swim lengths, workout charts, and saved routes. Exact activity locations, nearby activity search, and activity maps are available only after you enable precise activity locations for a new chat.',
       },
       {
         question: 'Does the Assistant send raw files or route locations to Gemini?',
@@ -688,9 +685,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     closingTitle: 'Start with today, then ask why',
-    closingCopy: 'Open with a daily report or a focused sleep, Training, measurement, activity, or saved-route question, then use follow-ups and deterministic visuals to compare the evidence over time.',
+    closingCopy: 'Open with a daily report or a focused sleep, Training, measurement, activity, or saved-route question, then use follow-ups, charts, and maps to compare the evidence over time.',
     closingActions: [
-      routeAction('Open Assistant', '/ai-insights', 'flat', 'arrow_forward'),
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Assistant Help', '/help', 'stroked', undefined, 'ai-insights'),
       routeAction('External MCP Overview', '/features/mcp-server', 'stroked', 'extension'),
     ],
@@ -700,7 +697,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
     eyebrow: 'Workout File Analyzer',
     title: 'FIT, GPX, TCX File Analyzer',
-    description: `Use Quantified Self as a FIT file analyzer, GPX file analyzer, and TCX workout file analyzer with maps, charts, source-file context, exports, reprocessing, and free-plan manual uploads for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
+    description: 'Upload FIT, GPX, TCX, JSON, or SML workouts to inspect maps, charts, statistics, source files, exports, and reprocessing.',
     h1: 'Analyze FIT, GPX, and TCX workout files',
     intro: `Upload FIT, GPX, TCX, JSON, or SML activity files and turn them into maps, charts, stats, exports, and source-file context. Manual uploads and core analysis are available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
     chips: ['FIT file analyzer', 'GPX file analyzer', 'TCX file analyzer', 'Maps', 'Charts', 'Free uploads'],
@@ -766,8 +763,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Yes. Quantified Self supports GPX and TCX activity uploads alongside FIT, JSON, and SML files when the file can be parsed as a workout activity.',
       },
       {
-        question: 'Is this a public FIT or GPX file viewer?',
-        answer: 'No. Quantified Self is an account-based training dashboard. Imported files support analysis, exports, reprocessing, and comparisons without becoming a public upload.',
+        question: 'Can I use Quantified Self as a FIT or GPX file viewer?',
+        answer: 'Yes. Upload FIT, GPX, TCX, JSON, or SML workout files to inspect their maps, charts, statistics, and recorded metrics. Imported files remain available for exports, reprocessing, and comparison.',
       },
       {
         question: 'Is workout file analysis free?',
@@ -787,7 +784,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     eyebrow: 'Route Files',
     title: 'FIT and GPX Route Files with Multi-Provider Delivery',
-    description: `Save FIT course files and GPX route or track files in a route library, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, import Suunto routes into Routes, and use free-plan storage for up to ${STARTER_ROUTE_LIMIT} saved routes.`,
+    description: 'Save FIT courses and GPX routes, import Suunto routes, and send saved routes to Garmin Connect, Suunto, Wahoo, or COROS.',
     h1: 'Save FIT and GPX route files, then send them to connected services',
     intro: `Upload route-only FIT course files or GPX route/track files, keep the original file attached, send saved routes to Suunto, Garmin Connect, Wahoo, or COROS, and import new or existing Suunto routes into one dashboard. Saved-route storage is free for up to ${STARTER_ROUTE_LIMIT} routes; provider delivery requires Pro and a connected destination account, and Garmin also requires Course Import permission.`,
     chips: ['FIT course files', 'GPX route/track files', 'Suunto route sync', 'Garmin course send', 'Wahoo route send', 'COROS route send'],

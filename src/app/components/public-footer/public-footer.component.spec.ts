@@ -52,7 +52,11 @@ describe('PublicFooterComponent', () => {
     expect(text).toContain('support@quantified-self.io');
     expect(text).toContain('contact@quantified-self.io');
     expect(text).not.toMatch(/\bprivate\b/i);
-    expect(footer?.querySelector('a[href="mailto:support@quantified-self.io"]')).toBeTruthy();
-    expect(footer?.querySelector('a[href="mailto:contact@quantified-self.io"]')).toBeTruthy();
+    const supportLink = footer?.querySelector('a[href="mailto:support@quantified-self.io"]');
+    const contactLink = footer?.querySelector('a[href="mailto:contact@quantified-self.io"]');
+    expect(supportLink).toBeTruthy();
+    expect(supportLink?.getAttribute('target')).toBeNull();
+    expect(contactLink).toBeTruthy();
+    expect(contactLink?.getAttribute('target')).toBeNull();
   });
 });

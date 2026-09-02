@@ -83,10 +83,7 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
     expect(text).toContain('Garmin Fenix 9');
   });
 
-  it('can move the chart comparison ahead of the workflow for homepage use', () => {
-    fixture.componentRef.setInput('chartsFirst', true);
-    fixture.detectChanges();
-
+  it('leads with the chart comparison before explaining the merge workflow', () => {
     const titles = Array.from(fixture.nativeElement.querySelectorAll('.compact-feature-row__title'))
       .map((title: Element) => title.textContent?.trim());
 

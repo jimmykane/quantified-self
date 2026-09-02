@@ -239,38 +239,53 @@ describe('AppUserSettingsQueryService', () => {
         });
     });
 
-    describe('Health workspace range', () => {
-        it('writes the selected range to the client-owned Health workspace settings', async () => {
+    describe('Health workspace preferences', () => {
+        it('writes the selected metric and range as one client-owned Health workspace setting', async () => {
             const user = createMockUser({ uid: 'test-uid' });
             mockUserSubject.next(user);
 
-            await service.updateHealthWorkspaceRange('test-uid', 'today');
+            await service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'sleep',
+                range: 'today',
+            });
 
             expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
                 settings: {
                     appSettings: {
-                        healthWorkspace: { range: 'today' },
+                        healthWorkspace: { metric: 'sleep', range: 'today' },
                     },
                 },
             });
         });
 
-        it('rejects unsupported ranges and queued writes after an account switch', async () => {
+        it('rejects unsupported selections and queued writes after an account switch', async () => {
             mockUserSubject.next(createMockUser({ uid: 'different-user' }));
 
-            await expect(service.updateHealthWorkspaceRange('test-uid', 'all' as never))
-                .rejects.toThrow('supported Health range');
-            await expect(service.updateHealthWorkspaceRange('test-uid', '30d'))
+            await expect(service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'not-a-metric' as never,
+                range: '30d',
+            })).rejects.toThrow('supported Health metric and range');
+            await expect(service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'sleep',
+                range: 'all' as never,
+            })).rejects.toThrow('supported Health metric and range');
+            await expect(service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'sleep',
+                range: '30d',
+            }))
                 .rejects.toThrow('account changed');
 
             expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
         });
 
-        it('propagates Health range persistence failures', async () => {
+        it('propagates Health preference persistence failures', async () => {
             mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
             mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('offline'));
 
-            await expect(service.updateHealthWorkspaceRange('test-uid', '1y'))
+            await expect(service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'resting_heart_rate',
+                range: '1y',
+            }))
                 .rejects.toThrow('offline');
         });
     });

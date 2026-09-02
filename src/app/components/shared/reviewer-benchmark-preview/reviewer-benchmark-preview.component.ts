@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { AppThemes, ChartCursorBehaviours, XAxisTypes } from '@sports-alliance/sports-lib';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
@@ -22,7 +22,6 @@ import {
 export class ReviewerBenchmarkPreviewComponent {
   private readonly themeService = inject(AppThemeService);
 
-  readonly chartsFirst = input(false);
   readonly darkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
   readonly heartRatePanel = REVIEWER_BENCHMARK_HEART_RATE_PANEL;
   readonly altitudePanel = REVIEWER_BENCHMARK_ALTITUDE_PANEL;

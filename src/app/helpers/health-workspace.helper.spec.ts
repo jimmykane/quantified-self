@@ -30,6 +30,7 @@ import {
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
   navigateHealthWorkspaceWindow,
+  normalizeHealthWorkspaceMetric,
   normalizeHealthWorkspaceRange,
   resolveHealthWorkspaceWindow,
   resolveSleepReferenceValue,
@@ -188,6 +189,13 @@ describe('Health workspace helpers', () => {
     expect(normalizeHealthWorkspaceRange(null)).toBe('30d');
   });
 
+  it('normalizes persisted Health metrics and falls back invalid settings to Resting heart rate', () => {
+    expect(normalizeHealthWorkspaceMetric('sleep')).toBe('sleep');
+    expect(normalizeHealthWorkspaceMetric(HEALTH_METRIC_IDS.Steps)).toBe(HEALTH_METRIC_IDS.Steps);
+    expect(normalizeHealthWorkspaceMetric('unknown_metric')).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
+    expect(normalizeHealthWorkspaceMetric(null)).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
+  });
+
   it('builds bounded windows and older/newer navigation without moving into the future', () => {
     const state = { metric: HEALTH_METRIC_IDS.HeartRate, range: '14d' as const, endDate: '2026-08-30' };
     expect(resolveHealthWorkspaceWindow(state, '2026-08-30')).toMatchObject({
@@ -205,6 +213,13 @@ describe('Health workspace helpers', () => {
 
   it('loads Today as one sample-enabled day and pages it one day at a time', () => {
     const state = { metric: HEALTH_METRIC_IDS.HeartRate, range: 'today' as const, endDate: '2026-08-30' };
+    const explicitTodayLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date('2026-08-30T00:00:00.000Z'));
 
     expect(resolveHealthWorkspaceWindow(state, '2026-08-30')).toMatchObject({
       startDate: '2026-08-30',
@@ -214,11 +229,18 @@ describe('Health workspace helpers', () => {
       dayCount: 1,
       includeSamples: true,
       canNavigateNewer: false,
-      label: 'Today',
+      label: `Today · ${explicitTodayLabel}`,
     });
     const older = navigateHealthWorkspaceWindow(state, 'older', '2026-08-30');
+    const explicitOlderLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date('2026-08-29T00:00:00.000Z'));
     expect(older.endDate).toBe('2026-08-29');
-    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).not.toContain('–');
+    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).toBe(explicitOlderLabel);
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
   });
 

@@ -31,16 +31,21 @@ import {
 } from '@shared/activity-health';
 import { SleepSession, normalizeSleepProvider } from '@shared/sleep';
 import {
+  APP_HEALTH_WORKSPACE_METRICS,
   APP_HEALTH_WORKSPACE_RANGES,
+  AppHealthWorkspaceMetric,
   AppHealthWorkspaceRange,
 } from '../models/app-user.interface';
 
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
-export type HealthWorkspaceMetricSelection = 'sleep' | HealthMetricId;
+export type HealthWorkspaceMetricSelection = AppHealthWorkspaceMetric;
 
 export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRate;
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
+const HEALTH_WORKSPACE_METRICS = new Set<HealthWorkspaceMetricSelection>([
+  ...APP_HEALTH_WORKSPACE_METRICS,
+]);
 
 export interface HealthWorkspaceRouteState {
   metric: HealthWorkspaceMetricSelection;
@@ -225,6 +230,12 @@ export function normalizeHealthWorkspaceRange(value: unknown): HealthWorkspaceRa
     : HEALTH_WORKSPACE_DEFAULT_RANGE;
 }
 
+export function normalizeHealthWorkspaceMetric(value: unknown): HealthWorkspaceMetricSelection {
+  return HEALTH_WORKSPACE_METRICS.has(value as HealthWorkspaceMetricSelection)
+    ? value as HealthWorkspaceMetricSelection
+    : HEALTH_WORKSPACE_DEFAULT_METRIC;
+}
+
 export function healthWorkspaceRangeDays(range: HealthWorkspaceRange): number {
   switch (range) {
     case 'today': return 1;
@@ -246,6 +257,7 @@ export function resolveHealthWorkspaceWindow(
   const nextEndDate = new Date(endDayMs + DAY_MS).toISOString().slice(0, 10);
   const startTimeMs = localCalendarDateStartMs(startDate) ?? startDayMs;
   const endTimeMs = (localCalendarDateStartMs(nextEndDate) ?? (endDayMs + DAY_MS)) - 1;
+  const explicitWindowLabel = formatWindowLabel(startDayMs, endDayMs);
   return {
     ...state,
     startDate,
@@ -255,8 +267,8 @@ export function resolveHealthWorkspaceWindow(
     includeSamples: dayCount <= 30,
     canNavigateNewer: state.endDate < todayDate,
     label: state.range === 'today' && state.endDate === todayDate
-      ? 'Today'
-      : formatWindowLabel(startDayMs, endDayMs),
+      ? `Today · ${explicitWindowLabel}`
+      : explicitWindowLabel,
   };
 }
 
@@ -874,10 +886,24 @@ function humanize(value: string): string {
 }
 
 function formatWindowLabel(startMs: number, endMs: number): string {
-  const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  const startLabel = formatter.format(new Date(startMs));
-  const endLabel = formatter.format(new Date(endMs));
-  return startLabel === endLabel ? startLabel : `${startLabel} – ${endLabel}`;
+  const rangeFormatter = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  const startLabel = rangeFormatter.format(new Date(startMs));
+  const endLabel = rangeFormatter.format(new Date(endMs));
+  if (startLabel !== endLabel) {
+    return `${startLabel} – ${endLabel}`;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(startMs));
 }
 
 function formatDate(timestampMs: number): string {

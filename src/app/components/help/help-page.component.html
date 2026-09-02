@@ -60,8 +60,8 @@
                     mat-stroked-button
                     class="section-link"
                     [href]="link.target"
-                    target="_blank"
-                    rel="noopener noreferrer">
+                    [attr.target]="link.kind === 'external' ? '_blank' : null"
+                    [attr.rel]="link.kind === 'external' ? 'noopener noreferrer' : null">
                     <mat-icon>{{ link.icon }}</mat-icon>
                     <span>{{ link.label }}</span>
                   </a>
@@ -85,7 +85,7 @@
             <p class="mat-body-medium support-guidance">Include the service or file type, activity date, and a screenshot or exact error where possible.</p>
             @for (action of actions; track action.id) {
               @if (action.id === 'email-support') {
-                <a mat-flat-button class="support-contact" [href]="action.target" target="_blank" rel="noopener noreferrer">
+                <a mat-flat-button class="support-contact" [href]="action.target">
                   <mat-icon>{{ action.icon }}</mat-icon>
                   <span>{{ action.label }}</span>
                 </a>
@@ -109,7 +109,12 @@
               <span class="quick-action-arrow"><mat-icon>arrow_forward</mat-icon></span>
             </a>
           } @else {
-            <a mat-stroked-button class="quick-action" [href]="action.target" target="_blank" rel="noopener noreferrer">
+            <a
+              mat-stroked-button
+              class="quick-action"
+              [href]="action.target"
+              [attr.target]="action.kind === 'external' ? '_blank' : null"
+              [attr.rel]="action.kind === 'external' ? 'noopener noreferrer' : null">
               <span class="quick-action-icon"><mat-icon>{{ action.icon }}</mat-icon></span>
               <span class="quick-action-copy">
                 <span class="quick-action-label">{{ action.label }}</span>
@@ -207,7 +212,7 @@
               <p class="mat-body-medium support-guidance">Include the service or file type, activity date, and a screenshot or exact error where possible.</p>
               @for (action of actions; track action.id) {
                 @if (action.id === 'email-support') {
-                  <a mat-flat-button class="support-contact" [href]="action.target" target="_blank" rel="noopener noreferrer">
+                  <a mat-flat-button class="support-contact" [href]="action.target">
                     <mat-icon>{{ action.icon }}</mat-icon>
                     <span>{{ action.label }}</span>
                   </a>

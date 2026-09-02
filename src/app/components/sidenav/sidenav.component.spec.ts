@@ -96,14 +96,15 @@ describe('SideNavComponent', () => {
         expect(Array.from(sectionHeaders).map((header: Element) => header.textContent?.trim())).not.toContain('Navigation');
     });
 
-    it('offers the application source under the repository license', () => {
+    it('offers the application source without license metadata', () => {
         fixture.detectChanges();
 
         const sourceLink = fixture.nativeElement.querySelector('.source-code-cta') as HTMLAnchorElement | null;
 
         expect(sourceLink).toBeTruthy();
         expect(sourceLink?.href).toBe('https://github.com/jimmykane/quantified-self');
-        expect(sourceLink?.textContent).toContain('Source code & AGPL-3.0-only');
+        expect(sourceLink?.textContent).toContain('Source code');
+        expect(sourceLink?.textContent).not.toMatch(/AGPL|licen[cs]e/i);
         expect(sourceLink?.target).toBe('_blank');
         expect(sourceLink?.rel).toBe('noopener noreferrer');
     });
@@ -163,14 +164,22 @@ describe('SideNavComponent', () => {
         openSpy.mockRestore();
     });
 
-    it('should open support and bug-report destinations through Angular handlers', () => {
+    it('renders contact support as a same-context email link', () => {
+        fixture.detectChanges();
+
+        const supportLink = fixture.nativeElement.querySelector('a[aria-label="Contact Support"]') as HTMLAnchorElement | null;
+
+        expect(supportLink?.getAttribute('href')).toBe('mailto:support@quantified-self.io');
+        expect(supportLink?.getAttribute('target')).toBeNull();
+        expect(supportLink?.getAttribute('rel')).toBeNull();
+    });
+
+    it('should open the bug-report destination through its Angular handler', () => {
         const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-        component.contactSupport();
         component.reportBug();
 
-        expect(openSpy).toHaveBeenNthCalledWith(1, 'mailto:support@quantified-self.io');
-        expect(openSpy).toHaveBeenNthCalledWith(2, 'https://github.com/jimmykane/quantified-self/issues');
+        expect(openSpy).toHaveBeenCalledWith('https://github.com/jimmykane/quantified-self/issues');
         openSpy.mockRestore();
     });
 

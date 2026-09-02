@@ -33,6 +33,7 @@ export interface SupportedActivitiesRouteData {
 }
 
 export const SUPPORTED_ACTIVITIES_URL = `https://quantified-self.io/${SUPPORTED_ACTIVITIES_PATH}`;
+export const SUPPORTED_ACTIVITIES_DESCRIPTION = 'Browse the activity types Quantified Self recognizes and see which maps, metrics, laps, charts, and sport-specific details may be available.';
 
 export const SUPPORTED_ACTIVITY_FAMILIES: readonly SupportedActivityFamily[] = getActivityTypeGroupCatalog().map((entry) => {
   const gradient = AppActivityTypeGroupGradients[entry.id];
@@ -73,12 +74,12 @@ export const SUPPORTED_ACTIVITIES_ROUTE_DATA: SupportedActivitiesRouteData = {
   title: 'Supported Activity Types',
   preload: true,
   animation: 'Features',
-  description: 'Browse the activity types Quantified Self recognizes. The metrics, maps, laps, charts, and sport-specific details shown for an activity depend on data from its device, connected service, or uploaded file.',
+  description: SUPPORTED_ACTIVITIES_DESCRIPTION,
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
     name: 'Supported Activity Types',
-    description: 'Browse the activity types Quantified Self recognizes. The metrics, maps, laps, charts, and sport-specific details shown for an activity depend on data from its device, connected service, or uploaded file.',
+    description: SUPPORTED_ACTIVITIES_DESCRIPTION,
     url: SUPPORTED_ACTIVITIES_URL,
     inLanguage: 'en',
     isPartOf: {
