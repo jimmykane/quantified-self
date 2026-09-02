@@ -110,7 +110,7 @@ export const COMPARISON_FAQ_ITEMS: readonly ComparisonFaqItem[] = [
   },
   {
     question: 'Is Quantified Self a FIT file viewer?',
-    answer: 'Quantified Self keeps original FIT, TCX, GPX, JSON, and SML activity files useful after import, including benchmark and reprocessing workflows, but it is an account-based dashboard rather than a standalone public file viewer.',
+    answer: 'Yes. Quantified Self works as a FIT and workout-file viewer: upload FIT, TCX, GPX, JSON, or SML activities to inspect their maps, charts, statistics, and recorded metrics. Imported files remain available for exports, reprocessing, and side-by-side benchmark comparisons.',
   },
   {
     question: 'What does a sports-device benchmark report include?',

@@ -67,7 +67,8 @@ describe('workout-data-comparison-page.content', () => {
     expect(visibleCopy).toContain('CEP50, CEP95, RMSE');
     expect(visibleCopy).toContain('Stable device colors and review tags');
     expect(visibleCopy).toContain('YouTube videos, blog posts, coaching notes, firmware tests, and QA');
-    expect(visibleCopy).toContain('account-based dashboard rather than a standalone public file viewer');
+    expect(visibleCopy).toContain('works as a FIT and workout-file viewer');
+    expect(visibleCopy).toContain('maps, charts, statistics, and recorded metrics');
     expect(visibleCopy).not.toMatch(/\bprivate\b/i);
     expect(visibleCopy).toContain('Manual uploads, core analysis tools, and benchmark comparisons are available on the free plan for up to 100 activities');
     expect(visibleCopy).toContain('Automatic service sync and higher activity limits require a paid plan');
