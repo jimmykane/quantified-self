@@ -351,6 +351,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/calendar</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/plans</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/health</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');

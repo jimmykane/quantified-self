@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { of } from 'rxjs';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
+import { TrainingPlansService } from '../../../services/training-plans.service';
 import {
   CalendarMonthPickerBottomSheetComponent,
   type CalendarMonthPickerBottomSheetData,
@@ -23,6 +24,16 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
         { provide: MatBottomSheetRef, useValue: { dismiss } },
         { provide: MatBottomSheet, useValue: { open: vi.fn() } },
         { provide: ActivityCalendarService, useValue: { watchEvents: vi.fn().mockReturnValue(of([])) } },
+        {
+          provide: TrainingPlansService,
+          useValue: {
+            watchSchedule: vi.fn().mockReturnValue(of({
+              state: { schemaVersion: 1, activePlanId: null, revision: 0, currentWorkoutCount: 0, updatedAtMs: 0 },
+              plans: [],
+              workouts: [],
+            })),
+          },
+        },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(CalendarMonthPickerBottomSheetComponent);

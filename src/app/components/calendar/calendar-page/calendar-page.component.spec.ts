@@ -16,12 +16,14 @@ import {
 } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import type { TimelineNote } from '@shared/timeline-notes';
+import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { AppTimelineNotesService } from '../../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 import { CalendarPageComponent } from './calendar-page.component';
 
@@ -57,6 +59,7 @@ describe('CalendarPageComponent', () => {
   const notesService = { uid: signal<string | null>('user-1'), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), invalidate: vi.fn(), isOwner: (uid: string) => notesService.uid() === uid };
   const haptics = { selection: vi.fn() };
   const dialogs = { open: vi.fn() };
+  let watchSchedule: ReturnType<typeof vi.fn>;
   let dayDetailsNavigation: {
     restorationFor: ReturnType<typeof vi.fn>;
     consumeRestoration: ReturnType<typeof vi.fn>;
@@ -72,6 +75,7 @@ describe('CalendarPageComponent', () => {
     notesService.loadRange.mockReset().mockResolvedValue({ notes: [], incomplete: null });
     notesService.invalidate.mockImplementation(() => notesService.changes$.next());
     haptics.selection.mockClear(); dialogs.open.mockClear();
+    watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
       consumeRestoration: vi.fn().mockReturnValue(true),
@@ -86,6 +90,7 @@ describe('CalendarPageComponent', () => {
         } },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
+        { provide: TrainingPlansService, useValue: { watchSchedule } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
         { provide: AppTimelineNotesService, useValue: notesService },
         { provide: AppHapticsService, useValue: haptics },
@@ -111,7 +116,7 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.qs-page-header__leading-icon')?.textContent?.trim())
       .toBe('calendar_month');
     expect(fixture.nativeElement.querySelector('.calendar-progress-slot')).toBeTruthy();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
     const summaryMetrics = [...fixture.nativeElement.querySelectorAll('.calendar-period-summary-metric')]
       .map((metric: HTMLElement) => ({
         label: metric.querySelector('.calendar-period-summary-label span')?.textContent?.trim(),
@@ -285,6 +290,35 @@ describe('CalendarPageComponent', () => {
     }));
   });
 
+  it('opens empty days and supplies standalone plus active-plan workouts separately', async () => {
+    watchSchedule.mockReturnValue(of(trainingSchedule()));
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const componentBottomSheet = (fixture.componentInstance as unknown as {
+      bottomSheet: MatBottomSheet;
+    }).bottomSheet;
+    const componentOpen = vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
+    const plannedDay = fixture.componentInstance.calendarModel().months[0].days
+      .find(day => day.dateKey === '2026-08-04')!;
+
+    fixture.componentInstance.openDay(plannedDay);
+
+    expect(fixture.nativeElement.querySelectorAll('[aria-label*="planned workout"]')).not.toHaveLength(0);
+    expect(componentOpen).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
+      data: expect.objectContaining({
+        day: expect.objectContaining({ dateKey: '2026-08-04', eventCount: 0 }),
+        plannedWorkouts: [
+          expect.objectContaining({ workout: expect.objectContaining({ id: 'active-workout' }) }),
+          expect.objectContaining({ workout: expect.objectContaining({ id: 'standalone-workout' }) }),
+        ],
+      }),
+    }));
+    expect((componentOpen.mock.calls[0][1] as { data: { plannedWorkouts: Array<{ workout: { id: string } }> } })
+      .data.plannedWorkouts.map(entry => entry.workout.id)).not.toContain('inactive-workout');
+  });
+
   it('reopens day details after returning from an event route', async () => {
     const restoration = { sourceUrl: '/', dateKey: '2026-08-03' };
     dayDetailsNavigation.restorationFor.mockReturnValue(restoration);
@@ -356,7 +390,7 @@ describe('CalendarPageComponent', () => {
     fixture.componentInstance.retry(); notesService.changes$.next();
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Retry notes');
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
   });
 
   it('shows the selected month empty state when only an adjacent grid day has an activity', async () => {
@@ -367,7 +401,7 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.hasEvents()).toBe(false);
-    expect(fixture.nativeElement.textContent).toContain('No activities in August 2026');
+    expect(fixture.nativeElement.textContent).toContain('No completed activities in August 2026');
     expect(fixture.nativeElement.querySelector('.calendar-status-announcement')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('.calendar-status:not(.calendar-status--error)')).toBeNull();
   });
@@ -424,6 +458,83 @@ describe('CalendarPageComponent', () => {
     }
   });
 });
+
+function emptySchedule(): CurrentTrainingScheduleV1 {
+  return {
+    state: { schemaVersion: 1, activePlanId: null, revision: 0, currentWorkoutCount: 0, updatedAtMs: 0 },
+    plans: [],
+    workouts: [],
+  };
+}
+
+function trainingSchedule(): CurrentTrainingScheduleV1 {
+  const structure = {
+    version: 1 as const,
+    sport: ActivityTypes.Running,
+    nodes: [{
+      kind: 'step' as const,
+      id: 'steady',
+      purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: 1800 },
+      targets: [],
+    }],
+  };
+  return {
+    state: { schemaVersion: 1, activePlanId: 'active-plan', revision: 1, currentWorkoutCount: 3, updatedAtMs: 1 },
+    plans: [
+      {
+        schemaVersion: 1,
+        id: 'active-plan',
+        name: 'Active build',
+        lifecycle: 'active',
+        startLocalDate: '2026-08-01',
+        endLocalDate: '2026-08-31',
+        revision: 1,
+        lastCheckpointRevision: 1,
+        workoutCount: 1,
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      },
+      {
+        schemaVersion: 1,
+        id: 'inactive-plan',
+        name: 'Paused build',
+        lifecycle: 'paused',
+        startLocalDate: '2026-08-01',
+        endLocalDate: '2026-08-31',
+        revision: 1,
+        lastCheckpointRevision: 1,
+        workoutCount: 1,
+        createdAtMs: 2,
+        updatedAtMs: 2,
+      },
+    ],
+    workouts: [
+      calendarWorkout('active-workout', 'active-plan', structure),
+      calendarWorkout('standalone-workout', null, structure),
+      calendarWorkout('inactive-workout', 'inactive-plan', structure),
+    ],
+  };
+}
+
+function calendarWorkout(
+  id: string,
+  planId: string | null,
+  structure: WorkoutStructureV1,
+) {
+  return {
+    schemaVersion: 1 as const,
+    id,
+    planId,
+    localDate: '2026-08-04',
+    lifecycle: 'planned' as const,
+    title: id,
+    structure,
+    revision: 1,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
+}
 
 function createEvent(
   startDate = new Date(2026, 7, 3, 8),

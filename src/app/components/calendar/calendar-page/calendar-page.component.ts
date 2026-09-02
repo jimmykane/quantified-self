@@ -11,6 +11,11 @@ import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import {
+  TrainingPlansService,
+  selectCalendarVisibleScheduledWorkouts,
+  type CurrentTrainingScheduleV1,
+} from '../../../services/training-plans.service';
+import {
   type ActivityCalendarDayViewModel,
   type ActivityCalendarRouteState,
   type ActivityCalendarView,
@@ -36,10 +41,19 @@ import {
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
 import { TimelineNotesWorkspaceComponent } from '../../timeline-notes/timeline-notes-workspace.component';
 import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
+import {
+  buildPlannedWorkoutCalendarOverlay,
+  type PlannedWorkoutCalendarOverlay,
+} from '../../../helpers/planned-workout-calendar.helper';
 
 interface CalendarEventsState {
   status: 'loading' | 'ready' | 'error';
   events: EventInterface[];
+}
+
+interface CalendarPlansState {
+  status: 'loading' | 'ready' | 'error';
+  schedule: CurrentTrainingScheduleV1 | null;
 }
 
 interface CalendarViewOption {
@@ -73,6 +87,7 @@ export class CalendarPageComponent {
   private readonly router = inject(Router);
   private readonly userService = inject(AppUserService);
   private readonly calendarService = inject(ActivityCalendarService);
+  private readonly plansService = inject(TrainingPlansService);
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
   private readonly locale = inject(LOCALE_ID);
@@ -115,6 +130,22 @@ export class CalendarPageComponent {
       );
     }),
   ), { initialValue: { status: 'loading', events: [] } as CalendarEventsState });
+  readonly plansState = toSignal(this.userService.user$.pipe(
+    filter((user): user is AppUserInterface => !!user?.uid),
+    switchMap(user => this.plansService.watchSchedule(user.uid).pipe(
+      map(schedule => ({ status: 'ready', schedule }) as CalendarPlansState),
+      startWith({ status: 'loading', schedule: null } as CalendarPlansState),
+      catchError(() => of({ status: 'error', schedule: null } as CalendarPlansState)),
+    )),
+  ), { initialValue: { status: 'loading', schedule: null } as CalendarPlansState });
+  readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
+    const schedule = this.plansState().schedule;
+    if (!schedule) return {};
+    return buildPlannedWorkoutCalendarOverlay(
+      selectCalendarVisibleScheduledWorkouts(schedule),
+      schedule.plans,
+    );
+  });
   readonly calendarModel = computed(() => {
     const state = this.routeState();
     return buildActivityCalendarViewModel(this.eventState().events, {
@@ -188,7 +219,7 @@ export class CalendarPageComponent {
   readonly hasEvents = computed(() => this.calendarModel().months.some(month => (
     month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)
   )));
-  readonly emptyStateLabel = computed(() => `No activities in ${this.calendarModel().periodLabel}`);
+  readonly emptyStateLabel = computed(() => `No completed activities in ${this.calendarModel().periodLabel}`);
   private readonly restoreDayDetailsEffect = effect(() => {
     const restoration = this.dayDetailsNavigation.restorationFor(this.router.url);
     if (!restoration || this.eventState().status !== 'ready') {
@@ -204,7 +235,7 @@ export class CalendarPageComponent {
     if (!this.dayDetailsNavigation.consumeRestoration(restoration)) {
       return;
     }
-    if (day?.eventCount) {
+    if (day) {
       this.openDay(day);
     }
   });
@@ -246,7 +277,7 @@ export class CalendarPageComponent {
 
   openDay(day: ActivityCalendarDayViewModel): void {
     const userId = `${this.currentUser()?.uid || ''}`.trim();
-    if ((!day.eventCount && !this.notesByDate().has(day.dateKey)) || !userId) {
+    if (!userId) {
       return;
     }
     // Keep an open sheet's notes live and owner-fenced through refreshes, edits, and account changes.
@@ -267,6 +298,9 @@ export class CalendarPageComponent {
             status: this.currentUser()?.uid === userId && currentDay ? this.eventState().status : 'error',
           };
         }),
+        plannedWorkouts: this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
+        plannedWorkoutsSource: () => this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
+        plannedWorkoutsStatusSource: () => this.plansState().status,
       },
     });
     sheet.afterDismissed().pipe(takeUntilDestroyed(this.destroy)).subscribe(noteId => {

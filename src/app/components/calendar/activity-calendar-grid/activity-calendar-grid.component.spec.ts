@@ -7,16 +7,16 @@ import { ActivityCalendarGridComponent } from './activity-calendar-grid.componen
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
+import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
-  it.each(['week', 'month', 'year'] as const)('makes note-only days accessible in %s view without activity markers', async view => {
+  it.each(['week', 'month', 'year'] as const)('marks note-only days without activity markers in %s view', async view => {
     const fixture = await renderGrid(view, false, []);
     const note: TimelineNote = { id: 'a'.repeat(64), category: 'vacation', title: 'Vacation', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button').length).toBeGreaterThan(0);
     fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
     fixture.detectChanges();
-    const button = fixture.nativeElement.querySelector('.activity-calendar-day-button') as HTMLButtonElement;
-    expect(button.getAttribute('aria-label')).toContain('1 Timeline note');
+    const button = fixture.nativeElement.querySelector('[aria-label*="1 Timeline note"]') as HTMLButtonElement;
     expect(button.querySelector('.activity-calendar-note-indicator')?.textContent).toBe('beach_access');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(1);
     expect(button.querySelector('.activity-calendar-marker')).toBeNull();
@@ -27,7 +27,7 @@ describe('ActivityCalendarGridComponent', () => {
     expect(selected.mock.calls[0][0].eventCount).toBe(0);
     expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
     fixture.componentRef.setInput('timelineNotesByDate', new Map()); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(0);
   });
   it('shows the selected color/category, keeping mixed-note days neutral and grouped', async () => {
     const fixture = await renderGrid('month', false, []);
@@ -42,20 +42,55 @@ describe('ActivityCalendarGridComponent', () => {
     expect(icon().textContent).toBe('event_note');
     expect(icon().style.color).toBe('');
   });
-  it('renders activity days as buttons and emits the selected day', async () => {
+
+  it('renders every visible day as a button and emits activity and empty days', async () => {
     const fixture = await renderGrid('month', false, [
       createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
     ]);
     const selected = vi.fn();
     fixture.componentInstance.daySelected.subscribe(selected);
-    const activeDay = fixture.debugElement.query(By.css('.activity-calendar-day-button'));
+    const buttons = fixture.debugElement.queryAll(By.css('.activity-calendar-day-button'));
+    const activityDayIndex = fixture.componentInstance.model.months[0].days
+      .findIndex(day => day.dateKey === '2026-08-03');
+    const emptyDayIndex = fixture.componentInstance.model.months[0].days
+      .findIndex(day => day.dateKey === '2026-08-04');
 
-    activeDay.triggerEventHandler('click');
+    buttons[activityDayIndex].triggerEventHandler('click');
+    buttons[emptyDayIndex].triggerEventHandler('click');
 
-    expect(selected).toHaveBeenCalledOnce();
+    expect(selected).toHaveBeenCalledTimes(2);
     expect(selected.mock.calls[0][0].dateKey).toBe('2026-08-03');
-    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
+    expect(selected.mock.calls[1][0].dateKey).toBe('2026-08-04');
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledTimes(2);
+    expect(buttons).toHaveLength(42);
+  });
+
+  it('renders planned and skipped workout markers without changing activity markers', async () => {
+    const plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {
+      '2026-08-03': {
+        entries: [],
+        visibleEntries: [
+          { workout: createWorkout('tempo', 'planned'), planName: 'Autumn build' },
+          { workout: createWorkout('rest', 'skipped'), planName: null },
+        ],
+        overflowCount: 1,
+        hasSkipped: true,
+        ariaLabel: '2 planned workouts, 1 skipped workout',
+      },
+    };
+    const fixture = await renderGrid('month', false, [
+      createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
+    ], DaysOfTheWeek.Monday, plannedWorkoutsByDate);
+    const plannedMarkers = fixture.nativeElement.querySelector('.planned-workout-markers');
+    const activityMarkers = fixture.nativeElement.querySelectorAll('.activity-calendar-marker');
+
+    expect(plannedMarkers.classList).toContain('planned-workout-markers--skipped');
+    expect([...plannedMarkers.querySelectorAll('mat-icon')].map((icon: Element) => icon.textContent?.trim()))
+      .toEqual(['event_note', 'event_busy']);
+    expect(plannedMarkers.textContent).toContain('+1');
+    expect(activityMarkers).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('[aria-label*="2 planned workouts, 1 skipped workout"]'))
+      .toBeTruthy();
   });
 
   it('renders same-center markers for compact calendars', async () => {
@@ -207,6 +242,7 @@ async function renderGrid(
   compact: boolean,
   events: EventInterface[],
   startOfWeek: DaysOfTheWeek | number = DaysOfTheWeek.Monday,
+  plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {},
 ) {
   const fixture = await import('@angular/core/testing').then(async ({ TestBed }) => {
     await TestBed.configureTestingModule({
@@ -231,8 +267,34 @@ async function renderGrid(
     now: new Date(2026, 7, 3),
   }));
   fixture.componentRef.setInput('compact', compact);
+  fixture.componentRef.setInput('plannedWorkoutsByDate', plannedWorkoutsByDate);
   fixture.detectChanges();
   return fixture;
+}
+
+function createWorkout(id: string, lifecycle: 'planned' | 'skipped') {
+  return {
+    schemaVersion: 1 as const,
+    id,
+    planId: id === 'tempo' ? 'plan-1' : null,
+    localDate: '2026-08-03',
+    lifecycle,
+    title: id,
+    structure: {
+      version: 1 as const,
+      sport: ActivityTypes.Running,
+      nodes: [{
+        kind: 'step' as const,
+        id: 'steady',
+        purpose: 'work' as const,
+        ending: { kind: 'time' as const, seconds: 1800 },
+        targets: [],
+      }],
+    },
+    revision: 1,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
 }
 
 function createEvent(

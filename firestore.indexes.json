@@ -11,6 +11,48 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "scheduledWorkouts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "planId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "localDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lifecycle",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "planId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lifecycle",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "activitySyncQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2361,6 +2403,12 @@
       "collectionGroup": "healthSyncState",
       "fieldPath": "*",
       "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "mutationReceipts",
+      "fieldPath": "expireAt",
+      "ttl": true,
       "indexes": []
     }
   ]
