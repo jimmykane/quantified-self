@@ -9,6 +9,8 @@ import {
   resolveEChartsTooltipTriggerOn,
 } from './echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
+import { HEALTH_METRIC_IDS, HealthMetricId } from '@shared/health';
+import { AppDataColors } from '../services/color/app.data.colors';
 import { HealthWorkspaceSeries, HealthWorkspaceSeriesPoint, formatHealthValue } from './health-workspace.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
@@ -56,7 +58,8 @@ export function buildHealthMetricEChartsOption(
   const isPoint = model.series.chartKind === 'point';
   const isBar = model.series.chartKind === 'bar';
   const pointsByTimestamp = new Map(model.displayedPoints.map(point => [point.timestampMs, point]));
-  const seriesColor = style.trendLineColor;
+  const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
+  const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
   const option = {
     animation: false,
     backgroundColor: 'transparent',
@@ -95,7 +98,12 @@ export function buildHealthMetricEChartsOption(
           rows: [{
             label: 'Reading',
             value: formatHealthValue(point.value, model.series.unit),
-            markerColor: seriesColor,
+            markerColor: resolveHealthValueColor(
+              model.series.metricId,
+              point.value,
+              seriesColor,
+              style.trendLineColor,
+            ),
           }],
           notes: point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : [],
           stackHeader: true,
@@ -145,6 +153,22 @@ export function buildHealthMetricEChartsOption(
           formatter: (value: number) => formatAxisValue(value, model.series.unit),
         },
       },
+    visualMap: useStressStateColors
+      ? {
+        show: false,
+        seriesIndex: 0,
+        dimension: 1,
+        pieces: model.categoryLabels.map(value => ({
+          value,
+          color: resolveHealthValueColor(
+            model.series.metricId,
+            value,
+            seriesColor,
+            style.trendLineColor,
+          ),
+        })),
+      }
+      : undefined,
     series: [{
       name: model.series.sourceLabel,
       type: isBar ? 'bar' : isPoint ? 'scatter' : 'line',
@@ -156,12 +180,106 @@ export function buildHealthMetricEChartsOption(
       symbolSize: isPoint ? 8 : 5,
       barMaxWidth: 28,
       lineStyle: { color: seriesColor, width: 2.25 },
-      itemStyle: { color: seriesColor },
+      itemStyle: {
+        color: useStressStateColors
+          ? (params: { value?: unknown }) => resolveHealthValueColor(
+            model.series.metricId,
+            chartValue(params.value),
+            seriesColor,
+            style.trendLineColor,
+          )
+          : seriesColor,
+      },
       emphasis: { scale: 1.25 },
     }],
   };
 
   return option as ChartOption;
+}
+
+function resolveHealthMetricColor(metricId: HealthMetricId, fallback: string): string {
+  switch (metricId) {
+    case HEALTH_METRIC_IDS.HeartRate:
+    case HEALTH_METRIC_IDS.RestingHeartRate:
+    case HEALTH_METRIC_IDS.PulseRate:
+    case HEALTH_METRIC_IDS.BloodPressureSystolic:
+    case HEALTH_METRIC_IDS.BloodPressureDiastolic:
+      return AppDataColors['Heart Rate'];
+    case HEALTH_METRIC_IDS.HeartRateVariability:
+    case HEALTH_METRIC_IDS.RecoveryScore:
+    case HEALTH_METRIC_IDS.SleepScore:
+      return AppDataColors['Recovery Time'];
+    case HEALTH_METRIC_IDS.BloodOxygenSaturation:
+      return AppDataColors['Blood Oxygen'];
+    case HEALTH_METRIC_IDS.RespirationRate:
+      return AppDataColors.Respiration;
+    case HEALTH_METRIC_IDS.Steps:
+    case HEALTH_METRIC_IDS.WheelchairPushes:
+    case HEALTH_METRIC_IDS.Distance:
+    case HEALTH_METRIC_IDS.WheelchairPushDistance:
+      return AppDataColors.Distance;
+    case HEALTH_METRIC_IDS.FloorsClimbed:
+    case HEALTH_METRIC_IDS.Altitude:
+    case HEALTH_METRIC_IDS.Vo2Max:
+    case HEALTH_METRIC_IDS.FitnessAge:
+      return AppDataColors.Altitude;
+    case HEALTH_METRIC_IDS.ActiveDuration:
+    case HEALTH_METRIC_IDS.ModerateIntensityDuration:
+    case HEALTH_METRIC_IDS.VigorousIntensityDuration:
+    case HEALTH_METRIC_IDS.StressDuration:
+    case HEALTH_METRIC_IDS.SleepDuration:
+      return AppDataColors.Duration;
+    case HEALTH_METRIC_IDS.ActiveEnergy:
+    case HEALTH_METRIC_IDS.BasalEnergy:
+    case HEALTH_METRIC_IDS.TotalEnergy:
+    case HEALTH_METRIC_IDS.BodyEnergy:
+    case HEALTH_METRIC_IDS.BodyEnergyChange:
+      return AppDataColors.Energy;
+    case HEALTH_METRIC_IDS.StressLevel:
+    case HEALTH_METRIC_IDS.StressState:
+      return AppDataColors.Stress;
+    case HEALTH_METRIC_IDS.BodyWeight:
+    case HEALTH_METRIC_IDS.BodyMassIndex:
+    case HEALTH_METRIC_IDS.BodyFat:
+    case HEALTH_METRIC_IDS.BodyWater:
+    case HEALTH_METRIC_IDS.MuscleMass:
+    case HEALTH_METRIC_IDS.BoneMass:
+      return AppDataColors['Body Composition'];
+    case HEALTH_METRIC_IDS.SkinTemperatureDeviation:
+      return AppDataColors.Temperature;
+    default:
+      return fallback;
+  }
+}
+
+function resolveHealthValueColor(
+  metricId: HealthMetricId,
+  value: unknown,
+  seriesColor: string,
+  neutralColor: string,
+): string {
+  if (metricId !== HEALTH_METRIC_IDS.StressState || typeof value !== 'string') {
+    return seriesColor;
+  }
+  switch (value.trim().toLowerCase()) {
+    case 'relaxing':
+    case 'calm':
+    case 'low':
+      return AppDataColors.Altitude;
+    case 'active':
+    case 'passive':
+    case 'medium':
+      return AppDataColors.Stress;
+    case 'stressful':
+    case 'high':
+      return AppDataColors['Heart Rate_0'];
+    default:
+      return neutralColor;
+  }
+}
+
+function chartValue(value: unknown): unknown {
+  return Array.isArray(value) ? value[1] : value;
 }
 
 function buildSeriesModel(

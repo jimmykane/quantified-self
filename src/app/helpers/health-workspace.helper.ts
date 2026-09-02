@@ -80,6 +80,7 @@ export type HealthWorkspaceChartKind = 'bar' | 'line' | 'point' | 'step';
 
 export interface HealthWorkspaceSeries {
   id: string;
+  metricId: HealthMetricId;
   provider: HealthProvider;
   providerLabel: string;
   sourceLabel: string;
@@ -399,6 +400,7 @@ export function buildHealthMetricWorkspaceView(
       .sort((left, right) => left.timestampMs - right.timestampMs);
     return {
       id: `health-series-${index + 1}`,
+      metricId: result.query.metricIds[0] || HEALTH_WORKSPACE_DEFAULT_METRIC,
       provider: first.provider,
       providerLabel: providerLabel(first.provider),
       sourceLabel,

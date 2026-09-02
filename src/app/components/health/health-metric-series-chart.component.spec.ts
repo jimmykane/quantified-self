@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import {
+  HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
   HEALTH_RECORDING_METHODS,
   HEALTH_VALUE_ORIGINS,
@@ -17,6 +18,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function series(): HealthWorkspaceSeries {
   return {
     id: 'garmin-resting-heart-rate',
+    metricId: HEALTH_METRIC_IDS.RestingHeartRate,
     provider: HEALTH_PROVIDERS.GarminAPI,
     providerLabel: 'Garmin',
     sourceLabel: 'Garmin',
