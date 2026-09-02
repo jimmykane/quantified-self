@@ -60,7 +60,7 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(fixture.nativeElement.querySelectorAll('app-compact-feature-row')).toHaveLength(4);
     expect(text).toContain('Benchmark Merge Workflow');
-    expect(text).toContain('Three-Device Chart Comparison');
+    expect(text).toContain('Multi-Device Chart Comparison');
     expect(text).toContain('GNSS Trace Comparison');
     expect(text).toContain('Sensor Quality Reports');
     expect(text).toContain('Save / Share');
