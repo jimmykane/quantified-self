@@ -36,14 +36,11 @@ describe('PublicFooterComponent', () => {
     expect(footer?.querySelector('a[href="/privacy"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/terms"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/policies"]')).toBeTruthy();
-    expect(text).toContain('provided without warranty');
-    expect(text).toContain('AGPL-3.0-only');
+    expect(text).not.toMatch(/AGPL|licen[cs]e|provided without warranty/i);
     expect(
       footer?.querySelector('a[href="https://github.com/jimmykane/quantified-self"]'),
     ).toBeTruthy();
-    expect(
-      footer?.querySelector('a[href="https://github.com/jimmykane/quantified-self/blob/main/LICENSE"]'),
-    ).toBeTruthy();
+    expect(footer?.querySelector('a[href*="/LICENSE"]')).toBeNull();
     expect(text).toContain('Help & support');
     expect(text).toContain('Quantified Self IO');
     expect(text).toContain('Kaloudi 15');
