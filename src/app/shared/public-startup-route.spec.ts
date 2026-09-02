@@ -33,6 +33,11 @@ describe('public-startup-route', () => {
     expect(isPublicStartupPath('/tools/compare/saved')).toBe(true);
   });
 
+  it('keeps legacy comparison URLs public while their client redirects resolve', () => {
+    expect(isPublicStartupPath('/features/workout-file-comparison')).toBe(true);
+    expect(isPublicStartupPath('/features/sports-watch-benchmark')).toBe(true);
+  });
+
   it('keeps dynamic share routes visible during auth startup', () => {
     expect(isPublicStartupPath('/share/event/user-1/event-1')).toBe(true);
     expect(isPublicStartupPath('/share/comparison/user-1/event-1?utm_source=test')).toBe(true);

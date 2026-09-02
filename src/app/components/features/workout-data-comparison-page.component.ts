@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatListModule } from '@angular/material/list';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
+import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
 import {
   COMPARISON_ANALYSIS_ITEMS,
   COMPARISON_FAQ_ITEMS,
@@ -20,11 +19,10 @@ import {
   imports: [
     RouterLink,
     MatButtonModule,
-    MatCardModule,
     MatIconModule,
-    MatListModule,
     ServiceSourceIconComponent,
     PublicFeaturePreviewComponent,
+    CompactFeatureRowComponent,
   ],
   templateUrl: './workout-data-comparison-page.component.html',
   styleUrls: ['./workout-data-comparison-page.component.scss'],

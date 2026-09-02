@@ -3,7 +3,6 @@ import {
   COMPARISON_ANALYSIS_ITEMS,
   COMPARISON_FAQ_ITEMS,
   COMPARISON_FREE_PLAN_ACTIVITY_LIMIT,
-  COMPARISON_FREE_PLAN_ROUTE_LIMIT,
   COMPARISON_PROVIDER_SOURCES,
   COMPARISON_REVIEW_ITEMS,
   COMPARISON_SOURCE_ITEMS,
@@ -29,6 +28,14 @@ describe('workout-data-comparison-page.content', () => {
       url: WORKOUT_DATA_COMPARISON_URL,
       inLanguage: 'en',
     });
+    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.jsonLd['about']).toEqual([
+      'Garmin vs COROS workout data',
+      'Garmin, Suunto, COROS, and Wahoo workout comparison',
+      'Custom FIT and TCX workout file comparison',
+      'Sports watch review benchmark reports',
+      'GNSS track comparison',
+      'Heart-rate and power sensor comparison',
+    ]);
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.jsonLd).toMatchObject({
       audience: [
         { '@type': 'Audience', audienceType: 'Endurance athletes' },
@@ -48,7 +55,6 @@ describe('workout-data-comparison-page.content', () => {
 
     expect(COMPARISON_PROVIDER_SOURCES.map(source => source.label)).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(COMPARISON_FREE_PLAN_ACTIVITY_LIMIT).toBe(100);
-    expect(COMPARISON_FREE_PLAN_ROUTE_LIMIT).toBe(10);
     expect(COMPARISON_SOURCE_ITEMS).toHaveLength(3);
     expect(COMPARISON_ANALYSIS_ITEMS).toHaveLength(4);
     expect(COMPARISON_REVIEW_ITEMS).toHaveLength(4);
@@ -63,8 +69,8 @@ describe('workout-data-comparison-page.content', () => {
     expect(visibleCopy).toContain('YouTube videos, blog posts, coaching notes, firmware tests, and QA');
     expect(visibleCopy).toContain('account-based dashboard rather than a standalone public file viewer');
     expect(visibleCopy).not.toMatch(/\bprivate\b/i);
-    expect(visibleCopy).toContain('Manual uploads, core analysis tools, and benchmark comparisons are available on the free plan for up to 100 activities and 10 saved routes');
-    expect(visibleCopy).toContain('Automatic service sync and higher limits require a paid plan');
+    expect(visibleCopy).toContain('Manual uploads, core analysis tools, and benchmark comparisons are available on the free plan for up to 100 activities');
+    expect(visibleCopy).toContain('Automatic service sync and higher activity limits require a paid plan');
     expect(visibleCopy).not.toContain('AI insights');
     expect(visibleCopy).not.toContain('AI-backed');
     expect(visibleCopy).not.toContain('AI analysis');

@@ -1,5 +1,5 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
+import { USAGE_LIMITS } from '@shared/limits';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { WORKOUT_DATA_COMPARISON_PATH } from './workout-data-comparison-page.paths';
 
@@ -31,7 +31,6 @@ export interface ComparisonRouteData {
 
 export const WORKOUT_DATA_COMPARISON_URL = `https://quantified-self.io/${WORKOUT_DATA_COMPARISON_PATH}`;
 export const COMPARISON_FREE_PLAN_ACTIVITY_LIMIT = USAGE_LIMITS.free;
-export const COMPARISON_FREE_PLAN_ROUTE_LIMIT = ROUTE_USAGE_LIMITS.free;
 
 export const COMPARISON_PROVIDER_SOURCES: readonly ComparisonProviderSource[] = [
   { label: getProviderDisplayName(ServiceNames.GarminAPI, 'source'), serviceName: ServiceNames.GarminAPI },
@@ -54,7 +53,7 @@ export const COMPARISON_SOURCE_ITEMS: readonly ComparisonFeatureItem[] = [
   {
     icon: 'compare_arrows',
     title: 'Mixed-source comparisons',
-    copy: 'Compare a provider activity with an uploaded file, or two recordings from different providers, without moving them into a separate comparison archive.',
+    copy: 'Compare a provider activity with an uploaded file, or two recordings from different providers, through the same benchmark workflow used for same-source recordings.',
   },
 ];
 
@@ -100,7 +99,7 @@ export const COMPARISON_REVIEW_ITEMS: readonly ComparisonFeatureItem[] = [
   {
     icon: 'history',
     title: 'One archive for repeat tests',
-    copy: 'Keep provider imports and test files together so later firmware, hardware, and sensor comparisons use the same workflow and reporting language.',
+    copy: 'Keep provider imports and test files in the same account so later firmware, hardware, and sensor comparisons use the same workflow and reporting language.',
   },
 ];
 
@@ -123,7 +122,7 @@ export const COMPARISON_FAQ_ITEMS: readonly ComparisonFaqItem[] = [
   },
   {
     question: 'Is workout data comparison available on the free plan?',
-    answer: `Yes. Manual uploads, core analysis tools, and benchmark comparisons are available on the free plan for up to ${COMPARISON_FREE_PLAN_ACTIVITY_LIMIT} activities and ${COMPARISON_FREE_PLAN_ROUTE_LIMIT} saved routes. Automatic service sync and higher limits require a paid plan.`,
+    answer: `Yes. Manual uploads, core analysis tools, and benchmark comparisons are available on the free plan for up to ${COMPARISON_FREE_PLAN_ACTIVITY_LIMIT} activities. Automatic service sync and higher activity limits require a paid plan.`,
   },
 ];
 
@@ -159,10 +158,8 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
       'Garmin, Suunto, COROS, and Wahoo workout comparison',
       'Custom FIT and TCX workout file comparison',
       'Sports watch review benchmark reports',
-      'Garmin training dashboard',
-      'Garmin to Suunto activity sync',
-      'COROS to Suunto activity sync',
-      'Wahoo to Suunto activity sync',
+      'GNSS track comparison',
+      'Heart-rate and power sensor comparison',
     ],
     mainEntity: [
       {

@@ -17,7 +17,7 @@
     <h1 id="workout-comparison-title">Compare workout files, providers, and sports devices</h1>
     <p class="hero-copy">
       Bring Garmin, Suunto, COROS, Wahoo, FIT, TCX, GPX, JSON, and SML recordings into one comparison workflow. Inspect
-      synchronized metrics and routes, assign reference and test devices, and save reviewer-ready benchmark reports.
+      synchronized metrics and routes, assign reference and test roles, and save reviewer-ready benchmark reports.
     </p>
 
     <div class="hero-actions" aria-label="Primary actions">
@@ -57,19 +57,15 @@
       </p>
     </div>
 
-    <div class="card-grid">
-      @for (item of sourceItems; track item.title) {
-      <mat-card appearance="outlined" class="feature-card">
-        <mat-card-header>
-          <div mat-card-avatar class="card-icon">
-            <mat-icon>{{ item.icon }}</mat-icon>
-          </div>
-          <mat-card-title>{{ item.title }}</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>{{ item.copy }}</p>
-        </mat-card-content>
-      </mat-card>
+    <div class="compact-list">
+      @for (item of sourceItems; track item.title; let last = $last) {
+      <app-compact-feature-row
+        [icon]="item.icon"
+        iconTone="primary"
+        [title]="item.title"
+        [summary]="item.copy"
+        [showDivider]="!last"
+      ></app-compact-feature-row>
       }
     </div>
   </section>
@@ -84,19 +80,15 @@
       </p>
     </div>
 
-    <div class="card-grid">
-      @for (item of analysisItems; track item.title) {
-      <mat-card appearance="outlined" class="feature-card">
-        <mat-card-header>
-          <div mat-card-avatar class="card-icon">
-            <mat-icon>{{ item.icon }}</mat-icon>
-          </div>
-          <mat-card-title>{{ item.title }}</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>{{ item.copy }}</p>
-        </mat-card-content>
-      </mat-card>
+    <div class="compact-list">
+      @for (item of analysisItems; track item.title; let last = $last) {
+      <app-compact-feature-row
+        [icon]="item.icon"
+        iconTone="secondary"
+        [title]="item.title"
+        [summary]="item.copy"
+        [showDivider]="!last"
+      ></app-compact-feature-row>
       }
     </div>
   </section>
@@ -129,15 +121,15 @@
       </p>
     </div>
 
-    <div class="tool-list">
-      @for (item of reviewItems; track item.title) {
-      <article class="tool-row">
-        <mat-icon>{{ item.icon }}</mat-icon>
-        <div>
-          <h3>{{ item.title }}</h3>
-          <p>{{ item.copy }}</p>
-        </div>
-      </article>
+    <div class="compact-list">
+      @for (item of reviewItems; track item.title; let last = $last) {
+      <app-compact-feature-row
+        [icon]="item.icon"
+        iconTone="tertiary"
+        [title]="item.title"
+        [summary]="item.copy"
+        [showDivider]="!last"
+      ></app-compact-feature-row>
       }
     </div>
   </section>
