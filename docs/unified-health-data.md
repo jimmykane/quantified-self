@@ -2,7 +2,7 @@
 
 This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path; issue #612 adds production Suunto 24/7 Activity, daily-statistics, and Recovery ingestion; issue #613 adds production Garmin Health API 1.2.4 ingestion.
 
-Issue #614 adds the authenticated **Health** workspace on top of this foundation. COROS, Suunto, and Garmin ingestion still does not make provider-specific Health records part of the existing MCP, Training, or activity contracts; normalized Sleep remains separate and is resolved through typed references.
+Issue #614 adds the authenticated **Health** workspace on top of this foundation. COROS, Suunto, and Garmin ingestion still does not make provider-specific Health records part of the existing MCP or Training contracts; normalized Sleep remains separate and is resolved through typed references. Weight profile context and activity-level VO2 max already embedded in imported workouts can also be read on demand for Health without copying them into Health storage or changing the activity contract.
 
 ## Goals
 
@@ -53,6 +53,12 @@ direct Firestore   queryHealthRange     account deletion
                         │
                         ▼
           /health source-separated workspace
+
+users/{uid}/events (Weight) ────────────────┐
+users/{uid}/activities (activity VO2 max) ──┼─ queryActivityHealthRange
+                                            └─ bounded identity-free observations
+                                                        │
+                                                        └─ /health only; no Health write
 ```
 
 The shared implementation is split intentionally:
@@ -63,7 +69,9 @@ The shared implementation is split intentionally:
 - `functions/src/health/validation.ts` validates untrusted adapter input at runtime.
 - `functions/src/health/writer.ts` owns opaque IDs, revisions, sample chunking, replacement, deletion guards, and sync state.
 - `functions/src/health/query.ts` and `functions/src/health/callable.ts` provide the server adapter.
+- `shared/activity-health.ts` and `functions/src/health/activity-query.ts` define the separate bounded workout-evidence projection used only by Health; `activity-callable.ts` enforces Authentication and App Check.
 - `src/app/services/app.health.service.ts` provides the default direct listener, the bounded cross-page workspace loader, and the explicit callable alternative.
+- `src/app/components/health/health-activity-query.service.ts` is the lazy workspace-only client for workout evidence, keeping the direct Health-record service and result contract unchanged.
 - `src/app/components/health/` and `src/app/helpers/health-workspace.helper.ts` provide the authenticated source-separated Health workspace and its view projection.
 
 ## Current provider coverage
@@ -203,6 +211,8 @@ Bounds protect Firestore document size, transaction limits, client reads, and pr
 | One Health workspace source aggregate | 2,048 source records |
 | One Health workspace sample aggregate | 256 chunks and 100,000 whole sample points |
 | One Health workspace serialized aggregate | 16 MiB across retained source records and chunks |
+| Workout-backed Health query page | 128 event or activity candidates |
+| One workout-backed Health query | 2,048 candidates and 1 MiB projected output |
 
 The validator counts recognized input JSON-escaped UTF-8 bytes cumulatively while walking aligned metric/sample values, charges raw sample strings before trimming, and stops before retaining the element that would cross 4 MiB. The writer then cleans, measures, and retains one sample chunk at a time with the same cumulative ceiling before applying the exact final source-record-plus-chunks check. This bounds validation and construction amplification; the final estimate remains authoritative because repeated chunk metadata changes the persisted size.
 
@@ -264,6 +274,16 @@ After every page is loaded, `projectLoadedHealthRange()` recomputes observations
 
 The callable derives the data owner exclusively from `request.auth.uid`, requires App Check, validates every bound, logs only a safe error class, and returns the same `HealthRangeResult` shape.
 
+### Workout-backed Weight and VO2 max
+
+`queryActivityHealthRange` is a separate Health-only contract rather than an extension of `HealthRangeResult`. The frontend sends exactly `body_weight` or `vo2_max` plus the selected Health window's inclusive start/end milliseconds. The callable derives `users/{uid}` from Authentication, requires App Check, reads exact 128-document internal pages, and stops explicitly at 2,048 candidates or 1 MiB of projected output. It selects only the metric, source timestamps, bounded source fields, and activity type needed for projection. The response contains one-way observation and source-account keys, canonical values/units, provider, and a bounded discipline; it excludes event/activity IDs, names, locations, Firebase UIDs, provider account IDs, and raw creator fields. Candidates whose provider cannot be recognized are counted toward the safety bound but omitted instead of receiving invented Quantified Self provenance.
+
+Weight reads `events.startDate + stats.Weight`. Sports Lib profile Weight is repeated on child activities, so querying the parent event emits at most one context observation per imported event. This is labelled `workout_profile_context`: it is not a weigh-in and is shown only when the active provider-filtered window contains no real `body_weight` Health observation.
+
+VO2 max ranges candidates with `activities.eventStartDate + stats.\`VO2 Max\`` and plots each retained value at the child activity's own `startDate`. The individual activity preserves its discipline, whereas the parent event reduces child VO2 values to a maximum and is therefore deliberately excluded. Workout series use `workout_imported_<discipline>` and remain separate by provider, opaque account, discipline, origin, recording method, and unit. Consecutive identical values are collapsed within one source/discipline run by retaining its latest observation; a later changed value begins another run. Provider Health User Metrics and workout estimates are never averaged or merged.
+
+The two indexed paths are `events(startDate, stats.Weight, __name__)` and `activities(eventStartDate, stats.\`VO2 Max\`, __name__)`, ascending. The client never queries `events` or `activities` directly. No historical migration or backfill is needed because the projection reads already imported workout documents on demand.
+
 ## Conflict policy
 
 Source records remain source-aware. The foundation does not pick a preferred provider, blend values, or hide duplicates.
@@ -279,6 +299,10 @@ The authenticated `/health` route is client-rendered and `noindex`. Owner-scoped
 The workspace opens on Resting heart rate for the latest 30 days when that metric is available. Its fixed priority order is Sleep, Heart rate, then HRV, with a latest row for each source series so differing semantics stay separate. The explorer groups the user's available historical metrics by the stable catalog categories; an empty current date window does not remove a metric that exists elsewhere in history. `/health` does not encode workspace state in query parameters. The selected `today`, `14d`, `30d`, `90d`, or `1y` range is validated and stored as the client-owned `appSettings.healthWorkspace.range` account preference; a missing or invalid value falls back to 30 days. The selected metric, older/newer window position, and provider filters remain local to the current workspace session, with metric and window position returning to Resting heart rate and today on the next visit before availability fallback is applied. Today is one calendar day and can be paged one day at a time.
 
 Totals render as bars, scalar or point readings as lines/points, and categorical readings as stepped series. Health metric charts use the shared ECharts host, theme, tooltip, resize, and mobile-interaction stack; Sleep continues to reuse its normalized Sleep chart. Detailed chunks load for Today, 14-day, and 30-day windows; 90-day and 1-year views use stored summaries and explain when a metric is sample-only. Today combines the day's source-attributed summaries with any available intra-day chunks, but it does not imply continuous coverage where a provider supplies intermittent samples or daily summaries only. Coverage, freshness, device attribution, partial results, superseded revisions, conflicts, and safe sync state stay visible. The expandable source-observation table is the accessible textual equivalent of the charts.
+
+Weight and VO2 max are always discoverable in the Health catalog because either may exist only in imported workouts rather than `healthSourceRecords`. Selecting either metric starts the direct Health-record load and the bounded workout-evidence callable together for the same remembered window. Request generations discard both stale results after metric, range, or older/newer navigation. A failed workout query does not hide successfully loaded provider Health measurements; the workspace identifies that partial source explicitly. Workout coverage is shown as not applicable rather than implying daily measurement completeness, raw creator fields are not presented as device attribution, and the latest workout observation still supplies last-observed context.
+
+Future manual measurements use the existing Health schema rather than another store: provider `QuantifiedSelf`, origin `recorded`, recording method `manual`, and the canonical catalog metric/unit. A manual Weight is a real Health observation and suppresses the workout Weight fallback in the active filtered window. Manual VO2 max remains separate from provider Health and workout series through source, origin, recording method, and semantic variant. Manual Sleep remains in `sleepSessions` and is exposed to Health only through typed Sleep references. This compatibility is intentional; this implementation adds no manual-entry form, write callable, migration, or persistence path.
 
 The compact provider footer reads the existing Health and Sleep sync-state documents. For a ready Garmin, Suunto, or COROS connection owned by an eligible Pro account, it offers the existing provider history callable only when a successful owner-scoped sync-state read proves that no prior Sleep/Health history request was made, or when that request failed and is retryable. A denied or failed state read cannot be interpreted as an absent backfill. A prior or cooldown-bound request suppresses the action, while Garmin's granular Health backfill state also exposes queued and running progress. The workspace does not invent progress states that Suunto and COROS do not publish. Wahoo and disconnected, permission-blocked, or reconnect-required sources never receive this action. The callable remains authoritative for plan access, provider rollout, connection credentials, permissions, deletion state, and cooldown enforcement. Request generations are UID-scoped so account/profile changes and component teardown cannot publish or clear another request's local state.
 
@@ -339,7 +363,7 @@ Issues #611–#613 should implement each provider independently against this fou
 
 The Health foundation receives production COROS, Suunto, and Garmin records, and `/health` now provides the source-separated product surface. COROS, Suunto, and Garmin backfills keep their existing provider history controls rather than adding a foundation-wide migration.
 
-A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health reads, then deploy the `queryHealthRange` callable and application through the normal release workflow. Issue #614 changes no Firestore schema, Rules, indexes, Functions, ingestion, or backfill behavior.
+A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health reads, then deploy the Health callables and application through the normal release workflow. The workout-evidence extension adds two read indexes and `queryActivityHealthRange`, but changes no Firestore schema, Rules, provider ingestion, or backfill behavior. Deploy the indexes before the callable and frontend.
 
 The Sports Lib 20.3 transition uses a separate user-scoped admin migration; it does not refetch provider history,
 change OAuth credentials, reconnect accounts, or alter webhooks. Deploy dual readers before new writers, then run
@@ -363,7 +387,7 @@ Useful local verification:
 
 ```bash
 npx vitest run src/app/shared/health.shared.spec.ts src/app/shared/sports-lib-health-data.shared.spec.ts src/app/services/app.health.service.spec.ts src/app/services/app.sleep.service.spec.ts src/app/helpers/health-workspace.helper.spec.ts src/app/helpers/health-metric-chart.helper.spec.ts src/app/components/health/health-workspace.component.spec.ts --reporter=verbose
-npm --prefix functions test -- src/health/validation.spec.ts src/health/writer.spec.ts src/health/query.spec.ts src/health/callable.spec.ts src/health/lifecycle.spec.ts src/health/sports-lib-data-migration.spec.ts src/sleep/writer.spec.ts src/firestore-indexes.spec.ts
+npm --prefix functions test -- src/health/validation.spec.ts src/health/writer.spec.ts src/health/query.spec.ts src/health/callable.spec.ts src/health/activity-query.spec.ts src/health/activity-callable.spec.ts src/health/lifecycle.spec.ts src/health/sports-lib-data-migration.spec.ts src/sleep/writer.spec.ts src/firestore-indexes.spec.ts
 npm run test:rules
 npm --prefix functions run build
 npm run build

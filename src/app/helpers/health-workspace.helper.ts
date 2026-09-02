@@ -1,9 +1,14 @@
 import {
+  HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
   HEALTH_METRIC_IDS,
   HEALTH_NORMALIZATION_STATUSES,
   HEALTH_PROVIDERS,
+  HEALTH_QUALITY_STATUSES,
+  HEALTH_RECORDING_METHODS,
   HEALTH_UNITS,
+  HEALTH_VALUE_ORIGINS,
+  HEALTH_VALUE_TYPES,
   HealthCoverageStatus,
   HealthMetricDefinition,
   HealthMetricId,
@@ -19,6 +24,11 @@ import {
   HealthValueType,
   getHealthMetricDefinition,
 } from '@shared/health';
+import {
+  ACTIVITY_HEALTH_SOURCE_KINDS,
+  type ActivityHealthObservation,
+  type ActivityHealthMetricId,
+} from '@shared/activity-health';
 import { SleepSession, normalizeSleepProvider } from '@shared/sleep';
 import {
   APP_HEALTH_WORKSPACE_RANGES,
@@ -146,7 +156,7 @@ interface MetricDatum {
   qualityCode: string | null;
   observationId: string | null;
   rowId: string;
-  rowKind: 'observation' | 'chunk';
+  rowKind: 'observation' | 'chunk' | 'activity';
   sampleCount: number;
   coverageStatus: HealthCoverageStatus;
   expectedUpdateIntervalMs: number | null;
@@ -329,6 +339,7 @@ export function filterHealthRangeResultByProviders(
 export function buildHealthMetricWorkspaceView(
   result: HealthRangeResult,
   sleepSessions: readonly SleepSession[] = [],
+  activityObservations: readonly ActivityHealthObservation[] = [],
 ): HealthMetricWorkspaceView {
   const sleepById = new Map(sleepSessions.flatMap(session => session.id ? [[session.id, session] as const] : []));
   const datums: MetricDatum[] = [];
@@ -340,6 +351,9 @@ export function buildHealthMetricWorkspaceView(
   }
   for (const chunk of result.sampleChunks) {
     datums.push(...chunkDatums(chunk));
+  }
+  for (const observation of activityObservations) {
+    datums.push(activityObservationDatum(observation));
   }
 
   const accountLabels = buildAccountLabels(datums.map(item => ({
@@ -420,8 +434,12 @@ export function buildHealthMetricWorkspaceView(
         ? `${datum.sampleCount.toLocaleString()} samples · latest ${formatHealthValue(datum.value, datum.unit)}`
         : formatHealthValue(datum.value, datum.unit),
       semanticsText: `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)} · ${humanize(datum.origin)} · ${humanize(datum.recordingMethod)}${datum.nativeOnly ? ' · native only' : ''}`,
-      coverageText: coverageStatusLabel(datum.coverageStatus),
-      freshnessText: freshnessStatusByRowId.get(datum.rowId) || 'Unknown',
+      coverageText: datum.rowKind === 'activity'
+        ? 'Not applicable'
+        : coverageStatusLabel(datum.coverageStatus),
+      freshnessText: datum.rowKind === 'activity'
+        ? `Last observed ${formatCalendarDate(datum.calendarDate)}`
+        : freshnessStatusByRowId.get(datum.rowId) || 'Unknown',
       conflict: !!datum.observationId && conflictingObservationIds.has(datum.observationId),
     };
     });
@@ -436,6 +454,23 @@ export function buildHealthMetricWorkspaceView(
     providers: [...new Set(series.map(item => item.provider))].sort((left, right) =>
       compareText(providerLabel(left), providerLabel(right))),
   };
+}
+
+export function selectActivityHealthObservations(
+  metricId: ActivityHealthMetricId,
+  result: HealthRangeResult,
+  observations: readonly ActivityHealthObservation[],
+  selectedProviders: readonly HealthProvider[] = [],
+): ActivityHealthObservation[] {
+  const allowed = selectedProviders.length ? new Set(selectedProviders) : null;
+  const filtered = observations.filter(observation => !allowed || allowed.has(observation.provider));
+  if (metricId !== HEALTH_METRIC_IDS.BodyWeight) {
+    return filtered;
+  }
+
+  const hasRealWeight = result.observations.some(observation => observation.entry.metricId === HEALTH_METRIC_IDS.BodyWeight)
+    || result.sampleChunks.some(chunk => chunk.metricId === HEALTH_METRIC_IDS.BodyWeight);
+  return hasRealWeight ? [] : filtered;
 }
 
 export function buildHealthPriorityRows(
@@ -628,6 +663,35 @@ function observationDatum(
   };
 }
 
+function activityObservationDatum(observation: ActivityHealthObservation): MetricDatum {
+  const isWeightContext = observation.sourceKind === ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutProfileContext;
+  return {
+    provider: observation.provider,
+    accountKey: observation.sourceAccountKey,
+    aggregation: 'point',
+    semanticVariant: observation.semanticVariant,
+    origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+    recordingMethod: isWeightContext
+      ? HEALTH_RECORDING_METHODS.Unknown
+      : HEALTH_RECORDING_METHODS.ProviderCalculated,
+    unit: observation.unit,
+    normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+    nativeOnly: false,
+    valueType: HEALTH_VALUE_TYPES.Number,
+    timestampMs: observation.observedAtMs,
+    calendarDate: localCalendarDate(observation.observedAtMs),
+    value: observation.value,
+    deviceLabel: null,
+    qualityCode: HEALTH_QUALITY_STATUSES.Valid,
+    observationId: null,
+    rowId: `activity:${observation.id}`,
+    rowKind: 'activity',
+    sampleCount: 1,
+    coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
+    expectedUpdateIntervalMs: null,
+  };
+}
+
 function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
   const useCanonical = chunk.normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical
     && Array.isArray(chunk.canonicalValues)
@@ -714,6 +778,9 @@ function exactSeriesCoverageText(
   endDate: string,
 ): string {
   const dates = new Set(items.map(item => item.calendarDate));
+  if (items.every(item => item.rowKind === 'activity')) {
+    return `${dates.size.toLocaleString()} workout ${dates.size === 1 ? 'date' : 'dates'} · coverage not applicable`;
+  }
   const partialDates = new Set(items
     .filter(item => item.coverageStatus === 'partial')
     .map(item => item.calendarDate));

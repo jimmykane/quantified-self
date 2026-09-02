@@ -254,6 +254,33 @@ describe('firestore indexes', () => {
         });
     });
 
+    it('keeps workout-backed Health Weight and VO2 range queries deployable', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'events',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'startDate', order: 'ASCENDING' },
+                    { fieldPath: 'stats.Weight', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'activities',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'eventStartDate', order: 'ASCENDING' },
+                    { fieldPath: 'stats.`VO2 Max`', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+        ]));
+    });
+
     it('does not retain the retired AI Insights activity-type date index', () => {
         const config = loadFirestoreIndexes();
 

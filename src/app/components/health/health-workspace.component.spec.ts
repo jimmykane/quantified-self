@@ -22,6 +22,10 @@ import {
   getHealthMetricDefinition,
 } from '@shared/health';
 import { ProviderPresentation } from '@shared/provider-presentation';
+import {
+  ACTIVITY_HEALTH_SOURCE_KINDS,
+  type ActivityHealthRangeResult,
+} from '@shared/activity-health';
 import { SLEEP_PROVIDERS, SleepProvider, SleepSession, SleepSyncState } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { BehaviorSubject, of, throwError } from 'rxjs';
@@ -37,6 +41,7 @@ import { HealthWorkspaceSeries, localCalendarDate } from '../../helpers/health-w
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
 import { HealthWorkspaceComponent } from './health-workspace.component';
+import { HealthActivityQueryService } from './health-activity-query.service';
 
 @Component({
   selector: 'app-sleep-trend-chart',
@@ -159,6 +164,33 @@ function rangeLoad(metricId: HealthMetricId, empty = false): HealthWorkspaceRang
   };
 }
 
+function activityRangeResult(
+  options: { metricId?: typeof HEALTH_METRIC_IDS.BodyWeight | typeof HEALTH_METRIC_IDS.Vo2Max } = {},
+): ActivityHealthRangeResult {
+  const metricId = options.metricId || HEALTH_METRIC_IDS.BodyWeight;
+  const isWeight = metricId === HEALTH_METRIC_IDS.BodyWeight;
+  return {
+    observations: [{
+      id: 'opaque-workout-observation',
+      metricId,
+      observedAtMs: todayStartMs + 10_000,
+      value: isWeight ? 72 : 51,
+      unit: isWeight ? 'kg' : 'ml_per_kg_per_min',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      sourceAccountKey: 'opaque-workout-account',
+      sourceKind: isWeight
+        ? ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutProfileContext
+        : ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutImported,
+      discipline: isWeight ? null : 'running',
+      semanticVariant: isWeight ? 'workout_profile_context' : 'workout_imported_running',
+    }],
+    complete: true,
+    incompleteReason: null,
+    candidateCount: 1,
+    serializedBytes: 256,
+  };
+}
+
 function sleepSession(): SleepSession {
   return {
     id: 'sleep-one',
@@ -188,6 +220,7 @@ describe('HealthWorkspaceComponent', () => {
   let router: Router;
   let loadMetricRange: ReturnType<typeof vi.fn>;
   let loadAvailableMetricIds: ReturnType<typeof vi.fn>;
+  let loadActivityHealthRange: ReturnType<typeof vi.fn>;
   let updateHealthWorkspaceRange: ReturnType<typeof vi.fn>;
   let hydrateSavedRange: (range: AppHealthWorkspaceRange) => void;
   let syncStates: BehaviorSubject<HealthSyncState[]>;
@@ -224,6 +257,7 @@ describe('HealthWorkspaceComponent', () => {
       : vi.fn().mockResolvedValue(
         availability.metricIds || Object.keys(HEALTH_METRIC_CATALOG) as HealthMetricId[],
       );
+    loadActivityHealthRange = vi.fn().mockResolvedValue(activityRangeResult());
     updateHealthWorkspaceRange = vi.fn().mockResolvedValue(undefined);
     const user = signal({
       uid: 'user-1',
@@ -278,9 +312,14 @@ describe('HealthWorkspaceComponent', () => {
           provide: AppHealthService,
           useValue: {
             loadMetricRange,
+            loadActivityHealthRange,
             loadAvailableMetricIds,
             watchSyncStates: () => syncStates.asObservable(),
           },
+        },
+        {
+          provide: HealthActivityQueryService,
+          useValue: { loadRange: loadActivityHealthRange },
         },
         {
           provide: AppSleepService,
@@ -386,14 +425,19 @@ describe('HealthWorkspaceComponent', () => {
 
   it('shows only metrics with stored history and falls back from an unavailable default', async () => {
     await createComponent(undefined, undefined, {
-      metricIds: [HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.HeartRate],
+      metricIds: [
+        HEALTH_METRIC_IDS.Steps,
+        HEALTH_METRIC_IDS.HeartRate,
+        HEALTH_METRIC_IDS.BodyWeight,
+        HEALTH_METRIC_IDS.Vo2Max,
+      ],
       hasSleep: false,
     });
 
     const host = fixture.nativeElement as HTMLElement;
     const metricLabels = [...host.querySelectorAll('.health-metric-option')]
       .map(option => option.textContent?.trim());
-    expect(metricLabels).toEqual(['Heart rate', 'Steps']);
+    expect(metricLabels).toEqual(['Heart rate', 'Steps', 'Body weight', 'VO2 max']);
     expect(host.textContent).not.toContain('Sleep overview');
     expect(host.textContent).not.toContain('Resting heart rate');
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
@@ -424,7 +468,7 @@ describe('HealthWorkspaceComponent', () => {
 
     const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option')]
       .map(option => option.textContent?.replace('bedtime', '').trim());
-    expect(labels).toEqual(['Sleep overview', 'Steps']);
+    expect(labels).toEqual(['Sleep overview', 'Steps', 'Body weight', 'VO2 max']);
     expect(component.routeState().metric).toBe('sleep');
   });
 
@@ -516,6 +560,87 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRateVariability);
     expect(component.selectedHealthLoad()?.result.query.metricIds).toEqual([HEALTH_METRIC_IDS.HeartRateVariability]);
     expect((fixture.nativeElement as HTMLElement).querySelector('#health-detail-title')?.textContent).toContain('Heart rate variability');
+  });
+
+  it('loads workout Weight for the exact remembered Health window and labels it as fallback context', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, metricId === HEALTH_METRIC_IDS.BodyWeight)));
+
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(loadActivityHealthRange).toHaveBeenCalledWith({
+      metricId: HEALTH_METRIC_IDS.BodyWeight,
+      startTimeMs: component.selectedWindow().startTimeMs,
+      endTimeMs: component.selectedWindow().endTimeMs,
+    });
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('Workout Weight is profile context');
+    expect(host.textContent).toContain('Workout profile context');
+    expect(host.textContent).toContain('Not applicable');
+    expect(host.textContent).not.toContain('opaque-workout-account');
+    expect(host.querySelectorAll('.health-chart-panel')).toHaveLength(1);
+  });
+
+  it('keeps a later workout-metric response when an earlier request resolves late', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    let resolveWeight: ((value: ActivityHealthRangeResult) => void) | null = null;
+    const weightPromise = new Promise<ActivityHealthRangeResult>(resolve => {
+      resolveWeight = resolve;
+    });
+    loadActivityHealthRange.mockImplementation((request: { metricId: HealthMetricId }) => (
+      request.metricId === HEALTH_METRIC_IDS.BodyWeight
+        ? weightPromise
+        : Promise.resolve(activityRangeResult({ metricId: HEALTH_METRIC_IDS.Vo2Max }))
+    ));
+
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges();
+    await Promise.resolve();
+    component.selectMetric(HEALTH_METRIC_IDS.Vo2Max);
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(component.selectedActivityHealthResult()?.observations[0].metricId).toBe(HEALTH_METRIC_IDS.Vo2Max);
+    resolveWeight?.(activityRangeResult());
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.Vo2Max);
+    expect(component.selectedActivityHealthResult()?.observations[0].metricId).toBe(HEALTH_METRIC_IDS.Vo2Max);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Workout VO₂ max is separate evidence');
+  });
+
+  it('surfaces incomplete and failed workout-source loads without hiding valid Health data', async () => {
+    await createComponent();
+    loadMetricRange.mockResolvedValueOnce({
+      ...rangeLoad(HEALTH_METRIC_IDS.Vo2Max),
+      limitReached: 'source_records',
+    });
+    loadActivityHealthRange.mockResolvedValueOnce({
+      ...activityRangeResult({ metricId: HEALTH_METRIC_IDS.Vo2Max }),
+      complete: false,
+      incompleteReason: 'candidate_limit',
+      candidateCount: 2_048,
+    });
+    component.selectMetric(HEALTH_METRIC_IDS.Vo2Max);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('2,048 source records');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('2,048 workout candidates');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('safety limits');
+
+    loadActivityHealthRange.mockRejectedValueOnce(new Error('private provider failure'));
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+    expect(text).toContain('Workout-backed observations could not be loaded');
+    expect(text).not.toContain('private provider failure');
   });
 
   it('refreshes selected and priority data when sync-state timestamps advance', async () => {

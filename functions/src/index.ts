@@ -184,6 +184,7 @@ export {
 } from './assistant/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { queryHealthRange } from './health/callable';
+export { queryActivityHealthRange } from './health/activity-callable';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
 export {
   onDashboardDerivedMetricsActivityWrite,

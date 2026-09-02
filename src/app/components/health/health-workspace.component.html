@@ -188,6 +188,18 @@
             <span>{{ partialCoverageNotice() }}</span>
           </div>
         }
+        @if (activitySourceNotice()) {
+          <div class="health-notice health-notice-warning" role="status">
+            <mat-icon aria-hidden="true">warning</mat-icon>
+            <span>{{ activitySourceNotice() }}</span>
+          </div>
+        }
+        @if (workoutMetricNotice()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">fitness_center</mat-icon>
+            <span>{{ workoutMetricNotice() }}</span>
+          </div>
+        }
         @if (!selectedIsSleep() && metricView().conflictCount > 0) {
           <div class="health-notice health-notice-conflict" role="alert">
             <mat-icon aria-hidden="true">difference</mat-icon>
