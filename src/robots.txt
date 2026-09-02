@@ -18,10 +18,8 @@ Allow: /features/training-analysis
 Allow: /features/training-dashboard
 Allow: /features/activity-map
 Allow: /features/ai-insights
-Allow: /features/workout-file-comparison
 Allow: /features/fit-gpx-tcx-file-analyzer
 Allow: /features/fit-gpx-route-files
-Allow: /features/sports-watch-benchmark
 Allow: /guides
 Allow: /guides/import-activities-to-suunto
 Allow: /guides/import-activities-to-wahoo

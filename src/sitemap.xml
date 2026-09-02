@@ -116,11 +116,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://quantified-self.io/features/workout-file-comparison</loc>
-    <lastmod>2026-09-02</lastmod>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://quantified-self.io/features/fit-gpx-tcx-file-analyzer</loc>
     <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
@@ -128,11 +123,6 @@
   <url>
     <loc>https://quantified-self.io/features/fit-gpx-route-files</loc>
     <lastmod>2026-06-26</lastmod>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://quantified-self.io/features/sports-watch-benchmark</loc>
-    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>

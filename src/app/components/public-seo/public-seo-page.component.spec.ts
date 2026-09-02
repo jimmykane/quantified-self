@@ -17,7 +17,7 @@ describe('PublicSeoPageComponent', () => {
     routeStub = {
       snapshot: {
         data: {
-          publicSeoPage: PUBLIC_SEO_PAGES.workoutFileComparison,
+          publicSeoPage: PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer,
         },
       },
     };
@@ -46,20 +46,18 @@ describe('PublicSeoPageComponent', () => {
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
 
     expect(cards.length).toBe(6);
-    expect(faqItems.length).toBe(3);
-    expect(text).toContain('Compare FIT, TCX, GPX, JSON, and SML workout files');
-    expect(text).toContain('Manual uploads and benchmark comparisons are available on the free plan');
-    expect(text).toContain('custom exports');
-    expect(text).toContain('Provider data beside files');
-    expect(text).toContain('Workout File Comparison FAQ');
+    expect(faqItems.length).toBe(4);
+    expect(text).toContain('Analyze FIT, GPX, and TCX workout files');
+    expect(text).toContain('maps, charts, stats, exports');
+    expect(text).toContain('Workout File Analyzer FAQ');
     expect(fixture.nativeElement.querySelector('.how-to-list')).toBeNull();
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/features/workout-data-comparison');
     expect(hrefs).toContain('/help#uploads-and-imports');
-    expect(hrefs).toContain('/features/sports-watch-benchmark');
-    const reviewerPreview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
-      .find(preview => preview.componentInstance.previewKey() === 'reviewer-benchmark');
-    expect(reviewerPreview).toBeTruthy();
+    expect(hrefs).toContain('/features/fit-gpx-route-files');
+    const workoutPreview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
+      .find(preview => preview.componentInstance.previewKey() === 'workout-analysis');
+    expect(workoutPreview).toBeTruthy();
   });
 
   it('renders visible HowTo steps when route data includes HowTo structured data', () => {

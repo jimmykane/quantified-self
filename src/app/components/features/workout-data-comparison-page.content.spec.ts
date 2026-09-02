@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COMPARISON_ANALYSIS_ITEMS,
   COMPARISON_FAQ_ITEMS,
-  COMPARISON_FEATURE_ITEMS,
   COMPARISON_FREE_PLAN_ACTIVITY_LIMIT,
   COMPARISON_FREE_PLAN_ROUTE_LIMIT,
   COMPARISON_PROVIDER_SOURCES,
-  COMPARISON_SEARCH_INTENT_ITEMS,
+  COMPARISON_REVIEW_ITEMS,
+  COMPARISON_SOURCE_ITEMS,
   WORKOUT_DATA_COMPARISON_PATH,
   WORKOUT_DATA_COMPARISON_ROUTE_DATA,
   WORKOUT_DATA_COMPARISON_URL,
@@ -15,15 +16,16 @@ describe('workout-data-comparison-page.content', () => {
   it('defines route metadata for the static comparison feature page', () => {
     expect(WORKOUT_DATA_COMPARISON_PATH).toBe('features/workout-data-comparison');
     expect(WORKOUT_DATA_COMPARISON_URL).toBe('https://quantified-self.io/features/workout-data-comparison');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.title).toBe('Workout Data Comparison');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('custom FIT, TCX, or GPX workout data');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('free-plan manual uploads');
-    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('reviewer-ready device comparisons');
+    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.title).toBe('Workout File, Provider & Sports Device Comparison');
+    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('FIT, TCX, GPX, JSON, and SML');
+    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('synchronized charts');
+    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description).toContain('reviewer-ready benchmarks');
+    expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.description.length).toBeLessThanOrEqual(160);
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA).not.toHaveProperty('keywords');
     expect(WORKOUT_DATA_COMPARISON_ROUTE_DATA.jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
-      name: 'Compare Garmin, Suunto, COROS, and Wahoo workout data',
+      name: 'Compare workout files, providers, and sports devices',
       url: WORKOUT_DATA_COMPARISON_URL,
       inLanguage: 'en',
     });
@@ -37,8 +39,9 @@ describe('workout-data-comparison-page.content', () => {
 
   it('keeps the visible feature content complete and natural', () => {
     const visibleCopy = [
-      ...COMPARISON_FEATURE_ITEMS.flatMap(item => [item.title, item.copy]),
-      ...COMPARISON_SEARCH_INTENT_ITEMS.flatMap(item => [item.title, item.copy]),
+      ...COMPARISON_SOURCE_ITEMS.flatMap(item => [item.title, item.copy]),
+      ...COMPARISON_ANALYSIS_ITEMS.flatMap(item => [item.title, item.copy]),
+      ...COMPARISON_REVIEW_ITEMS.flatMap(item => [item.title, item.copy]),
       ...COMPARISON_FAQ_ITEMS.flatMap(item => [item.question, item.answer]),
       WORKOUT_DATA_COMPARISON_ROUTE_DATA.description,
     ].join(' ');
@@ -46,20 +49,21 @@ describe('workout-data-comparison-page.content', () => {
     expect(COMPARISON_PROVIDER_SOURCES.map(source => source.label)).toEqual(['Garmin', 'Suunto', 'COROS', 'Wahoo']);
     expect(COMPARISON_FREE_PLAN_ACTIVITY_LIMIT).toBe(100);
     expect(COMPARISON_FREE_PLAN_ROUTE_LIMIT).toBe(10);
-    expect(COMPARISON_FEATURE_ITEMS).toHaveLength(4);
-    expect(COMPARISON_SEARCH_INTENT_ITEMS).toHaveLength(5);
+    expect(COMPARISON_SOURCE_ITEMS).toHaveLength(3);
+    expect(COMPARISON_ANALYSIS_ITEMS).toHaveLength(4);
+    expect(COMPARISON_REVIEW_ITEMS).toHaveLength(4);
     expect(COMPARISON_FAQ_ITEMS).toHaveLength(5);
-    expect(visibleCopy).toContain('Centralize Garmin, Suunto, COROS, and Wahoo workout data');
-    expect(visibleCopy).toContain('Garmin, COROS, and Wahoo to Suunto sync context');
-    expect(visibleCopy).toContain('eligible Wahoo FIT activities to Suunto');
-    expect(visibleCopy).toContain('manual FIT, TCX, GPX, JSON, and SML imports');
-    expect(visibleCopy).toContain('custom activity files');
-    expect(visibleCopy).toContain('YouTube reviews, blog posts, coaching notes, and device QA');
-    expect(visibleCopy).toContain('lab tests, beta firmware, review units, exported workouts, or unsupported services');
+    expect(visibleCopy).toContain('Garmin, Suunto, COROS, and Wahoo');
+    expect(visibleCopy).toContain('FIT, TCX, GPX, JSON, and SML');
+    expect(visibleCopy).toContain('lab tests, beta firmware, and review units');
+    expect(visibleCopy).toContain('Reference and test roles');
+    expect(visibleCopy).toContain('Synchronized metric overlays');
+    expect(visibleCopy).toContain('CEP50, CEP95, RMSE');
+    expect(visibleCopy).toContain('Stable device colors and review tags');
+    expect(visibleCopy).toContain('YouTube videos, blog posts, coaching notes, firmware tests, and QA');
     expect(visibleCopy).toContain('account-based dashboard rather than a standalone public file viewer');
     expect(visibleCopy).not.toMatch(/\bprivate\b/i);
-    expect(visibleCopy).toContain('Reviewers, YouTube creators, bloggers, coaches, and testers');
-    expect(visibleCopy).toContain('available on the free plan for up to 100 activities and 10 saved routes');
+    expect(visibleCopy).toContain('Manual uploads, core analysis tools, and benchmark comparisons are available on the free plan for up to 100 activities and 10 saved routes');
     expect(visibleCopy).toContain('Automatic service sync and higher limits require a paid plan');
     expect(visibleCopy).not.toContain('AI insights');
     expect(visibleCopy).not.toContain('AI-backed');

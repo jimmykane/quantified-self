@@ -88,6 +88,18 @@
         }
       ],
       "trailingSlash": false,
+      "redirects": [
+        {
+          "source": "/features/workout-file-comparison",
+          "destination": "/features/workout-data-comparison",
+          "type": 301
+        },
+        {
+          "source": "/features/sports-watch-benchmark",
+          "destination": "/features/workout-data-comparison",
+          "type": 301
+        }
+      ],
       "rewrites": [
         {
           "source": "/mcp/authorize",
@@ -355,6 +367,18 @@
         }
       ],
       "trailingSlash": false,
+      "redirects": [
+        {
+          "source": "/features/workout-file-comparison",
+          "destination": "/features/workout-data-comparison",
+          "type": 301
+        },
+        {
+          "source": "/features/sports-watch-benchmark",
+          "destination": "/features/workout-data-comparison",
+          "type": 301
+        }
+      ],
       "rewrites": [
         {
           "source": "/mcp/authorize",

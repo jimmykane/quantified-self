@@ -386,8 +386,7 @@ describe('ToolsComparePageComponent', () => {
     expect(text).not.toContain('Select Files');
     expect(text).not.toContain('No files selected');
     expect(text).not.toContain('Sign in to view saved comparisons.');
-    expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-file-comparison"], a[ng-reflect-router-link="/features/workout-file-comparison"]')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('a[routerlink="/features/sports-watch-benchmark"], a[ng-reflect-router-link="/features/sports-watch-benchmark"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-data-comparison"], a[ng-reflect-router-link="/features/workout-data-comparison"]')).toBeTruthy();
     expect(component.guestSignInRedirectUrl).toBe('/tools/compare');
     expect(comparisonServiceMock.getBenchmarkComparisonPage).not.toHaveBeenCalled();
   });

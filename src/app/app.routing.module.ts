@@ -9,7 +9,10 @@ import { adminGuard } from './authentication/admin.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
-import { WORKOUT_DATA_COMPARISON_PATH } from './components/features/workout-data-comparison-page.paths';
+import {
+  LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
+  WORKOUT_DATA_COMPARISON_PATH,
+} from './components/features/workout-data-comparison-page.paths';
 import { SUPPORTED_ACTIVITIES_PATH } from './components/features/supported-activities-page.paths';
 import {
   PUBLIC_FEATURE_PATHS,
@@ -93,6 +96,7 @@ const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
   'integrations/coros',
   'integrations/wahoo',
   WORKOUT_DATA_COMPARISON_PATH,
+  ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
   SUPPORTED_ACTIVITIES_PATH,
   ...Object.values(PUBLIC_FEATURE_PATHS),
   ...Object.values(PUBLIC_GUIDE_PATHS),
@@ -101,6 +105,11 @@ const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
 ]);
 
 const topLevelRoutes: Routes = [
+  ...LEGACY_WORKOUT_DATA_COMPARISON_PATHS.map(path => ({
+    path,
+    redirectTo: WORKOUT_DATA_COMPARISON_PATH,
+    pathMatch: 'full' as const,
+  })),
   {
     path: 'login',
     loadChildren: () => import('./modules/login.module').then(module => module.LoginModule),
@@ -427,15 +436,6 @@ const topLevelRoutes: Routes = [
     },
   },
   {
-    path: PUBLIC_FEATURE_PATHS.workoutFileComparison,
-    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    resolve: publicSeoRouteData('workoutFileComparison'),
-    data: {
-      preload: true,
-      animation: 'PublicSeo',
-    },
-  },
-  {
     path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('fitGpxTcxFileAnalyzer'),
@@ -448,15 +448,6 @@ const topLevelRoutes: Routes = [
     path: PUBLIC_FEATURE_PATHS.routeFiles,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('routeFiles'),
-    data: {
-      preload: true,
-      animation: 'PublicSeo',
-    },
-  },
-  {
-    path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
-    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
-    resolve: publicSeoRouteData('sportsWatchBenchmark'),
     data: {
       preload: true,
       animation: 'PublicSeo',

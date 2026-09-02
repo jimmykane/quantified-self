@@ -43,7 +43,7 @@ export class ToolsHubPageComponent {
       title: 'Device benchmarks',
       description: 'Open saved benchmark reports for review, coaching, and QA workflows.',
       icon: 'analytics',
-      route: '/features/sports-watch-benchmark',
+      route: '/features/workout-data-comparison',
       status: 'planned',
     },
   ];

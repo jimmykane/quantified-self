@@ -7,10 +7,11 @@ import { MatListModule } from '@angular/material/list';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import {
+  COMPARISON_ANALYSIS_ITEMS,
   COMPARISON_FAQ_ITEMS,
-  COMPARISON_FEATURE_ITEMS,
   COMPARISON_PROVIDER_SOURCES,
-  COMPARISON_SEARCH_INTENT_ITEMS,
+  COMPARISON_REVIEW_ITEMS,
+  COMPARISON_SOURCE_ITEMS,
 } from './workout-data-comparison-page.content';
 
 @Component({
@@ -31,7 +32,8 @@ import {
 })
 export class WorkoutDataComparisonPageComponent {
   readonly providerSources = COMPARISON_PROVIDER_SOURCES;
-  readonly featureItems = COMPARISON_FEATURE_ITEMS;
-  readonly searchIntentItems = COMPARISON_SEARCH_INTENT_ITEMS;
+  readonly sourceItems = COMPARISON_SOURCE_ITEMS;
+  readonly analysisItems = COMPARISON_ANALYSIS_ITEMS;
+  readonly reviewItems = COMPARISON_REVIEW_ITEMS;
   readonly faqItems = COMPARISON_FAQ_ITEMS;
 }

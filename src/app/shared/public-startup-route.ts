@@ -21,6 +21,10 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/integrations/wahoo',
   '/features',
   '/features/workout-data-comparison',
+  // Keep legacy comparison URLs public while the client performs local redirects.
+  // Firebase Hosting handles production requests with permanent redirects.
+  '/features/workout-file-comparison',
+  '/features/sports-watch-benchmark',
   '/features/supported-activities',
   '/features/activity-calendar',
   '/features/training-analysis',
@@ -28,10 +32,8 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/features/activity-map',
   '/features/mcp-server',
   '/features/ai-insights',
-  '/features/workout-file-comparison',
   '/features/fit-gpx-tcx-file-analyzer',
   '/features/fit-gpx-route-files',
-  '/features/sports-watch-benchmark',
   '/guides',
   '/guides/sync-garmin-to-suunto',
   '/guides/sync-coros-to-suunto',

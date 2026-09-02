@@ -103,11 +103,9 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Supported activity types', '/features/supported-activities'),
       routeAction('MCP Server', '/features/mcp-server'),
       routeAction('Assistant', '/features/ai-insights'),
-      routeAction('Workout Data Comparison', '/features/workout-data-comparison'),
-      routeAction('Compare Files', '/features/workout-file-comparison'),
+      routeAction('Workout Comparison & Benchmarks', '/features/workout-data-comparison'),
       routeAction('Analyze Files', '/features/fit-gpx-tcx-file-analyzer'),
       routeAction('Route Files', '/features/fit-gpx-route-files'),
-      routeAction('Device Benchmarks', '/features/sports-watch-benchmark'),
     ],
     sections: [
       {
@@ -697,89 +695,6 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('External MCP Overview', '/features/mcp-server', 'stroked', 'extension'),
     ],
   },
-  workoutFileComparison: {
-    key: 'workoutFileComparison',
-    path: PUBLIC_FEATURE_PATHS.workoutFileComparison,
-    eyebrow: 'Workout File Comparison',
-    title: 'FIT, TCX, GPX Workout File Comparison',
-    description: `Compare FIT, TCX, GPX, JSON, and SML workout files from services, exports, lab tests, review units, and unsupported devices. Manual uploads and benchmark comparisons are free for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
-    h1: 'Compare FIT, TCX, GPX, JSON, and SML workout files',
-    intro: `Upload activity files from services, unsupported devices, lab tests, review units, or custom exports, then compare them beside Garmin, Suunto, and COROS provider data. Manual uploads and benchmark comparisons are available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities.`,
-    chips: ['FIT', 'TCX', 'GPX', 'JSON', 'SML', 'Free uploads'],
-    actions: [
-      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Compare Workout Data', '/features/workout-data-comparison'),
-      routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
-    ],
-    sections: [
-      {
-        eyebrow: 'File Sources',
-        title: 'Bring exported workouts into the same dashboard',
-        copy: 'File comparison is for athletes and testers who have recordings outside the normal provider sync path.',
-        items: [
-          {
-            icon: 'upload_file',
-            title: 'Manual file uploads',
-            copy: 'Import FIT, TCX, GPX, JSON, and SML activity files, then keep them available for charts, exports, reprocessing, and comparison.',
-          },
-          {
-            icon: 'source',
-            title: 'Custom and unsupported services',
-            copy: 'Use exported files from unsupported tools, beta firmware, lab systems, or one-off device tests without losing source context.',
-          },
-          {
-            icon: 'hub',
-            title: 'Provider data beside files',
-            copy: 'Compare custom files with Garmin, Suunto, and COROS activities that already live in your Quantified Self account.',
-          },
-        ],
-      },
-      {
-        eyebrow: 'Comparison',
-        title: 'When two recordings tell a different story',
-        copy: 'Use the same benchmark workflow for service imports and uploaded files so disagreement is visible instead of hidden in averages.',
-        items: [
-          {
-            icon: 'merge_type',
-            title: 'Reference and test roles',
-            copy: 'Pick the trusted recording as the reference, pick the file or device under test, and rerun the comparison when needed.',
-          },
-          {
-            icon: 'stacked_line_chart',
-            title: 'Shared metric overlays',
-            copy: 'Compare pace or speed, heart rate, power, cadence, elevation, distance, and other compatible streams when the files include them.',
-          },
-          {
-            icon: 'route',
-            title: 'Route and distance disagreement',
-            copy: 'Inspect GPS traces and stat deltas so a distance, ascent, or duration difference is easier to explain.',
-          },
-        ],
-        preview: 'reviewer-benchmark',
-      },
-    ],
-    faqItems: [
-      {
-        question: 'Is Quantified Self a FIT, TCX, or GPX file viewer?',
-        answer: 'Quantified Self can keep FIT, TCX, GPX, JSON, and SML files useful after import, but it is an account-based training dashboard rather than a standalone public file viewer.',
-      },
-      {
-        question: 'Can I compare custom files with Garmin, Suunto, and COROS activities?',
-        answer: 'Yes. Uploaded files and provider-imported activities can be compared when compatible activity data and streams are available.',
-      },
-      {
-        question: 'Is workout file comparison free?',
-        answer: `Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities. Automatic service sync and higher limits require a paid plan.`,
-      },
-    ],
-    closingTitle: 'Upload the files, keep the context, compare the disagreement',
-    closingCopy: 'Start with the activity files you already have, then move to provider sync only when you need automatic imports or higher activity limits.',
-    closingActions: [
-      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Analyze Workout Files', '/features/fit-gpx-tcx-file-analyzer'),
-      routeAction('Sports Watch Benchmarks', '/features/sports-watch-benchmark'),
-    ],
-  },
   fitGpxTcxFileAnalyzer: {
     key: 'fitGpxTcxFileAnalyzer',
     path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
@@ -791,7 +706,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     chips: ['FIT file analyzer', 'GPX file analyzer', 'TCX file analyzer', 'Maps', 'Charts', 'Free uploads'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Compare Files', '/features/workout-file-comparison'),
+      routeAction('Compare Workouts', '/features/workout-data-comparison'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
     ],
     sections: [
@@ -863,7 +778,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingCopy: 'Start with one exported workout file, verify the available route and stream data, then keep it for later dashboards, exports, reprocessing, or benchmark comparisons.',
     closingActions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Workout File Comparison', '/features/workout-file-comparison'),
+      routeAction('Workout Comparison', '/features/workout-data-comparison'),
       routeAction('Route Files', '/features/fit-gpx-route-files'),
     ],
   },
@@ -998,88 +913,6 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Suunto Integration', '/integrations/suunto', 'stroked', 'published_with_changes'),
       routeAction('COROS Integration', '/integrations/coros', 'stroked', 'route'),
       routeAction('Upload Help', '/help', 'stroked', undefined, 'uploads-and-imports'),
-    ],
-  },
-  sportsWatchBenchmark: {
-    key: 'sportsWatchBenchmark',
-    path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
-    eyebrow: 'Device Benchmarks',
-    title: 'Sports Watch Benchmark Reports',
-    description: `Create sports watch benchmark reports for device reviews, YouTube videos, blog posts, coaching notes, firmware tests, and sensor comparisons using Garmin, Suunto, COROS, or uploaded workout files.`,
-    h1: 'Sports watch benchmark reports for reviewers and device tests',
-    intro: 'Compare same-session recordings, assign reference and test roles, auto-align time, and turn device disagreement into a repeatable benchmark report for reviews, coaching notes, blog posts, YouTube videos, and firmware QA.',
-    chips: ['Device reviews', 'GNSS', 'Heart rate', 'Power', 'YouTube', 'Blog posts'],
-    actions: [
-      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Compare Workout Data', '/features/workout-data-comparison'),
-      routeAction('File Comparison', '/features/workout-file-comparison'),
-    ],
-    sections: [
-      {
-        eyebrow: 'Review Workflow',
-        title: 'Use repeatable evidence instead of screenshots alone',
-        copy: 'Benchmark reports are built for tests where two devices record the same session and the differences need to be explained.',
-        items: [
-          {
-            icon: 'rate_review',
-            title: 'Reviewer-ready reports',
-            copy: 'Use saved benchmark outputs as evidence for sports watch reviews, bike computer tests, sensor comparisons, and firmware follow-up posts.',
-          },
-          {
-            icon: 'published_with_changes',
-            title: 'Role swap and rerun',
-            copy: 'Set a reference device, swap roles when needed, and rerun the benchmark after selecting better-aligned activities.',
-          },
-          {
-            icon: 'ios_share',
-            title: 'Shareable context',
-            copy: 'Use benchmark outputs to support YouTube videos, blog posts, coaching summaries, and internal QA notes without publishing raw training history.',
-          },
-        ],
-      },
-      {
-        eyebrow: 'Metrics',
-        title: 'Measure where devices agree and where they drift',
-        copy: 'Quantified Self focuses on shared streams and stats that make sports watch comparisons defensible.',
-        items: [
-          {
-            icon: 'route',
-            title: 'GNSS trace comparison',
-            copy: 'Compare positional disagreement with route traces, distance differences, and accuracy-style summary metrics.',
-          },
-          {
-            icon: 'monitor_heart',
-            title: 'Sensor agreement',
-            copy: 'Review compatible heart-rate, power, cadence, and pace or speed streams with correlation and error-style summaries.',
-          },
-          {
-            icon: 'data_object',
-            title: 'Files and services',
-            copy: 'Benchmark provider-imported activities or uploaded FIT, TCX, GPX, JSON, and SML files from review units and test devices.',
-          },
-        ],
-        preview: 'reviewer-benchmark',
-      },
-    ],
-    faqItems: [
-      {
-        question: 'Can sports tech reviewers use benchmark reports?',
-        answer: 'Yes. Reviewers, YouTube creators, bloggers, coaches, and testers can compare two recordings and use the report as evidence for device or firmware evaluation.',
-      },
-      {
-        question: 'Do benchmark reports work with uploaded files?',
-        answer: 'Yes. You can use provider-imported activities or uploaded FIT, TCX, GPX, JSON, and SML files when the recordings include compatible data.',
-      },
-      {
-        question: 'Is device benchmarking available on the free plan?',
-        answer: `Yes. Manual uploads and benchmark comparisons are available on the free plan for up to ${STARTER_ACTIVITY_LIMIT} activities. Automatic sync and higher limits require a paid plan.`,
-      },
-    ],
-    closingTitle: 'Create a cleaner benchmark before publishing a device opinion',
-    closingCopy: 'Use the same archive for test files, service imports, comparison reports, and follow-up analysis as firmware and devices change.',
-    closingActions: [
-      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
-      routeAction('Compare Files', '/features/workout-file-comparison'),
     ],
   },
   guidesHub: {
@@ -1832,7 +1665,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     closingActions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
       routeAction('All Integrations', '/integrations', 'stroked', 'arrow_forward'),
-      routeAction('Workout File Comparison', '/features/workout-file-comparison'),
+      routeAction('Workout Comparison', '/features/workout-data-comparison'),
     ],
     howToSteps: [
       'Connect the providers you use or upload supported activity files.',
@@ -1926,10 +1759,8 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   activityMap: buildRouteData(PUBLIC_SEO_PAGES.activityMap),
   mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),
   assistant: buildRouteData(PUBLIC_SEO_PAGES.assistant),
-  workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),
   fitGpxTcxFileAnalyzer: buildRouteData(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer),
   routeFiles: buildRouteData(PUBLIC_SEO_PAGES.routeFiles),
-  sportsWatchBenchmark: buildRouteData(PUBLIC_SEO_PAGES.sportsWatchBenchmark),
   guidesHub: buildRouteData(PUBLIC_SEO_PAGES.guidesHub),
   syncGarminToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncGarminToSuunto),
   syncCorosToSuunto: buildRouteData(PUBLIC_SEO_PAGES.syncCorosToSuunto),

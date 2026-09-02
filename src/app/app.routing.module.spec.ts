@@ -8,6 +8,10 @@ import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
 import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
+import {
+  LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
+  WORKOUT_DATA_COMPARISON_PATH,
+} from './components/features/workout-data-comparison-page.paths';
 import { PublicPricingComponent } from './components/public-pricing/public-pricing.component';
 import { PricingComponent } from './components/pricing/pricing.component';
 
@@ -357,18 +361,31 @@ describe('AppRoutingModule routes', () => {
       animation: 'Features',
     });
     expect(route?.data?.['title']).toBeUndefined();
-    expect(routeData['title']).toBe('Workout Data Comparison');
-    expect(routeData['description']).toContain('custom FIT, TCX, or GPX workout data');
-    expect(routeData['description']).toContain('free-plan manual uploads');
-    expect(routeData['description']).toContain('reviewer-ready device comparisons');
+    expect(routeData['title']).toBe('Workout File, Provider & Sports Device Comparison');
+    expect(routeData['description']).toContain('Garmin, Suunto, COROS, Wahoo, FIT, TCX, GPX, JSON, and SML');
+    expect(routeData['description']).toContain('reviewer-ready benchmarks');
     expect(routeData['keywords']).toBeUndefined();
     expect(jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
-      name: 'Compare Garmin, Suunto, COROS, and Wahoo workout data',
+      name: 'Compare workout files, providers, and sports devices',
       url: 'https://quantified-self.io/features/workout-data-comparison',
       inLanguage: 'en',
     });
+  });
+
+  it('redirects legacy comparison URLs to the consolidated feature page', () => {
+    for (const path of LEGACY_WORKOUT_DATA_COMPARISON_PATHS) {
+      const route = routes.find(candidate => candidate.path === path);
+
+      expect(route).toMatchObject({
+        path,
+        redirectTo: WORKOUT_DATA_COMPARISON_PATH,
+        pathMatch: 'full',
+      });
+      expect(route?.loadComponent).toBeUndefined();
+      expect(route?.resolve).toBeUndefined();
+    }
   });
 
   it('should define a public supported activities feature route with lazily resolved SEO metadata', async () => {
@@ -441,12 +458,6 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'grounded in read-only Quantified Self tools',
       },
       {
-        path: PUBLIC_FEATURE_PATHS.workoutFileComparison,
-        title: 'FIT, TCX, GPX Workout File Comparison',
-        h1: 'Compare FIT, TCX, GPX, JSON, and SML workout files',
-        descriptionText: 'Compare FIT, TCX, GPX, JSON, and SML workout files',
-      },
-      {
         path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
         title: 'FIT, GPX, TCX File Analyzer',
         h1: 'Analyze FIT, GPX, and TCX workout files',
@@ -457,12 +468,6 @@ describe('AppRoutingModule routes', () => {
         title: 'FIT and GPX Route Files with Multi-Provider Delivery',
         h1: 'Save FIT and GPX route files, then send them to connected services',
         descriptionText: 'Save FIT course files and GPX route or track files',
-      },
-      {
-        path: PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
-        title: 'Sports Watch Benchmark Reports',
-        h1: 'Sports watch benchmark reports for reviewers and device tests',
-        descriptionText: 'sports watch benchmark reports',
       },
     ];
 

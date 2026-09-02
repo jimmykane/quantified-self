@@ -6,10 +6,8 @@ export type PublicSeoPageKey =
   | 'activityMap'
   | 'mcpServer'
   | 'assistant'
-  | 'workoutFileComparison'
   | 'fitGpxTcxFileAnalyzer'
   | 'routeFiles'
-  | 'sportsWatchBenchmark'
   | 'guidesHub'
   | 'syncGarminToSuunto'
   | 'syncCorosToSuunto'
@@ -27,10 +25,8 @@ export const PUBLIC_FEATURE_PATHS = {
   activityMap: 'features/activity-map',
   mcpServer: 'features/mcp-server',
   assistant: 'features/ai-insights',
-  workoutFileComparison: 'features/workout-file-comparison',
   fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
   routeFiles: 'features/fit-gpx-route-files',
-  sportsWatchBenchmark: 'features/sports-watch-benchmark',
 } as const;
 
 export const PUBLIC_GUIDE_PATHS = {

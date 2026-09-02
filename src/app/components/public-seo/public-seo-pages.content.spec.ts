@@ -16,10 +16,8 @@ describe('public-seo-pages.content', () => {
       activityMap: 'features/activity-map',
       mcpServer: 'features/mcp-server',
       assistant: 'features/ai-insights',
-      workoutFileComparison: 'features/workout-file-comparison',
       fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
       routeFiles: 'features/fit-gpx-route-files',
-      sportsWatchBenchmark: 'features/sports-watch-benchmark',
     });
     expect(PUBLIC_GUIDE_PATHS).toEqual({
       hub: 'guides',
@@ -164,10 +162,6 @@ describe('public-seo-pages.content', () => {
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => section.preview === 'assistant-example')).toBe(true);
 
-    expect(PUBLIC_SEO_PAGES.workoutFileComparison.h1).toBe('Compare FIT, TCX, GPX, JSON, and SML workout files');
-    expect(PUBLIC_SEO_PAGES.workoutFileComparison.intro).toContain('Manual uploads and benchmark comparisons are available on the free plan');
-    expect(PUBLIC_SEO_PAGES.workoutFileComparison.intro).toContain('custom exports');
-
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.h1).toBe('Analyze FIT, GPX, and TCX workout files');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.description).toContain('FIT file analyzer');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.chips).toContain('GPX file analyzer');
@@ -194,11 +188,6 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can I send saved routes to Wahoo or COROS?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Can Quantified Self import routes from Suunto?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.routeFiles.faqItems.some(item => item.question === 'Are route files counted separately from activities?')).toBe(true);
-
-    expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.h1).toBe('Sports watch benchmark reports for reviewers and device tests');
-    expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('YouTube videos');
-    expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('firmware QA');
-    expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.sections.some(section => section.preview === 'reviewer-benchmark')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.guidesHub.h1).toBe('Training data sync guides');
     expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Garmin to Suunto activity sync');
@@ -250,10 +239,10 @@ describe('public-seo-pages.content', () => {
     expect(featureHubLinks).toContain('/features/activity-map');
     expect(featureHubLinks).toContain('/features/mcp-server');
     expect(featureHubLinks).toContain('/features/workout-data-comparison');
-    expect(featureHubLinks).toContain('/features/workout-file-comparison');
     expect(featureHubLinks).toContain('/features/fit-gpx-tcx-file-analyzer');
     expect(featureHubLinks).toContain('/features/fit-gpx-route-files');
-    expect(featureHubLinks).toContain('/features/sports-watch-benchmark');
+    expect(featureHubLinks).not.toContain('/features/workout-file-comparison');
+    expect(featureHubLinks).not.toContain('/features/sports-watch-benchmark');
     expect(featureHubLinks).toContain('/integrations');
     expect(featureHubLinks).toContain('/guides');
 
