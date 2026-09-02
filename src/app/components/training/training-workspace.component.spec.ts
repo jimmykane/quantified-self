@@ -182,7 +182,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(feedbackAction?.getAttribute('aria-label')).toBe('Send feedback about Training to support');
     expect(feedbackAction?.getAttribute('href')).toContain('mailto:');
     expect(feedbackAction?.getAttribute('href')).toContain('subject=Training%20feedback');
-    expect(feedbackAction?.getAttribute('target')).toBe('_blank');
+    expect(feedbackAction?.getAttribute('target')).toBeNull();
+    expect(feedbackAction?.getAttribute('rel')).toBeNull();
     const calendarAction = element.querySelector('.training-calendar-action');
     expect(calendarAction?.getAttribute('aria-label')).toBe('Open activity calendar');
     expect(calendarAction?.querySelector('mat-icon')?.textContent?.trim()).toBe('calendar_month');

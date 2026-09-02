@@ -27,14 +27,14 @@ export interface HelpAction {
   id: 'email-support' | 'report-bug' | 'release-notes' | 'policies';
   label: string;
   icon: string;
-  kind: 'route' | 'external';
+  kind: 'route' | 'external' | 'email';
   target: string;
 }
 
 export interface HelpSectionLink {
   label: string;
   icon: string;
-  kind: 'route' | 'external';
+  kind: 'route' | 'external' | 'email';
   target: string;
   fragment?: string;
   queryParams?: Record<string, string>;
@@ -163,7 +163,7 @@ export const HELP_ACTIONS: HelpAction[] = [
     id: 'email-support',
     label: 'Email Support',
     icon: 'email',
-    kind: 'external',
+    kind: 'email',
     target: SUPPORT_MAILTO,
   },
   {
@@ -499,7 +499,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     links: [
       { label: 'Open Training', icon: 'monitoring', kind: 'route', target: '/training' },
       { label: 'Training Analysis Overview', icon: 'travel_explore', kind: 'route', target: '/features/training-analysis' },
-      { label: 'Email Training Feedback', icon: 'email', kind: 'external', target: `${SUPPORT_MAILTO}?subject=Training%20feedback` },
+      { label: 'Email Training Feedback', icon: 'email', kind: 'email', target: `${SUPPORT_MAILTO}?subject=Training%20feedback` },
     ],
   },
   {
@@ -586,7 +586,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],
   },
@@ -671,7 +671,7 @@ Contact support if:
       { label: 'My Tracks', icon: 'layers', kind: 'route', target: '/mytracks' },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Policies', icon: 'policy', kind: 'route', target: '/policies' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -732,7 +732,7 @@ From an activity action menu you can also:
       { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -966,7 +966,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -1068,7 +1068,7 @@ This action cannot be undone.
       { label: 'MCP Server', icon: 'devices', kind: 'route', target: '/features/mcp-server' },
       { label: 'MCP Client Access', icon: 'devices', kind: 'route', target: '/policies', fragment: POLICIES_MCP_CLIENTS_FRAGMENT },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
-      { label: 'Privacy Email', icon: 'shield', kind: 'external', target: PRIVACY_MAILTO },
+      { label: 'Privacy Email', icon: 'shield', kind: 'email', target: PRIVACY_MAILTO },
     ],
   },
   {
@@ -1114,7 +1114,7 @@ Send these if possible:
 - a screenshot,
 - and an event link or event ID if the problem is tied to one activity.`,
     links: [
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
       { label: 'Report a Bug', icon: 'bug_report', kind: 'external', target: GITHUB_ISSUES_URL },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],

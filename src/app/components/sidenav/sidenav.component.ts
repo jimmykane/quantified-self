@@ -32,6 +32,7 @@ export class SideNavComponent {
   public appVersion = environment.appVersion;
   public readonly openSourceLicense = QUANTIFIED_SELF_LICENSE_ID;
   public readonly sourceCodeUrl = QUANTIFIED_SELF_SOURCE_URL;
+  public readonly supportMailtoHref = `mailto:${environment.supportEmail}`;
 
   private themeService = inject(AppThemeService);
   public appThemes = AppThemes;
@@ -109,10 +110,6 @@ export class SideNavComponent {
     this.analyticsService.logEvent('facebook_group_click');
     this.hapticsService.selection();
     window.open('https://www.facebook.com/groups/quantifiedself.io');
-  }
-
-  contactSupport(): void {
-    window.open('mailto:support@quantified-self.io');
   }
 
   reportBug(): void {

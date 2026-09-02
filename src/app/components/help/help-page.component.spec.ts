@@ -144,7 +144,7 @@ describe('HelpPageComponent', () => {
     expect(sectionCopy?.innerHTML).toContain('deletes the expired record asynchronously');
   });
 
-  it('renders internal links without target blank and external links with target blank', () => {
+  it('keeps routes and email links in the current context while opening web links in a new tab', () => {
     component.openSection('getting-started');
     fixture.detectChanges();
 
@@ -158,15 +158,33 @@ describe('HelpPageComponent', () => {
       .queryAll(By.css('a'))
       .find(node => node.nativeElement.textContent.includes('Email Support'));
     expect(emailLink?.attributes['href']).toContain('mailto:');
-    expect(emailLink?.attributes['target']).toBe('_blank');
+    expect(emailLink?.attributes['target']).toBeUndefined();
+    expect(emailLink?.attributes['rel']).toBeUndefined();
 
     component.returnToHelpCenter();
     fixture.detectChanges();
+    const quickEmailLink = fixture.debugElement
+      .queryAll(By.css('.quick-action'))
+      .find(node => node.nativeElement.textContent.includes('Email Support'));
+    expect(quickEmailLink?.attributes['href']).toContain('mailto:');
+    expect(quickEmailLink?.attributes['target']).toBeUndefined();
+    expect(quickEmailLink?.attributes['rel']).toBeUndefined();
+
     const bugLink = fixture.debugElement
       .queryAll(By.css('.quick-action'))
       .find(node => node.nativeElement.textContent.includes('Report a Bug'));
     expect(bugLink?.attributes['href']).toContain('github.com/jimmykane/quantified-self/issues');
     expect(bugLink?.attributes['target']).toBe('_blank');
+    expect(bugLink?.attributes['rel']).toBe('noopener noreferrer');
+
+    component.openSection('training-analysis');
+    fixture.detectChanges();
+    const sectionEmailLink = fixture.debugElement
+      .queryAll(By.css('.section-link'))
+      .find(node => node.nativeElement.textContent.includes('Email Training Feedback'));
+    expect(sectionEmailLink?.attributes['href']).toContain('mailto:');
+    expect(sectionEmailLink?.attributes['target']).toBeUndefined();
+    expect(sectionEmailLink?.attributes['rel']).toBeUndefined();
   });
 
   it('opens the article selected by a URL fragment on initial render', async () => {

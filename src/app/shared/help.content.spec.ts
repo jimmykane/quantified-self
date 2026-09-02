@@ -224,6 +224,22 @@ describe('help.content', () => {
     });
   });
 
+  it('classifies every email destination separately from new-tab web links', () => {
+    const links = [
+      ...HELP_ACTIONS,
+      ...HELP_SECTIONS.flatMap(section => section.links),
+    ];
+
+    links.forEach(link => {
+      if (link.target.startsWith('mailto:')) {
+        expect(link.kind).toBe('email');
+      }
+      if (link.kind === 'email') {
+        expect(link.target).toMatch(/^mailto:/);
+      }
+    });
+  });
+
   it('should document the dashboard recovery tile now/active/latest summary behavior', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
@@ -482,7 +498,7 @@ describe('help.content', () => {
     expect(trainingSection?.links).toContainEqual({
       label: 'Email Training Feedback',
       icon: 'email',
-      kind: 'external',
+      kind: 'email',
       target: expect.stringMatching(/^mailto:.*subject=Training%20feedback$/),
     });
   });
