@@ -310,9 +310,9 @@ Maintain the projection from trusted backend token writes with retryable, idempo
 2. Run `npm --prefix functions run backfill-service-connection-projections -- --services=garmin,suunto,coros` and inspect the dry-run summary.
 3. Apply with `--execute --confirm=BACKFILL_CONNECTION_PROJECTIONS`, then repeat the dry run and verify expected root/account coverage.
 4. Deploy the frontend that reads only the safe projection.
-5. Deploy Rules denying token-root and token-child reads. Keep the triggers deployed so reconnect, refresh, retained-account, and disconnect changes remain synchronized.
+5. In a separate follow-up release, deploy Rules denying token-root and token-child reads. Keep the triggers deployed so reconnect, refresh, retained-account, and disconnect changes remain synchronized.
 
-Do not reverse steps 4 and 5: an older frontend may continue to use the legacy read temporarily, but denying credential reads before the projection-aware frontend is live makes connected accounts appear disconnected.
+Do not combine or reverse steps 4 and 5 in the initial release: an older frontend may continue to use the legacy read temporarily, but denying credential reads before the projection-aware frontend and existing-account projections are verified makes connected accounts appear disconnected. The initial projection release must preserve the compatibility read; the follow-up Rules-only release removes it.
 
 ### Subscription enforcement
 

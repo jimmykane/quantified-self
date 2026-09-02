@@ -1070,11 +1070,11 @@ describe('help.content', () => {
     });
   });
 
-  it('should explain that provider credentials remain server-only', () => {
+  it('should explain that connection screens use the safe account summary', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('Connection screens read a limited account summary');
-    expect(gettingStartedSection?.content).toContain('provider access and refresh credentials stay server-only');
+    expect(gettingStartedSection?.content).toContain('Connection screens use a limited account summary');
+    expect(gettingStartedSection?.content).toContain('no longer request provider access or refresh credentials');
   });
 
   it('documents Wahoo FIT imports, activity and route delivery, skip rules, and retained imported activities', () => {

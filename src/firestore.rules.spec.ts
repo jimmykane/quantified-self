@@ -127,7 +127,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'service_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('denies Garmin browser reads and credential mutations', async () => {
+        it('preserves Garmin owner reads during projection rollout while denying credential mutations', async () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
             const tokenRef = db.doc(`garminAPITokens/${userId}/tokens/token-1`);
 
@@ -141,8 +141,8 @@ describe('Firestore Security Rules', () => {
                 });
             });
 
-            await assertFails(db.doc(`garminAPITokens/${userId}`).get());
-            await assertFails(tokenRef.get());
+            await assertSucceeds(db.doc(`garminAPITokens/${userId}`).get());
+            await assertSucceeds(tokenRef.get());
             await assertFails(db.doc(`garminAPITokens/${userId}`).set({ state: 'client-state' }));
             await assertFails(db.doc(`garminAPITokens/${userId}`).update({ state: 'client-state' }));
             await assertFails(db.doc(`garminAPITokens/${userId}`).delete());
@@ -241,7 +241,7 @@ describe('Firestore Security Rules', () => {
                     });
             });
 
-            await assertFails(tokenRef.get());
+            await assertSucceeds(tokenRef.get());
             await assertFails(tokenRef.update({ accessToken: 'changed' }));
             await assertFails(tokenRef.delete());
             await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).update({
@@ -269,7 +269,7 @@ describe('Firestore Security Rules', () => {
             for (const collectionName of ['suuntoAppAccessTokens', 'garminAPITokens']) {
                 const rootRef = db.collection(collectionName).doc(userId);
                 const tokenRef = rootRef.collection('tokens').doc('token-1');
-                await assertFails(tokenRef.get());
+                await assertSucceeds(tokenRef.get());
                 await assertFails(tokenRef.update({ accessToken: 'changed' }));
                 await assertFails(tokenRef.delete());
                 await assertFails(rootRef.update({ state: 'new-oauth-state' }));
@@ -282,7 +282,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'suunto_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('denies Suunto browser reads and credential or provider-identity mutations', async () => {
+        it('preserves Suunto owner reads during projection rollout while denying credential or provider-identity mutations', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc(`suuntoAppAccessTokens/${userId}`).set({
                     state: 'server-oauth-state',
@@ -299,8 +299,8 @@ describe('Firestore Security Rules', () => {
             const rootRef = db.doc(`suuntoAppAccessTokens/${userId}`);
             const tokenRef = db.doc(`suuntoAppAccessTokens/${userId}/tokens/suunto-account`);
 
-            await assertFails(rootRef.get());
-            await assertFails(tokenRef.get());
+            await assertSucceeds(rootRef.get());
+            await assertSucceeds(tokenRef.get());
             await assertFails(rootRef.set({ state: 'client-oauth-state' }));
             await assertFails(rootRef.update({ state: 'client-oauth-state' }));
             await assertFails(rootRef.delete());
@@ -322,7 +322,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'coros_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('denies COROS browser reads and client credential or identity mutations', async () => {
+        it('preserves COROS owner reads during projection rollout while denying client credential or identity mutations', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`).set({
                     accessToken: 'stored-access-token',
@@ -334,7 +334,7 @@ describe('Firestore Security Rules', () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
             const tokenRef = db.doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`);
 
-            await assertFails(tokenRef.get());
+            await assertSucceeds(tokenRef.get());
             await assertFails(tokenRef.update({ accessToken: 'forged-access-token' }));
             await assertFails(tokenRef.update({ refreshToken: 'forged-refresh-token' }));
             await assertFails(tokenRef.update({ openId: 'forged-open-id' }));

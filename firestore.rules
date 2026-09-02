@@ -5,6 +5,12 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    function isNonAnonymousOwner(userID) {
+      return request.auth != null
+        && request.auth.uid == userID
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
     // Make sure the uid of the requesting user matches name of the user
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.
@@ -396,7 +402,10 @@ service cloud.firestore {
 
 
     match /suuntoAppAccessTokens/{userID} {
-      allow read: if false;
+      // Temporary rollout compatibility: the projection-aware frontend no
+      // longer needs this read, but keep it until production projections have
+      // been backfilled and verified. Browser writes remain denied.
+      allow read: if isNonAnonymousOwner(userID);
       // Suunto OAuth state, credentials, stable provider identity, and
       // lifecycle fences are server-owned. In particular, an owner must not
       // be able to create a token child that a backend scheduler could promote
@@ -404,33 +413,37 @@ service cloud.firestore {
       // because Firestore would retain its token subcollection as an orphan.
       allow create, update, delete: if false;
        match /tokens/{document=**} {
-          allow read: if false;
+          allow read: if isNonAnonymousOwner(userID);
           allow write: if false;
        }
     }
 
     match /COROSAPIAccessTokens/{userID} {
-      allow read: if false;
+      // Temporary rollout compatibility; remove with the post-backfill Rules
+      // lockdown after the projection-aware frontend is verified.
+      allow read: if isNonAnonymousOwner(userID);
       // COROS OAuth state, credentials, and deauthorization are server-owned.
       // Keeping every root mutation behind callables prevents an owner from
       // deleting only the parent or reviving a legacy orphaned token child by
       // recreating an empty root.
       allow create, update, delete: if false;
        match /tokens/{document=**} {
-          allow read: if false;
-          // COROS OAuth exchange, refresh, disconnect, and safe connection
-          // projection flows use Admin SDK only.
+          allow read: if isNonAnonymousOwner(userID);
+          // COROS OAuth exchange, refresh, and disconnect flows use Admin SDK.
+          // Legacy owner reads remain only as a staged-rollout fallback.
           allow write: if false;
        }
     }
 
     match /garminAPITokens/{userID} {
-      allow read: if false;
+      // Temporary rollout compatibility; remove only after the projection
+      // backfill and projection-aware frontend have been verified in production.
+      allow read: if isNonAnonymousOwner(userID);
       // Garmin OAuth state, credentials, provider identity, and lifecycle
       // fences authorize backend Health callback processing and are server-owned.
       allow create, update, delete: if false;
        match /tokens/{tokenId} {
-          allow read: if false;
+          allow read: if isNonAnonymousOwner(userID);
           allow write: if false;
        }
     }
