@@ -83,6 +83,25 @@ describe('PublicSeoPageComponent', () => {
     guideFixture.destroy();
   });
 
+  it('uses the shared compact-row surface for every public feature-page section', () => {
+    for (const page of Object.values(PUBLIC_SEO_PAGES)) {
+      routeStub.snapshot.data.publicSeoPage = page;
+      const pageFixture = TestBed.createComponent(PublicSeoPageComponent);
+      pageFixture.detectChanges();
+
+      const expectedItemCount = page.sections.reduce(
+        (total, section) => total + section.items.length,
+        0,
+      );
+
+      expect(pageFixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))).toHaveLength(expectedItemCount);
+      expect(pageFixture.nativeElement.querySelectorAll('.compact-feature-row-stack')).toHaveLength(page.sections.length);
+      expect(pageFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(0);
+
+      pageFixture.destroy();
+    }
+  });
+
   it('renders the public MCP capabilities, boundaries, and setup links', () => {
     routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.mcpServer;
 
