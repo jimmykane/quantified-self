@@ -67,11 +67,11 @@ function weightDocument(
 
 function vo2Document(
     id: string,
-    eventStartDate: unknown,
+    startDate: unknown,
     value: unknown,
     type = 'Running',
     source = 'Garmin API',
-    startDate: unknown = eventStartDate,
+    eventStartDate: unknown = startDate,
     creatorName = 'private-device',
 ): ActivityHealthQueryPageDocument {
     return {
@@ -141,19 +141,17 @@ describe('readActivityHealthRange', () => {
         const documents = [
             vo2Document(
                 'run',
-                Timestamp.fromMillis(START_MS),
+                START_MS + 1_000,
                 51,
                 'Running',
                 'Garmin API',
-                START_MS + 1_000,
             ),
             vo2Document(
                 'bike',
-                Timestamp.fromMillis(START_MS),
+                START_MS + 2_000,
                 48,
                 'Cycling',
                 'Garmin API',
-                START_MS + 2_000,
             ),
         ];
         const result = await readActivityHealthRange('owner', query('vo2_max'), {
@@ -162,7 +160,7 @@ describe('readActivityHealthRange', () => {
 
         expect(ACTIVITY_HEALTH_QUERY_PLANS.vo2_max).toMatchObject({
             collectionId: 'activities',
-            timestampField: 'eventStartDate',
+            timestampField: 'startDate',
             observationTimestampField: 'startDate',
             statisticField: 'stats.`VO2 Max`',
             statisticKey: 'VO2 Max',
@@ -176,6 +174,29 @@ describe('readActivityHealthRange', () => {
             START_MS + 2_000,
         ]);
         expect(result.observations.every(item => item.semanticVariant.startsWith('workout_imported_'))).toBe(true);
+    });
+
+    it('keeps an in-window VO2 activity when its merged parent event starts outside the window', async () => {
+        const childStartDate = START_MS + 5_000;
+        const parentEventStartDate = START_MS - 60_000;
+        const result = await readActivityHealthRange('owner', query('vo2_max'), {
+            readPage: async () => [vo2Document(
+                'in-window-child',
+                childStartDate,
+                52,
+                'Running',
+                'Garmin API',
+                parentEventStartDate,
+            )],
+        });
+
+        expect(result.observations).toHaveLength(1);
+        expect(result.observations[0]).toMatchObject({
+            observedAtMs: childStartDate,
+            value: 52,
+            discipline: 'running',
+        });
+        expect(ACTIVITY_HEALTH_QUERY_PLANS.vo2_max.selectedFields).not.toContain('eventStartDate');
     });
 
     it('accepts stored number, Date, Timestamp, and timestamp-like date representations', async () => {
@@ -201,11 +222,11 @@ describe('readActivityHealthRange', () => {
         const result = await readActivityHealthRange('owner', query('vo2_max'), {
             readPage: async () => [vo2Document(
                 'outside-child',
-                Timestamp.fromMillis(END_MS),
+                END_MS + 1,
                 51,
                 'Running',
                 'Garmin API',
-                END_MS + 1,
+                END_MS,
             )],
         });
 
@@ -403,13 +424,16 @@ describe('default Firestore query construction', () => {
         expect(calls.select).toEqual(ACTIVITY_HEALTH_QUERY_PLANS.body_weight.selectedFields);
     });
 
-    it('queries Timestamp activity eventStartDate and only the VO2 projection', async () => {
+    it('queries numeric child activity startDate and only the VO2 projection', async () => {
         const { db, calls } = fakeFirestore();
         await readActivityHealthRange('owner', query('vo2_max'), { db: db as never });
         expect(calls.collectionId).toBe('activities');
-        expect((calls.where[0][2] as Timestamp).toMillis()).toBe(START_MS);
-        expect((calls.where[1][2] as Timestamp).toMillis()).toBe(END_MS);
+        expect(calls.where.slice(0, 2)).toEqual([
+            ['startDate', '>=', START_MS],
+            ['startDate', '<=', END_MS],
+        ]);
         expect(calls.where[2]).toEqual(['stats.`VO2 Max`', '>', 0]);
         expect(calls.select).toEqual(ACTIVITY_HEALTH_QUERY_PLANS.vo2_max.selectedFields);
+        expect(calls.select).not.toContain('eventStartDate');
     });
 });

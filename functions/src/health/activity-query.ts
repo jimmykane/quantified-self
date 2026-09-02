@@ -48,12 +48,11 @@ export const ACTIVITY_HEALTH_QUERY_PLANS = Object.freeze({
     }),
     [HEALTH_METRIC_IDS.Vo2Max]: Object.freeze({
         collectionId: 'activities',
-        timestampField: 'eventStartDate',
+        timestampField: 'startDate',
         observationTimestampField: 'startDate',
         statisticField: `stats.\`${DataVO2Max.type}\``,
         statisticKey: DataVO2Max.type,
         selectedFields: Object.freeze([
-            'eventStartDate',
             'startDate',
             'type',
             `stats.\`${DataVO2Max.type}\``,
@@ -68,7 +67,7 @@ export const ACTIVITY_HEALTH_QUERY_PLANS = Object.freeze({
 
 interface ActivityHealthQueryPlan {
     collectionId: 'events' | 'activities';
-    timestampField: 'startDate' | 'eventStartDate';
+    timestampField: 'startDate';
     observationTimestampField: 'startDate';
     statisticField: string;
     statisticKey: string;
@@ -141,8 +140,8 @@ async function defaultReadPage(
 ): Promise<ActivityHealthQueryPageDocument[]> {
     const collection = db.collection('users').doc(request.userID).collection(request.collectionId);
     let query: admin.firestore.Query = collection
-        .where(request.timestampField, '>=', queryTimestampForField(request.timestampField, request.startTimeMs))
-        .where(request.timestampField, '<=', queryTimestampForField(request.timestampField, request.endTimeMs))
+        .where(request.timestampField, '>=', request.startTimeMs)
+        .where(request.timestampField, '<=', request.endTimeMs)
         .where(request.statisticField, '>', 0)
         .orderBy(request.timestampField, 'asc')
         .orderBy(request.statisticField, 'asc')
@@ -157,10 +156,6 @@ async function defaultReadPage(
         data: documentSnapshot.data(),
         cursor: documentSnapshot,
     }));
-}
-
-function queryTimestampForField(field: ActivityHealthQueryPlan['timestampField'], timeMs: number): number | Timestamp {
-    return field === 'startDate' ? timeMs : Timestamp.fromMillis(timeMs);
 }
 
 function nestedValue(data: Record<string, unknown>, dottedPath: string): unknown {

@@ -226,7 +226,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "eventStartDate",
+          "fieldPath": "startDate",
           "order": "ASCENDING"
         },
         {

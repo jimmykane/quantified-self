@@ -272,7 +272,7 @@ describe('firestore indexes', () => {
                 collectionGroup: 'activities',
                 queryScope: 'COLLECTION',
                 fields: [
-                    { fieldPath: 'eventStartDate', order: 'ASCENDING' },
+                    { fieldPath: 'startDate', order: 'ASCENDING' },
                     { fieldPath: 'stats.`VO2 Max`', order: 'ASCENDING' },
                     { fieldPath: '__name__', order: 'ASCENDING' },
                 ],
