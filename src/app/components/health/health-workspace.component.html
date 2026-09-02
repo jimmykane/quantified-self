@@ -129,16 +129,16 @@
           </div>
         </header>
 
-        @if (isSavingRange()) {
+        @if (isSavingPreferences()) {
           <div class="health-range-save-status" role="status" aria-live="polite">
             <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
-            <span>Saving range preference…</span>
+            <span>Saving Health view…</span>
           </div>
-        } @else if (rangeSaveFailed()) {
+        } @else if (preferencesSaveFailed()) {
           <div class="health-range-save-status health-range-save-status-error" role="alert">
             <mat-icon aria-hidden="true">cloud_off</mat-icon>
-            <span>This range is active, but it was not saved.</span>
-            <button mat-button type="button" (click)="retryRangeSave()">Retry</button>
+            <span>This Health view is active, but it was not saved.</span>
+            <button mat-button type="button" (click)="retryPreferenceSave()">Retry</button>
           </div>
         }
 

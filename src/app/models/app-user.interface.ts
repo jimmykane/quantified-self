@@ -20,6 +20,7 @@ import { ActivitySyncRouteId } from '@shared/activity-sync-routes';
 import { RouteDeliverySyncRouteId } from '@shared/route-delivery-sync-routes';
 import { ServiceConnectionMetaFields } from '@shared/service-connection';
 import type { TrainingSettings } from '@shared/derived-metrics';
+import { HEALTH_METRIC_IDS, type HealthMetricId } from '@shared/health';
 import type { TrainingDestinationId, TrainingSportId } from '@shared/training-disciplines';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 
@@ -46,8 +47,14 @@ export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';
 
 export const APP_HEALTH_WORKSPACE_RANGES = ['today', '14d', '30d', '90d', '1y'] as const;
 export type AppHealthWorkspaceRange = typeof APP_HEALTH_WORKSPACE_RANGES[number];
+export type AppHealthWorkspaceMetric = 'sleep' | HealthMetricId;
+export const APP_HEALTH_WORKSPACE_METRICS: readonly AppHealthWorkspaceMetric[] = [
+    'sleep',
+    ...Object.values(HEALTH_METRIC_IDS),
+];
 
 export interface AppHealthWorkspaceSettingsInterface {
+    metric?: AppHealthWorkspaceMetric;
     range?: AppHealthWorkspaceRange;
 }
 

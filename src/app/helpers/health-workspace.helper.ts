@@ -31,16 +31,21 @@ import {
 } from '@shared/activity-health';
 import { SleepSession, normalizeSleepProvider } from '@shared/sleep';
 import {
+  APP_HEALTH_WORKSPACE_METRICS,
   APP_HEALTH_WORKSPACE_RANGES,
+  AppHealthWorkspaceMetric,
   AppHealthWorkspaceRange,
 } from '../models/app-user.interface';
 
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
-export type HealthWorkspaceMetricSelection = 'sleep' | HealthMetricId;
+export type HealthWorkspaceMetricSelection = AppHealthWorkspaceMetric;
 
 export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRate;
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
+const HEALTH_WORKSPACE_METRICS = new Set<HealthWorkspaceMetricSelection>([
+  ...APP_HEALTH_WORKSPACE_METRICS,
+]);
 
 export interface HealthWorkspaceRouteState {
   metric: HealthWorkspaceMetricSelection;
@@ -223,6 +228,12 @@ export function normalizeHealthWorkspaceRange(value: unknown): HealthWorkspaceRa
   return HEALTH_WORKSPACE_RANGES.includes(value as HealthWorkspaceRange)
     ? value as HealthWorkspaceRange
     : HEALTH_WORKSPACE_DEFAULT_RANGE;
+}
+
+export function normalizeHealthWorkspaceMetric(value: unknown): HealthWorkspaceMetricSelection {
+  return HEALTH_WORKSPACE_METRICS.has(value as HealthWorkspaceMetricSelection)
+    ? value as HealthWorkspaceMetricSelection
+    : HEALTH_WORKSPACE_DEFAULT_METRIC;
 }
 
 export function healthWorkspaceRangeDays(range: HealthWorkspaceRange): number {

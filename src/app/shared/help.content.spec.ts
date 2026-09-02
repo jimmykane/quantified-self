@@ -88,8 +88,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
     expect(healthSection?.content).toContain('**Today**, **14d**, **30d**, **90d**, or **1y**');
-    expect(healthSection?.content).toContain('range is saved to your account without adding URL query parameters');
-    expect(healthSection?.content).toContain('selected metric and older/newer position remain local');
+    expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
+    expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
     expect(healthSection?.content).toContain('Detailed sample streams load for Today, 14-day, and 30-day windows');

@@ -30,6 +30,7 @@ import {
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
   navigateHealthWorkspaceWindow,
+  normalizeHealthWorkspaceMetric,
   normalizeHealthWorkspaceRange,
   resolveHealthWorkspaceWindow,
   resolveSleepReferenceValue,
@@ -186,6 +187,13 @@ describe('Health workspace helpers', () => {
     expect(normalizeHealthWorkspaceRange('1y')).toBe('1y');
     expect(normalizeHealthWorkspaceRange('forever')).toBe('30d');
     expect(normalizeHealthWorkspaceRange(null)).toBe('30d');
+  });
+
+  it('normalizes persisted Health metrics and falls back invalid settings to Resting heart rate', () => {
+    expect(normalizeHealthWorkspaceMetric('sleep')).toBe('sleep');
+    expect(normalizeHealthWorkspaceMetric(HEALTH_METRIC_IDS.Steps)).toBe(HEALTH_METRIC_IDS.Steps);
+    expect(normalizeHealthWorkspaceMetric('unknown_metric')).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
+    expect(normalizeHealthWorkspaceMetric(null)).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
   });
 
   it('builds bounded windows and older/newer navigation without moving into the future', () => {

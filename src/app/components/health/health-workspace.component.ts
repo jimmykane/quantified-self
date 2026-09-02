@@ -73,6 +73,7 @@ import {
   filterHealthRangeResultByProviders,
   localCalendarDate,
   navigateHealthWorkspaceWindow,
+  normalizeHealthWorkspaceMetric,
   normalizeHealthWorkspaceRange,
   providerLabel,
   resolveHealthWorkspaceWindow,
@@ -106,8 +107,9 @@ interface HealthSyncStateView extends HealthProviderView {
 
 type HealthSyncTone = 'current' | 'delayed' | 'stale' | 'error' | 'neutral';
 
-interface QueuedHealthRangeWrite {
+interface QueuedHealthWorkspacePreferenceWrite {
   uid: string;
+  metric: HealthWorkspaceMetricSelection;
   range: HealthWorkspaceRange;
   generation: number;
 }
@@ -169,11 +171,12 @@ export class HealthWorkspaceComponent {
   private metricAvailabilityGeneration = 0;
   private latestSyncStates = new Map<HealthProvider, HealthSyncState>();
   private hasSeenSyncStateSnapshot = false;
-  private rangePreferenceUserID: string | null = null;
+  private workspacePreferenceUserID: string | null = null;
+  private metricPreferenceTouched = false;
   private rangePreferenceTouched = false;
-  private rangeWriteGeneration = 0;
-  private rangeWriteInFlight = false;
-  private queuedRangeWrite: QueuedHealthRangeWrite | null = null;
+  private preferenceWriteGeneration = 0;
+  private preferenceWriteInFlight = false;
+  private queuedPreferenceWrite: QueuedHealthWorkspacePreferenceWrite | null = null;
   private historyImportRequestGeneration = 0;
 
   readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({
@@ -190,8 +193,8 @@ export class HealthWorkspaceComponent {
     range: this.selectedRange(),
     endDate: this.selectedEndDate(),
   }));
-  readonly isSavingRange = signal(false);
-  readonly rangeSaveFailed = signal(false);
+  readonly isSavingPreferences = signal(false);
+  readonly preferencesSaveFailed = signal(false);
   readonly selectedWindow = computed(() => resolveHealthWorkspaceWindow(this.routeState(), this.todayDate));
   readonly selectedHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly selectedHealthStatus = signal<HealthLoadStatus>('loading');
@@ -491,19 +494,26 @@ export class HealthWorkspaceComponent {
       const savedRange = normalizeHealthWorkspaceRange(
         user?.settings?.appSettings?.healthWorkspace?.range,
       );
-      if (uid === this.rangePreferenceUserID) {
+      const savedMetric = normalizeHealthWorkspaceMetric(
+        user?.settings?.appSettings?.healthWorkspace?.metric,
+      );
+      if (uid === this.workspacePreferenceUserID) {
+        if (!this.metricPreferenceTouched) {
+          this.selectedMetric.set(savedMetric);
+        }
         if (!this.rangePreferenceTouched) {
           this.selectedRange.set(savedRange);
         }
         return;
       }
-      this.rangePreferenceUserID = uid;
+      this.workspacePreferenceUserID = uid;
+      this.metricPreferenceTouched = false;
       this.rangePreferenceTouched = false;
-      this.rangeWriteGeneration += 1;
-      this.queuedRangeWrite = null;
-      this.isSavingRange.set(false);
-      this.rangeSaveFailed.set(false);
-      this.selectedMetric.set(HEALTH_METRIC_IDS.RestingHeartRate);
+      this.preferenceWriteGeneration += 1;
+      this.queuedPreferenceWrite = null;
+      this.isSavingPreferences.set(false);
+      this.preferencesSaveFailed.set(false);
+      this.selectedMetric.set(savedMetric);
       this.selectedEndDate.set(this.todayDate);
       this.selectedRange.set(savedRange);
     });
@@ -746,21 +756,21 @@ export class HealthWorkspaceComponent {
   }
 
   selectPriorityMetric(metric: HealthWorkspaceMetricSelection): void {
-    this.selectedMetric.set(metric);
+    this.selectAndSaveMetric(metric);
   }
 
   selectMetric(metric: HealthWorkspaceMetricSelection): void {
-    this.selectedMetric.set(metric);
+    this.selectAndSaveMetric(metric);
   }
 
   selectRange(range: HealthWorkspaceRange): void {
     const normalizedRange = normalizeHealthWorkspaceRange(range);
-    if (normalizedRange === this.selectedRange() && !this.rangeSaveFailed()) {
+    if (normalizedRange === this.selectedRange() && !this.preferencesSaveFailed()) {
       return;
     }
     this.rangePreferenceTouched = true;
     this.selectedRange.set(normalizedRange);
-    this.queueRangePreferenceWrite(normalizedRange);
+    this.queueWorkspacePreferenceWrite();
   }
 
   navigateWindow(direction: 'older' | 'newer'): void {
@@ -772,9 +782,10 @@ export class HealthWorkspaceComponent {
     );
   }
 
-  retryRangeSave(): void {
+  retryPreferenceSave(): void {
+    this.metricPreferenceTouched = true;
     this.rangePreferenceTouched = true;
-    this.queueRangePreferenceWrite(this.selectedRange());
+    this.queueWorkspacePreferenceWrite();
   }
 
   showAllProviders(): void {
@@ -906,46 +917,60 @@ export class HealthWorkspaceComponent {
     }
   }
 
-  private queueRangePreferenceWrite(range: HealthWorkspaceRange): void {
+  private selectAndSaveMetric(metric: HealthWorkspaceMetricSelection): void {
+    const normalizedMetric = normalizeHealthWorkspaceMetric(metric);
+    if (normalizedMetric === this.selectedMetric() && !this.preferencesSaveFailed()) {
+      return;
+    }
+    this.metricPreferenceTouched = true;
+    this.selectedMetric.set(normalizedMetric);
+    this.queueWorkspacePreferenceWrite();
+  }
+
+  private queueWorkspacePreferenceWrite(): void {
     const uid = `${this.userService.user()?.uid || ''}`.trim();
-    this.rangeSaveFailed.set(false);
+    this.preferencesSaveFailed.set(false);
     if (!uid) {
       return;
     }
-    this.queuedRangeWrite = {
+    this.queuedPreferenceWrite = {
       uid,
-      range,
-      generation: this.rangeWriteGeneration,
+      metric: this.selectedMetric(),
+      range: this.selectedRange(),
+      generation: this.preferenceWriteGeneration,
     };
-    this.isSavingRange.set(true);
-    void this.flushRangePreferenceWrites();
+    this.isSavingPreferences.set(true);
+    void this.flushWorkspacePreferenceWrites();
   }
 
-  private async flushRangePreferenceWrites(): Promise<void> {
-    if (this.rangeWriteInFlight) {
+  private async flushWorkspacePreferenceWrites(): Promise<void> {
+    if (this.preferenceWriteInFlight) {
       return;
     }
-    this.rangeWriteInFlight = true;
-    while (this.queuedRangeWrite) {
-      const write = this.queuedRangeWrite;
-      this.queuedRangeWrite = null;
-      if (write.generation !== this.rangeWriteGeneration || write.uid !== this.rangePreferenceUserID) {
+    this.preferenceWriteInFlight = true;
+    while (this.queuedPreferenceWrite) {
+      const write = this.queuedPreferenceWrite;
+      this.queuedPreferenceWrite = null;
+      if (write.generation !== this.preferenceWriteGeneration || write.uid !== this.workspacePreferenceUserID) {
         continue;
       }
       try {
-        await this.userSettingsService.updateHealthWorkspaceRange(write.uid, write.range);
+        await this.userSettingsService.updateHealthWorkspacePreferences(write.uid, {
+          metric: write.metric,
+          range: write.range,
+        });
       } catch {
         if (
-          write.generation === this.rangeWriteGeneration
-          && write.uid === this.rangePreferenceUserID
-          && this.queuedRangeWrite === null
+          write.generation === this.preferenceWriteGeneration
+          && write.uid === this.workspacePreferenceUserID
+          && this.queuedPreferenceWrite === null
         ) {
-          this.rangeSaveFailed.set(true);
+          this.preferencesSaveFailed.set(true);
         }
       }
     }
-    this.rangeWriteInFlight = false;
-    this.isSavingRange.set(false);
+    this.preferenceWriteInFlight = false;
+    this.isSavingPreferences.set(false);
   }
 }
 
