@@ -205,6 +205,13 @@ describe('Health workspace helpers', () => {
 
   it('loads Today as one sample-enabled day and pages it one day at a time', () => {
     const state = { metric: HEALTH_METRIC_IDS.HeartRate, range: 'today' as const, endDate: '2026-08-30' };
+    const explicitTodayLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date('2026-08-30T00:00:00.000Z'));
 
     expect(resolveHealthWorkspaceWindow(state, '2026-08-30')).toMatchObject({
       startDate: '2026-08-30',
@@ -214,11 +221,18 @@ describe('Health workspace helpers', () => {
       dayCount: 1,
       includeSamples: true,
       canNavigateNewer: false,
-      label: 'Today',
+      label: `Today · ${explicitTodayLabel}`,
     });
     const older = navigateHealthWorkspaceWindow(state, 'older', '2026-08-30');
+    const explicitOlderLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date('2026-08-29T00:00:00.000Z'));
     expect(older.endDate).toBe('2026-08-29');
-    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).not.toContain('–');
+    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).toBe(explicitOlderLabel);
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
   });
 

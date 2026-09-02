@@ -246,6 +246,7 @@ export function resolveHealthWorkspaceWindow(
   const nextEndDate = new Date(endDayMs + DAY_MS).toISOString().slice(0, 10);
   const startTimeMs = localCalendarDateStartMs(startDate) ?? startDayMs;
   const endTimeMs = (localCalendarDateStartMs(nextEndDate) ?? (endDayMs + DAY_MS)) - 1;
+  const explicitWindowLabel = formatWindowLabel(startDayMs, endDayMs);
   return {
     ...state,
     startDate,
@@ -255,8 +256,8 @@ export function resolveHealthWorkspaceWindow(
     includeSamples: dayCount <= 30,
     canNavigateNewer: state.endDate < todayDate,
     label: state.range === 'today' && state.endDate === todayDate
-      ? 'Today'
-      : formatWindowLabel(startDayMs, endDayMs),
+      ? `Today · ${explicitWindowLabel}`
+      : explicitWindowLabel,
   };
 }
 
@@ -874,10 +875,24 @@ function humanize(value: string): string {
 }
 
 function formatWindowLabel(startMs: number, endMs: number): string {
-  const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  const startLabel = formatter.format(new Date(startMs));
-  const endLabel = formatter.format(new Date(endMs));
-  return startLabel === endLabel ? startLabel : `${startLabel} – ${endLabel}`;
+  const rangeFormatter = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  const startLabel = rangeFormatter.format(new Date(startMs));
+  const endLabel = rangeFormatter.format(new Date(endMs));
+  if (startLabel !== endLabel) {
+    return `${startLabel} – ${endLabel}`;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(startMs));
 }
 
 function formatDate(timestampMs: number): string {

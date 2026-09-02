@@ -412,9 +412,16 @@ describe('HealthWorkspaceComponent', () => {
       endDate: todayDate,
       dayCount: 1,
       includeSamples: true,
-      label: 'Today',
     });
-    expect(component.detailSubtitle()).toBe('Today');
+    const explicitTodayLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(`${todayDate}T00:00:00.000Z`));
+    expect(component.selectedWindow().label).toBe(`Today · ${explicitTodayLabel}`);
+    expect(component.detailSubtitle()).toBe(component.selectedWindow().label);
     expect(component.ranges[0]).toMatchObject({ range: 'today', buttonLabel: 'Today' });
     expect(updateHealthWorkspaceRange).toHaveBeenCalledWith('user-1', 'today');
     expect(loadMetricRange.mock.calls.some(([, request]) => request.startDate === todayDate
