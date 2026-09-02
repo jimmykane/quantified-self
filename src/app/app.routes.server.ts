@@ -88,6 +88,7 @@ export const CLIENT_RENDERED_APP_ROUTES = [
   'dashboard',
   'health',
   'calendar',
+  'plans',
   'training',
   'mytracks',
   'routes',

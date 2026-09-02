@@ -43,10 +43,14 @@
     [model]="calendarModel()"
     [compact]="true"
     [hideOutsideDays]="true"
+    [plannedWorkoutsByDate]="plannedWorkoutsByDate()"
     (daySelected)="openDay($event)">
   </app-activity-calendar-grid>
   @if (!isLoading() && !hasEvents()) {
-  <div class="activity-calendar-tile-status" role="status">No activities this month</div>
+  <div class="activity-calendar-tile-status" role="status">No completed activities this month</div>
+  }
+  @if (plansState().status === 'error') {
+  <div class="activity-calendar-tile-status" role="status">Planned workouts unavailable</div>
   }
   }
 </section>

@@ -298,6 +298,36 @@ service cloud.firestore {
           allow write: if false;
         }
 
+        // Current training-plan state is owner-readable for live UI listeners,
+        // but every mutation is fenced and validated by App Check callables.
+        // Nested revisions, receipts, and deletion locks remain server-only.
+        match /trainingPlanState/{stateID} {
+          allow read: if isOwner();
+          allow write: if false;
+
+          match /{document=**} {
+            allow read, write: if false;
+          }
+        }
+
+        match /trainingPlans/{planID} {
+          allow read: if isOwner();
+          allow write: if false;
+
+          match /{document=**} {
+            allow read, write: if false;
+          }
+        }
+
+        match /scheduledWorkouts/{workoutID} {
+          allow read: if isOwner();
+          allow write: if false;
+
+          match /{document=**} {
+            allow read, write: if false;
+          }
+        }
+
         match /sleepSessions/{sleepSessionID} {
           allow read: if request.auth.uid == userID;
           allow write: if false;

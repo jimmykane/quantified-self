@@ -183,6 +183,20 @@ describe('AppRoutingModule routes', () => {
     expect(calendarRoute?.data?.['robots']).toBe('noindex, follow');
   });
 
+  it('keeps manual training plans authenticated, client-rendered, and noindexed', () => {
+    const plansRoute = routes.find(route => route.path === 'plans');
+
+    expect(plansRoute).toBeTruthy();
+    expect(plansRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
+    expect(plansRoute?.loadComponent).toBeTypeOf('function');
+    expect(plansRoute?.data).toMatchObject({
+      title: 'Plans',
+      preload: true,
+      robots: 'noindex, follow',
+    });
+    expect(plansRoute?.data?.['description']).toContain('standalone workouts');
+  });
+
   it('should keep the private routes library authenticated and noindexed', () => {
     const routesRoute = routes.find(route => route.path === 'routes');
 

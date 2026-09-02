@@ -73,6 +73,39 @@ h3 {
   letter-spacing: 0;
 }
 
+.calendar-day-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.calendar-day-section-heading h3 {
+  margin-bottom: 0;
+}
+
+.calendar-day-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.calendar-day-planned-item {
+  height: auto;
+  min-height: 72px;
+}
+
+.calendar-day-planned-summary {
+  white-space: normal;
+}
+
+.calendar-day-empty {
+  margin: 12px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+}
+
 mat-nav-list {
   padding-top: 0;
 }
@@ -113,5 +146,15 @@ mat-nav-list {
 @media (max-width: 480px) {
   .calendar-day-details-content {
     padding: 12px;
+  }
+
+  .calendar-day-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .calendar-day-plan-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }

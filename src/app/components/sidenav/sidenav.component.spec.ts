@@ -337,6 +337,7 @@ describe('SideNavComponent', () => {
         const dashboardItem = navigationItems.find(item => item.nativeElement.textContent.includes('Dashboard'));
         const healthItem = navigationItems.find(item => item.nativeElement.textContent.includes('Health'));
         const calendarItem = navigationItems.find(item => item.nativeElement.textContent.includes('Calendar'));
+        const plansItem = navigationItems.find(item => item.nativeElement.textContent.includes('Plans'));
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
         const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
@@ -346,6 +347,7 @@ describe('SideNavComponent', () => {
         expect(dashboardItem).toBeTruthy();
         expect(healthItem).toBeTruthy();
         expect(calendarItem).toBeTruthy();
+        expect(plansItem).toBeTruthy();
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
         expect(myTracksItem).toBeTruthy();
@@ -356,6 +358,7 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(dashboardItem!),
             navigationItems.indexOf(healthItem!),
             navigationItems.indexOf(calendarItem!),
+            navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(trainingItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
@@ -370,6 +373,7 @@ describe('SideNavComponent', () => {
             dashboardIndex + 5,
             dashboardIndex + 6,
             dashboardIndex + 7,
+            dashboardIndex + 8,
         ]);
         expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
         expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');

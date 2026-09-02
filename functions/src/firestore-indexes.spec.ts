@@ -750,4 +750,38 @@ describe('firestore indexes', () => {
             indexes: [],
         });
     });
+
+    it('supports dated plan overlays, deletion fencing queries, and expiring mutation receipts', () => {
+        const config = loadFirestoreIndexes();
+
+        expect(config.indexes).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'scheduledWorkouts',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'planId', order: 'ASCENDING' },
+                    { fieldPath: 'localDate', order: 'ASCENDING' },
+                    { fieldPath: 'lifecycle', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+            {
+                collectionGroup: 'scheduledWorkouts',
+                queryScope: 'COLLECTION',
+                fields: [
+                    { fieldPath: 'planId', order: 'ASCENDING' },
+                    { fieldPath: 'lifecycle', order: 'ASCENDING' },
+                    { fieldPath: '__name__', order: 'ASCENDING' },
+                ],
+                density: 'SPARSE_ALL',
+            },
+        ]));
+        expect(config.fieldOverrides).toContainEqual({
+            collectionGroup: 'mutationReceipts',
+            fieldPath: 'expireAt',
+            ttl: true,
+            indexes: [],
+        });
+    });
 });

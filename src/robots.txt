@@ -39,6 +39,7 @@ Disallow: /settings
 Disallow: /dashboard
 Disallow: /health
 Disallow: /calendar
+Disallow: /plans
 Disallow: /training
 Disallow: /routes
 Disallow: /tools/compare/saved

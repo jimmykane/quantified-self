@@ -72,7 +72,12 @@
     @if (!isLoading() && !hasEvents()) {
     <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
-    <app-activity-calendar-grid [model]="calendarModel()" (daySelected)="openDay($event)">
+    @if (plansState().status === 'error') {
+    <span class="calendar-status-announcement" role="status">Planned workouts could not be loaded.</span>
+    }
+    <app-activity-calendar-grid [model]="calendarModel()"
+      [plannedWorkoutsByDate]="plannedWorkoutsByDate()"
+      (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
 
     @if (!isLoading() && familyVolumeRows().length) {

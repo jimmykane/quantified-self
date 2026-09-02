@@ -6,6 +6,11 @@ import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { DERIVED_METRICS_COLLECTION_ID } from '../../../shared/derived-metrics';
+import {
+    SCHEDULED_WORKOUTS_COLLECTION_ID,
+    TRAINING_PLANS_COLLECTION_ID,
+    TRAINING_PLAN_STATE_COLLECTION_ID,
+} from '../../../shared/training-plans';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
@@ -311,6 +316,9 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
     const userRef = db.collection('users').doc(uid);
     const cleanupTargets = [
         { label: 'derived metrics', ref: userRef.collection(DERIVED_METRICS_COLLECTION_ID) },
+        { label: 'training plan state', ref: userRef.collection(TRAINING_PLAN_STATE_COLLECTION_ID) },
+        { label: 'training plans', ref: userRef.collection(TRAINING_PLANS_COLLECTION_ID) },
+        { label: 'scheduled workouts', ref: userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID) },
     ];
 
     for (const target of cleanupTargets) {

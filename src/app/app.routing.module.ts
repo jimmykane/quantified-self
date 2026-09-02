@@ -600,6 +600,19 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
+    path: 'plans',
+    loadComponent: () => import('./components/plans/plans-workspace.component')
+      .then(module => module.PlansWorkspaceComponent),
+    data: {
+      title: 'Plans',
+      animation: 'Plans',
+      preload: true,
+      description: 'Create standalone workouts and organize date-based running and cycling training plans.',
+      robots: 'noindex, follow',
+    },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'training',
     loadChildren: () => import('./modules/training.module').then(module => module.TrainingModule),
     data: {

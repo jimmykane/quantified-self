@@ -1,0 +1,320 @@
+:host {
+  display: block;
+}
+
+.plans-header-actions,
+.plans-view-navigation,
+.plan-selector-row,
+.plan-heading-row,
+.plan-actions,
+.inline-plan-action,
+.standalone-heading,
+.workout-nodes-heading,
+.workout-node-add-actions,
+.repeat-heading,
+.workout-list-heading,
+.deleted-workout-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plans-overview {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+  margin-block: 20px;
+  padding: 16px 20px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.plans-overview > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.plans-overview span,
+.plan-heading-row p,
+.standalone-heading p,
+.workout-nodes-heading p,
+.workout-list-heading p,
+.workout-destination-note {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.plans-overview strong {
+  font: var(--mat-sys-title-medium);
+}
+
+.plans-view-navigation,
+.plan-heading-row,
+.standalone-heading,
+.workout-nodes-heading,
+.workout-list-heading {
+  justify-content: space-between;
+}
+
+.plan-form-card,
+.plan-scope,
+.workout-editor,
+.workout-list,
+.deleted-workouts-panel,
+.history-panel {
+  margin-block: 20px;
+}
+
+.plan-form-grid,
+.workout-editor-basics,
+.step-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.plan-form-card mat-card-content,
+.workout-editor mat-card-content,
+.plan-deletion-card mat-card-content {
+  padding-top: 16px;
+}
+
+.plan-selector-row {
+  flex-wrap: wrap;
+}
+
+.plan-selector-row mat-form-field {
+  min-width: min(100%, 320px);
+}
+
+.plan-heading-row,
+.standalone-heading,
+.workout-list-heading {
+  margin-block: 18px;
+}
+
+.plan-heading-row h2,
+.standalone-heading h2,
+.workout-list-heading h2,
+.workout-nodes-heading h3 {
+  margin: 0;
+  font: var(--mat-sys-title-large);
+}
+
+.plan-heading-row p,
+.standalone-heading p,
+.workout-list-heading p,
+.workout-nodes-heading p {
+  margin: 4px 0 0;
+}
+
+.plan-actions,
+.inline-plan-action,
+.workout-node-add-actions {
+  flex-wrap: wrap;
+}
+
+.inline-plan-action {
+  align-items: flex-start;
+  margin-block: 12px;
+}
+
+.plan-deletion-card {
+  border-inline-start: 4px solid var(--mat-sys-error);
+}
+
+.plan-deletion-card mat-radio-group {
+  display: grid;
+  gap: 8px;
+}
+
+.plans-status,
+.history-status,
+.workout-empty-state,
+.plans-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 120px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.plans-status--error,
+.history-status--error {
+  color: var(--mat-sys-error);
+}
+
+.history-load-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+}
+
+.plans-empty-state {
+  flex-direction: column;
+  text-align: center;
+  padding: 32px;
+}
+
+.plans-empty-state h2,
+.plans-empty-state p {
+  margin: 0;
+}
+
+.workout-destination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 8px 0 24px;
+  padding: 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-small);
+}
+
+.workout-destination legend {
+  padding-inline: 6px;
+  font: var(--mat-sys-label-large);
+}
+
+.workout-destination p {
+  margin: 0;
+}
+
+.workout-nodes {
+  display: grid;
+  gap: 14px;
+}
+
+.workout-node-card mat-card-header,
+.history-panel mat-card-header {
+  align-items: center;
+}
+
+.workout-node-card mat-card-header button,
+.history-panel mat-card-header button {
+  margin-inline-start: auto;
+}
+
+.workout-node-card mat-card-content {
+  padding-top: 12px;
+}
+
+.workout-step-editor {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+}
+
+.workout-step-editor .step-fields {
+  flex: 1;
+}
+
+.repeat-step-editor + .repeat-step-editor {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
+
+.step-index {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font: var(--mat-sys-label-large);
+}
+
+.workout-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 16px;
+}
+
+.workout-card--skipped {
+  opacity: 0.78;
+}
+
+.workout-card mat-card-header {
+  align-items: center;
+}
+
+.workout-card mat-chip-set {
+  margin-inline-start: auto;
+}
+
+.workout-summary {
+  margin: 16px 0 0;
+  padding-inline-start: 22px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.workout-summary li + li {
+  margin-top: 6px;
+}
+
+.deleted-workouts-panel mat-list-item,
+.history-panel mat-list-item {
+  height: auto;
+  min-height: 64px;
+}
+
+mat-card-actions button,
+.plans-header-actions button,
+.plans-header-actions a,
+.plans-view-navigation button,
+.plan-actions button,
+.standalone-heading button,
+.workout-node-add-actions button,
+.workout-list-heading button,
+.deleted-workout-actions button {
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .plan-form-grid,
+  .workout-editor-basics,
+  .step-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plan-heading-row,
+  .standalone-heading,
+  .workout-nodes-heading,
+  .workout-list-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .plans-overview {
+    gap: 12px;
+    overflow-x: auto;
+  }
+
+  .plans-view-navigation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plan-form-grid,
+  .workout-editor-basics,
+  .step-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .workout-step-editor {
+    flex-wrap: wrap;
+  }
+
+  .workout-card mat-card-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

@@ -6,21 +6,61 @@
   </app-bottom-sheet-header>
 
   <div class="bottom-sheet-content calendar-day-details-content">
-    <div class="calendar-day-total" aria-label="Day total">
-      <span><span class="calendar-day-number">{{ data.day.eventCount }}</span> {{ data.day.eventCount === 1 ? 'activity' : 'activities' }}</span>
+    <div class="calendar-day-total" aria-label="Completed activity total">
+      <span><span class="calendar-day-number">{{ data.day.eventCount }}</span> completed {{ data.day.eventCount === 1 ? 'activity' : 'activities' }}</span>
       <strong>{{ data.day.durationLabel }}</strong>
     </div>
 
+    <section class="calendar-day-planned" aria-labelledby="calendar-day-planned-title">
+      <div class="calendar-day-section-heading">
+        <h3 id="calendar-day-planned-title">Planned workouts</h3>
+        <div class="calendar-day-plan-actions" aria-label="Add a workout">
+          <a mat-flat-button [routerLink]="['/plans']" [queryParams]="{ date: data.day.dateKey }"
+            (click)="prepareWorkoutNavigation()">
+            <mat-icon aria-hidden="true">add</mat-icon>
+            Add workout
+          </a>
+          <a mat-stroked-button [routerLink]="['/plans']"
+            [queryParams]="{ date: data.day.dateKey, scope: 'standalone' }"
+            (click)="prepareWorkoutNavigation()">
+            Standalone
+          </a>
+        </div>
+      </div>
+      @if (plannedWorkoutRows.length) {
+      <mat-nav-list>
+        @for (planned of plannedWorkoutRows; track planned.id) {
+        <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/plans']"
+          [queryParams]="{ workout: planned.id }" (click)="prepareWorkoutNavigation()">
+          <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"
+            aria-hidden="true"></app-activity-type-icon>
+          <span matListItemTitle>{{ planned.title }}</span>
+          <span matListItemLine>{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
+          <span matListItemLine class="calendar-day-planned-summary">{{ planned.summary.join(' · ') }}</span>
+          <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+        </a>
+        }
+      </mat-nav-list>
+      } @else {
+      <p class="calendar-day-empty">No planned workouts for this day.</p>
+      }
+    </section>
+
+    <mat-divider></mat-divider>
+
+    @if (familyVolumeRows.length) {
     <section aria-labelledby="calendar-day-family-title">
-      <h3 id="calendar-day-family-title">Activities</h3>
+      <h3 id="calendar-day-family-title">Completed activities</h3>
       <app-activity-calendar-volume-list [rows]="familyVolumeRows" [emphasizeNumericText]="true"
         (rowSelected)="prepareEventNavigation($event.route)"></app-activity-calendar-volume-list>
     </section>
 
     <mat-divider></mat-divider>
+    }
 
     <section aria-labelledby="calendar-day-activities-title">
-      <h3 id="calendar-day-activities-title">Activity details</h3>
+      <h3 id="calendar-day-activities-title">Completed activity details</h3>
+      @if (eventRows.length) {
       <mat-nav-list>
         @for (event of eventRows; track event.id) {
           @if (event.route) {
@@ -70,6 +110,9 @@
           }
         }
       </mat-nav-list>
+      } @else {
+      <p class="calendar-day-empty">No completed activities for this day.</p>
+      }
     </section>
   </div>
 </section>

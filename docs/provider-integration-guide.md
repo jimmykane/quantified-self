@@ -31,6 +31,44 @@ The current providers are intentionally not identical:
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
+### Structured-workout delivery proof (not production support)
+
+Training planning uses a stricter launch boundary than activity or route delivery. Manual plan and standalone-workout
+authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
+directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
+connection alone never opts workouts into delivery.
+
+The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
+`functions/src/training-plans/providers/`. Every provider delivery flag is currently `false`:
+
+| Provider | Proof state | Truthful model and current gate |
+| --- | --- | --- |
+| Garmin | `blocked-contract` | Garmin documents separate workout and calendar concepts, but the current private Training API contract, limits, update/delete rules, completion markers, and sandbox access are not in this repository. Keep `WORKOUT_IMPORT` scoped to issue #647 and do not guess endpoints or payloads. |
+| COROS | `blocked-contract` | The available partner reference describes dated training-plan batches of at most 30 workouts, a today-through-one-year horizon, stable `planWorkoutId` values, eligible deletion, and completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
+| Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
+| Suunto | `fixture-only` | A scheduled workout maps to one dated SuuntoPlus Guide, not a native training-plan calendar. Time, distance, manual transition, repeats, and absolute HR/power/speed/pace/cadence targets map to Guide JSON; cadence converts from rpm to hertz. Guide entitlement, ZIP/icon transport, watch storage/pinning, supported-device behavior, CRUD, and FIT correlation need sandbox proof. |
+
+Wahoo mapping follows the official [Cloud API](https://cloud-api.wahooligan.com/) and
+[plan.json 1.0.0 format](https://cloud-api.wahooligan.com/docs/plan-json-format.pdf). Canonical repeat count is total
+passes, while Wahoo's repeat trigger counts passes after the first, so the serializer writes `count - 1`. Wahoo stores
+relative FTP, maximum-HR, threshold-HR, and threshold-speed references in the header. Conflicting snapshots, critical
+power, relative cadence, generic `other` purpose, and multiple targets where ELEMNT uses only the first are explicit
+degradations; unsupported endings fail.
+
+Suunto mapping follows the official [Guide API workflow](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api),
+[Guide JSON reference](https://apizone.suunto.com/suuntoplus-guide-description), and
+[FIT correlation description](https://apizone.suunto.com/fit-description). Guide `externalId` values are deterministic,
+opaque, and at most 64 characters. Relative targets are frozen from the canonical reference snapshot only after explicit
+degradation approval. Text and metadata limits are never truncated silently. The serializer produces `guide.json`
+fixtures only; it must not be described as a completed Guide upload adapter because the API requires a ZIP containing
+that JSON and a valid 300 x 300 PNG.
+
+Fixture compatibility is not delivery readiness. Before any adapter flag changes, record sandbox evidence for create,
+update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and provider-specific horizon behavior. The
+shared delivery ledger, reconciliation queue, entitlement, disconnect/deletion behavior, provider certification,
+observability, and kill switches are tracked under epic #583. Do not hide an unmet gate in a code comment or silently
+narrow the epic acceptance criteria.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:

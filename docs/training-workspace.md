@@ -199,6 +199,86 @@ overview is the indexable search entry point: it describes the curated workspace
 non-prescriptive treatment of readiness and sleep without exposing account-specific data. Keep that public page, the
 Features hub, homepage link, Help link, sitemap, and `robots.txt` aligned when the Training product contract changes.
 
+## Training Planning
+
+Training planning is a separate authored-workout workflow at authenticated `/plans`; it does not change the analytical
+meaning of `/training`. Manual planning is available without a provider connection. A scheduled workout may belong to a
+plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is a future Pro action
+and must never be inferred from merely connecting a service.
+
+### Canonical workout boundary
+
+Quantified Self currently owns the versioned planned-workout contract in `shared/planned-workout.ts`. It stores only
+plain canonical primitives: Sports Lib `ActivityTypes` strings, seconds, metres, bpm, watts, metres per second, rpm,
+kilojoules, percentage points, and positive repetition counts. It does not persist Sports Lib class instances or
+event-stat JSON. Sports Lib remains authoritative for activity types, canonical unit semantics, conversions, and scalar
+formatting; Quantified Self owns workout ordering, provider compatibility, scheduling, lifecycle, history, entitlement,
+and localized UI language.
+
+`WorkoutStructureV1` has stable node IDs, ordered steps or one-level repeats, purposes, endings, and typed targets. The
+strict codec rejects unknown fields and discriminants, unsupported versions or sports, duplicate IDs, non-finite or
+negative values, non-positive endings/reference snapshots, inverted ranges, more than 100 nodes, repeat counts above
+100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
+the persisted v1 value. The initial manual editor intentionally exposes the smaller Running/Cycling, date-only,
+time/distance, fixed-repeat, single absolute HR/power/pace subset. The shared contract is broader so saved v1 data does
+not need a redesign when later UI slices are enabled.
+
+Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
+recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
+pass sandbox create/update/reschedule/delete round trips, Wahoo and Suunto fixtures are complete, the provider adapters
+have not contaminated the neutral model, and persisted Quantified Self fixtures round-trip unchanged through a locally
+packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic #583.
+
+### Persistence, mutation, and history
+
+- Owner-visible current state is stored at `users/{uid}/trainingPlanState/current`,
+  `users/{uid}/trainingPlans/{planId}`, and `users/{uid}/scheduledWorkouts/{workoutId}`. Browser writes are denied.
+- Authenticated, App Check-enforced callables own mutations, history reads, restore previews/restores, and plan deletion.
+  Every write path is sanitized, fenced against account deletion, idempotent by `mutationId`, and guarded by expected
+  revisions.
+- Multiple plans are allowed, but at most one is active. Activating one plan atomically pauses the previous active plan.
+  Plans are limited to 366 inclusive local dates and an account to 400 current workouts.
+- Workout IDs survive standalone-to-plan, plan-to-standalone, and plan-to-plan moves. An out-of-range add, move, copy, or
+  attach requires explicit confirmation before the plan range is extended atomically. Shifting a plan moves only its
+  range and associated current workouts.
+- Plan-bound changes share the plan revision stream. Standalone changes have workout-scoped complete snapshots. Plan
+  history uses immutable deltas and compressed child-document checkpoint chunks every 20 revisions and after bulk
+  operations, keeping revision envelopes below Firestore document limits. A restore creates a new revision and cannot
+  reclaim a workout that has moved to a different scope or recreate a permanently deleted workout.
+- Ordinary workout deletion remains recoverable through history. Permanent deletion requires its own confirmation. Plan
+  deletion requires choosing whether its current workouts become standalone or are deleted; either choice removes the
+  plan history, while Archive remains the non-destructive choice.
+- Permanent deletion retains only a server-internal hash tombstone for each retired plan or workout ID. Retired IDs
+  cannot be reused, preventing delayed or retried recursive cleanup from deleting a newly created entity.
+
+### UI and calendar contract
+
+`/plans` provides Plans and Standalone views plus create, edit, copy, move/associate, skip, delete, permanent delete,
+history/restore, activation, pause, archive, and date-shift actions. Calendar-originated creation defaults to the active
+plan when one exists and provides an explicit standalone action; without an active plan it defaults to standalone.
+
+The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
+workouts from the active plan. Inactive-plan workouts remain visible only in `/plans`; skipped workouts stay visible and
+marked. Every rendered date is selectable, including empty dates. Day details keep **Planned workouts** and completed
+activities in separate sections. Planned workouts never enter recorded activity counts, durations, distance, elevation,
+group bars, activity tables, or Training-derived metrics.
+
+`/plans` is authenticated, client-rendered, `noindex, follow`, disallowed by `robots.txt`, and excluded from the sitemap.
+
+### Provider proof status
+
+`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four delivery switches remain
+false. Garmin and COROS are `blocked-contract`; no endpoint or payload is guessed without the current private partner
+contract. Wahoo and Suunto are `fixture-only`: pure serializers and redacted fixtures prove the documented mapping, but
+there is no provider transport, token use, schedule write, ZIP upload, or production action.
+
+Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
+examples include Wahoo's first-target-only ELEMNT behavior, unsupported Wahoo relative references frozen to their stored
+absolute snapshot, Suunto relative targets frozen to absolute values, cadence converted from rpm to hertz, and explicit
+text truncation. Unsupported sport or ending combinations fail instead of being approximated. Sandbox CRUD,
+idempotency, retry/reconnect, deletion, reconciliation, rollout, AI, templates, completion matching, and the Sports Lib
+extraction remain separately tracked by subissues #645–#655 under epic #583; they must not be left as anonymous TODOs.
+
 ### Product analytics
 
 The app-wide, consent-gated Firebase `screen_view` already records `/training` route visits, so Training must not emit a

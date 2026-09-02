@@ -15,6 +15,7 @@ import {
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
 
 describe('CalendarDayDetailsComponent', () => {
@@ -23,7 +24,8 @@ describe('CalendarDayDetailsComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Running');
     expect(fixture.nativeElement.textContent).toContain('Morning run');
-    expect(fixture.nativeElement.querySelector('a')?.getAttribute('href')).toBe('/user/user-1/event/event-1');
+    expect(fixture.nativeElement.querySelector('.calendar-day-event-item')?.getAttribute('href'))
+      .toBe('/user/user-1/event/event-1');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim()).toBe('Running');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-row--link')?.getAttribute('href'))
@@ -36,7 +38,27 @@ describe('CalendarDayDetailsComponent', () => {
     expect([...fixture.nativeElement.querySelectorAll('.calendar-day-event-metric')]
       .map((part: HTMLElement) => part.textContent?.trim())).toEqual(['8:30 AM', '1h']);
     expect([...fixture.nativeElement.querySelectorAll('h3')].map((heading: HTMLElement) => heading.textContent?.trim()))
-      .toEqual(['Activities', 'Activity details']);
+      .toEqual(['Planned workouts', 'Completed activities', 'Completed activity details']);
+  });
+
+  it('keeps planned workouts separate and offers active-plan and standalone add paths', async () => {
+    const fixture = await renderDayDetails([], [{
+      workout: createPlannedWorkout(),
+      planName: 'Autumn build',
+    }]);
+    const actions = [...fixture.nativeElement.querySelectorAll('.calendar-day-plan-actions a')] as HTMLAnchorElement[];
+
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.getAttribute('href'))
+      .toBe('/plans?workout=workout-1');
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
+      .toContain('Autumn build · Planned');
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
+    expect(actions.map(action => action.getAttribute('href'))).toEqual([
+      '/plans?date=2026-08-03',
+      '/plans?date=2026-08-03&scope=standalone',
+    ]);
+    expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
+    expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
   });
 
   it('uses Barlow Condensed only for numeric day-detail content, not the date title', () => {
@@ -178,7 +200,10 @@ describe('CalendarDayDetailsComponent', () => {
   });
 });
 
-async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]) {
+async function renderDayDetails(
+  eventOrEvents: EventInterface | EventInterface[],
+  plannedWorkouts: PlannedWorkoutCalendarEntry[] = [],
+) {
   const events = Array.isArray(eventOrEvents) ? eventOrEvents : [eventOrEvents];
   const model = buildActivityCalendarViewModel(events, {
     view: 'month',
@@ -187,9 +212,10 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
     locale: 'en-US',
   });
   const data: CalendarDayDetailsData = {
-    day: model.months[0].days.find(day => day.eventCount > 0),
+    day: model.months[0].days.find(day => day.dateKey === '2026-08-03'),
     userId: 'user-1',
     locale: 'en-US',
+    plannedWorkouts,
   } as CalendarDayDetailsData;
   await TestBed.configureTestingModule({
     imports: [CalendarDayDetailsComponent],
@@ -209,6 +235,31 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
   const fixture = TestBed.createComponent(CalendarDayDetailsComponent);
   fixture.detectChanges();
   return fixture;
+}
+
+function createPlannedWorkout() {
+  return {
+    schemaVersion: 1 as const,
+    id: 'workout-1',
+    planId: 'plan-1',
+    localDate: '2026-08-03',
+    lifecycle: 'planned' as const,
+    title: 'Tempo intervals',
+    structure: {
+      version: 1 as const,
+      sport: ActivityTypes.Running,
+      nodes: [{
+        kind: 'step' as const,
+        id: 'steady',
+        purpose: 'work' as const,
+        ending: { kind: 'time' as const, seconds: 1800 },
+        targets: [],
+      }],
+    },
+    revision: 1,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
 }
 
 function createEvent(
