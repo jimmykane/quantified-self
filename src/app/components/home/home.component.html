@@ -119,12 +119,6 @@
         title="Your Training Snapshot"
         summary="Current state, recovery-aware readiness, recent volume, and exact load-model values in the same hierarchy used by Training."
       >
-        <a
-          compactFeatureRowAction
-          mat-stroked-button
-          routerLink="/features/training-analysis"
-          >Explore Training</a
-        >
         <app-public-feature-preview
           class="training-preview-data"
           data-nosnippet
@@ -163,6 +157,13 @@
       >
         <app-public-feature-preview data-nosnippet previewKey="workout-analysis"></app-public-feature-preview>
       </app-compact-feature-row>
+    </div>
+
+    <div class="section-actions training-actions animate-on-scroll">
+      <a mat-stroked-button routerLink="/features/training-analysis">
+        Explore Training Analysis
+        <mat-icon iconPositionEnd>monitoring</mat-icon>
+      </a>
     </div>
   </section>
 
@@ -205,7 +206,7 @@
       previewKey="assistant-example"
     ></app-public-feature-preview>
 
-    <div class="ai-insights-actions animate-on-scroll">
+    <div class="section-actions ai-insights-actions animate-on-scroll">
       <a mat-stroked-button routerLink="/features/ai-insights">
         Explore the Assistant
       </a>

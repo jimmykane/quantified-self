@@ -272,8 +272,15 @@ describe('HomeComponent', () => {
         expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
         expect(text).not.toContain('Illustrative data');
         expect(text).toContain('Your Training Snapshot');
-        expect(text).toContain('Explore Training');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/training-analysis"], a[ng-reflect-router-link="/features/training-analysis"]')).toBeTruthy();
+        expect(text).toContain('Explore Training Analysis');
+        const trainingCta = fixture.nativeElement.querySelector(
+            '.training-actions a[routerlink="/features/training-analysis"], .training-actions a[ng-reflect-router-link="/features/training-analysis"]'
+        ) as HTMLAnchorElement | null;
+        expect(trainingCta).toBeTruthy();
+        expect(trainingPreview.querySelector('[compactFeatureRowAction]')).toBeNull();
+        expect(
+            fixture.nativeElement.querySelector('.features-grid')?.compareDocumentPosition(trainingCta!) & Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
         expect(text).toContain('sleep views');
         expect(text).not.toContain('Training Load & Readiness Engine');
         expect(text).not.toContain('Derived metrics turn your activity history into load, fatigue, form, recovery, ramp, and intensity signals');
