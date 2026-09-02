@@ -399,12 +399,25 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(3);
-    const providerIcons = fixture.debugElement.queryAll(By.css(
-      '.health-priority-card app-service-source-icon, .health-provider-filter app-service-source-icon',
+    const priorityProviderIcons = fixture.debugElement.queryAll(By.css(
+      '.health-priority-card app-service-source-icon',
     ));
-    expect(providerIcons.length).toBeGreaterThan(0);
-    expect(providerIcons.every(icon => icon.componentInstance.iconWidth === 32)).toBe(true);
-    expect(providerIcons.every(icon => icon.componentInstance.iconHeight === 18)).toBe(true);
+    expect(priorityProviderIcons.length).toBeGreaterThan(0);
+    expect(priorityProviderIcons.every(icon => icon.componentInstance.iconWidth === 32)).toBe(true);
+    expect(priorityProviderIcons.every(icon => icon.componentInstance.iconHeight === 18)).toBe(true);
+    const filterProviderIcons = fixture.debugElement.queryAll(By.css(
+      '.health-provider-filter app-service-source-icon',
+    ));
+    expect(filterProviderIcons.length).toBeGreaterThan(0);
+    expect(filterProviderIcons.every(icon => icon.componentInstance.iconWidth === null)).toBe(true);
+    expect(filterProviderIcons.every(icon => icon.componentInstance.iconHeight === 20)).toBe(true);
+    const providerFilterButtons = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button.health-provider-filter'),
+    );
+    expect(providerFilterButtons).toHaveLength(component.providerFilterOptions().length + 1);
+    expect(providerFilterButtons[0]?.textContent).toContain('All sources');
+    expect(providerFilterButtons[0]?.getAttribute('aria-pressed')).toBe('true');
+    expect((fixture.nativeElement as HTMLElement).querySelector('mat-chip-listbox')).toBeNull();
     expect(router.url).not.toContain('?');
     expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
   }, 10_000);
@@ -604,11 +617,17 @@ describe('HealthWorkspaceComponent', () => {
 
     const garminFilter = fixture.debugElement.queryAll(By.css('.health-provider-filter'))
       .find(button => button.nativeElement.textContent.includes('Garmin'));
+    const allSourcesFilter = fixture.debugElement.queryAll(By.css('.health-provider-filter'))
+      .find(button => button.nativeElement.textContent.includes('All sources'));
+    expect(garminFilter?.nativeElement.tagName).toBe('BUTTON');
+    expect(garminFilter?.nativeElement.getAttribute('aria-pressed')).toBe('false');
     garminFilter?.triggerEventHandler('click');
     fixture.detectChanges();
 
     expect(nativeElement.querySelectorAll('.health-chart-panel')).toHaveLength(1);
     expect(nativeElement.querySelector('.health-chart-panel')?.textContent).toContain('Garmin');
+    expect(garminFilter?.nativeElement.getAttribute('aria-pressed')).toBe('true');
+    expect(allSourcesFilter?.nativeElement.getAttribute('aria-pressed')).toBe('false');
     expect(loadMetricRange).toHaveBeenCalledTimes(3);
   });
 

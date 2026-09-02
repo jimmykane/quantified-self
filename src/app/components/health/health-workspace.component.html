@@ -143,31 +143,40 @@
         }
 
         @if (providerFilterOptions().length > 0) {
-          <mat-chip-listbox class="health-provider-filters" multiple aria-label="Filter Health sources">
-            <mat-chip-option
+          <div class="health-provider-filters" role="group" aria-label="Filter Health sources">
+            <button
+              mat-stroked-button
+              type="button"
               class="health-provider-filter"
-              [selected]="allProvidersSelected()"
+              [class.health-provider-filter-selected]="allProvidersSelected()"
+              [attr.aria-pressed]="allProvidersSelected()"
               (click)="showAllProviders()">
-              All sources
-            </mat-chip-option>
+              <span class="health-provider-filter-content">
+                <mat-icon aria-hidden="true">select_all</mat-icon>
+                <span>All sources</span>
+              </span>
+            </button>
             @for (option of providerFilterOptions(); track option.provider) {
-              <mat-chip-option
+              <button
+                mat-stroked-button
+                type="button"
                 class="health-provider-filter"
-                [selected]="option.selected && !allProvidersSelected()"
+                [class.health-provider-filter-selected]="option.selected && !allProvidersSelected()"
+                [attr.aria-pressed]="option.selected && !allProvidersSelected()"
                 (click)="toggleProvider(option.provider)">
-                @if (option.presentation) {
-                  <app-service-source-icon
-                    [presentation]="option.presentation"
-                    [showText]="false"
-                    [showTooltip]="false"
-                    [iconWidth]="32"
-                    [iconHeight]="18">
-                  </app-service-source-icon>
-                }
-                <span>{{ option.label }}</span>
-              </mat-chip-option>
+                <span class="health-provider-filter-content">
+                  @if (option.presentation) {
+                    <app-service-source-icon
+                      [presentation]="option.presentation"
+                      [showText]="false"
+                      [showTooltip]="false">
+                    </app-service-source-icon>
+                  }
+                  <span>{{ option.label }}</span>
+                </span>
+              </button>
             }
-          </mat-chip-listbox>
+          </div>
         }
 
         @if (incompleteNotice()) {
