@@ -32,26 +32,15 @@
 .signal-preview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 16px;
-  overflow: hidden;
+  gap: 1rem;
 }
 
 .signal-preview-widget {
   min-width: 0;
   height: 190px;
-  background: var(--mat-sys-surface-container-lowest);
   overflow: hidden;
   touch-action: pan-y;
   user-select: none;
-
-  &:nth-child(even) {
-    border-left: 1px solid var(--mat-sys-outline-variant);
-  }
-
-  &:nth-child(n + 3) {
-    border-top: 1px solid var(--mat-sys-outline-variant);
-  }
 
   app-freshness-forecast-chart,
   app-intensity-distribution-chart,
@@ -67,8 +56,6 @@
   grid-column: 1 / -1;
   min-width: 0;
   padding: 0.75rem;
-  border-top: 1px solid var(--mat-sys-outline-variant);
-  background: var(--mat-sys-surface-container-lowest);
 }
 
 .signal-preview-form-heading {
@@ -120,16 +107,6 @@
 @container (max-width: 400px) {
   .signal-preview-grid {
     grid-template-columns: 1fr;
-  }
-
-  .signal-preview-widget {
-    &:nth-child(even) {
-      border-left: 0;
-    }
-
-    &:nth-child(n + 2) {
-      border-top: 1px solid var(--mat-sys-outline-variant);
-    }
   }
 }
 
