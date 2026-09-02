@@ -158,4 +158,79 @@ describe('EChartsHorizontalTouchGestureController', () => {
     expect(clickSpy).toHaveBeenCalledOnce();
     controller.dispose();
   });
+
+  it('blocks the complete compatibility mouse sequence produced by a long-press', () => {
+    const element = document.createElement('div');
+    const mouseDownSpy = vi.fn();
+    const clickSpy = vi.fn();
+    const contextMenuSpy = vi.fn();
+    element.addEventListener('mousedown', mouseDownSpy);
+    element.addEventListener('click', clickSpy);
+    element.addEventListener('contextmenu', contextMenuSpy);
+    const controller = new EChartsHorizontalTouchGestureController({
+      onHorizontalMove: vi.fn(),
+      onHorizontalEnd: vi.fn(),
+    });
+    controller.bind(element);
+
+    dispatchTouch(element, 'touchstart', [createTouch(1, { clientX: 20, clientY: 20 })]);
+    const longPressMouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    element.dispatchEvent(longPressMouseDown);
+    dispatchTouch(element, 'touchend', [], [createTouch(1, { clientX: 20, clientY: 20 })]);
+    const longPressContextMenu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    element.dispatchEvent(longPressContextMenu);
+    const completedTapClick = new MouseEvent('click', { bubbles: true, cancelable: true });
+    element.dispatchEvent(completedTapClick);
+
+    expect(longPressMouseDown.defaultPrevented).toBe(true);
+    expect(longPressContextMenu.defaultPrevented).toBe(true);
+    expect(completedTapClick.defaultPrevented).toBe(true);
+    expect(mouseDownSpy).not.toHaveBeenCalled();
+    expect(contextMenuSpy).not.toHaveBeenCalled();
+    expect(clickSpy).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it('cancels an active horizontal gesture when disposed', () => {
+    const element = document.createElement('div');
+    const onHorizontalCancel = vi.fn();
+    const controller = new EChartsHorizontalTouchGestureController({
+      onHorizontalMove: vi.fn(),
+      onHorizontalEnd: vi.fn(),
+      onHorizontalCancel,
+    });
+    controller.bind(element);
+
+    dispatchTouch(element, 'touchstart', [createTouch(1, { clientX: 20, clientY: 20 })]);
+    dispatchTouch(element, 'touchmove', [createTouch(1, { clientX: 60, clientY: 22 })]);
+    controller.dispose();
+
+    expect(onHorizontalCancel).toHaveBeenCalledOnce();
+    dispatchTouch(element, 'touchend', [], [createTouch(1, { clientX: 80, clientY: 22 })]);
+    expect(onHorizontalCancel).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes compatibility suppression when native scrolling cancels a long gesture', () => {
+    const element = document.createElement('div');
+    const clickSpy = vi.fn();
+    element.addEventListener('click', clickSpy);
+    const controller = new EChartsHorizontalTouchGestureController({
+      onHorizontalMove: vi.fn(),
+      onHorizontalEnd: vi.fn(),
+    });
+    controller.bind(element);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(0);
+
+    dispatchTouch(element, 'touchstart', [createTouch(1, { clientX: 20, clientY: 20 })]);
+    dispatchTouch(element, 'touchmove', [createTouch(1, { clientX: 22, clientY: 80 })]);
+    nowSpy.mockReturnValue(1000);
+    dispatchTouch(element, 'touchcancel', [], [createTouch(1, { clientX: 22, clientY: 120 })]);
+    const compatibilityClick = new MouseEvent('click', { bubbles: true, cancelable: true });
+    element.dispatchEvent(compatibilityClick);
+
+    expect(compatibilityClick.defaultPrevented).toBe(true);
+    expect(clickSpy).not.toHaveBeenCalled();
+    nowSpy.mockRestore();
+    controller.dispose();
+  });
 });

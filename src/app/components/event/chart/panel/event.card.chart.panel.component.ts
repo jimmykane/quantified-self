@@ -6,6 +6,7 @@ import {
   ElementRef,
   EventEmitter,
   Input,
+  NgZone,
   OnChanges,
   OnDestroy,
   Output,
@@ -142,6 +143,7 @@ type TooltipResolvedPoint = {
 };
 type PanelTouchInteraction = {
   kind: 'panel';
+  mode: ChartCursorBehaviours;
   startValue: number;
   lastRange: EventChartRange | null;
 };
@@ -292,6 +294,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private pendingFullscreenZoomRange: EventChartRange | null | undefined = undefined;
   private axisPointerCursorBoundChart: EChartsType | null = null;
   private copyingPanelImage = false;
+  private destroyed = false;
   private readonly axisPointerCursorHandler = (params: AxisPointerEvent) => {
     const value = Number(params?.axesInfo?.[0]?.value);
     if (Number.isFinite(value)) {
@@ -299,10 +302,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     }
   };
   private readonly touchGestureController = new EChartsHorizontalTouchGestureController({
-    onHorizontalStart: (gesture) => this.startHorizontalTouchInteraction(gesture),
-    onHorizontalMove: (gesture) => this.updateHorizontalTouchInteraction(gesture),
-    onHorizontalEnd: (gesture) => this.finishHorizontalTouchInteraction(gesture),
-    onHorizontalCancel: () => this.cancelHorizontalTouchInteraction(),
+    onHorizontalStart: (gesture) => this.ngZone.run(() => this.startHorizontalTouchInteraction(gesture)),
+    onHorizontalMove: (gesture) => this.ngZone.run(() => this.updateHorizontalTouchInteraction(gesture)),
+    onHorizontalEnd: (gesture) => this.ngZone.run(() => this.finishHorizontalTouchInteraction(gesture)),
+    onHorizontalCancel: () => this.ngZone.run(() => this.cancelHorizontalTouchInteraction()),
   });
   private readonly nonPrimaryMouseButtonGuard = (event: Event) => {
     if (!this.isNonPrimaryMouseButtonEvent(event)) {
@@ -340,6 +343,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     private eChartsLoader: EChartsLoaderService,
     private logger: LoggerService,
     private cdr: ChangeDetectorRef,
+    private ngZone: NgZone,
     private shareService: AppShareService,
     private snackBar: MatSnackBar,
   ) {
@@ -537,6 +541,10 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
   async ngAfterViewInit(): Promise<void> {
     await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
+    if (this.destroyed) {
+      return;
+    }
+
     this.bindTouchGestureController();
     if (!this.previewMode) {
       this.bindFullscreenEvents();
@@ -553,6 +561,19 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.chartHost.getChart()) {
       return;
+    }
+
+    if (
+      changes.cursorBehaviour
+      || changes.panel
+      || changes.showZoomBar
+      || changes.xAxisType
+      || changes.xDomain
+      || changes.darkTheme
+      || changes.previewMode
+      || changes.previewInteractions
+    ) {
+      this.cancelHorizontalTouchInteraction();
     }
 
     if (
@@ -612,6 +633,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.cancelPendingFrame('axisScale');
     this.unbindFullscreenEvents();
     this.teardownViewportObserver();
@@ -649,7 +671,17 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private queueChartRefresh(source: string): void {
     this.chartRefreshSequence = this.chartRefreshSequence
       .then(async () => {
+        if (this.destroyed) {
+          return;
+        }
+
+        const previousChart = this.chartHost.getChart();
         await this.chartHost.init(this.chartDiv?.nativeElement, resolveEChartsThemeName(this.darkTheme));
+        if (this.destroyed) {
+          return;
+        }
+        this.resetInstanceBindingsIfChartChanged(previousChart);
+
         if (this.interactionsEnabled) {
           this.bindChartEvents();
         }
@@ -664,6 +696,15 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
           error,
         });
       });
+  }
+
+  private resetInstanceBindingsIfChartChanged(previousChart: EChartsType | null): void {
+    if (this.chartHost.getChart() === previousChart) {
+      return;
+    }
+
+    this.eventsBound = false;
+    this.axisPointerCursorBoundChart = null;
   }
 
   private refreshChart(mode: ChartRefreshMode = 'merge'): void {
@@ -2892,7 +2933,9 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    this.touchGestureController.bind(element);
+    // Vertical flings only arbitrate native input and must not schedule an
+    // Angular change-detection pass for every passive touchmove.
+    this.ngZone.runOutsideAngular(() => this.touchGestureController.bind(element));
   }
 
   private startHorizontalTouchInteraction(gesture: EChartsHorizontalTouchGesture): void {
@@ -2921,6 +2964,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
 
     this.touchInteraction = {
       kind: 'panel',
+      mode: this.cursorBehaviour,
       startValue,
       lastRange: null,
     };
@@ -2959,13 +3003,13 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    if (this.cursorBehaviour === ChartCursorBehaviours.SelectX) {
+    if (touchInteraction.mode === ChartCursorBehaviours.SelectX) {
       this.previewRangeChange.emit(nextRange);
       this.selectedRangeChange.emit(nextRange);
       return;
     }
 
-    if (this.cursorBehaviour !== ChartCursorBehaviours.ZoomX) {
+    if (touchInteraction.mode !== ChartCursorBehaviours.ZoomX) {
       this.clearSelectionOverlay();
       return;
     }
@@ -2990,13 +3034,29 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
   private cancelHorizontalTouchInteraction(): void {
     const touchInteraction = this.touchInteraction;
     this.touchInteraction = null;
-    if (touchInteraction?.kind !== 'panel') {
+    if (!touchInteraction) {
+      return;
+    }
+
+    if (touchInteraction.kind === 'zoomBar') {
+      const chart = this.chartHost.getChart();
+      if (!chart || this.areRangesEqual(touchInteraction.lastRange, touchInteraction.initialRange)) {
+        return;
+      }
+
+      const restoreZoomAction: ChartAction = {
+        type: 'dataZoom',
+        startValue: touchInteraction.initialRange.start,
+        endValue: touchInteraction.initialRange.end,
+        $from: TOUCH_GESTURE_DATAZOOM_SOURCE,
+      };
+      chart.dispatchAction(restoreZoomAction);
       return;
     }
 
     this.updateSelectionBrushState(false);
     this.clearSelectionOverlay();
-    if (this.cursorBehaviour === ChartCursorBehaviours.SelectX) {
+    if (touchInteraction.mode === ChartCursorBehaviours.SelectX) {
       this.previewRangeChange.emit(null);
     }
   }
@@ -3028,7 +3088,7 @@ export class EventCardChartPanelComponent implements AfterViewInit, OnChanges, O
     };
     chart.dispatchAction(brushAction);
 
-    if (this.cursorBehaviour !== ChartCursorBehaviours.SelectX || !ENABLE_LIVE_SELECTION_SYNC) {
+    if (touchInteraction.mode !== ChartCursorBehaviours.SelectX || !ENABLE_LIVE_SELECTION_SYNC) {
       return;
     }
 

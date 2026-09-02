@@ -28,6 +28,7 @@ type ActiveTouchGesture = {
 const DEFAULT_INTENT_THRESHOLD_PX = 8;
 const DEFAULT_HORIZONTAL_DOMINANCE_RATIO = 1.25;
 const COMPATIBILITY_MOUSE_SUPPRESSION_MS = 700;
+const COMPATIBILITY_CONTEXT_MENU_SUPPRESSION_MS = 700;
 const PASSIVE_CAPTURE_LISTENER_OPTIONS: AddEventListenerOptions = {
   capture: true,
   passive: true,
@@ -42,6 +43,7 @@ export class EChartsHorizontalTouchGestureController {
   private element: HTMLElement | null = null;
   private activeGesture: ActiveTouchGesture | null = null;
   private suppressCompatibilityMouseUntil = 0;
+  private suppressCompatibilityContextMenuUntil = 0;
 
   private readonly touchStartHandler = (event: TouchEvent) => this.onTouchStart(event);
   private readonly touchMoveHandler = (event: TouchEvent) => this.onTouchMove(event);
@@ -70,11 +72,14 @@ export class EChartsHorizontalTouchGestureController {
     element.addEventListener('mousedown', this.compatibilityMouseHandler, true);
     element.addEventListener('mouseup', this.compatibilityMouseHandler, true);
     element.addEventListener('click', this.compatibilityMouseHandler, true);
+    element.addEventListener('contextmenu', this.compatibilityMouseHandler, true);
   }
 
   dispose(): void {
+    this.cancelActiveGesture();
     if (!this.element) {
-      this.activeGesture = null;
+      this.suppressCompatibilityMouseUntil = 0;
+      this.suppressCompatibilityContextMenuUntil = 0;
       return;
     }
 
@@ -86,16 +91,18 @@ export class EChartsHorizontalTouchGestureController {
     this.element.removeEventListener('mousedown', this.compatibilityMouseHandler, true);
     this.element.removeEventListener('mouseup', this.compatibilityMouseHandler, true);
     this.element.removeEventListener('click', this.compatibilityMouseHandler, true);
+    this.element.removeEventListener('contextmenu', this.compatibilityMouseHandler, true);
     this.element = null;
     this.activeGesture = null;
     this.suppressCompatibilityMouseUntil = 0;
+    this.suppressCompatibilityContextMenuUntil = 0;
   }
 
   private onTouchStart(event: TouchEvent): void {
     this.keepGestureAwayFromECharts(event);
 
     if (event.touches.length !== 1) {
-      this.cancelActiveHorizontalGesture();
+      this.cancelActiveGesture(true);
       return;
     }
 
@@ -120,13 +127,13 @@ export class EChartsHorizontalTouchGestureController {
 
     const activeGesture = this.activeGesture;
     if (!activeGesture || event.touches.length !== 1) {
-      this.cancelActiveHorizontalGesture();
+      this.cancelActiveGesture(true);
       return;
     }
 
     const touch = this.findTouch(event.touches, activeGesture.identifier);
     if (!touch) {
-      this.cancelActiveHorizontalGesture();
+      this.cancelActiveGesture(true);
       return;
     }
 
@@ -152,6 +159,7 @@ export class EChartsHorizontalTouchGestureController {
 
   private onTouchEnd(event: TouchEvent): void {
     this.keepGestureAwayFromECharts(event);
+    this.suppressCompatibilityContextMenu();
 
     const activeGesture = this.activeGesture;
     if (!activeGesture) {
@@ -175,11 +183,19 @@ export class EChartsHorizontalTouchGestureController {
 
   private onTouchCancel(event: TouchEvent): void {
     this.keepGestureAwayFromECharts(event);
-    this.cancelActiveHorizontalGesture();
+    this.suppressCompatibilityContextMenu();
+    this.cancelActiveGesture(true);
   }
 
   private onCompatibilityMouseEvent(event: MouseEvent): void {
-    if (Date.now() > this.suppressCompatibilityMouseUntil) {
+    const touchInProgress = this.activeGesture !== null;
+    if (touchInProgress) {
+      this.suppressCompatibilityMouseEvents();
+    }
+    const now = Date.now();
+    const contextMenuSuppressed = event.type === 'contextmenu'
+      && now <= this.suppressCompatibilityContextMenuUntil;
+    if (!touchInProgress && now > this.suppressCompatibilityMouseUntil && !contextMenuSuppressed) {
       return;
     }
 
@@ -191,9 +207,19 @@ export class EChartsHorizontalTouchGestureController {
     }
   }
 
-  private cancelActiveHorizontalGesture(): void {
-    if (this.activeGesture?.intent === 'horizontal') {
+  private cancelActiveGesture(forceCompatibilityMouseSuppression = false): void {
+    const activeGesture = this.activeGesture;
+    if (
+      activeGesture
+      && (
+        forceCompatibilityMouseSuppression
+        || activeGesture.intent !== 'pending'
+        || activeGesture.maxDistance >= this.intentThresholdPx
+      )
+    ) {
       this.suppressCompatibilityMouseEvents();
+    }
+    if (activeGesture?.intent === 'horizontal') {
       this.callbacks.onHorizontalCancel?.();
     }
     this.activeGesture = null;
@@ -220,6 +246,10 @@ export class EChartsHorizontalTouchGestureController {
 
   private suppressCompatibilityMouseEvents(): void {
     this.suppressCompatibilityMouseUntil = Date.now() + COMPATIBILITY_MOUSE_SUPPRESSION_MS;
+  }
+
+  private suppressCompatibilityContextMenu(): void {
+    this.suppressCompatibilityContextMenuUntil = Date.now() + COMPATIBILITY_CONTEXT_MENU_SUPPRESSION_MS;
   }
 
   private findTouch(touches: TouchList, identifier: number): Touch | null {
