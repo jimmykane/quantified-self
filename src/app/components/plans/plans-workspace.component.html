@@ -11,7 +11,8 @@
         <mat-icon aria-hidden="true">calendar_month</mat-icon>
         <span>Calendar</span>
       </a>
-      <button mat-flat-button type="button" (click)="openNewWorkout()" [disabled]="scheduleState().status !== 'ready'">
+      <button mat-flat-button type="button" (click)="openNewWorkout()"
+        [disabled]="scheduleState().status !== 'ready' || busyAction() !== null">
         <mat-icon aria-hidden="true">add</mat-icon>
         <span>Add workout</span>
       </button>
@@ -38,6 +39,7 @@
   <nav class="plans-view-navigation" aria-label="Workout scope">
     <mat-button-toggle-group
       [value]="view()"
+      [disabled]="busyAction() !== null"
       hideSingleSelectionIndicator
       aria-label="View plans or standalone workouts"
       (change)="selectView($event.value)">
@@ -50,7 +52,7 @@
         <span>Standalone</span>
       </mat-button-toggle>
     </mat-button-toggle-group>
-    <button mat-stroked-button type="button" (click)="beginPlanCreation()">
+    <button mat-stroked-button type="button" (click)="beginPlanCreation()" [disabled]="busyAction() !== null">
       <mat-icon aria-hidden="true">playlist_add</mat-icon>
       <span>New plan</span>
     </button>
@@ -97,9 +99,9 @@
           </mat-checkbox>
         </mat-card-content>
         <mat-card-actions align="end">
-          <button mat-button type="button" (click)="cancelPlanCreation()">Cancel</button>
+          <button mat-button type="button" (click)="cancelPlanCreation()" [disabled]="busyAction() !== null">Cancel</button>
           <button mat-flat-button type="button" (click)="createPlan()"
-            [disabled]="busyAction() === 'create-plan' || !planDraft().name.trim()">
+            [disabled]="busyAction() !== null || !planDraft().name.trim()">
             @if (busyAction() === 'create-plan') {
               <mat-spinner diameter="18"></mat-spinner>
             } @else {
@@ -116,7 +118,8 @@
         <div class="plan-selector-row">
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>Training plan</mat-label>
-            <mat-select [value]="selectedPlanId()" (selectionChange)="selectPlan($event.value)">
+            <mat-select [value]="selectedPlanId()" (selectionChange)="selectPlan($event.value)"
+              [disabled]="busyAction() !== null">
               @for (plan of planOptions(); track plan.id) {
                 <mat-option [value]="plan.id">{{ plan.name }} · {{ plan.lifecycle | titlecase }}</mat-option>
               }
@@ -139,20 +142,24 @@
             <div class="plan-actions">
               @if (plan.lifecycle !== 'active') {
                 <button mat-stroked-button type="button" (click)="setPlanLifecycle(plan, 'active')"
-                  [disabled]="busyAction() === 'lifecycle-' + plan.id">
+                  [disabled]="busyAction() !== null">
                   <mat-icon aria-hidden="true">play_circle</mat-icon>
                   <span>Activate</span>
                 </button>
               } @else {
                 <button mat-stroked-button type="button" (click)="setPlanLifecycle(plan, 'paused')"
-                  [disabled]="busyAction() === 'lifecycle-' + plan.id">
+                  [disabled]="busyAction() !== null">
                   <mat-icon aria-hidden="true">pause_circle</mat-icon>
                   <span>Pause</span>
                 </button>
               }
-              <button mat-button type="button" [matMenuTriggerFor]="planActionsMenu">
-                <mat-icon aria-hidden="true">more_horiz</mat-icon>
-                <span>Plan actions</span>
+              <button mat-button type="button" [matMenuTriggerFor]="planActionsMenu" [disabled]="busyAction() !== null">
+                @if (selectedPlanActionBusy()) {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">more_horiz</mat-icon>
+                }
+                <span>{{ selectedPlanActionBusy() ? 'Updating plan' : 'Plan actions' }}</span>
               </button>
               <mat-menu #planActionsMenu="matMenu" class="qs-menu-panel">
                 <button mat-menu-item type="button" (click)="beginRename(plan)">
@@ -182,8 +189,16 @@
                 <mat-label>Plan name</mat-label>
                 <input matInput maxlength="120" [ngModel]="renameValue()" (ngModelChange)="renameValue.set($event)">
               </mat-form-field>
-              <button mat-flat-button type="button" (click)="renamePlan(plan)" [disabled]="!renameValue().trim()">Save</button>
-              <button mat-button type="button" (click)="renamingPlanId.set(null)">Cancel</button>
+              <button mat-flat-button type="button" (click)="renamePlan(plan)"
+                [disabled]="busyAction() !== null || !renameValue().trim()">
+                @if (busyAction() === 'rename-' + plan.id) {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">save</mat-icon>
+                }
+                <span>Save</span>
+              </button>
+              <button mat-button type="button" (click)="renamingPlanId.set(null)" [disabled]="busyAction() !== null">Cancel</button>
             </div>
           }
 
@@ -195,8 +210,15 @@
                   (ngModelChange)="shiftDays.set(+$event)">
                 <mat-hint>Negative moves the plan earlier</mat-hint>
               </mat-form-field>
-              <button mat-flat-button type="button" (click)="shiftPlan(plan)">Shift plan</button>
-              <button mat-button type="button" (click)="shiftingPlanId.set(null)">Cancel</button>
+              <button mat-flat-button type="button" (click)="shiftPlan(plan)" [disabled]="busyAction() !== null">
+                @if (busyAction() === 'shift-' + plan.id) {
+                  <mat-spinner diameter="18"></mat-spinner>
+                } @else {
+                  <mat-icon aria-hidden="true">date_range</mat-icon>
+                }
+                <span>Shift plan</span>
+              </button>
+              <button mat-button type="button" (click)="shiftingPlanId.set(null)" [disabled]="busyAction() !== null">Cancel</button>
             </div>
           }
 
@@ -217,12 +239,18 @@
                 </mat-radio-group>
               </mat-card-content>
               <mat-card-actions align="end">
-                <button mat-button type="button" (click)="deletingPlanId.set(null)">Cancel</button>
-                <button mat-stroked-button type="button" (click)="setPlanLifecycle(plan, 'archived')">
-                  Archive instead
+                <button mat-button type="button" (click)="deletingPlanId.set(null)" [disabled]="busyAction() !== null">Cancel</button>
+                <button mat-stroked-button type="button" (click)="setPlanLifecycle(plan, 'archived')"
+                  [disabled]="busyAction() !== null">
+                  @if (busyAction() === 'lifecycle-' + plan.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">archive</mat-icon>
+                  }
+                  <span>Archive instead</span>
                 </button>
                 <button mat-flat-button color="warn" type="button" (click)="deletePlan(plan)"
-                  [disabled]="busyAction() === 'delete-plan-' + plan.id">
+                  [disabled]="busyAction() !== null">
                   @if (busyAction() === 'delete-plan-' + plan.id) {
                     <mat-spinner diameter="18"></mat-spinner>
                   } @else {
@@ -238,7 +266,7 @@
             <mat-icon aria-hidden="true">event_note</mat-icon>
             <h2 id="plan-scope-title">No plans yet</h2>
             <p>Create a plan, or switch to Standalone to add workouts without one.</p>
-            <button mat-flat-button type="button" (click)="beginPlanCreation()">Create your first plan</button>
+            <button mat-flat-button type="button" (click)="beginPlanCreation()" [disabled]="busyAction() !== null">Create your first plan</button>
           </section>
         }
       </section>
@@ -248,7 +276,7 @@
           <h2 id="standalone-title">Standalone workouts</h2>
           <p>These workouts do not belong to a plan and can be attached later.</p>
         </div>
-        <button mat-flat-button type="button" (click)="openNewWorkout(null)">
+        <button mat-flat-button type="button" (click)="openNewWorkout(null)" [disabled]="busyAction() !== null">
           <mat-icon aria-hidden="true">add</mat-icon><span>Add standalone</span>
         </button>
       </section>
@@ -371,9 +399,9 @@
           </section>
         </mat-card-content>
         <mat-card-actions align="end">
-          <button mat-button type="button" (click)="cancelEditor()">Cancel</button>
+          <button mat-button type="button" (click)="cancelEditor()" [disabled]="busyAction() !== null">Cancel</button>
           <button mat-flat-button type="button" (click)="saveWorkout()"
-            [disabled]="busyAction() === 'save-workout' || !session.value.title.trim() || session.value.nodes.length === 0">
+            [disabled]="busyAction() !== null || !session.value.title.trim() || session.value.nodes.length === 0">
             @if (busyAction() === 'save-workout') {
               <mat-spinner diameter="18"></mat-spinner>
             } @else {
@@ -420,12 +448,12 @@
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ step.targetKind === 'pace' ? 'Faster min/km' : 'Minimum' }}</mat-label>
             <input matInput type="number" [min]="step.targetKind === 'pace' ? 0.01 : 0" step="0.01" [ngModel]="step.targetMinimum"
-              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', +$event)">
+              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', $event)">
           </mat-form-field>
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ step.targetKind === 'pace' ? 'Slower min/km' : 'Maximum' }}</mat-label>
             <input matInput type="number" [min]="step.targetKind === 'pace' ? 0.01 : 0" step="0.01" [ngModel]="step.targetMaximum"
-              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', +$event)">
+              (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', $event)">
           </mat-form-field>
         }
       </div>
@@ -439,7 +467,7 @@
         </div>
         <button mat-stroked-button type="button"
           (click)="openNewWorkout(view() === 'plans' ? selectedPlanId() : null)"
-          [disabled]="view() === 'plans' && !selectedPlanId()">
+          [disabled]="busyAction() !== null || (view() === 'plans' && !selectedPlanId())">
           <mat-icon aria-hidden="true">add</mat-icon><span>Add here</span>
         </button>
       </div>
@@ -471,23 +499,37 @@
                 </ol>
               </mat-card-content>
               <mat-card-actions align="end">
-                <button mat-button type="button" (click)="editWorkout(row.workout)">
+                <button mat-button type="button" (click)="editWorkout(row.workout)" [disabled]="busyAction() !== null">
                   <mat-icon aria-hidden="true">edit</mat-icon><span>Edit / move</span>
                 </button>
-                <button mat-button type="button" (click)="copyWorkout(row.workout)">
-                  <mat-icon aria-hidden="true">content_copy</mat-icon><span>Copy</span>
+                <button mat-button type="button" (click)="copyWorkout(row.workout)" [disabled]="busyAction() !== null">
+                  @if (busyAction() === 'copy-' + row.workout.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">content_copy</mat-icon>
+                  }
+                  <span>Copy</span>
                 </button>
-                <button mat-button type="button" (click)="setWorkoutSkipped(row.workout, row.workout.lifecycle !== 'skipped')">
-                  <mat-icon aria-hidden="true">{{ row.workout.lifecycle === 'skipped' ? 'undo' : 'skip_next' }}</mat-icon>
+                <button mat-button type="button" (click)="setWorkoutSkipped(row.workout, row.workout.lifecycle !== 'skipped')"
+                  [disabled]="busyAction() !== null">
+                  @if (busyAction() === 'skip-' + row.workout.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">{{ row.workout.lifecycle === 'skipped' ? 'undo' : 'skip_next' }}</mat-icon>
+                  }
                   <span>{{ row.workout.lifecycle === 'skipped' ? 'Unskip' : 'Skip' }}</span>
                 </button>
                 <button mat-icon-button type="button" matTooltip="Workout history" aria-label="Workout history"
-                  (click)="openHistory(historyScopeForWorkout(row.workout))">
+                  (click)="openHistory(row.historyScope)" [disabled]="busyAction() !== null">
                   <mat-icon>history</mat-icon>
                 </button>
                 <button mat-icon-button type="button" matTooltip="Delete workout" aria-label="Delete workout"
-                  (click)="deleteWorkout(row.workout)">
-                  <mat-icon>delete</mat-icon>
+                  (click)="deleteWorkout(row.workout)" [disabled]="busyAction() !== null">
+                  @if (busyAction() === 'delete-' + row.workout.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon>delete</mat-icon>
+                  }
                 </button>
               </mat-card-actions>
             </mat-card>
@@ -511,12 +553,16 @@
                 {{ row.workout.localDate }} · Open {{ row.workout.planId ? 'plan' : 'workout' }} history to restore
               </span>
               <div matListItemMeta class="deleted-workout-actions">
-                <button mat-button type="button" (click)="openHistory(historyScopeForWorkout(row.workout))">
+                <button mat-button type="button" (click)="openHistory(row.historyScope)" [disabled]="busyAction() !== null">
                   <mat-icon aria-hidden="true">history</mat-icon><span>History</span>
                 </button>
                 <button mat-icon-button type="button" matTooltip="Delete permanently" aria-label="Delete workout permanently"
-                  (click)="permanentlyDeleteWorkout(row.workout)">
-                  <mat-icon>delete_forever</mat-icon>
+                  (click)="permanentlyDeleteWorkout(row.workout)" [disabled]="busyAction() !== null">
+                  @if (busyAction() === 'permanent-' + row.workout.id) {
+                    <mat-spinner diameter="18"></mat-spinner>
+                  } @else {
+                    <mat-icon>delete_forever</mat-icon>
+                  }
                 </button>
               </div>
             </mat-list-item>
@@ -551,7 +597,7 @@
                   <span matListItemTitle>Revision {{ entry.revision }} · {{ entry.operationKind }}</span>
                   <span matListItemLine>{{ entry.createdAtMs | date:'medium' }}{{ entry.isCheckpoint ? ' · checkpoint' : '' }}</span>
                   <button mat-stroked-button matListItemMeta type="button" (click)="restoreHistoryEntry(entry)"
-                    [disabled]="busyAction() === 'restore-' + entry.revision">
+                    [disabled]="busyAction() !== null">
                     @if (busyAction() === 'restore-' + entry.revision) {
                       <mat-spinner diameter="18"></mat-spinner>
                     } @else {
@@ -565,7 +611,7 @@
             @if (history.nextBeforeRevision !== null) {
               <div class="history-load-more">
                 <button mat-stroked-button type="button" (click)="loadOlderHistory()"
-                  [disabled]="busyAction() === 'history-older'">
+                  [disabled]="busyAction() !== null">
                   @if (busyAction() === 'history-older') {
                     <mat-spinner diameter="18"></mat-spinner>
                   } @else {

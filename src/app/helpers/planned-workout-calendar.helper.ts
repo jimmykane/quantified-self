@@ -18,11 +18,12 @@ export type PlannedWorkoutCalendarOverlay = Readonly<Record<string, PlannedWorko
 export function buildPlannedWorkoutCalendarOverlay(
   workouts: readonly ScheduledWorkoutV1[],
   plans: readonly TrainingPlanV1[] = [],
+  activePlanId?: string | null,
 ): PlannedWorkoutCalendarOverlay {
   const planNames = new Map(plans.map(plan => [plan.id, plan.name]));
-  const activePlanIds = new Set(plans
-    .filter(plan => plan.lifecycle === 'active')
-    .map(plan => plan.id));
+  const activePlanIds = activePlanId === undefined
+    ? new Set(plans.filter(plan => plan.lifecycle === 'active').map(plan => plan.id))
+    : new Set(activePlanId ? [activePlanId] : []);
   const grouped = new Map<string, PlannedWorkoutCalendarEntry[]>();
   workouts
     .filter(workout => (

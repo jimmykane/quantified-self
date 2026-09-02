@@ -240,6 +240,17 @@ describe('planned workout v1 contract', () => {
       sport: ActivityTypes.Running,
       nodes: [{
         kind: 'repeat',
+        id: 'oversized-repeat',
+        count: 2,
+        steps: nodes,
+      }],
+    }, 'limit_exceeded', '$.nodes[0].steps');
+
+    expectValidationIssue({
+      version: 1,
+      sport: ActivityTypes.Running,
+      nodes: [{
+        kind: 'repeat',
         id: 'too-many',
         count: 101,
         steps: [{

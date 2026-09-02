@@ -81,4 +81,17 @@ describe('planned workout calendar overlay', () => {
     expect(overlay['2026-09-02'].entries.map(entry => entry.workout.id))
       .toEqual(['standalone', 'tempo']);
   });
+
+  it('uses the authoritative active-plan state while lifecycle listeners catch up', () => {
+    const stalePlan = { ...PLAN, lifecycle: 'paused' as const };
+
+    const overlay = buildPlannedWorkoutCalendarOverlay(
+      [workout('tempo'), workout('standalone')],
+      [stalePlan],
+      stalePlan.id,
+    );
+
+    expect(overlay['2026-09-02'].entries.map(entry => entry.workout.id))
+      .toEqual(['standalone', 'tempo']);
+  });
 });
