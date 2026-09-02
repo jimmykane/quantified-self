@@ -24,7 +24,6 @@ const EXPECTED_BINDINGS: Record<string, string[]> = {
   backfillCorosAPISleep: COROS,
   backfillGarminAPIActivities: GARMIN,
   backfillGarminAPIHealth: GARMIN,
-  backfillGarminAPISleep: GARMIN,
   backfillSuuntoAppSleep: SUUNTO,
   cleanupStripeCustomer: ['STRIPE_SECRET_KEY'],
   cleanupUserAccounts: [...COROS, ...GARMIN, ...SUUNTO, ...WAHOO],

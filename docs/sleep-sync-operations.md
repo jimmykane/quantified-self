@@ -51,8 +51,7 @@ See [Suunto 24/7 Health integration](suunto-integration.md).
 
 Garmin Daily, Stress Details, HRV, User Metrics, Body Composition, Pulse Ox, All-day Respiration,
 Blood Pressure, Skin Temperature, and Health Snapshot summaries are likewise separate Health records.
-They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint; the old
-`receiveGarminAPISleepData` endpoint is a temporary Sleep-compatible alias. The handler deduplicates
+They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint. The handler deduplicates
 validated descriptors, resolves unique accounts with bounded lookups, and durably queues compact
 UID-scoped callback batches before acknowledging. A retryable Firestore trigger dispatches each newly created
 or replacement batch revision outside the HTTP acknowledgement path without redispatching same-revision retry-state
@@ -171,8 +170,7 @@ queue row permanently stuck.
    `sleepSyncState/SuuntoApp` and that Activity, daily-statistics, and Recovery remain separate
    source-record types.
 
-The Garmin history control calls `backfillGarminAPIHealth`. The legacy `backfillGarminAPISleep` callable is a
-temporary alias for cached clients, with removal tracked by #625. The canonical callable requests Sleep for every eligible connected
+The Garmin history control calls `backfillGarminAPIHealth`. The callable requests Sleep for every eligible connected
 Pro user and, while Garmin Health is enabled, adds one durable cursor for all ten Health families.
 The UI waits for `getGarminHealthSyncAvailability` before enabling the control, then labels the action and
 completion from the server response. If the operational switch is disabled, the same control retains Sleep-only behavior.
@@ -199,7 +197,7 @@ gain the SpO₂ aggregate only when Garmin redelivers the session or the user ru
 **Import Sleep History** flow after the updated worker is deployed; deploying or rescanning an
 MCP client does not rewrite sleep documents.
 
-## One-Off COROS Sleep and Health Backfill
+## COROS Sleep and Health Backfill
 
 COROS retains daily data for up to three months and permits a maximum 30-day range per request.
 Connected Pro users can choose **Import Sleep & Health History** in COROS History Import. The
@@ -207,8 +205,7 @@ user-requested backfill queues their available three-month window in 30-day rang
 once every seven days. It uses the same guarded worker and ordered Sleep/Health writes as routine polling.
 
 The `backfill-coros-daily-health` Functions script queues the current eligible COROS accounts through
-the normal sleep queue in 30-day windows. The compatibility alias `backfill-coros-sleep` runs the same
-script. It neither logs tokens nor fetches raw provider data itself; the deployed worker performs the
+the normal sleep queue in 30-day windows. It neither logs tokens nor fetches raw provider data itself; the deployed worker performs the
 guarded token use and Sleep/Health writes.
 
 Deploy the enabled scheduler and sleep worker before queueing a backfill:
@@ -245,45 +242,6 @@ non-overlapping range of at most 28 days for every connected Suunto account. The
 `sleepQueued` and `healthQueued` counts. A combined request accepts at most eight connected accounts. When the Health kill switch is disabled, the existing Sleep-only copy
 and behavior remain available. A partial enqueue failure clears the cooldown claim so the user can retry immediately;
 deterministic queue identities make already accepted ranges duplicate-safe.
-
-## Legacy COROS Sleep Sample Migration
-
-Before the daily Health adapter, COROS daily extras and detailed HRV were stored inside normalized
-Sleep documents. Inspect the bounded migration plan first; dry-run is the default and performs no writes:
-
-```bash
-npm --prefix functions run migrate-coros-sleep-to-health -- --uid <Firebase UID>
-```
-
-Execute the reviewed single-user plan explicitly:
-
-```bash
-npm --prefix functions run migrate-coros-sleep-to-health -- --uid <Firebase UID> --execute
-```
-
-For a global execution, a prior dry-run is required operationally and the command requires the additional
-`--confirm-all-users` guard. The projected query defaults to 100 Sleep documents and has a hard 250-document
-page maximum. Use `--limit` and the reported `nextStartAfter` with `--start-after` to page:
-
-```bash
-npm --prefix functions run migrate-coros-sleep-to-health -- --execute --confirm-all-users --limit 250
-```
-
-The migration writes the Health replacement first. Only after the exact content is successfully written or is
-already present unchanged does a deletion-guarded transaction remove legacy `hrvSamples` and the moved COROS
-daily fields from that Sleep document. It also handles a narrowly bounded rollout race where a current daily
-backfill has already written the same provider date and revision while scalar-only legacy fields remain on the
-same referenced Sleep document. That cleanup requires the stored Health record to match the user, provider,
-source type, receipt revision, day, interval, coverage, metric identities and definitions, and exact Sleep
-references, with no incoming samples or stored sample chunks. The current Health scalar values may supersede
-older retained Sleep-side summaries; `healthRecordsSuperseded` reports this case. The Health record and unchanged
-legacy fingerprint are both rechecked inside the cleanup transaction.
-
-A stale result or any conflict containing sample-series data does not prove that every legacy value is durable,
-so the source fields remain for operator review. Aggregate Sleep vitals and timing remain. A concurrent Sleep or
-Health change fails the cleanup closed, and rerunning is idempotent. Malformed, out-of-window, or inconsistent
-legacy samples/vitals also remain untouched and are counted as invalid so an operator can review them without
-data loss.
 
 ## Health and Sleep Sports Lib JSON Migration
 

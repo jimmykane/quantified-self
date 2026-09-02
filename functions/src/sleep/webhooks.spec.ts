@@ -72,7 +72,6 @@ vi.mock('../garmin/health-flags', () => ({
 
 import {
     receiveGarminAPIHealthData,
-    receiveGarminAPISleepData,
     receiveSuunto247Data,
     suuntoWebhookTestInternals,
 } from './webhooks';
@@ -146,12 +145,12 @@ describe('sleep webhooks', () => {
         expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
-    it('keeps the legacy Sleep endpoint as a durable Ping/Pull alias', async () => {
+    it('queues Garmin Sleep Ping/Pull callbacks through the canonical endpoint', async () => {
         hoisted.garminEnabled = true;
         const response = createResponse();
         const callbackURL = garminCallbackURL('sleeps');
 
-        await receiveGarminAPISleepData({
+        await receiveGarminAPIHealthData({
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {
@@ -419,7 +418,7 @@ describe('sleep webhooks', () => {
         hoisted.garminEnabled = true;
         const response = createResponse();
 
-        await receiveGarminAPISleepData({
+        await receiveGarminAPIHealthData({
             method: 'POST',
             rawBody: Buffer.from('{}'),
             body: {

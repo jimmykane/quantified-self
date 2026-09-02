@@ -75,7 +75,6 @@ export const FUNCTIONS_MANIFEST = {
     importRouteToGarminAPI: { name: 'importRouteToGarminAPI', region: 'europe-west2' },
     backfillGarminAPIActivities: { name: 'backfillGarminAPIActivities', region: 'europe-west2' },
     backfillGarminAPIHealth: { name: 'backfillGarminAPIHealth', region: 'europe-west2' },
-    backfillGarminAPISleep: { name: 'backfillGarminAPISleep', region: 'europe-west2' },
     getGarminHealthSyncAvailability: { name: 'getGarminHealthSyncAvailability', region: 'europe-west2' },
     receiveGarminAPIDeregistration: { name: 'receiveGarminAPIDeregistration', region: 'europe-west2' },
     receiveGarminAPIUserPermissions: { name: 'receiveGarminAPIUserPermissions', region: 'europe-west2' },

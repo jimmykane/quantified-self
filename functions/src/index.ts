@@ -121,7 +121,6 @@ export { backfillActivitySyncRoute } from './activity-sync/backfill';
 export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
 export {
   receiveGarminAPIHealthData,
-  receiveGarminAPISleepData,
   receiveSuunto247Data,
 } from './sleep/webhooks';
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
@@ -135,7 +134,6 @@ export {
 export {
   backfillCorosAPISleep,
   backfillGarminAPIHealth,
-  backfillGarminAPISleep,
   backfillSuuntoAppSleep,
 } from './sleep/backfill';
 export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
