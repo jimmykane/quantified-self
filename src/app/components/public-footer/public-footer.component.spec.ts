@@ -36,7 +36,8 @@ describe('PublicFooterComponent', () => {
     expect(footer?.querySelector('a[href="/privacy"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/terms"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/policies"]')).toBeTruthy();
-    expect(text).toContain('provided without warranty');
+    expect(text).not.toContain('contributors.');
+    expect(text).not.toContain('provided without warranty');
     expect(text).toContain('AGPL-3.0-only');
     expect(
       footer?.querySelector('a[href="https://github.com/jimmykane/quantified-self"]'),
