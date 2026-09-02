@@ -36,7 +36,7 @@ Garmin Body Battery is retained as provider-native because the provider score is
 
 ## Identity and lifecycle
 
-New OAuth callbacks pin the Garmin provider user ID in server-owned service metadata. Garmin token roots and token children remain owner-readable for compatibility but are server-writable only.
+New OAuth callbacks pin the Garmin provider user ID in server-owned service metadata. Garmin token roots and token children are browser-inaccessible. A retryable backend projection copies only the connected account identity, connection time, and bounded permission names/timestamp to the owner-readable service metadata used by the connection and route-permission UI; credentials and lifecycle generations never enter that projection.
 
 Queue admission resolves the callback account to a token owned by the Firebase user, captures the token credential generation, current token-root OAuth generation, and connection generation, and atomically checks those documents with the queue write. The worker rechecks the same lifecycle before provider I/O, after token refresh, after the callback, and inside every normalized Health/state write. A disconnect or reconnect therefore prevents in-flight work from adopting a different account lifecycle.
 

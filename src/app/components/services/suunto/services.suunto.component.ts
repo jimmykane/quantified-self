@@ -7,7 +7,8 @@ import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService, GarminRouteSendContext, RouteDeliverySyncBackfillSummary } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
-import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceConnectionAccountProjection } from '@shared/service-connection';
 import { getSuuntoProviderUserIdFromTokenLike } from '@shared/suunto-route-import-state';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { AppUserServiceMetaInterface } from '../../../models/app-user.interface';
@@ -27,6 +28,11 @@ import { Subscription } from 'rxjs';
 function isDateValue(value: unknown): value is Date {
   return Object.prototype.toString.call(value) === '[object Date]';
 }
+
+type SuuntoConnectionAccountLike = ServiceConnectionAccountProjection & {
+  userName?: string;
+  dateCreated?: string | number | Date | null;
+};
 
 @Component({
   selector: 'app-services-suunto',
@@ -48,9 +54,9 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   isQueueingWahooRouteDeliverySyncBackfill = false;
   wahooRouteDeliveryBackfillSummary: RouteDeliverySyncBackfillSummary | null = null;
   public isServiceConnected = false;
-  public connectedSuuntoServiceTokens: Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface> = [];
+  public connectedSuuntoServiceTokens: SuuntoConnectionAccountLike[] = [];
   public connectedSuuntoAccounts: Array<{
-    serviceToken: Auth1ServiceTokenInterface | Auth2ServiceTokenInterface;
+    serviceToken: SuuntoConnectionAccountLike;
     trackKey: string;
     userName?: string;
   }> = [];
@@ -74,7 +80,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     serviceMeta: null,
     permissionPromptSource: null,
   };
-  private lastServiceTokensRef: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
+  private lastServiceTokensRef: unknown[] | undefined;
   private lastServiceMetaRef: AppUserServiceMetaInterface | undefined;
   private lastForceConnected = false;
   private garminRouteSendSubscription: Subscription | null = null;
@@ -483,13 +489,13 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         const leftProviderUserId = getSuuntoProviderUserIdFromTokenLike(left) || '';
         const rightProviderUserId = getSuuntoProviderUserIdFromTokenLike(right) || '';
         return leftProviderUserId.localeCompare(rightProviderUserId);
-      }) as Array<Auth1ServiceTokenInterface | Auth2ServiceTokenInterface>;
+      }) as SuuntoConnectionAccountLike[];
 
     this.connectedSuuntoServiceTokens = connectedTokens;
     this.connectedSuuntoAccounts = connectedTokens.map(serviceToken => ({
       serviceToken,
       trackKey: this.buildConnectedSuuntoAccountTrackKey(serviceToken),
-      userName: (serviceToken as Auth2ServiceTokenInterface).userName,
+      userName: getSuuntoProviderUserIdFromTokenLike(serviceToken) || undefined,
     }));
     this.hasConnectedSuuntoAccount = connectedTokens.length > 0;
     this.connectionView = buildSuuntoServiceConnectionViewModel({
@@ -541,9 +547,9 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     });
   }
 
-  private buildConnectedSuuntoAccountTrackKey(token: Auth1ServiceTokenInterface | Auth2ServiceTokenInterface): string {
+  private buildConnectedSuuntoAccountTrackKey(token: SuuntoConnectionAccountLike): string {
     const providerUserId = getSuuntoProviderUserIdFromTokenLike(token) || 'unknown-user';
-    const rawDateCreated = token?.dateCreated;
+    const rawDateCreated = token?.connectedAtMs ?? token?.dateCreated;
     const createdAt = isDateValue(rawDateCreated)
       ? rawDateCreated.getTime()
       : typeof rawDateCreated === 'number'

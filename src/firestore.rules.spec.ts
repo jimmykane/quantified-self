@@ -127,7 +127,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'service_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('preserves Garmin owner reads while denying root and credential mutations', async () => {
+        it('denies Garmin browser reads and credential mutations', async () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
             const tokenRef = db.doc(`garminAPITokens/${userId}/tokens/token-1`);
 
@@ -141,8 +141,8 @@ describe('Firestore Security Rules', () => {
                 });
             });
 
-            await assertSucceeds(db.doc(`garminAPITokens/${userId}`).get());
-            await assertSucceeds(tokenRef.get());
+            await assertFails(db.doc(`garminAPITokens/${userId}`).get());
+            await assertFails(tokenRef.get());
             await assertFails(db.doc(`garminAPITokens/${userId}`).set({ state: 'client-state' }));
             await assertFails(db.doc(`garminAPITokens/${userId}`).update({ state: 'client-state' }));
             await assertFails(db.doc(`garminAPITokens/${userId}`).delete());
@@ -241,7 +241,7 @@ describe('Firestore Security Rules', () => {
                     });
             });
 
-            await assertSucceeds(tokenRef.get());
+            await assertFails(tokenRef.get());
             await assertFails(tokenRef.update({ accessToken: 'changed' }));
             await assertFails(tokenRef.delete());
             await assertFails(db.collection('suuntoAppAccessTokens').doc(userId).update({
@@ -269,7 +269,7 @@ describe('Firestore Security Rules', () => {
             for (const collectionName of ['suuntoAppAccessTokens', 'garminAPITokens']) {
                 const rootRef = db.collection(collectionName).doc(userId);
                 const tokenRef = rootRef.collection('tokens').doc('token-1');
-                await assertSucceeds(tokenRef.get());
+                await assertFails(tokenRef.get());
                 await assertFails(tokenRef.update({ accessToken: 'changed' }));
                 await assertFails(tokenRef.delete());
                 await assertFails(rootRef.update({ state: 'new-oauth-state' }));
@@ -282,7 +282,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'suunto_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('preserves owner reads while denying root, credential, and provider-identity mutations', async () => {
+        it('denies Suunto browser reads and credential or provider-identity mutations', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc(`suuntoAppAccessTokens/${userId}`).set({
                     state: 'server-oauth-state',
@@ -299,8 +299,8 @@ describe('Firestore Security Rules', () => {
             const rootRef = db.doc(`suuntoAppAccessTokens/${userId}`);
             const tokenRef = db.doc(`suuntoAppAccessTokens/${userId}/tokens/suunto-account`);
 
-            await assertSucceeds(rootRef.get());
-            await assertSucceeds(tokenRef.get());
+            await assertFails(rootRef.get());
+            await assertFails(tokenRef.get());
             await assertFails(rootRef.set({ state: 'client-oauth-state' }));
             await assertFails(rootRef.update({ state: 'client-oauth-state' }));
             await assertFails(rootRef.delete());
@@ -322,7 +322,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'coros_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('preserves owner reads while denying client credential and identity mutations', async () => {
+        it('denies COROS browser reads and client credential or identity mutations', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`).set({
                     accessToken: 'stored-access-token',
@@ -334,7 +334,7 @@ describe('Firestore Security Rules', () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
             const tokenRef = db.doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`);
 
-            await assertSucceeds(tokenRef.get());
+            await assertFails(tokenRef.get());
             await assertFails(tokenRef.update({ accessToken: 'forged-access-token' }));
             await assertFails(tokenRef.update({ refreshToken: 'forged-refresh-token' }));
             await assertFails(tokenRef.update({ openId: 'forged-open-id' }));
@@ -361,6 +361,34 @@ describe('Firestore Security Rules', () => {
 
             await assertFails(rootRef.update({ state: 'client-replacement-state' }));
             await assertFails(rootRef.delete());
+        });
+    });
+
+    describe('Provider connection account projections', () => {
+        const userId = 'provider_projection_user';
+
+        it.each([
+            'Garmin API',
+            'Suunto app',
+            'COROS API',
+        ])('allows only the owner to read the safe %s projection', async (serviceName) => {
+            const path = `users/${userId}/meta/${serviceName}`;
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(path).set({
+                    connectionState: 'connected',
+                    connectionAccounts: [{
+                        providerUserId: 'display-account',
+                        connectedAtMs: 1_700_000_000_000,
+                    }],
+                });
+            });
+
+            await assertSucceeds(testEnv.authenticatedContext(userId).firestore().doc(path).get());
+            await assertFails(testEnv.authenticatedContext('other_user').firestore().doc(path).get());
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+            await assertFails(testEnv.authenticatedContext(userId).firestore().doc(path).update({
+                connectionAccounts: [],
+            }));
         });
     });
 

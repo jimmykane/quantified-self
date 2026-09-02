@@ -139,6 +139,11 @@ export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
 export { getGarminHealthSyncAvailability } from './garmin/health-availability';
 export { fanOutSuuntoHealthWebhookIngress } from './suunto/health-webhook-ingress';
 export {
+  projectGarminConnectionOnTokenWrite,
+  projectSuuntoConnectionOnTokenWrite,
+  projectCOROSConnectionOnTokenWrite,
+} from './service-connection-account-projection';
+export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,
   disableActivitySyncRoutesOnCOROSTokenRootDelete,

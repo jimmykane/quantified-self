@@ -80,7 +80,7 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import {
@@ -114,6 +114,7 @@ import {
   SERVICE_DISCONNECT_RETRY_REASON,
   SERVICE_CONNECTION_STATES,
   type ServiceDisconnectRetryDetails,
+  type ServiceConnectionAccountProjection,
 } from '@shared/service-connection';
 import {
   getUserLegalAgreementsPath,
@@ -988,21 +989,32 @@ export class AppUserService implements OnDestroy {
     }
   }
 
-  public getServiceToken(user: User, serviceName: ServiceNames) {
+  public getServiceToken(
+    user: User,
+    serviceName: ServiceNames,
+  ): Observable<ServiceConnectionAccountProjection[]> {
     switch (serviceName) {
       default:
         throw new Error(`Not implemented for service ${serviceName}`);
       case ServiceNames.COROSAPI:
       case ServiceNames.SuuntoApp:
-        return this.getServiceTokens(user, serviceName);
-      case ServiceNames.WahooAPI:
-        // Wahoo OAuth credentials are deliberately server-only. Expose a token-like
-        // connection marker derived from the safe user service metadata projection.
-        return this.getUserMetaForService(user, serviceName).pipe(
-          map(serviceMeta => serviceMeta?.connectionState === SERVICE_CONNECTION_STATES.Connected ? [{}] : []),
-        );
       case ServiceNames.GarminAPI:
-        return this.getGarminAPITokens(user);
+      case ServiceNames.WahooAPI:
+        return this.getUserMetaForService(user, serviceName).pipe(
+          map(serviceMeta => {
+            const accounts = Array.isArray(serviceMeta?.connectionAccounts)
+              ? serviceMeta.connectionAccounts
+              : [];
+            if (accounts.length > 0) return accounts;
+            if (serviceName !== ServiceNames.WahooAPI
+              || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected) {
+              return [];
+            }
+            const providerUserId = `${serviceMeta.providerUserId || ''}`.trim();
+            return providerUserId ? [{ providerUserId }] : [{}];
+          }),
+          catchError(() => of([])),
+        );
     }
   }
 
@@ -1032,7 +1044,10 @@ export class AppUserService implements OnDestroy {
 
     if (serviceName === ServiceNames.COROSAPI) {
       const connectedOpenIds = tokens
-        .map(token => `${(token as { openId?: unknown } | null)?.openId || ''}`.trim())
+        .map(token => {
+          const account = token as { providerUserId?: unknown; openId?: unknown } | null;
+          return `${account?.providerUserId || account?.openId || ''}`.trim();
+        })
         .filter(Boolean);
       const pinnedOpenId = `${serviceMeta?.providerUserId || ''}`.trim();
       return pinnedOpenId
@@ -1816,32 +1831,6 @@ export class AppUserService implements OnDestroy {
 
   ngOnDestroy() {
     // Required to satisfy OnDestroy interface
-  }
-
-  private getServiceTokens(user: User, serviceName: ServiceNames): Observable<any[]> {
-    const serviceNamesToCollectionName: Partial<Record<ServiceNames, string>> = {
-      [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
-      [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
-    };
-    const collectionName = serviceNamesToCollectionName[serviceName];
-    if (!collectionName) return of([]);
-
-    const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
-    return collectionData(collectionRef).pipe(
-      catchError(() => {
-        return of([]);
-      })
-    );
-  }
-
-  private getGarminAPITokens(user: User): Observable<any[]> {
-    // Garmin tokens are stored in: garminAPITokens/{userID}/tokens/{garminUserID}
-    const collectionRef = collection(this.firestore, 'garminAPITokens', user.uid, 'tokens');
-    return collectionData(collectionRef).pipe(
-      catchError(() => {
-        return of([]);
-      })
-    );
   }
 
   private createEmptyActivityServiceConnectionState(): ActivityServiceConnectionState {

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService, isActionableProfileReadState } from './app.user.service';
 import { Auth, authState, user } from 'app/firebase/auth';
-import { Firestore, collection, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -31,7 +31,6 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
     return {
         ...actual,
         doc: vi.fn().mockReturnValue({}),
-        collection: vi.fn().mockReturnValue({}),
         docData: vi.fn().mockReturnValue(of({})),
         collectionData: vi.fn().mockReturnValue(of([])),
         setDoc: vi.fn().mockResolvedValue(undefined),
@@ -867,11 +866,11 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const user = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([{ accessToken: 'token', userName: 'suunto-user' }]));
-        (docData as any).mockReturnValueOnce(of({
+        (docData as any).mockReturnValue(of({
             connectionState: 'reconnect_required',
             lastDisconnectedAt: 123,
             lastAuthFailureMessage: 'invalid_grant',
+            connectionAccounts: [{ providerUserId: 'suunto-user' }],
         }));
 
         const result = await firstValueFrom(service.watchSuuntoServiceConnectionView(user).pipe(take(1)));
@@ -889,19 +888,11 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const testUser = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([
-            {
-                accessToken: 'token-a',
-                dateCreated: 1710000000000,
-                userName: 'suunto-user-a',
-            },
-            {
-                accessToken: 'token-b',
-                dateCreated: 1710001000000,
-                userName: 'suunto-user-b',
-            },
-        ]));
-        (docData as any).mockReturnValueOnce(of({
+        (docData as any).mockReturnValue(of({
+            connectionAccounts: [
+                { providerUserId: 'suunto-user-a', connectedAtMs: 1710000000000 },
+                { providerUserId: 'suunto-user-b', connectedAtMs: 1710001000000 },
+            ],
             routeImportStatesByProviderSourceKey: [
                 {
                     sourceKey: 'suunto-user-a:1710000000000',
@@ -938,19 +929,11 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const testUser = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([
-            {
-                accessToken: 'token-a',
-                dateCreated: 1710000000000,
-                userName: 'suunto-user-a',
-            },
-            {
-                accessToken: 'token-b',
-                dateCreated: 1710001000000,
-                userName: 'suunto-user-b',
-            },
-        ]));
-        (docData as any).mockReturnValueOnce(of({
+        (docData as any).mockReturnValue(of({
+            connectionAccounts: [
+                { providerUserId: 'suunto-user-a', connectedAtMs: 1710000000000 },
+                { providerUserId: 'suunto-user-b', connectedAtMs: 1710001000000 },
+            ],
             didLastRouteImport: {
                 toDate: () => new Date('2026-06-12T09:45:00.000Z'),
             },
@@ -966,14 +949,10 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const testUser = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([
-            {
-                accessToken: 'token-a',
-                dateCreated: 1711000000000,
-                userName: 'suunto-user-a',
-            },
-        ]));
-        (docData as any).mockReturnValueOnce(of({
+        (docData as any).mockReturnValue(of({
+            connectionAccounts: [
+                { providerUserId: 'suunto-user-a', connectedAtMs: 1711000000000 },
+            ],
             didLastRouteImport: {
                 toDate: () => new Date('2026-06-12T09:45:00.000Z'),
             },
@@ -999,13 +978,8 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const testUser = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([
-            {
-                accessToken: 'token-a',
-                dateCreated: 1711000000000,
-            },
-        ]));
-        (docData as any).mockReturnValueOnce(of({
+        (docData as any).mockReturnValue(of({
+            connectionAccounts: [],
             didLastRouteImport: {
                 toDate: () => new Date('2026-06-12T09:45:00.000Z'),
             },
@@ -1026,16 +1000,14 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const testUser = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([
-            {
-                accessToken: 'garmin-token',
-                userID: 'garmin-user-1',
+        (docData as any).mockReturnValue(of({
+            connectionAccounts: [{
+                providerUserId: 'garmin-user-1',
                 permissions: ['ACTIVITY_EXPORT'],
-                permissionsLastChangedAt: 1710000000,
-                dateCreated: 1700000000000,
-            },
-        ]));
-        (docData as any).mockReturnValueOnce(of({}));
+                permissionsUpdatedAtMs: 1710000000000,
+                connectedAtMs: 1700000000000,
+            }],
+        }));
 
         const result = await firstValueFrom(service.watchGarminRouteSendContext(testUser).pipe(take(1)));
 
@@ -1044,7 +1016,7 @@ describe('AppUserService', () => {
             reconnectRequired: false,
             missingPermissions: ['COURSE_IMPORT'],
             providerUserId: 'garmin-user-1',
-            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1710000000:COURSE_IMPORT',
+            permissionPromptSource: 'garmin-route-course-import:garmin-user-1:1710000000000:COURSE_IMPORT',
         });
         expect(result.providerStates).toEqual([{
             providerUserId: 'garmin-user-1',
@@ -1057,14 +1029,12 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const testUser = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([
-            {
-                accessToken: 'garmin-token',
-                userID: 'garmin-user-1',
-                dateCreated: 1700000000000,
-            },
-        ]));
-        (docData as any).mockReturnValueOnce(of({}));
+        (docData as any).mockReturnValue(of({
+            connectionAccounts: [{
+                providerUserId: 'garmin-user-1',
+                connectedAtMs: 1700000000000,
+            }],
+        }));
 
         const result = await firstValueFrom(service.watchGarminRouteSendContext(testUser).pipe(take(1)));
 
@@ -1086,16 +1056,15 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const testUser = { uid: 'u1' } as any;
 
-        (collectionData as any).mockReturnValueOnce(of([
-            {
-                accessToken: 'garmin-token',
-                userID: 'garmin-user-1',
+        (docData as any).mockReturnValue(of({
+            connectionAccounts: [{
+                providerUserId: 'garmin-user-1',
                 permissions: ['ACTIVITY_EXPORT'],
-                permissionsLastChangedAt: 1710000000,
-                dateCreated: 1700000000000,
-            },
-        ]));
-        (docData as any).mockReturnValueOnce(of({ connectionState: 'disconnect_pending' }));
+                permissionsUpdatedAtMs: 1710000000000,
+                connectedAtMs: 1700000000000,
+            }],
+            connectionState: 'disconnect_pending',
+        }));
 
         const result = await firstValueFrom(service.watchGarminRouteSendContext(testUser).pipe(take(1)));
 
@@ -1382,26 +1351,28 @@ describe('AppUserService', () => {
             service = TestBed.inject(AppUserService);
         });
 
-        it('getServiceToken should read Suunto tokens from suuntoAppAccessTokens collection', async () => {
+        it('getServiceToken should read Suunto accounts from safe service metadata', async () => {
             const user = { uid: 'u1' } as any;
-            const tokens = [{ accessToken: 'suunto-token' }];
-            (collectionData as any).mockReturnValueOnce(of(tokens));
+            const accounts = [{ providerUserId: 'suunto-user' }];
+            (docData as any).mockReturnValueOnce(of({ connectionAccounts: accounts }));
 
             const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.SuuntoApp));
 
-            expect(collection).toHaveBeenCalledWith(expect.anything(), 'suuntoAppAccessTokens', 'u1', 'tokens');
-            expect(result).toEqual(tokens);
+            expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'u1', 'meta', ServiceNames.SuuntoApp);
+            expect(result).toEqual(accounts);
+            expect(collectionData).not.toHaveBeenCalled();
         });
 
-        it('getServiceToken should read COROS tokens from COROSAPIAccessTokens collection', async () => {
+        it('getServiceToken should read COROS accounts from safe service metadata', async () => {
             const user = { uid: 'u2' } as any;
-            const tokens = [{ accessToken: 'coros-token' }];
-            (collectionData as any).mockReturnValueOnce(of(tokens));
+            const accounts = [{ providerUserId: 'coros-user' }];
+            (docData as any).mockReturnValueOnce(of({ connectionAccounts: accounts }));
 
             const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.COROSAPI));
 
-            expect(collection).toHaveBeenCalledWith(expect.anything(), 'COROSAPIAccessTokens', 'u2', 'tokens');
-            expect(result).toEqual(tokens);
+            expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'u2', 'meta', ServiceNames.COROSAPI);
+            expect(result).toEqual(accounts);
+            expect(collectionData).not.toHaveBeenCalled();
         });
 
         it('should fail closed when COROS metadata pins a token that is no longer present', () => {
@@ -1410,12 +1381,12 @@ describe('AppUserService', () => {
 
             expect(hasConnectedToken(
                 ServiceNames.COROSAPI,
-                [{ openId: 'remaining-coros-account' }],
+                [{ providerUserId: 'remaining-coros-account' }],
                 { providerUserId: 'missing-pinned-account' },
             )).toBe(false);
             expect(hasConnectedToken(
                 ServiceNames.COROSAPI,
-                [{ openId: 'active-coros-account' }],
+                [{ providerUserId: 'active-coros-account' }],
                 { providerUserId: 'active-coros-account' },
             )).toBe(true);
         });
@@ -1426,21 +1397,22 @@ describe('AppUserService', () => {
 
             expect(hasConnectedToken(
                 ServiceNames.COROSAPI,
-                [{ openId: 'legacy-coros-account' }],
+                [{ providerUserId: 'legacy-coros-account' }],
                 {},
             )).toBe(true);
             expect(hasConnectedToken(ServiceNames.COROSAPI, [{ accessToken: 'malformed' }], {})).toBe(false);
         });
 
-        it('getServiceToken should read Garmin tokens from garminAPITokens collection', async () => {
+        it('getServiceToken should read Garmin accounts from safe service metadata', async () => {
             const user = { uid: 'u3' } as any;
-            const tokens = [{ accessToken: 'garmin-token' }];
-            (collectionData as any).mockReturnValueOnce(of(tokens));
+            const accounts = [{ providerUserId: 'garmin-user', permissions: [] }];
+            (docData as any).mockReturnValueOnce(of({ connectionAccounts: accounts }));
 
             const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.GarminAPI));
 
-            expect(collection).toHaveBeenCalledWith(expect.anything(), 'garminAPITokens', 'u3', 'tokens');
-            expect(result).toEqual(tokens);
+            expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'u3', 'meta', ServiceNames.GarminAPI);
+            expect(result).toEqual(accounts);
+            expect(collectionData).not.toHaveBeenCalled();
         });
 
         it('getServiceToken should derive Wahoo connection state from safe user metadata', async () => {
@@ -1462,18 +1434,18 @@ describe('AppUserService', () => {
             );
         });
 
-        it('getServiceToken should recover with empty array when Suunto token query fails', async () => {
+        it('getServiceToken should recover with empty array when Suunto projection read fails', async () => {
             const user = { uid: 'u5' } as any;
-            (collectionData as any).mockReturnValueOnce(throwError(() => new Error('Suunto read failed')));
+            (docData as any).mockReturnValueOnce(throwError(() => new Error('Suunto read failed')));
 
             const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.SuuntoApp));
 
             expect(result).toEqual([]);
         });
 
-        it('getServiceToken should recover with empty array when Garmin token query fails', async () => {
+        it('getServiceToken should recover with empty array when Garmin projection read fails', async () => {
             const user = { uid: 'u6' } as any;
-            (collectionData as any).mockReturnValueOnce(throwError(() => new Error('Garmin read failed')));
+            (docData as any).mockReturnValueOnce(throwError(() => new Error('Garmin read failed')));
 
             const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.GarminAPI));
 
@@ -1489,10 +1461,14 @@ describe('AppUserService', () => {
 
         it('watchActivityServiceConnectionState should emit per-service connection state', async () => {
             const user = { uid: 'u10' } as any;
-            (collectionData as any)
-                .mockReturnValueOnce(of([{ accessToken: 'garmin-token', userID: 'garmin-user' }]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token', userName: 'suunto-user' }]))
-                .mockReturnValueOnce(of([]));
+            vi.spyOn(service, 'getServiceToken').mockImplementation((_user, serviceName) => of(
+                serviceName === ServiceNames.GarminAPI
+                    ? [{ providerUserId: 'garmin-user' }]
+                    : serviceName === ServiceNames.SuuntoApp
+                        ? [{ providerUserId: 'suunto-user' }]
+                        : []
+            ) as any);
+            vi.spyOn(service, 'getUserMetaForService').mockReturnValue(of(undefined));
 
             const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
 
@@ -1506,10 +1482,10 @@ describe('AppUserService', () => {
 
         it('watchActivityServiceConnectionState should ignore malformed Suunto tokens without provider identity', async () => {
             const user = { uid: 'u10b' } as any;
-            (collectionData as any)
-                .mockReturnValueOnce(of([]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
-                .mockReturnValueOnce(of([]));
+            vi.spyOn(service, 'getServiceToken').mockImplementation((_user, serviceName) => of(
+                serviceName === ServiceNames.SuuntoApp ? [{}] : []
+            ) as any);
+            vi.spyOn(service, 'getUserMetaForService').mockReturnValue(of(undefined));
 
             const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
 
@@ -1547,25 +1523,19 @@ describe('AppUserService', () => {
 
         it('watchHasAnyActivityServiceConnection should emit false when activity service token streams are empty', async () => {
             const user = { uid: 'u7' } as any;
-            (collectionData as any)
-                .mockReturnValueOnce(of([]))
-                .mockReturnValueOnce(of([]))
-                .mockReturnValueOnce(of([]));
 
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 
             expect(result).toBe(false);
-            expect(collection).toHaveBeenNthCalledWith(1, expect.anything(), 'garminAPITokens', 'u7', 'tokens');
-            expect(collection).toHaveBeenNthCalledWith(2, expect.anything(), 'suuntoAppAccessTokens', 'u7', 'tokens');
-            expect(collection).toHaveBeenNthCalledWith(3, expect.anything(), 'COROSAPIAccessTokens', 'u7', 'tokens');
+            expect(collectionData).not.toHaveBeenCalled();
         });
 
         it('watchHasAnyActivityServiceConnection should emit true when any activity service has a token', async () => {
             const user = { uid: 'u8' } as any;
-            (collectionData as any)
-                .mockReturnValueOnce(of([]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token', userName: 'suunto-user' }]))
-                .mockReturnValueOnce(of([]));
+            vi.spyOn(service, 'getServiceToken').mockImplementation((_user, serviceName) => of(
+                serviceName === ServiceNames.SuuntoApp ? [{ providerUserId: 'suunto-user' }] : []
+            ) as any);
+            vi.spyOn(service, 'getUserMetaForService').mockReturnValue(of(undefined));
 
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 
@@ -1574,22 +1544,22 @@ describe('AppUserService', () => {
 
         it('watchHasAnyActivityServiceConnection should stay false when the only Suunto token is malformed', async () => {
             const user = { uid: 'u8b' } as any;
-            (collectionData as any)
-                .mockReturnValueOnce(of([]))
-                .mockReturnValueOnce(of([{ accessToken: 'suunto-token' }]))
-                .mockReturnValueOnce(of([]));
+            vi.spyOn(service, 'getServiceToken').mockImplementation((_user, serviceName) => of(
+                serviceName === ServiceNames.SuuntoApp ? [{}] : []
+            ) as any);
+            vi.spyOn(service, 'getUserMetaForService').mockReturnValue(of(undefined));
 
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 
             expect(result).toBe(false);
         });
 
-        it('watchHasAnyActivityServiceConnection should fail closed when token reads fail', async () => {
+        it('watchHasAnyActivityServiceConnection should fail closed when projection reads fail', async () => {
             const user = { uid: 'u9' } as any;
-            (collectionData as any)
-                .mockReturnValueOnce(throwError(() => new Error('Garmin read failed')))
-                .mockReturnValueOnce(throwError(() => new Error('Suunto read failed')))
-                .mockReturnValueOnce(throwError(() => new Error('COROS read failed')));
+            vi.spyOn(service, 'getServiceToken').mockReturnValue(
+                throwError(() => new Error('Projection read failed')),
+            );
+            vi.spyOn(service, 'getUserMetaForService').mockReturnValue(of(undefined));
 
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 

@@ -1070,6 +1070,13 @@ describe('help.content', () => {
     });
   });
 
+  it('should explain that provider credentials remain server-only', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Connection screens read a limited account summary');
+    expect(gettingStartedSection?.content).toContain('provider access and refresh credentials stay server-only');
+  });
+
   it('documents Wahoo FIT imports, activity and route delivery, skip rules, and retained imported activities', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
