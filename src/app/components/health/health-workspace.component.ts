@@ -10,6 +10,13 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { AppThemes, ServiceNames } from '@sports-alliance/sports-lib';
 import {
+  ACTIVITY_HEALTH_METRIC_IDS,
+  ACTIVITY_HEALTH_INCOMPLETE_REASONS,
+  isActivityHealthMetricId,
+  type ActivityHealthObservation,
+  type ActivityHealthRangeResult,
+} from '@shared/activity-health';
+import {
   HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
   HEALTH_SYNC_STATUSES,
@@ -41,6 +48,7 @@ import { AppChartsModule } from '../../modules/app-charts.module';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
+import { HealthActivityQueryService } from './health-activity-query.service';
 import {
   HealthPriorityCardView,
   HealthPrioritySummaryComponent,
@@ -68,6 +76,7 @@ import {
   normalizeHealthWorkspaceRange,
   providerLabel,
   resolveHealthWorkspaceWindow,
+  selectActivityHealthObservations,
 } from '../../helpers/health-workspace.helper';
 import { buildDashboardSleepTrendContext } from '../../helpers/dashboard-sleep-chart.helper';
 import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
@@ -150,6 +159,7 @@ export class HealthWorkspaceComponent {
   private readonly userService = inject(AppUserService);
   private readonly userSettingsService = inject(AppUserSettingsQueryService);
   private readonly healthService = inject(AppHealthService);
+  private readonly activityHealthService = inject(HealthActivityQueryService);
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
   private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
@@ -185,6 +195,8 @@ export class HealthWorkspaceComponent {
   readonly selectedWindow = computed(() => resolveHealthWorkspaceWindow(this.routeState(), this.todayDate));
   readonly selectedHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly selectedHealthStatus = signal<HealthLoadStatus>('loading');
+  readonly selectedActivityHealthResult = signal<ActivityHealthRangeResult | null>(null);
+  readonly selectedActivityHealthStatus = signal<HealthLoadStatus>('ready');
   readonly selectedSleepSessions = signal<SleepSession[]>([]);
   readonly selectedSleepStatus = signal<HealthLoadStatus>('loading');
   readonly prioritySleepSessions = signal<SleepSession[]>([]);
@@ -261,9 +273,29 @@ export class HealthWorkspaceComponent {
     const result = this.selectedHealthLoad()?.result;
     return result ? filterHealthRangeResultByProviders(result, this.effectiveProviderFilters()) : null;
   });
+  readonly filteredActivityHealthObservations = computed<ActivityHealthObservation[]>(() => {
+    const metric = this.routeState().metric;
+    const healthResult = this.filteredHealthResult();
+    const activityResult = this.selectedActivityHealthResult();
+    if (!isActivityHealthMetricId(metric) || !healthResult || !activityResult) {
+      return [];
+    }
+    return selectActivityHealthObservations(
+      metric,
+      healthResult,
+      activityResult.observations,
+      this.effectiveProviderFilters(),
+    );
+  });
   readonly metricView = computed<HealthMetricWorkspaceView>(() => {
     const result = this.filteredHealthResult();
-    return result ? buildHealthMetricWorkspaceView(result, this.filteredSleepSessions()) : emptyMetricView();
+    return result
+      ? buildHealthMetricWorkspaceView(
+        result,
+        this.filteredSleepSessions(),
+        this.filteredActivityHealthObservations(),
+      )
+      : emptyMetricView();
   });
   readonly sleepTrend = computed(() => buildDashboardSleepTrendContext(this.filteredSleepSessions(), {
     sleepWindow: {
@@ -283,6 +315,7 @@ export class HealthWorkspaceComponent {
         ...(this.selectedHealthLoad()?.providers || []),
         ...(loadedResult?.observations.map(item => item.provider) || []),
         ...(loadedResult?.sampleChunks.map(item => item.provider) || []),
+        ...(this.selectedActivityHealthResult()?.observations.map(item => item.provider) || []),
       ];
     return [...new Set(providers)].sort((left, right) => providerLabel(left).localeCompare(providerLabel(right)));
   });
@@ -294,9 +327,28 @@ export class HealthWorkspaceComponent {
     }));
   });
   readonly allProvidersSelected = computed(() => this.effectiveProviderFilters().length === 0);
-  readonly selectedStatus = computed(() => this.selectedIsSleep()
-    ? this.selectedSleepStatus()
-    : this.selectedHealthStatus());
+  readonly selectedStatus = computed(() => {
+    if (this.selectedIsSleep()) {
+      return this.selectedSleepStatus();
+    }
+    const healthStatus = this.selectedHealthStatus();
+    const metric = this.routeState().metric;
+    if (!isActivityHealthMetricId(metric)) {
+      return healthStatus;
+    }
+    const activityStatus = this.selectedActivityHealthStatus();
+    if (healthStatus === 'loading' || activityStatus === 'loading') {
+      return 'loading';
+    }
+    if (healthStatus === 'denied' || healthStatus === 'error') {
+      return healthStatus;
+    }
+    if ((activityStatus === 'denied' || activityStatus === 'error')
+      && !hasHealthResultValues(this.filteredHealthResult())) {
+      return activityStatus;
+    }
+    return healthStatus;
+  });
   readonly isLoading = computed(() => this.selectedStatus() === 'loading');
   readonly isDenied = computed(() => this.selectedStatus() === 'denied');
   readonly hasLoadError = computed(() => this.selectedStatus() === 'error');
@@ -313,16 +365,51 @@ export class HealthWorkspaceComponent {
     && this.metricView().series.length === 0);
   readonly incompleteNotice = computed(() => {
     const loaded = this.selectedHealthLoad();
-    if (!loaded?.limitReached) {
+    const reasons: string[] = [];
+    if (loaded?.limitReached) {
+      reasons.push({
+        source_records: '2,048 source records',
+        sample_chunks: '256 sample chunks',
+        sample_points: '100,000 sample points',
+        serialized_bytes: '16 MiB of serialized data',
+      }[loaded.limitReached]);
+    }
+    const activityResult = this.selectedActivityHealthResult();
+    if (activityEvidenceCanAffectView(this.routeState().metric, this.filteredHealthResult())
+      && activityResult?.complete === false
+      && activityResult.incompleteReason) {
+      reasons.push(activityResult.incompleteReason === ACTIVITY_HEALTH_INCOMPLETE_REASONS.CandidateLimit
+        ? '2,048 workout candidates'
+        : '1 MiB projected workout result');
+    }
+    if (!reasons.length) {
       return null;
     }
-    const reason = {
-      source_records: '2,048 source records',
-      sample_chunks: '256 sample chunks',
-      sample_points: '100,000 sample points',
-      serialized_bytes: '16 MiB of serialized data',
-    }[loaded.limitReached];
-    return `Incomplete result: this load stopped at the ${reason} safety limit. Choose a shorter or older window to inspect the remaining data.`;
+    return `Incomplete result: this load stopped at the ${reasons.join(' and ')} safety ${reasons.length === 1 ? 'limit' : 'limits'}. Choose a shorter or older window to inspect the remaining data.`;
+  });
+  readonly activitySourceNotice = computed(() => {
+    const metric = this.routeState().metric;
+    const status = this.selectedActivityHealthStatus();
+    if (!isActivityHealthMetricId(metric)
+      || !activityEvidenceCanAffectView(metric, this.filteredHealthResult())
+      || (status !== 'error' && status !== 'denied')
+      || this.selectedStatus() !== 'ready') {
+      return null;
+    }
+    return 'Workout-backed observations could not be loaded. Provider Health measurements are shown, but this view may be incomplete.';
+  });
+  readonly workoutMetricNotice = computed(() => {
+    const metric = this.routeState().metric;
+    if (!this.filteredActivityHealthObservations().length) {
+      return null;
+    }
+    if (metric === HEALTH_METRIC_IDS.BodyWeight) {
+      return 'Workout Weight is profile context embedded in an imported workout, not a weigh-in. It is shown only because no Health Weight measurement exists in this filtered window.';
+    }
+    if (metric === HEALTH_METRIC_IDS.Vo2Max) {
+      return 'Workout VO₂ max is separate evidence grouped by source and discipline. It is never combined with provider Health or manual VO₂ max.';
+    }
+    return null;
   });
   readonly revisionNotice = computed(() => {
     const count = this.selectedHealthLoad()?.result.pageInfo.sampleRevisionMismatchCount || 0;
@@ -489,7 +576,10 @@ export class HealthWorkspaceComponent {
         if (generation !== this.metricAvailabilityGeneration) {
           return;
         }
-        this.availableHealthMetricIds.set(metricIds);
+        this.availableHealthMetricIds.set([...new Set([
+          ...metricIds,
+          ...ACTIVITY_HEALTH_METRIC_IDS,
+        ])]);
         this.healthMetricAvailabilityStatus.set('ready');
       }).catch(error => {
         if (generation !== this.metricAvailabilityGeneration) {
@@ -545,25 +635,46 @@ export class HealthWorkspaceComponent {
       this.refreshRevision();
       const generation = ++this.selectedLoadGeneration;
       this.selectedHealthLoad.set(null);
+      this.selectedActivityHealthResult.set(null);
       if (!uid || metric === 'sleep') {
         this.selectedHealthStatus.set(metric === 'sleep' ? 'ready' : 'loading');
+        this.selectedActivityHealthStatus.set('ready');
         return;
       }
       this.selectedHealthStatus.set('loading');
-      void this.healthService.loadMetricRange(uid, {
+      const healthLoad = this.healthService.loadMetricRange(uid, {
         startDate: window.startDate,
         endDate: window.endDate,
         metricId: metric,
         includeSamples: window.includeSamples,
-      }).then(result => {
+      });
+      const activityLoad = isActivityHealthMetricId(metric)
+        ? this.activityHealthService.loadRange({
+          metricId: metric,
+          startTimeMs: window.startTimeMs,
+          endTimeMs: window.endTimeMs,
+        })
+        : Promise.resolve(null);
+      this.selectedActivityHealthStatus.set(isActivityHealthMetricId(metric) ? 'loading' : 'ready');
+      void Promise.allSettled([healthLoad, activityLoad]).then(([healthOutcome, activityOutcome]) => {
         if (generation !== this.selectedLoadGeneration) {
           return;
         }
-        this.selectedHealthLoad.set(result);
-        this.selectedHealthStatus.set('ready');
-      }).catch(error => {
-        if (generation === this.selectedLoadGeneration) {
-          this.selectedHealthStatus.set(loadErrorStatus(error));
+        if (healthOutcome.status === 'fulfilled') {
+          this.selectedHealthLoad.set(healthOutcome.value);
+          this.selectedHealthStatus.set('ready');
+        } else {
+          this.selectedHealthStatus.set(loadErrorStatus(healthOutcome.reason));
+        }
+        if (!isActivityHealthMetricId(metric)) {
+          this.selectedActivityHealthStatus.set('ready');
+        } else if (activityOutcome.status === 'fulfilled' && activityOutcome.value) {
+          this.selectedActivityHealthResult.set(activityOutcome.value);
+          this.selectedActivityHealthStatus.set('ready');
+        } else {
+          this.selectedActivityHealthStatus.set(loadErrorStatus(
+            activityOutcome.status === 'rejected' ? activityOutcome.reason : null,
+          ));
         }
       });
     });
@@ -848,6 +959,18 @@ function emptyMetricView(): HealthMetricWorkspaceView {
     conflictCount: 0,
     providers: [],
   };
+}
+
+function hasHealthResultValues(result: ReturnType<HealthWorkspaceComponent['filteredHealthResult']>): boolean {
+  return !!result && (result.observations.length > 0 || result.sampleChunks.length > 0);
+}
+
+function activityEvidenceCanAffectView(
+  metric: HealthWorkspaceMetricSelection,
+  result: ReturnType<HealthWorkspaceComponent['filteredHealthResult']>,
+): boolean {
+  return metric === HEALTH_METRIC_IDS.Vo2Max
+    || (metric === HEALTH_METRIC_IDS.BodyWeight && !hasHealthResultValues(result));
 }
 
 function healthRangeToSleepRange(range: HealthWorkspaceRange): AppDashboardSleepTrendRange | null {

@@ -76,7 +76,14 @@ describe('help.content', () => {
 
     expect(healthSection?.title).toBe('Health');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
-    expect(healthSection?.content).toContain('only metrics found anywhere in your imported history');
+    expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
+    expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
+    expect(healthSection?.content).toContain('**Weight from workouts is fallback profile context, not a weigh-in.**');
+    expect(healthSection?.content).toContain('future manual measurement');
+    expect(healthSection?.content).toContain('**Workout VO₂ max is separate evidence.**');
+    expect(healthSection?.content).toContain('never merges them with provider Health User Metrics');
+    expect(healthSection?.content).toContain('not copied into Health storage');
+    expect(healthSection?.content).toContain('omits workout IDs, names, locations, account IDs, and raw creator details');
     expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');

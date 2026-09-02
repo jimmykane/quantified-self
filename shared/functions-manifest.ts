@@ -28,6 +28,7 @@ export const FUNCTIONS_MANIFEST = {
     listMcpConnections: { name: 'listMcpConnections', region: 'europe-west2' },
     revokeMcpConnection: { name: 'revokeMcpConnection', region: 'europe-west2' },
     queryHealthRange: { name: 'queryHealthRange', region: 'europe-west2' },
+    queryActivityHealthRange: { name: 'queryActivityHealthRange', region: 'europe-west2' },
 
     // COROS Functions
     getCOROSAPIAuthRequestTokenRedirectURI: { name: 'getCOROSAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
