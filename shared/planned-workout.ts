@@ -260,6 +260,7 @@ interface ParseContext {
   issues: WorkoutStructureValidationIssue[];
   ids: Set<string>;
   nodeCount: number;
+  nodeLimitExceeded: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -273,6 +274,17 @@ function pushIssue(
   message: string,
 ): void {
   context.issues.push({ code, path, message });
+}
+
+function pushNodeLimitIssue(context: ParseContext, path: string): void {
+  if (context.nodeLimitExceeded) return;
+  context.nodeLimitExceeded = true;
+  pushIssue(
+    context,
+    'limit_exceeded',
+    path,
+    `Workout structures may contain at most ${WORKOUT_STRUCTURE_MAX_NODES} nodes including repeated steps.`,
+  );
 }
 
 function readRecord(value: unknown, path: string, context: ParseContext): Record<string, unknown> | null {
@@ -681,6 +693,8 @@ function parseNode(value: unknown, path: string, context: ParseContext): Workout
   let expectedStepCount: number | null = null;
   if (!Array.isArray(record.steps) || record.steps.length === 0) {
     pushIssue(context, 'invalid_type', `${path}.steps`, 'Expected a non-empty array of steps.');
+  } else if (context.nodeCount + record.steps.length > WORKOUT_STRUCTURE_MAX_NODES) {
+    pushNodeLimitIssue(context, `${path}.steps`);
   } else {
     expectedStepCount = record.steps.length;
     steps = record.steps
@@ -694,7 +708,7 @@ function parseNode(value: unknown, path: string, context: ParseContext): Workout
 }
 
 export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
-  const context: ParseContext = { issues: [], ids: new Set(), nodeCount: 0 };
+  const context: ParseContext = { issues: [], ids: new Set(), nodeCount: 0, nodeLimitExceeded: false };
   const record = readRecord(value, '$', context);
   if (!record) throw new WorkoutStructureValidationError(context.issues);
   rejectUnknownFields(record, ['version', 'sport', 'nodes'], '$', context);
@@ -717,6 +731,9 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
   let expectedNodeCount: number | null = null;
   if (!Array.isArray(record.nodes) || record.nodes.length === 0) {
     pushIssue(context, 'invalid_type', '$.nodes', 'Expected a non-empty array.');
+  } else if (record.nodes.length > WORKOUT_STRUCTURE_MAX_NODES) {
+    expectedNodeCount = record.nodes.length;
+    pushNodeLimitIssue(context, '$.nodes');
   } else {
     expectedNodeCount = record.nodes.length;
     nodes = record.nodes
@@ -725,12 +742,7 @@ export function parseWorkoutStructureV1(value: unknown): WorkoutStructureV1 {
   }
 
   if (context.nodeCount > WORKOUT_STRUCTURE_MAX_NODES) {
-    pushIssue(
-      context,
-      'limit_exceeded',
-      '$.nodes',
-      `Workout structures may contain at most ${WORKOUT_STRUCTURE_MAX_NODES} nodes including repeated steps.`,
-    );
+    pushNodeLimitIssue(context, '$.nodes');
   }
 
   if (context.issues.length > 0 || !sport || nodes.length !== expectedNodeCount) {

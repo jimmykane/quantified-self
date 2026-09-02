@@ -174,6 +174,32 @@ describe('PlansWorkspaceComponent', () => {
     }));
   });
 
+  it('reports a failed range-extension retry without losing the open editor', async () => {
+    route.snapshot.queryParamMap = convertToParamMap({ date: '2026-10-10' });
+    mutate
+      .mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build to include 2026-10-10.'))
+      .mockRejectedValueOnce(new Error('The schedule changed before the extension was applied.'));
+    const fixture = await renderPlans();
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    const componentSnackBar = (fixture.componentInstance as unknown as { snackBar: MatSnackBar }).snackBar;
+    vi.spyOn(componentDialog, 'open').mockReturnValue({ afterClosed: () => of(true) } as never);
+    const errorNotice = vi.spyOn(componentSnackBar, 'open');
+    fixture.componentInstance.updateEditorField('title', 'Long run');
+
+    await expect(fixture.componentInstance.saveWorkout()).resolves.toBeUndefined();
+
+    expect(mutate).toHaveBeenCalledTimes(2);
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({
+      operation: expect.objectContaining({ confirmPlanRangeExtension: true }),
+    }));
+    expect(errorNotice).toHaveBeenCalledWith(
+      'The schedule changed before the extension was applied.',
+      'Dismiss',
+      { duration: 7000 },
+    );
+    expect(fixture.componentInstance.editor()).not.toBeNull();
+  });
+
   it('closes the destructive deletion panel after archiving instead', async () => {
     const fixture = await renderPlans();
     const plan = schedule.plans[0];
@@ -185,6 +211,16 @@ describe('PlansWorkspaceComponent', () => {
       operation: { kind: 'set-plan-lifecycle', planId: plan.id, lifecycle: 'archived' },
     }));
     expect(fixture.componentInstance.deletingPlanId()).toBeNull();
+  });
+
+  it('keeps plan mutations visibly pending beside the triggering controls', async () => {
+    const fixture = await renderPlans();
+
+    fixture.componentInstance.busyAction.set('shift-active-plan');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedPlanActionBusy()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Updating plan');
   });
 
   it('keeps restore revisions fixed across preview and confirmation', async () => {
@@ -240,14 +276,72 @@ describe('PlansWorkspaceComponent', () => {
 
   it('routes plan-bound workout history through the plan stream and standalone history through the workout stream', async () => {
     const fixture = await renderPlans();
-    const [planWorkout, standaloneWorkout] = schedule.workouts;
 
-    expect(fixture.componentInstance.historyScopeForWorkout(planWorkout)).toEqual({
+    expect(fixture.componentInstance.workoutRows()[0]?.historyScope).toEqual({
       kind: 'plan', id: 'active-plan',
     });
-    expect(fixture.componentInstance.historyScopeForWorkout(standaloneWorkout)).toEqual({
+    fixture.componentInstance.selectView('standalone');
+    expect(fixture.componentInstance.workoutRows()[0]?.historyScope).toEqual({
       kind: 'workout', id: 'standalone-workout',
     });
+  });
+
+  it('does not reopen revision history after an in-flight request is closed', async () => {
+    let resolveHistory: (value: unknown) => void = () => undefined;
+    getHistory.mockReturnValue(new Promise(resolve => { resolveHistory = resolve; }));
+    const fixture = await renderPlans();
+
+    const pending = fixture.componentInstance.openHistory({ kind: 'plan', id: 'active-plan' });
+    fixture.componentInstance.closeHistory();
+    resolveHistory({
+      scope: { kind: 'plan', id: 'active-plan' },
+      entries: [],
+      nextBeforeRevision: null,
+    });
+    await pending;
+
+    expect(fixture.componentInstance.historyPanel()).toBeNull();
+  });
+
+  it('does not continue a restore after its history panel is closed', async () => {
+    let resolvePreview: (value: {
+      scope: { kind: 'plan'; id: string };
+      targetRevision: number;
+      changedPlanIds: string[];
+      changedWorkoutIds: string[];
+      skippedWorkoutIds: string[];
+      warnings: string[];
+    }) => void = () => undefined;
+    previewRestore.mockReturnValue(new Promise(resolve => { resolvePreview = resolve; }));
+    const fixture = await renderPlans();
+    fixture.componentInstance.historyPanel.set({
+      scope: { kind: 'plan', id: 'active-plan' },
+      status: 'ready',
+      entries: [],
+      nextBeforeRevision: null,
+      error: null,
+    });
+
+    const pending = fixture.componentInstance.restoreHistoryEntry({
+      revision: 1,
+      operationKind: 'create-plan',
+      createdAtMs: 1,
+      mutationId: 'create',
+      isCheckpoint: true,
+    });
+    fixture.componentInstance.closeHistory();
+    resolvePreview({
+      scope: { kind: 'plan', id: 'active-plan' },
+      targetRevision: 1,
+      changedPlanIds: ['active-plan'],
+      changedWorkoutIds: [],
+      skippedWorkoutIds: [],
+      warnings: [],
+    });
+    await pending;
+
+    expect(dialogOpen).not.toHaveBeenCalled();
+    expect(restoreSchedule).not.toHaveBeenCalled();
   });
 
   it('loads older history pages without replacing newer revisions', async () => {

@@ -67,6 +67,7 @@ interface WorkoutRow {
   workout: ScheduledWorkoutV1;
   summary: string[];
   planName: string;
+  historyScope: TrainingScheduleRevisionScope;
 }
 
 interface PlanDraft {
@@ -106,6 +107,7 @@ export class PlansWorkspaceComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly locale = inject(LOCALE_ID);
   private requestedEditorOpened = false;
+  private historyRequestSequence = 0;
   private nodeSequence = 1;
 
   readonly activityTypes = ActivityTypes;
@@ -161,6 +163,16 @@ export class PlansWorkspaceComponent {
   readonly selectedPlan = computed(() => this.schedule().plans.find(plan => (
     plan.id === this.selectedPlanId()
   )) ?? null);
+  readonly selectedPlanActionBusy = computed(() => {
+    const planId = this.selectedPlanId();
+    const action = this.busyAction();
+    return Boolean(planId && action && [
+      `rename-${planId}`,
+      `shift-${planId}`,
+      `lifecycle-${planId}`,
+      `delete-plan-${planId}`,
+    ].includes(action));
+  });
   readonly activePlanLabel = computed(() => this.activePlan()?.name ?? 'None');
   readonly workoutRows = computed<WorkoutRow[]>(() => {
     const selectedPlanId = this.view() === 'plans' ? this.selectedPlanId() : null;
@@ -177,6 +189,9 @@ export class PlansWorkspaceComponent {
           this.locale,
         ),
         planName: workout.planId ? planNames.get(workout.planId) ?? 'Unknown plan' : 'Standalone',
+        historyScope: workout.planId
+          ? { kind: 'plan', id: workout.planId }
+          : { kind: 'workout', id: workout.id },
       }));
   });
   readonly currentWorkoutRows = computed(() => this.workoutRows().filter(row => row.workout.lifecycle !== 'deleted'));
@@ -233,14 +248,14 @@ export class PlansWorkspaceComponent {
   selectView(view: PlansView): void {
     this.view.set(view);
     this.cancelEditor();
-    this.historyPanel.set(null);
+    this.closeHistory();
   }
 
   selectPlan(planId: string): void {
     this.selectedPlanId.set(planId);
     this.view.set('plans');
     this.cancelEditor();
-    this.historyPanel.set(null);
+    this.closeHistory();
   }
 
   beginPlanCreation(): void {
@@ -650,9 +665,11 @@ export class PlansWorkspaceComponent {
   }
 
   async openHistory(scope: TrainingScheduleRevisionScope): Promise<void> {
+    const requestSequence = ++this.historyRequestSequence;
     this.historyPanel.set({ scope, status: 'loading', entries: [], nextBeforeRevision: null, error: null });
     try {
       const response = await this.plansService.getHistory({ scope, limit: 50 });
+      if (!this.isCurrentHistoryPanel(scope, requestSequence)) return;
       this.historyPanel.set({
         scope,
         status: 'ready',
@@ -661,6 +678,7 @@ export class PlansWorkspaceComponent {
         error: null,
       });
     } catch (error) {
+      if (!this.isCurrentHistoryPanel(scope, requestSequence)) return;
       this.historyPanel.set({
         scope,
         status: 'error',
@@ -671,15 +689,10 @@ export class PlansWorkspaceComponent {
     }
   }
 
-  historyScopeForWorkout(workout: ScheduledWorkoutV1): TrainingScheduleRevisionScope {
-    return workout.planId
-      ? { kind: 'plan', id: workout.planId }
-      : { kind: 'workout', id: workout.id };
-  }
-
   async loadOlderHistory(): Promise<void> {
     const panel = this.historyPanel();
     if (!panel || panel.status !== 'ready' || panel.nextBeforeRevision === null) return;
+    const requestSequence = this.historyRequestSequence;
     this.busyAction.set('history-older');
     try {
       const response = await this.plansService.getHistory({
@@ -687,8 +700,8 @@ export class PlansWorkspaceComponent {
         beforeRevision: panel.nextBeforeRevision,
         limit: 50,
       });
-      const current = this.historyPanel();
-      if (!current || current.scope.kind !== panel.scope.kind || current.scope.id !== panel.scope.id) return;
+      if (!this.isCurrentHistoryPanel(panel.scope, requestSequence)) return;
+      const current = this.historyPanel()!;
       const entries = new Map(current.entries.map(entry => [entry.revision, entry]));
       response.entries.forEach(entry => entries.set(entry.revision, entry));
       this.historyPanel.set({
@@ -704,12 +717,14 @@ export class PlansWorkspaceComponent {
   }
 
   closeHistory(): void {
+    this.historyRequestSequence += 1;
     this.historyPanel.set(null);
   }
 
   async restoreHistoryEntry(entry: TrainingScheduleHistoryEntryV1): Promise<void> {
     const panel = this.historyPanel();
     if (!panel) return;
+    const requestSequence = this.historyRequestSequence;
     const expected = panel.scope.kind === 'workout'
       ? this.expectedRevisions({ workoutIds: [panel.scope.id] })
       : this.expectedRevisions({
@@ -721,6 +736,7 @@ export class PlansWorkspaceComponent {
     this.busyAction.set(`restore-${entry.revision}`);
     try {
       const preview = await this.plansService.previewRestore({ scope: panel.scope, targetRevision: entry.revision });
+      if (!this.isCurrentHistoryPanel(panel.scope, requestSequence)) return;
       const changedCount = preview.changedPlanIds.length + preview.changedWorkoutIds.length;
       const warnings = preview.warnings.length ? ` ${preview.warnings.join(' ')}` : '';
       const confirmed = await this.confirm(
@@ -728,14 +744,14 @@ export class PlansWorkspaceComponent {
         `This creates a new revision and changes ${changedCount} item${changedCount === 1 ? '' : 's'}.${warnings}`,
         'Restore revision',
       );
-      if (!confirmed) return;
+      if (!confirmed || !this.isCurrentHistoryPanel(panel.scope, requestSequence)) return;
       const response = await this.plansService.restore({
         mutationId: this.plansService.createMutationId('restore-schedule'),
         expectedRevisions: expected,
         scope: panel.scope,
         targetRevision: entry.revision,
       });
-      this.historyPanel.set(null);
+      this.closeHistory();
       const skipped = response.skippedWorkoutIds.length;
       this.snackBar.open(
         skipped ? `Revision restored; ${skipped} workout${skipped === 1 ? '' : 's'} left unchanged.` : 'Revision restored.',
@@ -758,6 +774,12 @@ export class PlansWorkspaceComponent {
     return expectedRevisionsFromSchedule(this.schedule(), options);
   }
 
+  private isCurrentHistoryPanel(scope: TrainingScheduleRevisionScope, requestSequence: number): boolean {
+    if (requestSequence !== this.historyRequestSequence) return false;
+    const current = this.historyPanel();
+    return Boolean(current && current.scope.kind === scope.kind && current.scope.id === scope.id);
+  }
+
   private async runMutation(
     request: MutateTrainingScheduleRequestV1,
     action: string,
@@ -770,10 +792,15 @@ export class PlansWorkspaceComponent {
       if (/requires extending/i.test(message) && 'confirmPlanRangeExtension' in request.operation) {
         const confirmed = await this.confirm('Extend plan dates?', message, 'Extend and continue');
         if (confirmed) {
-          return await this.plansService.mutate({
-            ...request,
-            operation: { ...request.operation, confirmPlanRangeExtension: true },
-          } as MutateTrainingScheduleRequestV1);
+          try {
+            return await this.plansService.mutate({
+              ...request,
+              operation: { ...request.operation, confirmPlanRangeExtension: true },
+            } as MutateTrainingScheduleRequestV1);
+          } catch (retryError) {
+            this.showError(retryError);
+            return null;
+          }
         }
         return null;
       }

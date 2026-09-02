@@ -111,6 +111,7 @@ export class ActivityCalendarTileComponent {
     return buildPlannedWorkoutCalendarOverlay(
       selectCalendarVisibleScheduledWorkouts(schedule),
       schedule.plans,
+      schedule.state.activePlanId,
     );
   });
   readonly calendarModel = computed(() => buildActivityCalendarViewModel(this.eventState().events, {

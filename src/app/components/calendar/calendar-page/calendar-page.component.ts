@@ -139,6 +139,7 @@ export class CalendarPageComponent {
     return buildPlannedWorkoutCalendarOverlay(
       selectCalendarVisibleScheduledWorkouts(schedule),
       schedule.plans,
+      schedule.state.activePlanId,
     );
   });
   readonly calendarModel = computed(() => {
