@@ -59,10 +59,12 @@
     <span>Calendar</span>
   </mat-list-item>
 
-  <mat-list-item routerLinkActive="active" routerLink="/plans" (click)="closeSideNav()">
-    <mat-icon>event_note</mat-icon>
-    <span>Plans</span>
-  </mat-list-item>
+  @if (hasTrainingPlanningNavigationAccess()) {
+    <mat-list-item routerLinkActive="active" routerLink="/plans" (click)="closeSideNav()">
+      <mat-icon>event_note</mat-icon>
+      <span>Plans</span>
+    </mat-list-item>
+  }
 
   <mat-list-item routerLinkActive="active" routerLink="/training" (click)="closeSideNav()">
     <mat-icon>monitoring</mat-icon>
