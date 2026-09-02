@@ -124,14 +124,15 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
       this.fitSelectedPreview();
     } catch (error) {
       if (this.destroyed) return;
+      this.mapViewHandle?.destroy();
+      this.mapViewHandle = null;
+      this.styleSynchronizer = null;
       this.initializationFailed.set(true);
       this.logger.error('[HomeMyTracksPreviewComponent] Failed to initialize sample MyTracks map.', error);
     }
   }
 
   selectPreviewTrip(trip: MyTracksTripPanelItem): void {
-    if (trip.tripId === this.selectedPreviewTripId()) return;
-
     this.selectedPreviewTripId.set(trip.tripId);
     this.hapticsService.selection();
     if (this.mapViewHandle) {
@@ -141,8 +142,6 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
   }
 
   selectPreviewHome(): void {
-    if (this.homeSelected()) return;
-
     this.selectedPreviewTripId.set(HomeMyTracksPreviewComponent.HOME_PANEL_ENTRY_ID);
     this.hapticsService.selection();
     if (!this.mapViewHandle) return;
