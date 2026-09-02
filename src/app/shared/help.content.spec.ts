@@ -1073,8 +1073,8 @@ describe('help.content', () => {
   it('should explain that connection screens use the safe account summary', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('Connection screens use a limited account summary');
-    expect(gettingStartedSection?.content).toContain('no longer request provider access or refresh credentials');
+    expect(gettingStartedSection?.content).toContain('Connection screens use a limited account summary once it is available');
+    expect(gettingStartedSection?.content).toContain('existing connections continue to work');
   });
 
   it('documents Wahoo FIT imports, activity and route delivery, skip rules, and retained imported activities', () => {

@@ -80,7 +80,7 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import {
@@ -1001,17 +1001,25 @@ export class AppUserService implements OnDestroy {
       case ServiceNames.GarminAPI:
       case ServiceNames.WahooAPI:
         return this.getUserMetaForService(user, serviceName).pipe(
-          map(serviceMeta => {
+          switchMap(serviceMeta => {
+            const hasConnectionAccountProjection = !!serviceMeta
+              && Object.prototype.hasOwnProperty.call(serviceMeta, 'connectionAccounts');
+            if (serviceName !== ServiceNames.WahooAPI && !hasConnectionAccountProjection) {
+              // Temporary rollout compatibility: the projection triggers and frontend
+              // ship before the existing-account backfill. Remove this token-tree read
+              // together with the temporary owner-read Rule after backfill verification.
+              return this.getLegacyServiceConnectionAccounts(user, serviceName);
+            }
             const accounts = Array.isArray(serviceMeta?.connectionAccounts)
               ? serviceMeta.connectionAccounts
               : [];
-            if (accounts.length > 0) return accounts;
+            if (accounts.length > 0) return of(accounts);
             if (serviceName !== ServiceNames.WahooAPI
               || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected) {
-              return [];
+              return of([]);
             }
             const providerUserId = `${serviceMeta.providerUserId || ''}`.trim();
-            return providerUserId ? [{ providerUserId }] : [{}];
+            return of(providerUserId ? [{ providerUserId }] : [{}]);
           }),
           catchError(() => of([])),
         );
@@ -1831,6 +1839,84 @@ export class AppUserService implements OnDestroy {
 
   ngOnDestroy() {
     // Required to satisfy OnDestroy interface
+  }
+
+  private getLegacyServiceConnectionAccounts(
+    user: User,
+    serviceName: ServiceNames.GarminAPI | ServiceNames.SuuntoApp | ServiceNames.COROSAPI,
+  ): Observable<ServiceConnectionAccountProjection[]> {
+    const config = {
+      [ServiceNames.GarminAPI]: { collectionName: 'garminAPITokens', providerUserIdField: 'userID' },
+      [ServiceNames.SuuntoApp]: { collectionName: 'suuntoAppAccessTokens', providerUserIdField: 'userName' },
+      [ServiceNames.COROSAPI]: { collectionName: 'COROSAPIAccessTokens', providerUserIdField: 'openId' },
+    }[serviceName];
+    const collectionRef = collection(this.firestore, config.collectionName, user.uid, 'tokens');
+    return collectionData(collectionRef).pipe(
+      map(tokens => tokens
+        .map(token => this.buildLegacyServiceConnectionAccountProjection(
+          token as Record<string, unknown>,
+          config.providerUserIdField,
+          serviceName === ServiceNames.GarminAPI,
+        ))
+        .filter((account): account is ServiceConnectionAccountProjection => !!account)
+        .sort((left, right) => `${left.providerUserId || ''}`.localeCompare(`${right.providerUserId || ''}`))
+        .slice(0, 32)),
+      catchError(() => of([])),
+    );
+  }
+
+  private buildLegacyServiceConnectionAccountProjection(
+    token: Record<string, unknown>,
+    providerUserIdField: string,
+    includePermissions: boolean,
+  ): ServiceConnectionAccountProjection | null {
+    const providerUserId = typeof token[providerUserIdField] === 'string'
+      ? token[providerUserIdField].trim()
+      : '';
+    if (!providerUserId || providerUserId.length > 512) return null;
+
+    const connectedAtMs = this.toLegacyProjectionTimestampMs(token.dateCreated);
+    const permissions = includePermissions && Array.isArray(token.permissions)
+      ? [...new Set(token.permissions
+        .filter((permission): permission is string => typeof permission === 'string')
+        .map(permission => permission.trim())
+        .filter(permission => !!permission && permission.length <= 128))]
+        .sort((left, right) => left.localeCompare(right))
+        .slice(0, 64)
+      : null;
+    const rawPermissionsUpdatedAtMs = includePermissions
+      ? this.toLegacyProjectionTimestampMs(token.permissionsLastChangedAt)
+      : null;
+    const permissionsUpdatedAtMs = rawPermissionsUpdatedAtMs !== null
+      && rawPermissionsUpdatedAtMs > 0
+      && rawPermissionsUpdatedAtMs < 100_000_000_000
+      ? rawPermissionsUpdatedAtMs * 1000
+      : rawPermissionsUpdatedAtMs;
+
+    return {
+      providerUserId,
+      ...(connectedAtMs === null ? {} : { connectedAtMs }),
+      ...(permissions === null ? {} : { permissions }),
+      ...(permissionsUpdatedAtMs === null ? {} : { permissionsUpdatedAtMs }),
+    };
+  }
+
+  private toLegacyProjectionTimestampMs(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return Math.floor(value);
+    }
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isFinite(time) && time >= 0 ? time : null;
+    }
+    if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+      const time = (value as { toMillis: () => number }).toMillis();
+      return Number.isFinite(time) && time >= 0 ? Math.floor(time) : null;
+    }
+    if (value && typeof value === 'object' && typeof (value as { toDate?: unknown }).toDate === 'function') {
+      return this.toLegacyProjectionTimestampMs((value as { toDate: () => Date }).toDate());
+    }
+    return null;
   }
 
   private createEmptyActivityServiceConnectionState(): ActivityServiceConnectionState {

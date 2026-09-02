@@ -402,9 +402,9 @@ service cloud.firestore {
 
 
     match /suuntoAppAccessTokens/{userID} {
-      // Temporary rollout compatibility: the projection-aware frontend no
-      // longer needs this read, but keep it until production projections have
-      // been backfilled and verified. Browser writes remain denied.
+      // Temporary rollout compatibility for older frontends and for the new
+      // frontend's field-absent fallback. Remove only after production
+      // projections have been backfilled and verified. Browser writes remain denied.
       allow read: if isNonAnonymousOwner(userID);
       // Suunto OAuth state, credentials, stable provider identity, and
       // lifecycle fences are server-owned. In particular, an owner must not

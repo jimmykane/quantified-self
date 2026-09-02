@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService, isActionableProfileReadState } from './app.user.service';
 import { Auth, authState, user } from 'app/firebase/auth';
-import { Firestore, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -31,6 +31,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
     return {
         ...actual,
         doc: vi.fn().mockReturnValue({}),
+        collection: vi.fn().mockReturnValue({}),
         docData: vi.fn().mockReturnValue(of({})),
         collectionData: vi.fn().mockReturnValue(of([])),
         setDoc: vi.fn().mockResolvedValue(undefined),
@@ -1415,6 +1416,44 @@ describe('AppUserService', () => {
             expect(collectionData).not.toHaveBeenCalled();
         });
 
+        it.each([
+            [ServiceNames.SuuntoApp, 'suuntoAppAccessTokens', { userName: 'suunto-user', accessToken: 'secret' }],
+            [ServiceNames.COROSAPI, 'COROSAPIAccessTokens', { openId: 'coros-user', refreshToken: 'secret' }],
+            [ServiceNames.GarminAPI, 'garminAPITokens', {
+                userID: 'garmin-user',
+                accessToken: 'secret',
+                permissions: ['COURSE_IMPORT'],
+                permissionsLastChangedAt: 1710000000,
+            }],
+        ])('getServiceToken should temporarily fall back to legacy %s tokens when the projection is absent', async (
+            serviceName,
+            collectionName,
+            legacyToken,
+        ) => {
+            const user = { uid: 'legacy-user' } as any;
+            (docData as any).mockReturnValueOnce(of({ connectionState: 'connected' }));
+            (collectionData as any).mockReturnValueOnce(of([legacyToken]));
+
+            const result = await firstValueFrom(service.getServiceToken(user, serviceName));
+
+            expect(collection).toHaveBeenCalledWith(expect.anything(), collectionName, 'legacy-user', 'tokens');
+            expect(result).toEqual([expect.objectContaining({
+                providerUserId: expect.stringMatching(/-user$/),
+            })]);
+            expect(result[0]).not.toHaveProperty('accessToken');
+            expect(result[0]).not.toHaveProperty('refreshToken');
+        });
+
+        it('getServiceToken should treat an explicit empty projection as authoritative', async () => {
+            const user = { uid: 'projected-user' } as any;
+            (docData as any).mockReturnValueOnce(of({ connectionAccounts: [] }));
+
+            const result = await firstValueFrom(service.getServiceToken(user, ServiceNames.GarminAPI));
+
+            expect(result).toEqual([]);
+            expect(collectionData).not.toHaveBeenCalled();
+        });
+
         it('getServiceToken should derive Wahoo connection state from safe user metadata', async () => {
             const user = { uid: 'u-wahoo' } as any;
             (docData as any).mockReturnValueOnce(of({ connectionState: 'connected' }));
@@ -1527,7 +1566,7 @@ describe('AppUserService', () => {
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 
             expect(result).toBe(false);
-            expect(collectionData).not.toHaveBeenCalled();
+            expect(collectionData).toHaveBeenCalledTimes(3);
         });
 
         it('watchHasAnyActivityServiceConnection should emit true when any activity service has a token', async () => {
