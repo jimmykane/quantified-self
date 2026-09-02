@@ -6,29 +6,62 @@
     summary="Combine same-session recordings, keep the benchmark out of normal training totals, then assign reference and test devices."
   >
     <div class="analysis-row-content">
-      <div class="visual-box chart-preview">
-        <svg class="chart-svg" viewBox="0 -80 1000 560" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-          <g opacity="0.1">
-            <line x1="0" y1="80" x2="1000" y2="80" stroke="currentColor" stroke-width="1" />
-            <line x1="0" y1="240" x2="1000" y2="240" stroke="currentColor" stroke-width="1" />
-            <line x1="0" y1="400" x2="1000" y2="400" stroke="currentColor" stroke-width="1" />
-          </g>
-          <path d="M0,350 Q200,50 400,200 T800,100 T1000,250" class="ghost-path" />
-          <path d="M0,360 Q210,60 410,210 T810,110 T1000,240" class="active-path" />
-          <g transform="translate(450, 220)" class="hardware-label primary">
-            <rect x="-60" y="-35" width="120" height="24" rx="6" />
-            <text x="0" y="-19" text-anchor="middle">FENIX 8 (1S)</text>
-          </g>
-          <g transform="translate(450, 160)" class="hardware-label secondary">
-            <rect x="-60" y="-35" width="120" height="24" rx="6" />
-            <text x="0" y="-19" text-anchor="middle">WATCH ULTRA 2</text>
-          </g>
-        </svg>
+      <div class="benchmark-workflow" aria-label="Three recordings aligned into one benchmark">
+        <span class="benchmark-workflow__step">3 recordings</span>
+        <mat-icon aria-hidden="true">arrow_forward</mat-icon>
+        <span class="benchmark-workflow__step">Auto-align</span>
+        <mat-icon aria-hidden="true">arrow_forward</mat-icon>
+        <span class="benchmark-workflow__step benchmark-workflow__step--active">Ref / Test</span>
       </div>
       <div class="stat-preview">
         <div class="stat-item"><span class="stat-label">Merge Type</span><span class="stat-value">Benchmark</span></div>
         <div class="stat-item"><span class="stat-label">Roles</span><span class="stat-value">Ref / Test</span></div>
         <div class="stat-item"><span class="stat-label">Auto Align</span><span class="stat-value success">+/-15s</span></div>
+      </div>
+    </div>
+  </app-compact-feature-row>
+
+  <app-compact-feature-row
+    icon="monitoring"
+    iconTone="secondary"
+    title="Three-Device Chart Comparison"
+    summary="Inspect aligned heart-rate and altitude traces together to see agreement, offsets, dropouts, and short-lived sensor differences."
+  >
+    <div class="benchmark-chart-preview" role="group" aria-label="Heart rate and altitude comparison for three sports watches">
+      <p class="benchmark-chart-preview__context">
+        Traces from an anonymized multi-device running benchmark. Model labels are representative.
+      </p>
+      <div class="benchmark-chart-preview__grid">
+        <app-event-card-chart-panel
+          [panel]="heartRatePanel"
+          [xAxisType]="xAxisType"
+          [xDomain]="xDomain"
+          [cursorBehaviour]="cursorBehaviour"
+          [darkTheme]="darkTheme()"
+          [useAnimations]="false"
+          [showLaps]="false"
+          [showSwimLengths]="false"
+          [showActivityNamesInTooltip]="true"
+          [previewMode]="true"
+          [previewInteractions]="true"
+          [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
+        ></app-event-card-chart-panel>
+        <app-event-card-chart-panel
+          [panel]="altitudePanel"
+          [xAxisType]="xAxisType"
+          [xDomain]="xDomain"
+          [cursorBehaviour]="cursorBehaviour"
+          [darkTheme]="darkTheme()"
+          [useAnimations]="false"
+          [showLaps]="false"
+          [showSwimLengths]="false"
+          [colorAltitudeByGrade]="false"
+          [showGradeLegend]="false"
+          [showActivityNamesInTooltip]="true"
+          [previewMode]="true"
+          [previewInteractions]="true"
+          [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
+        ></app-event-card-chart-panel>
       </div>
     </div>
   </app-compact-feature-row>
