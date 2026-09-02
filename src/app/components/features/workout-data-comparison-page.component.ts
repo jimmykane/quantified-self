@@ -5,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
+import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import {
   COMPARISON_FAQ_ITEMS,
   COMPARISON_FEATURE_ITEMS,
@@ -22,6 +23,7 @@ import {
     MatIconModule,
     MatListModule,
     ServiceSourceIconComponent,
+    PublicFeaturePreviewComponent,
   ],
   templateUrl: './workout-data-comparison-page.component.html',
   styleUrls: ['./workout-data-comparison-page.component.scss'],

@@ -390,48 +390,8 @@
         }
     }
 
-    .feature-card {
-        .home-preview-placeholder {
-            border: 1px solid var(--mat-sys-outline-variant);
-            border-radius: 18px;
-            background: var(--mat-sys-surface-container-lowest);
-
-            &--dashboard {
-                min-height: 470px;
-            }
-
-            &--signals {
-                min-height: 690px;
-            }
-
-            &--workout {
-                min-height: 330px;
-            }
-
-            &__summary {
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                padding: 0;
-                margin: -1px;
-                overflow: hidden;
-                clip: rect(0, 0, 0, 0);
-                white-space: nowrap;
-                border: 0;
-            }
-        }
-    }
 }
 
-@media (max-width: 520px), (min-width: 600px) and (max-width: 1080px) {
-    .features-section .home-preview-placeholder--signals {
-        min-height: 1030px;
-    }
-
-    .features-section .home-preview-placeholder--workout {
-        min-height: 630px;
-    }
-}
 
 .ai-insights-section {
     padding-top: 0.5rem;
@@ -462,27 +422,6 @@
 
     .ai-insights-examples {
         margin-top: 1.5rem;
-        padding: 1.25rem;
-        border-radius: 16px;
-        border: 1px solid var(--mat-sys-outline-variant);
-        background: var(--mat-sys-surface-container-low);
-
-        .examples-label {
-            margin: 0 0 0.75rem;
-            font-size: 0.9rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            color: var(--mat-sys-on-surface-variant);
-            font-weight: 700;
-            text-align: center;
-        }
-
-        .example-prompts {
-            width: 100%;
-            max-width: min(100%, 48rem);
-            margin: 0 auto;
-            min-height: 48px;
-        }
     }
 
     .ai-insights-actions {
@@ -576,275 +515,6 @@
         display: block;
     }
 
-    .analysis-row-content {
-        display: grid;
-        min-width: 0;
-        gap: 1.5rem;
-
-        .visual-box {
-            height: 300px;
-            background: var(--mat-sys-surface);
-            border-radius: 16px;
-            position: relative;
-            overflow: hidden;
-            border: 1px solid var(--mat-sys-outline-variant);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-            &.map-preview {
-                padding: 0;
-            }
-
-            &.quality-preview {
-                align-items: stretch;
-                justify-content: flex-start;
-                flex-direction: column;
-                padding: 1.25rem;
-                gap: 1rem;
-            }
-        }
-
-        .quality-verdict {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 1rem;
-            border-radius: 12px;
-            background: var(--mat-sys-surface-container-low);
-            border: 1px solid var(--mat-sys-outline-variant);
-
-            mat-icon {
-                width: 32px;
-                height: 32px;
-                font-size: 32px;
-                color: var(--mat-sys-primary);
-            }
-
-            div {
-                display: flex;
-                flex-direction: column;
-                gap: 0.25rem;
-            }
-
-            strong {
-                font-size: 1.2rem;
-                line-height: 1.2;
-            }
-
-            span {
-                color: var(--mat-sys-on-surface-variant);
-                font-size: 0.9rem;
-            }
-        }
-
-        .quality-rows {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .quality-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 0.85rem 1rem;
-            border-radius: 12px;
-            background: var(--mat-sys-surface-container-lowest);
-            border: 1px solid var(--mat-sys-outline-variant);
-
-            span {
-                color: var(--mat-sys-on-surface-variant);
-                font-size: 0.9rem;
-            }
-
-            strong {
-                color: var(--mat-sys-on-surface);
-                font-size: 0.95rem;
-                text-align: right;
-            }
-
-            &.warning strong {
-                color: var(--mat-sys-primary);
-            }
-        }
-
-        // Chart Visuals
-        .chart-svg {
-            width: 100%;
-            height: 100%;
-            color: var(--mat-sys-outline-variant);
-
-            .active-path {
-                fill: none;
-                stroke: var(--mat-sys-primary);
-                stroke-width: 4;
-                stroke-linecap: round;
-                filter: drop-shadow(0 0 8px rgba(255, 152, 0, 0.4)); // Fallback to primary orange glow
-            }
-
-            .ghost-path {
-                fill: none;
-                stroke: var(--mat-sys-secondary);
-                stroke-width: 3;
-                stroke-dasharray: 8, 4;
-                opacity: 0.3;
-            }
-
-            .hardware-label {
-                rect {
-                    fill: var(--mat-sys-surface-container-high);
-                    stroke: var(--mat-sys-outline-variant);
-                    stroke-width: 1;
-                }
-
-                text {
-                    fill: var(--mat-sys-on-surface);
-                    font-size: 10px;
-                    font-weight: 700;
-                    font-family: 'Inter', sans-serif;
-                }
-
-                &.primary rect {
-                    fill: var(--mat-sys-primary);
-                    stroke: none;
-                }
-
-                &.primary text {
-                    fill: var(--mat-sys-on-primary);
-                }
-            }
-        }
-
-        // Map Visuals
-        .map-tile-bg {
-            position: absolute;
-            inset: 0;
-            background-image:
-                linear-gradient(var(--mat-sys-outline-variant) 1px, transparent 1px),
-                linear-gradient(90deg, var(--mat-sys-outline-variant) 1px, transparent 1px);
-            background-size: 30px 30px;
-            opacity: 0.1;
-        }
-
-        .map-svg {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            z-index: 2;
-            overflow: visible; // Allow glow to bleed out slightly
-
-            .track-active {
-                fill: none;
-                stroke: var(--mat-sys-primary);
-                stroke-width: 5;
-                stroke-linecap: round;
-                filter: drop-shadow(0 0 10px rgba(255, 152, 0, 0.5));
-            }
-
-            .track-ghost {
-                fill: none;
-                stroke: var(--mat-sys-secondary);
-                stroke-width: 4;
-                stroke-linecap: round;
-                opacity: 0.3;
-                stroke-dasharray: 6, 2;
-            }
-
-            .marker.start {
-                fill: #4CAF50;
-                filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.3));
-            }
-
-            .accuracy-callout {
-                rect {
-                    fill: var(--mat-sys-surface-container-highest);
-                    stroke: var(--mat-sys-secondary);
-                    stroke-width: 1;
-                }
-
-                text {
-                    fill: var(--mat-sys-secondary);
-                    font-size: 11px;
-                    font-weight: 800;
-                    font-family: 'Inter', sans-serif;
-                }
-            }
-        }
-
-        .scale-bar {
-            position: absolute;
-            bottom: 16px;
-            right: 16px;
-            width: 60px;
-            height: 2px;
-            background: var(--mat-sys-on-surface);
-            opacity: 0.2;
-            z-index: 3;
-
-            &::before,
-            &::after {
-                content: '';
-                position: absolute;
-                height: 4px;
-                width: 2px;
-                background: currentColor;
-                top: -1px;
-            }
-
-            &::after {
-                right: 0;
-            }
-        }
-
-        .scale-label {
-            position: absolute;
-            bottom: 22px;
-            right: 16px;
-            font-size: 8px;
-            opacity: 0.4;
-            letter-spacing: 1px;
-            font-family: 'Inter', sans-serif;
-        }
-
-        .stat-preview {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1.5rem;
-            padding: 1rem;
-            background: var(--mat-sys-surface-container-low);
-            border-radius: 12px;
-            border: 1px solid var(--mat-sys-outline-variant);
-
-            .stat-item {
-                display: flex;
-                flex-direction: column;
-                gap: 0.25rem;
-            }
-
-            .stat-label {
-                font-size: 10px;
-                color: var(--mat-sys-on-surface-variant);
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                font-weight: 600;
-            }
-
-            .stat-value {
-                font-size: 1.1rem;
-                font-weight: 700;
-                font-family: 'Inter', sans-serif;
-
-                &.success {
-                    color: #4CAF50;
-                }
-
-                &.warning {
-                    color: var(--mat-sys-primary);
-                }
-            }
-        }
-    }
 }
 
 // 3.5 Footprint Section
@@ -905,19 +575,8 @@
     .footprint-map-stage {
         height: clamp(320px, 48vw, 520px);
         margin-top: 2.5rem;
-        overflow: hidden;
-        border: 1px solid var(--mat-sys-outline-variant);
-        border-radius: var(--mat-sys-corner-large, 16px);
-        background: var(--mat-sys-surface-container-low);
     }
 
-    .footprint-map-placeholder {
-        width: 100%;
-        height: 100%;
-        background:
-            linear-gradient(135deg, transparent 28%, color-mix(in srgb, var(--mat-sys-primary) 5%, transparent) 52%, transparent 76%),
-            var(--mat-sys-surface-container-low);
-    }
 
     .footprint-map-caption {
         margin: 0.75rem 0 0;
@@ -988,15 +647,6 @@
 
         .section-subtitle {
             font-size: 1.05rem;
-        }
-
-        .ai-insights-examples {
-            padding: 1rem;
-
-            .example-prompts {
-                width: 100%;
-                max-width: 100%;
-            }
         }
 
         .ai-insights-actions {

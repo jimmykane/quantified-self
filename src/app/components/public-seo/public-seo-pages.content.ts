@@ -4,6 +4,7 @@ import {
   PUBLIC_GUIDE_PATHS,
 } from './public-seo-pages.paths';
 import type { PublicSeoPageKey } from './public-seo-pages.paths';
+import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 
 export {
   PUBLIC_FEATURE_PATHS,
@@ -30,6 +31,7 @@ export interface PublicSeoSection {
   title: string;
   copy: string;
   items: readonly PublicSeoContentItem[];
+  preview?: PublicFeaturePreviewKey;
 }
 
 export interface PublicSeoFaqItem {
@@ -95,6 +97,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     chips: ['Activity calendar', 'Training analysis', 'Supported activity types', 'Assistant', 'MCP server', 'Workout comparison', 'Route files', 'Benchmarks'],
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
+      routeAction('Training Dashboard', '/features/training-dashboard'),
+      routeAction('Activity Map', '/features/activity-map'),
       routeAction('Activity Calendar', '/features/activity-calendar'),
       routeAction('Supported activity types', '/features/supported-activities'),
       routeAction('MCP Server', '/features/mcp-server'),
@@ -323,6 +327,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'See parent-event load, top contributors, sport-specific load changes, and training rhythm without hiding other eligible sports from the overall explanation.',
           },
         ],
+        preview: 'training-snapshot',
       },
       {
         eyebrow: 'Discipline Evidence',
@@ -367,6 +372,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Missing TSS, zones, power, heart rate, pace, sleep, and durability evidence stays unavailable rather than becoming a misleading zero or generic score.',
           },
         ],
+        preview: 'training-signals',
       },
     ],
     faqItems: [
@@ -393,6 +399,104 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Explore Integrations', '/integrations'),
       routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
+    ],
+  },
+  trainingDashboard: {
+    key: 'trainingDashboard',
+    path: PUBLIC_FEATURE_PATHS.trainingDashboard,
+    eyebrow: 'Training Dashboard',
+    title: 'Custom Training Dashboard for Endurance Athletes',
+    description: 'Build a custom endurance training dashboard with Curated, KPI, Custom, and Map tiles, independent filters, training-load charts, activity summaries, and clustered maps.',
+    h1: 'Build the training dashboard you need',
+    intro: 'Start from a dashboard preset or arrange Curated, KPI, Custom, and Map tiles around the questions you track. Each tile keeps its own filters, while shared chart and map components keep the same interaction and styling used throughout Quantified Self.',
+    chips: ['Curated charts', 'KPI tiles', 'Custom charts', 'Map tiles', 'Independent filters', 'Drag and arrange'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Training Analysis', '/features/training-analysis'),
+      routeAction('Activity Calendar', '/features/activity-calendar'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Your Workspace',
+        title: 'Arrange the evidence around your training questions',
+        copy: 'Dashboard is the configurable workspace: choose the tiles that matter, place them where they are useful, and keep a compact overview or a deeper analytical layout.',
+        items: [
+          { icon: 'dashboard_customize', title: 'Presets or your own layout', copy: 'Begin with a prepared dashboard, then add, remove, resize, and rearrange supported tiles without changing the underlying activity data.' },
+          { icon: 'filter_alt', title: 'Filters per tile', copy: 'Give each tile its own activity, date, and metric context so one dashboard can compare different periods or disciplines.' },
+          { icon: 'query_stats', title: 'Consistent chart interaction', copy: 'Curated and KPI tiles keep familiar colors, tooltips, zoom behavior, and haptic feedback across the app.' },
+        ],
+        preview: 'dashboard',
+      },
+      {
+        eyebrow: 'Available Views',
+        title: 'Mix current KPIs, trends, activities, and maps',
+        copy: 'A dashboard can combine compact current-state values with longer trends and location context without forcing every tile into the same range.',
+        items: [
+          { icon: 'speed', title: 'KPI and derived-metric tiles', copy: 'Track values such as Fitness, Form, and easy-volume share with compact trend context where the metric supports it.' },
+          { icon: 'monitoring', title: 'Curated and custom charts', copy: 'Use prepared training views or choose compatible metrics and filters for a custom chart.' },
+          { icon: 'map', title: 'Map and activity tiles', copy: 'Add activity context and clustered map views, with controls that belong to the individual tile.' },
+        ],
+      },
+    ],
+    faqItems: [
+      { question: 'How is Dashboard different from Training?', answer: 'Dashboard is configurable: you choose and arrange the tiles. Training is a fixed, curated analytical workspace with a global overview and sport-specific destinations.' },
+      { question: 'Do dashboard tiles share one filter?', answer: 'No. Each tile keeps its own supported filters, so the same dashboard can show different sports, metrics, or date ranges.' },
+      { question: 'Can a dashboard include maps?', answer: 'Yes. Map tiles provide activity-location context and their own supported map and clustering controls.' },
+    ],
+    closingTitle: 'Build one view around the decisions you actually make',
+    closingCopy: 'Create an account, start with a preset, and refine the tile mix as your training questions change.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Explore Training Analysis', '/features/training-analysis'),
+    ],
+  },
+  activityMap: {
+    key: 'activityMap',
+    path: PUBLIC_FEATURE_PATHS.activityMap,
+    eyebrow: 'Activity Map',
+    title: 'Map Your Running, Cycling, Swimming, and Outdoor Activities',
+    description: 'See GPS activities together on an interactive activity map, filter the visible history by date or activity type, and explore running, cycling, swimming, hiking, and other recorded routes.',
+    h1: 'See your activity history on one map',
+    intro: 'Bring GPS activities from connected providers and uploaded files into one interactive map. Filter by date or activity type, inspect dense areas without losing the wider history, and open the workout behind a recorded trace.',
+    chips: ['Activity traces', 'Runs and rides', 'Open-water swims', 'Date filters', 'Activity filters', 'Interactive map'],
+    actions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Integrations', '/integrations'),
+      routeAction('Activity Calendar', '/features/activity-calendar'),
+    ],
+    sections: [
+      {
+        eyebrow: 'Your Footprint',
+        title: 'Explore the places behind the activity list',
+        copy: 'The activity map turns location-enabled workouts into a geographic view of your history while keeping each trace connected to its original activity.',
+        items: [
+          { icon: 'route', title: 'Recorded activity traces', copy: 'View GPS paths from runs, rides, hikes, open-water swims, and other supported outdoor activities when coordinates are available.' },
+          { icon: 'filter_alt', title: 'Date and activity filters', copy: 'Narrow the visible history to the period or activity types you want to explore.' },
+          { icon: 'touch_app', title: 'Interactive workout context', copy: 'Move around the map, inspect visible activities, and continue to the workout details tied to a trace.' },
+        ],
+        preview: 'activity-map',
+      },
+      {
+        eyebrow: 'One Archive',
+        title: 'Map provider imports and uploaded activities together',
+        copy: 'Location-enabled activities can share one view even when their source devices and services differ.',
+        items: [
+          { icon: 'hub', title: 'Connected provider history', copy: 'Use supported Garmin, Suunto, COROS, and Wahoo activity imports as part of the same account history.' },
+          { icon: 'upload_file', title: 'Uploaded activity files', copy: 'Include compatible uploaded FIT, TCX, GPX, JSON, and SML activities when they contain recorded coordinates.' },
+          { icon: 'calendar_month', title: 'Map and calendar context', copy: 'Use the map for geographic exploration and the activity calendar for the rhythm and volume of the same workout history.' },
+        ],
+      },
+    ],
+    faqItems: [
+      { question: 'Which activities appear on the activity map?', answer: 'Activities need compatible recorded coordinates. Runs, rides, hikes, open-water swims, and other outdoor activities can appear when location data is available.' },
+      { question: 'Can I filter the activity map?', answer: 'Yes. The map supports narrowing the visible history by date and activity type.' },
+      { question: 'Can uploaded workout files appear?', answer: 'Yes. Compatible uploaded activity files can appear when they contain usable recorded coordinates.' },
+    ],
+    closingTitle: 'Turn a list of workouts into a visible training footprint',
+    closingCopy: 'Connect a provider or upload location-enabled activities, then explore the routes and places across your history.',
+    closingActions: [
+      routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
+      routeAction('Explore Integrations', '/integrations'),
     ],
   },
   mcpServer: {
@@ -436,6 +540,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Filter bounded newest-first route scans by canonical activity type or route-name text, then read names, metrics, counts, and timestamps. A separate saved-route location permission enables exact bounds, simplified geometry, nearby search, segment endpoints, and waypoints.',
           },
         ],
+        preview: 'mcp-flow',
       },
       {
         eyebrow: 'Access Boundaries',
@@ -541,6 +646,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'When a visual materially helps, the answer can include an interactive chart built from validated measurement, sleep, Training, metric, ranking, jump, or workout-chart results. A map rendered with the user’s separate Assistant map style can use only activity coordinates already allowed by the current precise-location chat; Gemini selects a safe source while Quantified Self owns every plotted value, coordinate, label, and renderer setting.',
           },
         ],
+        preview: 'assistant-example',
       },
       {
         eyebrow: 'Grounding and privacy',
@@ -649,6 +755,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Inspect GPS traces and stat deltas so a distance, ascent, or duration difference is easier to explain.',
           },
         ],
+        preview: 'reviewer-benchmark',
       },
     ],
     faqItems: [
@@ -709,6 +816,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Keep source files available for original-file download, GPX export when route data exists, CSV exports, and future reprocessing.',
           },
         ],
+        preview: 'workout-analysis',
       },
       {
         eyebrow: 'Supported Workflows',
@@ -950,6 +1058,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Benchmark provider-imported activities or uploaded FIT, TCX, GPX, JSON, and SML files from review units and test devices.',
           },
         ],
+        preview: 'reviewer-benchmark',
       },
     ],
     faqItems: [
@@ -1813,6 +1922,8 @@ export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData>
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
   activityCalendar: buildRouteData(PUBLIC_SEO_PAGES.activityCalendar),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),
+  trainingDashboard: buildRouteData(PUBLIC_SEO_PAGES.trainingDashboard),
+  activityMap: buildRouteData(PUBLIC_SEO_PAGES.activityMap),
   mcpServer: buildRouteData(PUBLIC_SEO_PAGES.mcpServer),
   assistant: buildRouteData(PUBLIC_SEO_PAGES.assistant),
   workoutFileComparison: buildRouteData(PUBLIC_SEO_PAGES.workoutFileComparison),

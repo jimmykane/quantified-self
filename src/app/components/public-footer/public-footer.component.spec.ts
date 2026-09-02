@@ -24,9 +24,13 @@ describe('PublicFooterComponent', () => {
     expect(footer).toBeTruthy();
     expect(text).toContain('Activity calendar');
     expect(text).toContain('Training analysis');
+    expect(text).toContain('Training dashboard');
+    expect(text).toContain('Activity map');
     expect(text).toContain('MCP server');
     expect(text).toContain('Wahoo integration');
     expect(footer?.querySelector('a[href="/features/activity-calendar"]')).toBeTruthy();
+    expect(footer?.querySelector('a[href="/features/training-dashboard"]')).toBeTruthy();
+    expect(footer?.querySelector('a[href="/features/activity-map"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/features/mcp-server"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/integrations/wahoo"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/privacy"]')).toBeTruthy();

@@ -12,6 +12,8 @@ describe('public-seo-pages.content', () => {
       hub: 'features',
       activityCalendar: 'features/activity-calendar',
       trainingAnalysis: 'features/training-analysis',
+      trainingDashboard: 'features/training-dashboard',
+      activityMap: 'features/activity-map',
       mcpServer: 'features/mcp-server',
       assistant: 'features/ai-insights',
       workoutFileComparison: 'features/workout-file-comparison',
@@ -84,6 +86,13 @@ describe('public-seo-pages.content', () => {
       section.items.some(item => item.copy.includes('longest-jump evidence'))
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.trainingAnalysis.faqItems.some(item => item.question === 'How is Training different from the Dashboard?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-snapshot');
+    expect(PUBLIC_SEO_PAGES.trainingAnalysis.sections.map(section => section.preview)).toContain('training-signals');
+
+    expect(PUBLIC_SEO_PAGES.trainingDashboard.h1).toBe('Build the training dashboard you need');
+    expect(PUBLIC_SEO_PAGES.trainingDashboard.sections.some(section => section.preview === 'dashboard')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.activityMap.h1).toBe('See your activity history on one map');
+    expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => section.preview === 'activity-map')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.mcpServer.h1).toBe('Connect ChatGPT to your training data with a read-only MCP server');
     expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('compatible MCP clients');
@@ -109,6 +118,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.items.some(item => item.copy.includes('route-name text')))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.question === 'Can an MCP client rearrange my dashboard or change my data?')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.some(item => item.answer.includes('Granting one never exposes the other'))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.preview === 'mcp-flow')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.assistant.h1).toBe('If you could ask your training history one question, what would it be?');
     expect(PUBLIC_SEO_PAGES.assistant.h1).not.toContain('complete training history');
@@ -152,6 +162,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.assistant.faqItems.some(item => (
       item.answer.includes('displayed tile area to Mapbox')
     ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.assistant.sections.some(section => section.preview === 'assistant-example')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.workoutFileComparison.h1).toBe('Compare FIT, TCX, GPX, JSON, and SML workout files');
     expect(PUBLIC_SEO_PAGES.workoutFileComparison.intro).toContain('Manual uploads and benchmark comparisons are available on the free plan');
@@ -162,6 +173,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.chips).toContain('GPX file analyzer');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.intro).toContain('maps, charts, stats, exports');
     expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.faqItems.some(item => item.question === 'Can I analyze FIT files?')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer.sections.some(section => section.preview === 'workout-analysis')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.routeFiles.h1).toBe('Save FIT and GPX route files, then send them to connected services');
     expect(PUBLIC_SEO_PAGES.routeFiles.description).toContain('FIT course files and GPX route or track files');
@@ -186,6 +198,7 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.h1).toBe('Sports watch benchmark reports for reviewers and device tests');
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('YouTube videos');
     expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.intro).toContain('firmware QA');
+    expect(PUBLIC_SEO_PAGES.sportsWatchBenchmark.sections.some(section => section.preview === 'reviewer-benchmark')).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.guidesHub.h1).toBe('Training data sync guides');
     expect(PUBLIC_SEO_PAGES.guidesHub.description).toContain('Garmin to Suunto activity sync');
@@ -233,6 +246,8 @@ describe('public-seo-pages.content', () => {
     expect(featureHubLinks).toContain('/features/activity-calendar');
     expect(featureHubLinks).toContain('/features/supported-activities');
     expect(featureHubLinks).toContain('/features/training-analysis');
+    expect(featureHubLinks).toContain('/features/training-dashboard');
+    expect(featureHubLinks).toContain('/features/activity-map');
     expect(featureHubLinks).toContain('/features/mcp-server');
     expect(featureHubLinks).toContain('/features/workout-data-comparison');
     expect(featureHubLinks).toContain('/features/workout-file-comparison');

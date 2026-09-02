@@ -1,0 +1,25 @@
+<div class="assistant-example" data-nosnippet>
+  <div class="assistant-example__prompt">
+    <span>What you can ask</span>
+    <app-typed-prompt-rotator [prompts]="prompts"></app-typed-prompt-rotator>
+  </div>
+
+  <div class="assistant-example__answer" aria-label="Example grounded Assistant answer">
+    <div class="assistant-example__answer-heading">
+      <mat-icon>auto_awesome</mat-icon>
+      <div>
+        <strong>Example: today’s training context</strong>
+        <span>Grounded in validated data</span>
+      </div>
+    </div>
+    <p>
+      Readiness is 78 with balanced load. Recent easy-volume share is stable, with recorded sleep and load signals
+      available to inspect together.
+    </p>
+    <div class="assistant-example__evidence" aria-label="Evidence used">
+      <span><mat-icon>monitor_heart</mat-icon> Readiness 78</span>
+      <span><mat-icon>show_chart</mat-icon> Form +8</span>
+      <span><mat-icon>bedtime</mat-icon> Sleep 7h 42m</span>
+    </div>
+  </div>
+</div>

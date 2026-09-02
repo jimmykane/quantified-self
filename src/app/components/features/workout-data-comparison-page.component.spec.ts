@@ -39,22 +39,12 @@ describe('WorkoutDataComparisonPageComponent', () => {
     expect(text).toContain('custom FIT, TCX, GPX, JSON, or SML imports');
     expect(text).toContain('Manual uploads and benchmark comparisons are available on the free plan');
     expect(text).toContain('automatic provider sync and higher limits');
-    expect(text).toContain('Garmin Fenix');
-    expect(text).toContain('COROS Pace');
-    expect(text).toContain('VS');
-    expect(text).toContain('Offset +2s');
-    expect(text).toContain('Good Agreement');
-    expect(text).toContain('Hardware Benchmark Analysis');
-    expect(text).toContain('GNSS accuracy is good');
-    expect(text).toContain('Heart Rate agreement is excellent');
-    expect(text).toContain('GNSS Accuracy');
-    expect(text).toContain('CEP 50%');
-    expect(text).toContain('Data Quality');
-    expect(text).toContain('Stat Differences');
-    expect(text).toContain('Heart Rate');
-    expect(text).toContain('Excellent Correlation');
-    expect(text).toContain('RMSE 2.4');
-    expect(text).toContain('live reports use your selected services or uploaded files');
+    const reviewerPreview = fixture.nativeElement.querySelector(
+      'app-public-feature-preview[previewkey="reviewer-benchmark"]'
+    );
+    expect(reviewerPreview).toBeTruthy();
+    expect(reviewerPreview.hasAttribute('data-nosnippet')).toBe(true);
+    expect(fixture.nativeElement.querySelector('.benchmark-preview')).toBeNull();
     expect(text).toContain('From sync to benchmark analysis');
     expect(text).toContain('Benchmark any two imported activities');
     expect(text).toContain('available on the free plan for up to 100 activities and 10 saved routes');

@@ -24,6 +24,8 @@ const PUBLIC_CONTENT_PATHS = new Set([
   '/features/supported-activities',
   '/features/activity-calendar',
   '/features/training-analysis',
+  '/features/training-dashboard',
+  '/features/activity-map',
   '/features/mcp-server',
   '/features/ai-insights',
   '/features/workout-file-comparison',

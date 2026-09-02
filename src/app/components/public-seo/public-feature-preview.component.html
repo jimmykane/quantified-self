@@ -1,0 +1,79 @@
+@if (previewKey() === 'training-snapshot') {
+  @defer (on viewport) {
+    <app-training-snapshot-preview></app-training-snapshot-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--training" aria-hidden="true"></div>
+  }
+}
+
+@if (previewKey() === 'training-signals') {
+  @defer (on viewport) {
+    <app-home-signal-charts-preview></app-home-signal-charts-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--signals" aria-hidden="true"></div>
+  }
+}
+
+@if (previewKey() === 'dashboard') {
+  @defer (on viewport) {
+    <app-home-dashboard-preview></app-home-dashboard-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--dashboard" aria-hidden="true"></div>
+  }
+}
+
+@if (previewKey() === 'workout-analysis') {
+  @defer (on viewport) {
+    <app-home-workout-preview></app-home-workout-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--workout" aria-hidden="true"></div>
+  }
+}
+
+@if (previewKey() === 'activity-map') {
+  <div class="map-stage">
+    @defer (on viewport) {
+      <app-home-my-tracks-preview></app-home-my-tracks-preview>
+    } @placeholder {
+      <div class="preview-placeholder preview-placeholder--map" aria-hidden="true"></div>
+    }
+  </div>
+}
+
+@if (previewKey() === 'provider-flow') {
+  @defer (on viewport) {
+    <app-provider-data-flow-matrix
+      caption="Supported provider paths"
+      [rows]="providerDataFlowRows"
+      [interactive]="false"
+      [compact]="true"
+      [showRouteState]="false"
+    ></app-provider-data-flow-matrix>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--flow" aria-hidden="true"></div>
+  }
+}
+
+@if (previewKey() === 'reviewer-benchmark') {
+  @defer (on viewport) {
+    <app-reviewer-benchmark-preview></app-reviewer-benchmark-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--reviewer" aria-hidden="true"></div>
+  }
+}
+
+@if (previewKey() === 'assistant-example') {
+  @defer (on viewport) {
+    <app-assistant-example-preview></app-assistant-example-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--assistant" aria-hidden="true"></div>
+  }
+}
+
+@if (previewKey() === 'mcp-flow') {
+  @defer (on viewport) {
+    <app-mcp-read-only-flow-preview></app-mcp-read-only-flow-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--mcp" aria-hidden="true"></div>
+  }
+}

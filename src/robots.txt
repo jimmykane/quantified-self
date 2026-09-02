@@ -15,6 +15,8 @@ Allow: /features/mcp-server
 Allow: /features/workout-data-comparison
 Allow: /features/supported-activities
 Allow: /features/training-analysis
+Allow: /features/training-dashboard
+Allow: /features/activity-map
 Allow: /features/ai-insights
 Allow: /features/workout-file-comparison
 Allow: /features/fit-gpx-tcx-file-analyzer

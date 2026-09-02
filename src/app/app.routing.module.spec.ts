@@ -417,6 +417,18 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'readiness, load trends, intensity, durability, sleep context, and historical build comparisons',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.trainingDashboard,
+        title: 'Custom Training Dashboard for Endurance Athletes',
+        h1: 'Build the training dashboard you need',
+        descriptionText: 'Curated, KPI, Custom, and Map tiles',
+      },
+      {
+        path: PUBLIC_FEATURE_PATHS.activityMap,
+        title: 'Map Your Running, Cycling, Swimming, and Outdoor Activities',
+        h1: 'See your activity history on one map',
+        descriptionText: 'interactive activity map',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.mcpServer,
         title: 'Read-only MCP Server for Training Data',
         h1: 'Connect ChatGPT to your training data with a read-only MCP server',

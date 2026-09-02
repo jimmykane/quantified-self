@@ -4,11 +4,12 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import type { PublicSeoPage } from './public-seo-pages.content';
+import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
 
 @Component({
   selector: 'app-public-seo-page',
   standalone: true,
-  imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule],
+  imports: [RouterLink, MatButtonModule, MatCardModule, MatIconModule, PublicFeaturePreviewComponent],
   templateUrl: './public-seo-page.component.html',
   styleUrls: ['./public-seo-page.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

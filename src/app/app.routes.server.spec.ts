@@ -67,6 +67,8 @@ describe('serverRoutes', () => {
       'features/supported-activities',
       'features/activity-calendar',
       'features/training-analysis',
+      'features/training-dashboard',
+      'features/activity-map',
       'features/mcp-server',
       'features/ai-insights',
       'features/workout-file-comparison',
@@ -116,6 +118,8 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('features/supported-activities')).toBe(true);
     expect(prerenderedPaths.has('features/activity-calendar')).toBe(true);
     expect(prerenderedPaths.has('features/training-analysis')).toBe(true);
+    expect(prerenderedPaths.has('features/training-dashboard')).toBe(true);
+    expect(prerenderedPaths.has('features/activity-map')).toBe(true);
     expect(prerenderedPaths.has('features/mcp-server')).toBe(true);
     expect(prerenderedPaths.has('features/ai-insights')).toBe(true);
     expect(prerenderedPaths.has('features/workout-file-comparison')).toBe(true);

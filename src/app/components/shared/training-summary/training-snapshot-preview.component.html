@@ -1,0 +1,19 @@
+<div class="training-snapshot-preview" data-nosnippet>
+  <app-training-summary-cards
+    mode="preview"
+    [cards]="cards"
+    ariaLabel="Example current Training overview"
+  ></app-training-summary-cards>
+
+  <app-training-metric-grid
+    mode="preview-load"
+    [metrics]="loadMetrics"
+    ariaLabel="Example Training load metrics"
+  ></app-training-metric-grid>
+
+  <app-training-metric-grid
+    mode="preview-context"
+    [metrics]="contextMetrics"
+    ariaLabel="Example Training context"
+  ></app-training-metric-grid>
+</div>

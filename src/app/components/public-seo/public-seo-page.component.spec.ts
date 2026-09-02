@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -6,6 +7,7 @@ import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PublicSeoPageComponent } from './public-seo-page.component';
 import { PUBLIC_SEO_PAGES, PublicSeoPage } from './public-seo-pages.content';
+import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
 
 describe('PublicSeoPageComponent', () => {
   let fixture: ComponentFixture<PublicSeoPageComponent>;
@@ -55,6 +57,9 @@ describe('PublicSeoPageComponent', () => {
     expect(hrefs).toContain('/features/workout-data-comparison');
     expect(hrefs).toContain('/help#uploads-and-imports');
     expect(hrefs).toContain('/features/sports-watch-benchmark');
+    const reviewerPreview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
+      .find(preview => preview.componentInstance.previewKey() === 'reviewer-benchmark');
+    expect(reviewerPreview).toBeTruthy();
   });
 
   it('renders visible HowTo steps when route data includes HowTo structured data', () => {

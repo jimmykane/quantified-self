@@ -47,7 +47,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/integrations</loc>
-    <lastmod>2026-08-03</lastmod>
+    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -82,7 +82,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/features/workout-data-comparison</loc>
-    <lastmod>2026-07-21</lastmod>
+    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -92,27 +92,37 @@
   </url>
   <url>
     <loc>https://quantified-self.io/features/training-analysis</loc>
-    <lastmod>2026-08-07</lastmod>
+    <lastmod>2026-09-02</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/features/training-dashboard</loc>
+    <lastmod>2026-09-02</lastmod>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://quantified-self.io/features/activity-map</loc>
+    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/mcp-server</loc>
-    <lastmod>2026-08-06</lastmod>
+    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/ai-insights</loc>
-    <lastmod>2026-08-06</lastmod>
+    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/workout-file-comparison</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/features/fit-gpx-tcx-file-analyzer</loc>
-    <lastmod>2026-05-31</lastmod>
+    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>
@@ -122,7 +132,7 @@
   </url>
   <url>
     <loc>https://quantified-self.io/features/sports-watch-benchmark</loc>
-    <lastmod>2026-05-29</lastmod>
+    <lastmod>2026-09-02</lastmod>
     <priority>0.8</priority>
   </url>
   <url>

@@ -48,6 +48,11 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('Send Suunto routes to Garmin');
     expect(text).toContain('sending Suunto routes to Garmin');
     expect(text).toContain('Activity sync, FIT uploads, and route delivery');
+    const providerFlow = fixture.nativeElement.querySelector(
+      'app-public-feature-preview[previewkey="provider-flow"]'
+    );
+    expect(providerFlow).toBeTruthy();
+    expect(providerFlow.hasAttribute('data-nosnippet')).toBe(true);
   });
 
   it('should link to each provider integration page', () => {

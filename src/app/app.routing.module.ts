@@ -391,6 +391,24 @@ const topLevelRoutes: Routes = [
     },
   },
   {
+    path: PUBLIC_FEATURE_PATHS.trainingDashboard,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('trainingDashboard'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
+    path: PUBLIC_FEATURE_PATHS.activityMap,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('activityMap'),
+    data: {
+      preload: true,
+      animation: 'PublicSeo',
+    },
+  },
+  {
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('mcpServer'),

@@ -1,0 +1,91 @@
+<div class="reviewer-preview" data-nosnippet>
+  <app-compact-feature-row
+    icon="merge_type"
+    iconTone="secondary"
+    title="Benchmark Merge Workflow"
+    summary="Combine same-session recordings, keep the benchmark out of normal training totals, then assign reference and test devices."
+  >
+    <div class="analysis-row-content">
+      <div class="visual-box chart-preview">
+        <svg class="chart-svg" viewBox="0 -80 1000 560" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <g opacity="0.1">
+            <line x1="0" y1="80" x2="1000" y2="80" stroke="currentColor" stroke-width="1" />
+            <line x1="0" y1="240" x2="1000" y2="240" stroke="currentColor" stroke-width="1" />
+            <line x1="0" y1="400" x2="1000" y2="400" stroke="currentColor" stroke-width="1" />
+          </g>
+          <path d="M0,350 Q200,50 400,200 T800,100 T1000,250" class="ghost-path" />
+          <path d="M0,360 Q210,60 410,210 T810,110 T1000,240" class="active-path" />
+          <g transform="translate(450, 220)" class="hardware-label primary">
+            <rect x="-60" y="-35" width="120" height="24" rx="6" />
+            <text x="0" y="-19" text-anchor="middle">FENIX 8 (1S)</text>
+          </g>
+          <g transform="translate(450, 160)" class="hardware-label secondary">
+            <rect x="-60" y="-35" width="120" height="24" rx="6" />
+            <text x="0" y="-19" text-anchor="middle">WATCH ULTRA 2</text>
+          </g>
+        </svg>
+      </div>
+      <div class="stat-preview">
+        <div class="stat-item"><span class="stat-label">Merge Type</span><span class="stat-value">Benchmark</span></div>
+        <div class="stat-item"><span class="stat-label">Roles</span><span class="stat-value">Ref / Test</span></div>
+        <div class="stat-item"><span class="stat-label">Auto Align</span><span class="stat-value success">+/-15s</span></div>
+      </div>
+    </div>
+  </app-compact-feature-row>
+
+  <app-compact-feature-row
+    icon="route"
+    iconTone="secondary"
+    title="GNSS Trace Comparison"
+    summary="Compare GPS tracks point by point and quantify trace disagreement with CEP50, CEP95, RMSE, maximum deviation, and distance difference."
+  >
+    <div class="analysis-row-content">
+      <div class="visual-box map-preview">
+        <div class="map-tile-bg"></div>
+        <svg class="map-svg" viewBox="-100 -50 1000 700" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <path d="M100,600 L120,400 L130,200 C140,0 400,0 600,10 L780,20" class="track-ghost" />
+          <path d="M100,600 L110,400 L115,200 C120,0 400,0 600,0 L800,0" class="track-active" />
+          <circle cx="100" cy="600" r="10" class="marker start" />
+          <g transform="translate(130, 100)" class="accuracy-callout">
+            <rect x="10" y="-35" width="140" height="28" rx="6" />
+            <text x="80" y="-17" text-anchor="middle">&#916; OFFSET: 1.2M</text>
+          </g>
+        </svg>
+        <div class="scale-bar"></div>
+        <span class="scale-label">500M</span>
+      </div>
+      <div class="stat-preview">
+        <div class="stat-item"><span class="stat-label">CEP (50%)</span><span class="stat-value">0.8m</span></div>
+        <div class="stat-item"><span class="stat-label">CEP (95%)</span><span class="stat-value">2.4m</span></div>
+        <div class="stat-item"><span class="stat-label">RMSE</span><span class="stat-value warning">1.1m</span></div>
+      </div>
+    </div>
+  </app-compact-feature-row>
+
+  <app-compact-feature-row
+    icon="sensors"
+    iconTone="secondary"
+    title="Sensor Quality Reports"
+    [showDivider]="false"
+    summary="Grade shared streams with correlation, MAE, and RMSE, then surface dropouts, stuck values, and cadence-lock warnings."
+  >
+    <div class="analysis-row-content">
+      <div class="visual-box quality-preview">
+        <div class="quality-verdict">
+          <mat-icon>verified</mat-icon>
+          <div><strong>Good Agreement</strong><span>Saved benchmark report</span></div>
+        </div>
+        <div class="quality-rows">
+          <div class="quality-row"><span>Heart Rate</span><strong>98.7% correlation</strong></div>
+          <div class="quality-row"><span>Power</span><strong>MAE 4.2w</strong></div>
+          <div class="quality-row warning"><span>Data Quality</span><strong>Dropouts grouped</strong></div>
+        </div>
+      </div>
+      <div class="stat-preview">
+        <div class="stat-item"><span class="stat-label">Streams</span><span class="stat-value">Corr / MAE</span></div>
+        <div class="stat-item"><span class="stat-label">Artifacts</span><span class="stat-value warning">Detected</span></div>
+        <div class="stat-item"><span class="stat-label">Reports</span><span class="stat-value success">Save / Share</span></div>
+      </div>
+    </div>
+  </app-compact-feature-row>
+</div>
