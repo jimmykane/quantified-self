@@ -83,6 +83,17 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
     expect(text).toContain('Garmin Fenix 9');
   });
 
+  it('can move the chart comparison ahead of the workflow for homepage use', () => {
+    fixture.componentRef.setInput('chartsFirst', true);
+    fixture.detectChanges();
+
+    const titles = Array.from(fixture.nativeElement.querySelectorAll('.compact-feature-row__title'))
+      .map((title: Element) => title.textContent?.trim());
+
+    expect(titles[0]).toBe('Multi-Device Chart Comparison');
+    expect(titles[1]).toBe('Benchmark Merge Workflow');
+  });
+
   it('keeps the anonymized comparison series aligned and complete', () => {
     const panels = [REVIEWER_BENCHMARK_HEART_RATE_PANEL, REVIEWER_BENCHMARK_ALTITUDE_PANEL];
     const expectedLabels = ['Suunto Vertical 2', 'COROS APEX 4', 'Garmin Fenix 9'];

@@ -1,4 +1,8 @@
 <div class="reviewer-preview" data-nosnippet>
+  @if (chartsFirst()) {
+    <ng-container [ngTemplateOutlet]="comparisonCharts"></ng-container>
+  }
+
   <app-compact-feature-row
     icon="merge_type"
     iconTone="secondary"
@@ -21,50 +25,9 @@
     </div>
   </app-compact-feature-row>
 
-  <app-compact-feature-row
-    icon="monitoring"
-    iconTone="secondary"
-    title="Multi-Device Chart Comparison"
-    summary="Inspect any number of aligned heart-rate and altitude traces together to see agreement, offsets, dropouts, and short-lived sensor differences."
-  >
-    <div class="benchmark-chart-preview" role="group" aria-label="Heart rate and altitude comparison for three sports watches">
-      <p class="benchmark-chart-preview__context">
-        Traces from an anonymized multi-device running benchmark. Model labels are representative.
-      </p>
-      <div class="benchmark-chart-preview__grid">
-        <app-event-card-chart-panel
-          [panel]="heartRatePanel"
-          [xAxisType]="xAxisType"
-          [xDomain]="xDomain"
-          [cursorBehaviour]="cursorBehaviour"
-          [darkTheme]="darkTheme()"
-          [useAnimations]="false"
-          [showLaps]="false"
-          [showSwimLengths]="false"
-          [showActivityNamesInTooltip]="true"
-          [previewMode]="true"
-          [previewInteractions]="true"
-          [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
-        ></app-event-card-chart-panel>
-        <app-event-card-chart-panel
-          [panel]="altitudePanel"
-          [xAxisType]="xAxisType"
-          [xDomain]="xDomain"
-          [cursorBehaviour]="cursorBehaviour"
-          [darkTheme]="darkTheme()"
-          [useAnimations]="false"
-          [showLaps]="false"
-          [showSwimLengths]="false"
-          [colorAltitudeByGrade]="false"
-          [showGradeLegend]="false"
-          [showActivityNamesInTooltip]="true"
-          [previewMode]="true"
-          [previewInteractions]="true"
-          [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
-        ></app-event-card-chart-panel>
-      </div>
-    </div>
-  </app-compact-feature-row>
+  @if (!chartsFirst()) {
+    <ng-container [ngTemplateOutlet]="comparisonCharts"></ng-container>
+  }
 
   <app-compact-feature-row
     icon="route"
@@ -122,3 +85,50 @@
     </div>
   </app-compact-feature-row>
 </div>
+
+<ng-template #comparisonCharts>
+  <app-compact-feature-row
+    icon="monitoring"
+    iconTone="secondary"
+    title="Multi-Device Chart Comparison"
+    summary="Inspect any number of aligned heart-rate and altitude traces together to see agreement, offsets, dropouts, and short-lived sensor differences."
+  >
+    <div class="benchmark-chart-preview" role="group" aria-label="Heart rate and altitude comparison for three sports watches">
+      <p class="benchmark-chart-preview__context">
+        Traces from an anonymized multi-device running benchmark. Model labels are representative.
+      </p>
+      <div class="benchmark-chart-preview__grid">
+        <app-event-card-chart-panel
+          [panel]="heartRatePanel"
+          [xAxisType]="xAxisType"
+          [xDomain]="xDomain"
+          [cursorBehaviour]="cursorBehaviour"
+          [darkTheme]="darkTheme()"
+          [useAnimations]="false"
+          [showLaps]="false"
+          [showSwimLengths]="false"
+          [showActivityNamesInTooltip]="true"
+          [previewMode]="true"
+          [previewInteractions]="true"
+          [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
+        ></app-event-card-chart-panel>
+        <app-event-card-chart-panel
+          [panel]="altitudePanel"
+          [xAxisType]="xAxisType"
+          [xDomain]="xDomain"
+          [cursorBehaviour]="cursorBehaviour"
+          [darkTheme]="darkTheme()"
+          [useAnimations]="false"
+          [showLaps]="false"
+          [showSwimLengths]="false"
+          [colorAltitudeByGrade]="false"
+          [showGradeLegend]="false"
+          [showActivityNamesInTooltip]="true"
+          [previewMode]="true"
+          [previewInteractions]="true"
+          [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
+        ></app-event-card-chart-panel>
+      </div>
+    </div>
+  </app-compact-feature-row>
+</ng-template>

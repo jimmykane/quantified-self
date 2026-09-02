@@ -31,5 +31,6 @@ import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 })
 export class PublicFeaturePreviewComponent {
   readonly previewKey = input.required<PublicFeaturePreviewKey>();
+  readonly reviewerChartsFirst = input(false);
   readonly providerDataFlowRows = buildPublicProviderDataFlowRows();
 }

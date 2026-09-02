@@ -319,6 +319,7 @@ describe('HomeComponent', () => {
     it('should delegate every visual to the shared deferred preview boundary', () => {
         const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
         const previewKeys = previews.map(preview => preview.componentInstance.previewKey());
+        const reviewerPreview = previews.find(preview => preview.componentInstance.previewKey() === 'reviewer-benchmark');
 
         expect(previewKeys).toEqual([
             'training-snapshot',
@@ -331,6 +332,7 @@ describe('HomeComponent', () => {
             'reviewer-benchmark',
         ]);
         expect(previews.every(preview => preview.nativeElement.hasAttribute('data-nosnippet'))).toBe(true);
+        expect(reviewerPreview?.componentInstance.reviewerChartsFirst()).toBe(true);
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {
