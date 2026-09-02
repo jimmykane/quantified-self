@@ -80,4 +80,20 @@ describe('MyTracksTripsPanelComponent', () => {
     expect(sortToggled).toHaveBeenCalledTimes(1);
     expect(panelExpanded).toHaveBeenCalledWith(false);
   });
+
+  it('uses singular activity copy for a Home area inferred from one activity', () => {
+    fixture.componentRef.setInput('homeArea', {
+      destinationId: 'destination-home',
+      pointCount: 1,
+      pointShare: 1,
+      centroidLat: 37.98,
+      centroidLng: 23.72,
+      bounds: { west: 23.69, east: 23.75, south: 37.95, north: 38.01 },
+      radiusKm: 4,
+    });
+    fixture.detectChanges();
+
+    const homeButton = fixture.nativeElement.querySelector('.detected-home-button') as HTMLButtonElement;
+    expect(homeButton.textContent).toContain('1 activity used');
+  });
 });

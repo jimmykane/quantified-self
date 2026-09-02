@@ -124,6 +124,26 @@ describe('HomeMyTracksPreviewComponent', () => {
     expect(coastButton.getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('refocuses the map when the already-selected trip is selected again', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    manager.fitBoundsToCoordinates.mockClear();
+
+    const selectedTripButton = Array.from(
+      fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>,
+    ).find((button) => button.textContent?.includes('Ioannina')) as HTMLButtonElement;
+    selectedTripButton.click();
+
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(manager.fitBoundsToCoordinates).toHaveBeenCalledWith(
+      [
+        ...HOME_MY_TRACKS_PREVIEW_TRACKS[1].coordinates,
+        ...HOME_MY_TRACKS_PREVIEW_TRACKS[2].coordinates,
+      ],
+      { padding: 42, animate: true },
+    );
+  });
+
   it('focuses the example Home area and clears the active trip overlay', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
@@ -141,6 +161,16 @@ describe('HomeMyTracksPreviewComponent', () => {
       [HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.east, HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.north],
     ], { padding: 42, animate: true });
     expect(homeButton.getAttribute('aria-pressed')).toBe('true');
+
+    manager.fitBoundsToCoordinates.mockClear();
+    haptics.selection.mockClear();
+    homeButton.click();
+
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(manager.fitBoundsToCoordinates).toHaveBeenCalledWith([
+      [HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.west, HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.south],
+      [HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.east, HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.north],
+    ], { padding: 42, animate: true });
   });
 
   it('disposes the same shared map handle on destroy', async () => {
@@ -167,6 +197,29 @@ describe('HomeMyTracksPreviewComponent', () => {
 
     expect(handle.destroy).toHaveBeenCalledTimes(1);
     expect(manager.setTracksFromPrepared).not.toHaveBeenCalled();
+  });
+
+  it('hides the trip controls and reports an unavailable preview when map initialization fails', async () => {
+    factory.initialize.mockRejectedValueOnce(new Error('Map unavailable'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[role="status"]')?.textContent).toContain('Map preview unavailable.');
+    expect(fixture.nativeElement.querySelector('.home-my-tracks-preview__map')?.getAttribute('aria-hidden')).toBe('true');
+    expect(fixture.nativeElement.querySelector('[role="region"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-my-tracks-trips-panel')).toBeNull();
+  });
+
+  it('disposes a partially initialized map when preview setup fails', async () => {
+    mapStyle.createSynchronizer.mockImplementationOnce(() => {
+      throw new Error('Style synchronizer unavailable');
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(handle.destroy).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.initializationFailed()).toBe(true);
   });
 
   it('applies the latest theme when it changes during map initialization', async () => {

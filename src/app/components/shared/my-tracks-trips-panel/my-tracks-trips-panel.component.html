@@ -43,7 +43,9 @@
         >
           <span class="trip-location">Home</span>
           <span class="trip-dates">Home area</span>
-          <span class="trip-count">{{ home.pointCount }} activities used</span>
+          <span class="trip-count">
+            {{ home.pointCount }} {{ home.pointCount === 1 ? 'activity' : 'activities' }} used
+          </span>
         </button>
       </li>
     }
