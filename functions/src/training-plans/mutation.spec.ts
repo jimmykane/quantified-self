@@ -254,6 +254,56 @@ describe('applyTrainingScheduleMutation', () => {
         expect(result.bulkOperation).toBe(true);
     });
 
+    it('updates content, date, association, and plan range in one revisioned mutation', () => {
+        const sourcePlan = plan({ workoutCount: 1 });
+        const destinationPlan = plan({
+            id: 'plan-2',
+            name: 'Destination',
+            lifecycle: 'paused',
+            revision: 5,
+            startLocalDate: '2026-09-01',
+            endLocalDate: '2026-09-30',
+        });
+        const scheduled = workout({ planId: sourcePlan.id });
+        initial = snapshot([sourcePlan, destinationPlan], [scheduled], sourcePlan.id);
+
+        const operation = {
+            kind: 'update-workout' as const,
+            workoutId: scheduled.id,
+            planId: destinationPlan.id,
+            localDate: '2026-10-02',
+            title: 'Moved and edited',
+            structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
+        };
+        const expected = [
+            { scope: 'workout' as const, id: scheduled.id, revision: scheduled.revision },
+            { scope: 'plan' as const, id: sourcePlan.id, revision: sourcePlan.revision },
+            { scope: 'plan' as const, id: destinationPlan.id, revision: destinationPlan.revision },
+        ];
+
+        expect(() => applyTrainingScheduleMutation(initial, request(operation, expected), NOW_MS))
+            .toThrow(expect.objectContaining({ code: 'range-extension-required' }));
+
+        const result = applyTrainingScheduleMutation(initial, request({
+            ...operation,
+            confirmPlanRangeExtension: true,
+        }, expected), NOW_MS);
+
+        expect(result.after.workouts.get(scheduled.id)).toMatchObject({
+            planId: destinationPlan.id,
+            localDate: '2026-10-02',
+            title: 'Moved and edited',
+            revision: scheduled.revision + 1,
+        });
+        expect(result.after.plans.get(sourcePlan.id)).toMatchObject({ workoutCount: 0, revision: 4 });
+        expect(result.after.plans.get(destinationPlan.id)).toMatchObject({
+            workoutCount: 1,
+            revision: 6,
+            endLocalDate: '2026-10-02',
+        });
+    });
+
     it('keeps skipped workouts current and makes deletion history-recoverable before permanent deletion', () => {
         const scheduled = workout();
         initial = snapshot([], [scheduled]);
@@ -293,6 +343,33 @@ describe('applyTrainingScheduleMutation', () => {
         expect(permanentlyDeleted.permanentlyDeletedWorkoutIds).toEqual([scheduled.id]);
     });
 
+    it('records permanent deletion of a plan-bound workout in the plan revision stream', () => {
+        const selectedPlan = plan({ workoutCount: 0 });
+        const deletedWorkout = workout({
+            planId: selectedPlan.id,
+            lifecycle: 'deleted',
+            deletedAtMs: NOW_MS - 1,
+        });
+        initial = snapshot([selectedPlan], [deletedWorkout], selectedPlan.id);
+
+        const permanentlyDeleted = applyTrainingScheduleMutation(initial, request({
+            kind: 'permanently-delete-workout',
+            workoutId: deletedWorkout.id,
+            confirmPermanentDeletion: true,
+        }, [
+            { scope: 'plan', id: selectedPlan.id, revision: selectedPlan.revision },
+            { scope: 'workout', id: deletedWorkout.id, revision: deletedWorkout.revision },
+        ]), NOW_MS);
+
+        expect(permanentlyDeleted.after.workouts.has(deletedWorkout.id)).toBe(false);
+        expect(permanentlyDeleted.affectedPlanIds).toEqual([selectedPlan.id]);
+        expect(permanentlyDeleted.changedWorkoutIds).toEqual([deletedWorkout.id]);
+        expect(permanentlyDeleted.after.plans.get(selectedPlan.id)).toMatchObject({
+            revision: selectedPlan.revision + 1,
+            workoutCount: 0,
+        });
+    });
+
     it('rejects missing or stale expected revisions', () => {
         const scheduled = workout();
         initial = snapshot([], [scheduled]);
@@ -300,15 +377,21 @@ describe('applyTrainingScheduleMutation', () => {
         expect(() => applyTrainingScheduleMutation(initial, request({
             kind: 'update-workout',
             workoutId: scheduled.id,
+            planId: scheduled.planId,
+            localDate: scheduled.localDate,
             title: 'Changed',
             structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
         }), NOW_MS)).toThrow(expect.objectContaining({ code: 'revision-conflict' }));
 
         expect(() => applyTrainingScheduleMutation(initial, request({
             kind: 'update-workout',
             workoutId: scheduled.id,
+            planId: scheduled.planId,
+            localDate: scheduled.localDate,
             title: 'Changed',
             structure: STRUCTURE,
+            confirmPlanRangeExtension: false,
         }, [{ scope: 'workout', id: scheduled.id, revision: 1 }]), NOW_MS))
             .toThrow(expect.objectContaining({ code: 'revision-conflict' }));
     });

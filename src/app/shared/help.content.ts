@@ -139,7 +139,7 @@ const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 - An account can keep multiple plans but only one can be active. Activating a plan pauses the previous active plan. Archived plans remain available without contributing workouts to Calendar overlays.
 - Move a workout between plans or between a plan and **Standalone** without changing its workout identity. Copy creates a new workout. Moving, copying, or attaching outside a plan's current dates asks before extending that range.
 - Shifting a plan moves its start and end dates together with only that plan's current workouts. Skipping keeps a workout visible and marked; it does not turn it into a completed activity.
-- Ordinary deletion is recoverable from history. Permanent deletion has a separate confirmation. Deleting a plan asks whether its current workouts should become standalone or be deleted; archiving is the non-destructive alternative.
+- Ordinary deletion is recoverable from history. Permanent deletion has a separate confirmation and prevents restoration. A standalone workout's revision history is removed with it; a plan-bound workout can remain in its plan's immutable audit until that plan is deleted, and the confirmation identifies this retention. Deleting a plan asks whether its current workouts should become standalone or be deleted; archiving is the non-destructive alternative.
 - History preview shows what a restore would change before you confirm it. A restore creates a new revision, does not silently reclaim a workout moved to another plan or to standalone, and never recreates a permanently deleted workout.
 
 ## Add from Calendar

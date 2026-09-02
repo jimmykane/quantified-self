@@ -248,8 +248,17 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 - Ordinary workout deletion remains recoverable through history. Permanent deletion requires its own confirmation. Plan
   deletion requires choosing whether its current workouts become standalone or are deleted; either choice removes the
   plan history, while Archive remains the non-destructive choice.
-- Permanent deletion retains only a server-internal hash tombstone for each retired plan or workout ID. Retired IDs
-  cannot be reused, preventing delayed or retried recursive cleanup from deleting a newly created entity.
+- Permanent deletion removes the workout root and its standalone revision subtree, then retains a server-internal hash
+  tombstone so the retired ID cannot be reused. A plan-bound workout can still occur in that plan's immutable revision
+  audit until the plan itself is deleted; it is tombstoned, cannot be restored, and this retention is disclosed in the
+  confirmation UI. Plan deletion removes the complete plan revision subtree.
+- Plan deletion uses a user-scoped durable lock while it prepares bounded tombstones and standalone revision snapshots.
+  An exact retry remains idempotent, and a same-disposition retry with the locked state/plan revisions may resume the
+  original operation after a browser reload even when the caller no longer has the original mutation ID.
+- Resumable processing at the full 400-current-workout boundary, paged recoverable-workout history, and durable retry of
+  post-commit recursive cleanup are tracked explicitly by epic subissue #657. Until that slice lands, unusually large
+  structure payloads may still reach Firestore's atomic request-size limit even when their write count is valid; do not
+  lower the public v1 limits or hide this boundary in an anonymous TODO.
 
 ### UI and calendar contract
 
@@ -268,16 +277,20 @@ group bars, activity tables, or Training-derived metrics.
 ### Provider proof status
 
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four delivery switches remain
-false. Garmin and COROS are `blocked-contract`; no endpoint or payload is guessed without the current private partner
-contract. Wahoo and Suunto are `fixture-only`: pure serializers and redacted fixtures prove the documented mapping, but
-there is no provider transport, token use, schedule write, ZIP upload, or production action.
+false. Garmin, COROS, Wahoo, and Suunto are `fixture-only`: pure serializers and redacted fixtures prove documented
+mapping behavior, but there is no provider transport, token use, schedule write, ZIP upload, or production action. The
+ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
-examples include Wahoo's first-target-only ELEMNT behavior, unsupported Wahoo relative references frozen to their stored
-absolute snapshot, Suunto relative targets frozen to absolute values, cadence converted from rpm to hertz, and explicit
-text truncation. Unsupported sport or ending combinations fail instead of being approximated. Sandbox CRUD,
-idempotency, retry/reconnect, deletion, reconciliation, rollout, AI, templates, completion matching, and the Sports Lib
-extraction remain separately tracked by subissues #645–#655 under epic #583; they must not be left as anonymous TODOs.
+examples include Garmin relative targets frozen from their stored reference snapshots, Garmin cycling-secondary-target
+device limits, COROS recovery-to-rest and first-target-only behavior, COROS integer rounding, Wahoo's first-target-only
+ELEMNT behavior, unsupported Wahoo relative references frozen to their stored absolute snapshot, integer rounding for
+Wahoo FTP/heart-rate header references, Suunto relative targets frozen to absolute values, Wahoo relative HR/speed
+target support limited to treadmill workouts in its app, cadence converted from rpm to hertz, Unicode-safe text
+truncation, and Suunto text outside the guaranteed minimum watch character set. Unsupported sport, ending, or target
+combinations fail instead of being approximated. Sandbox CRUD, idempotency, retry/reconnect, deletion, reconciliation,
+rollout, AI, templates, completion matching, and the Sports Lib extraction remain separately tracked by subissues
+#645–#655 and #657 under epic #583; they must not be left as anonymous TODOs.
 
 ### Product analytics
 

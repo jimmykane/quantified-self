@@ -1,5 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
+import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import {
   createManualWorkoutEditorStep,
   manualWorkoutEditorToStructure,
@@ -88,5 +89,72 @@ describe('manual planned-workout editor conversion', () => {
       targetMaximum: 150,
     }];
     expect(() => manualWorkoutEditorToStructure(value)).toThrow('minimum must not exceed');
+  });
+
+  it('preserves step notes and accepts canonical zero-watt bounds', () => {
+    const structure: WorkoutStructureV1 = {
+      version: 1,
+      sport: ActivityTypes.Cycling,
+      nodes: [{
+        kind: 'step',
+        id: 'recovery',
+        purpose: 'recovery',
+        ending: { kind: 'time', seconds: 300 },
+        targets: [{
+          kind: 'power',
+          mode: 'absolute',
+          minimumWatts: 0,
+          maximumWatts: 100,
+        }],
+        note: 'Keep the legs moving',
+      }],
+    };
+
+    const editor = workoutStructureToManualEditor('Recovery', '2026-09-03', structure);
+    expect(editor.nodes[0]).toMatchObject({
+      targetKind: 'power',
+      targetMinimum: 0,
+      targetMaximum: 100,
+      note: 'Keep the legs moving',
+    });
+    expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
+  });
+
+  it('rejects targets the first editor cannot represent instead of silently dropping them', () => {
+    const base: WorkoutStructureV1 = {
+      version: 1,
+      sport: ActivityTypes.Running,
+      nodes: [{
+        kind: 'step',
+        id: 'work',
+        purpose: 'work',
+        ending: { kind: 'time', seconds: 600 },
+        targets: [{
+          kind: 'cadence',
+          mode: 'absolute',
+          minimumRpm: 170,
+          maximumRpm: 180,
+        }],
+      }],
+    };
+    expect(() => workoutStructureToManualEditor('Cadence', '2026-09-03', base))
+      .toThrow('cadence target');
+
+    const relative: WorkoutStructureV1 = {
+      ...base,
+      nodes: [{
+        ...base.nodes[0],
+        kind: 'step',
+        targets: [{
+          kind: 'heart-rate',
+          mode: 'relative',
+          minimumPercent: 80,
+          maximumPercent: 90,
+          reference: { kind: 'max-heart-rate', bpm: 190 },
+        }],
+      }],
+    };
+    expect(() => workoutStructureToManualEditor('Relative', '2026-09-03', relative))
+      .toThrow('relative target');
   });
 });

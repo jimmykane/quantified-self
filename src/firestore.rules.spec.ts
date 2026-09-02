@@ -1420,6 +1420,9 @@ describe('Firestore Security Rules', () => {
                         currentWorkoutCount: 1,
                         updatedAtMs: 1,
                     });
+                    await userRef.collection('trainingPlanState').doc('internal').set({
+                        privateState: true,
+                    });
                     await userRef.collection('trainingPlans').doc('plan-1').set({ id: 'plan-1' });
                     await userRef.collection('scheduledWorkouts').doc('workout-1').set({
                         id: 'workout-1', planId: 'plan-1', localDate: '2026-09-02', lifecycle: 'planned',
@@ -1449,6 +1452,8 @@ describe('Firestore Security Rules', () => {
                 await assertSucceeds(userRef.collection('trainingPlans').get());
                 await assertSucceeds(userRef.collection('scheduledWorkouts').doc('workout-1').get());
                 await assertSucceeds(userRef.collection('scheduledWorkouts').get());
+                await assertFails(userRef.collection('trainingPlanState').doc('internal').get());
+                await assertFails(userRef.collection('trainingPlanState').get());
             });
 
             it('denies cross-user and unauthenticated reads of current training data', async () => {

@@ -12,7 +12,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { catchError, filter, map, of, startWith, switchMap } from 'rxjs';
+import { catchError, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
@@ -58,6 +58,7 @@ interface ScheduleLoadState {
 interface WorkoutEditorSession {
   mode: 'create' | 'edit';
   original: ScheduledWorkoutV1 | null;
+  originalWorkoutRevision: number | null;
   destinationPlanId: string | null;
   value: ManualWorkoutEditorValue;
 }
@@ -126,16 +127,17 @@ export class PlansWorkspaceComponent {
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly scheduleState = toSignal(this.userService.user$.pipe(
-    filter((user): user is AppUserInterface => !!user?.uid),
-    switchMap(user => this.plansService.watchSchedule(user.uid).pipe(
-      map(schedule => ({ status: 'ready', schedule, message: null }) as ScheduleLoadState),
-      startWith({ status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState),
-      catchError(error => of({
-        status: 'error',
-        schedule: EMPTY_SCHEDULE,
-        message: errorMessage(error),
-      } as ScheduleLoadState)),
-    )),
+    switchMap(user => user?.uid
+      ? this.plansService.watchSchedule(user.uid).pipe(
+        map(schedule => ({ status: 'ready', schedule, message: null }) as ScheduleLoadState),
+        startWith({ status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState),
+        catchError(error => of({
+          status: 'error',
+          schedule: EMPTY_SCHEDULE,
+          message: errorMessage(error),
+        } as ScheduleLoadState)),
+      )
+      : of({ status: 'ready', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState)),
   ), { initialValue: { status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState });
   readonly schedule = computed(() => this.scheduleState().schedule);
   readonly view = signal<PlansView>('plans');
@@ -289,7 +291,10 @@ export class PlansWorkspaceComponent {
     if (!name) return;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('rename-plan'),
-      expectedRevisions: this.expectedRevisions({ planIds: [plan.id] }),
+      expectedRevisions: this.expectedRevisions({
+        planIds: [plan.id],
+        planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+      }),
       operation: { kind: 'rename-plan', planId: plan.id, name },
     }, `rename-${plan.id}`);
     if (!response) return;
@@ -304,10 +309,17 @@ export class PlansWorkspaceComponent {
     }
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId(`plan-${lifecycle}`),
-      expectedRevisions: this.expectedRevisions({ planIds }),
+      expectedRevisions: this.expectedRevisions({
+        planIds,
+        planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+      }),
       operation: { kind: 'set-plan-lifecycle', planId: plan.id, lifecycle },
     }, `lifecycle-${plan.id}`);
-    if (response) this.snackBar.open(`Plan ${lifecycle}.`, 'Dismiss', { duration: 3000 });
+    if (!response) return;
+    if (lifecycle === 'archived' && this.deletingPlanId() === plan.id) {
+      this.deletingPlanId.set(null);
+    }
+    this.snackBar.open(`Plan ${lifecycle}.`, 'Dismiss', { duration: 3000 });
   }
 
   beginShift(plan: TrainingPlanV1): void {
@@ -323,7 +335,10 @@ export class PlansWorkspaceComponent {
     }
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('shift-plan'),
-      expectedRevisions: this.expectedRevisions({ planIds: [plan.id] }),
+      expectedRevisions: this.expectedRevisions({
+        planIds: [plan.id],
+        planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+      }),
       operation: { kind: 'shift-plan', planId: plan.id, days },
     }, `shift-${plan.id}`);
     if (!response) return;
@@ -338,6 +353,10 @@ export class PlansWorkspaceComponent {
 
   async deletePlan(plan: TrainingPlanV1): Promise<void> {
     const disposition = this.deleteDisposition();
+    const expectedRevisions = this.expectedRevisions({
+      planIds: [plan.id],
+      planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+    });
     const confirmed = await this.confirm(
       'Delete training plan?',
       disposition === 'convert-to-standalone'
@@ -352,7 +371,7 @@ export class PlansWorkspaceComponent {
       await this.plansService.deletePlan({
         mutationId: this.plansService.createMutationId('delete-plan'),
         planId: plan.id,
-        expectedRevisions: this.expectedRevisions({ planIds: [plan.id] }),
+        expectedRevisions,
         workoutDisposition: disposition,
         confirmPlanDeletion: true,
       });
@@ -372,6 +391,7 @@ export class PlansWorkspaceComponent {
     this.editor.set({
       mode: 'create',
       original: null,
+      originalWorkoutRevision: null,
       destinationPlanId: defaultDestination ?? null,
       value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
     });
@@ -382,6 +402,7 @@ export class PlansWorkspaceComponent {
       this.editor.set({
         mode: 'edit',
         original: workout,
+        originalWorkoutRevision: workout.revision,
         destinationPlanId: workout.planId,
         value: workoutStructureToManualEditor(workout.title, workout.localDate, workout.structure),
       });
@@ -527,34 +548,24 @@ export class PlansWorkspaceComponent {
     }
 
     const original = session.original!;
-    const updateResponse = await this.runMutation({
+    const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('update-workout'),
       expectedRevisions: this.expectedRevisions({
         workoutIds: [original.id],
-        planIds: original.planId ? [original.planId] : [],
+        workoutRevisionOverrides: new Map([[original.id, session.originalWorkoutRevision!]]),
+        planIds: [original.planId, session.destinationPlanId].filter((id): id is string => !!id),
       }),
-      operation: { kind: 'update-workout', workoutId: original.id, title, structure },
+      operation: {
+        kind: 'update-workout',
+        workoutId: original.id,
+        planId: session.destinationPlanId,
+        localDate: session.value.localDate,
+        title,
+        structure,
+        confirmPlanRangeExtension: false,
+      },
     }, 'save-workout');
-    if (!updateResponse) return;
-
-    if (original.planId !== session.destinationPlanId || original.localDate !== session.value.localDate) {
-      const afterUpdate = mergeMutationResponse(this.schedule(), updateResponse);
-      const moveResponse = await this.runMutation({
-        mutationId: this.plansService.createMutationId('move-workout'),
-        expectedRevisions: expectedRevisionsFromSchedule(afterUpdate, {
-          workoutIds: [original.id],
-          planIds: [original.planId, session.destinationPlanId].filter((id): id is string => !!id),
-        }),
-        operation: {
-          kind: 'move-workout',
-          workoutId: original.id,
-          planId: session.destinationPlanId,
-          localDate: session.value.localDate,
-          confirmPlanRangeExtension: false,
-        },
-      }, 'save-workout');
-      if (!moveResponse) return;
-    }
+    if (!response) return;
     this.editor.set(null);
     this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });
   }
@@ -564,7 +575,11 @@ export class PlansWorkspaceComponent {
     const planIds = workout.planId ? [workout.planId] : [];
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('copy-workout'),
-      expectedRevisions: this.expectedRevisions({ workoutIds: [workout.id], planIds }),
+      expectedRevisions: this.expectedRevisions({
+        workoutIds: [workout.id],
+        workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
+        planIds,
+      }),
       operation: {
         kind: 'copy-workout',
         sourceWorkoutId: workout.id,
@@ -582,6 +597,7 @@ export class PlansWorkspaceComponent {
       mutationId: this.plansService.createMutationId(skipped ? 'skip-workout' : 'unskip-workout'),
       expectedRevisions: this.expectedRevisions({
         workoutIds: [workout.id],
+        workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
         planIds: workout.planId ? [workout.planId] : [],
       }),
       operation: { kind: 'set-workout-lifecycle', workoutId: workout.id, lifecycle: skipped ? 'skipped' : 'planned' },
@@ -590,6 +606,11 @@ export class PlansWorkspaceComponent {
   }
 
   async deleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const expectedRevisions = this.expectedRevisions({
+      workoutIds: [workout.id],
+      workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
+      planIds: workout.planId ? [workout.planId] : [],
+    });
     const confirmed = await this.confirm(
       'Delete workout?',
       'The workout will remain in history and can be restored.',
@@ -599,29 +620,33 @@ export class PlansWorkspaceComponent {
     if (!confirmed) return;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('delete-workout'),
-      expectedRevisions: this.expectedRevisions({
-        workoutIds: [workout.id],
-        planIds: workout.planId ? [workout.planId] : [],
-      }),
+      expectedRevisions,
       operation: { kind: 'delete-workout', workoutId: workout.id },
     }, `delete-${workout.id}`);
     if (response) this.snackBar.open('Workout deleted. Open history to restore it.', 'Dismiss', { duration: 5000 });
   }
 
   async permanentlyDeleteWorkout(workout: ScheduledWorkoutV1): Promise<void> {
+    const expectedRevisions = this.expectedRevisions({
+      workoutIds: [workout.id],
+      workoutRevisionOverrides: new Map([[workout.id, workout.revision]]),
+      planIds: workout.planId ? [workout.planId] : [],
+    });
     const confirmed = await this.confirm(
       'Permanently delete workout?',
-      'This removes the workout and all of its history. This cannot be undone.',
+      workout.planId
+        ? 'This removes the workout and prevents restoration. Its plan revision audit remains until the plan is deleted. This cannot be undone.'
+        : 'This removes the workout and its standalone revision history. This cannot be undone.',
       'Delete permanently',
       'warn',
     );
     if (!confirmed) return;
     const response = await this.runMutation({
       mutationId: this.plansService.createMutationId('permanent-workout-delete'),
-      expectedRevisions: this.expectedRevisions({ workoutIds: [workout.id] }),
+      expectedRevisions,
       operation: { kind: 'permanently-delete-workout', workoutId: workout.id, confirmPermanentDeletion: true },
     }, `permanent-${workout.id}`);
-    if (response) this.snackBar.open('Workout history permanently deleted.', 'Dismiss', { duration: 4000 });
+    if (response) this.snackBar.open('Workout permanently retired and can no longer be restored.', 'Dismiss', { duration: 4000 });
   }
 
   async openHistory(scope: TrainingScheduleRevisionScope): Promise<void> {
@@ -685,6 +710,14 @@ export class PlansWorkspaceComponent {
   async restoreHistoryEntry(entry: TrainingScheduleHistoryEntryV1): Promise<void> {
     const panel = this.historyPanel();
     if (!panel) return;
+    const expected = panel.scope.kind === 'workout'
+      ? this.expectedRevisions({ workoutIds: [panel.scope.id] })
+      : this.expectedRevisions({
+        planIds: [
+          panel.scope.id,
+          ...(this.activePlan() && this.activePlan()!.id !== panel.scope.id ? [this.activePlan()!.id] : []),
+        ],
+      });
     this.busyAction.set(`restore-${entry.revision}`);
     try {
       const preview = await this.plansService.previewRestore({ scope: panel.scope, targetRevision: entry.revision });
@@ -696,14 +729,6 @@ export class PlansWorkspaceComponent {
         'Restore revision',
       );
       if (!confirmed) return;
-      const expected = panel.scope.kind === 'workout'
-        ? this.expectedRevisions({ workoutIds: [panel.scope.id] })
-        : this.expectedRevisions({
-          planIds: [
-            panel.scope.id,
-            ...(this.activePlan() && this.activePlan()!.id !== panel.scope.id ? [this.activePlan()!.id] : []),
-          ],
-        });
       const response = await this.plansService.restore({
         mutationId: this.plansService.createMutationId('restore-schedule'),
         expectedRevisions: expected,
@@ -724,7 +749,12 @@ export class PlansWorkspaceComponent {
     }
   }
 
-  private expectedRevisions(options: { planIds?: string[]; workoutIds?: string[] }): ExpectedTrainingScheduleRevision[] {
+  private expectedRevisions(options: {
+    planIds?: string[];
+    workoutIds?: string[];
+    planRevisionOverrides?: ReadonlyMap<string, number>;
+    workoutRevisionOverrides?: ReadonlyMap<string, number>;
+  }): ExpectedTrainingScheduleRevision[] {
     return expectedRevisionsFromSchedule(this.schedule(), options);
   }
 
@@ -778,34 +808,34 @@ export class PlansWorkspaceComponent {
 
 function expectedRevisionsFromSchedule(
   schedule: CurrentTrainingScheduleV1,
-  options: { planIds?: string[]; workoutIds?: string[] },
+  options: {
+    planIds?: string[];
+    workoutIds?: string[];
+    planRevisionOverrides?: ReadonlyMap<string, number>;
+    workoutRevisionOverrides?: ReadonlyMap<string, number>;
+  },
 ): ExpectedTrainingScheduleRevision[] {
   const expected: ExpectedTrainingScheduleRevision[] = [
     { scope: 'state', id: 'current', revision: schedule.state.revision },
   ];
   [...new Set(options.planIds ?? [])].forEach((planId) => {
     const plan = schedule.plans.find(candidate => candidate.id === planId);
-    if (plan) expected.push({ scope: 'plan', id: plan.id, revision: plan.revision });
+    if (plan) expected.push({
+      scope: 'plan',
+      id: plan.id,
+      revision: options.planRevisionOverrides?.get(plan.id) ?? plan.revision,
+    });
   });
   [...new Set(options.workoutIds ?? [])].forEach((workoutId) => {
     const workout = schedule.workouts.find(candidate => candidate.id === workoutId);
-    if (workout) expected.push({ scope: 'workout', id: workout.id, revision: workout.revision });
+    if (workout) expected.push({
+      scope: 'workout',
+      id: workout.id,
+      revision: options.workoutRevisionOverrides?.get(workout.id) ?? workout.revision,
+    });
   });
   if (expected.length > 4) throw new Error('This change requires too many concurrent revision checks.');
   return expected;
-}
-
-function mergeMutationResponse(
-  schedule: CurrentTrainingScheduleV1,
-  response: MutateTrainingScheduleResponseV1,
-): CurrentTrainingScheduleV1 {
-  const plans = new Map(schedule.plans.map(plan => [plan.id, plan]));
-  response.plans.forEach(plan => plans.set(plan.id, plan));
-  response.removedPlanIds.forEach(id => plans.delete(id));
-  const workouts = new Map(schedule.workouts.map(workout => [workout.id, workout]));
-  response.workouts.forEach(workout => workouts.set(workout.id, workout));
-  response.permanentlyDeletedWorkoutIds.forEach(id => workouts.delete(id));
-  return { state: response.state, plans: [...plans.values()], workouts: [...workouts.values()] };
 }
 
 function errorMessage(error: unknown): string {

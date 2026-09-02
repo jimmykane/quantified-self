@@ -2360,6 +2360,24 @@
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": []
+    },
+    {
+      "collectionGroup": "scheduledWorkouts",
+      "fieldPath": "structure",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "revisions",
+      "fieldPath": "snapshot",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "chunks",
+      "fieldPath": "payloadBase64",
+      "ttl": false,
+      "indexes": []
     }
   ]
 }

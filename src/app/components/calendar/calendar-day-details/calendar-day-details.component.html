@@ -27,9 +27,13 @@
           </a>
         </div>
       </div>
-      @if (plannedWorkoutRows.length) {
+      @if (plannedWorkoutsStatus() === 'loading') {
+      <p class="calendar-day-empty" role="status">Loading planned workouts…</p>
+      } @else if (plannedWorkoutsStatus() === 'error') {
+      <p class="calendar-day-empty" role="status">Planned workouts could not be loaded.</p>
+      } @else if (plannedWorkoutRows().length) {
       <mat-nav-list>
-        @for (planned of plannedWorkoutRows; track planned.id) {
+        @for (planned of plannedWorkoutRows(); track planned.id) {
         <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/plans']"
           [queryParams]="{ workout: planned.id }" (click)="prepareWorkoutNavigation()">
           <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"

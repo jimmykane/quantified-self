@@ -298,10 +298,18 @@ export function applyTrainingScheduleMutation(
         }
         case 'update-workout': {
             const workout = expectWorkout(operation.workoutId);
+            const sourcePlanId = workout.planId;
+            if (sourcePlanId) expectPlan(sourcePlanId);
+            if (operation.planId) {
+                const destination = expectPlan(operation.planId);
+                enforceDestinationRange(destination, operation.localDate, operation.confirmPlanRangeExtension);
+            }
+            workout.planId = operation.planId;
+            workout.localDate = operation.localDate;
             workout.title = operation.title;
             workout.structure = cloneValue(operation.structure);
-            affectPlan(workout.planId);
-            if (workout.planId) expectPlan(workout.planId);
+            affectPlan(sourcePlanId);
+            affectPlan(operation.planId);
             changeWorkout(workout.id);
             break;
         }
@@ -377,6 +385,13 @@ export function applyTrainingScheduleMutation(
                     'Delete the workout before permanently deleting its history.',
                 );
             }
+            if (workout.planId) expectPlan(workout.planId);
+            affectPlan(workout.planId);
+            // Plan history must record that this retained root became
+            // unavailable. The persisted plan delta keeps the before snapshot
+            // and an explicit null after value, while the root and its nested
+            // standalone history are removed below.
+            changeWorkout(workout.id);
             after.workouts.delete(workout.id);
             permanentlyDeletedWorkoutIds.add(workout.id);
             break;

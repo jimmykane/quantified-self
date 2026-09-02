@@ -374,21 +374,62 @@ async function readCurrentScheduleForRestore(
 function parseStoredRestoreResponse(value: unknown): RestoreTrainingScheduleRevisionResponseV1 {
     const record = asRecord(value, '$receipt.response');
     const mutation = asRecord(record.mutation, '$receipt.response.mutation');
-    if (!Array.isArray(record.skippedWorkoutIds) || typeof mutation.mutationId !== 'string') {
+    if (
+        !Array.isArray(record.skippedWorkoutIds)
+        || typeof mutation.mutationId !== 'string'
+        || !Array.isArray(mutation.plans)
+        || !Array.isArray(mutation.workouts)
+    ) {
         throw new Error('Invalid restore receipt.');
     }
+    const readStringArray = (candidate: unknown, path: string): string[] => {
+        if (!Array.isArray(candidate) || candidate.some(item => typeof item !== 'string')) {
+            throw new Error(`Invalid restore receipt field ${path}.`);
+        }
+        return candidate as string[];
+    };
     return {
         mutation: {
             mutationId: mutation.mutationId,
             state: parseTrainingPlanStateV1(mutation.state),
-            plans: Array.isArray(mutation.plans) ? mutation.plans.map(parseTrainingPlanV1) : [],
-            workouts: Array.isArray(mutation.workouts) ? mutation.workouts.map(parseScheduledWorkoutV1) : [],
-            removedPlanIds: Array.isArray(mutation.removedPlanIds) ? mutation.removedPlanIds as string[] : [],
-            permanentlyDeletedWorkoutIds: Array.isArray(mutation.permanentlyDeletedWorkoutIds)
-                ? mutation.permanentlyDeletedWorkoutIds as string[] : [],
+            plans: mutation.plans.map(parseTrainingPlanV1),
+            workouts: mutation.workouts.map(parseScheduledWorkoutV1),
+            removedPlanIds: readStringArray(mutation.removedPlanIds, 'mutation.removedPlanIds'),
+            permanentlyDeletedWorkoutIds: readStringArray(
+                mutation.permanentlyDeletedWorkoutIds,
+                'mutation.permanentlyDeletedWorkoutIds',
+            ),
         },
-        skippedWorkoutIds: record.skippedWorkoutIds as string[],
+        skippedWorkoutIds: readStringArray(record.skippedWorkoutIds, 'skippedWorkoutIds'),
     };
+}
+
+async function readCompletedRestoreReceiptBeforeHistory(
+    db: admin.firestore.Firestore,
+    uid: string,
+    receiptRef: admin.firestore.DocumentReference,
+    requestHash: string,
+    nowMs: number,
+): Promise<RestoreTrainingScheduleRevisionResponseV1 | null> {
+    return db.runTransaction(async (transaction) => {
+        const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
+        if (guard.shouldSkip) {
+            throw new TrainingScheduleMutationError(
+                'failed-precondition',
+                'This account is being deleted or is no longer available.',
+            );
+        }
+        const receiptSnapshot = await transaction.get(receiptRef);
+        if (!receiptSnapshot.exists) return null;
+        const receipt = documentData(receiptSnapshot);
+        if (receipt.requestHash !== requestHash) {
+            throw new TrainingScheduleMutationError(
+                'failed-precondition',
+                'This mutation ID was already used differently.',
+            );
+        }
+        return parseStoredRestoreResponse(receipt.response);
+    });
 }
 
 export async function restoreTrainingScheduleRevisionForUser(
@@ -398,6 +439,19 @@ export async function restoreTrainingScheduleRevisionForUser(
 ): Promise<RestoreTrainingScheduleRevisionResponseV1> {
     const db = options.db ?? admin.firestore();
     const nowMs = options.nowMs ?? Date.now();
+    const requestHash = hashTrainingScheduleRequestPayload(request);
+    const userRef = db.collection('users').doc(uid);
+    const stateRef = userRef.collection('trainingPlanState').doc('current');
+    const receiptRef = stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(request.mutationId);
+    const completed = await readCompletedRestoreReceiptBeforeHistory(
+        db,
+        uid,
+        receiptRef,
+        requestHash,
+        nowMs,
+    );
+    if (completed) return completed;
+
     const desiredPlan = request.scope.kind === 'plan'
         ? await readPlanSnapshotAtRevision(db, uid, request.scope.id, request.targetRevision)
         : null;
@@ -405,10 +459,6 @@ export async function restoreTrainingScheduleRevisionForUser(
         ? await readStandaloneWorkoutAtRevision(db, uid, request.scope.id, request.targetRevision)
         : null;
     const desiredWorkoutIds = desiredPlan ? [...desiredPlan.workouts.keys()] : [request.scope.id];
-    const requestHash = hashTrainingScheduleRequestPayload(request);
-    const userRef = db.collection('users').doc(uid);
-    const stateRef = userRef.collection('trainingPlanState').doc('current');
-    const receiptRef = stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(request.mutationId);
 
     return db.runTransaction(async (transaction) => {
         const guard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);

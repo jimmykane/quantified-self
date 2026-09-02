@@ -4,7 +4,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { DataAscent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
 import { formatUnitAwareDataValue } from '@shared/unit-aware-display';
-import { catchError, combineLatest, distinctUntilChanged, filter, map, of, shareReplay, startWith, switchMap } from 'rxjs';
+import { catchError, combineLatest, distinctUntilChanged, map, of, shareReplay, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../../models/app-user.interface';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppUserService } from '../../../services/app.user.service';
@@ -109,13 +109,12 @@ export class CalendarPageComponent {
   readonly routeState = toSignal(this.routeState$, { initialValue: this.initialRouteState });
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
   readonly eventState = toSignal(combineLatest([
-    this.userService.user$.pipe(
-      filter((user): user is AppUserInterface => !!user?.uid),
-    ),
+    this.userService.user$,
     this.routeState$,
     toObservable(this.reloadSequence),
   ]).pipe(
     switchMap(([user, state]) => {
+      if (!user?.uid) return of({ status: 'ready', events: [] } as CalendarEventsState);
       const startOfWeek = user.settings?.unitSettings?.startOfTheWeek;
       const queryWindow = resolveActivityCalendarQueryWindow(state.view, state.anchorDate, startOfWeek);
       return this.calendarService.watchEvents(user, queryWindow).pipe(
@@ -126,12 +125,13 @@ export class CalendarPageComponent {
     }),
   ), { initialValue: { status: 'loading', events: [] } as CalendarEventsState });
   readonly plansState = toSignal(this.userService.user$.pipe(
-    filter((user): user is AppUserInterface => !!user?.uid),
-    switchMap(user => this.plansService.watchSchedule(user.uid).pipe(
-      map(schedule => ({ status: 'ready', schedule }) as CalendarPlansState),
-      startWith({ status: 'loading', schedule: null } as CalendarPlansState),
-      catchError(() => of({ status: 'error', schedule: null } as CalendarPlansState)),
-    )),
+    switchMap(user => user?.uid
+      ? this.plansService.watchSchedule(user.uid).pipe(
+        map(schedule => ({ status: 'ready', schedule }) as CalendarPlansState),
+        startWith({ status: 'loading', schedule: null } as CalendarPlansState),
+        catchError(() => of({ status: 'error', schedule: null } as CalendarPlansState)),
+      )
+      : of({ status: 'ready', schedule: null } as CalendarPlansState)),
   ), { initialValue: { status: 'loading', schedule: null } as CalendarPlansState });
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
@@ -271,6 +271,8 @@ export class CalendarPageComponent {
         unitSettings: this.currentUser()?.settings?.unitSettings ?? null,
         summariesSettings: this.currentUser()?.settings?.summariesSettings ?? null,
         plannedWorkouts: this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
+        plannedWorkoutsSource: () => this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
+        plannedWorkoutsStatusSource: () => this.plansState().status,
       },
     });
   }

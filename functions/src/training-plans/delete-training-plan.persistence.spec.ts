@@ -14,6 +14,7 @@ vi.mock('../shared/user-deletion-guard', () => ({
 
 import { deleteTrainingPlanForUser } from './delete-training-plan';
 import {
+    hashTrainingScheduleRequestPayload,
     mutateTrainingScheduleForUser,
     trainingScheduleDeletionTombstoneDocumentId,
 } from './persistence';
@@ -183,14 +184,15 @@ function request(workoutDisposition: DeleteTrainingPlanRequestV1['workoutDisposi
 }
 
 function seed(db: FakeFirestore, workouts: ScheduledWorkoutV1[]): void {
+    const currentWorkoutCount = workouts.filter(item => item.lifecycle !== 'deleted').length;
     db.seed('users/user-1/trainingPlanState/current', {
         schemaVersion: 1,
         activePlanId: 'plan-1',
         revision: 8,
-        currentWorkoutCount: workouts.length,
+        currentWorkoutCount,
         updatedAtMs: 8,
     });
-    db.seed('users/user-1/trainingPlans/plan-1', plan(workouts.length));
+    db.seed('users/user-1/trainingPlans/plan-1', plan(currentWorkoutCount));
     db.seed('users/user-1/trainingPlans/plan-1/revisions/0000000001', { privateHistory: true });
     workouts.forEach(item => db.seed(`users/user-1/scheduledWorkouts/${item.id}`, item));
 }
@@ -271,7 +273,51 @@ describe('deleteTrainingPlanForUser persistence', () => {
         });
     });
 
-    it('honors the declared 400-current-workout limit without exceeding one batch', async () => {
+    it('retires soft-deleted plan workout IDs before removing their residual roots', async () => {
+        const current = workout('workout-1');
+        const previouslyDeleted = {
+            ...workout('workout-deleted'),
+            lifecycle: 'deleted' as const,
+            revision: 3,
+            deletedAtMs: NOW_MS - 100,
+        };
+        seed(db, [current, previouslyDeleted]);
+        db.seed('users/user-1/scheduledWorkouts/workout-deleted/revisions/0000000003', { privateHistory: true });
+
+        await deleteTrainingPlanForUser(
+            'user-1', request('convert-to-standalone'), { db: db as never, nowMs: NOW_MS },
+        );
+
+        expect(db.read('users/user-1/scheduledWorkouts/workout-deleted')).toBeUndefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-deleted/revisions/0000000003')).toBeUndefined();
+        const tombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', 'workout-deleted');
+        expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${tombstoneId}`)).toMatchObject({
+            entityKind: 'workout',
+            mutationId: request('convert-to-standalone').mutationId,
+        });
+
+        const recreate: MutateTrainingScheduleRequestV1 = {
+            mutationId: 'recreate-retired-workout',
+            expectedRevisions: [{ scope: 'state', id: 'current', revision: 9 }],
+            operation: {
+                kind: 'create-workout',
+                workoutId: 'workout-deleted',
+                planId: null,
+                localDate: '2026-09-04',
+                title: 'Must stay retired',
+                structure: STRUCTURE,
+                confirmPlanRangeExtension: false,
+            },
+        };
+        await expect(mutateTrainingScheduleForUser('user-1', recreate, {
+            db: db as never,
+            nowMs: NOW_MS + 1,
+        })).rejects.toMatchObject({ code: 'already-exists' });
+    });
+
+    it('preserves the declared 400-current-workout limit in the in-memory transaction model', async () => {
+        // Emulator request-size and resumable-operation coverage is tracked by
+        // https://github.com/jimmykane/quantified-self/issues/657.
         const workouts = Array.from({ length: 400 }, (_, index) => workout(`workout-${`${index}`.padStart(3, '0')}`));
         seed(db, workouts);
 
@@ -293,6 +339,84 @@ describe('deleteTrainingPlanForUser persistence', () => {
         expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeUndefined();
     });
 
+    it('resumes an interrupted deletion after a reload supplies a new mutation ID', async () => {
+        const current = workout('workout-1');
+        seed(db, [current]);
+        const original = request('convert-to-standalone');
+        db.seed('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1', {
+            schemaVersion: 1,
+            mutationId: original.mutationId,
+            requestHash: hashTrainingScheduleRequestPayload(original),
+            planId: 'plan-1',
+            stateRevision: 8,
+            planRevision: 4,
+            workoutDisposition: 'convert-to-standalone',
+            workouts: [{ id: current.id, revision: current.revision }],
+            createdAtMs: NOW_MS - 1,
+        });
+        const retry = { ...original, mutationId: 'delete-after-reload' };
+
+        const response = await deleteTrainingPlanForUser(
+            'user-1', retry, { db: db as never, nowMs: NOW_MS },
+        );
+
+        expect(response.mutationId).toBe(original.mutationId);
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeUndefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toMatchObject({ planId: null, revision: 3 });
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000003')).toMatchObject({
+            mutationId: original.mutationId,
+        });
+        expect(db.read('users/user-1/trainingPlanState/current/mutationReceipts/delete-after-reload'))
+            .toMatchObject({
+                requestHash: hashTrainingScheduleRequestPayload(retry),
+                response: { mutationId: original.mutationId },
+            });
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', retry, { db: db as never, nowMs: NOW_MS + 1 },
+        )).resolves.toEqual(response);
+    });
+
+    it('resumes cleanup with a new mutation ID after the deletion commit already succeeded', async () => {
+        seed(db, [workout('workout-1')]);
+        const original = request('convert-to-standalone');
+        db.recursiveDelete.mockRejectedValueOnce(new Error('cleanup interrupted'));
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', original, { db: db as never, nowMs: NOW_MS },
+        )).rejects.toThrow('cleanup interrupted');
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeUndefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toMatchObject({ planId: null, revision: 3 });
+        expect(db.read(`users/user-1/trainingPlanState/current/mutationReceipts/${original.mutationId}`))
+            .toMatchObject({ response: { mutationId: original.mutationId } });
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeDefined();
+
+        const retry = { ...original, mutationId: 'delete-after-committed-reload' };
+        const response = await deleteTrainingPlanForUser(
+            'user-1', retry, { db: db as never, nowMs: NOW_MS + 1 },
+        );
+
+        expect(response.mutationId).toBe(original.mutationId);
+        expect(db.read('users/user-1/trainingPlanState/current/planDeletionLocks/plan-1')).toBeUndefined();
+        expect(db.read('users/user-1/trainingPlanState/current/mutationReceipts/delete-after-committed-reload'))
+            .toMatchObject({ response: { mutationId: original.mutationId } });
+    });
+
+    it('does not stage deletion records after account deletion starts', async () => {
+        seed(db, [workout('workout-1')]);
+        guard.getUserDeletionGuardStateInTransaction
+            .mockResolvedValueOnce({ shouldSkip: false })
+            .mockResolvedValueOnce({ shouldSkip: true });
+
+        await expect(deleteTrainingPlanForUser(
+            'user-1', request('convert-to-standalone'), { db: db as never, nowMs: NOW_MS },
+        )).rejects.toThrow('account is being deleted');
+
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toBeDefined();
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toMatchObject({ planId: 'plan-1' });
+        expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000003')).toBeUndefined();
+    });
+
     it('serializes plan deletions for a user', async () => {
         seed(db, [workout('workout-1')]);
         db.seed('users/user-1/trainingPlanState/current/planDeletionLocks/plan-2', {
@@ -300,6 +424,7 @@ describe('deleteTrainingPlanForUser persistence', () => {
             mutationId: 'delete-plan-2',
             requestHash: 'different-request',
             planId: 'plan-2',
+            stateRevision: 8,
             planRevision: 1,
             workoutDisposition: 'delete-workouts',
             workouts: [],

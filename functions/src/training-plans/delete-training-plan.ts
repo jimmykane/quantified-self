@@ -31,6 +31,7 @@ import {
 
 const DELETE_PLAN_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const RECURSIVE_DELETE_CONCURRENCY = 20;
+const TOMBSTONE_BATCH_SIZE = 400;
 
 interface PlanDeletionLockWorkoutV1 {
     id: string;
@@ -42,6 +43,7 @@ interface PlanDeletionLockV1 {
     mutationId: string;
     requestHash: string;
     planId: string;
+    stateRevision: number;
     planRevision: number;
     workoutDisposition: DeleteTrainingPlanRequestV1['workoutDisposition'];
     workouts: PlanDeletionLockWorkoutV1[];
@@ -183,6 +185,7 @@ function parsePlanDeletionLock(value: unknown): PlanDeletionLockV1 {
         || typeof record.mutationId !== 'string'
         || typeof record.requestHash !== 'string'
         || typeof record.planId !== 'string'
+        || !Number.isSafeInteger(record.stateRevision)
         || !Number.isSafeInteger(record.planRevision)
         || (record.workoutDisposition !== 'convert-to-standalone' && record.workoutDisposition !== 'delete-workouts')
         || !Array.isArray(record.workouts)
@@ -201,6 +204,7 @@ function parsePlanDeletionLock(value: unknown): PlanDeletionLockV1 {
         mutationId: record.mutationId,
         requestHash: record.requestHash,
         planId: record.planId,
+        stateRevision: record.stateRevision as number,
         planRevision: record.planRevision as number,
         workoutDisposition: record.workoutDisposition,
         workouts,
@@ -281,8 +285,29 @@ async function ensurePlanDeletionLock(
         }
         if (lockSnapshot?.exists) {
             const lock = parsePlanDeletionLock(documentData(lockSnapshot));
-            if (lock.requestHash !== requestHash || lock.mutationId !== request.mutationId) {
-                throw new TrainingScheduleMutationError('failed-precondition', 'This plan already has a deletion in progress.');
+            if (lock.workoutDisposition !== request.workoutDisposition) {
+                throw new TrainingScheduleMutationError(
+                    'failed-precondition',
+                    'This plan already has a deletion in progress with a different workout choice.',
+                );
+            }
+            requireExpectedRevision(request, 'state', 'current', lock.stateRevision);
+            requireExpectedRevision(request, 'plan', request.planId, lock.planRevision);
+            const canonicalReceiptSnapshot = await transaction.get(
+                stateRef.collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(lock.mutationId),
+            );
+            if (canonicalReceiptSnapshot.exists) {
+                const canonicalReceipt = documentData(canonicalReceiptSnapshot);
+                if (canonicalReceipt.requestHash !== lock.requestHash) {
+                    throw new TrainingScheduleMutationError(
+                        'failed-precondition',
+                        'The completed plan deletion does not match its cleanup lock.',
+                    );
+                }
+                return {
+                    kind: 'completed',
+                    response: parseStoredDeleteResponse(canonicalReceipt.response),
+                };
             }
             return { kind: 'pending', lock };
         }
@@ -294,6 +319,7 @@ async function ensurePlanDeletionLock(
             mutationId: request.mutationId,
             requestHash,
             planId: request.planId,
+            stateRevision: snapshot.state.revision,
             planRevision: plan.revision,
             workoutDisposition: request.workoutDisposition,
             workouts: [...applied.convertedWorkouts.size > 0
@@ -324,6 +350,7 @@ async function prepareStandaloneRevisionSnapshots(
     db: admin.firestore.Firestore,
     uid: string,
     lock: PlanDeletionLockV1,
+    nowMs: number,
 ): Promise<void> {
     if (lock.workoutDisposition !== 'convert-to-standalone' || lock.workouts.length === 0) return;
     const workoutsRef = db.collection('users').doc(uid).collection(SCHEDULED_WORKOUTS_COLLECTION_ID);
@@ -341,36 +368,44 @@ async function prepareStandaloneRevisionSnapshots(
     const revisionRefs = converted.map(workout => workoutsRef.doc(workout.id)
         .collection(TRAINING_PLAN_REVISIONS_COLLECTION_ID)
         .doc(trainingScheduleRevisionDocumentId(workout.revision)));
-    const revisionSnapshots = await db.getAll(...revisionRefs);
-    const missing: Array<{ ref: admin.firestore.DocumentReference; revision: StandaloneWorkoutRevisionDocumentV1 }> = [];
-    revisionSnapshots.forEach((snapshot, index) => {
-        const workout = converted[index];
-        const revision: StandaloneWorkoutRevisionDocumentV1 = {
-            schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
-            revision: workout.revision,
-            mutationId: lock.mutationId,
-            operationKind: 'delete-plan-convert-workouts',
-            createdAtMs: lock.createdAtMs,
-            snapshot: workout,
-        };
-        if (!snapshot.exists) {
-            missing.push({ ref: revisionRefs[index], revision });
-            return;
+    await db.runTransaction(async (transaction) => {
+        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
+        if (deletionGuard.shouldSkip) {
+            throw new TrainingScheduleMutationError(
+                'failed-precondition',
+                'This account is being deleted or is no longer available.',
+            );
         }
-        if (!valuesEqual(documentData(snapshot), revision)) {
-            throw new TrainingScheduleMutationError('failed-precondition', 'A workout revision conflicts with this plan deletion.');
-        }
+        const revisionSnapshots = await Promise.all(revisionRefs.map(ref => transaction.get(ref)));
+        revisionSnapshots.forEach((snapshot, index) => {
+            const workout = converted[index];
+            const revision: StandaloneWorkoutRevisionDocumentV1 = {
+                schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
+                revision: workout.revision,
+                mutationId: lock.mutationId,
+                operationKind: 'delete-plan-convert-workouts',
+                createdAtMs: lock.createdAtMs,
+                snapshot: workout,
+            };
+            if (!snapshot.exists) {
+                transaction.create(revisionRefs[index], revision);
+                return;
+            }
+            if (!valuesEqual(documentData(snapshot), revision)) {
+                throw new TrainingScheduleMutationError(
+                    'failed-precondition',
+                    'A workout revision conflicts with this plan deletion.',
+                );
+            }
+        });
     });
-    if (missing.length === 0) return;
-    const batch = db.batch();
-    missing.forEach(item => batch.create(item.ref, item.revision));
-    await batch.commit();
 }
 
 async function preparePlanDeletionTombstones(
     db: admin.firestore.Firestore,
     uid: string,
     lock: PlanDeletionLockV1,
+    nowMs: number,
 ): Promise<void> {
     const stateRef = db.collection('users').doc(uid).collection('trainingPlanState').doc('current');
     const targets: Array<{ kind: 'plan' | 'workout'; id: string }> = [
@@ -390,21 +425,111 @@ async function preparePlanDeletionTombstones(
             lock.createdAtMs,
         ),
     }));
-    const existing = await db.getAll(...tombstones.map(tombstone => tombstone.ref));
-    const missing = tombstones.filter((tombstone, index) => {
-        if (!existing[index].exists) return true;
-        if (!valuesEqual(documentData(existing[index]), tombstone.value)) {
+    await db.runTransaction(async (transaction) => {
+        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
+        if (deletionGuard.shouldSkip) {
             throw new TrainingScheduleMutationError(
                 'failed-precondition',
-                'A deletion tombstone conflicts with this plan deletion.',
+                'This account is being deleted or is no longer available.',
             );
         }
-        return false;
+        const existing = await Promise.all(tombstones.map(tombstone => transaction.get(tombstone.ref)));
+        tombstones.forEach((tombstone, index) => {
+            if (!existing[index].exists) {
+                transaction.create(tombstone.ref, tombstone.value);
+                return;
+            }
+            if (!valuesEqual(documentData(existing[index]), tombstone.value)) {
+                throw new TrainingScheduleMutationError(
+                    'failed-precondition',
+                    'A deletion tombstone conflicts with this plan deletion.',
+                );
+            }
+        });
     });
-    if (missing.length === 0) return;
-    const batch = db.batch();
-    missing.forEach(tombstone => batch.create(tombstone.ref, tombstone.value));
-    await batch.commit();
+}
+
+async function prepareResidualWorkoutTombstones(
+    db: admin.firestore.Firestore,
+    uid: string,
+    workoutIds: string[],
+    mutationId: string,
+    createdAtMs: number,
+    nowMs: number,
+): Promise<void> {
+    const stateRef = db.collection('users').doc(uid).collection('trainingPlanState').doc('current');
+    const tombstonesRef = stateRef.collection(TRAINING_SCHEDULE_DELETION_TOMBSTONES_COLLECTION_ID);
+    for (let index = 0; index < workoutIds.length; index += TOMBSTONE_BATCH_SIZE) {
+        const values = workoutIds.slice(index, index + TOMBSTONE_BATCH_SIZE).map(workoutId => ({
+            ref: tombstonesRef.doc(trainingScheduleDeletionTombstoneDocumentId('workout', workoutId)),
+            value: buildTrainingScheduleDeletionTombstone('workout', workoutId, mutationId, createdAtMs),
+        }));
+        const shouldContinue = await db.runTransaction(async (transaction) => {
+            const deletionGuard = await getUserDeletionGuardStateInTransaction(
+                db,
+                transaction,
+                uid,
+                nowMs,
+            );
+            if (deletionGuard.shouldSkip) return false;
+            const existing = await Promise.all(values.map(value => transaction.get(value.ref)));
+            values.forEach((value, valueIndex) => {
+                if (existing[valueIndex].exists) {
+                    if (!valuesEqual(documentData(existing[valueIndex]), value.value)) {
+                        throw new TrainingScheduleMutationError(
+                            'failed-precondition',
+                            'A deletion tombstone conflicts with this plan cleanup.',
+                        );
+                    }
+                    return;
+                }
+                transaction.create(value.ref, value.value);
+            });
+            return true;
+        });
+        if (!shouldContinue) return;
+    }
+}
+
+async function persistPlanDeletionResumeReceipt(
+    db: admin.firestore.Firestore,
+    uid: string,
+    request: DeleteTrainingPlanRequestV1,
+    requestHash: string,
+    response: DeleteTrainingPlanResponseV1,
+    nowMs: number,
+): Promise<void> {
+    if (request.mutationId === response.mutationId) return;
+    const receiptRef = db.collection('users').doc(uid)
+        .collection('trainingPlanState').doc('current')
+        .collection(TRAINING_PLAN_MUTATION_RECEIPTS_COLLECTION_ID).doc(request.mutationId);
+    await db.runTransaction(async (transaction) => {
+        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
+        if (deletionGuard.shouldSkip) {
+            throw new TrainingScheduleMutationError(
+                'failed-precondition',
+                'This account is being deleted or is no longer available.',
+            );
+        }
+        const snapshot = await transaction.get(receiptRef);
+        if (snapshot.exists) {
+            const receipt = documentData(snapshot);
+            if (receipt.requestHash !== requestHash || !valuesEqual(receipt.response, response)) {
+                throw new TrainingScheduleMutationError(
+                    'failed-precondition',
+                    'This mutation ID was already used differently.',
+                );
+            }
+            return;
+        }
+        transaction.create(receiptRef, {
+            schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
+            requestHash,
+            response,
+            createdAtMs: nowMs,
+            expireAt: Timestamp.fromMillis(nowMs + DELETE_PLAN_RECEIPT_RETENTION_MS),
+        });
+    });
 }
 
 function validateLockedWorkouts(snapshot: TrainingScheduleSnapshotV1, lock: PlanDeletionLockV1): void {
@@ -487,7 +612,6 @@ async function finalizePlanDeletion(
             createdAtMs: nowMs,
             expireAt: Timestamp.fromMillis(nowMs + DELETE_PLAN_RECEIPT_RETENTION_MS),
         });
-        transaction.delete(lockRef);
         return applied.response;
     });
 }
@@ -505,16 +629,42 @@ async function cleanupDeletedPlanData(
     db: admin.firestore.Firestore,
     uid: string,
     response: DeleteTrainingPlanResponseV1,
+    nowMs: number,
 ): Promise<void> {
     const userRef = db.collection('users').doc(uid);
     const workoutsRef = userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID);
     await db.recursiveDelete(userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(response.removedPlanId));
-    await recursivelyDeleteInChunks(
-        db,
-        response.permanentlyDeletedWorkoutIds.map(id => workoutsRef.doc(id)),
-    );
     const residual = await workoutsRef.where('planId', '==', response.removedPlanId).get();
-    await recursivelyDeleteInChunks(db, residual.docs.map(snapshot => snapshot.ref));
+    const workoutRefs = new Map<string, admin.firestore.DocumentReference>();
+    response.permanentlyDeletedWorkoutIds.forEach(id => workoutRefs.set(id, workoutsRef.doc(id)));
+    residual.docs.forEach(snapshot => workoutRefs.set(snapshot.id, snapshot.ref));
+    const residualWorkoutIds = residual.docs.map(snapshot => snapshot.id).sort();
+    await prepareResidualWorkoutTombstones(
+        db,
+        uid,
+        residualWorkoutIds,
+        response.mutationId,
+        response.state.updatedAtMs,
+        nowMs,
+    );
+    await recursivelyDeleteInChunks(db, [...workoutRefs.values()]);
+
+    const stateRef = userRef.collection('trainingPlanState').doc('current');
+    const lockRef = stateRef.collection(TRAINING_PLAN_DELETION_LOCKS_COLLECTION_ID).doc(response.removedPlanId);
+    await db.runTransaction(async (transaction) => {
+        const deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, uid, nowMs);
+        if (deletionGuard.shouldSkip) return;
+        const lockSnapshot = await transaction.get(lockRef);
+        if (!lockSnapshot.exists) return;
+        const lock = parsePlanDeletionLock(documentData(lockSnapshot));
+        if (lock.mutationId !== response.mutationId) {
+            throw new TrainingScheduleMutationError(
+                'failed-precondition',
+                'A different plan deletion owns the cleanup lock.',
+            );
+        }
+        transaction.delete(lockRef);
+    });
 }
 
 export async function deleteTrainingPlanForUser(
@@ -529,10 +679,23 @@ export async function deleteTrainingPlanForUser(
     const response = lockResult.kind === 'completed'
         ? lockResult.response
         : await (async () => {
-            await preparePlanDeletionTombstones(db, uid, lockResult.lock);
-            await prepareStandaloneRevisionSnapshots(db, uid, lockResult.lock);
-            return finalizePlanDeletion(db, uid, request, requestHash, lockResult.lock, nowMs);
+            await preparePlanDeletionTombstones(db, uid, lockResult.lock, nowMs);
+            await prepareStandaloneRevisionSnapshots(db, uid, lockResult.lock, nowMs);
+            const lockedRequest: DeleteTrainingPlanRequestV1 = {
+                ...request,
+                mutationId: lockResult.lock.mutationId,
+                workoutDisposition: lockResult.lock.workoutDisposition,
+            };
+            return finalizePlanDeletion(
+                db,
+                uid,
+                lockedRequest,
+                lockResult.lock.requestHash,
+                lockResult.lock,
+                nowMs,
+            );
         })();
-    await cleanupDeletedPlanData(db, uid, response);
+    await persistPlanDeletionResumeReceipt(db, uid, request, requestHash, response, nowMs);
+    await cleanupDeletedPlanData(db, uid, response, nowMs);
     return response;
 }

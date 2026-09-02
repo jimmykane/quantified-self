@@ -751,7 +751,7 @@ describe('firestore indexes', () => {
         });
     });
 
-    it('supports dated plan overlays, deletion fencing queries, and expiring mutation receipts', () => {
+    it('supports dated plan overlays, bounded indexing, deletion fencing, and expiring mutation receipts', () => {
         const config = loadFirestoreIndexes();
 
         expect(config.indexes).toEqual(expect.arrayContaining([
@@ -783,5 +783,25 @@ describe('firestore indexes', () => {
             ttl: true,
             indexes: [],
         });
+        expect(config.fieldOverrides).toEqual(expect.arrayContaining([
+            {
+                collectionGroup: 'scheduledWorkouts',
+                fieldPath: 'structure',
+                ttl: false,
+                indexes: [],
+            },
+            {
+                collectionGroup: 'revisions',
+                fieldPath: 'snapshot',
+                ttl: false,
+                indexes: [],
+            },
+            {
+                collectionGroup: 'chunks',
+                fieldPath: 'payloadBase64',
+                ttl: false,
+                indexes: [],
+            },
+        ]));
     });
 });

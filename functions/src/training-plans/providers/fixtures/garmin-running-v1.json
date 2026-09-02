@@ -1,0 +1,103 @@
+{
+  "workoutName": "Fixture intervals",
+  "description": "Redacted provider contract fixture.",
+  "sport": "RUNNING",
+  "workoutProvider": "Quantified Self",
+  "workoutSourceId": "Quantified Self",
+  "isSessionTransitionEnabled": false,
+  "segments": [
+    {
+      "segmentOrder": 1,
+      "sport": "RUNNING",
+      "poolLength": null,
+      "poolLengthUnit": null,
+      "steps": [
+        {
+          "type": "WorkoutStep",
+          "stepOrder": 1,
+          "intensity": "WARMUP",
+          "description": "Easy warm up",
+          "durationType": "TIME",
+          "durationValue": 600,
+          "durationValueType": null,
+          "targetType": "HEART_RATE",
+          "targetValue": null,
+          "targetValueLow": 130,
+          "targetValueHigh": 145,
+          "targetValueType": null,
+          "secondaryTargetType": null,
+          "secondaryTargetValue": null,
+          "secondaryTargetValueLow": null,
+          "secondaryTargetValueHigh": null,
+          "secondaryTargetValueType": null
+        },
+        {
+          "type": "WorkoutRepeatStep",
+          "stepOrder": 2,
+          "repeatType": "REPEAT_UNTIL_STEPS_CMPLT",
+          "repeatValue": 3,
+          "skipLastRestStep": false,
+          "steps": [
+            {
+              "type": "WorkoutStep",
+              "stepOrder": 3,
+              "intensity": "ACTIVE",
+              "description": "Fast 400",
+              "durationType": "DISTANCE",
+              "durationValue": 400,
+              "durationValueType": "METER",
+              "targetType": "PACE",
+              "targetValue": null,
+              "targetValueLow": 4.3,
+              "targetValueHigh": 4.55,
+              "targetValueType": null,
+              "secondaryTargetType": null,
+              "secondaryTargetValue": null,
+              "secondaryTargetValueLow": null,
+              "secondaryTargetValueHigh": null,
+              "secondaryTargetValueType": null
+            },
+            {
+              "type": "WorkoutStep",
+              "stepOrder": 4,
+              "intensity": "RECOVERY",
+              "description": "Jog easy",
+              "durationType": "TIME",
+              "durationValue": 60,
+              "durationValueType": null,
+              "targetType": "HEART_RATE",
+              "targetValue": null,
+              "targetValueLow": 110,
+              "targetValueHigh": 130,
+              "targetValueType": null,
+              "secondaryTargetType": null,
+              "secondaryTargetValue": null,
+              "secondaryTargetValueLow": null,
+              "secondaryTargetValueHigh": null,
+              "secondaryTargetValueType": null
+            }
+          ]
+        },
+        {
+          "type": "WorkoutStep",
+          "stepOrder": 5,
+          "intensity": "COOLDOWN",
+          "description": "Relax",
+          "durationType": "TIME",
+          "durationValue": 300,
+          "durationValueType": null,
+          "targetType": "CADENCE",
+          "targetValue": null,
+          "targetValueLow": 80,
+          "targetValueHigh": 90,
+          "targetValueType": null,
+          "secondaryTargetType": null,
+          "secondaryTargetValue": null,
+          "secondaryTargetValueLow": null,
+          "secondaryTargetValueHigh": null,
+          "secondaryTargetValueType": null
+        }
+      ]
+    }
+  ]
+}

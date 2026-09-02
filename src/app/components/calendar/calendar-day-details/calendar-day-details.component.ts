@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -30,6 +30,8 @@ export interface CalendarDayDetailsData {
   unitSettings?: UserUnitSettingsInterface | null;
   summariesSettings?: SummaryStatsSettingsLike | null;
   plannedWorkouts?: PlannedWorkoutCalendarEntry[];
+  plannedWorkoutsSource?: () => readonly PlannedWorkoutCalendarEntry[];
+  plannedWorkoutsStatusSource?: () => 'loading' | 'ready' | 'error';
 }
 
 interface CalendarDayPlannedWorkoutRow {
@@ -78,14 +80,17 @@ export class CalendarDayDetailsComponent {
   });
   readonly title = this.titleFormatter.format(this.data.day.date);
   readonly eventRows = this.data.day.events.map(event => this.buildEventRow(event));
-  readonly plannedWorkoutRows = (this.data.plannedWorkouts ?? []).map<CalendarDayPlannedWorkoutRow>(entry => ({
+  readonly plannedWorkoutsStatus = computed(() => this.data.plannedWorkoutsStatusSource?.() ?? 'ready');
+  readonly plannedWorkoutRows = computed(() => (
+    this.data.plannedWorkoutsSource?.() ?? this.data.plannedWorkouts ?? []
+  ).map<CalendarDayPlannedWorkoutRow>(entry => ({
     id: entry.workout.id,
     title: entry.workout.title,
     sport: entry.workout.structure.sport,
     scopeLabel: entry.planName ?? 'Standalone',
     lifecycleLabel: entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
     summary: formatManualWorkoutStructure(entry.workout.structure, this.data.unitSettings, this.data.locale),
-  }));
+  })));
   readonly familyVolumeRows = this.buildFamilyVolumeRows();
 
   dismiss(): void {

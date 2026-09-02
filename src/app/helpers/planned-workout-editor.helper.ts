@@ -23,6 +23,7 @@ export interface ManualWorkoutEditorStep {
   targetKind: ManualWorkoutTarget;
   targetMinimum: number | null;
   targetMaximum: number | null;
+  note?: string;
 }
 
 export interface ManualWorkoutEditorRepeat {
@@ -77,12 +78,18 @@ function endingFromEditor(step: ManualWorkoutEditorStep): WorkoutEndingV1 {
 
 function targetFromEditor(step: ManualWorkoutEditorStep): WorkoutTargetV1[] {
   if (step.targetKind === 'none') return [];
-  const minimum = Number(step.targetMinimum);
-  const maximum = Number(step.targetMaximum);
-  if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || minimum <= 0 || maximum <= 0) {
-    throw new Error('Target ranges need two positive values.');
+  if (typeof step.targetMinimum !== 'number' || typeof step.targetMaximum !== 'number') {
+    throw new Error('Target ranges need two numeric values.');
+  }
+  const minimum = step.targetMinimum;
+  const maximum = step.targetMaximum;
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) {
+    throw new Error('Target ranges need two finite values.');
   }
   if (step.targetKind === 'pace') {
+    if (minimum <= 0 || maximum <= 0) {
+      throw new Error('Pace target ranges need two positive values.');
+    }
     const fasterMinutesPerKilometer = Math.min(minimum, maximum);
     const slowerMinutesPerKilometer = Math.max(minimum, maximum);
     return [{
@@ -93,6 +100,9 @@ function targetFromEditor(step: ManualWorkoutEditorStep): WorkoutTargetV1[] {
       presentation: 'pace',
     }];
   }
+  if (minimum < 0 || maximum < 0) {
+    throw new Error('Heart-rate and power target ranges cannot be negative.');
+  }
   if (minimum > maximum) throw new Error('The target minimum must not exceed its maximum.');
   return step.targetKind === 'heart-rate'
     ? [{ kind: 'heart-rate', mode: 'absolute', minimumBpm: minimum, maximumBpm: maximum }]
@@ -100,13 +110,14 @@ function targetFromEditor(step: ManualWorkoutEditorStep): WorkoutTargetV1[] {
 }
 
 function stepFromEditor(step: ManualWorkoutEditorStep): WorkoutStepV1 {
-  return {
+  const converted: WorkoutStepV1 = {
     kind: 'step',
     id: step.id,
     purpose: step.purpose,
     ending: endingFromEditor(step),
     targets: targetFromEditor(step),
   };
+  return step.note === undefined ? converted : { ...converted, note: step.note };
 }
 
 export function manualWorkoutEditorToStructure(value: ManualWorkoutEditorValue): WorkoutStructureV1 {
@@ -132,7 +143,8 @@ function editorTarget(target: WorkoutTargetV1 | undefined): Pick<
   'targetKind' | 'targetMinimum' | 'targetMaximum'
 > {
   if (!target || target.mode !== 'absolute') {
-    return { targetKind: 'none', targetMinimum: null, targetMaximum: null };
+    if (!target) return { targetKind: 'none', targetMinimum: null, targetMaximum: null };
+    throw new Error('This workout uses a relative target that the first manual editor cannot change.');
   }
   switch (target.kind) {
     case 'heart-rate':
@@ -148,14 +160,16 @@ function editorTarget(target: WorkoutTargetV1 | undefined): Pick<
         targetMaximum: target.maximumWatts,
       };
     case 'speed':
-      if (target.presentation !== 'pace') return { targetKind: 'none', targetMinimum: null, targetMaximum: null };
+      if (target.presentation !== 'pace') {
+        throw new Error('This workout uses a speed target that the first manual editor cannot change.');
+      }
       return {
         targetKind: 'pace',
         targetMinimum: roundEditorNumber(1000 / target.maximumMetersPerSecond / 60),
         targetMaximum: roundEditorNumber(1000 / target.minimumMetersPerSecond / 60),
       };
     case 'cadence':
-      return { targetKind: 'none', targetMinimum: null, targetMaximum: null };
+      throw new Error('This workout uses a cadence target that the first manual editor cannot change.');
   }
 }
 
@@ -176,6 +190,7 @@ function editorStep(step: WorkoutStepV1): ManualWorkoutEditorStep {
     endingKind: step.ending.kind,
     endingValue: step.ending.kind === 'time' ? step.ending.seconds / 60 : step.ending.meters / 1000,
     ...target,
+    ...(step.note === undefined ? {} : { note: step.note }),
   };
 }
 

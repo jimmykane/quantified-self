@@ -125,6 +125,7 @@ describe('ActivityCalendarTileComponent', () => {
 
   it('shows a retry action when the month query fails', async () => {
     watchEvents.mockReturnValue(throwError(() => new Error('offline')));
+    watchSchedule.mockReturnValue(of(scheduleForDate(currentLocalDate(2))));
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
     fixture.detectChanges();
@@ -132,6 +133,9 @@ describe('ActivityCalendarTileComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Calendar unavailable');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities this month');
   });
 
   it('shows the empty state when query results only belong to an adjacent month', async () => {

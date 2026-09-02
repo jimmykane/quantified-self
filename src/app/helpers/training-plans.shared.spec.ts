@@ -1,6 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
   TRAINING_PLAN_CHECKPOINT_INTERVAL,
+  TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
   TRAINING_PLAN_MAX_DAYS,
   TrainingPlanContractError,
   addDaysToTrainingLocalDate,
@@ -93,6 +94,20 @@ describe('training-plan persisted contracts', () => {
     });
     expect(parseTrainingPlanV1(PLAN)).toEqual(PLAN);
     expect(() => parseTrainingPlanV1({ ...PLAN, providerId: 'garmin' })).toThrow(TrainingPlanContractError);
+  });
+
+  it('rejects persisted workout counts above the canonical account limit', () => {
+    expect(() => parseTrainingPlanStateV1({
+      schemaVersion: 1,
+      activePlanId: null,
+      revision: 4,
+      currentWorkoutCount: TRAINING_PLAN_MAX_CURRENT_WORKOUTS + 1,
+      updatedAtMs: 10,
+    })).toThrow(TrainingPlanContractError);
+    expect(() => parseTrainingPlanV1({
+      ...PLAN,
+      workoutCount: TRAINING_PLAN_MAX_CURRENT_WORKOUTS + 1,
+    })).toThrow(TrainingPlanContractError);
   });
 
   it('keeps standalone workouts first-class and normalizes their structure', () => {

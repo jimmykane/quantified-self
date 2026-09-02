@@ -101,9 +101,11 @@ export class TrainingPlansService {
         const workouts = (workoutValues as unknown[]).map(parseScheduledWorkoutV1)
           .sort((left, right) => left.localDate.localeCompare(right.localDate) || left.id.localeCompare(right.id));
         const state = stateValue === undefined ? emptyTrainingSchedule().state : parseTrainingPlanStateV1(stateValue);
-        if (state.currentWorkoutCount !== workouts.filter(workout => workout.lifecycle !== 'deleted').length) {
-          throw new Error('The training schedule count is inconsistent. Reload before editing.');
-        }
+        // These are three independent Firestore listeners. A transaction can
+        // therefore reach them in adjacent emissions even though its writes
+        // were atomic. The server validates the authoritative count inside
+        // each mutation; turning a transient client-side mismatch into a
+        // terminal observable error would strand every schedule consumer.
         return { state, plans, workouts };
       }),
       shareReplay({ bufferSize: 1, refCount: true }),
