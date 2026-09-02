@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PublicSeoPageComponent } from './public-seo-page.component';
 import { PUBLIC_SEO_PAGES, PublicSeoPage } from './public-seo-pages.content';
 import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
+import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
 
 describe('PublicSeoPageComponent', () => {
   let fixture: ComponentFixture<PublicSeoPageComponent>;
@@ -40,12 +41,15 @@ describe('PublicSeoPageComponent', () => {
 
   it('renders page content, sections, FAQ items, and CTAs from route data', () => {
     const text = fixture.nativeElement.textContent as string;
-    const cards = fixture.nativeElement.querySelectorAll('.feature-card');
+    const featureRows = fixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent));
     const faqItems = fixture.nativeElement.querySelectorAll('.faq-item');
     const links = Array.from(fixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
 
-    expect(cards.length).toBe(6);
+    expect(featureRows).toHaveLength(6);
+    expect(fixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelectorAll('.compact-feature-row-stack')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('app-compact-feature-row.compact-feature-row-host--without-divider')).toHaveLength(2);
     expect(faqItems.length).toBe(4);
     expect(text).toContain('Analyze FIT, GPX, and TCX workout files');
     expect(text).toContain('maps, charts, stats, exports');
@@ -100,7 +104,7 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('plan your next workout');
     expect(text).toContain('No settings or data writes');
     expect(text).toContain('External clients have their own privacy and retention practices');
-    expect(mcpFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(8);
+    expect(mcpFixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))).toHaveLength(8);
     expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(5);
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/help#data-and-privacy');
@@ -123,7 +127,7 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Week, Month, and Year views');
     expect(text).toContain('Duration-scaled activity circles');
     expect(text).toContain('independent from dashboard event-search filters');
-    expect(calendarFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(6);
+    expect(calendarFixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))).toHaveLength(6);
     expect(calendarFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(4);
     expect(hrefs).not.toContain('/calendar');
     expect(hrefs).toContain('/help#activity-calendar');

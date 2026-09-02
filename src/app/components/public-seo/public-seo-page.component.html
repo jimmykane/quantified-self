@@ -39,19 +39,14 @@
       <p>{{ section.copy }}</p>
     </div>
 
-    <div class="card-grid">
-      @for (item of section.items; track item.title) {
-      <mat-card appearance="outlined" class="feature-card">
-        <mat-card-header>
-          <div mat-card-avatar class="card-icon">
-            <mat-icon>{{ item.icon }}</mat-icon>
-          </div>
-          <mat-card-title>{{ item.title }}</mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <p>{{ item.copy }}</p>
-        </mat-card-content>
-      </mat-card>
+    <div class="compact-feature-row-stack">
+      @for (item of section.items; track item.title; let last = $last) {
+      <app-compact-feature-row
+        [icon]="item.icon"
+        [title]="item.title"
+        [summary]="item.copy"
+        [showDivider]="!last"
+      ></app-compact-feature-row>
       }
     </div>
 
