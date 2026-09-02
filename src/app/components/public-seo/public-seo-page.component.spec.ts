@@ -89,20 +89,17 @@ describe('PublicSeoPageComponent', () => {
     const links = Array.from(mcpFixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
 
-    expect(text).toContain('Connect ChatGPT to your training data with a read-only MCP server');
-    expect(text).toContain('Activity, body measurement, and Training analysis');
-    expect(text).toContain('body measurements, individual activity details');
-    expect(text).toContain('identity-free body-weight history');
-    expect(text).toContain('Sleep trends, live readiness, and a daily report');
-    expect(text).toContain('one bounded sleep trend');
-    expect(text).toContain('Saved-route summaries and optional locations');
-    expect(text).toContain('Individual activity details and charts');
-    expect(text).toContain('canonical Sports Lib activity types');
-    expect(text).toContain('latest run');
-    expect(text).toContain('explicit IANA timezone');
-    expect(text).toContain('route-name text');
+    expect(text).toContain('Connect ChatGPT or Claude to your training data');
+    expect(text).toContain('Training and measurement trends');
+    expect(text).toContain('training metrics, measurements, workout details');
+    expect(text).toContain('body-weight history');
+    expect(text).toContain('Sleep, readiness, and daily context');
+    expect(text).toContain('Saved routes and optional locations');
+    expect(text).toContain('Workout details and charts');
+    expect(text).toContain('Find recent activities');
+    expect(text).toContain('plan your next workout');
     expect(text).toContain('No settings or data writes');
-    expect(text).toContain('ChatGPT is an external client with its own privacy and retention practices');
+    expect(text).toContain('External clients have their own privacy and retention practices');
     expect(mcpFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(8);
     expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(5);
     expect(hrefs).toContain('/login');
@@ -128,7 +125,7 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('independent from dashboard event-search filters');
     expect(calendarFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(6);
     expect(calendarFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(4);
-    expect(hrefs).toContain('/calendar');
+    expect(hrefs).not.toContain('/calendar');
     expect(hrefs).toContain('/help#activity-calendar');
     expect(hrefs).toContain('/features/training-analysis');
 
