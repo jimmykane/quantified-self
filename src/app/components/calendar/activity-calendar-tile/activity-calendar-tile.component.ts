@@ -24,15 +24,29 @@ import {
 import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import {
+  TrainingPlansService,
+  selectCalendarVisibleScheduledWorkouts,
+  type CurrentTrainingScheduleV1,
+} from '../../../services/training-plans.service';
 import { ActivityCalendarGridComponent } from '../activity-calendar-grid/activity-calendar-grid.component';
 import {
   CalendarDayDetailsComponent,
   type CalendarDayDetailsData,
 } from '../calendar-day-details/calendar-day-details.component';
+import {
+  buildPlannedWorkoutCalendarOverlay,
+  type PlannedWorkoutCalendarOverlay,
+} from '../../../helpers/planned-workout-calendar.helper';
 
 interface ActivityCalendarTileState {
   status: 'loading' | 'ready' | 'error';
   events: EventInterface[];
+}
+
+interface ActivityCalendarTilePlansState {
+  status: 'loading' | 'ready' | 'error';
+  schedule: CurrentTrainingScheduleV1 | null;
 }
 
 @Component({
@@ -45,6 +59,7 @@ interface ActivityCalendarTileState {
 })
 export class ActivityCalendarTileComponent {
   private readonly calendarService = inject(ActivityCalendarService);
+  private readonly plansService = inject(TrainingPlansService);
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly router = inject(Router);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
@@ -78,6 +93,27 @@ export class ActivityCalendarTileComponent {
       );
     }),
   ), { initialValue: { status: 'loading', events: [] } as ActivityCalendarTileState });
+  readonly plansState = toSignal(toObservable(this.user).pipe(
+    switchMap(user => {
+      if (!user?.uid) {
+        return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
+      }
+      return this.plansService.watchSchedule(user.uid).pipe(
+        map(schedule => ({ status: 'ready', schedule }) as ActivityCalendarTilePlansState),
+        startWith({ status: 'loading', schedule: null } as ActivityCalendarTilePlansState),
+        catchError(() => of({ status: 'error', schedule: null } as ActivityCalendarTilePlansState)),
+      );
+    }),
+  ), { initialValue: { status: 'loading', schedule: null } as ActivityCalendarTilePlansState });
+  readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
+    const schedule = this.plansState().schedule;
+    if (!schedule) return {};
+    return buildPlannedWorkoutCalendarOverlay(
+      selectCalendarVisibleScheduledWorkouts(schedule),
+      schedule.plans,
+      schedule.state.activePlanId,
+    );
+  });
   readonly calendarModel = computed(() => buildActivityCalendarViewModel(this.eventState().events, {
     view: 'month',
     anchorDate: this.anchorDate(),
@@ -115,7 +151,7 @@ export class ActivityCalendarTileComponent {
     if (!this.dayDetailsNavigation.consumeRestoration(restoration)) {
       return;
     }
-    if (day?.eventCount) {
+    if (day) {
       this.openDay(day);
     }
   });
@@ -144,7 +180,7 @@ export class ActivityCalendarTileComponent {
 
   openDay(day: ActivityCalendarDayViewModel): void {
     const userId = `${this.user()?.uid || ''}`.trim();
-    if (!day.eventCount || !userId) {
+    if (!userId) {
       return;
     }
     this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData>(CalendarDayDetailsComponent, {
@@ -154,6 +190,9 @@ export class ActivityCalendarTileComponent {
         locale: this.locale,
         unitSettings: this.user()?.settings?.unitSettings ?? null,
         summariesSettings: this.user()?.settings?.summariesSettings ?? null,
+        plannedWorkouts: this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
+        plannedWorkoutsSource: () => this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
+        plannedWorkoutsStatusSource: () => this.plansState().status,
       },
     });
   }

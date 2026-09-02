@@ -14,6 +14,7 @@ export type HelpSectionId =
   | 'getting-started'
   | 'supported-activities'
   | 'activity-calendar'
+  | 'training-plans'
   | 'health'
   | 'training-analysis'
   | 'ai-insights'
@@ -127,6 +128,27 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 - Missing or unreliable inputs remain explicit. Training does not infer LT1/LT2, race readiness, a universal athlete score, or workout-execution scoring.
 - Training power-profile callouts compare the best 90-day curve with the best one-year curve at 5 seconds, 1 minute, 5 minutes, 20 minutes, and 1 hour. They use bounded reciprocal-duration interpolation, never bridge duration brackets wider than 1.25×, show both activity counts, and call out the strongest retained duration and clearest gap. Missing comparable anchors stay explicit.`;
 
+const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
+
+- Open [Plans](/plans) to create a dated workout. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
+- Manual planning is available without a provider connection. Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet; connecting a service does not send anything automatically.
+- The first editor supports Running and Cycling, date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Unsupported recipe features remain unavailable instead of being approximated.
+
+## Organize plans and standalone workouts
+
+- An account can keep multiple plans but only one can be active. Activating a plan pauses the previous active plan. Archived plans remain available without contributing workouts to Calendar overlays.
+- Move a workout between plans or between a plan and **Standalone** without changing its workout identity. Copy creates a new workout. Moving, copying, or attaching outside a plan's current dates asks before extending that range.
+- Shifting a plan moves its start and end dates together with only that plan's current workouts. Skipping keeps a workout visible and marked; it does not turn it into a completed activity.
+- Ordinary deletion is recoverable from history. Permanent deletion has a separate confirmation and prevents restoration. A standalone workout's revision history is removed with it; a plan-bound workout can remain in its plan's immutable audit until that plan is deleted, and the confirmation identifies this retention. Deleting a plan asks whether its current workouts should become standalone or be deleted; archiving is the non-destructive alternative.
+- History preview shows what a restore would change before you confirm it. A restore creates a new revision, does not silently reclaim a workout moved to another plan or to standalone, and never recreates a permanently deleted workout.
+
+## Add from Calendar
+
+- Every visible date in the full Calendar, dashboard Activity Calendar tile, and Today mini-calendar can be selected, including an empty date.
+- **Add workout** uses the active plan when one exists and otherwise creates a standalone workout. **Add standalone** is always available as the explicit independent option.
+- Calendar overlays show standalone workouts and workouts from the active plan. Inactive-plan workouts remain in [Plans](/plans), while skipped workouts stay visible with a separate mark.
+- Planned workouts and completed activities are separate. Plans never increase completed activity counts, duration, distance, elevation, activity-group bars, the activity table, or Training analysis.`;
+
 const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 - New dashboards start with a 1 x 1 **Activity Calendar** tile showing the current month. Select its open action to move to the full [Calendar](/calendar).
@@ -139,13 +161,15 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 - A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.
 - Week and Month views separate activity-group circles when space allows. Narrow layouts, the dashboard tile, and Year view place multiple circles concentrically around the same center so a day stays readable in a compact cell.
-- Select a day with activity to open its details sheet. It shows the day's total duration, the same duration bars and available distance/ascent/descent totals by activity group, and individual activities with their available distance and elevation metrics.
+- Select any date, including an empty one, to open its details sheet. Planned workouts appear in their own section with links to edit them and actions to add a workout for that date. Completed totals and activity-group bars remain separate, followed by individual activities with their available distance and elevation metrics.
+- The calendar shows standalone workouts plus workouts from the active plan. Inactive-plan workouts remain in [Plans](/plans), and skipped workouts stay visible with a separate marker.
 - In day details, an activity group containing exactly one activity opens that activity directly, as does its individual activity row. Browser **Back** restores the same day's details sheet. Deleting an activity from its details page returns to the previous in-app page; the day sheet reopens when other activity remains on that day.
 - Calendar dates intentionally have no hover or touch tooltip. This keeps native vertical scrolling responsive on phones; day details remain available by selecting a date.
 
 ## Understand period totals and activity bars
 
 - The summary above the full calendar shows recorded **Distance**, **Duration**, and **Ascent** for the selected week, month, or year. Month totals exclude adjacent dates shown only to complete the calendar grid.
+- Planned workouts never change recorded period totals, activity counts, activity-group bars, or the activity table.
 - Below the calendar, **Activities** compares activity groups by recorded duration. Each bar uses the same color as its circles and is scaled against the longest-duration group in the selected period. The info control beside the heading explains this comparison.
 - Available duration, distance, ascent, and descent totals appear with icons beneath each bar. A metric is omitted when no positive recorded value exists, and **--** beside an activity group means duration was not recorded.
 - Lift-served downhill activities such as alpine skiing, snowboarding, and downhill cycling do not add ascent but do contribute descent. Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding do not contribute either elevation metric; their vertical movement is recorded as depth. Ascent and descent summary exclusions configured in **Settings** also apply.
@@ -206,6 +230,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Dashboard** is your main activity overview.
 - **Health** compares supported Sleep and Health measurements source by source. Open the [Health guide](/help#health) for metric ranges, source separation, and sync-state guidance.
 - **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
+- **Plans** lets you create standalone workouts or organize them into dated plans without connecting a provider. Open the [Training plans guide](/help#training-plans).
 - **Supported activity types** lists the activity types Quantified Self recognizes and explains why the details shown depend on data in each activity. Open the [Supported activity types guide](/help#supported-activities) or public [Supported activity types page](/features/supported-activities).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters. Its activity filter lists only trackable types in the selected date range, while keeping an active no-match choice visible until you clear it. Detected trips list an inferred **Home** area first when available; use the sort button to choose newest-first or oldest-first, and the choice is saved.
@@ -428,6 +453,8 @@ export const HELP_SECTIONS: HelpSection[] = [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
       { label: 'Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
+      { label: 'Plans', icon: 'event_note', kind: 'route', target: '/plans' },
+      { label: 'Training plans guide', icon: 'school', kind: 'route', target: '/help', fragment: 'training-plans' },
       { label: 'Health guide', icon: 'school', kind: 'route', target: '/help', fragment: 'health' },
       { label: 'Activity Calendar guide', icon: 'school', kind: 'route', target: '/help', fragment: 'activity-calendar' },
       { label: 'Activity Calendar Overview', icon: 'travel_explore', kind: 'route', target: '/features/activity-calendar' },
@@ -477,6 +504,18 @@ export const HELP_SECTIONS: HelpSection[] = [
       { label: 'Open Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
       { label: 'Activity Calendar Overview', icon: 'travel_explore', kind: 'route', target: '/features/activity-calendar' },
       { label: 'Calendar Settings', icon: 'tune', kind: 'route', target: '/settings' },
+    ],
+  },
+  {
+    id: 'training-plans',
+    icon: 'event_note',
+    title: 'Training plans',
+    summary: 'Create standalone workouts or organize dated Running and Cycling workouts into plans.',
+    content: TRAINING_PLANS_HELP_CONTENT,
+    links: [
+      { label: 'Open Plans', icon: 'event_note', kind: 'route', target: '/plans' },
+      { label: 'Open Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
+      { label: 'Training analysis guide', icon: 'monitoring', kind: 'route', target: '/help', fragment: 'training-analysis' },
     ],
   },
   {

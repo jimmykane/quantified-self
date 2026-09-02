@@ -1409,6 +1409,94 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Training plans and scheduled workouts', () => {
+            const seedCurrentTrainingData = async () => {
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    const userRef = context.firestore().collection('users').doc(userId);
+                    await userRef.collection('trainingPlanState').doc('current').set({
+                        schemaVersion: 1,
+                        activePlanId: 'plan-1',
+                        revision: 1,
+                        currentWorkoutCount: 1,
+                        updatedAtMs: 1,
+                    });
+                    await userRef.collection('trainingPlanState').doc('internal').set({
+                        privateState: true,
+                    });
+                    await userRef.collection('trainingPlans').doc('plan-1').set({ id: 'plan-1' });
+                    await userRef.collection('scheduledWorkouts').doc('workout-1').set({
+                        id: 'workout-1', planId: 'plan-1', localDate: '2026-09-02', lifecycle: 'planned',
+                    });
+                    await userRef.collection('trainingPlans').doc('plan-1')
+                        .collection('revisions').doc('0000000001').set({ privateDelta: true });
+                    await userRef.collection('trainingPlans').doc('plan-1')
+                        .collection('revisions').doc('0000000001')
+                        .collection('chunks').doc('checkpoint-workouts-0000').set({ privatePayload: true });
+                    await userRef.collection('scheduledWorkouts').doc('workout-1')
+                        .collection('revisions').doc('0000000001').set({ privateSnapshot: true });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('mutationReceipts').doc('mutation-1').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('planDeletionLocks').doc('plan-1').set({ requestHash: 'private' });
+                    await userRef.collection('trainingPlanState').doc('current')
+                        .collection('deletionTombstones').doc('hashed-entity-id').set({ entityIdHash: 'private' });
+                });
+            };
+
+            it('allows owners to read and list current state, plans, and workouts', async () => {
+                await seedCurrentTrainingData();
+                const userRef = testEnv.authenticatedContext(userId).firestore().collection('users').doc(userId);
+
+                await assertSucceeds(userRef.collection('trainingPlanState').doc('current').get());
+                await assertSucceeds(userRef.collection('trainingPlans').doc('plan-1').get());
+                await assertSucceeds(userRef.collection('trainingPlans').get());
+                await assertSucceeds(userRef.collection('scheduledWorkouts').doc('workout-1').get());
+                await assertSucceeds(userRef.collection('scheduledWorkouts').get());
+                await assertFails(userRef.collection('trainingPlanState').doc('internal').get());
+                await assertFails(userRef.collection('trainingPlanState').get());
+            });
+
+            it('denies cross-user and unauthenticated reads of current training data', async () => {
+                await seedCurrentTrainingData();
+                const ownerPath = `users/${userId}/scheduledWorkouts/workout-1`;
+                await assertFails(testEnv.authenticatedContext(otherId).firestore().doc(ownerPath).get());
+                await assertFails(testEnv.unauthenticatedContext().firestore().doc(ownerPath).get());
+            });
+
+            it('denies every direct browser create, update, and delete', async () => {
+                await seedCurrentTrainingData();
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const planRef = db.doc(`users/${userId}/trainingPlans/plan-1`);
+                const workoutRef = db.doc(`users/${userId}/scheduledWorkouts/workout-1`);
+                const stateRef = db.doc(`users/${userId}/trainingPlanState/current`);
+
+                await assertFails(db.doc(`users/${userId}/trainingPlans/plan-2`).set({ id: 'plan-2' }));
+                await assertFails(planRef.update({ name: 'Browser edit' }));
+                await assertFails(planRef.delete());
+                await assertFails(db.doc(`users/${userId}/scheduledWorkouts/workout-2`).set({ id: 'workout-2' }));
+                await assertFails(workoutRef.update({ lifecycle: 'skipped' }));
+                await assertFails(workoutRef.delete());
+                await assertFails(stateRef.update({ revision: 99 }));
+            });
+
+            it('keeps revisions, receipts, deletion locks, and tombstones inaccessible to owners', async () => {
+                await seedCurrentTrainingData();
+                const db = testEnv.authenticatedContext(userId).firestore();
+                const internalPaths = [
+                    `users/${userId}/trainingPlans/plan-1/revisions/0000000001`,
+                    `users/${userId}/trainingPlans/plan-1/revisions/0000000001/chunks/checkpoint-workouts-0000`,
+                    `users/${userId}/scheduledWorkouts/workout-1/revisions/0000000001`,
+                    `users/${userId}/trainingPlanState/current/mutationReceipts/mutation-1`,
+                    `users/${userId}/trainingPlanState/current/planDeletionLocks/plan-1`,
+                    `users/${userId}/trainingPlanState/current/deletionTombstones/hashed-entity-id`,
+                ];
+                for (const path of internalPaths) {
+                    await assertFails(db.doc(path).get());
+                    await assertFails(db.doc(path).set({ forged: true }));
+                }
+            });
+        });
+
         describe('Sleep Sessions and Sync State', () => {
             it('should allow owners to read their own sleep session docs', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();

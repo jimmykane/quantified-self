@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -20,6 +20,8 @@ import { SharedModule } from '../../../modules/shared.module';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
 import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volume-list/activity-calendar-volume-stats.component';
+import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
+import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
 
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
@@ -27,6 +29,18 @@ export interface CalendarDayDetailsData {
   locale?: string;
   unitSettings?: UserUnitSettingsInterface | null;
   summariesSettings?: SummaryStatsSettingsLike | null;
+  plannedWorkouts?: PlannedWorkoutCalendarEntry[];
+  plannedWorkoutsSource?: () => readonly PlannedWorkoutCalendarEntry[];
+  plannedWorkoutsStatusSource?: () => 'loading' | 'ready' | 'error';
+}
+
+interface CalendarDayPlannedWorkoutRow {
+  id: string;
+  title: string;
+  sport: string;
+  scopeLabel: string;
+  lifecycleLabel: string;
+  summary: string[];
 }
 
 interface CalendarDayEventRow {
@@ -66,6 +80,17 @@ export class CalendarDayDetailsComponent {
   });
   readonly title = this.titleFormatter.format(this.data.day.date);
   readonly eventRows = this.data.day.events.map(event => this.buildEventRow(event));
+  readonly plannedWorkoutsStatus = computed(() => this.data.plannedWorkoutsStatusSource?.() ?? 'ready');
+  readonly plannedWorkoutRows = computed(() => (
+    this.data.plannedWorkoutsSource?.() ?? this.data.plannedWorkouts ?? []
+  ).map<CalendarDayPlannedWorkoutRow>(entry => ({
+    id: entry.workout.id,
+    title: entry.workout.title,
+    sport: entry.workout.structure.sport,
+    scopeLabel: entry.planName ?? 'Standalone',
+    lifecycleLabel: entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
+    summary: formatManualWorkoutStructure(entry.workout.structure, this.data.unitSettings, this.data.locale),
+  })));
   readonly familyVolumeRows = this.buildFamilyVolumeRows();
 
   dismiss(): void {
@@ -77,6 +102,10 @@ export class CalendarDayDetailsComponent {
       return;
     }
     this.navigation.prepareReturn(this.router.url, this.data.day.dateKey);
+    this.dismiss();
+  }
+
+  prepareWorkoutNavigation(): void {
     this.dismiss();
   }
 

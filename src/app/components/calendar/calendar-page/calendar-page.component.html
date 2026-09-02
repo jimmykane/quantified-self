@@ -68,11 +68,16 @@
       <span>Retry</span>
     </button>
   </section>
-  } @else {
-    @if (!isLoading() && !hasEvents()) {
+  }
+    @if (eventState().status === 'ready' && !hasEvents()) {
     <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
-    <app-activity-calendar-grid [model]="calendarModel()" (daySelected)="openDay($event)">
+    @if (plansState().status === 'error') {
+    <span class="calendar-status-announcement" role="status">Planned workouts could not be loaded.</span>
+    }
+    <app-activity-calendar-grid [model]="calendarModel()"
+      [plannedWorkoutsByDate]="plannedWorkoutsByDate()"
+      (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
 
     @if (!isLoading() && familyVolumeRows().length) {
@@ -94,7 +99,6 @@
       <app-activity-calendar-volume-list [rows]="familyVolumeRows()"></app-activity-calendar-volume-list>
     </section>
     }
-  }
 
   @if (currentUser(); as user) {
   <app-activity-range-table-section [user]="user" [range]="primaryActivityRange()" heading="Activities"

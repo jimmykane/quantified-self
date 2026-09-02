@@ -251,6 +251,10 @@
           "destination": "/index.csr.html"
         },
         {
+          "source": "/plans",
+          "destination": "/index.csr.html"
+        },
+        {
           "source": "/training",
           "destination": "/index.csr.html"
         },
@@ -527,6 +531,10 @@
         },
         {
           "source": "/calendar",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/plans",
           "destination": "/index.csr.html"
         },
         {

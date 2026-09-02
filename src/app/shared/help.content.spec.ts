@@ -39,6 +39,7 @@ describe('help.content', () => {
       'getting-started',
       'supported-activities',
       'activity-calendar',
+      'training-plans',
       'health',
       'training-analysis',
       'ai-insights',
@@ -50,8 +51,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define eleven unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(11);
+  it('should define twelve unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(12);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -342,6 +343,9 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
+    expect(calendarSection?.content).toContain('Select any date, including an empty one');
+    expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');
+    expect(calendarSection?.content).toContain('Planned workouts never change recorded period totals');
     expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
     expect(calendarSection?.content).toContain('action menu to share, reprocess, download, or delete it');
     expect(calendarSection?.links).toContainEqual({
@@ -357,6 +361,27 @@ describe('help.content', () => {
       target: '/help',
       fragment: 'activity-calendar',
     });
+  });
+
+  it('documents standalone manual planning, revision recovery, and truthful provider status', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
+
+    expect(planningSection?.content).toContain('You do not need to create a plan first');
+    expect(planningSection?.content).toContain('Manual planning is available without a provider connection');
+    expect(planningSection?.content).toContain('Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet');
+    expect(planningSection?.content).toContain('only one can be active');
+    expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
+    expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');
+    expect(planningSection?.content).toContain('Every visible date');
+    expect(planningSection?.content).toContain('Planned workouts and completed activities are separate');
+    expect(planningSection?.links).toContainEqual({
+      label: 'Open Plans',
+      icon: 'event_note',
+      kind: 'route',
+      target: '/plans',
+    });
+    expect(gettingStartedSection?.content).toContain('[Training plans guide](/help#training-plans)');
   });
 
   it('should document safe event merge retry and recovery behavior', () => {

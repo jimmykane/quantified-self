@@ -186,6 +186,13 @@ export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { queryHealthRange } from './health/callable';
 export { queryActivityHealthRange } from './health/activity-callable';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
+export { mutateTrainingSchedule } from './training-plans/mutate-training-schedule';
+export {
+  getTrainingScheduleHistory,
+  previewTrainingScheduleRestore,
+} from './training-plans/history-callables';
+export { restoreTrainingScheduleRevision } from './training-plans/restore-callable';
+export { deleteTrainingPlan } from './training-plans/delete-training-plan-callable';
 export {
   onDashboardDerivedMetricsActivityWrite,
   onDashboardDerivedMetricsEventWrite,

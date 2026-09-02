@@ -579,13 +579,16 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(docRef);
     });
 
-    it('should recursively delete generated derived metrics subtree', async () => {
+    it('should recursively delete generated metrics and training-planning subtrees', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/derivedMetrics' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingPlanState' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingPlans' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/scheduledWorkouts' }));
     });
 
     it('should handle subcollection deletion error and continue', async () => {

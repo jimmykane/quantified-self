@@ -227,6 +227,32 @@
   letter-spacing: 0;
 }
 
+.planned-workout-markers {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: inline-flex;
+  max-width: calc(100% - 6px);
+  align-items: center;
+  gap: 1px;
+  padding: 1px 3px;
+  border-radius: var(--mat-sys-corner-extra-small);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  font: var(--mat-sys-label-small);
+}
+
+.planned-workout-markers--skipped {
+  background: var(--mat-sys-surface-container-highest);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.planned-workout-markers mat-icon {
+  width: 13px;
+  height: 13px;
+  font-size: 13px;
+}
+
 .activity-calendar--year .activity-calendar-weekdays {
   min-height: 22px;
 }
@@ -242,6 +268,27 @@
   padding: 2px 1px;
   border-right-color: transparent;
   border-bottom-color: transparent;
+}
+
+.activity-calendar--year .planned-workout-markers,
+.activity-calendar--compact .planned-workout-markers {
+  top: 0;
+  right: 0;
+  bottom: auto;
+  padding: 0;
+  background: transparent;
+}
+
+.activity-calendar--year .planned-workout-markers mat-icon,
+.activity-calendar--compact .planned-workout-markers mat-icon {
+  width: 10px;
+  height: 10px;
+  font-size: 10px;
+}
+
+.activity-calendar--year .planned-workout-markers mat-icon:nth-of-type(n + 2),
+.activity-calendar--compact .planned-workout-markers mat-icon:nth-of-type(n + 2) {
+  display: none;
 }
 
 .activity-calendar--year .activity-calendar-day-number,

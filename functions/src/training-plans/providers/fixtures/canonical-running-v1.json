@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "sport": "Running",
+  "nodes": [
+    {
+      "kind": "step",
+      "id": "warmup",
+      "purpose": "warmup",
+      "ending": { "kind": "time", "seconds": 600 },
+      "targets": [
+        {
+          "kind": "heart-rate",
+          "mode": "absolute",
+          "minimumBpm": 130,
+          "maximumBpm": 145
+        }
+      ],
+      "note": "Easy warm up"
+    },
+    {
+      "kind": "repeat",
+      "id": "intervals",
+      "count": 3,
+      "steps": [
+        {
+          "kind": "step",
+          "id": "fast",
+          "purpose": "work",
+          "ending": { "kind": "distance", "meters": 400 },
+          "targets": [
+            {
+              "kind": "speed",
+              "mode": "absolute",
+              "minimumMetersPerSecond": 4.3,
+              "maximumMetersPerSecond": 4.55,
+              "presentation": "pace"
+            }
+          ],
+          "note": "Fast 400"
+        },
+        {
+          "kind": "step",
+          "id": "recover",
+          "purpose": "recovery",
+          "ending": { "kind": "time", "seconds": 60 },
+          "targets": [
+            {
+              "kind": "heart-rate",
+              "mode": "absolute",
+              "minimumBpm": 110,
+              "maximumBpm": 130
+            }
+          ],
+          "note": "Jog easy"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "id": "cooldown",
+      "purpose": "cooldown",
+      "ending": { "kind": "time", "seconds": 300 },
+      "targets": [
+        {
+          "kind": "cadence",
+          "mode": "absolute",
+          "minimumRpm": 80,
+          "maximumRpm": 90
+        }
+      ],
+      "note": "Relax"
+    }
+  ]
+}

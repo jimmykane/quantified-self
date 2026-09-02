@@ -31,6 +31,66 @@ The current providers are intentionally not identical:
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
+### Structured-workout delivery proof (not production support)
+
+Training planning uses a stricter launch boundary than activity or route delivery. Manual plan and standalone-workout
+authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
+directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
+connection alone never opts workouts into delivery.
+
+The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
+`functions/src/training-plans/providers/`. Every provider delivery flag is currently `false`:
+
+| Provider | Proof state | Truthful model and current gate |
+| --- | --- | --- |
+| Garmin | `fixture-only` | The local ignored Training API V2 partner contract proves separate Workout and Workout Schedule CRUD, `WORKOUT_IMPORT`, 100-step single-sport limits, and primary/secondary target fields. Redacted Running/Cycling fixtures cover time/distance/manual steps and repeats. Evaluation credentials, device coverage, completion correlation, and sandbox CRUD remain unproven. |
+| COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
+| Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
+| Suunto | `fixture-only` | A scheduled workout maps to one dated SuuntoPlus Guide, not a native training-plan calendar. Time, distance, manual transition, repeats, and absolute HR/power/speed/pace/cadence targets map to Guide JSON; cadence converts from rpm to hertz. Guide entitlement, ZIP/icon transport, watch storage/pinning, supported-device behavior, CRUD, and FIT correlation need sandbox proof. |
+
+Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
+not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
+provider ID and CRUD lifecycle. The fixture mapper supports the portable Running/Cycling baseline, fixed repeats,
+time/distance/manual endings, and absolute HR/power/speed/pace/cadence ranges. Garmin's percentage fields do not carry
+the canonical reference snapshot, so relative targets are frozen to their stored absolute range only after explicit
+degradation approval. Secondary targets are rejected outside cycling, must differ from the primary target, and remain
+an explicit device-support degradation even for cycling. The private contract does not document a completed-activity
+workout identifier.
+
+COROS mapping follows the local ignored COROS API Reference V2.0.6 (February 2026); the confidential PDF is likewise
+kept out of Git. Partner athlete/workout IDs in fixtures are redacted or deterministic opaque safe integers. The mapper
+supports dated Run/Bike time/distance/manual steps and fixed repeats. Native FTP, threshold-HR, and threshold-speed
+percentage targets preserve their canonical reference snapshots. Maximum-HR, critical-power, and relative-cadence
+targets freeze to absolute ranges only after approval. COROS accepts one intensity target per step, exposes no distinct
+recovery intensity, documents cadence targets for running but not cycling, and requires integer lengths and percentages;
+each lossy case is surfaced before serialization.
+
+Wahoo mapping follows the official [Cloud API](https://cloud-api.wahooligan.com/) and
+[plan.json 1.0.0 format](https://cloud-api.wahooligan.com/docs/plan-json-format.pdf). Canonical repeat count is total
+passes, while Wahoo's repeat trigger counts passes after the first, so the serializer writes `count - 1`. Wahoo stores
+relative FTP, maximum-HR, threshold-HR, and threshold-speed references in the header. Conflicting snapshots, critical
+power, relative cadence, generic `other` purpose, and multiple targets where ELEMNT uses only the first are explicit
+degradations. FTP and heart-rate header references are integer fields; a fractional canonical snapshot is rounded only
+after explicit degradation approval. Relative threshold/max-heart-rate and threshold-speed targets are also explicit
+device-support degradations: Wahoo documents them for treadmill workouts in the Wahoo app, not ELEMNT computers or
+RIVAL. Unsupported endings fail.
+
+Suunto mapping follows the official [Guide API workflow](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api),
+[Guide JSON reference](https://apizone.suunto.com/suuntoplus-guide-description), and
+[FIT correlation description](https://apizone.suunto.com/fit-description). Guide `externalId` values are deterministic,
+opaque, and at most 64 characters. Relative targets are frozen from the canonical reference snapshot only after explicit
+degradation approval. Text and metadata limits are never truncated silently, truncation counts Unicode code points, and
+text outside Suunto's guaranteed minimum watch character set requires explicit degradation approval because rendering
+remains device-dependent. The serializer produces `guide.json`
+fixtures only; it must not be described as a completed Guide upload adapter because the API requires a ZIP containing
+that JSON and a valid 300 x 300 PNG.
+
+Fixture compatibility is not delivery readiness. Before any adapter flag changes, record sandbox evidence for create,
+update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and provider-specific horizon behavior. The
+shared delivery ledger, reconciliation queue, entitlement, disconnect/deletion behavior, provider certification,
+observability, and kill switches are tracked under epic #583. Do not hide an unmet gate in a code comment or silently
+narrow the epic acceptance criteria.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:

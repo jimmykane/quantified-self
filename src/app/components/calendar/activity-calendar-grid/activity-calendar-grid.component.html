@@ -22,15 +22,15 @@
       <div class="activity-calendar-days">
         @for (day of month.days; track day.dateKey) {
         @if (day.inPrimaryPeriod || (!hideOutsideDays && model.view !== 'year')) {
-          @if (day.eventCount) {
           <button type="button" class="activity-calendar-day activity-calendar-day-button"
             [class.activity-calendar-day--outside]="!day.inPrimaryPeriod"
             [class.activity-calendar-day--today]="day.isToday"
             [class.activity-calendar-day--weekend]="day.isWeekend"
-            [attr.aria-label]="day.ariaLabel"
+            [attr.aria-label]="day.ariaLabel + (plannedWorkoutsByDate[day.dateKey] ? ', ' + plannedWorkoutsByDate[day.dateKey].ariaLabel : ', no planned workouts')"
             matRipple
             (click)="selectDay(day)">
             <span class="activity-calendar-day-number"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span></span>
+            @if (day.eventCount) {
             <span class="activity-calendar-marker-stage"
               [class.activity-calendar-marker-stage--concentric]="compact || model.view === 'year'">
               @for (family of day.visibleFamilies; track family.id) {
@@ -44,16 +44,19 @@
               <span class="activity-calendar-marker-overflow">+{{ day.overflowFamilyCount }}</span>
               }
             </span>
+            }
+            @if (plannedWorkoutsByDate[day.dateKey]; as plannedDay) {
+              <span class="planned-workout-markers" aria-hidden="true"
+                [class.planned-workout-markers--skipped]="plannedDay.hasSkipped">
+                @for (entry of plannedDay.visibleEntries; track entry.workout.id) {
+                  <mat-icon>{{ entry.workout.lifecycle === 'skipped' ? 'event_busy' : 'event_note' }}</mat-icon>
+                }
+                @if (plannedDay.overflowCount) {
+                  <span>+{{ plannedDay.overflowCount }}</span>
+                }
+              </span>
+            }
           </button>
-          } @else {
-          <div class="activity-calendar-day"
-            [class.activity-calendar-day--outside]="!day.inPrimaryPeriod"
-            [class.activity-calendar-day--today]="day.isToday"
-            [class.activity-calendar-day--weekend]="day.isWeekend"
-            [attr.aria-label]="day.ariaLabel">
-            <span class="activity-calendar-day-number"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span></span>
-          </div>
-          }
         } @else {
         <div class="activity-calendar-day activity-calendar-day--blank"
           [class.activity-calendar-day--weekend]="day.isWeekend"

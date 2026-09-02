@@ -60,6 +60,21 @@ The Health cursor advances one inclusive window of at most 90 days at a time fro
 
 Sleep and Health share the existing 30-day Garmin history cooldown, but their ranges are independent: a provider-discovered Sleep minimum does not shorten another Health family's range. The callable reports `sleepQueued` and `healthQueued` separately while retaining `queued` as the number of Sleep date-range requests. Garmin Summary Resender remains an operational recovery option for a deliberately bounded family/range after live delivery is healthy; it is not the normal user history flow, and no local credential migration script is required.
 
+## Training-planning proof boundary
+
+The ignored local Garmin Training API V2 version 1.0 partner contract is available for development, but it is never
+committed. `shared/planned-workout-providers.ts` and the pure serializer under
+`functions/src/training-plans/providers/` record a redacted Running/Cycling fixture for the portable v1 workout model.
+Workout content and date-only Workout Schedule payloads are deliberately separate because Garmin assigns and manages
+their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
+heart-rate/power/speed/pace/cadence ranges.
+
+All Garmin planned-workout delivery remains disabled. Relative targets require explicit degradation approval because
+the provider percentage fields do not transmit Quantified Self's stored reference snapshot. Secondary targets are
+rejected outside cycling and remain device-dependent for cycling. Evaluation credentials, representative device access,
+create/update/reschedule/delete/duplicate evidence, reconnect behavior, production review, and completed-activity
+correlation remain in issues #645 and #647. This proof does not authorize a provider call or deployment.
+
 ## Production configuration
 
 No new secret is required. The existing Garmin OAuth client credentials authorize callback pulls.

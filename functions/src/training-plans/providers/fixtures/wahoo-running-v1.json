@@ -1,0 +1,53 @@
+{
+  "header": {
+    "name": "Fixture intervals",
+    "version": "1.0.0",
+    "description": "Redacted provider contract fixture.",
+    "workout_type_family": 1,
+    "workout_type_location": 1
+  },
+  "intervals": [
+    {
+      "name": "Easy warm up",
+      "exit_trigger_type": "time",
+      "exit_trigger_value": 600,
+      "intensity_type": "wu",
+      "targets": [
+        { "type": "hr", "low": 130, "high": 145 }
+      ]
+    },
+    {
+      "exit_trigger_type": "repeat",
+      "exit_trigger_value": 2,
+      "intervals": [
+        {
+          "name": "Fast 400",
+          "exit_trigger_type": "distance",
+          "exit_trigger_value": 400,
+          "intensity_type": "active",
+          "targets": [
+            { "type": "speed", "low": 4.3, "high": 4.55 }
+          ]
+        },
+        {
+          "name": "Jog easy",
+          "exit_trigger_type": "time",
+          "exit_trigger_value": 60,
+          "intensity_type": "recover",
+          "targets": [
+            { "type": "hr", "low": 110, "high": 130 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Relax",
+      "exit_trigger_type": "time",
+      "exit_trigger_value": 300,
+      "intensity_type": "cd",
+      "targets": [
+        { "type": "rpm", "low": 80, "high": 90 }
+      ]
+    }
+  ]
+}

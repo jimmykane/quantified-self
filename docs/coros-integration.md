@@ -148,6 +148,21 @@ The provider route ID is a deterministic digest of the Quantified Self user, act
 
 HTTP 408, 429, 5xx, and transient transport failures are retryable. Authentication failures require reconnect, and HTTP 403 or provider code `30009` is a permission-required failure. Invalid parameters, missing required distance, invalid provider responses, and rejected content are terminal and sanitized before reaching the browser or DLQ.
 
+## Training-planning proof boundary
+
+The ignored local COROS API Reference V2.0.6 (February 2026) is available for development but is never committed. The
+versioned capability matrix and pure serializer under `functions/src/training-plans/providers/` produce a redacted,
+dated Run/Bike Training Plan fixture with deterministic opaque partner workout IDs. The mapping covers fixed repeats,
+time/distance/manual steps, absolute targets, and native FTP, threshold-heart-rate, and threshold-speed percentage
+targets while retaining their canonical reference snapshots.
+
+All COROS planned-workout delivery remains disabled. A second target, recovery-to-rest mapping, fractional lengths or
+percentages, maximum-heart-rate/critical-power/relative-cadence freezing, and other lossy mappings require explicit
+approval; cycling cadence is unsupported by the current contract. Training Plan entitlement, repeated-ID replacement,
+overlapping-window behavior, sandbox CRUD/idempotency, and production certification remain in issues #645 and #648.
+The existing inbound `planWorkoutId` preservation is only a correlation prerequisite; completion reconciliation remains
+tracked separately in issue #651. This proof does not authorize a provider call or deployment.
+
 ## Security and lifecycle controls
 
 - Access/refresh tokens remain in the existing `COROSAPIAccessTokens` tree and its pre-existing owner-readable connection model, but browser writes to the token subtree are denied. OAuth exchange, refresh, and disconnect mutations use the Admin SDK. The delivery callables and workers do not return credentials; their browser responses contain only bounded upload/status identifiers and messages.

@@ -7,7 +7,8 @@ This document is the implementation and maintenance guide for the Activity Calen
 - The dashboard Activity Calendar tile shows the current month in a compact 1 x 1 tile and opens the full calendar. This is the creation default; persisted user-selected dimensions are not rewritten.
 - New dashboards include the tile by default. An existing editable dashboard that does not contain it receives a one-time automatic addition with an Undo action.
 - The authenticated `/calendar` route provides Week, Month, and Year views, period navigation, totals, activity-group bars, and day details.
-- Selecting an active day opens an Angular Material bottom sheet with day totals, the shared activity-group duration bars and available distance/ascent/descent totals, plus recorded distance/ascent/descent for each individual activity, and links to individual events.
+- Every rendered date is selectable. Its Angular Material bottom sheet keeps planned workouts separate from completed activity totals and rows, provides active-plan/standalone creation actions, and links to a planned-workout editor or individual event as appropriate.
+- Standalone workouts and workouts from the active plan appear on the full Calendar, dashboard tile, and Dashboard Today mini-calendar. Inactive-plan workouts remain in `/plans`; skipped workouts remain visible with a distinct marker.
 - The public `/features/activity-calendar` route explains the feature without reading or exposing user activity data.
 
 ## Query and state model
@@ -29,6 +30,11 @@ Dashboard migration state uses the shared automatic-tile framework:
 
 `src/app/services/activity-calendar.service.ts` reads lightweight event summary documents by `startDate`. It excludes merge and benchmark documents, maps only calendar-required fields into `EventInterface` values, and sorts results by start time. Exact user and query-window results are cached for five minutes with at most 12 entries; a cached value is emitted immediately while the live listener supplies current data.
 
+`TrainingPlansService.watchSchedule()` independently reads the owner-visible current plan, workout, and state documents.
+`planned-workout-calendar.helper.ts` projects only standalone workouts and workouts belonging to the active plan into a
+local-date map. The activity and planning listeners stay separate so a plan read failure cannot turn recorded activity
+data into an empty result, and a planned workout can never become an `EventInterface` or enter activity summaries.
+
 ## Day markers
 
 Activities are grouped with the shared Sports Lib activity-type groups and app colors. Events containing more than one group are represented as Multisport.
@@ -39,7 +45,8 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 - Standard markers range from 8 to 30 px. Compact concentric markers range from 4 to 18 px and preserve at least a 14 percent size difference between visible layers.
 - At most three groups are drawn in a day cell; an overflow count represents additional groups.
 - Week and Month layouts separate markers when space allows. Compact tiles, narrow layouts, and Year view use concentric markers.
-- Date cells do not use Material tooltips. This preserves native touch scrolling; their accessible names contain the date, activity count, duration, and group summary.
+- Planned and skipped-workout icons are independent from the duration-scaled activity markers. Their count does not change marker size or overflow.
+- Date cells do not use Material tooltips. This preserves native touch scrolling; their accessible names contain the date, activity and planned-workout counts, duration, and group summary.
 
 ## Period summaries
 
@@ -47,6 +54,7 @@ The top summary shows distance, duration, and ascent for the selected primary pe
 
 - Duration is the bar metric. Positive recorded duration, distance, ascent, and descent values appear beneath the bar.
 - The day-details sheet reuses these exact group rows for the selected local day; its bars compare only that day's activity groups.
+- Planned workouts never contribute to distance, duration, ascent, descent, activity counts, group bars, or the activity table. Day details render them in a separate **Planned workouts** section.
 - Missing values remain unavailable rather than being inferred. A group without recorded duration uses `--` and has no progressbar semantics.
 - `AppEventUtilities.shouldExcludeAscent` and `shouldExcludeDescent` apply shared sport rules. Lift-served downhill types can contribute descent without contributing ascent; Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding contribute neither elevation metric because their vertical movement is depth.
 - User `removeAscentForEventTypes` and `removeDescentForEventTypes` summary settings are applied in addition to the shared sport rules.
@@ -61,7 +69,7 @@ Keep these interaction contracts:
 - Previous and next controls have period-specific accessible labels.
 - The period label announces navigation changes.
 - Loading occupies a stable progress slot so cached and live emissions do not move the page.
-- Active days are buttons; empty days are non-interactive cells.
+- Every rendered date is a button, including dates with neither a planned workout nor a completed activity. Empty dates open creation choices.
 - Activity bars expose progressbar semantics only when recorded duration exists.
 - Start-of-week and weekend treatment must follow the user's settings and shared theme tokens.
 
@@ -69,6 +77,7 @@ Keep these interaction contracts:
 
 - `/features/activity-calendar` is a prerendered public page included in the sitemap and public startup-route allowlist.
 - `/calendar` requires authentication, uses `noindex, follow`, is excluded from the sitemap, and is disallowed in `robots.txt`.
+- `/plans` has the same authenticated, client-rendered, `noindex` and sitemap/robots treatment. It is not a public product page.
 - Public page metadata and structured data describe the feature only. They must never include activity values, account identifiers, or examples derived from a user's calendar.
 
 ## Test map
@@ -77,6 +86,7 @@ Keep these interaction contracts:
 - `src/app/services/activity-calendar.service.spec.ts`: summary queries, filtering, mapping, sorting, and cache behavior.
 - `src/app/helpers/dashboard-auto-tile.helper.spec.ts` and `src/app/services/dashboard-auto-tile.service.spec.ts`: Calendar identity, one-time dashboard migration, duplicate prevention, dismissal, Undo, and rollback behavior.
 - `src/app/components/calendar/**.spec.ts`: page, grid, tile, day details, responsive behavior, and Material interaction contracts.
+- `src/app/helpers/planned-workout-calendar.helper.spec.ts` and `src/app/services/training-plans.service.spec.ts`: active-plan/standalone overlay selection, inactive-plan exclusion, skipped visibility, and owner-current schedule reads.
 - `src/app/components/public-seo/public-seo-pages.content.spec.ts`: public page metadata, links, and structured data.
 - `src/app/app.routing.module.spec.ts`, `src/app/app.routes.server.spec.ts`, and `src/app/shared/public-startup-route.spec.ts`: public and authenticated route contracts.
 - `src/firebase-hosting.config.spec.ts`: sitemap, robots, and hosting behavior.

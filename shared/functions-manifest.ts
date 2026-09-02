@@ -123,6 +123,11 @@ export const FUNCTIONS_MANIFEST = {
     resetAssistantConversation: { name: 'resetAssistantConversation', region: 'europe-west2' },
     ensureDerivedMetrics: { name: 'ensureDerivedMetrics', region: 'europe-west2' },
     setTrainingBuildBenchmark: { name: 'setTrainingBuildBenchmark', region: 'europe-west2' },
+    mutateTrainingSchedule: { name: 'mutateTrainingSchedule', region: 'europe-west2' },
+    getTrainingScheduleHistory: { name: 'getTrainingScheduleHistory', region: 'europe-west2' },
+    previewTrainingScheduleRestore: { name: 'previewTrainingScheduleRestore', region: 'europe-west2' },
+    restoreTrainingScheduleRevision: { name: 'restoreTrainingScheduleRevision', region: 'europe-west2' },
+    deleteTrainingPlan: { name: 'deleteTrainingPlan', region: 'europe-west2' },
     processDerivedMetricsIngressTask: { name: 'processDerivedMetricsIngressTask', region: 'europe-west2' },
 } as const;
 
