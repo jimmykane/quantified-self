@@ -29,6 +29,16 @@ interface StressStateColorOption {
   };
 }
 
+interface RecoveryBalanceColorOption {
+  series: Array<{
+    type: string;
+    itemStyle: { color: (params: { value?: unknown }) => string };
+  }>;
+  tooltip: {
+    formatter: (params: { value?: unknown }) => string;
+  };
+}
+
 function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspaceSeries {
   return {
     id: 'series-1',
@@ -198,6 +208,40 @@ describe('Health metric chart helpers', () => {
     ]);
     expect(option.tooltip.formatter({ value: [DAY_MS * 3, 'provider-specific'] }))
       .toContain(`background:${style.trendLineColor}`);
+  });
+
+  it('renders Suunto Recovery Balance as separately graded resource bars', () => {
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.BodyEnergy,
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+      providerLabel: 'Suunto',
+      sourceLabel: 'Suunto',
+      semanticVariant: 'recovery_balance',
+      chartKind: 'bar',
+      unit: 'percent',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 20, qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 45, qualityCode: null },
+        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 70, qualityCode: null },
+        { timestampMs: DAY_MS * 3, calendarDate: '1970-01-04', value: 90, qualityCode: null },
+      ],
+    })], 0, DAY_MS * 3)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 3,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as RecoveryBalanceColorOption;
+    const color = option.series[0].itemStyle.color;
+
+    expect(option.series[0].type).toBe('bar');
+    expect(color({ value: [0, 20] })).toBe(AppDataColors['Recovery Balance Low']);
+    expect(color({ value: [DAY_MS, 45] })).toBe(AppDataColors['Recovery Balance Reduced']);
+    expect(color({ value: [DAY_MS * 2, 70] })).toBe(AppDataColors['Recovery Balance Moderate']);
+    expect(color({ value: [DAY_MS * 3, 90] })).toBe(AppDataColors['Recovery Balance High']);
+    expect(option.tooltip.formatter({ value: [DAY_MS * 3, 90] }))
+      .toContain(`background:${AppDataColors['Recovery Balance High']}`);
   });
 
   it('bounds visual DOM points while preserving the first and last reading', () => {

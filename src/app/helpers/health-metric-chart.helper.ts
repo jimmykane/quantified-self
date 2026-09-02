@@ -9,7 +9,7 @@ import {
   resolveEChartsTooltipTriggerOn,
 } from './echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
-import { HEALTH_METRIC_IDS, HealthMetricId } from '@shared/health';
+import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS, HealthMetricId } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
 import { HealthWorkspaceSeries, HealthWorkspaceSeriesPoint, formatHealthValue } from './health-workspace.helper';
 
@@ -60,6 +60,7 @@ export function buildHealthMetricEChartsOption(
   const pointsByTimestamp = new Map(model.displayedPoints.map(point => [point.timestampMs, point]));
   const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
+  const useSuuntoRecoveryBalanceColors = isSuuntoRecoveryBalanceSeries(model.series);
   const option = {
     animation: false,
     backgroundColor: 'transparent',
@@ -103,6 +104,7 @@ export function buildHealthMetricEChartsOption(
               point.value,
               seriesColor,
               style.trendLineColor,
+              useSuuntoRecoveryBalanceColors,
             ),
           }],
           notes: point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : [],
@@ -181,12 +183,13 @@ export function buildHealthMetricEChartsOption(
       barMaxWidth: 28,
       lineStyle: { color: seriesColor, width: 2.25 },
       itemStyle: {
-        color: useStressStateColors
+        color: useStressStateColors || useSuuntoRecoveryBalanceColors
           ? (params: { value?: unknown }) => resolveHealthValueColor(
             model.series.metricId,
             chartValue(params.value),
             seriesColor,
             style.trendLineColor,
+            useSuuntoRecoveryBalanceColors,
           )
           : seriesColor,
       },
@@ -257,7 +260,11 @@ function resolveHealthValueColor(
   value: unknown,
   seriesColor: string,
   neutralColor: string,
+  isSuuntoRecoveryBalance = false,
 ): string {
+  if (isSuuntoRecoveryBalance) {
+    return resolveSuuntoRecoveryBalanceColor(value, seriesColor);
+  }
   if (metricId !== HEALTH_METRIC_IDS.StressState || typeof value !== 'string') {
     return seriesColor;
   }
@@ -276,6 +283,29 @@ function resolveHealthValueColor(
     default:
       return neutralColor;
   }
+}
+
+function isSuuntoRecoveryBalanceSeries(series: HealthWorkspaceSeries): boolean {
+  return series.provider === HEALTH_PROVIDERS.SuuntoApp
+    && series.metricId === HEALTH_METRIC_IDS.BodyEnergy
+    && series.semanticVariant === 'recovery_balance';
+}
+
+function resolveSuuntoRecoveryBalanceColor(value: unknown, fallback: string): string {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+  if (numericValue >= 75) {
+    return AppDataColors['Recovery Balance High'];
+  }
+  if (numericValue >= 50) {
+    return AppDataColors['Recovery Balance Moderate'];
+  }
+  if (numericValue >= 25) {
+    return AppDataColors['Recovery Balance Reduced'];
+  }
+  return AppDataColors['Recovery Balance Low'];
 }
 
 function chartValue(value: unknown): unknown {

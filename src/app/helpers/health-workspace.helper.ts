@@ -145,6 +145,7 @@ export interface HealthSleepObservationRow {
 }
 
 interface MetricDatum {
+  metricId: HealthMetricId;
   provider: HealthProvider;
   accountKey: string;
   aggregation: string;
@@ -400,7 +401,7 @@ export function buildHealthMetricWorkspaceView(
       .sort((left, right) => left.timestampMs - right.timestampMs);
     return {
       id: `health-series-${index + 1}`,
-      metricId: result.query.metricIds[0] || HEALTH_WORKSPACE_DEFAULT_METRIC,
+      metricId: first.metricId,
       provider: first.provider,
       providerLabel: providerLabel(first.provider),
       sourceLabel,
@@ -653,6 +654,7 @@ function observationDatum(
     nativeOnly = metricValue.normalizationStatus !== HEALTH_NORMALIZATION_STATUSES.Canonical || !canonical;
   }
   return {
+    metricId: entry.metricId,
     provider: observation.provider,
     accountKey: observation.accountKey,
     aggregation: entry.aggregation,
@@ -680,6 +682,7 @@ function observationDatum(
 function activityObservationDatum(observation: ActivityHealthObservation): MetricDatum {
   const isWeightContext = observation.sourceKind === ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutProfileContext;
   return {
+    metricId: observation.metricId,
     provider: observation.provider,
     accountKey: observation.sourceAccountKey,
     aggregation: 'point',
@@ -717,6 +720,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       return [];
     }
     return [{
+      metricId: chunk.metricId,
       provider: chunk.provider,
       accountKey: chunk.accountKey,
       aggregation: chunk.aggregation,
@@ -774,6 +778,7 @@ function accountIdentity(provider: HealthProvider, accountKey: string): string {
 
 function metricDatumSeriesIdentity(datum: MetricDatum): string {
   return JSON.stringify([
+    datum.metricId,
     datum.provider,
     datum.accountKey,
     datum.aggregation,
@@ -855,6 +860,13 @@ function positiveNumberOrNull(value: unknown): number | null {
 }
 
 function resolveChartKind(datum: MetricDatum, pointCount: number): HealthWorkspaceChartKind {
+  if (
+    datum.provider === HEALTH_PROVIDERS.SuuntoApp
+    && datum.metricId === HEALTH_METRIC_IDS.BodyEnergy
+    && datum.semanticVariant === 'recovery_balance'
+  ) {
+    return 'bar';
+  }
   if (datum.valueType === 'category' || typeof datum.value === 'string' || typeof datum.value === 'boolean') {
     return 'step';
   }

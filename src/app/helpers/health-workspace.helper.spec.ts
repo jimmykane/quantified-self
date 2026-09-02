@@ -13,6 +13,7 @@ import {
   HEALTH_VALUE_ORIGINS,
   HEALTH_VALUE_TYPES,
   HealthMetricEntry,
+  HealthMetricId,
   HealthMetricValue,
   HealthProvider,
   HealthSampleChunk,
@@ -96,6 +97,8 @@ function sampleChunk(input: {
   id: string;
   provider?: HealthProvider;
   accountKey?: string;
+  metricId?: HealthMetricId;
+  semanticVariant?: string;
   values?: Array<number | string>;
   valueType?: 'number' | 'category';
   normalizationStatus?: 'canonical' | 'native_only';
@@ -104,6 +107,9 @@ function sampleChunk(input: {
   const values = input.values || [50, 51, 52];
   const valueType = input.valueType || HEALTH_VALUE_TYPES.Number;
   const normalizationStatus = input.normalizationStatus || HEALTH_NORMALIZATION_STATUSES.Canonical;
+  const metricId = input.metricId || (valueType === HEALTH_VALUE_TYPES.Category
+    ? HEALTH_METRIC_IDS.StressState
+    : HEALTH_METRIC_IDS.RestingHeartRate);
   return {
     schemaVersion: HEALTH_SCHEMA_VERSION,
     id: input.id,
@@ -111,17 +117,19 @@ function sampleChunk(input: {
     parentSourceRecordId: 'sample-parent',
     provider: input.provider || HEALTH_PROVIDERS.GarminAPI,
     accountKey: input.accountKey || 'garmin-one',
-    metricId: valueType === HEALTH_VALUE_TYPES.Category ? HEALTH_METRIC_IDS.StressState : HEALTH_METRIC_IDS.RestingHeartRate,
+    metricId,
     valueType,
     aggregation: 'sample',
-    semanticVariant: valueType === HEALTH_VALUE_TYPES.Category ? 'provider_state' : 'device_sample',
+    semanticVariant: input.semanticVariant || (valueType === HEALTH_VALUE_TYPES.Category ? 'provider_state' : 'device_sample'),
     origin: HEALTH_VALUE_ORIGINS.Recorded,
     recordingMethod: HEALTH_RECORDING_METHODS.Device,
     normalizationStatus,
     nativeMetric: valueType === HEALTH_VALUE_TYPES.Category ? 'stressState' : 'heartRate',
     nativeUnit: valueType === HEALTH_VALUE_TYPES.Category ? 'state' : 'bpm',
     canonicalUnit: normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical
-      ? valueType === HEALTH_VALUE_TYPES.Category ? HEALTH_UNITS.Category : HEALTH_UNITS.BeatsPerMinute
+      ? valueType === HEALTH_VALUE_TYPES.Category
+        ? HEALTH_UNITS.Category
+        : metricId === HEALTH_METRIC_IDS.BodyEnergy ? HEALTH_UNITS.Percent : HEALTH_UNITS.BeatsPerMinute
       : null,
     calendarDate: '2026-08-01',
     startTimeMs,
@@ -376,6 +384,34 @@ describe('Health workspace helpers', () => {
     expect(view.series.map(series => series.chartKind).sort()).toEqual(['line', 'line', 'step']);
     expect(view.series.filter(series => series.nativeOnly)).toHaveLength(1);
     expect(view.rows.every(row => row.valueText.includes('samples'))).toBe(true);
+  });
+
+  it('renders Suunto Recovery Balance as bars without changing other Body Energy series', () => {
+    const result = projectLoadedHealthRange([], [
+      sampleChunk({
+        id: 'suunto-recovery-balance',
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        metricId: HEALTH_METRIC_IDS.BodyEnergy,
+        semanticVariant: 'recovery_balance',
+        values: [30, 60, 85],
+      }),
+      sampleChunk({
+        id: 'garmin-body-energy',
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        metricId: HEALTH_METRIC_IDS.BodyEnergy,
+        semanticVariant: 'body_battery',
+        values: [30, 60, 85],
+      }),
+    ], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.BodyEnergy],
+      includeSamples: true,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const view = buildHealthMetricWorkspaceView(result);
+    expect(view.series.find(series => series.provider === HEALTH_PROVIDERS.SuuntoApp)?.chartKind).toBe('bar');
+    expect(view.series.find(series => series.provider === HEALTH_PROVIDERS.GarminAPI)?.chartKind).toBe('line');
   });
 
   it('filters providers locally and removes conflicts that no longer have two sources', () => {
