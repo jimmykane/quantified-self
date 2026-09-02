@@ -390,6 +390,15 @@
         }
     }
 
+    .section-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        justify-content: center;
+        margin-top: 2rem;
+    }
+
 }
 
 
@@ -425,37 +434,7 @@
     }
 
     .ai-insights-actions {
-        display: flex;
-        gap: 1rem;
-        justify-content: center;
-        align-items: center;
-        flex-wrap: wrap;
-        margin-top: 2rem;
         margin-bottom: 0;
-
-        .cta-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.45rem;
-            min-width: 180px;
-            min-height: 48px;
-            padding: 0.75rem 1.35rem;
-            border-radius: 999px;
-            font-size: 0.98rem;
-            font-weight: 600;
-            line-height: 1;
-            white-space: nowrap;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-
-            &:hover {
-                transform: translateY(-2px);
-            }
-        }
-
-        .cta-button.primary:hover {
-            box-shadow: 0 4px 12px color-mix(in srgb, var(--mat-sys-primary) 30%, transparent);
-        }
     }
 
     .ai-insights-cta-note {
@@ -649,12 +628,12 @@
             font-size: 1.05rem;
         }
 
-        .ai-insights-actions {
+        .section-actions {
             flex-direction: column;
             align-items: stretch;
             gap: 0.75rem;
 
-            .cta-button {
+            a[mat-stroked-button] {
                 width: 100%;
                 max-width: 360px;
                 margin: 0 auto;

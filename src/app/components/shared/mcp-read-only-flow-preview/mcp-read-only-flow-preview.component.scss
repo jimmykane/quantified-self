@@ -46,6 +46,8 @@
   mat-icon { flex: 0 0 auto; margin-left: -0.2rem; }
 }
 
+.mcp-flow__connector-icon--vertical { display: none; }
+
 .mcp-flow__access-title { gap: 0.45rem; }
 
 .mcp-flow__scopes { display: flex; flex-wrap: wrap; gap: 0.35rem; }
@@ -63,6 +65,29 @@
 .mcp-flow__access small { color: var(--mat-sys-on-surface-variant); }
 
 @media (max-width: 620px) {
-  .mcp-flow { grid-template-columns: 1fr; }
-  .mcp-flow__connector { min-height: 2.5rem; transform: rotate(90deg); }
+  .mcp-flow {
+    grid-template-columns: 1fr;
+    padding: 0.625rem;
+  }
+
+  .mcp-flow__clients,
+  .mcp-flow__access {
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .mcp-flow__connector {
+    flex-direction: column;
+    min-height: 2rem;
+
+    span {
+      width: 1px;
+      height: 0.9rem;
+    }
+
+    mat-icon { margin: -0.2rem 0 0; }
+  }
+
+  .mcp-flow__connector-icon--horizontal { display: none; }
+  .mcp-flow__connector-icon--vertical { display: block; }
 }

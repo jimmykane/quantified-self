@@ -416,7 +416,7 @@ describe('AppRoutingModule routes', () => {
     });
     expect(routeData['title']).toBe('Supported Activity Types');
     expect(routeData['description']).toContain('activity types Quantified Self recognizes');
-    expect(routeData['description']).toContain('maps, metrics, laps, charts');
+    expect(routeData['description']).toContain('maps, metrics, laps, charts, and sport-specific details');
     expect(routeData['keywords']).toBeUndefined();
     expect(jsonLd).toMatchObject({
       '@context': 'https://schema.org',
@@ -433,7 +433,7 @@ describe('AppRoutingModule routes', () => {
         path: PUBLIC_FEATURE_PATHS.hub,
         title: 'Features for Endurance Training Data',
         h1: 'Features for endurance training data',
-        descriptionText: 'Garmin, Suunto, COROS, Wahoo',
+        descriptionText: 'training analysis, maps, dashboards, comparisons, and AI answers',
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityCalendar,
@@ -445,31 +445,31 @@ describe('AppRoutingModule routes', () => {
         path: PUBLIC_FEATURE_PATHS.trainingAnalysis,
         title: 'Training Analysis for Endurance Athletes',
         h1: 'Training analysis for endurance athletes',
-        descriptionText: 'training load, readiness, intensity, durability',
+        descriptionText: 'training load, readiness, intensity, durability, sleep, power, and sport-specific trends',
       },
       {
         path: PUBLIC_FEATURE_PATHS.trainingDashboard,
         title: 'Custom Training Dashboard for Endurance Athletes',
         h1: 'Build the training dashboard you need',
-        descriptionText: 'KPI, chart, and map tiles',
+        descriptionText: 'KPI, chart, and map tiles, independent filters',
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityMap,
         title: 'Activity Map and Automatic Trip Detection',
         h1: 'See workouts, trips, and destinations on one map',
-        descriptionText: 'group activity history into trips',
+        descriptionText: 'Map GPS workouts, filter by sport or date',
       },
       {
         path: PUBLIC_FEATURE_PATHS.mcpServer,
         title: 'Read-only MCP Server for Training Data',
         h1: 'Connect ChatGPT or Claude to your training data',
-        descriptionText: 'Connect ChatGPT, Claude, or another MCP client',
+        descriptionText: 'ChatGPT, Claude, or another MCP client',
       },
       {
         path: PUBLIC_FEATURE_PATHS.assistant,
         title: 'AI Training Assistant Grounded in Your Fitness Data',
         h1: 'If you could ask your training history one question, what would it be?',
-        descriptionText: 'answers grounded in your recorded data',
+        descriptionText: 'grounded in your recorded data',
       },
       {
         path: PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,

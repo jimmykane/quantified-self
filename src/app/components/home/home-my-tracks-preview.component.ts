@@ -43,9 +43,10 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
 
   @ViewChild('mapContainer', { static: true }) private mapContainer!: ElementRef<HTMLDivElement>;
 
+  private readonly platformId = inject(PLATFORM_ID);
   readonly initializationFailed = signal(false);
   readonly previewHomeArea = HOME_MY_TRACKS_PREVIEW_HOME_AREA;
-  readonly tripsPanelExpanded = signal(true);
+  readonly tripsPanelExpanded = signal(this.resolveDesktopViewportDefault());
   readonly tripSortDirection = signal<AppMyTracksTripSortDirection>('desc');
   readonly selectedPreviewTripId = signal(HOME_MY_TRACKS_PREVIEW_TRIPS[0].tripId);
   readonly hoveredPreviewTripId = signal<string | null>(null);
@@ -61,7 +62,6 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
     this.selectedPreviewTripId() === HomeMyTracksPreviewComponent.HOME_PANEL_ENTRY_ID
   ));
 
-  private readonly platformId = inject(PLATFORM_ID);
   private readonly hapticsService = inject(AppHapticsService);
   private readonly themeService = inject(AppThemeService);
   private readonly mapStyleService = inject(MapStyleService);
@@ -229,5 +229,14 @@ export class HomeMyTracksPreviewComponent implements AfterViewInit, OnDestroy {
       centroidLng: activeTrip.centroidLng,
       bounds: { ...activeTrip.bounds },
     } : null);
+  }
+
+  private resolveDesktopViewportDefault(): boolean {
+    if (!isPlatformBrowser(this.platformId)) {
+      return true;
+    }
+
+    const mediaQuery = window.matchMedia?.('(min-width: 641px)');
+    return mediaQuery ? mediaQuery.matches : window.innerWidth >= 641;
   }
 }
