@@ -256,9 +256,9 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks recently updated public discovery surfaces in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-09-02');
