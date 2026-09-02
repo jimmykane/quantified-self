@@ -190,6 +190,8 @@ export class ActivityCalendarTileComponent {
         unitSettings: this.user()?.settings?.unitSettings ?? null,
         summariesSettings: this.user()?.settings?.summariesSettings ?? null,
         plannedWorkouts: this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
+        plannedWorkoutsSource: () => this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
+        plannedWorkoutsStatusSource: () => this.plansState().status,
       },
     });
   }

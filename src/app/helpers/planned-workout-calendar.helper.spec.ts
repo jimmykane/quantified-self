@@ -64,4 +64,21 @@ describe('planned workout calendar overlay', () => {
       ariaLabel: '2 planned workouts, 1 skipped workout',
     });
   });
+
+  it('keeps paused and archived plan workouts out of calendar overlays', () => {
+    const pausedPlan = { ...PLAN, id: 'paused-plan', lifecycle: 'paused' as const };
+    const archivedPlan = { ...PLAN, id: 'archived-plan', lifecycle: 'archived' as const };
+    const pausedWorkout = { ...workout('paused-workout'), planId: pausedPlan.id };
+    const archivedWorkout = { ...workout('archived-workout'), planId: archivedPlan.id };
+
+    const overlay = buildPlannedWorkoutCalendarOverlay([
+      workout('tempo'),
+      workout('standalone'),
+      pausedWorkout,
+      archivedWorkout,
+    ], [PLAN, pausedPlan, archivedPlan]);
+
+    expect(overlay['2026-09-02'].entries.map(entry => entry.workout.id))
+      .toEqual(['standalone', 'tempo']);
+  });
 });

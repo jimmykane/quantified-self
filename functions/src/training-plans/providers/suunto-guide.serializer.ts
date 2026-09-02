@@ -73,6 +73,22 @@ export interface SerializeSuuntoGuideOptionsV1 {
     allowDegraded: boolean;
 }
 
+const SUUNTO_MINIMUM_SUPPORTED_CHARACTERS = new Set(Array.from(
+    "\n !\"#$%&'()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|°",
+));
+
+function codePointLength(value: string): number {
+    return Array.from(value).length;
+}
+
+function truncateCodePoints(value: string, maximum: number): string {
+    return Array.from(value).slice(0, maximum).join('');
+}
+
+function usesCharactersOutsideSuuntoMinimum(value: string): boolean {
+    return Array.from(value).some(character => !SUUNTO_MINIMUM_SUPPORTED_CHARACTERS.has(character));
+}
+
 function normalizedRequiredText(value: string, label: string): string {
     const normalized = value.trim();
     if (normalized.length === 0) throw new Error(`${label} must not be empty.`);
@@ -105,6 +121,20 @@ function addTruncationIssue(
         code: 'text_truncated',
         path,
         message: `${label} is limited to ${maximum} characters by Suunto.`,
+    });
+}
+
+function addCharacterSetIssue(
+    issues: ProviderSerializationIssueV1[],
+    path: string,
+    value: string,
+): void {
+    if (!usesCharactersOutsideSuuntoMinimum(value)) return;
+    issues.push({
+        severity: 'degraded',
+        code: 'device_character_support_unverified',
+        path,
+        message: 'This text contains characters outside Suunto\'s guaranteed watch character set and may not render on every device.',
     });
 }
 
@@ -220,10 +250,10 @@ function collectStepIssues(
     issues: ProviderSerializationIssueV1[],
 ): void {
     const visit = (step: WorkoutStepV1, path: string): void => {
-        if (step.note && step.note.length > 54) {
+        if (step.note && codePointLength(step.note) > 54) {
             addTruncationIssue(issues, `${path}.note`, 'Suunto step text', 54);
         }
-        if (step.note && step.note.length > 40 && (step.targets.length > 0 || step.ending.kind !== 'manual')) {
+        if (step.note && codePointLength(step.note) > 40 && (step.targets.length > 0 || step.ending.kind !== 'manual')) {
             issues.push({
                 severity: 'degraded',
                 code: 'text_truncated_for_metrics',
@@ -231,6 +261,7 @@ function collectStepIssues(
                 message: 'Suunto cannot show other fields alongside text longer than 40 characters.',
             });
         }
+        if (step.note) addCharacterSetIssue(issues, `${path}.note`, step.note);
         step.targets.forEach((target, targetIndex) => {
             if (target.kind !== 'heart-rate') return;
             const values = absoluteTargetValues(target);
@@ -261,7 +292,7 @@ function stepToSuunto(step: WorkoutStepV1): SuuntoGuideFieldsStepV1 {
     ];
     if (step.note) {
         const maximum = fields.length > 0 ? 40 : 54;
-        fields.push({ type: 'text', value: step.note.slice(0, maximum) });
+        fields.push({ type: 'text', value: truncateCodePoints(step.note, maximum) });
     }
     if (fields.length === 0) fields.push({ type: 'text', value: 'Press lap' });
 
@@ -306,14 +337,18 @@ export function serializeSuuntoGuideJsonV1(
     if (externalId.length > 64) throw new Error('Suunto Guide external ID must not exceed 64 characters.');
 
     const additionalIssues: ProviderSerializationIssueV1[] = [];
-    if (rawName.length > 60) addTruncationIssue(additionalIssues, '$.name', 'Suunto Guide name', 60);
-    if (rawDescription.length > 256) {
+    if (codePointLength(rawName) > 60) addTruncationIssue(additionalIssues, '$.name', 'Suunto Guide name', 60);
+    if (codePointLength(rawDescription) > 256) {
         addTruncationIssue(additionalIssues, '$.description', 'Suunto Guide description', 256);
     }
-    if (rawShortDescription.length > 23) {
+    if (codePointLength(rawShortDescription) > 23) {
         addTruncationIssue(additionalIssues, '$.shortDescription', 'Suunto Guide short description', 23);
     }
-    if (rawOwner.length > 64) addTruncationIssue(additionalIssues, '$.owner', 'Suunto Guide owner', 64);
+    if (codePointLength(rawOwner) > 64) addTruncationIssue(additionalIssues, '$.owner', 'Suunto Guide owner', 64);
+    addCharacterSetIssue(additionalIssues, '$.name', rawName);
+    addCharacterSetIssue(additionalIssues, '$.description', rawDescription);
+    addCharacterSetIssue(additionalIssues, '$.shortDescription', rawShortDescription);
+    addCharacterSetIssue(additionalIssues, '$.owner', rawOwner);
     collectStepIssues(structure, additionalIssues);
 
     const resolved = resolveProviderSerializationIssuesV1({
@@ -325,10 +360,10 @@ export function serializeSuuntoGuideJsonV1(
     const activity: 1 | 2 = structure.sport === ActivityTypes.Running ? 1 : 2;
     const artifact: SuuntoGuideJsonV1 = {
         type: 'sequence',
-        name: rawName.slice(0, 60),
-        description: rawDescription.slice(0, 256),
-        shortDescription: rawShortDescription.slice(0, 23),
-        owner: rawOwner.slice(0, 64),
+        name: truncateCodePoints(rawName, 60),
+        description: truncateCodePoints(rawDescription, 256),
+        shortDescription: truncateCodePoints(rawShortDescription, 23),
+        owner: truncateCodePoints(rawOwner, 64),
         url,
         activities: [activity],
         usage: 'workout',

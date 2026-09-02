@@ -70,7 +70,7 @@
     </button>
   </section>
   }
-    @if (!hasError() && !isLoading() && !hasEvents()) {
+    @if (eventState().status === 'ready' && !hasEvents()) {
     <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
     @if (plansState().status === 'error') {

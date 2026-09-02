@@ -20,9 +20,15 @@ export function buildPlannedWorkoutCalendarOverlay(
   plans: readonly TrainingPlanV1[] = [],
 ): PlannedWorkoutCalendarOverlay {
   const planNames = new Map(plans.map(plan => [plan.id, plan.name]));
+  const activePlanIds = new Set(plans
+    .filter(plan => plan.lifecycle === 'active')
+    .map(plan => plan.id));
   const grouped = new Map<string, PlannedWorkoutCalendarEntry[]>();
   workouts
-    .filter(workout => workout.lifecycle !== 'deleted')
+    .filter(workout => (
+      workout.lifecycle !== 'deleted'
+      && (workout.planId === null || activePlanIds.has(workout.planId))
+    ))
     .forEach((workout) => {
       const entries = grouped.get(workout.localDate) ?? [];
       entries.push({

@@ -20,6 +20,9 @@ describe('PlansWorkspaceComponent', () => {
   let watchSchedule: ReturnType<typeof vi.fn>;
   let mutate: ReturnType<typeof vi.fn>;
   let getHistory: ReturnType<typeof vi.fn>;
+  let previewRestore: ReturnType<typeof vi.fn>;
+  let restoreSchedule: ReturnType<typeof vi.fn>;
+  let dialogOpen: ReturnType<typeof vi.fn>;
   let snackBarOpen: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
@@ -35,6 +38,9 @@ describe('PlansWorkspaceComponent', () => {
       permanentlyDeletedWorkoutIds: [],
     }));
     getHistory = vi.fn();
+    previewRestore = vi.fn();
+    restoreSchedule = vi.fn();
+    dialogOpen = vi.fn();
     snackBarOpen = vi.fn();
     await TestBed.configureTestingModule({
       imports: [PlansWorkspaceComponent],
@@ -50,12 +56,12 @@ describe('PlansWorkspaceComponent', () => {
             createMutationId: vi.fn().mockReturnValue('mutation-1'),
             mutate,
             getHistory,
-            previewRestore: vi.fn(),
-            restore: vi.fn(),
+            previewRestore,
+            restore: restoreSchedule,
             deletePlan: vi.fn(),
           },
         },
-        { provide: MatDialog, useValue: { open: vi.fn() } },
+        { provide: MatDialog, useValue: { open: dialogOpen } },
         { provide: MatSnackBar, useValue: { open: snackBarOpen } },
         {
           provide: AppEventColorService,
@@ -123,6 +129,112 @@ describe('PlansWorkspaceComponent', () => {
         localDate: '2026-09-10',
         title: 'Unplanned run',
       }),
+    }));
+  });
+
+  it('saves content, date, and plan association in one atomic update mutation', async () => {
+    route.snapshot.queryParamMap = convertToParamMap({ workout: 'standalone-workout' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('title', 'Attached run');
+    fixture.componentInstance.updateEditorField('localDate', '2026-09-10');
+    fixture.componentInstance.updateEditorDestination('active-plan');
+
+    await fixture.componentInstance.saveWorkout();
+
+    expect(mutate).toHaveBeenCalledOnce();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRevisions: [
+        { scope: 'state', id: 'current', revision: 4 },
+        { scope: 'plan', id: 'active-plan', revision: 2 },
+        { scope: 'workout', id: 'standalone-workout', revision: 1 },
+      ],
+      operation: expect.objectContaining({
+        kind: 'update-workout',
+        workoutId: 'standalone-workout',
+        planId: 'active-plan',
+        localDate: '2026-09-10',
+        title: 'Attached run',
+        confirmPlanRangeExtension: false,
+      }),
+    }));
+  });
+
+  it('keeps the editor-open workout revision instead of borrowing a concurrent update', async () => {
+    route.snapshot.queryParamMap = convertToParamMap({ workout: 'standalone-workout' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.updateEditorField('title', 'My pending edit');
+    schedule.workouts.find(workout => workout.id === 'standalone-workout')!.revision = 9;
+
+    await fixture.componentInstance.saveWorkout();
+
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRevisions: expect.arrayContaining([
+        { scope: 'workout', id: 'standalone-workout', revision: 1 },
+      ]),
+    }));
+  });
+
+  it('closes the destructive deletion panel after archiving instead', async () => {
+    const fixture = await renderPlans();
+    const plan = schedule.plans[0];
+    fixture.componentInstance.beginPlanDeletion(plan);
+
+    await fixture.componentInstance.setPlanLifecycle(plan, 'archived');
+
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      operation: { kind: 'set-plan-lifecycle', planId: plan.id, lifecycle: 'archived' },
+    }));
+    expect(fixture.componentInstance.deletingPlanId()).toBeNull();
+  });
+
+  it('keeps restore revisions fixed across preview and confirmation', async () => {
+    const fixture = await renderPlans();
+    previewRestore.mockImplementation(async () => {
+      schedule.state.revision = 8;
+      schedule.plans[0].revision = 7;
+      return {
+        scope: { kind: 'plan', id: 'active-plan' },
+        targetRevision: 1,
+        changedPlanIds: ['active-plan'],
+        changedWorkoutIds: [],
+        skippedWorkoutIds: [],
+        warnings: [],
+      };
+    });
+    restoreSchedule.mockResolvedValue({
+      mutation: {
+        mutationId: 'mutation-1',
+        state: schedule.state,
+        plans: [],
+        workouts: [],
+        removedPlanIds: [],
+        permanentlyDeletedWorkoutIds: [],
+      },
+      skippedWorkoutIds: [],
+    });
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(componentDialog, 'open').mockReturnValue({ afterClosed: () => of(true) } as never);
+    fixture.componentInstance.historyPanel.set({
+      scope: { kind: 'plan', id: 'active-plan' },
+      status: 'ready',
+      entries: [],
+      nextBeforeRevision: null,
+      error: null,
+    });
+
+    await fixture.componentInstance.restoreHistoryEntry({
+      revision: 1,
+      operationKind: 'create-plan',
+      createdAtMs: 1,
+      mutationId: 'create',
+      isCheckpoint: true,
+    });
+
+    expect(restoreSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRevisions: [
+        { scope: 'state', id: 'current', revision: 4 },
+        { scope: 'plan', id: 'active-plan', revision: 2 },
+      ],
     }));
   });
 

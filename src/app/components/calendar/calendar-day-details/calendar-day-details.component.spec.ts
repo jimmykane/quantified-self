@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
@@ -17,6 +17,7 @@ import {
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
 
 describe('CalendarDayDetailsComponent', () => {
@@ -83,6 +84,25 @@ describe('CalendarDayDetailsComponent', () => {
     ]);
     expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
+  });
+
+  it('updates an already-open day when the planned-workout listener finishes', async () => {
+    const status = signal<'loading' | 'ready' | 'error'>('loading');
+    const planned = signal<PlannedWorkoutCalendarEntry[]>([]);
+    const fixture = await renderDayDetails([], {
+      plannedWorkoutsSource: () => planned(),
+      plannedWorkoutsStatusSource: () => status(),
+    });
+
+    expect(fixture.nativeElement.textContent).toContain('Loading planned workouts');
+
+    planned.set([{ workout: createPlannedWorkout(), planName: 'Autumn build' }]);
+    status.set('ready');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
+      .toContain('Autumn build · Planned');
+    expect(fixture.nativeElement.textContent).not.toContain('Loading planned workouts');
   });
 
   it('uses Barlow Condensed only for numeric day-detail content, not the date title', () => {

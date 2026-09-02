@@ -38,7 +38,7 @@
       <mat-icon>refresh</mat-icon>
     </button>
   </div>
-  } @else {
+  }
   <app-activity-calendar-grid
     [model]="calendarModel()"
     [compact]="true"
@@ -46,11 +46,10 @@
     [plannedWorkoutsByDate]="plannedWorkoutsByDate()"
     (daySelected)="openDay($event)">
   </app-activity-calendar-grid>
-  @if (!isLoading() && !hasEvents()) {
+  @if (eventState().status === 'ready' && !hasEvents()) {
   <div class="activity-calendar-tile-status" role="status">No completed activities this month</div>
   }
   @if (plansState().status === 'error') {
   <div class="activity-calendar-tile-status" role="status">Planned workouts unavailable</div>
-  }
   }
 </section>

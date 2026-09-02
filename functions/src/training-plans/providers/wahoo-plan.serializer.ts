@@ -65,6 +65,15 @@ type WahooReferenceHeaderKey = 'ftp' | 'threshold_hr' | 'max_hr' | 'threshold_sp
 
 interface WahooMappingContext {
     headerReferences: Partial<Record<WahooReferenceHeaderKey, number>>;
+    rawHeaderReferences: Partial<Record<WahooReferenceHeaderKey, number>>;
+}
+
+function codePointLength(value: string): number {
+    return Array.from(value).length;
+}
+
+function truncateCodePoints(value: string, maximum: number): string {
+    return Array.from(value).slice(0, maximum).join('');
 }
 
 function assertNonEmpty(value: string, label: string): string {
@@ -120,6 +129,10 @@ function nativeReference(target: WorkoutTargetV1): { key: WahooReferenceHeaderKe
     }
 }
 
+function normalizedNativeReferenceValue(reference: { key: WahooReferenceHeaderKey; value: number }): number {
+    return reference.key === 'threshold_speed' ? reference.value : Math.round(reference.value);
+}
+
 function freezeRelativeTarget(target: Exclude<WorkoutTargetV1, { mode: 'absolute' }>): WahooPlanTargetV1 {
     const scale = (value: number, percent: number): number => value * percent / 100;
     switch (target.kind) {
@@ -170,16 +183,42 @@ function targetToWahoo(target: WorkoutTargetV1, context: WahooMappingContext): W
 
     const reference = nativeReference(target);
     if (reference === null) return freezeRelativeTarget(target);
-    const existingReference = context.headerReferences[reference.key];
+    const existingReference = context.rawHeaderReferences[reference.key];
     if (existingReference !== undefined && existingReference !== reference.value) {
         return freezeRelativeTarget(target);
     }
-    context.headerReferences[reference.key] = reference.value;
+    context.rawHeaderReferences[reference.key] = reference.value;
+    context.headerReferences[reference.key] = normalizedNativeReferenceValue(reference);
     return {
         type: reference.key,
         low: target.minimumPercent / 100,
         high: target.maximumPercent / 100,
     };
+}
+
+function collectReferenceRoundingIssues(
+    structure: WorkoutStructureV1,
+    issues: ProviderSerializationIssueV1[],
+): void {
+    const visit = (step: WorkoutStepV1, path: string): void => {
+        step.targets.forEach((target, targetIndex) => {
+            const reference = nativeReference(target);
+            if (!reference || reference.key === 'threshold_speed' || Number.isInteger(reference.value)) return;
+            issues.push({
+                severity: 'degraded',
+                code: 'relative_reference_rounded',
+                path: `${path}.targets[${targetIndex}].reference`,
+                message: 'Wahoo requires an integer FTP or heart-rate header reference, so this snapshot will be rounded.',
+            });
+        });
+    };
+    structure.nodes.forEach((node, nodeIndex) => {
+        if (node.kind === 'step') {
+            visit(node, `$.nodes[${nodeIndex}]`);
+            return;
+        }
+        node.steps.forEach((step, stepIndex) => visit(step, `$.nodes[${nodeIndex}].steps[${stepIndex}]`));
+    });
 }
 
 function stepToWahoo(step: WorkoutStepV1, context: WahooMappingContext): WahooPlanIntervalV1 {
@@ -215,7 +254,7 @@ export function serializeWahooPlanJsonV1(
     const name = assertNonEmpty(options.name, 'Wahoo plan name');
     const normalizedDescription = options.description?.trim();
     const additionalIssues: ProviderSerializationIssueV1[] = [];
-    if (normalizedDescription && normalizedDescription.length > 5000) {
+    if (normalizedDescription && codePointLength(normalizedDescription) > 5000) {
         additionalIssues.push({
             severity: 'degraded',
             code: 'description_truncated',
@@ -223,6 +262,7 @@ export function serializeWahooPlanJsonV1(
             message: 'Wahoo descriptions are limited to 5000 characters.',
         });
     }
+    collectReferenceRoundingIssues(structure, additionalIssues);
 
     const resolved = resolveProviderSerializationIssuesV1({
         provider: 'wahoo',
@@ -230,7 +270,7 @@ export function serializeWahooPlanJsonV1(
         additionalIssues,
         allowDegraded: options.allowDegraded,
     });
-    const context: WahooMappingContext = { headerReferences: {} };
+    const context: WahooMappingContext = { headerReferences: {}, rawHeaderReferences: {} };
     const intervals = structureToIntervals(structure, context);
     const workoutTypeFamily: 0 | 1 = structure.sport === ActivityTypes.Cycling ? 0 : 1;
     const workoutTypeLocation: 0 | 1 = options.location === 'indoor' ? 0 : 1;
@@ -239,7 +279,7 @@ export function serializeWahooPlanJsonV1(
             name,
             version: '1.0.0',
             ...(normalizedDescription
-                ? { description: normalizedDescription.slice(0, 5000) }
+                ? { description: truncateCodePoints(normalizedDescription, 5000) }
                 : {}),
             workout_type_family: workoutTypeFamily,
             workout_type_location: workoutTypeLocation,

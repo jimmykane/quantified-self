@@ -339,12 +339,16 @@ describe('CalendarPageComponent', () => {
 
   it('shows a retryable error state', async () => {
     watchEvents.mockReturnValue(throwError(() => new Error('offline')));
+    watchSchedule.mockReturnValue(of(trainingSchedule()));
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('could not be loaded');
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities in August 2026');
   });
   it('loads the visible grid and opens notes on days without activities using the shared manager', async () => {
     notesService.loadRange.mockResolvedValue({ notes: [note], incomplete: null });

@@ -114,8 +114,11 @@ export interface CreateScheduledWorkoutMutationV1 {
 export interface UpdateScheduledWorkoutMutationV1 {
   kind: 'update-workout';
   workoutId: string;
+  planId: string | null;
+  localDate: string;
   title: string;
   structure: WorkoutStructureV1;
+  confirmPlanRangeExtension: boolean;
 }
 
 export interface MoveScheduledWorkoutMutationV1 {
@@ -293,6 +296,17 @@ function readInteger(value: unknown, path: string, minimum = 0): number {
   return value as number;
 }
 
+function readCurrentWorkoutCount(value: unknown, path: string): number {
+  const count = readInteger(value, path);
+  if (count > TRAINING_PLAN_MAX_CURRENT_WORKOUTS) {
+    throw new TrainingPlanContractError(
+      path,
+      `Expected at most ${TRAINING_PLAN_MAX_CURRENT_WORKOUTS} current workouts.`,
+    );
+  }
+  return count;
+}
+
 function readTimestampMs(value: unknown, path: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
     throw new TrainingPlanContractError(path, 'Expected a non-negative millisecond timestamp.');
@@ -384,7 +398,7 @@ export function parseTrainingPlanStateV1(value: unknown): TrainingPlanStateV1 {
     schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
     activePlanId: readNullableEntityId(record.activePlanId, '$.activePlanId'),
     revision: readInteger(record.revision, '$.revision'),
-    currentWorkoutCount: readInteger(record.currentWorkoutCount, '$.currentWorkoutCount'),
+    currentWorkoutCount: readCurrentWorkoutCount(record.currentWorkoutCount, '$.currentWorkoutCount'),
     updatedAtMs: readTimestampMs(record.updatedAtMs, '$.updatedAtMs'),
   };
 }
@@ -415,7 +429,7 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
     endLocalDate,
     revision,
     lastCheckpointRevision,
-    workoutCount: readInteger(record.workoutCount, '$.workoutCount'),
+    workoutCount: readCurrentWorkoutCount(record.workoutCount, '$.workoutCount'),
     createdAtMs: readTimestampMs(record.createdAtMs, '$.createdAtMs'),
     updatedAtMs: readTimestampMs(record.updatedAtMs, '$.updatedAtMs'),
   };
@@ -567,10 +581,15 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
       break;
     }
     case 'update-workout':
-      rejectUnknownFields(operationRecord, ['kind', 'workoutId', 'title', 'structure'], '$.operation');
+      rejectUnknownFields(
+        operationRecord,
+        ['kind', 'workoutId', 'planId', 'localDate', 'title', 'structure', 'confirmPlanRangeExtension'],
+        '$.operation',
+      );
       operation = {
         kind,
         workoutId: readEntityId(operationRecord.workoutId, '$.operation.workoutId'),
+        ...parseWorkoutDestinationFields(operationRecord),
         title: readString(operationRecord.title, '$.operation.title', 120),
         structure: parseWorkoutStructureV1(operationRecord.structure),
       };

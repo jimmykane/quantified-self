@@ -54,6 +54,25 @@ export function createStableProviderExternalId(
     return `qs-${provider}-${digest}`;
 }
 
+/**
+ * Produces an opaque positive signed 32-bit integer for provider contracts
+ * that declare partner-owned IDs as `int`. The provider remains part of the
+ * digest namespace and the original Quantified Self ID is never disclosed.
+ */
+export function createStableProviderIntegerId(
+    provider: PlannedWorkoutProviderId,
+    sourceId: string,
+): number {
+    if (sourceId.trim().length === 0) {
+        throw new Error('A non-empty source ID is required.');
+    }
+    const digest = createHash('sha256')
+        .update(`${provider}\u0000integer\u0000${sourceId}`, 'utf8')
+        .digest();
+    const value = digest.readUInt32BE(0) & 0x7fffffff;
+    return value === 0 ? 1 : value;
+}
+
 export function buildProviderSerializationResultV1<T>(params: {
     provider: PlannedWorkoutProviderId;
     structure: unknown;

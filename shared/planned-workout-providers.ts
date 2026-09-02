@@ -45,10 +45,12 @@ export interface PlannedWorkoutProviderMappingIssueV1 {
     | 'provider_contract_unavailable'
     | 'unsupported_sport'
     | 'unsupported_ending'
+    | 'unsupported_target'
     | 'purpose_degraded'
     | 'multiple_targets_degraded'
     | 'relative_target_degraded'
-    | 'relative_reference_conflict';
+    | 'relative_reference_conflict'
+    | 'relative_target_device_support_limited';
   path: string;
   message: string;
 }
@@ -69,19 +71,35 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   garmin: {
     id: 'garmin',
     label: 'Garmin',
-    implementationState: 'blocked-contract',
+    implementationState: 'fixture-only',
     deliveryEnabled: false,
     deliveryModel: 'native-workout-and-schedule',
     requiredScopes: ['WORKOUT_IMPORT'],
-    profile: null,
+    profile: {
+      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      endingKinds: ['time', 'distance', 'manual'],
+      targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
+      supportsRepeats: true,
+      supportsRelativeTargets: false,
+      maxNodes: 100,
+      maxRepeatCount: 100,
+      maxTargetsPerStep: 2,
+    },
     scheduling: 'Workout content and Garmin Connect calendar scheduling have separate lifecycles.',
-    limits: ['Current private Training API contract is not present in this repository.'],
-    completionCorrelation: 'Pending confirmation from the current Garmin Training API contract.',
+    limits: [
+      'Single-sport workouts allow at most 100 total steps.',
+      'Descriptions allow 1024 characters per workout and 512 characters per step.',
+      'A secondary target is documented only for cycling and depends on device support.',
+      'Evaluation access is limited to 100 partner requests per minute and 200 requests per user per rolling day.',
+    ],
+    completionCorrelation: 'Training API V2 does not document a completed-activity workout identifier.',
     unresolvedGates: [
-      'Obtain the current private Training API schema, endpoints, limits, update/delete semantics, and test access.',
+      'Confirm evaluation credentials, app entitlement, and representative test-device access.',
+      'Confirm completion-correlation behavior outside the Training API contract.',
       'Pass sandbox create, update, reschedule, delete, reconnect, and duplicate tests.',
     ],
     evidence: [
+      'Garmin Connect Developer Program Training API V2, version 1.0 (private partner document, May 2025)',
       'https://developer.garmin.com/gc-developer-program/training-api/',
       'https://developer.garmin.com/gc-developer-program/program-faq/',
     ],
@@ -89,11 +107,18 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   coros: {
     id: 'coros',
     label: 'COROS',
-    implementationState: 'blocked-contract',
+    implementationState: 'fixture-only',
     deliveryEnabled: false,
     deliveryModel: 'native-plan-workout-batches',
     requiredScopes: ['training-plan partner entitlement'],
-    profile: null,
+    profile: {
+      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      endingKinds: ['time', 'distance', 'manual'],
+      targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
+      supportsRepeats: true,
+      supportsRelativeTargets: true,
+      maxTargetsPerStep: 1,
+    },
     scheduling: 'Partner workout IDs are pushed in dated batches through the Training Plan API.',
     limits: ['At most 30 workouts per push.', 'Dates from today through one year ahead.'],
     completionCorrelation: 'Completed workout payloads may carry planWorkoutId.',
@@ -123,6 +148,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'The public plan.json schema is version 1.0.0 and supports running and cycling.',
       'Bike computers use only the first target in an interval.',
+      'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
       'Device-visible scheduling is documented as the current day plus six days.',
     ],
     completionCorrelation: 'workout_token identifies the app workout, but third-party-origin completions are not shared.',
@@ -147,7 +173,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       endingKinds: ['time', 'distance', 'manual'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
-      supportsRelativeTargets: true,
+      supportsRelativeTargets: false,
       maxNodes: 100,
       maxRepeatCount: 100,
       maxTargetsPerStep: 2,
@@ -217,16 +243,6 @@ export function assessPlannedWorkoutProviderMappingV1(
   const structure = parseWorkoutStructureV1(value);
   const issues: PlannedWorkoutProviderMappingIssueV1[] = [];
 
-  if (provider === 'garmin' || provider === 'coros') {
-    issues.push({
-      severity: 'unsupported',
-      code: 'provider_contract_unavailable',
-      path: '$',
-      message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} mapping is blocked until the current partner contract is available.`,
-    });
-    return { provider, level: 'unsupported', issues };
-  }
-
   if (![ActivityTypes.Running, ActivityTypes.Cycling].includes(structure.sport)) {
     issues.push({
       severity: 'unsupported',
@@ -250,21 +266,73 @@ export function assessPlannedWorkoutProviderMappingV1(
       });
     }
 
-    if (provider === 'wahoo' && step.purpose === 'other') {
+    if (
+      (provider === 'garmin' || provider === 'coros' || provider === 'wahoo')
+      && step.purpose === 'other'
+    ) {
       issues.push({
         severity: 'degraded',
         code: 'purpose_degraded',
         path: `${path}.purpose`,
-        message: 'Wahoo has no generic other intensity, so this step is delivered as active.',
+        message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} has no generic other intensity, so this step is delivered as active.`,
       });
     }
 
-    if (provider === 'wahoo' && step.targets.length > 1) {
+    if (provider === 'coros' && step.purpose === 'recovery') {
+      issues.push({
+        severity: 'degraded',
+        code: 'purpose_degraded',
+        path: `${path}.purpose`,
+        message: 'COROS has no recovery intensity, so this step is delivered as rest.',
+      });
+    }
+
+    if ((provider === 'wahoo' || provider === 'coros') && step.targets.length > 1) {
       issues.push({
         severity: 'degraded',
         code: 'multiple_targets_degraded',
         path: `${path}.targets`,
-        message: 'The plan file preserves both targets, but ELEMNT bike computers use only the first target.',
+        message: provider === 'wahoo'
+          ? 'The plan file preserves both targets, but ELEMNT bike computers use only the first target.'
+          : 'COROS accepts one intensity target per step, so only the first target can be delivered.',
+      });
+    }
+
+    if (provider === 'garmin' && step.targets.length > 1) {
+      if (structure.sport !== ActivityTypes.Cycling) {
+        issues.push({
+          severity: 'unsupported',
+          code: 'unsupported_target',
+          path: `${path}.targets`,
+          message: 'Garmin documents secondary targets only for cycling and lap swimming.',
+        });
+      } else if (step.targets[0]?.kind === step.targets[1]?.kind) {
+        issues.push({
+          severity: 'unsupported',
+          code: 'unsupported_target',
+          path: `${path}.targets[1]`,
+          message: 'Garmin requires the secondary target type to differ from the primary target type.',
+        });
+      } else {
+        issues.push({
+          severity: 'degraded',
+          code: 'multiple_targets_degraded',
+          path: `${path}.targets`,
+          message: 'Garmin cycling secondary targets are supported only on a documented subset of devices.',
+        });
+      }
+    }
+
+    if (
+      provider === 'coros'
+      && structure.sport === ActivityTypes.Cycling
+      && step.targets.some(target => target.kind === 'cadence')
+    ) {
+      issues.push({
+        severity: 'unsupported',
+        code: 'unsupported_target',
+        path: `${path}.targets`,
+        message: 'The COROS partner contract documents cadence targets for running and trail running, not cycling.',
       });
     }
 
@@ -275,7 +343,11 @@ export function assessPlannedWorkoutProviderMappingV1(
       const referenceValue = relativeReferenceValue(target);
 
       if (
-        provider === 'suunto'
+        provider === 'garmin'
+        || provider === 'suunto'
+        || (provider === 'coros' && target.kind === 'cadence')
+        || (provider === 'coros' && target.kind === 'heart-rate' && target.reference.kind === 'max-heart-rate')
+        || (provider === 'coros' && target.kind === 'power' && target.reference.kind === 'critical-power')
         || (provider === 'wahoo' && target.kind === 'cadence')
         || (provider === 'wahoo' && target.kind === 'power' && target.reference.kind === 'critical-power')
       ) {
@@ -288,7 +360,16 @@ export function assessPlannedWorkoutProviderMappingV1(
         return;
       }
 
-      if (referenceKey === null || referenceValue === null) return;
+      if (provider === 'wahoo' && (target.kind === 'heart-rate' || target.kind === 'speed')) {
+        issues.push({
+          severity: 'degraded',
+          code: 'relative_target_device_support_limited',
+          path: targetPath,
+          message: 'Wahoo documents relative heart-rate and threshold-speed targets for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
+        });
+      }
+
+      if (provider !== 'wahoo' || referenceKey === null || referenceValue === null) return;
       const priorValue = referenceSnapshots.get(referenceKey);
       if (priorValue !== undefined && priorValue !== referenceValue) {
         issues.push({

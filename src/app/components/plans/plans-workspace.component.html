@@ -419,12 +419,12 @@
         @if (step.targetKind !== 'none') {
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ step.targetKind === 'pace' ? 'Faster min/km' : 'Minimum' }}</mat-label>
-            <input matInput type="number" min="0.01" step="0.01" [ngModel]="step.targetMinimum"
+            <input matInput type="number" [min]="step.targetKind === 'pace' ? 0.01 : 0" step="0.01" [ngModel]="step.targetMinimum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMinimum', +$event)">
           </mat-form-field>
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ step.targetKind === 'pace' ? 'Slower min/km' : 'Maximum' }}</mat-label>
-            <input matInput type="number" min="0.01" step="0.01" [ngModel]="step.targetMaximum"
+            <input matInput type="number" [min]="step.targetKind === 'pace' ? 0.01 : 0" step="0.01" [ngModel]="step.targetMaximum"
               (ngModelChange)="updateStep(nodeIndex, stepIndex, 'targetMaximum', +$event)">
           </mat-form-field>
         }

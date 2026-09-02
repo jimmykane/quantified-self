@@ -302,7 +302,7 @@ service cloud.firestore {
         // but every mutation is fenced and validated by App Check callables.
         // Nested revisions, receipts, and deletion locks remain server-only.
         match /trainingPlanState/{stateID} {
-          allow read: if isOwner();
+          allow read: if isOwner() && stateID == 'current';
           allow write: if false;
 
           match /{document=**} {
