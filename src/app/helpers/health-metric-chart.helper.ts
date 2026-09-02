@@ -60,7 +60,7 @@ export function buildHealthMetricEChartsOption(
   const pointsByTimestamp = new Map(model.displayedPoints.map(point => [point.timestampMs, point]));
   const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
-  const useSuuntoRecoveryBalanceColors = isSuuntoRecoveryBalanceSeries(model.series);
+  const useBodyEnergyColors = isProviderBodyEnergySeries(model.series);
   const option = {
     animation: false,
     backgroundColor: 'transparent',
@@ -104,7 +104,7 @@ export function buildHealthMetricEChartsOption(
               point.value,
               seriesColor,
               style.trendLineColor,
-              useSuuntoRecoveryBalanceColors,
+              useBodyEnergyColors,
             ),
           }],
           notes: point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : [],
@@ -183,13 +183,13 @@ export function buildHealthMetricEChartsOption(
       barMaxWidth: 28,
       lineStyle: { color: seriesColor, width: 2.25 },
       itemStyle: {
-        color: useStressStateColors || useSuuntoRecoveryBalanceColors
+        color: useStressStateColors || useBodyEnergyColors
           ? (params: { value?: unknown }) => resolveHealthValueColor(
             model.series.metricId,
             chartValue(params.value),
             seriesColor,
             style.trendLineColor,
-            useSuuntoRecoveryBalanceColors,
+            useBodyEnergyColors,
           )
           : seriesColor,
       },
@@ -260,10 +260,10 @@ function resolveHealthValueColor(
   value: unknown,
   seriesColor: string,
   neutralColor: string,
-  isSuuntoRecoveryBalance = false,
+  isProviderBodyEnergy = false,
 ): string {
-  if (isSuuntoRecoveryBalance) {
-    return resolveSuuntoRecoveryBalanceColor(value, seriesColor);
+  if (isProviderBodyEnergy) {
+    return resolveBodyEnergyColor(value, seriesColor);
   }
   if (metricId !== HEALTH_METRIC_IDS.StressState || typeof value !== 'string') {
     return seriesColor;
@@ -285,27 +285,29 @@ function resolveHealthValueColor(
   }
 }
 
-function isSuuntoRecoveryBalanceSeries(series: HealthWorkspaceSeries): boolean {
-  return series.provider === HEALTH_PROVIDERS.SuuntoApp
-    && series.metricId === HEALTH_METRIC_IDS.BodyEnergy
-    && series.semanticVariant === 'recovery_balance';
+function isProviderBodyEnergySeries(series: HealthWorkspaceSeries): boolean {
+  if (series.metricId !== HEALTH_METRIC_IDS.BodyEnergy) {
+    return false;
+  }
+  return (series.provider === HEALTH_PROVIDERS.SuuntoApp && series.semanticVariant === 'recovery_balance')
+    || (series.provider === HEALTH_PROVIDERS.GarminAPI && series.semanticVariant === 'garmin_body_battery');
 }
 
-function resolveSuuntoRecoveryBalanceColor(value: unknown, fallback: string): string {
+function resolveBodyEnergyColor(value: unknown, fallback: string): string {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) {
     return fallback;
   }
   if (numericValue >= 75) {
-    return AppDataColors['Recovery Balance High'];
+    return AppDataColors['Body Energy High'];
   }
   if (numericValue >= 50) {
-    return AppDataColors['Recovery Balance Moderate'];
+    return AppDataColors['Body Energy Moderate'];
   }
   if (numericValue >= 25) {
-    return AppDataColors['Recovery Balance Reduced'];
+    return AppDataColors['Body Energy Reduced'];
   }
-  return AppDataColors['Recovery Balance Low'];
+  return AppDataColors['Body Energy Low'];
 }
 
 function chartValue(value: unknown): unknown {

@@ -386,7 +386,7 @@ describe('Health workspace helpers', () => {
     expect(view.rows.every(row => row.valueText.includes('samples'))).toBe(true);
   });
 
-  it('renders Suunto Recovery Balance as bars without changing other Body Energy series', () => {
+  it('renders provider-specific Body Energy scores as bars without changing other series', () => {
     const result = projectLoadedHealthRange([], [
       sampleChunk({
         id: 'suunto-recovery-balance',
@@ -399,7 +399,7 @@ describe('Health workspace helpers', () => {
         id: 'garmin-body-energy',
         provider: HEALTH_PROVIDERS.GarminAPI,
         metricId: HEALTH_METRIC_IDS.BodyEnergy,
-        semanticVariant: 'body_battery',
+        semanticVariant: 'garmin_body_battery',
         values: [30, 60, 85],
       }),
     ], {
@@ -411,7 +411,7 @@ describe('Health workspace helpers', () => {
 
     const view = buildHealthMetricWorkspaceView(result);
     expect(view.series.find(series => series.provider === HEALTH_PROVIDERS.SuuntoApp)?.chartKind).toBe('bar');
-    expect(view.series.find(series => series.provider === HEALTH_PROVIDERS.GarminAPI)?.chartKind).toBe('line');
+    expect(view.series.find(series => series.provider === HEALTH_PROVIDERS.GarminAPI)?.chartKind).toBe('bar');
   });
 
   it('filters providers locally and removes conflicts that no longer have two sources', () => {

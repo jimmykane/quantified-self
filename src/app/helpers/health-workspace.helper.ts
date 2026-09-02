@@ -860,11 +860,7 @@ function positiveNumberOrNull(value: unknown): number | null {
 }
 
 function resolveChartKind(datum: MetricDatum, pointCount: number): HealthWorkspaceChartKind {
-  if (
-    datum.provider === HEALTH_PROVIDERS.SuuntoApp
-    && datum.metricId === HEALTH_METRIC_IDS.BodyEnergy
-    && datum.semanticVariant === 'recovery_balance'
-  ) {
+  if (isProviderBodyEnergyDatum(datum)) {
     return 'bar';
   }
   if (datum.valueType === 'category' || typeof datum.value === 'string' || typeof datum.value === 'boolean') {
@@ -874,6 +870,14 @@ function resolveChartKind(datum: MetricDatum, pointCount: number): HealthWorkspa
     return 'bar';
   }
   return pointCount <= 1 ? 'point' : 'line';
+}
+
+function isProviderBodyEnergyDatum(datum: MetricDatum): boolean {
+  if (datum.metricId !== HEALTH_METRIC_IDS.BodyEnergy) {
+    return false;
+  }
+  return (datum.provider === HEALTH_PROVIDERS.SuuntoApp && datum.semanticVariant === 'recovery_balance')
+    || (datum.provider === HEALTH_PROVIDERS.GarminAPI && datum.semanticVariant === 'garmin_body_battery');
 }
 
 function resolveDeviceLabel(device: HealthObservation['device'] | HealthSampleChunk['device']): string | null {

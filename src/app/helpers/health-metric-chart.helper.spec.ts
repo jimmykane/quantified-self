@@ -210,7 +210,7 @@ describe('Health metric chart helpers', () => {
       .toContain(`background:${style.trendLineColor}`);
   });
 
-  it('renders Suunto Recovery Balance as separately graded resource bars', () => {
+  it('renders provider-specific Body Energy as separately graded resource bars', () => {
     const model = buildHealthChartModels([series({
       metricId: HEALTH_METRIC_IDS.BodyEnergy,
       provider: HEALTH_PROVIDERS.SuuntoApp,
@@ -236,12 +236,28 @@ describe('Health metric chart helpers', () => {
     const color = option.series[0].itemStyle.color;
 
     expect(option.series[0].type).toBe('bar');
-    expect(color({ value: [0, 20] })).toBe(AppDataColors['Recovery Balance Low']);
-    expect(color({ value: [DAY_MS, 45] })).toBe(AppDataColors['Recovery Balance Reduced']);
-    expect(color({ value: [DAY_MS * 2, 70] })).toBe(AppDataColors['Recovery Balance Moderate']);
-    expect(color({ value: [DAY_MS * 3, 90] })).toBe(AppDataColors['Recovery Balance High']);
+    expect(color({ value: [0, 20] })).toBe(AppDataColors['Body Energy Low']);
+    expect(color({ value: [DAY_MS, 45] })).toBe(AppDataColors['Body Energy Reduced']);
+    expect(color({ value: [DAY_MS * 2, 70] })).toBe(AppDataColors['Body Energy Moderate']);
+    expect(color({ value: [DAY_MS * 3, 90] })).toBe(AppDataColors['Body Energy High']);
     expect(option.tooltip.formatter({ value: [DAY_MS * 3, 90] }))
-      .toContain(`background:${AppDataColors['Recovery Balance High']}`);
+      .toContain(`background:${AppDataColors['Body Energy High']}`);
+
+    const garminModel = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.BodyEnergy,
+      semanticVariant: 'garmin_body_battery',
+      chartKind: 'bar',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 45, qualityCode: null }],
+    })], 0, DAY_MS)[0];
+    const garminOption = buildHealthMetricEChartsOption(
+      garminModel,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as RecoveryBalanceColorOption;
+    expect(garminOption.series[0].itemStyle.color({ value: [0, 45] }))
+      .toBe(AppDataColors['Body Energy Reduced']);
   });
 
   it('bounds visual DOM points while preserving the first and last reading', () => {
