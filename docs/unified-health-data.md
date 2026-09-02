@@ -154,7 +154,7 @@ This collection is not the OAuth connection source of truth. Provider credential
 
 ### Sports Lib scalar serialization boundary
 
-Quantified Self pins `@sports-alliance/sports-lib@20.3.0` and uses its exported Health and Sleep data classes as the
+Quantified Self pins `@sports-alliance/sports-lib@21.0.3` and uses its exported Health and Sleep data classes as the
 canonical scalar serialization boundary. A canonical Health `value` metric stores a versioned `sportsLibData` envelope
 inside that metric entry; a normalized Sleep session stores one versioned aggregate envelope at the session root. Each
 entry in the envelope is the exact single-key JSON returned by the explicitly mapped class's `toJSON()` method:
