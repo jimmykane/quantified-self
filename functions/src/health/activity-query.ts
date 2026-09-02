@@ -214,16 +214,22 @@ function sourceValues(data: Record<string, unknown>): string[] {
 }
 
 function providerFromSource(data: Record<string, unknown>): HealthProvider | null {
-    const normalized = sourceValues(data).join(' ').toLowerCase();
-    if (normalized.includes('garmin')) return HEALTH_PROVIDERS.GarminAPI;
-    if (normalized.includes('suunto')) return HEALTH_PROVIDERS.SuuntoApp;
-    if (normalized.includes('coros')) return HEALTH_PROVIDERS.COROSAPI;
-    if (normalized.includes('wahoo')) return HEALTH_PROVIDERS.WahooAPI;
+    // Preserve provenance priority: a recognized source service is more
+    // authoritative than a lower-priority device manufacturer or name.
+    for (const value of sourceValues(data)) {
+        const normalized = value.toLowerCase();
+        if (normalized.includes('garmin')) return HEALTH_PROVIDERS.GarminAPI;
+        if (normalized.includes('suunto')) return HEALTH_PROVIDERS.SuuntoApp;
+        if (normalized.includes('coros')) return HEALTH_PROVIDERS.COROSAPI;
+        if (normalized.includes('wahoo')) return HEALTH_PROVIDERS.WahooAPI;
+    }
     return null;
 }
 
 function digest(...values: readonly string[]): string {
-    return createHash('sha256').update(values.join('\u0000')).digest('base64url').slice(0, 32);
+    // JSON preserves part boundaries even when a persisted source string
+    // contains delimiter characters.
+    return createHash('sha256').update(JSON.stringify(values)).digest('base64url').slice(0, 32);
 }
 
 function projectDocument(

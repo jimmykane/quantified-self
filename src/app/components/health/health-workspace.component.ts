@@ -375,7 +375,9 @@ export class HealthWorkspaceComponent {
       }[loaded.limitReached]);
     }
     const activityResult = this.selectedActivityHealthResult();
-    if (activityResult?.complete === false && activityResult.incompleteReason) {
+    if (activityEvidenceCanAffectView(this.routeState().metric, this.filteredHealthResult())
+      && activityResult?.complete === false
+      && activityResult.incompleteReason) {
       reasons.push(activityResult.incompleteReason === ACTIVITY_HEALTH_INCOMPLETE_REASONS.CandidateLimit
         ? '2,048 workout candidates'
         : '1 MiB projected workout result');
@@ -389,6 +391,7 @@ export class HealthWorkspaceComponent {
     const metric = this.routeState().metric;
     const status = this.selectedActivityHealthStatus();
     if (!isActivityHealthMetricId(metric)
+      || !activityEvidenceCanAffectView(metric, this.filteredHealthResult())
       || (status !== 'error' && status !== 'denied')
       || this.selectedStatus() !== 'ready') {
       return null;
@@ -960,6 +963,14 @@ function emptyMetricView(): HealthMetricWorkspaceView {
 
 function hasHealthResultValues(result: ReturnType<HealthWorkspaceComponent['filteredHealthResult']>): boolean {
   return !!result && (result.observations.length > 0 || result.sampleChunks.length > 0);
+}
+
+function activityEvidenceCanAffectView(
+  metric: HealthWorkspaceMetricSelection,
+  result: ReturnType<HealthWorkspaceComponent['filteredHealthResult']>,
+): boolean {
+  return metric === HEALTH_METRIC_IDS.Vo2Max
+    || (metric === HEALTH_METRIC_IDS.BodyWeight && !hasHealthResultValues(result));
 }
 
 function healthRangeToSleepRange(range: HealthWorkspaceRange): AppDashboardSleepTrendRange | null {

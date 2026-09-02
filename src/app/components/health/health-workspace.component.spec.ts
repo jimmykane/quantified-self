@@ -633,8 +633,16 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('2,048 workout candidates');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('safety limits');
 
-    loadActivityHealthRange.mockRejectedValueOnce(new Error('private provider failure'));
+    loadActivityHealthRange.mockRejectedValueOnce(new Error('irrelevant private provider failure'));
     component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent)
+      .not.toContain('Workout-backed observations could not be loaded');
+
+    loadActivityHealthRange.mockRejectedValueOnce(new Error('private provider failure'));
+    component.selectMetric(HEALTH_METRIC_IDS.Vo2Max);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();

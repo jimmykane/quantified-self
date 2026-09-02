@@ -301,6 +301,23 @@ describe('readActivityHealthRange', () => {
         expect(JSON.stringify(result)).not.toContain('Private importer');
     });
 
+    it('prefers an authoritative source service over a different device brand', async () => {
+        const document = weightDocument('source-priority', START_MS, 70, 'Suunto App');
+        document.data.creator = {
+            name: 'Garmin-compatible private device',
+            manufacturer: 'Garmin',
+            serialNumber: 'private-serial',
+        };
+
+        const result = await readActivityHealthRange('owner', query('body_weight'), {
+            readPage: async () => [document],
+        });
+
+        expect(result.observations).toHaveLength(1);
+        expect(result.observations[0].provider).toBe(HEALTH_PROVIDERS.SuuntoApp);
+        expect(JSON.stringify(result)).not.toContain('private-serial');
+    });
+
     it('drops missing, invalid, non-finite, and non-positive metric values', async () => {
         const values = [null, '72', Number.NaN, Number.POSITIVE_INFINITY, 0, -1, { value: 71 }];
         const result = await readActivityHealthRange('owner', query('body_weight'), {
