@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TracksComponent } from './tracks.component';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, PLATFORM_ID, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
@@ -26,6 +27,7 @@ import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-dete
 import { MyTracksPolylineCacheService } from '../../services/my-tracks-polyline-cache.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
 import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
+import { MyTracksTripsPanelComponent } from '../shared/my-tracks-trips-panel/my-tracks-trips-panel.component';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
 import { MapboxLayersControlService } from '../../services/map/mapbox-layers-control.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -423,8 +425,8 @@ describe('TracksComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TracksComponent, PeekPanelComponent],
-      imports: [MaterialModule],
+      declarations: [TracksComponent, PeekPanelComponent, MyTracksTripsPanelComponent],
+      imports: [CommonModule, MaterialModule],
       providers: [
         { provide: AppAuthService, useValue: mockAuthService },
         { provide: AppUserService, useValue: mockUserService },
@@ -2258,7 +2260,10 @@ describe('TracksComponent', () => {
         'Oldest trip',
         'Newest trip',
       ]);
-      expect(component.tripSortToggleLabel()).toBe('Showing oldest trips first. Show newest trips first.');
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector(
+        'button[aria-label="Showing oldest trips first. Show newest trips first."]',
+      )).not.toBeNull();
     });
 
     it('toggles detected-trips panel state without changing settings', () => {

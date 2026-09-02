@@ -91,8 +91,19 @@ describe('public-seo-pages.content', () => {
 
     expect(PUBLIC_SEO_PAGES.trainingDashboard.h1).toBe('Build the training dashboard you need');
     expect(PUBLIC_SEO_PAGES.trainingDashboard.sections.some(section => section.preview === 'dashboard')).toBe(true);
-    expect(PUBLIC_SEO_PAGES.activityMap.h1).toBe('See your activity history on one map');
+    expect(PUBLIC_SEO_PAGES.activityMap.h1).toBe('See workouts, trips, and destinations on one map');
+    expect(PUBLIC_SEO_PAGES.activityMap.description).toContain('group activity history into trips');
     expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => section.preview === 'activity-map')).toBe(true);
+    expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => (
+      section.items.some(item => item.title === 'Automatic trip detection')
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.activityMap.sections.some(section => (
+      section.items.some(item => item.copy.includes('weighted jump heatmap'))
+    ))).toBe(true);
+    expect(PUBLIC_SEO_PAGES.activityMap.faqItems.some(item => (
+      item.question === 'Does trip detection use my current location?'
+      && item.answer.includes('recorded activity starts')
+    ))).toBe(true);
 
     expect(PUBLIC_SEO_PAGES.mcpServer.h1).toBe('Connect ChatGPT or Claude to your training data');
     expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('ChatGPT, Claude, or another MCP client');

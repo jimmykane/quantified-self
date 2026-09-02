@@ -37,6 +37,7 @@ import { DurabilityReadingGuideComponent } from '../components/shared/durability
 import { PageHeaderComponent } from '../components/shared/page-header/page-header.component';
 import { MetricIndicatorComponent } from '../components/shared/metric-indicator/metric-indicator.component';
 import { AppChartSharedModule } from './app-chart-shared.module';
+import { MyTracksTripsPanelComponent } from '../components/shared/my-tracks-trips-panel/my-tracks-trips-panel.component';
 
 @NgModule({
     imports: [
@@ -78,6 +79,7 @@ import { AppChartSharedModule } from './app-chart-shared.module';
         DashboardActionPromptComponent,
         WorkspaceSectionNavigationComponent,
         DurabilityReadingGuideComponent,
+        MyTracksTripsPanelComponent,
     ],
     providers: [],
     exports: [
@@ -115,6 +117,7 @@ import { AppChartSharedModule } from './app-chart-shared.module';
         DurabilityReadingGuideComponent,
         PageHeaderComponent,
         MetricIndicatorComponent,
+        MyTracksTripsPanelComponent,
     ]
 })
 
