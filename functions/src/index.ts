@@ -129,7 +129,6 @@ export {
   scheduleSuuntoSleepSync,
   scheduleCOROSSleepSync,
   scheduleSuuntoHealthSync,
-  scheduleSuuntoWebhookBindingVerification,
 } from './sleep/polling';
 export {
   backfillCorosAPISleep,

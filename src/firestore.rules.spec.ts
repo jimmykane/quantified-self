@@ -312,7 +312,7 @@ describe('Firestore Security Rules', () => {
             }));
             await assertFails(tokenRef.update({ userName: 'victim-account' }));
             await assertFails(tokenRef.delete());
-            const cursorRef = db.doc('providerMaintenanceState/suuntoWebhookBindingVerification');
+            const cursorRef = db.doc('providerMaintenanceState/suuntoSleepPolling');
             await assertFails(cursorRef.get());
             await assertFails(cursorRef.set({ nextOffset: 0 }));
         });

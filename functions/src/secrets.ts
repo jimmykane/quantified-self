@@ -110,7 +110,6 @@ export const FUNCTION_SECRET_BINDINGS = {
   requestAndSetWahooAPIAccessToken: WAHOO,
   restoreUserClaims: [SECRET_PARAMS.STRIPE_SECRET_KEY],
   retryPendingServiceDisconnects: [...COROS, ...GARMIN, ...SUUNTO, ...WAHOO],
-  scheduleSuuntoWebhookBindingVerification: SUUNTO,
   sendRoutesToService: [...COROS, ...SUUNTO_API, ...GARMIN, ...WAHOO],
   wahooAPIWebhook: [SECRET_PARAMS.WAHOOAPI_WEBHOOK_TOKEN],
 } satisfies Record<string, SecretParam[]>;
