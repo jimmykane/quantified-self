@@ -1,23 +1,27 @@
-<div class="home-my-tracks-preview__selector" role="group" aria-label="Choose a real activity trace">
-  @for (option of previewOptions; track option.label; let index = $index) {
-    <button
-      type="button"
-      class="home-my-tracks-preview__option"
-      [class.is-active]="selectedPreviewIndex() === index"
-      [attr.aria-label]="option.accessibleLabel"
-      [attr.aria-pressed]="selectedPreviewIndex() === index"
-      (click)="selectPreview(index)"
-    >
-      {{ option.label }}
-    </button>
-  }
-</div>
 <div
   #mapContainer
   class="home-my-tracks-preview__map"
   role="region"
-  aria-label="Interactive MyTracks preview showing a real activity trace"
+  aria-label="Interactive My Tracks preview showing anonymized activity traces and example detected trips"
 ></div>
+<app-my-tracks-trips-panel
+  [trips]="displayedPreviewTrips()"
+  [homeArea]="previewHomeArea"
+  [expanded]="tripsPanelExpanded()"
+  [expandedSizePx]="276"
+  [sortDirection]="tripSortDirection()"
+  [selectedTripId]="selectedPreviewTripId()"
+  [homeSelected]="homeSelected()"
+  title="Example trips"
+  (panelExpandedChange)="tripsPanelExpanded.set($event)"
+  (sortToggle)="toggleTripSortDirection()"
+  (tripSelected)="selectPreviewTrip($event)"
+  (tripHovered)="hoverPreviewTrip($event)"
+  (tripHoverEnded)="endPreviewTripHover($event)"
+  (homeSelectedChange)="selectPreviewHome()"
+  (homeHovered)="hoverPreviewHome()"
+  (homeHoverEnded)="endPreviewHomeHover()"
+></app-my-tracks-trips-panel>
 @if (initializationFailed()) {
   <p class="home-my-tracks-preview__fallback">Map preview unavailable.</p>
 }

@@ -12,59 +12,6 @@
   min-height: inherit;
 }
 
-.home-my-tracks-preview__selector {
-  position: absolute;
-  z-index: 2;
-  top: 0.75rem;
-  left: 0.75rem;
-  display: flex;
-  gap: 0.3rem;
-  padding: 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 82%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--mat-sys-surface-container-high) 92%, transparent);
-  box-shadow: 0 0.2rem 0.7rem color-mix(in srgb, var(--mat-sys-shadow) 14%, transparent);
-  backdrop-filter: blur(0.45rem);
-}
-
-.home-my-tracks-preview__option {
-  min-height: 2rem;
-  padding: 0.25rem 0.7rem;
-  border: 0;
-  border-radius: 999px;
-  color: var(--mat-sys-on-surface-variant);
-  background: transparent;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 650;
-  line-height: 1;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.home-my-tracks-preview__option.is-active {
-  color: var(--mat-sys-on-primary-container);
-  background: var(--mat-sys-primary-container);
-}
-
-.home-my-tracks-preview__option:focus-visible {
-  outline: 2px solid var(--mat-sys-primary);
-  outline-offset: 2px;
-}
-
-@media (max-width: 420px) {
-  .home-my-tracks-preview__selector {
-    top: 0.55rem;
-    left: 0.55rem;
-  }
-
-  .home-my-tracks-preview__option {
-    min-height: 1.9rem;
-    padding-inline: 0.55rem;
-    font-size: 0.72rem;
-  }
-}
-
 .home-my-tracks-preview__fallback {
   position: absolute;
   inset: 0;

@@ -1,4 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import type { DetectedHomeArea } from '../../services/my-tracks-trip-detection.service';
+import type { MyTracksTripPanelItem } from '../shared/my-tracks-trips-panel/my-tracks-trips-panel.component';
 import type { TracksMapPreparedTrack } from '../tracks/tracks-map.manager';
 
 type PreviewCoordinate = [longitude: number, latitude: number];
@@ -243,4 +245,69 @@ export const HOME_MY_TRACKS_PREVIEW_TRACKS: readonly TracksMapPreparedTrack[] = 
     [20.8366592, 39.6674161],
     [20.8367728, 39.6676502],
   ]),
+]);
+
+/**
+ * Deterministic example metadata for the public Trips panel.
+ *
+ * These labels, dates, and grouping values are illustrative. They contain no
+ * account identifiers or original activity metadata. The referenced trace IDs
+ * point only to the identity-stripped preview geometry above.
+ */
+export const HOME_MY_TRACKS_PREVIEW_HOME_AREA: DetectedHomeArea = Object.freeze({
+  destinationId: 'preview-home-athens',
+  pointCount: 64,
+  pointShare: 0.68,
+  centroidLat: 37.9838,
+  centroidLng: 23.7275,
+  bounds: Object.freeze({
+    west: 23.68,
+    east: 23.78,
+    south: 37.94,
+    north: 38.03,
+  }),
+  radiusKm: 5.2,
+});
+
+export const HOME_MY_TRACKS_PREVIEW_TRIPS: readonly MyTracksTripPanelItem[] = Object.freeze([
+  Object.freeze({
+    tripId: 'preview-trip-ioannina',
+    destinationId: 'preview-destination-ioannina',
+    destinationVisitIndex: 1,
+    destinationVisitCount: 1,
+    isRevisit: false,
+    eventIds: ['preview-trail-run', 'preview-mountain-bike'],
+    locationLabel: 'Ioannina, Greece',
+    startDate: new Date('2026-08-28T07:10:00Z'),
+    endDate: new Date('2026-08-30T10:35:00Z'),
+    activityCount: 2,
+    centroidLat: 39.6703,
+    centroidLng: 20.8405,
+    bounds: Object.freeze({
+      west: 20.8263,
+      east: 20.8557,
+      south: 39.6623,
+      north: 39.6781,
+    }),
+  }),
+  Object.freeze({
+    tripId: 'preview-trip-epirus-coast',
+    destinationId: 'preview-destination-epirus-coast',
+    destinationVisitIndex: 2,
+    destinationVisitCount: 2,
+    isRevisit: true,
+    eventIds: ['preview-open-water'],
+    locationLabel: 'Epirus Coast, Greece',
+    startDate: new Date('2026-08-16T06:45:00Z'),
+    endDate: new Date('2026-08-16T07:25:00Z'),
+    activityCount: 1,
+    centroidLat: 38.9996,
+    centroidLng: 20.7004,
+    bounds: Object.freeze({
+      west: 20.6994,
+      east: 20.7015,
+      south: 38.997,
+      north: 39.0022,
+    }),
+  }),
 ]);

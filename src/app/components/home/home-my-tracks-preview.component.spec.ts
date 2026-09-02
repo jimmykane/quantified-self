@@ -7,7 +7,11 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { MyTracksMapViewFactory } from '../shared/my-tracks-map-view/my-tracks-map-view.factory';
-import { HOME_MY_TRACKS_PREVIEW_TRACKS } from './home-my-tracks-preview.data';
+import {
+  HOME_MY_TRACKS_PREVIEW_HOME_AREA,
+  HOME_MY_TRACKS_PREVIEW_TRACKS,
+  HOME_MY_TRACKS_PREVIEW_TRIPS,
+} from './home-my-tracks-preview.data';
 import { HomeMyTracksPreviewComponent } from './home-my-tracks-preview.component';
 
 describe('HomeMyTracksPreviewComponent', () => {
@@ -21,6 +25,8 @@ describe('HomeMyTracksPreviewComponent', () => {
     setMapStyle: vi.fn(),
     setTracksFromPrepared: vi.fn(),
     fitBoundsToCoordinates: vi.fn(),
+    setHomeArea: vi.fn(),
+    setTripArea: vi.fn(),
   };
   const factory = {
     createManager: vi.fn(() => manager),
@@ -57,7 +63,7 @@ describe('HomeMyTracksPreviewComponent', () => {
     fixture = TestBed.createComponent(HomeMyTracksPreviewComponent);
   });
 
-  it('renders the real MTB preview through the shared MyTracks map view', async () => {
+  it('renders all anonymized traces and example trip context through the shared MyTracks map view', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -70,12 +76,20 @@ describe('HomeMyTracksPreviewComponent', () => {
       }),
       { controlMode: 'preview' },
     );
-    expect(manager.setTracksFromPrepared).toHaveBeenCalledWith([HOME_MY_TRACKS_PREVIEW_TRACKS[2]]);
+    expect(manager.setTracksFromPrepared).toHaveBeenCalledWith([...HOME_MY_TRACKS_PREVIEW_TRACKS]);
+    expect(manager.setHomeArea).toHaveBeenCalledWith(HOME_MY_TRACKS_PREVIEW_HOME_AREA);
+    expect(manager.setTripArea).toHaveBeenCalledWith(expect.objectContaining({
+      tripId: HOME_MY_TRACKS_PREVIEW_TRIPS[0].tripId,
+    }));
     expect(manager.fitBoundsToCoordinates).toHaveBeenCalledWith(
-      HOME_MY_TRACKS_PREVIEW_TRACKS[2].coordinates,
+      [
+        ...HOME_MY_TRACKS_PREVIEW_TRACKS[1].coordinates,
+        ...HOME_MY_TRACKS_PREVIEW_TRACKS[2].coordinates,
+      ],
       { padding: 42, animate: false },
     );
-    expect(fixture.nativeElement.querySelector('[aria-label="Interactive MyTracks preview showing a real activity trace"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label*="example detected trips"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('app-my-tracks-trips-panel')).toBeTruthy();
     expect(HOME_MY_TRACKS_PREVIEW_TRACKS.map((track) => track.activity.type)).toEqual([
       ActivityTypes.OpenWaterSwimming,
       ActivityTypes.TrailRunning,
@@ -89,23 +103,44 @@ describe('HomeMyTracksPreviewComponent', () => {
     ]);
   });
 
-  it('switches to a readable real trace with haptic feedback', async () => {
+  it('focuses an example trip with the shared map overlay and haptic feedback', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const openWaterButton = fixture.nativeElement.querySelector(
-      '[aria-label="Show open-water swimming activity"]',
-    ) as HTMLButtonElement;
-    openWaterButton.click();
+    const coastButton = Array.from(
+      fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>,
+    ).find((button) => button.textContent?.includes('Epirus Coast')) as HTMLButtonElement;
+    coastButton.click();
     fixture.detectChanges();
 
     expect(haptics.selection).toHaveBeenCalledTimes(1);
-    expect(manager.setTracksFromPrepared).toHaveBeenLastCalledWith([HOME_MY_TRACKS_PREVIEW_TRACKS[0]]);
+    expect(manager.setTripArea).toHaveBeenLastCalledWith(expect.objectContaining({
+      tripId: 'preview-trip-epirus-coast',
+    }));
     expect(manager.fitBoundsToCoordinates).toHaveBeenLastCalledWith(
       HOME_MY_TRACKS_PREVIEW_TRACKS[0].coordinates,
-      { padding: 42, animate: false },
+      { padding: 42, animate: true },
     );
-    expect(openWaterButton.getAttribute('aria-pressed')).toBe('true');
+    expect(coastButton.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('focuses the example Home area and clears the active trip overlay', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const homeButton = Array.from(
+      fixture.nativeElement.querySelectorAll('.detected-trip-button') as NodeListOf<HTMLButtonElement>,
+    ).find((button) => button.textContent?.includes('Home area')) as HTMLButtonElement;
+    homeButton.click();
+    fixture.detectChanges();
+
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(manager.setTripArea).toHaveBeenLastCalledWith(null);
+    expect(manager.fitBoundsToCoordinates).toHaveBeenLastCalledWith([
+      [HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.west, HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.south],
+      [HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.east, HOME_MY_TRACKS_PREVIEW_HOME_AREA.bounds.north],
+    ], { padding: 42, animate: true });
+    expect(homeButton.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('disposes the same shared map handle on destroy', async () => {

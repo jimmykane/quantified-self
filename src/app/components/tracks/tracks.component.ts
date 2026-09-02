@@ -78,10 +78,7 @@ import {
   type MyTracksMapViewHandle,
 } from '../shared/my-tracks-map-view/my-tracks-map-view.factory';
 import type { MapOptions } from 'mapbox-gl';
-
-interface DetectedTripViewModel extends DetectedTrip {
-  locationLabel: string | null;
-}
+import type { MyTracksTripPanelItem } from '../shared/my-tracks-trips-panel/my-tracks-trips-panel.component';
 
 interface JumpHeatPoint {
   lng: number;
@@ -224,15 +221,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   public readonly tripSortDirection = computed<AppMyTracksTripSortDirection>(() => (
     this.myTracksSettings()?.tripSortDirection === 'asc' ? 'asc' : 'desc'
   ));
-  public readonly tripSortIcon = computed(() => this.tripSortDirection() === 'desc' ? 'south' : 'north');
-  public readonly tripSortToggleLabel = computed(() => (
-    this.tripSortDirection() === 'desc'
-      ? 'Showing newest trips first. Show oldest trips first.'
-      : 'Showing oldest trips first. Show newest trips first.'
-  ));
-
   public isLoading: WritableSignal<boolean> = signal(false);
-  public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
+  public detectedTrips: WritableSignal<MyTracksTripPanelItem[]> = signal([]);
   public readonly displayedDetectedTrips = computed(() => this.sortDetectedTripsForDisplay(
     this.detectedTrips(),
     this.tripSortDirection(),
@@ -241,6 +231,9 @@ export class TracksComponent implements OnInit, OnDestroy {
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
   public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
   public selectedDetectedTripId: WritableSignal<string | null> = signal(null);
+  public readonly isHomeEntrySelected = computed(() => (
+    this.selectedDetectedTripId() === TracksComponent.HOME_PANEL_ENTRY_ID
+  ));
   public hoveredDetectedTripId: WritableSignal<string | null> = signal(null);
   public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
   public searchPeekExpanded: WritableSignal<boolean> = signal(true);
@@ -1906,7 +1899,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.tracksMapManager.fitBoundsToCoordinates(coordinates);
   }
 
-  public onDetectedTripSelected(trip: DetectedTripViewModel): void {
+  public onDetectedTripSelected(trip: MyTracksTripPanelItem): void {
     this.hapticsService.selection();
     this.onMapViewInteraction();
     this.selectedDetectedTripId.set(trip.tripId);
@@ -1942,7 +1935,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     ]);
   }
 
-  public onDetectedTripHovered(trip: DetectedTripViewModel): void {
+  public onDetectedTripHovered(trip: MyTracksTripPanelItem): void {
     this.hoveredDetectedTripId.set(trip.tripId);
     this.applyActiveDetectedTripAreaOverlay();
   }
@@ -1956,7 +1949,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.applyActiveDetectedTripAreaOverlay();
   }
 
-  public onDetectedTripHoverEnded(trip: DetectedTripViewModel): void {
+  public onDetectedTripHoverEnded(trip: MyTracksTripPanelItem): void {
     if (this.hoveredDetectedTripId() !== trip.tripId) {
       return;
     }
@@ -1966,9 +1959,9 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private sortDetectedTripsForDisplay(
-    trips: readonly DetectedTripViewModel[],
+    trips: readonly MyTracksTripPanelItem[],
     direction: AppMyTracksTripSortDirection,
-  ): DetectedTripViewModel[] {
+  ): MyTracksTripPanelItem[] {
     const directionMultiplier = direction === 'desc' ? -1 : 1;
     return [...trips].sort((left, right) => {
       const startDateDifference = left.startDate.getTime() - right.startDate.getTime();
@@ -2307,7 +2300,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.tracksMapManager.setTripArea(activeTrip ? this.toTripAreaOverlay(activeTrip) : null);
   }
 
-  private resolveActiveDetectedTrip(): DetectedTripViewModel | null {
+  private resolveActiveDetectedTrip(): MyTracksTripPanelItem | null {
     const detectedTrips = this.detectedTrips();
     const hoveredTripId = this.hoveredDetectedTripId();
     if (hoveredTripId === TracksComponent.HOME_PANEL_ENTRY_ID) {
@@ -2333,11 +2326,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     return detectedTrips.find((trip) => trip.tripId === selectedTripId) || null;
   }
 
-  public isHomeEntrySelected(): boolean {
-    return this.selectedDetectedTripId() === TracksComponent.HOME_PANEL_ENTRY_ID;
-  }
-
-  private toTripAreaOverlay(trip: DetectedTripViewModel): TripAreaOverlay {
+  private toTripAreaOverlay(trip: MyTracksTripPanelItem): TripAreaOverlay {
     return {
       tripId: trip.tripId,
       centroidLat: trip.centroidLat,
