@@ -65,6 +65,18 @@ describe('WorkoutDataComparisonPageComponent', () => {
     expect(text).not.toContain('compare Garmin Suunto COROS workout data');
   });
 
+  it('starts the feature content with workout-file uploads', () => {
+    const sections = Array.from(
+      fixture.nativeElement.querySelectorAll('main > section')
+    ) as HTMLElement[];
+
+    expect(sections[0].classList.contains('hero-section')).toBe(true);
+    expect(sections[1].id).toBe('files');
+    expect(sections[1].querySelector('h2')?.textContent?.trim()).toBe(
+      'Upload FIT, TCX, GPX, JSON, and SML activities'
+    );
+  });
+
   it('exposes public CTAs and support links', () => {
     const links = Array.from(fixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
