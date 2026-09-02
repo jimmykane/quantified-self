@@ -455,9 +455,9 @@ describe('AppRoutingModule routes', () => {
       },
       {
         path: PUBLIC_FEATURE_PATHS.activityMap,
-        title: 'Map Your Running, Cycling, Swimming, and Outdoor Activities',
-        h1: 'See your activity history on one map',
-        descriptionText: 'GPS workouts together on one interactive map',
+        title: 'Activity Map and Automatic Trip Detection',
+        h1: 'See workouts, trips, and destinations on one map',
+        descriptionText: 'group activity history into trips',
       },
       {
         path: PUBLIC_FEATURE_PATHS.mcpServer,
