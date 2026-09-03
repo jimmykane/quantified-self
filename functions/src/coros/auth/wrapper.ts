@@ -55,9 +55,20 @@ export const getCOROSAPIAuthRequestTokenRedirectURI = functions
       throw new functions.https.HttpsError('invalid-argument', 'Missing redirect_uri');
     }
 
-    return {
-      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
-    };
+    try {
+      return {
+        redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
+      };
+    } catch (error) {
+      if (isServiceDisconnectInProgressError(error)) {
+        logger.info('[COROSAuth] OAuth start is waiting for an in-progress disconnect.', {
+          serviceName: SERVICE_NAME,
+          blocker: error.details.blocker,
+        });
+        throw new functions.https.HttpsError('unavailable', error.message, error.details);
+      }
+      throw error;
+    }
   });
 
 

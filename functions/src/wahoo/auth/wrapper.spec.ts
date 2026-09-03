@@ -52,6 +52,7 @@ vi.mock('firebase-admin', () => ({
 
 vi.mock('firebase-functions/logger', () => ({
   error: vi.fn(),
+  info: vi.fn(),
   warn: vi.fn(),
 }));
 
@@ -86,6 +87,7 @@ vi.mock('../account', () => ({
 
 import {
   deauthorizeWahooAPI,
+  getWahooAPIAuthRequestTokenRedirectURI,
   getWahooAPIConnectionAccount,
   requestAndSetWahooAPIAccessToken,
 } from './wrapper';
@@ -100,6 +102,31 @@ describe('Wahoo Auth Wrapper', () => {
     mocks.tokenQueryGet.mockResolvedValue({ docs: [] });
     mocks.hasServiceOAuthConnectAccess.mockResolvedValue(true);
     mocks.validateOAuth2State.mockResolvedValue(true);
+  });
+
+  it('returns a retryable callable error when OAuth start is blocked by a disconnect', async () => {
+    const details = {
+      reason: 'service_disconnect_in_progress',
+      blocker: 'disconnect_operation',
+      retryAt: Date.now() + 2_000,
+      retryDeadlineAt: Date.now() + 60_000,
+    };
+    mocks.getServiceOAuth2CodeRedirectAndSaveStateToUser.mockRejectedValueOnce(
+      Object.assign(new Error('Wahoo API is already being disconnected. Please retry shortly.'), {
+        name: 'ServiceDisconnectInProgressError',
+        details,
+      }),
+    );
+
+    await expect(getWahooAPIAuthRequestTokenRedirectURI({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: { redirectUri: 'https://localhost/callback' },
+    } as Parameters<typeof getWahooAPIAuthRequestTokenRedirectURI>[0])).rejects.toMatchObject({
+      code: 'unavailable',
+      message: 'Wahoo API is already being disconnected. Please retry shortly.',
+      details,
+    });
   });
 
   it('passes the validated callback state into the atomic OAuth context claim', async () => {

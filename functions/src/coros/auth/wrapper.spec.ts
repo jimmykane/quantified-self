@@ -104,6 +104,27 @@ describe('COROS Auth Wrapper', () => {
             await expect(getCOROSAPIAuthRequestTokenRedirectURI(data, context))
                 .rejects.toThrow('User must be authenticated.');
         });
+
+        it('returns a retryable callable error when a disconnect still owns a token', async () => {
+            const details = {
+                reason: 'service_disconnect_in_progress',
+                blocker: 'disconnect_operation',
+                retryAt: Date.now() + 2_000,
+                retryDeadlineAt: Date.now() + 60_000,
+            };
+            vi.mocked(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).mockRejectedValueOnce(
+                Object.assign(new Error('COROS API is already being disconnected. Please retry shortly.'), {
+                    name: 'ServiceDisconnectInProgressError',
+                    details,
+                }),
+            );
+
+            await expect(getCOROSAPIAuthRequestTokenRedirectURI(data, context)).rejects.toMatchObject({
+                code: 'unavailable',
+                message: 'COROS API is already being disconnected. Please retry shortly.',
+                details,
+            });
+        });
     });
 
     describe('requestAndSetCOROSAPIAccessToken', () => {

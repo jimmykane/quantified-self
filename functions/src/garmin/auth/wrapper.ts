@@ -76,6 +76,13 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions
       redirect_uri: url,
     };
   } catch (e: any) {
+    if (isServiceDisconnectInProgressError(e)) {
+      logger.info('[GarminAuth] OAuth start is waiting for an in-progress disconnect.', {
+        serviceName: SERVICE_NAME,
+        blocker: e.details.blocker,
+      });
+      throw new functions.https.HttpsError('unavailable', e.message, e.details);
+    }
     logger.error('Error getting Garmin redirect URI:', e);
     const status = e.statusCode || 500;
     if (status === 502) {
