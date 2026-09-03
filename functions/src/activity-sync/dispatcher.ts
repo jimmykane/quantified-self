@@ -143,13 +143,12 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
 
     while (candidateDocs.length < scanLimit) {
         const remainingScanCapacity = scanLimit - candidateDocs.length;
-        const currentPageSize = Math.min(pageSize, remainingScanCapacity);
 
         let query = admin.firestore()
             .collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
             .where('processed', '==', false)
             .orderBy('dateCreated', 'asc')
-            .limit(currentPageSize);
+            .limit(pageSize);
 
         if (pageCursor) {
             query = query.startAfter(pageCursor);
@@ -169,8 +168,8 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         // Task. It must not consume this reconciliation pass's finite
         // candidate budget, otherwise enough old polls hide newer work.
         skippedScheduledProviderPolls += pageSnapshot.docs.length - nonScheduledPollDocs.length;
-        candidateDocs.push(...nonScheduledPollDocs);
-        if (pageSnapshot.docs.length < currentPageSize) {
+        candidateDocs.push(...nonScheduledPollDocs.slice(0, remainingScanCapacity));
+        if (pageSnapshot.docs.length < pageSize) {
             break;
         }
 
