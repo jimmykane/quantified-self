@@ -861,17 +861,16 @@ describe('HealthWorkspaceComponent', () => {
     await createComponent();
 
     const host = fixture.nativeElement as HTMLElement;
-    const importButton = host.querySelector('.health-sync-import') as HTMLButtonElement;
-    expect(importButton.textContent).toContain('Import history');
-    expect(importButton.getAttribute('aria-label')).toBe('Import history for Garmin');
+    const actionsButton = host.querySelector('.health-sync-actions') as HTMLButtonElement;
+    expect(actionsButton.getAttribute('aria-label')).toBe('More actions for Garmin');
+    expect(actionsButton.textContent).not.toContain('Import history');
 
-    importButton.click();
-    fixture.detectChanges();
+    await component.startHistoryImport(HEALTH_PROVIDERS.GarminAPI);
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(backfillGarminHealthForCurrentUser).toHaveBeenCalledTimes(1);
-    expect(host.querySelector('.health-sync-import')).toBeNull();
+    expect(host.querySelector('.health-sync-actions')).toBeNull();
     expect(host.textContent).toContain('History queued');
   });
 
@@ -887,13 +886,13 @@ describe('HealthWorkspaceComponent', () => {
     });
     fixture.detectChanges();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-import')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-actions')).toBeNull();
 
     sleepSyncStates[SLEEP_PROVIDERS.GarminAPI].next(null);
     hasProAccess.set(false);
     fixture.detectChanges();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-import')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-actions')).toBeNull();
   });
 
   it('offers a retry after a failed history import and keeps provider errors inline', async () => {
@@ -909,17 +908,18 @@ describe('HealthWorkspaceComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    const retryButton = host.querySelector('.health-sync-import') as HTMLButtonElement;
-    expect(retryButton.textContent).toContain('Retry import');
+    const actionsButton = host.querySelector('.health-sync-actions') as HTMLButtonElement;
+    expect(actionsButton.getAttribute('aria-label')).toBe('More actions for Garmin');
 
     backfillGarminHealthForCurrentUser.mockRejectedValueOnce(new Error('provider details'));
-    retryButton.click();
+    await component.startHistoryImport(HEALTH_PROVIDERS.GarminAPI);
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(host.textContent).toContain('History import could not be started.');
     expect(host.textContent).not.toContain('provider details');
-    expect((host.querySelector('.health-sync-import') as HTMLButtonElement).textContent).toContain('Retry import');
+    expect((host.querySelector('.health-sync-actions') as HTMLButtonElement).getAttribute('aria-label'))
+      .toBe('More actions for Garmin');
   });
 
   it('does not mistake an unrelated live-sync failure for a failed history import', async () => {

@@ -339,19 +339,30 @@
             }
             @if (state.historyImportActionLabel) {
               <button
-                mat-button
+                mat-icon-button
                 type="button"
-                class="health-sync-import"
+                class="health-sync-actions"
                 [disabled]="state.historyImportBusy"
-                [attr.aria-label]="state.historyImportActionLabel + ' for ' + state.label"
-                (click)="startHistoryImport(state.provider)">
+                [matMenuTriggerFor]="historyImportMenu"
+                [attr.aria-label]="'More actions for ' + state.label"
+                matTooltip="More actions">
                 @if (state.historyImportBusy) {
                   <mat-spinner diameter="14" aria-hidden="true"></mat-spinner>
                 } @else {
-                  <mat-icon aria-hidden="true">history</mat-icon>
+                  <mat-icon aria-hidden="true">more_horiz</mat-icon>
                 }
-                <span>{{ state.historyImportActionLabel }}</span>
               </button>
+              <mat-menu #historyImportMenu="matMenu" class="qs-menu-panel">
+                <button
+                  mat-menu-item
+                  type="button"
+                  [disabled]="state.historyImportBusy"
+                  [attr.aria-label]="state.historyImportActionLabel + ' for ' + state.label"
+                  (click)="startHistoryImport(state.provider)">
+                  <mat-icon aria-hidden="true">history</mat-icon>
+                  <span>{{ state.historyImportActionLabel }}</span>
+                </button>
+              </mat-menu>
             }
           </li>
         }
