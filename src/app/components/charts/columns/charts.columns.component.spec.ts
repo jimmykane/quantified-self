@@ -6,6 +6,7 @@ import {
   ChartDataValueTypes,
   DataAscent,
   DataDistance,
+  DataDuration,
   DataPaceAvg,
   DistanceUnits,
   PaceUnits,
@@ -256,6 +257,91 @@ describe('ChartsColumnsComponent', () => {
     const option = getLastOption();
 
     expect(option.xAxis.data).toEqual(['W22', 'W23']);
+  });
+
+  it('should render desktop duration column labels compactly with regular weight', async () => {
+    component.chartDataType = DataDuration.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Weekly;
+    component.data = [
+      {
+        time: Date.UTC(2026, 7, 17),
+        [ChartDataValueTypes.Total]: (21 * 60 * 60) + (23 * 60) + 4,
+        count: 2,
+        Running: 9 * 60 * 60,
+        Cycling: (12 * 60 * 60) + (23 * 60) + 4,
+      },
+    ];
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
+      configurable: true,
+      value: 760,
+    });
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    const totalLabelSeries = option.series.find((seriesEntry: { name?: string }) => (
+      seriesEntry.name === '__date_activity_totals__'
+    ));
+    const renderedLabel = totalLabelSeries.renderItem({}, {
+      value: (dimension: number) => totalLabelSeries.data[0][dimension],
+      coord: () => [100, 100],
+    });
+
+    expect(renderedLabel.style).toMatchObject({
+      text: '21h 23m',
+      fontSize: 10,
+      fontWeight: 400,
+    });
+  });
+
+  it('should apply the lighter duration label treatment to unsegmented columns', async () => {
+    component.chartDataType = DataDuration.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.ActivityType;
+    component.data = [
+      { type: 'Running', [ChartDataValueTypes.Total]: (21 * 60 * 60) + (23 * 60) + 4, count: 2 },
+    ];
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
+      configurable: true,
+      value: 760,
+    });
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.series[0].label.fontSize).toBe(10);
+    expect(option.series[0].label.fontWeight).toBe(400);
+    expect(option.series[0].label.formatter({ dataIndex: 0 })).toBe('21h 23m');
+  });
+
+  it('should hide persistent duration column labels on compact layouts', async () => {
+    component.chartDataType = DataDuration.type;
+    component.chartDataCategoryType = ChartDataCategoryTypes.DateType;
+    component.chartDataTimeInterval = TimeIntervals.Weekly;
+    component.data = [
+      {
+        time: Date.UTC(2026, 7, 17),
+        [ChartDataValueTypes.Total]: (21 * 60 * 60) + (23 * 60) + 4,
+        count: 2,
+        Running: 9 * 60 * 60,
+        Cycling: (12 * 60 * 60) + (23 * 60) + 4,
+      },
+    ];
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
+      configurable: true,
+      value: 360,
+    });
+
+    fixture.detectChanges();
+    await waitForChartStabilization();
+
+    const option = getLastOption();
+    expect(option.series.find((seriesEntry: { name?: string }) => (
+      seriesEntry.name === '__date_activity_totals__'
+    ))).toBeUndefined();
+    expect(option.tooltip.trigger).toBe('axis');
   });
 
   it('should render summary meta as "per activity type" for activity categories', async () => {

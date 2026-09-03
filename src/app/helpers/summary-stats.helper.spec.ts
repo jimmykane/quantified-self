@@ -9,6 +9,9 @@ import {
   DataAscent,
   DataCadenceMin,
   DataBeginningPotentialStamina,
+  DataContactTimeToFlightTimeRatioAvg,
+  DataContactTimeToFlightTimeRatioMax,
+  DataContactTimeToFlightTimeRatioMin,
   DataDescent,
   DataDescentTime,
   DataDepthAvg,
@@ -24,6 +27,9 @@ import {
   DataGradeAvg,
   DataGradeMax,
   DataGradeMin,
+  DataGroundContactTimePercentageAvg,
+  DataGroundContactTimePercentageMax,
+  DataGroundContactTimePercentageMin,
   DataHeartRateMin,
   DataJumpCount,
   DataJumpDistanceAvg,
@@ -38,6 +44,9 @@ import {
   DataPowerMax,
   DataPowerTrainingStressScore,
   DataRPE,
+  DataRunningFlightTimeAvg,
+  DataRunningFlightTimeMax,
+  DataRunningFlightTimeMin,
   DataSpeedAvg,
   DataStaminaAvg,
   DataStaminaMin,
@@ -66,6 +75,17 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain('Average Absolute Pressure');
     expect(stats).toContain('Average Grade');
     expect(stats).toContain('Average Ground Contact Time');
+    expect(stats).toEqual(expect.arrayContaining([
+      DataGroundContactTimePercentageAvg.type,
+      DataGroundContactTimePercentageMin.type,
+      DataGroundContactTimePercentageMax.type,
+      DataRunningFlightTimeAvg.type,
+      DataRunningFlightTimeMin.type,
+      DataRunningFlightTimeMax.type,
+      DataContactTimeToFlightTimeRatioAvg.type,
+      DataContactTimeToFlightTimeRatioMin.type,
+      DataContactTimeToFlightTimeRatioMax.type,
+    ]));
     expect(stats).toContain('Average Leg Stiffness');
     expect(stats).toContain('Average EVPE');
     expect(stats).toContain('Average EHPE');

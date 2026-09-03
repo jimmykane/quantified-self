@@ -39,12 +39,6 @@ import { SUUNTO_HEALTH_MAX_PROVIDER_ACCOUNT_ID_LENGTH } from './health';
  * account identity through a forced provider refresh.
  */
 export type SuuntoWebhookBindingStatus = 'created' | 'current' | 'unverified' | 'inactive';
-export const SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_VERSION = 1;
-export const SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_FIELDS = {
-  Version: 'suuntoLegacyWebhookBindingRepairVersion',
-  RepairedAtMs: 'suuntoLegacyWebhookBindingRepairedAtMs',
-  IncidentStartMs: 'suuntoLegacyWebhookBindingRepairIncidentStartMs',
-} as const;
 export type SuuntoWebhookWriteLifecycleGuards = Required<Pick<
   SleepLifecycleWriterDependencies,
   | 'requiredExistingDocumentRef'
@@ -374,41 +368,6 @@ export function ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(
     userID,
     tokenSnapshot,
     nowMs,
-  );
-}
-
-/**
- * One-time child-only legacy repair. The provider refresh, exact credential
- * fence, lifecycle creation, binding creation, and resumable repair marker are
- * one authorization decision. A partial write cannot make the connection look
- * repaired while leaving the binding or its lifecycle incomplete (or vice
- * versa).
- */
-export function repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
-  db: admin.firestore.Firestore,
-  userID: string,
-  tokenSnapshot: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot,
-  incidentStartMs: number,
-  nowMs = Date.now(),
-): Promise<SuuntoWebhookBindingStatus> {
-  if (!Number.isFinite(incidentStartMs) || incidentStartMs <= 0) {
-    return Promise.resolve('unverified');
-  }
-  return ensureSuuntoWebhookAccountBindingForProviderVerifiedTokenInternal(
-    db,
-    userID,
-    tokenSnapshot,
-    nowMs,
-    {
-      forceProviderVerification: true,
-      requireExistingConnectedServiceMeta: true,
-      verifiedTokenPatch: {
-        [SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_FIELDS.Version]:
-          SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_VERSION,
-        [SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_FIELDS.RepairedAtMs]: nowMs,
-        [SUUNTO_LEGACY_WEBHOOK_BINDING_REPAIR_FIELDS.IncidentStartMs]: incidentStartMs,
-      },
-    },
   );
 }
 

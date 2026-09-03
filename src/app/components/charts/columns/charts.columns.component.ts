@@ -17,6 +17,7 @@ import {
   ChartDataValueTypes,
   DataAscent,
   DataDescent,
+  DataDuration,
   TimeIntervals,
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -52,6 +53,7 @@ import {
   formatDashboardAxisDateByInterval,
   formatDashboardAxisNumericValue,
   formatDashboardDataDisplay,
+  formatDashboardDurationLabel,
   formatDashboardNumericValue,
   getDashboardAggregateData,
   getDashboardSummaryMetaLabel
@@ -227,7 +229,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const useDateActivitySegmentation = isDateCategory
       && (supportsAdditiveActivitySegmentation || this.preferDateActivitySegmentation)
       && !!dateActivitySegmentation;
-    const showValueLabels = points.length > 0 && points.length <= 200 && !useDateActivitySegmentation;
+    const isVerticalDurationColumnChart = this.isVerticalDurationColumnChart();
+    const showPersistentValueLabels = !isVerticalDurationColumnChart || !isCompactLayout;
+    const showValueLabels = points.length > 0
+      && points.length <= 200
+      && !useDateActivitySegmentation
+      && showPersistentValueLabels;
 
     if (!points.length) {
       return {
@@ -278,7 +285,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         isCompactLayout,
         points
       )];
-    const totalLabelSeries = useDateActivitySegmentation && dateActivitySegmentation
+    const totalLabelSeries = useDateActivitySegmentation && dateActivitySegmentation && showPersistentValueLabels
       ? this.buildDateActivityTotalLabelSeries(dateActivitySegmentation, textColor, isCompactLayout)
       : null;
     const dataSeries = totalLabelSeries
@@ -508,8 +515,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         text: this.formatDataLabelValue(total),
         fill: textColor,
         fontFamily: "'Barlow Condensed', sans-serif",
-        fontSize: isCompactLayout ? 11 : 12,
-        fontWeight: 700,
+        fontSize: this.isVerticalDurationColumnChart() ? 10 : (isCompactLayout ? 11 : 12),
+        fontWeight: this.isVerticalDurationColumnChart() ? 400 : 700,
         textAlign: this.vertical ? 'center' : 'left',
         textVerticalAlign: this.vertical ? 'bottom' : 'middle'
       }
@@ -640,7 +647,8 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         position: this.vertical ? 'top' : 'right',
         color: textColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-        fontSize: isCompactLayout ? 11 : 12,
+        fontSize: this.isVerticalDurationColumnChart() ? 10 : (isCompactLayout ? 11 : 12),
+        fontWeight: this.isVerticalDurationColumnChart() ? 400 : undefined,
         formatter: (params: { dataIndex: number }) => {
           const point = points[params.dataIndex];
           if (!point || !Number.isFinite(point.value)) {
@@ -730,6 +738,9 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   }
 
   private formatDataLabelValue(value: number | null): string {
+    if (this.isVerticalDurationColumnChart()) {
+      return formatDashboardDurationLabel(value);
+    }
     if (this.chartDataType === DataAscent.type || this.chartDataType === DataDescent.type) {
       return formatDashboardAxisNumericValue(
         this.chartDataType,
@@ -740,6 +751,12 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
       );
     }
     return this.formatValue(value);
+  }
+
+  private isVerticalDurationColumnChart(): boolean {
+    return this.type === 'columns'
+      && this.vertical
+      && this.chartDataType === DataDuration.type;
   }
 
   private formatTooltip(

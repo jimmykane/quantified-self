@@ -13,6 +13,8 @@
       <ul>
         <li><a routerLink="/features/activity-calendar">Activity calendar</a></li>
         <li><a routerLink="/features/training-analysis">Training analysis</a></li>
+        <li><a routerLink="/features/training-dashboard">Training dashboard</a></li>
+        <li><a routerLink="/features/activity-map">Activity map</a></li>
         <li><a routerLink="/features/supported-activities">Supported activity types</a></li>
         <li><a routerLink="/features/mcp-server">MCP server</a></li>
         <li><a routerLink="/integrations">Integrations</a></li>
@@ -44,10 +46,6 @@
   </div>
 
   <div class="public-footer__bottom">
-    <p>
-      &copy; {{ currentYear }} {{ operator.brandName }} contributors. The software is provided without warranty under its
-      open-source license.
-    </p>
     <nav aria-label="Legal links">
       <a [href]="sourceCodeUrl" target="_blank" rel="noopener noreferrer">Source code</a>
       <a [href]="licenseUrl" target="_blank" rel="noopener noreferrer">{{ openSourceLicense }}</a>

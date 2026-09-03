@@ -982,10 +982,3 @@ export const backfillGarminAPIHealth = onCall({
         nextAllowedAtMs,
     };
 });
-
-/**
- * Temporary compatibility alias for already-open tabs and cached clients.
- * Remove after the canonical callable has aged through the compatibility
- * window tracked by GitHub issue #625.
- */
-export const backfillGarminAPISleep = backfillGarminAPIHealth;

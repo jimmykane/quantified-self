@@ -27,14 +27,14 @@ export interface HelpAction {
   id: 'email-support' | 'report-bug' | 'release-notes' | 'policies';
   label: string;
   icon: string;
-  kind: 'route' | 'external';
+  kind: 'route' | 'external' | 'email';
   target: string;
 }
 
 export interface HelpSectionLink {
   label: string;
   icon: string;
-  kind: 'route' | 'external';
+  kind: 'route' | 'external' | 'email';
   target: string;
   fragment?: string;
   queryParams?: Record<string, string>;
@@ -61,15 +61,18 @@ const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
 
 ## Explore a metric
 
-- Health opens on **Resting heart rate · 30d** when that metric is available. The explorer shows only metrics found anywhere in your imported history, regardless of the currently selected date window; Sleep appears when a normalized Sleep session exists. Health and Sleep availability are checked independently. If either check fails, only that domain stays unfiltered rather than risking hidden valid data. Use **Today**, **14d**, **30d**, **90d**, or **1y** and the older/newer controls. Your range is saved to your account without adding URL query parameters. The selected metric and older/newer position remain local to the open workspace and reset when you return later.
+- Health opens on **Resting heart rate · 30d** when that metric is available. The explorer shows metrics found anywhere in your imported history, regardless of the currently selected date window; Weight and VO₂ max also remain available because they can exist only inside imported workouts. Sleep appears when a normalized Sleep session exists. Health and Sleep availability are checked independently. If either check fails, only that domain stays unfiltered rather than risking hidden valid data. Use **Today**, **14d**, **30d**, **90d**, or **1y** and the older/newer controls. Your selected metric and range are saved to your account without adding URL query parameters. The older/newer position and provider filters remain local to the open workspace and reset when you return later.
 - Detailed sample streams load for Today, 14-day, and 30-day windows. Longer windows use stored summary observations. If a metric exists only as samples, Health asks you to choose a shorter range instead of showing an empty or misleading aggregate. Today shows available intra-day samples and daily summaries; it does not imply that every metric is continuous. Provider support and delivery cadence determine whether a metric is continuous, intermittent, or summary-only.
 - Totals use bars, scalar readings use lines or points, and categorical states use stepped series. Every provider, connected account, aggregation, semantic variant, origin, recording method, and unit stays in a separate series. Provider-native or non-comparable readings are labeled and isolated from canonical readings.
 - Use the local source filters to focus on one or more providers. Filters are not saved as a preferred source. When one provider has multiple connected accounts, Health shows local labels such as **Garmin account 1** instead of an account identifier.
+- **Weight from workouts is fallback profile context, not a weigh-in.** Health reads one value from each parent event so a multisport file does not repeat the same profile Weight for every child activity. It appears only when the active provider-filtered window has no real Health Weight measurement, including a future manual measurement.
+- **Workout VO₂ max is separate evidence.** Health reads each activity so Running, Cycling, and other disciplines keep their meaning, collapses consecutive unchanged estimates within the same source and discipline, and never merges them with provider Health User Metrics or future manual VO₂ max.
 
 ## Read source quality and status
 
 - Series show device attribution when supplied, coverage, and freshness. Partial coverage, superseded sample revisions, conflicts, and bounded-load limits are stated explicitly. A conflict means comparable source observations disagree; both readings remain visible.
 - Expand **Source observations** for the accessible table. It lists source, device, reading, semantics, coverage, freshness, and conflict state without displaying opaque account keys.
+- Workout-backed Weight and VO₂ max are read on demand from your already imported events/activities through an authenticated bounded query. They are not copied into Health storage, and the Health response omits workout IDs, names, locations, account IDs, and raw creator details.
 - **Sleep** continues to use the normalized Sleep model and existing Sleep trend. Health resolves typed references to those sessions rather than copying Sleep values into another model.
 - The compact source footer shows each provider's recency. For an eligible connected Pro source with verified sync state and no previous Sleep or Health history request, **Import history** starts the provider's existing bounded history workflow. Prior and cooldown-bound requests suppress the action; failed requests can be retried, and Garmin also reports its granular queued and running Health progress. If history permissions are missing or the prior-import state cannot be verified, use **Connectivity** instead.
 - Loading, empty, permission, reconnect, failure, disconnected, and unsupported states link to **Connectivity** when an account action is available. Disconnecting stops future imports but keeps existing Health history; deleting your Quantified Self account removes user-scoped Health records, samples, sync state, and Sleep sessions as described in Policies.`;
@@ -160,7 +163,7 @@ export const HELP_ACTIONS: HelpAction[] = [
     id: 'email-support',
     label: 'Email Support',
     icon: 'email',
-    kind: 'external',
+    kind: 'email',
     target: SUPPORT_MAILTO,
   },
   {
@@ -206,7 +209,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Supported activity types** lists the activity types Quantified Self recognizes and explains why the details shown depend on data in each activity. Open the [Supported activity types guide](/help#supported-activities) or public [Supported activity types page](/features/supported-activities).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters. Its activity filter lists only trackable types in the selected date range, while keeping an active no-match choice visible until you clear it. Detected trips list an inferred **Home** area first when available; use the sort button to choose newest-first or oldest-first, and the choice is saved.
-- **Services** is where you connect Garmin, Suunto, COROS, and Wahoo.
+- **Services** is where you connect Garmin, Suunto, COROS, and Wahoo. Connection screens use a limited account summary once it is available; existing connections continue to work while those summaries are populated during rollout.
 - **Settings** is where you manage profile details, consent options, charts, maps, and units.
 - **Subscription** is where you review your current plan.
 - **Release Notes** shows product updates and fixes.
@@ -356,7 +359,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Saved file comparisons are listed from [Tools -> Compare](/tools/compare/saved) in a sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags for labeling firmware, sensor, route, or publication workflow groups.
 - Benchmark reports show an **At a Glance** reviewer summary with the key pair, overall agreement, GNSS, heart-rate, altitude, quality, and saved tags. The report share menu can copy that summary for review notes.
 - Reviewers can assign account-level device color preferences from saved file comparisons; colors are keyed by the base device name rather than firmware/software version and carry through activity toggles, event tables, benchmark dialogs, charts, and maps.
-- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), [FIT and GPX Route Files](/features/fit-gpx-route-files), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how Garmin, Suunto, COROS, uploaded FIT/TCX/GPX/JSON/SML activity files, and saved FIT/GPX route files fit with benchmark reports, source files, maps, charts, overlays, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
+- The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), which brings provider activities and uploaded FIT/TCX/GPX/JSON/SML activity files into one workflow with maps, charts, sports-device benchmarks, and reviewer workflows for device tests, YouTube videos, and blog posts. The [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) and [FIT and GPX Route Files](/features/fit-gpx-route-files) pages cover single-file analysis and saved-route workflows separately. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
 
 ### Event jump tables
 
@@ -449,6 +452,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 - Routes, terrain, sensors, laps, swim lengths, jumps, charts, and sport-specific details appear only when the imported activity includes that data. We do not add missing information.
 - When you open an activity, you can see **Laps** when it includes lap data, **Swim Lengths** when the data includes individual pool lengths, and **Jumps** when the activity includes jump events. Charts and overlays need data recorded over time in the activity.
+- Compatible FIT running data can provide ground contact time and ground contact time percentage. Compatible Suunto JSON can also provide running flight time, contact-time-to-flight-time ratio, and left/right ground-contact balance. Event Details groups recorded average, minimum, and maximum running-dynamics summaries under **Performance** when available; a metric absent from both source summaries and recorded samples remains hidden.
 - Groups help you browse, but the activity type and its data determine the charts. Activities in the same group can show different charts. For example, Boating is listed in Motorized but can use sailing-oriented charts when the activity includes the data those charts need. Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts when the activity includes the data those charts need.
 - Hand Cycle and Velomobile are grouped with Cycling. They appear in Cycling Training analysis only when the activity contains enough relevant data.
 
@@ -495,7 +499,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     links: [
       { label: 'Open Training', icon: 'monitoring', kind: 'route', target: '/training' },
       { label: 'Training Analysis Overview', icon: 'travel_explore', kind: 'route', target: '/features/training-analysis' },
-      { label: 'Email Training Feedback', icon: 'email', kind: 'external', target: `${SUPPORT_MAILTO}?subject=Training%20feedback` },
+      { label: 'Email Training Feedback', icon: 'email', kind: 'email', target: `${SUPPORT_MAILTO}?subject=Training%20feedback` },
     ],
   },
   {
@@ -582,7 +586,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Membership', icon: 'card_membership', kind: 'route', target: '/pricing' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],
   },
@@ -639,6 +643,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Yearly plans can show a **Save X% vs monthly** label based on the matching monthly price.
 - If you start monthly, you can switch to yearly later from the billing portal.
 
+## Complimentary extensions
+
+Support may occasionally add complimentary calendar months to an existing Basic or Pro membership as a thank-you or service credit. The time is added after the later of the current paid period or an existing trial. It postpones the next renewal date, or the final access date if cancellation is already scheduled, without changing the plan, creating a charge or proration, or turning automatic renewal back on.
+
+During gifted time, the subscription page shows **Complimentary extension** instead of an ordinary trial label. The optional notification email states the plan, gifted time, and new access date; internal admin notes are never included.
+
 ## Downgrades and grace period
 
 If you downgrade from a paid plan, the app keeps your access through the current billing period and then applies a **30-day grace period**.
@@ -661,7 +671,7 @@ Contact support if:
       { label: 'My Tracks', icon: 'layers', kind: 'route', target: '/mytracks' },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Policies', icon: 'policy', kind: 'route', target: '/policies' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -679,7 +689,7 @@ The app accepts these file types for manual activity upload:
 - \`.json\`
 - \`.sml\`
 
-The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page explains how FIT, GPX, TCX, JSON, and SML activity uploads can be analyzed with maps, charts, statistics, exports, source-file context, and reprocessing. The public [Workout File Comparison](/features/workout-file-comparison) page explains how those files can be compared with provider activities and benchmark reports. The public [FIT and GPX Route Files](/features/fit-gpx-route-files) page explains saved FIT course and GPX route/track uploads, original-file retention, downloads, and route limits.
+The public [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer) page explains how FIT, GPX, TCX, JSON, and SML activity uploads can be analyzed with maps, charts, statistics, exports, source-file context, and reprocessing. The public [Workout Data Comparison](/features/workout-data-comparison) page explains how those files can be compared with provider activities, sports devices, and benchmark reports. The public [FIT and GPX Route Files](/features/fit-gpx-route-files) page explains saved FIT course and GPX route/track uploads, original-file retention, downloads, and route limits.
 
 Saved routes open from **Routes** with the details action. Route details parse the original FIT or GPX file in memory to show the route summary, all segments, map, elevation and grade charts, waypoints and turn instructions, and original-file download. GPX files with route points, untimed tracks, or timed track geometry can be saved as routes from **Routes**. The original uploaded route file remains the canonical source; parsed points and streams are not saved back to Firestore. New or reprocessed saved routes store a lightweight encoded route preview for route-table thumbnails, the Routes page map, and dashboard route maps. The Routes page map follows the current table filters using saved-route documents only; it does not load activity events or parse original route files. Older saved routes need to be reprocessed before they appear with previews.
 
@@ -716,14 +726,13 @@ From an activity action menu you can also:
 - **Regenerate activity statistics**
 - **Reimport activity from file** when original source files are available`,
     links: [
-      { label: 'Workout File Comparison', icon: 'upload_file', kind: 'route', target: '/features/workout-file-comparison' },
+      { label: 'Workout Data Comparison', icon: 'compare_arrows', kind: 'route', target: '/features/workout-data-comparison' },
       { label: 'Compare Files Tool', icon: 'compare_arrows', kind: 'route', target: '/tools/compare' },
       { label: 'Workout File Analyzer', icon: 'analytics', kind: 'route', target: '/features/fit-gpx-tcx-file-analyzer' },
       { label: 'FIT and GPX Route Files', icon: 'route', kind: 'route', target: '/features/fit-gpx-route-files' },
-      { label: 'Sports Watch Benchmarks', icon: 'rate_review', kind: 'route', target: '/features/sports-watch-benchmark' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -751,7 +760,7 @@ The public [Training Data Sync Guides](/guides) hub links to the [import activit
 
 The public [Tools hub](/tools) links to the [File Comparison Tool](/tools/compare), which creates saved benchmark events directly from FIT, GPX, TCX, JSON, and SML files.
 
-The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Comparison](/features/workout-file-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), [FIT and GPX Route Files](/features/fit-gpx-route-files), and [Sports Watch Benchmark](/features/sports-watch-benchmark) pages that explain how centralized Garmin, Suunto, COROS, uploaded FIT/TCX/GPX/JSON/SML activity files, and saved route-only FIT/GPX files support benchmark reports, metric overlays, maps, charts, source-file workflows, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
+The public [Features hub](/features) links to [Workout Data Comparison](/features/workout-data-comparison), [Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer), and [FIT and GPX Route Files](/features/fit-gpx-route-files). The comparison page combines centralized Garmin, Suunto, COROS, and Wahoo activities with uploaded FIT/TCX/GPX/JSON/SML activity files, synchronized overlays, sports-device benchmarks, and reviewer workflows for device tests, YouTube videos, and blog posts. Manual uploads, core analysis, and benchmark comparisons are available on the free plan for up to ${USAGE_LIMITS.free} activities and ${ROUTE_USAGE_LIMITS.free} saved routes; automatic provider sync and higher limits require a paid plan.
 
 ## Sleep data
 
@@ -910,6 +919,8 @@ Direct FIT activity delivery only sends the selected file to Wahoo. It does not 
 
 If Wahoo rejects repeated token refreshes, its connection card changes to **Reconnect required**. Select **Reconnect** there and authorize the same Wahoo account so parked work cannot be delivered to a different account. To change Wahoo accounts, disconnect the retained account first and then connect the other one. Quantified Self keeps unaccepted automatic activity and saved-route deliveries parked while reconnecting, then resumes them safely after the new connection succeeds; it does not turn your saved route settings off.
 
+After Wahoo processes an activity automatically synced from Garmin, COROS, or Suunto, Quantified Self corrects the Wahoo workout type when the persisted Sports Lib activity type has an explicit Wahoo mapping. Activities containing multiple canonical types are marked as multisport. If no explicit mapping exists, Quantified Self keeps Wahoo's inferred type instead of guessing or defaulting to cycling or Other. Direct FIT activity uploads keep Wahoo's inferred type.
+
 Direct course/route delivery accepts GPX and FIT files. Quantified Self converts a selected GPX route to a FIT course in memory before sending it to Wahoo; the GPX must contain exactly one route with valid coordinates. It sends the route to Wahoo without creating or retaining a route in Quantified Self. If you connected Wahoo before route sending was available, reconnect it once to grant route access. When a route send reports missing Wahoo route access, select **Reconnect Wahoo** in the displayed dialog, then send the route again after you return. Routes imported by Wahoo's Cloud API sync to the Wahoo App and directly to an ELEMNT bike computer, not the ELEMNT App.
 
 Wahoo to Suunto or COROS activity sync requires:
@@ -955,7 +966,7 @@ Suunto, COROS, and Wahoo history imports are queued jobs. Large ranges can take 
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
       { label: 'Services', icon: 'sync', kind: 'route', target: '/services' },
       { label: 'Subscription', icon: 'credit_card', kind: 'route', target: '/subscriptions' },
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
     ],
   },
   {
@@ -1057,7 +1068,7 @@ This action cannot be undone.
       { label: 'MCP Server', icon: 'devices', kind: 'route', target: '/features/mcp-server' },
       { label: 'MCP Client Access', icon: 'devices', kind: 'route', target: '/policies', fragment: POLICIES_MCP_CLIENTS_FRAGMENT },
       { label: 'AI & Processors', icon: 'shield', kind: 'route', target: '/policies', fragment: POLICIES_AI_AND_PROCESSORS_FRAGMENT },
-      { label: 'Privacy Email', icon: 'shield', kind: 'external', target: PRIVACY_MAILTO },
+      { label: 'Privacy Email', icon: 'shield', kind: 'email', target: PRIVACY_MAILTO },
     ],
   },
   {
@@ -1103,7 +1114,7 @@ Send these if possible:
 - a screenshot,
 - and an event link or event ID if the problem is tied to one activity.`,
     links: [
-      { label: 'Email Support', icon: 'email', kind: 'external', target: SUPPORT_MAILTO },
+      { label: 'Email Support', icon: 'email', kind: 'email', target: SUPPORT_MAILTO },
       { label: 'Report a Bug', icon: 'bug_report', kind: 'external', target: GITHUB_ISSUES_URL },
       { label: 'Release Notes', icon: 'campaign', kind: 'route', target: '/releases' },
     ],

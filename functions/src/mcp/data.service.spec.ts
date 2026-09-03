@@ -26,6 +26,7 @@ import {
   DataGradeAvg,
   DataGradeMax,
   DataGradeMin,
+  DataRunningFlightTimeAvg,
   DataSpeedAvg,
   DataSleepDuration,
   DataStartPosition,
@@ -3363,6 +3364,71 @@ describe('MCP data service', () => {
       Date.parse('2026-07-01T00:00:00.000Z'),
       Date.parse('2026-07-02T00:00:00.000Z'),
       [DataMetabolicCalories.type, DataActivityTypes.type],
+      25,
+      undefined,
+    );
+  });
+
+  it('discovers and queries persisted Sports Lib 20.4 running flight time', async () => {
+    vi.mocked(dependencies.fetchMetricDiscoveryDocuments).mockResolvedValue([{
+      id: 'suunto-1',
+      data: {
+        name: 'Private track session',
+        sourceKey: 'private-suunto-source',
+        stats: {
+          [DataRunningFlightTimeAvg.type]: 118,
+        },
+      },
+    }]);
+
+    const discovered = await createMcpDataService(dependencies).listMetrics({
+      uid: 'user-1',
+      search: 'flight',
+      limit: 10,
+    });
+
+    expect(discovered.eventMetrics).toEqual([
+      expect.objectContaining({
+        type: DataRunningFlightTimeAvg.type,
+        unit: 'ms',
+      }),
+    ]);
+    expect(JSON.stringify(discovered)).not.toMatch(/Private track session|private-suunto-source/);
+
+    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([{
+      id: 'suunto-1',
+      data: {
+        startDate: Date.parse('2026-07-01T08:00:00.000Z'),
+        endDate: Date.parse('2026-07-01T09:00:00.000Z'),
+        stats: {
+          [DataActivityTypes.type]: [ActivityTypes.Running],
+          [DataRunningFlightTimeAvg.type]: 118,
+        },
+      },
+    }]);
+    dependencies.importEvent = vi.fn((data, id) => (
+      EventImporterJSON.getEventFromJSON(data).setID(id)
+    ));
+
+    const result = await createMcpDataService(dependencies).queryMetric({
+      uid: 'user-1',
+      metric: DataRunningFlightTimeAvg.type,
+      startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+      aggregation: 'average',
+      groupBy: 'date',
+      interval: 'daily',
+      timeZone: 'UTC',
+    });
+
+    expect(result.aggregation.buckets).toEqual([
+      expect.objectContaining({ aggregateValue: 118 }),
+    ]);
+    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2026-07-01T00:00:00.000Z'),
+      Date.parse('2026-07-02T00:00:00.000Z'),
+      [DataRunningFlightTimeAvg.type, DataActivityTypes.type],
       25,
       undefined,
     );

@@ -121,7 +121,6 @@ export { backfillActivitySyncRoute } from './activity-sync/backfill';
 export { dispatchActivitySyncQueue } from './activity-sync/dispatcher';
 export {
   receiveGarminAPIHealthData,
-  receiveGarminAPISleepData,
   receiveSuunto247Data,
 } from './sleep/webhooks';
 export { dispatchSleepSyncQueue } from './sleep/dispatcher';
@@ -130,17 +129,20 @@ export {
   scheduleSuuntoSleepSync,
   scheduleCOROSSleepSync,
   scheduleSuuntoHealthSync,
-  scheduleSuuntoWebhookBindingVerification,
 } from './sleep/polling';
 export {
   backfillCorosAPISleep,
   backfillGarminAPIHealth,
-  backfillGarminAPISleep,
   backfillSuuntoAppSleep,
 } from './sleep/backfill';
 export { getSuuntoHealthSyncAvailability } from './suunto/health-availability';
 export { getGarminHealthSyncAvailability } from './garmin/health-availability';
 export { fanOutSuuntoHealthWebhookIngress } from './suunto/health-webhook-ingress';
+export {
+  projectGarminConnectionOnTokenWrite,
+  projectSuuntoConnectionOnTokenWrite,
+  projectCOROSConnectionOnTokenWrite,
+} from './service-connection-account-projection';
 export {
   disableActivitySyncRoutesOnGarminTokenRootDelete,
   disableActivitySyncRoutesOnSuuntoTokenRootDelete,
@@ -187,6 +189,7 @@ export {
 } from './assistant/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { queryHealthRange } from './health/callable';
+export { queryActivityHealthRange } from './health/activity-callable';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
 export {
   onDashboardDerivedMetricsActivityWrite,
@@ -212,7 +215,23 @@ export {
   listMcpConnections,
   revokeMcpConnection,
 } from './mcp/callables';
-export { listUsers, getQueueStats, setSportsLibReparseSettings, getUserCount, getAdminDashboardHistory, scheduleAdminDashboardSnapshot, getSubscriptionHistoryTrend, getUserGrowthTrend, setMaintenanceMode, getMaintenanceStatus, impersonateUser, stopImpersonation, getFinancialStats } from './admin';
+export {
+  listUsers,
+  getQueueStats,
+  setSportsLibReparseSettings,
+  getUserCount,
+  getAdminDashboardHistory,
+  scheduleAdminDashboardSnapshot,
+  getSubscriptionHistoryTrend,
+  getUserGrowthTrend,
+  setMaintenanceMode,
+  getMaintenanceStatus,
+  impersonateUser,
+  stopImpersonation,
+  getFinancialStats,
+  previewAdminSubscriptionGift,
+  grantAdminSubscriptionGift,
+} from './admin';
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';

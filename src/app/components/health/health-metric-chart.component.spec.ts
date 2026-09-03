@@ -1,6 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import {
+  HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
   HEALTH_RECORDING_METHODS,
   HEALTH_VALUE_ORIGINS,
@@ -27,6 +28,7 @@ class HealthMetricSeriesChartStubComponent {
 function series(deviceLabel: string | null): HealthWorkspaceSeries {
   return {
     id: 'garmin-resting-heart-rate',
+    metricId: HEALTH_METRIC_IDS.RestingHeartRate,
     provider: HEALTH_PROVIDERS.GarminAPI,
     providerLabel: 'Garmin',
     sourceLabel: 'Garmin',

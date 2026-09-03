@@ -596,7 +596,9 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     return RETRYABLE_WAHOO_STATUS_ERROR_CODES.has(code);
   }
 
-  private async getServiceUploadStatusResult(row: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>): Promise<ServiceUploadResult> {
+  private async getServiceUploadStatusResult(
+    row: Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'>,
+  ): Promise<ServiceUploadResult> {
     if (!row.uploadId) {
       throw new Error(`Missing ${this.destinationName} upload identifier.`);
     }
@@ -829,6 +831,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     if (retryMode === 'restart') {
       return { uploadId: undefined, providerUserId: undefined };
     }
+    if (this.serviceName === ServiceNames.WahooAPI && retryMode === 'resume') {
+      const uploadId = `${(details as { resumeUploadId?: unknown }).resumeUploadId || ''}`.trim();
+      return uploadId
+        ? { uploadId, providerUserId: undefined }
+        : {};
+    }
     if (this.serviceName === ServiceNames.COROSAPI && retryMode === 'resume') {
       const uploadId = `${(details as { resumeUploadId?: unknown }).resumeUploadId || ''}`.trim();
       const providerUserId = `${(details as { resumeProviderUserId?: unknown }).resumeProviderUserId || ''}`.trim();
@@ -851,7 +859,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     }
     if (responseStatus === 'pending' || responseStatus === 'processing') {
       if (this.usesAsynchronousStatusPolling
-        && (!uploadId || (this.serviceName === ServiceNames.COROSAPI && !providerUserId))) {
+        && (!uploadId
+          || (this.serviceName === ServiceNames.COROSAPI && !providerUserId))) {
         throw new Error(`${this.destinationName} returned an incomplete upload status.`);
       }
       return {

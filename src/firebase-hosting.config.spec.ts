@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CLIENT_RENDERED_APP_ROUTES,
   PRERENDERED_PUBLIC_ROUTES,
+  PUBLIC_REDIRECT_ROUTES,
 } from './app/app.routes.server';
 
 interface FirebaseHostingTarget {
@@ -23,6 +24,11 @@ interface FirebaseHostingTarget {
       functionId: string;
       region: string;
     };
+  }>;
+  redirects?: Array<{
+    source: string;
+    destination: string;
+    type: number;
   }>;
 }
 
@@ -77,6 +83,11 @@ const robotsTxt = readFileSync(resolve(__dirname, 'robots.txt'), 'utf8');
 const sitemapXml = readFileSync(resolve(__dirname, 'sitemap.xml'), 'utf8');
 
 const expectedCsrRewriteSources = CLIENT_RENDERED_APP_ROUTES.map(routePathToHostingSource);
+const expectedComparisonRedirects = PUBLIC_REDIRECT_ROUTES.map(path => ({
+  source: routePathToHostingSource(path),
+  destination: '/features/workout-data-comparison',
+  type: 301,
+}));
 const expectedMcpFunctionRewriteSources = [
   '/mcp',
   '/.well-known/oauth-protected-resource',
@@ -165,6 +176,18 @@ function getCspDirective(policy: string, directiveName: string): string | undefi
 }
 
 describe('Firebase Hosting configuration', () => {
+  it('permanently redirects legacy comparison pages to the consolidated canonical page', () => {
+    for (const target of firebaseConfig.hosting) {
+      expect(target.redirects).toEqual(expectedComparisonRedirects);
+      expect(target.redirects?.every(redirect => redirect.type === 301)).toBe(true);
+
+      const rewriteSources = new Set((target.rewrites ?? []).map(rewrite => rewrite.source));
+      for (const redirect of expectedComparisonRedirects) {
+        expect(rewriteSources.has(redirect.source)).toBe(false);
+      }
+    }
+  });
+
   it('rewrites only known CSR app routes so unknown URLs can fall through to 404.html', () => {
     for (const target of firebaseConfig.hosting) {
       const rewrites = target.rewrites ?? [];
@@ -256,25 +279,30 @@ describe('Firebase Hosting configuration', () => {
   });
 
   it('marks recently updated public discovery surfaces in sitemap', () => {
-    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-08-06');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-08-06');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-08-03');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/coros`)).toBe('2026-08-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/wahoo`)).toBe('2026-08-03');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-07-21');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/workout-data-comparison`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/supported-activities`)).toBe('2026-08-24');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-suunto`)).toBe('2026-07-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/import-activities-to-wahoo`)).toBe('2026-07-28');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/sync-wahoo-to-suunto`)).toBe('2026-07-21');
     expect(sitemapLastmodForUrl(`${siteOrigin}/guides/centralize-garmin-suunto-coros-workout-data`)).toBe('2026-07-21');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-08-07');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-analysis`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/training-dashboard`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-map`)).toBe('2026-09-02');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
+    expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
+    expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
     expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-26');
     expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-26');

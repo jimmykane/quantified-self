@@ -13,12 +13,17 @@ import {
   HEALTH_VALUE_ORIGINS,
   HEALTH_VALUE_TYPES,
   HealthMetricEntry,
+  HealthMetricId,
   HealthMetricValue,
   HealthProvider,
   HealthSampleChunk,
   HealthSourceRecord,
 } from '@shared/health';
 import { SLEEP_PROVIDERS, SleepSession } from '@shared/sleep';
+import {
+  ACTIVITY_HEALTH_SOURCE_KINDS,
+  type ActivityHealthObservation,
+} from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import {
   buildHealthMetricCatalogGroups,
@@ -26,9 +31,11 @@ import {
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
   navigateHealthWorkspaceWindow,
+  normalizeHealthWorkspaceMetric,
   normalizeHealthWorkspaceRange,
   resolveHealthWorkspaceWindow,
   resolveSleepReferenceValue,
+  selectActivityHealthObservations,
 } from './health-workspace.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -90,6 +97,8 @@ function sampleChunk(input: {
   id: string;
   provider?: HealthProvider;
   accountKey?: string;
+  metricId?: HealthMetricId;
+  semanticVariant?: string;
   values?: Array<number | string>;
   valueType?: 'number' | 'category';
   normalizationStatus?: 'canonical' | 'native_only';
@@ -98,6 +107,9 @@ function sampleChunk(input: {
   const values = input.values || [50, 51, 52];
   const valueType = input.valueType || HEALTH_VALUE_TYPES.Number;
   const normalizationStatus = input.normalizationStatus || HEALTH_NORMALIZATION_STATUSES.Canonical;
+  const metricId = input.metricId || (valueType === HEALTH_VALUE_TYPES.Category
+    ? HEALTH_METRIC_IDS.StressState
+    : HEALTH_METRIC_IDS.RestingHeartRate);
   return {
     schemaVersion: HEALTH_SCHEMA_VERSION,
     id: input.id,
@@ -105,17 +117,19 @@ function sampleChunk(input: {
     parentSourceRecordId: 'sample-parent',
     provider: input.provider || HEALTH_PROVIDERS.GarminAPI,
     accountKey: input.accountKey || 'garmin-one',
-    metricId: valueType === HEALTH_VALUE_TYPES.Category ? HEALTH_METRIC_IDS.StressState : HEALTH_METRIC_IDS.RestingHeartRate,
+    metricId,
     valueType,
     aggregation: 'sample',
-    semanticVariant: valueType === HEALTH_VALUE_TYPES.Category ? 'provider_state' : 'device_sample',
+    semanticVariant: input.semanticVariant || (valueType === HEALTH_VALUE_TYPES.Category ? 'provider_state' : 'device_sample'),
     origin: HEALTH_VALUE_ORIGINS.Recorded,
     recordingMethod: HEALTH_RECORDING_METHODS.Device,
     normalizationStatus,
     nativeMetric: valueType === HEALTH_VALUE_TYPES.Category ? 'stressState' : 'heartRate',
     nativeUnit: valueType === HEALTH_VALUE_TYPES.Category ? 'state' : 'bpm',
     canonicalUnit: normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical
-      ? valueType === HEALTH_VALUE_TYPES.Category ? HEALTH_UNITS.Category : HEALTH_UNITS.BeatsPerMinute
+      ? valueType === HEALTH_VALUE_TYPES.Category
+        ? HEALTH_UNITS.Category
+        : metricId === HEALTH_METRIC_IDS.BodyEnergy ? HEALTH_UNITS.Percent : HEALTH_UNITS.BeatsPerMinute
       : null,
     calendarDate: '2026-08-01',
     startTimeMs,
@@ -158,6 +172,22 @@ function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
   };
 }
 
+function activityObservation(overrides: Partial<ActivityHealthObservation> = {}): ActivityHealthObservation {
+  return {
+    id: 'opaque-workout-observation',
+    metricId: HEALTH_METRIC_IDS.BodyWeight,
+    observedAtMs: Date.parse('2026-08-02T08:00:00.000Z'),
+    value: 72,
+    unit: HEALTH_UNITS.Kilogram,
+    provider: HEALTH_PROVIDERS.COROSAPI,
+    sourceAccountKey: 'opaque-workout-account',
+    sourceKind: ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutProfileContext,
+    discipline: null,
+    semanticVariant: 'workout_profile_context',
+    ...overrides,
+  };
+}
+
 describe('Health workspace helpers', () => {
   it('normalizes saved Health ranges and falls back invalid settings to 30 days', () => {
     expect(normalizeHealthWorkspaceRange('today')).toBe('today');
@@ -165,6 +195,13 @@ describe('Health workspace helpers', () => {
     expect(normalizeHealthWorkspaceRange('1y')).toBe('1y');
     expect(normalizeHealthWorkspaceRange('forever')).toBe('30d');
     expect(normalizeHealthWorkspaceRange(null)).toBe('30d');
+  });
+
+  it('normalizes persisted Health metrics and falls back invalid settings to Resting heart rate', () => {
+    expect(normalizeHealthWorkspaceMetric('sleep')).toBe('sleep');
+    expect(normalizeHealthWorkspaceMetric(HEALTH_METRIC_IDS.Steps)).toBe(HEALTH_METRIC_IDS.Steps);
+    expect(normalizeHealthWorkspaceMetric('unknown_metric')).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
+    expect(normalizeHealthWorkspaceMetric(null)).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
   });
 
   it('builds bounded windows and older/newer navigation without moving into the future', () => {
@@ -184,6 +221,13 @@ describe('Health workspace helpers', () => {
 
   it('loads Today as one sample-enabled day and pages it one day at a time', () => {
     const state = { metric: HEALTH_METRIC_IDS.HeartRate, range: 'today' as const, endDate: '2026-08-30' };
+    const explicitTodayLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date('2026-08-30T00:00:00.000Z'));
 
     expect(resolveHealthWorkspaceWindow(state, '2026-08-30')).toMatchObject({
       startDate: '2026-08-30',
@@ -193,11 +237,18 @@ describe('Health workspace helpers', () => {
       dayCount: 1,
       includeSamples: true,
       canNavigateNewer: false,
-      label: 'Today',
+      label: `Today · ${explicitTodayLabel}`,
     });
     const older = navigateHealthWorkspaceWindow(state, 'older', '2026-08-30');
+    const explicitOlderLabel = new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date('2026-08-29T00:00:00.000Z'));
     expect(older.endDate).toBe('2026-08-29');
-    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).not.toContain('–');
+    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).toBe(explicitOlderLabel);
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
   });
 
@@ -335,6 +386,34 @@ describe('Health workspace helpers', () => {
     expect(view.rows.every(row => row.valueText.includes('samples'))).toBe(true);
   });
 
+  it('renders provider-specific Body Energy scores as bars without changing other series', () => {
+    const result = projectLoadedHealthRange([], [
+      sampleChunk({
+        id: 'suunto-recovery-balance',
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        metricId: HEALTH_METRIC_IDS.BodyEnergy,
+        semanticVariant: 'recovery_balance',
+        values: [30, 60, 85],
+      }),
+      sampleChunk({
+        id: 'garmin-body-energy',
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        metricId: HEALTH_METRIC_IDS.BodyEnergy,
+        semanticVariant: 'garmin_body_battery',
+        values: [30, 60, 85],
+      }),
+    ], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.BodyEnergy],
+      includeSamples: true,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const view = buildHealthMetricWorkspaceView(result);
+    expect(view.series.find(series => series.provider === HEALTH_PROVIDERS.SuuntoApp)?.chartKind).toBe('bar');
+    expect(view.series.find(series => series.provider === HEALTH_PROVIDERS.GarminAPI)?.chartKind).toBe('bar');
+  });
+
   it('filters providers locally and removes conflicts that no longer have two sources', () => {
     const result = projectLoadedHealthRange([
       sourceRecord({ id: 'garmin', provider: HEALTH_PROVIDERS.GarminAPI, accountKey: 'one' }),
@@ -353,6 +432,145 @@ describe('Health workspace helpers', () => {
     const filtered = filterHealthRangeResultByProviders(result, [HEALTH_PROVIDERS.GarminAPI]);
     expect(filtered.observations).toHaveLength(1);
     expect(filtered.conflicts).toEqual([]);
+  });
+
+  it('uses workout Weight only as fallback context after applying provider filters', () => {
+    const directWeight = sourceRecord({
+      id: 'health-weight',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      accountKey: 'garmin-health-account',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        semanticVariant: 'provider_weight_measurement',
+        native: { metric: 'weight', value: 71, unit: 'kg' },
+        canonical: { value: 71, unit: HEALTH_UNITS.Kilogram },
+      })],
+    });
+    const result = projectLoadedHealthRange([directWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const workout = activityObservation();
+
+    expect(selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [workout])).toEqual([]);
+
+    const corosOnly = filterHealthRangeResultByProviders(result, [HEALTH_PROVIDERS.COROSAPI]);
+    const fallback = selectActivityHealthObservations(
+      HEALTH_METRIC_IDS.BodyWeight,
+      corosOnly,
+      [workout],
+      [HEALTH_PROVIDERS.COROSAPI],
+    );
+    expect(fallback).toEqual([workout]);
+    const view = buildHealthMetricWorkspaceView(corosOnly, [], fallback);
+    expect(view.series).toHaveLength(1);
+    expect(view.series[0]).toMatchObject({
+      provider: HEALTH_PROVIDERS.COROSAPI,
+      semanticVariant: 'workout_profile_context',
+      coverageText: '1 workout date · coverage not applicable',
+      deviceLabel: null,
+    });
+    expect(view.rows[0].semanticsText).toContain('Workout profile context');
+    expect(view.rows[0]).toMatchObject({
+      deviceLabel: 'Not reported',
+      coverageText: 'Not applicable',
+      freshnessText: 'Last observed Aug 2, 2026',
+    });
+    expect(JSON.stringify(view)).not.toContain('opaque-workout-account');
+  });
+
+  it('treats future manual Weight as a real measurement that suppresses workout fallback', () => {
+    const manualWeight = sourceRecord({
+      id: 'manual-weight',
+      provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        semanticVariant: 'manual_measurement',
+        origin: HEALTH_VALUE_ORIGINS.Recorded,
+        recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+        native: { metric: 'weight', value: 70, unit: 'kg' },
+        canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
+      })],
+    });
+    const result = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(selectActivityHealthObservations(
+      HEALTH_METRIC_IDS.BodyWeight,
+      result,
+      [activityObservation({ provider: HEALTH_PROVIDERS.QuantifiedSelf })],
+    )).toEqual([]);
+  });
+
+  it('keeps workout VO2 separate from provider Health and manual series by discipline and origin', () => {
+    const providerVo2 = sourceRecord({
+      id: 'provider-vo2',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      accountKey: 'provider-account',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.Vo2Max,
+        semanticVariant: 'user_metrics_vo2_max',
+        native: { metric: 'vo2Max', value: 52, unit: 'ml/kg/min' },
+        canonical: { value: 52, unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute },
+      })],
+    });
+    const manualVo2 = sourceRecord({
+      id: 'manual-vo2',
+      provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.Vo2Max,
+        semanticVariant: 'manual_measurement',
+        origin: HEALTH_VALUE_ORIGINS.Recorded,
+        recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+        native: { metric: 'vo2Max', value: 50, unit: 'ml/kg/min' },
+        canonical: { value: 50, unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute },
+      })],
+    });
+    const result = projectLoadedHealthRange([providerVo2, manualVo2], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.Vo2Max],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const workouts = [
+      activityObservation({
+        id: 'run-vo2',
+        metricId: HEALTH_METRIC_IDS.Vo2Max,
+        value: 51,
+        unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute,
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        sourceKind: ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutImported,
+        discipline: 'running',
+        semanticVariant: 'workout_imported_running',
+      }),
+      activityObservation({
+        id: 'bike-vo2',
+        metricId: HEALTH_METRIC_IDS.Vo2Max,
+        value: 49,
+        unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute,
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        sourceKind: ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutImported,
+        discipline: 'cycling',
+        semanticVariant: 'workout_imported_cycling',
+      }),
+    ];
+
+    const selected = selectActivityHealthObservations(HEALTH_METRIC_IDS.Vo2Max, result, workouts);
+    const view = buildHealthMetricWorkspaceView(result, [], selected);
+    expect(view.series).toHaveLength(4);
+    expect(view.series.map(series => series.semanticVariant)).toEqual(expect.arrayContaining([
+      'user_metrics_vo2_max',
+      'manual_measurement',
+      'workout_imported_running',
+      'workout_imported_cycling',
+    ]));
+    expect(view.series.filter(series => series.semanticVariant.startsWith('workout_imported_')))
+      .toHaveLength(2);
   });
 
   it('resolves Sleep references against the normalized Sleep model', () => {

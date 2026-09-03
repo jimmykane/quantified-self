@@ -48,6 +48,11 @@ describe('IntegrationsHubPageComponent', () => {
     expect(text).toContain('Send Suunto routes to Garmin');
     expect(text).toContain('sending Suunto routes to Garmin');
     expect(text).toContain('Activity sync, FIT uploads, and route delivery');
+    const providerFlow = fixture.nativeElement.querySelector(
+      'app-public-feature-preview[previewkey="provider-flow"]'
+    );
+    expect(providerFlow).toBeTruthy();
+    expect(providerFlow.hasAttribute('data-nosnippet')).toBe(true);
   });
 
   it('should link to each provider integration page', () => {
@@ -60,9 +65,7 @@ describe('IntegrationsHubPageComponent', () => {
     expect(hrefs).toContain('/integrations/wahoo');
     expect(hrefs).toContain('/features');
     expect(hrefs).toContain('/features/workout-data-comparison');
-    expect(hrefs).toContain('/features/workout-file-comparison');
     expect(hrefs).toContain('/features/fit-gpx-tcx-file-analyzer');
-    expect(hrefs).toContain('/features/sports-watch-benchmark');
     expect(hrefs).toContain('/guides');
     expect(hrefs).toContain('/guides/import-activities-to-suunto');
     expect(hrefs).toContain('/guides/import-activities-to-wahoo');

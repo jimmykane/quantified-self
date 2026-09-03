@@ -29,6 +29,7 @@ function createMockActivitySyncQueueItemRef(): MockActivitySyncQueueItemRef {
 
 const {
   mockTokenGet,
+  mockEventGet,
   mockDownload,
   mockUpdateToProcessed,
   mockDeferQueueItemForPendingDisconnect,
@@ -72,6 +73,7 @@ const {
 
   return {
     mockTokenGet,
+    mockEventGet: vi.fn(),
     mockDownload,
     mockUpdateToProcessed: vi.fn(),
     mockDeferQueueItemForPendingDisconnect: vi.fn(),
@@ -118,13 +120,17 @@ const {
 
 vi.mock('firebase-admin', () => ({
   firestore: () => ({
-    collection: vi.fn(() => ({
+    collection: vi.fn((collectionName: string) => ({
       doc: vi.fn(() => ({
-        collection: vi.fn(() => ({
-          limit: vi.fn(() => ({
-            get: mockTokenGet,
-          })),
-        })),
+        collection: vi.fn((nestedCollectionName: string) => (
+          collectionName === 'users' && nestedCollectionName === 'events'
+            ? { doc: vi.fn(() => ({ get: mockEventGet })) }
+            : {
+              limit: vi.fn(() => ({
+                get: mockTokenGet,
+              })),
+            }
+        )),
       })),
     })),
   }),
@@ -348,6 +354,7 @@ describe('activity-sync/process-queue-item', () => {
     delete baseQueueItem.destinationProviderUserID;
     delete baseQueueItem.destinationWorkoutKey;
     delete baseQueueItem.destinationInfoCode;
+    delete baseQueueItem.destinationExpectedWorkoutTypeID;
     delete baseQueueItem.destinationUploadCountedID;
     delete baseQueueItem.destinationUploadCountedAt;
     delete baseQueueItem.destinationUploadContinuation;
@@ -420,6 +427,10 @@ describe('activity-sync/process-queue-item', () => {
     mockRecordActivitySyncOutboundFingerprint.mockResolvedValue({
       exactFingerprintId: 'exact-v1-new',
       fingerprintIds: ['exact-v1-new', 'semantic-v1-new'],
+    });
+    mockEventGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ stats: { 'Activity Types': ['Hiking'] } }),
     });
   });
 
@@ -809,6 +820,19 @@ describe('activity-sync/process-queue-item', () => {
     const result = await processActivitySyncQueueItem(queueItem);
 
     expect(result).toBe(QueueResult.Processed);
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID,
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ expectedWorkoutTypeId: 9 }),
+    );
+    expect(mockEventGet.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUpdateQueueItemIfUserActive.mock.invocationCallOrder[0]);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_destination_provider_operation',
+      updateData: expect.objectContaining({ destinationExpectedWorkoutTypeID: 9 }),
+    }));
+    expect(mockUpdateQueueItemIfUserActive.mock.invocationCallOrder[0])
+      .toBeLessThan(mockUploadActivityFileToWahoo.mock.invocationCallOrder[0]);
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
       phase: 'before_activity_sync_wahoo_upload_state_persist',
       updateData: expect.objectContaining({
@@ -870,6 +894,250 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
   });
 
+  it('maps multiple persisted event activity types to Wahoo multisport', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ stats: { 'Activity Types': ['Running', 'Cycling'] } }),
+    });
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID,
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ expectedWorkoutTypeId: 62 }),
+    );
+  });
+
+  it('keeps Wahoo inference for an explicitly unmapped persisted event type', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ stats: { 'Activity Types': ['Soccer'] } }),
+    });
+
+    await processActivitySyncQueueItem(queueItem);
+
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
+      queueItem.userID,
+      Buffer.from('FITDATA'),
+      expect.objectContaining({ expectedWorkoutTypeId: undefined }),
+    );
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_destination_provider_operation',
+      updateData: expect.objectContaining({ destinationExpectedWorkoutTypeID: null }),
+    }));
+  });
+
+  it('moves an invalid durable Wahoo type to DLQ without calling the provider', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      destinationExpectedWorkoutTypeID: 999,
+    };
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockEventGet).not.toHaveBeenCalled();
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+    expect(mockGetWahooActivityUploadStatus).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      queueItem,
+      expect.objectContaining({ message: 'Activity sync contains an invalid persisted Wahoo workout type.' }),
+      undefined,
+      'WAHOO_ACTIVITY_TYPE_CORRECTION_INVALID_TYPE',
+    );
+  });
+
+  it('retries an event activity-type read failure before claiming or calling Wahoo', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockEventGet.mockRejectedValueOnce(Object.assign(new Error('Firestore unavailable'), {
+      code: 'unavailable',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.RetryIncremented);
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+    expect(mockUpdateQueueItemIfUserActive).not.toHaveBeenCalled();
+  });
+
+  it('persists a transient Wahoo type-correction resume ID and never reposts the FIT', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'retryable',
+      retryMode: 'resume',
+      code: 'unavailable',
+      message: 'Wahoo could not update the workout type.',
+      providerOperationId: 'wahoo-correction-resume',
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_RETRY_EXHAUSTED',
+    }));
+
+    const firstResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    expect(queueItem.destinationUploadID).toBe('wahoo-correction-resume');
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+
+    const secondResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(secondResult).toBe(QueueResult.Processed);
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      'wahoo-correction-resume',
+      9,
+    );
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the durable Wahoo type on resume without rereading a changed event', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      destinationUploadID: 'wahoo-accepted-upload',
+      destinationExpectedWorkoutTypeID: 9,
+    };
+    mockEventGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ stats: { 'Activity Types': ['Cycling'] } }),
+    });
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Processed);
+    expect(mockEventGet).not.toHaveBeenCalled();
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      'wahoo-accepted-upload',
+      9,
+    );
+    expect(mockUploadActivityFileToWahoo).not.toHaveBeenCalled();
+  });
+
+  it('retains the accepted Wahoo upload ID when type correction cannot be reconciled', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Wahoo completed without a workout ID.',
+      providerOperationId: 'wahoo-complete-without-workout-id',
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_MISSING_WORKOUT_ID',
+    }));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(queueItem.destinationUploadID).toBe('wahoo-complete-without-workout-id');
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_wahoo_upload_state_persist',
+      updateData: expect.objectContaining({
+        destinationUploadID: 'wahoo-complete-without-workout-id',
+      }),
+    }));
+    expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+    expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destinationUploadID: 'wahoo-complete-without-workout-id',
+      }),
+      expect.objectContaining({ providerOperationId: 'wahoo-complete-without-workout-id' }),
+      undefined,
+      'WAHOO_ACTIVITY_TYPE_CORRECTION_MISSING_WORKOUT_ID',
+    );
+  });
+
+  it('keeps a terminal correction upload ID durable when its first DLQ write fails', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(new ProviderOperationError({
+      serviceName: ServiceNames.WahooAPI,
+      operation: 'activity_upload_status',
+      disposition: 'permanent',
+      retryMode: 'none',
+      code: 'failed-precondition',
+      message: 'Wahoo rejected the workout type correction.',
+      providerOperationId: 'wahoo-terminal-correction',
+      dlqContext: 'WAHOO_ACTIVITY_TYPE_CORRECTION_REJECTED',
+    }));
+    mockMoveToDeadLetterQueue.mockResolvedValueOnce(QueueResult.Failed);
+
+    const firstResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(firstResult).toBe(QueueResult.Failed);
+    expect(queueItem.destinationUploadID).toBe('wahoo-terminal-correction');
+    queueItem.providerOperationStartedAt = Date.now() - 13 * 60 * 1000;
+
+    const secondResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(secondResult).toBe(QueueResult.Processed);
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      'wahoo-terminal-correction',
+      9,
+    );
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it('repeats only Wahoo status and its idempotent correction after final queue persistence fails', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUpdateQueueItemIfUserActive
+      .mockResolvedValueOnce('updated')
+      .mockResolvedValueOnce('updated')
+      .mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+    const firstResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(firstResult).toBe(QueueResult.Failed);
+    expect(queueItem.destinationUploadID).toBe('wahoo-upload-1');
+    queueItem.providerOperationStartedAt = Date.now() - 13 * 60 * 1000;
+
+    const secondResult = await processActivitySyncQueueItem(queueItem);
+
+    expect(secondResult).toBe(QueueResult.Processed);
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
+      queueItem.userID,
+      'wahoo-upload-1',
+      9,
+    );
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+
   it('clears an irrelevant signed continuation while persisting Wahoo upload state', async () => {
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
@@ -918,6 +1186,8 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('persists a pending Wahoo upload token and retries status checks without posting the FIT file again', async () => {
+    const pollSchedulingStartedAtMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(pollSchedulingStartedAtMs);
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
@@ -932,7 +1202,9 @@ describe('activity-sync/process-queue-item', () => {
 
     const firstResult = await processActivitySyncQueueItem(queueItem);
 
-    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    dateNowSpy.mockRestore();
+
+    expect(firstResult).toBe(QueueResult.ProviderStatusPending);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'), expect.objectContaining({
       filename: 'original.fit',
     }));
@@ -945,16 +1217,63 @@ describe('activity-sync/process-queue-item', () => {
     }));
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
       queueItem,
-      expect.objectContaining({ code: 'deadline-exceeded' }),
+      expect.objectContaining({
+        name: 'ProviderOperationError',
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'activity_upload_status',
+        disposition: 'retryable',
+        retryMode: 'resume',
+        code: 'deadline-exceeded',
+        providerOperationId: 'wahoo-upload-1',
+      }),
       1,
       undefined,
+      'WAHOO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
     );
+    const retryParams = mockIncreaseRetryCountIfCurrentParams.mock.calls.at(-1)?.[0] as MockActivitySyncRetryParams | undefined;
+    expect(retryParams?.retryDispatchMarkerAtMs?.(1)).toBe(
+      pollSchedulingStartedAtMs + (15 * 60 * 1000),
+    );
+    expect(queueItem.dispatchedToCloudTask).toBe(
+      pollSchedulingStartedAtMs + (15 * 60 * 1000),
+    );
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
 
     await processActivitySyncQueueItem(queueItem);
 
-    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1');
+    expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1', 9);
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps exhausted Wahoo pending polling visible as a terminal failure', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      ref: createMockActivitySyncQueueItemRef(),
+    };
+    mockUploadActivityFileToWahoo.mockResolvedValueOnce({
+      status: 'pending',
+      message: 'processing',
+      uploadId: 'wahoo-upload-1',
+    });
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationServiceName: ServiceNames.WahooAPI,
+    }));
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        destinationServiceName: ServiceNames.WahooAPI,
+        outcome: 'dlq',
+      }),
+    );
   });
 
   it('persists COROS async identifiers and resumes status without uploading the FIT file again', async () => {
@@ -1796,6 +2115,7 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
       queueItem.userID,
       'wahoo-definitively-failed-upload',
+      9,
     );
     expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
       phase: 'before_activity_sync_pending_upload_restart',
@@ -1805,9 +2125,11 @@ describe('activity-sync/process-queue-item', () => {
         destinationWorkoutKey: null,
         destinationInfoCode: null,
         destinationUploadContinuation: null,
+        destinationExpectedWorkoutTypeID: mockFieldValueDelete,
       }),
     }));
     expect(queueItem.destinationUploadID).toBeNull();
+    expect(queueItem.destinationExpectedWorkoutTypeID).toBeUndefined();
     expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
       queueItem,
@@ -1827,7 +2149,7 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith(
       queueItem.userID,
       Buffer.from('FITDATA'),
-      expect.any(Object),
+      expect.objectContaining({ expectedWorkoutTypeId: 9 }),
     );
   });
 
@@ -2472,6 +2794,7 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith(
       queueItem.userID,
       queueItem.destinationUploadID,
+      9,
     );
     expect(mockDownload).not.toHaveBeenCalled();
     expect(mockSetActivitySyncSkippedMetadata).not.toHaveBeenCalled();
@@ -2597,6 +2920,42 @@ describe('activity-sync/process-queue-item', () => {
     expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
     expect(mockSetActivitySyncRetryingMetadataIfQueueItemDeferred).not.toHaveBeenCalled();
   });
+
+  it('persists an accepted Wahoo upload before deferring post-acceptance disconnect work', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+    };
+    mockUploadActivityFileToWahoo.mockRejectedValueOnce(Object.assign(
+      new Error('Wahoo disconnect is pending.'),
+      {
+        name: 'TokenUseSkippedForPendingDisconnectError',
+        serviceName: ServiceNames.WahooAPI,
+        providerOperationId: 'wahoo-accepted-upload',
+      },
+    ));
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.Deferred);
+    expect(mockUpdateQueueItemIfUserActive).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'before_activity_sync_wahoo_upload_state_persist',
+      updateData: expect.objectContaining({
+        destinationUploadID: 'wahoo-accepted-upload',
+      }),
+    }));
+    expect(mockDeferQueueItemForPendingDisconnectIfCurrentUserActive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueItem: expect.objectContaining({
+          destinationUploadID: 'wahoo-accepted-upload',
+        }),
+      }),
+    );
+    expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+    expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
+  });
+
 
   it('defers an enabled Wahoo route when its source service is pending disconnect', async () => {
     const route = ACTIVITY_SYNC_ROUTES[ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI];

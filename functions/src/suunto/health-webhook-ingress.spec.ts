@@ -263,6 +263,7 @@ describe('Suunto Health webhook ingress', () => {
     expect(hoisted.getRegisteredTriggerOptions()).toEqual(expect.objectContaining({
       document: 'suuntoHealthWebhookIngress/{ingressID}',
       region: 'europe-west2',
+      memory: '512MiB',
       retry: true,
     }));
   });

@@ -5,7 +5,6 @@ import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
 import { take, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
-import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
 import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
@@ -22,7 +21,6 @@ import { Overlay } from '@angular/cdk/overlay';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserService } from '../../services/app.user.service';
 import { WhereFilterOp } from 'firebase/firestore';
-import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -37,10 +35,6 @@ import { TrackStartPoint, TrackStartSelection, TracksMapManager, TripAreaOverlay
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { MapStyleName } from '../../services/map/map-style.types';
-import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
-import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
-import { MapboxStartPointLayerService } from '../../services/map/mapbox-start-point-layer.service';
-import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
 import {
   MapboxLayersControlHandle,
   MapboxLayersControlInputs,
@@ -79,10 +73,12 @@ import {
   correctPopupPositionToViewport,
   resolvePopupAnchorPosition,
 } from '../../services/map/mapbox-popup-positioning.utils';
-
-interface DetectedTripViewModel extends DetectedTrip {
-  locationLabel: string | null;
-}
+import {
+  MyTracksMapViewFactory,
+  type MyTracksMapViewHandle,
+} from '../shared/my-tracks-map-view/my-tracks-map-view.factory';
+import type { MapOptions } from 'mapbox-gl';
+import type { MyTracksTripPanelItem } from '../shared/my-tracks-trips-panel/my-tracks-trips-panel.component';
 
 interface JumpHeatPoint {
   lng: number;
@@ -189,6 +185,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   private mapSignal = signal<any>(null); // Signal to hold map instance for reactive synchronization
   private userSignal = signal<AppUserInterface | undefined>(undefined);
   private tracksMapManager: TracksMapManager;
+  private mapViewHandle: MyTracksMapViewHandle | null = null;
+  private destroyed = false;
   private scrolled = false;
   private hasTrackBoundsBeenApplied = false;
   private shouldPreserveMapViewForCurrentLoad = false;
@@ -223,15 +221,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   public readonly tripSortDirection = computed<AppMyTracksTripSortDirection>(() => (
     this.myTracksSettings()?.tripSortDirection === 'asc' ? 'asc' : 'desc'
   ));
-  public readonly tripSortIcon = computed(() => this.tripSortDirection() === 'desc' ? 'south' : 'north');
-  public readonly tripSortToggleLabel = computed(() => (
-    this.tripSortDirection() === 'desc'
-      ? 'Showing newest trips first. Show oldest trips first.'
-      : 'Showing oldest trips first. Show newest trips first.'
-  ));
-
   public isLoading: WritableSignal<boolean> = signal(false);
-  public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
+  public detectedTrips: WritableSignal<MyTracksTripPanelItem[]> = signal([]);
   public readonly displayedDetectedTrips = computed(() => this.sortDetectedTripsForDisplay(
     this.detectedTrips(),
     this.tripSortDirection(),
@@ -240,6 +231,9 @@ export class TracksComponent implements OnInit, OnDestroy {
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
   public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
   public selectedDetectedTripId: WritableSignal<string | null> = signal(null);
+  public readonly isHomeEntrySelected = computed(() => (
+    this.selectedDetectedTripId() === TracksComponent.HOME_PANEL_ENTRY_ID
+  ));
   public hoveredDetectedTripId: WritableSignal<string | null> = signal(null);
   public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
   public searchPeekExpanded: WritableSignal<boolean> = signal(true);
@@ -257,32 +251,19 @@ export class TracksComponent implements OnInit, OnDestroy {
     private eventService: AppEventService,
     private authService: AppAuthService,
     private router: Router,
-    private eventColorService: AppEventColorService,
     private zone: NgZone,
     private fileService: AppFileService,
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
     private userService: AppUserService,
-    private mapboxLoader: MapboxLoaderService,
     private themeService: AppThemeService,
     private mapStyleService: MapStyleService,
-    private mapboxHeatmapLayerService: MapboxHeatmapLayerService,
-    private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
-    private mapboxStartPointLayerService: MapboxStartPointLayerService,
-    private mapboxAutoResizeService: MapboxAutoResizeService,
     private mapboxLayersControlService: MapboxLayersControlService,
     private polylineSimplificationService: PolylineSimplificationService,
     private popupContentService: MapEventPopupContentService,
+    private myTracksMapViewFactory: MyTracksMapViewFactory,
   ) {
-    this.tracksMapManager = new TracksMapManager(
-      this.zone,
-      this.eventColorService,
-      this.mapStyleService,
-      this.mapboxHeatmapLayerService,
-      this.jumpHeatmapWeightingService,
-      this.mapboxStartPointLayerService,
-      this.logger
-    );
+    this.tracksMapManager = this.myTracksMapViewFactory.createManager();
     this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
 
     const platformId = inject(PLATFORM_ID);
@@ -398,7 +379,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // Removed manualStyleOverride logic
 
-      const mapOptions: any = {
+      const mapOptions: Omit<MapOptions, 'container'> = {
         zoom: 1.5,
         center: [0, 20],
         style: initialStyleUrl // Pass user's preferred style directly
@@ -407,69 +388,67 @@ export class TracksComponent implements OnInit, OnDestroy {
         mapOptions.config = { basemap: { lightPreset: resolved.preset } };
       }
 
-      // Run Mapbox initialization entirely outside Angular to prevent Map events from triggering CD
-      await this.zone.runOutsideAngular(async () => {
-        const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
-        this.mapSignal.set(mapInstance);
-
-        // Initialize Synchronizer
-        this.mapSynchronizer.set(this.mapStyleService.createSynchronizer(mapInstance, resolved));
-        // We don't call update(resolved) here because the effect will trigger automatically 
-        // as soon as mapSignal and mapSynchronizer are both set.
-
-        const mapboxgl = await this.mapboxLoader.loadMapbox();
-        this.tracksMapManager.setMap(mapInstance, mapboxgl);
-        this.bindMapViewInteractionListeners(mapInstance);
-        this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
-        this.tracksMapManager.setStartMarkerSelectionHandler((selection) => {
-          this.zone.run(() => {
-            if (!selection) {
-              this.closeSelectedStartPointPopup();
-              return;
-            }
-            this.searchPeekExpanded.set(false);
-            this.detectedTripsPanelExpanded.set(false);
-            this.selectedStartPoint.set(selection);
-            this.updateSelectedStartPointScreenPosition();
-            this.centerMapOnStartPoint(selection);
-          });
-        });
-        this.bindStartPointPopupMapListeners(mapInstance);
-        this.mapboxAutoResizeService.bind(mapInstance, {
-          container: this.mapDiv?.nativeElement,
+      this.mapViewHandle?.destroy();
+      this.mapViewHandle = null;
+      this.mapSignal.set(null);
+      this.mapSynchronizer.set(undefined);
+      const mapViewHandle = await this.myTracksMapViewFactory.initialize(
+        this.tracksMapManager,
+        this.mapDiv.nativeElement,
+        mapOptions,
+        {
+          controlMode: 'workspace',
           onResize: () => {
             if (!this.selectedStartPoint()) return;
             this.zone.run(() => this.updateSelectedStartPointScreenPosition());
+          },
+        },
+      );
+      if (this.destroyed) {
+        mapViewHandle.destroy();
+        return;
+      }
+
+      this.mapViewHandle = mapViewHandle;
+      const mapInstance = mapViewHandle.map;
+      this.mapSignal.set(mapInstance);
+
+      // Initialize Synchronizer. The reactive effect applies later style changes.
+      this.mapSynchronizer.set(this.mapStyleService.createSynchronizer(mapInstance, resolved));
+
+      this.bindMapViewInteractionListeners(mapInstance);
+      this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+      this.tracksMapManager.setStartMarkerSelectionHandler((selection) => {
+        this.zone.run(() => {
+          if (!selection) {
+            this.closeSelectedStartPointPopup();
+            return;
           }
+          this.searchPeekExpanded.set(false);
+          this.detectedTripsPanelExpanded.set(false);
+          this.selectedStartPoint.set(selection);
+          this.updateSelectedStartPointScreenPosition();
+          this.centerMapOnStartPoint(selection);
         });
-
-        mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
-
-        // Standard Navigation Control for Zoom and Rotation (Pitch)
-        const navControl = new mapboxgl.NavigationControl({
-          visualizePitch: true,
-          showCompass: true,
-          showZoom: true
-        });
-        mapInstance.addControl(navControl, 'bottom-right');
-        this.zone.run(() => this.attachMapLayersControl(mapInstance));
-
-        this.centerMapToStartingLocation(mapInstance);
-        this.eventsSubscription.add(
-          this.authService.user$
-            .pipe(
-              filter((authUser): authUser is AppUserInterface => !!authUser),
-              take(1),
-            )
-            .subscribe((authUser) => {
-              this.user = authUser;
-              this.userSignal.set(authUser);
-            })
-        );
-
       });
+      this.bindStartPointPopupMapListeners(mapInstance);
+      this.zone.run(() => this.attachMapLayersControl(mapInstance));
+
+      this.centerMapToStartingLocation(mapInstance);
+      this.eventsSubscription.add(
+        this.authService.user$
+          .pipe(
+            filter((authUser): authUser is AppUserInterface => !!authUser),
+            take(1),
+          )
+          .subscribe((authUser) => {
+            this.user = authUser;
+            this.userSignal.set(authUser);
+          })
+      );
 
     } catch (error) {
+      if (this.destroyed) return;
       this.logger.error('Failed to initialize Mapbox:', error);
     }
   }
@@ -525,6 +504,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public ngOnDestroy() {
+    this.destroyed = true;
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
     this.tracksMapManager.setStartMarkerSelectionHandler(null);
@@ -534,11 +514,10 @@ export class TracksComponent implements OnInit, OnDestroy {
       cancelAnimationFrame(this.pendingStartPointPopupCorrectionRaf);
       this.pendingStartPointPopupCorrectionRaf = null;
     }
-    this.mapboxAutoResizeService.unbind(this.tracksMapManager.getMap());
     this.destroyMapLayersControl();
-    if (this.mapSignal()) {
-      this.mapSignal().remove();
-    }
+    this.mapViewHandle?.destroy();
+    this.mapViewHandle = null;
+    this.mapSignal.set(null);
   }
 
   private attachMapLayersControl(map: any): void {
@@ -1920,7 +1899,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.tracksMapManager.fitBoundsToCoordinates(coordinates);
   }
 
-  public onDetectedTripSelected(trip: DetectedTripViewModel): void {
+  public onDetectedTripSelected(trip: MyTracksTripPanelItem): void {
     this.hapticsService.selection();
     this.onMapViewInteraction();
     this.selectedDetectedTripId.set(trip.tripId);
@@ -1956,7 +1935,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     ]);
   }
 
-  public onDetectedTripHovered(trip: DetectedTripViewModel): void {
+  public onDetectedTripHovered(trip: MyTracksTripPanelItem): void {
     this.hoveredDetectedTripId.set(trip.tripId);
     this.applyActiveDetectedTripAreaOverlay();
   }
@@ -1970,7 +1949,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.applyActiveDetectedTripAreaOverlay();
   }
 
-  public onDetectedTripHoverEnded(trip: DetectedTripViewModel): void {
+  public onDetectedTripHoverEnded(trip: MyTracksTripPanelItem): void {
     if (this.hoveredDetectedTripId() !== trip.tripId) {
       return;
     }
@@ -1980,9 +1959,9 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private sortDetectedTripsForDisplay(
-    trips: readonly DetectedTripViewModel[],
+    trips: readonly MyTracksTripPanelItem[],
     direction: AppMyTracksTripSortDirection,
-  ): DetectedTripViewModel[] {
+  ): MyTracksTripPanelItem[] {
     const directionMultiplier = direction === 'desc' ? -1 : 1;
     return [...trips].sort((left, right) => {
       const startDateDifference = left.startDate.getTime() - right.startDate.getTime();
@@ -2265,7 +2244,9 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.detectedHomeArea.set(detectedHomeArea);
     this.tracksMapManager.setHomeArea(detectedHomeArea);
     this.applyActiveDetectedTripAreaOverlay();
-    this.detectedTripsPanelExpanded.set(viewModels.length > 0 || !!detectedHomeArea);
+    this.detectedTripsPanelExpanded.set(
+      this.resolveDesktopViewportDefault() && (viewModels.length > 0 || !!detectedHomeArea),
+    );
     this.hasEvaluatedTripDetection.set(true);
     this.logger.info('[debug] my_tracks_trip_detection_ui_models', {
       trips: viewModels.map((trip) => ({
@@ -2321,7 +2302,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.tracksMapManager.setTripArea(activeTrip ? this.toTripAreaOverlay(activeTrip) : null);
   }
 
-  private resolveActiveDetectedTrip(): DetectedTripViewModel | null {
+  private resolveActiveDetectedTrip(): MyTracksTripPanelItem | null {
     const detectedTrips = this.detectedTrips();
     const hoveredTripId = this.hoveredDetectedTripId();
     if (hoveredTripId === TracksComponent.HOME_PANEL_ENTRY_ID) {
@@ -2347,11 +2328,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     return detectedTrips.find((trip) => trip.tripId === selectedTripId) || null;
   }
 
-  public isHomeEntrySelected(): boolean {
-    return this.selectedDetectedTripId() === TracksComponent.HOME_PANEL_ENTRY_ID;
-  }
-
-  private toTripAreaOverlay(trip: DetectedTripViewModel): TripAreaOverlay {
+  private toTripAreaOverlay(trip: MyTracksTripPanelItem): TripAreaOverlay {
     return {
       tripId: trip.tripId,
       centroidLat: trip.centroidLat,

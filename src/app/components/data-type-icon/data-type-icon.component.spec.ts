@@ -11,6 +11,9 @@ import {
   DataBeginningPotentialStamina,
   DataCadenceMax,
   DataCadenceMin,
+  DataContactTimeToFlightTimeRatioAvg,
+  DataContactTimeToFlightTimeRatioMax,
+  DataContactTimeToFlightTimeRatioMin,
   DataStrokeRateAvg,
   DataStrokeRateMax,
   DataStrokeRateMin,
@@ -23,6 +26,9 @@ import {
   DataMetabolicCalories,
   DataFeeling,
   DataGradeAdjustedPaceAvg,
+  DataGroundContactTimePercentageAvg,
+  DataGroundContactTimePercentageMax,
+  DataGroundContactTimePercentageMin,
   DataPaceAvg,
   DataPotentialStamina,
   DataPotentialStaminaAvg,
@@ -74,6 +80,9 @@ import {
   DataLegSpringStiffnessBalanceLeft,
   DataLegSpringStiffnessBalanceRight,
   DataRPE,
+  DataRunningFlightTimeAvg,
+  DataRunningFlightTimeMax,
+  DataRunningFlightTimeMin,
   DataStamina,
   DataStaminaAvg,
   DataStaminaMax,
@@ -192,6 +201,15 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Average Ground Contact Time')).toBe('step_over');
     expect(component.getColumnHeaderIcon('Minimum Ground Contact Time')).toBe('step_over');
     expect(component.getColumnHeaderIcon('Maximum Ground Contact Time')).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataGroundContactTimePercentageAvg.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataGroundContactTimePercentageMin.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataGroundContactTimePercentageMax.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataRunningFlightTimeAvg.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataRunningFlightTimeMin.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataRunningFlightTimeMax.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataContactTimeToFlightTimeRatioAvg.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataContactTimeToFlightTimeRatioMin.type)).toBe('step_over');
+    expect(component.getColumnHeaderIcon(DataContactTimeToFlightTimeRatioMax.type)).toBe('step_over');
     expect(component.getColumnHeaderIcon(DataImpactLoadingRateBalanceLeft.type)).toBe('step_over');
     expect(component.getColumnHeaderIcon(DataImpactLoadingRateBalanceRight.type)).toBe('step_over');
     expect(component.getColumnHeaderIcon(DataVerticalOscillation.type)).toBe('swap_vert');

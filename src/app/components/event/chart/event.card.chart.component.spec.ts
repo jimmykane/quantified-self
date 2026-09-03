@@ -163,6 +163,10 @@ describe('EventCardChartComponent', () => {
     await ((component as any).eventChartOverlayPersistQueue as Promise<void>).catch(() => undefined);
   }
 
+  async function flushCursorBehaviourPersistQueue(): Promise<void> {
+    await ((component as any).cursorBehaviourPersistQueue as Promise<void>).catch(() => undefined);
+  }
+
   async function flushMicrotasks(iterations = 4): Promise<void> {
     for (let index = 0; index < iterations; index += 1) {
       await Promise.resolve();
@@ -572,16 +576,130 @@ describe('EventCardChartComponent', () => {
     component.selectedRange = { start: 10, end: 20 };
 
     component.cursorBehaviour = ChartCursorBehaviours.SelectX;
-    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.SelectX });
+    await flushCursorBehaviourPersistQueue();
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith(
+      { chartCursorBehaviour: ChartCursorBehaviours.SelectX },
+      { force: true },
+    );
 
     vi.clearAllMocks();
     component.previewSelectedRange = { start: 10, end: 20 };
     component.selectedRange = { start: 10, end: 20 };
     component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    await flushCursorBehaviourPersistQueue();
 
-    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith({ chartCursorBehaviour: ChartCursorBehaviours.ZoomX });
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenCalledWith(
+      { chartCursorBehaviour: ChartCursorBehaviours.ZoomX },
+      { force: true },
+    );
     expect(component.previewSelectedRange).toEqual({ start: 10, end: 20 });
     expect(component.selectedRange).toEqual({ start: 10, end: 20 });
+  });
+
+  it('keeps the optimistic cursor mode until matching settings confirm the completed write', async () => {
+    let resolvePersist: (() => void) | null = null;
+    mockUserSettingsQuery.updateChartSettings.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolvePersist = resolve;
+    }));
+    fixture.detectChanges();
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    await flushMicrotasks();
+
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.SelectX);
+
+    resolvePersist?.();
+    await flushCursorBehaviourPersistQueue();
+
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.SelectX);
+    expect((component as any).cursorBehaviourOverride).toBe(ChartCursorBehaviours.SelectX);
+
+    chartSettingsSignal.set({
+      ...chartSettingsSignal(),
+      chartCursorBehaviour: ChartCursorBehaviours.SelectX,
+    });
+    TestBed.flushEffects();
+
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.SelectX);
+    expect((component as any).cursorBehaviourOverride).toBeNull();
+  });
+
+  it('serializes rapid cursor mode changes so the latest button state wins', async () => {
+    const writeOrder: ChartCursorBehaviours[] = [];
+    let resolveFirst: (() => void) | null = null;
+    mockUserSettingsQuery.updateChartSettings
+      .mockImplementationOnce((settings: any) => {
+        writeOrder.push(settings.chartCursorBehaviour);
+        return new Promise<void>((resolve) => {
+          resolveFirst = resolve;
+        });
+      })
+      .mockImplementationOnce((settings: any) => {
+        writeOrder.push(settings.chartCursorBehaviour);
+        return Promise.resolve();
+      });
+    fixture.detectChanges();
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    await flushMicrotasks();
+
+    expect(writeOrder).toEqual([ChartCursorBehaviours.SelectX]);
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.ZoomX);
+
+    resolveFirst?.();
+    await flushCursorBehaviourPersistQueue();
+
+    expect(writeOrder).toEqual([
+      ChartCursorBehaviours.SelectX,
+      ChartCursorBehaviours.ZoomX,
+    ]);
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.ZoomX);
+  });
+
+  it('reverts the optimistic cursor mode when the latest settings write fails', async () => {
+    const error = new Error('write failed');
+    mockUserSettingsQuery.updateChartSettings.mockRejectedValueOnce(error);
+    fixture.detectChanges();
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.SelectX);
+
+    await flushCursorBehaviourPersistQueue();
+
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.ZoomX);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      '[EventCardChart] Failed to persist chartCursorBehaviour setting',
+      error,
+    );
+  });
+
+  it('keeps the latest cursor mode when an older queued write fails', async () => {
+    const firstError = new Error('first write failed');
+    let rejectFirst: ((error: Error) => void) | null = null;
+    mockUserSettingsQuery.updateChartSettings
+      .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
+        rejectFirst = reject;
+      }))
+      .mockResolvedValueOnce(undefined);
+    fixture.detectChanges();
+
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+    await flushMicrotasks();
+
+    rejectFirst?.(firstError);
+    await flushCursorBehaviourPersistQueue();
+
+    expect(component.cursorBehaviour).toBe(ChartCursorBehaviours.ZoomX);
+    expect(mockUserSettingsQuery.updateChartSettings).toHaveBeenLastCalledWith(
+      { chartCursorBehaviour: ChartCursorBehaviours.ZoomX },
+      { force: true },
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      '[EventCardChart] Failed to persist chartCursorBehaviour setting',
+      firstError,
+    );
   });
 
   it('should persist syncChartHoverToMap changes', async () => {
@@ -1278,7 +1396,7 @@ describe('EventCardChartComponent', () => {
         speed: 'power',
         power: 'speed',
       },
-    });
+    }, { force: true });
     expect((component as any).eventChartOverlayDataTypeByPrimaryOverride).toEqual({
       speed: 'power',
       power: 'speed',
@@ -1303,7 +1421,7 @@ describe('EventCardChartComponent', () => {
       eventChartOverlayDataTypeByPrimary: {
         speed: 'power',
       },
-    });
+    }, { force: true });
   });
 
   it('keeps the latest optimistic overlay choice when an older persist request fails later', async () => {

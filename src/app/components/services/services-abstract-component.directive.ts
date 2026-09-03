@@ -21,9 +21,7 @@ import { combineLatest, firstValueFrom, of, Subscription } from 'rxjs';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { distinctUntilChanged, switchMap, take, tap } from 'rxjs/operators';
-import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { AppFileService } from '../../services/app.file.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -37,6 +35,7 @@ import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRoute } from '@shared/rout
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import equal from 'fast-deep-equal';
+import { ServiceConnectionAccountProjection } from '@shared/service-connection';
 
 type ServiceSyncRouteImpact = ActivitySyncRoute | RouteDeliverySyncRoute;
 
@@ -54,7 +53,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   @Input() showOnlyActiveProviderTool = false;
   @Output() connectionStateChanged = new EventEmitter<boolean>();
   public isLoading = false;
-  public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
+  /** Browser-safe account summaries sourced from service metadata. */
+  public serviceTokens: ServiceConnectionAccountProjection[] | undefined;
   public serviceMeta: AppUserServiceMetaInterface | undefined;
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;

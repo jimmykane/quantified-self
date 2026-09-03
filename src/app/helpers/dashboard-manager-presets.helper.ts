@@ -568,7 +568,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     description: 'Training duration totals aggregated weekly.',
     icon: 'schedule',
     category: 'custom',
-    chartType: ChartTypes.LinesVertical,
+    chartType: ChartTypes.ColumnsVertical,
     dataType: DataDuration.type,
     dataValueType: ChartDataValueTypes.Total,
     dataCategoryType: ChartDataCategoryTypes.DateType,

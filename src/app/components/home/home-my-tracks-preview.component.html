@@ -1,0 +1,31 @@
+<div
+  #mapContainer
+  class="home-my-tracks-preview__map"
+  [attr.role]="initializationFailed() ? null : 'region'"
+  [attr.aria-label]="initializationFailed()
+    ? null
+    : 'Interactive My Tracks preview showing anonymized activity traces and example detected trips'"
+  [attr.aria-hidden]="initializationFailed() ? 'true' : null"
+></div>
+@if (initializationFailed()) {
+  <p class="home-my-tracks-preview__fallback" role="status">Map preview unavailable.</p>
+} @else {
+  <app-my-tracks-trips-panel
+    [trips]="displayedPreviewTrips()"
+    [homeArea]="previewHomeArea"
+    [expanded]="tripsPanelExpanded()"
+    [expandedSizePx]="276"
+    [sortDirection]="tripSortDirection()"
+    [selectedTripId]="selectedPreviewTripId()"
+    [homeSelected]="homeSelected()"
+    title="Example trips"
+    (panelExpandedChange)="tripsPanelExpanded.set($event)"
+    (sortToggle)="toggleTripSortDirection()"
+    (tripSelected)="selectPreviewTrip($event)"
+    (tripHovered)="hoverPreviewTrip($event)"
+    (tripHoverEnded)="endPreviewTripHover($event)"
+    (homeSelectedChange)="selectPreviewHome()"
+    (homeHovered)="hoverPreviewHome()"
+    (homeHoverEnded)="endPreviewHomeHover()"
+  ></app-my-tracks-trips-panel>
+}

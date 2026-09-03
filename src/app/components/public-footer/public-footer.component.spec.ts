@@ -24,15 +24,20 @@ describe('PublicFooterComponent', () => {
     expect(footer).toBeTruthy();
     expect(text).toContain('Activity calendar');
     expect(text).toContain('Training analysis');
+    expect(text).toContain('Training dashboard');
+    expect(text).toContain('Activity map');
     expect(text).toContain('MCP server');
     expect(text).toContain('Wahoo integration');
     expect(footer?.querySelector('a[href="/features/activity-calendar"]')).toBeTruthy();
+    expect(footer?.querySelector('a[href="/features/training-dashboard"]')).toBeTruthy();
+    expect(footer?.querySelector('a[href="/features/activity-map"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/features/mcp-server"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/integrations/wahoo"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/privacy"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/terms"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/policies"]')).toBeTruthy();
-    expect(text).toContain('provided without warranty');
+    expect(text).not.toContain('contributors.');
+    expect(text).not.toContain('provided without warranty');
     expect(text).toContain('AGPL-3.0-only');
     expect(
       footer?.querySelector('a[href="https://github.com/jimmykane/quantified-self"]'),
@@ -48,7 +53,11 @@ describe('PublicFooterComponent', () => {
     expect(text).toContain('support@quantified-self.io');
     expect(text).toContain('contact@quantified-self.io');
     expect(text).not.toMatch(/\bprivate\b/i);
-    expect(footer?.querySelector('a[href="mailto:support@quantified-self.io"]')).toBeTruthy();
-    expect(footer?.querySelector('a[href="mailto:contact@quantified-self.io"]')).toBeTruthy();
+    const supportLink = footer?.querySelector('a[href="mailto:support@quantified-self.io"]');
+    const contactLink = footer?.querySelector('a[href="mailto:contact@quantified-self.io"]');
+    expect(supportLink).toBeTruthy();
+    expect(supportLink?.getAttribute('target')).toBeNull();
+    expect(contactLink).toBeTruthy();
+    expect(contactLink?.getAttribute('target')).toBeNull();
   });
 });

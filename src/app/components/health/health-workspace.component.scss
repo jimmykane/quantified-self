@@ -167,12 +167,41 @@
 
 .health-provider-filters {
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
 .health-provider-filter {
-  gap: 0.35rem;
+  --mat-button-outlined-container-height: 36px;
+  --mat-button-outlined-container-shape: 999px;
+  --mat-button-outlined-label-text-weight: 600;
+  --mat-button-outlined-outline-color: var(--mat-sys-outline-variant);
+
+  background: var(--mat-sys-surface-container-low);
+  color: var(--mat-sys-on-surface);
+  min-width: 0;
+  padding-inline: 0.75rem;
+}
+
+.health-provider-filter-selected {
+  --mat-button-outlined-outline-color: var(--mat-sys-primary);
+
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.health-provider-filter-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.health-provider-filter-content > mat-icon {
+  font-size: 18px;
+  height: 18px;
+  margin: 0;
+  width: 18px;
 }
 
 .health-notice {

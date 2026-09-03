@@ -129,45 +129,54 @@
           </div>
         </header>
 
-        @if (isSavingRange()) {
+        @if (isSavingPreferences()) {
           <div class="health-range-save-status" role="status" aria-live="polite">
             <mat-spinner diameter="16" aria-hidden="true"></mat-spinner>
-            <span>Saving range preference…</span>
+            <span>Saving Health view…</span>
           </div>
-        } @else if (rangeSaveFailed()) {
+        } @else if (preferencesSaveFailed()) {
           <div class="health-range-save-status health-range-save-status-error" role="alert">
             <mat-icon aria-hidden="true">cloud_off</mat-icon>
-            <span>This range is active, but it was not saved.</span>
-            <button mat-button type="button" (click)="retryRangeSave()">Retry</button>
+            <span>This Health view is active, but it was not saved.</span>
+            <button mat-button type="button" (click)="retryPreferenceSave()">Retry</button>
           </div>
         }
 
         @if (providerFilterOptions().length > 0) {
-          <mat-chip-listbox class="health-provider-filters" multiple aria-label="Filter Health sources">
-            <mat-chip-option
+          <div class="health-provider-filters" role="group" aria-label="Filter Health sources">
+            <button
+              mat-stroked-button
+              type="button"
               class="health-provider-filter"
-              [selected]="allProvidersSelected()"
+              [class.health-provider-filter-selected]="allProvidersSelected()"
+              [attr.aria-pressed]="allProvidersSelected()"
               (click)="showAllProviders()">
-              All sources
-            </mat-chip-option>
+              <span class="health-provider-filter-content">
+                <mat-icon aria-hidden="true">select_all</mat-icon>
+                <span>All sources</span>
+              </span>
+            </button>
             @for (option of providerFilterOptions(); track option.provider) {
-              <mat-chip-option
+              <button
+                mat-stroked-button
+                type="button"
                 class="health-provider-filter"
-                [selected]="option.selected && !allProvidersSelected()"
+                [class.health-provider-filter-selected]="option.selected && !allProvidersSelected()"
+                [attr.aria-pressed]="option.selected && !allProvidersSelected()"
                 (click)="toggleProvider(option.provider)">
-                @if (option.presentation) {
-                  <app-service-source-icon
-                    [presentation]="option.presentation"
-                    [showText]="false"
-                    [showTooltip]="false"
-                    [iconWidth]="32"
-                    [iconHeight]="18">
-                  </app-service-source-icon>
-                }
-                <span>{{ option.label }}</span>
-              </mat-chip-option>
+                <span class="health-provider-filter-content">
+                  @if (option.presentation) {
+                    <app-service-source-icon
+                      [presentation]="option.presentation"
+                      [showText]="false"
+                      [showTooltip]="false">
+                    </app-service-source-icon>
+                  }
+                  <span>{{ option.label }}</span>
+                </span>
+              </button>
             }
-          </mat-chip-listbox>
+          </div>
         }
 
         @if (incompleteNotice()) {
@@ -186,6 +195,18 @@
           <div class="health-notice" role="status">
             <mat-icon aria-hidden="true">data_usage</mat-icon>
             <span>{{ partialCoverageNotice() }}</span>
+          </div>
+        }
+        @if (activitySourceNotice()) {
+          <div class="health-notice health-notice-warning" role="status">
+            <mat-icon aria-hidden="true">warning</mat-icon>
+            <span>{{ activitySourceNotice() }}</span>
+          </div>
+        }
+        @if (workoutMetricNotice()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">fitness_center</mat-icon>
+            <span>{{ workoutMetricNotice() }}</span>
           </div>
         }
         @if (!selectedIsSleep() && metricView().conflictCount > 0) {

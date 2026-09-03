@@ -3,10 +3,10 @@ import {
     createCorosSleepBackfillQueueInput,
     parseCorosSleepBackfillOptions,
     resolveCorosSleepBackfillRange,
-} from './backfill-coros-sleep';
+} from './backfill-coros-daily-health';
 import { getCorosSleepBackfillStartMs } from '../../../shared/sleep-backfill';
 
-describe('backfill-coros-sleep', () => {
+describe('backfill-coros-daily-health', () => {
     it('requires an explicit confirmation before globally writing sleep backfill queue items', () => {
         expect(() => parseCorosSleepBackfillOptions(['--execute']))
             .toThrow('Global execution requires --confirm-all-users');

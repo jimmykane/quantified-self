@@ -19,20 +19,15 @@ const hoisted = vi.hoisted(() => ({
     collectionGroupGet: vi.fn(),
     metaDocGet: vi.fn(),
     mockGetUserDeletionGuardState: vi.fn(),
-    mockGetUserDeletionGuardStateInTransaction: vi.fn(),
     getActiveCOROSTokenSnapshot: vi.fn(),
-    ensureSuuntoWebhookAccountBindingForProviderVerifiedToken: vi.fn(),
-    bindingCursorGet: vi.fn(),
-    bindingCursorSet: vi.fn(),
+    maintenanceCursorGet: vi.fn(),
+    maintenanceCursorSet: vi.fn(),
     collectionGroupLimit: vi.fn(),
     suuntoRootOrderBy: vi.fn(),
     suuntoRootStartAfter: vi.fn(),
     suuntoRootLimit: vi.fn(),
     suuntoRootGet: vi.fn(),
     suuntoTokenOrderBy: vi.fn(),
-    transactionUpdate: vi.fn((ref: { update: (data: unknown) => unknown }, data: unknown) => (
-        ref.update(data)
-    )),
     installedTokenDocs: [] as MockTokenDocument[],
 }));
 
@@ -50,15 +45,6 @@ vi.mock('firebase-admin', () => {
     const firestore = vi.fn(() => ({
         collectionGroup: hoisted.collectionGroup,
         collection: hoisted.collection,
-        runTransaction: vi.fn(async (callback: (transaction: unknown) => unknown) => callback({
-            get: vi.fn(async (ref: unknown) => {
-                const token = hoisted.installedTokenDocs.find(candidate => candidate.ref === ref);
-                return token
-                    ? { exists: true, data: token.data }
-                    : { exists: false, data: () => undefined };
-            }),
-            update: hoisted.transactionUpdate,
-        })),
     }));
     Object.assign(firestore, {
         FieldPath: {
@@ -74,19 +60,10 @@ vi.mock('./queue', () => ({
 
 vi.mock('../shared/user-deletion-guard', () => ({
     getUserDeletionGuardState: hoisted.mockGetUserDeletionGuardState,
-    getUserDeletionGuardStateInTransaction: hoisted.mockGetUserDeletionGuardStateInTransaction,
-    UserDeletionGuardReadError: class UserDeletionGuardReadError extends Error {
-        public readonly name = 'UserDeletionGuardReadError';
-    },
 }));
 
 vi.mock('../coros/account', () => ({
     getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
-}));
-
-vi.mock('../suunto/health-webhook-binding-lifecycle', () => ({
-    ensureSuuntoWebhookAccountBindingForProviderVerifiedToken:
-        (...args: unknown[]) => hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken(...args),
 }));
 
 import { sleepPollingTestInternals } from './polling';
@@ -102,20 +79,14 @@ describe('sleep polling', () => {
             deletionInProgress: false,
             shouldSkip: false,
         });
-        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValue({
-            userExists: true,
-            deletionInProgress: false,
-            shouldSkip: false,
-        });
         hoisted.installedTokenDocs.length = 0;
         hoisted.getActiveCOROSTokenSnapshot.mockImplementation(async (userID: string) => {
             const token = hoisted.installedTokenDocs.find(candidate => candidate.ref.parent.parent.id === userID);
             if (!token) throw new Error('No active COROS token');
             return token;
         });
-        hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken.mockResolvedValue('current');
-        hoisted.bindingCursorGet.mockResolvedValue({ exists: false, data: () => undefined });
-        hoisted.bindingCursorSet.mockResolvedValue(undefined);
+        hoisted.maintenanceCursorGet.mockResolvedValue({ exists: false, data: () => undefined });
+        hoisted.maintenanceCursorSet.mockResolvedValue(undefined);
     });
 
     function createTokenDoc(
@@ -233,8 +204,8 @@ describe('sleep polling', () => {
             if (name === 'providerMaintenanceState') {
                 return {
                     doc: vi.fn(() => ({
-                        get: hoisted.bindingCursorGet,
-                        set: hoisted.bindingCursorSet,
+                        get: hoisted.maintenanceCursorGet,
+                        set: hoisted.maintenanceCursorSet,
                     })),
                 };
             }
@@ -402,7 +373,6 @@ describe('sleep polling', () => {
             userID,
             providerUserId: 'suunto-user-1',
         }));
-        expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken).not.toHaveBeenCalled();
         expect(hoisted.suuntoRootLimit).toHaveBeenCalledWith(
             sleepPollingTestInternals.SUUNTO_SLEEP_POLL_ROOT_PAGE_SIZE + 1,
         );
@@ -457,7 +427,7 @@ describe('sleep polling', () => {
 
         expect(queued).toBe(pageSize);
         expect(addSleepSyncQueueItem).toHaveBeenCalledTimes(pageSize);
-        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(expect.objectContaining({
+        expect(hoisted.maintenanceCursorSet).toHaveBeenCalledWith(expect.objectContaining({
             lastCompletedUserID: expect.any(String),
             currentUserID: null,
             rootPageSize: pageSize,
@@ -484,7 +454,7 @@ describe('sleep polling', () => {
         );
 
         expect(firstQueued).toBe(sleepPollingTestInternals.SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT);
-        const firstCursor = hoisted.bindingCursorSet.mock.calls.at(-1)?.[0];
+        const firstCursor = hoisted.maintenanceCursorSet.mock.calls.at(-1)?.[0];
         expect(firstCursor).toEqual(expect.objectContaining({
             lastCompletedUserID: null,
             currentUserID: userID,
@@ -492,7 +462,7 @@ describe('sleep polling', () => {
         }));
 
         vi.mocked(addSleepSyncQueueItem).mockClear();
-        hoisted.bindingCursorGet.mockResolvedValue({
+        hoisted.maintenanceCursorGet.mockResolvedValue({
             exists: true,
             data: () => firstCursor,
         });
@@ -508,7 +478,7 @@ describe('sleep polling', () => {
             userID,
             providerUserId: 'provider-8',
         }));
-        expect(hoisted.bindingCursorSet).toHaveBeenLastCalledWith(expect.objectContaining({
+        expect(hoisted.maintenanceCursorSet).toHaveBeenLastCalledWith(expect.objectContaining({
             lastCompletedUserID: userID,
             currentUserID: null,
             lastProcessedTokenID: null,
@@ -527,7 +497,7 @@ describe('sleep polling', () => {
                 userName: 'provider-c',
             }),
         ]);
-        hoisted.bindingCursorGet.mockResolvedValue({
+        hoisted.maintenanceCursorGet.mockResolvedValue({
             exists: true,
             data: () => ({
                 lastCompletedUserID: 'user-b',
@@ -560,7 +530,7 @@ describe('sleep polling', () => {
                 userName: 'provider-a',
             }),
         ]);
-        hoisted.bindingCursorGet.mockResolvedValue({
+        hoisted.maintenanceCursorGet.mockResolvedValue({
             exists: true,
             data: () => ({
                 lastCompletedUserID: null,
@@ -580,145 +550,6 @@ describe('sleep polling', () => {
         expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
     });
 
-    it('provider-verifies an independent bounded page without queueing poll work', async () => {
-        const nowMs = Date.UTC(2026, 3, 28);
-        const tokens = Array.from({ length: 6 }, (_, index) => createTokenDoc(`user-${index}`, {
-            serviceName: ServiceNames.SuuntoApp,
-            userName: `provider-${index}`,
-        }));
-        installCollectionGroupTokenMock(tokens);
-        await sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs);
-
-        expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken)
-            .toHaveBeenCalledTimes(sleepPollingTestInternals.SUUNTO_BINDING_VERIFICATION_ROOT_PAGE_SIZE);
-        expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken.mock.calls
-            .map(call => call[2].id)).toEqual([
-                'provider-0',
-                'provider-1',
-                'provider-2',
-                'provider-3',
-            ]);
-        expect(addSleepSyncQueueItem).not.toHaveBeenCalled();
-        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(expect.objectContaining({
-            lastCompletedUserID: expect.any(String),
-            rootPageSize: 4,
-        }), { merge: false });
-    });
-
-    it('backs off one failed credential while advancing the canonical migration cursor', async () => {
-        const nowMs = Date.UTC(2026, 3, 28);
-        const failedToken = createTokenDoc('user-1', {
-                serviceName: ServiceNames.SuuntoApp,
-                userName: 'provider-1',
-            });
-        installCollectionGroupTokenMock([failedToken]);
-        hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken
-            .mockRejectedValueOnce(new Error('transient provider failure'));
-
-        await sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs);
-
-        expect(failedToken.ref.update).toHaveBeenCalledWith(expect.objectContaining({
-            suuntoWebhookBindingVerificationFailureCount: 1,
-            suuntoWebhookBindingVerificationNextAttemptAtMs: nowMs + (30 * 60 * 1000),
-        }));
-        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(expect.objectContaining({
-            lastCompletedUserID: null,
-            lastCompletedSweepAtMs: nowMs,
-        }), { merge: false });
-    });
-
-    it('does not recreate a token deleted during provider verification', async () => {
-        const nowMs = Date.UTC(2026, 3, 28);
-        const deletedToken = createTokenDoc('user-1', {
-            serviceName: ServiceNames.SuuntoApp,
-            userName: 'provider-1',
-            tokenCredentialGeneration: 'generation-1',
-        });
-        installCollectionGroupTokenMock([deletedToken]);
-        hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken
-            .mockImplementationOnce(async () => {
-                hoisted.installedTokenDocs.length = 0;
-                return 'inactive';
-            });
-
-        await sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs);
-
-        expect(deletedToken.ref.set).not.toHaveBeenCalled();
-        expect(deletedToken.ref.update).not.toHaveBeenCalled();
-        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(expect.objectContaining({
-            lastCompletedSweepAtMs: nowMs,
-        }), { merge: false });
-    });
-
-    it('does not record successful verification after account deletion starts', async () => {
-        const nowMs = Date.UTC(2026, 3, 28);
-        const deletingToken = createTokenDoc('user-1', {
-            serviceName: ServiceNames.SuuntoApp,
-            userName: 'provider-1',
-            tokenCredentialGeneration: 'generation-1',
-        });
-        installCollectionGroupTokenMock([deletingToken]);
-        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
-            userExists: true,
-            deletionInProgress: true,
-            shouldSkip: true,
-        });
-
-        await sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs);
-
-        expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken)
-            .toHaveBeenCalledOnce();
-        expect(deletingToken.ref.update).not.toHaveBeenCalled();
-        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(expect.objectContaining({
-            lastCompletedSweepAtMs: nowMs,
-        }), { merge: false });
-    });
-
-    it('does not record failed verification after account deletion starts', async () => {
-        const nowMs = Date.UTC(2026, 3, 28);
-        const deletingToken = createTokenDoc('user-1', {
-            serviceName: ServiceNames.SuuntoApp,
-            userName: 'provider-1',
-            tokenCredentialGeneration: 'generation-1',
-        });
-        installCollectionGroupTokenMock([deletingToken]);
-        hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken
-            .mockRejectedValueOnce(new Error('provider unavailable'));
-        hoisted.mockGetUserDeletionGuardStateInTransaction.mockResolvedValueOnce({
-            userExists: true,
-            deletionInProgress: true,
-            shouldSkip: true,
-        });
-
-        await sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs);
-
-        expect(deletingToken.ref.update).not.toHaveBeenCalled();
-        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(expect.objectContaining({
-            lastCompletedSweepAtMs: nowMs,
-        }), { merge: false });
-    });
-
-    it('does not advance verification when the transactional deletion guard cannot be read', async () => {
-        const nowMs = Date.UTC(2026, 3, 28);
-        const token = createTokenDoc('user-1', {
-            serviceName: ServiceNames.SuuntoApp,
-            userName: 'provider-1',
-            tokenCredentialGeneration: 'generation-1',
-        });
-        installCollectionGroupTokenMock([token]);
-        hoisted.mockGetUserDeletionGuardStateInTransaction
-            .mockRejectedValue(new Error('deletion guard unavailable'));
-
-        await expect(sleepPollingTestInternals.verifyNextSuuntoWebhookBindingPage(nowMs))
-            .rejects.toThrow('Suunto webhook-binding verification state was not persisted.');
-
-        expect(token.ref.update).not.toHaveBeenCalled();
-        expect(hoisted.bindingCursorSet).not.toHaveBeenCalledWith(
-            expect.objectContaining({ lastCompletedSweepAtMs: nowMs }),
-            { merge: false },
-        );
-    });
-
     it('queues production-wide Suunto Health polls from canonical account roots', async () => {
         const userID = 'health-user-1';
         const nowMs = Date.UTC(2026, 7, 27, 12);
@@ -732,7 +563,7 @@ describe('sleep polling', () => {
                 userName: 'other-suunto-account',
             }),
         ]);
-        hoisted.bindingCursorGet.mockResolvedValue({
+        hoisted.maintenanceCursorGet.mockResolvedValue({
             exists: true,
             data: () => ({
                 lastCompletedUserID: userID,
@@ -746,7 +577,7 @@ describe('sleep polling', () => {
         expect(hoisted.suuntoRootLimit).toHaveBeenCalledWith(
             sleepPollingTestInternals.SUUNTO_HEALTH_POLL_ROOT_PAGE_SIZE + 1,
         );
-        expect(hoisted.bindingCursorSet).toHaveBeenCalledWith(
+        expect(hoisted.maintenanceCursorSet).toHaveBeenCalledWith(
             expect.objectContaining({
                 cursorScope: 'global-v1',
                 lastCompletedSweepAtMs: nowMs,
@@ -768,7 +599,6 @@ describe('sleep polling', () => {
             userID: 'health-user-2',
             providerUserId: 'other-suunto-account',
         }));
-        expect(hoisted.ensureSuuntoWebhookAccountBindingForProviderVerifiedToken).not.toHaveBeenCalled();
     });
 
     it('resumes production-wide Health polling after the first retained-account page', async () => {
@@ -784,14 +614,14 @@ describe('sleep polling', () => {
 
         const firstQueued = await sleepPollingTestInternals.enqueueSuuntoHealthPolls(nowMs);
         expect(firstQueued).toBe(sleepPollingTestInternals.SUUNTO_TOKEN_CANDIDATES_PER_ROOT_LIMIT);
-        const firstCursor = hoisted.bindingCursorSet.mock.calls.at(-1)?.[0];
+        const firstCursor = hoisted.maintenanceCursorSet.mock.calls.at(-1)?.[0];
         expect(firstCursor).toEqual(expect.objectContaining({
             currentUserID: userID,
             lastProcessedTokenID: 'health-provider-7',
         }));
 
         vi.mocked(addSleepSyncQueueItem).mockClear();
-        hoisted.bindingCursorGet.mockResolvedValue({
+        hoisted.maintenanceCursorGet.mockResolvedValue({
             exists: true,
             data: () => firstCursor,
         });

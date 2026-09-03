@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TracksComponent } from './tracks.component';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, PLATFORM_ID, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
@@ -26,6 +27,7 @@ import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-dete
 import { MyTracksPolylineCacheService } from '../../services/my-tracks-polyline-cache.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
 import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
+import { MyTracksTripsPanelComponent } from '../shared/my-tracks-trips-panel/my-tracks-trips-panel.component';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
 import { MapboxLayersControlService } from '../../services/map/mapbox-layers-control.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -160,6 +162,22 @@ const createTripDetectionResult = (overrides: {
   trips: overrides.trips || [],
   homeArea: overrides.homeArea ?? null,
 });
+
+const stubMediaQueryMatch = (matches: boolean): (() => void) => {
+  const matchMediaDescriptor = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn(() => ({ matches })),
+  });
+
+  return () => {
+    if (matchMediaDescriptor) {
+      Object.defineProperty(window, 'matchMedia', matchMediaDescriptor);
+    } else {
+      Reflect.deleteProperty(window, 'matchMedia');
+    }
+  };
+};
 
 describe('TracksComponent', () => {
   let component: TracksComponent;
@@ -423,8 +441,8 @@ describe('TracksComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TracksComponent, PeekPanelComponent],
-      imports: [MaterialModule],
+      declarations: [TracksComponent, PeekPanelComponent, MyTracksTripsPanelComponent],
+      imports: [CommonModule, MaterialModule],
       providers: [
         { provide: AppAuthService, useValue: mockAuthService },
         { provide: AppUserService, useValue: mockUserService },
@@ -508,6 +526,28 @@ describe('TracksComponent', () => {
     mockMapCanvas.dispatchEvent(new Event('pointerdown', { bubbles: true }));
 
     expect((component as any).shouldPreserveMapViewForCurrentLoad).toBe(false);
+  });
+
+  it('removes a shared map that finishes initializing after the workspace is destroyed', async () => {
+    let resolveMapbox!: (value: any) => void;
+    mockMapboxLoader.loadMapbox.mockReturnValueOnce(new Promise((resolve) => {
+      resolveMapbox = resolve;
+    }));
+    const initialization = component.ngOnInit();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    component.ngOnDestroy();
+    resolveMapbox({
+      FullscreenControl: class {},
+      NavigationControl: class {},
+      ScaleControl: class {},
+      LngLatBounds: class { extend = vi.fn(); },
+    });
+    await initialization;
+
+    expect(mockMap.remove).toHaveBeenCalledTimes(1);
+    expect(mockMapboxLayersControlService.create).not.toHaveBeenCalled();
   });
 
   describe('Initialization robustness', () => {
@@ -1033,9 +1073,9 @@ describe('TracksComponent', () => {
 
     it('should add mapbox-dem source before setting terrain', async () => {
       mockMap.isStyleLoaded.mockReturnValue(true);
-      await component.ngOnInit();
       fixture.detectChanges();
       await waitForAsyncWork();
+      fixture.detectChanges();
 
       expect(mockMap.addSource).toHaveBeenCalledWith('mapbox-dem', expect.anything());
       expect(mockMap.setTerrain).toHaveBeenCalled();
@@ -1045,17 +1085,17 @@ describe('TracksComponent', () => {
       mockMap.isStyleLoaded.mockReturnValue(true);
       mockMap.getSource.mockReturnValue({});
 
-      await component.ngOnInit();
       fixture.detectChanges();
       await waitForAsyncWork();
+      fixture.detectChanges();
 
       expect(mockMap.addSource).not.toHaveBeenCalledWith('mapbox-dem', expect.anything());
     });
 
     it('should initialize map synchronizer on init', async () => {
-      await component.ngOnInit();
       fixture.detectChanges();
       await waitForAsyncWork();
+      fixture.detectChanges();
 
       expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(mockMap, expect.objectContaining({
         styleUrl: 'mapbox://styles/mapbox/standard',
@@ -1071,9 +1111,9 @@ describe('TracksComponent', () => {
         .spyOn(component as any, 'loadTracksMapForUserByDateRange')
         .mockResolvedValue(undefined);
 
-      await component.ngOnInit();
       fixture.detectChanges();
       await waitForAsyncWork();
+      fixture.detectChanges();
 
       const loadCallsBefore = loadTracksSpy.mock.calls.length;
       expect(loadCallsBefore).toBeGreaterThan(0);
@@ -2154,6 +2194,7 @@ describe('TracksComponent', () => {
     });
 
     it('expands the trips panel when detection finds only a home area', async () => {
+      const restoreMediaQuery = stubMediaQueryMatch(true);
       const homeArea = {
         destinationId: 'destination-home',
         pointCount: 5,
@@ -2171,11 +2212,15 @@ describe('TracksComponent', () => {
       (component as any).promiseTime = 1;
       mockTripDetectionService.detectTripsWithContext.mockReturnValue(createTripDetectionResult({ homeArea }));
 
-      await (component as any).updateDetectedTripsForCurrentLoad([], [], 1);
+      try {
+        await (component as any).updateDetectedTripsForCurrentLoad([], [], 1);
 
-      expect(component.detectedTrips()).toEqual([]);
-      expect(component.detectedHomeArea()).toEqual(homeArea);
-      expect(component.detectedTripsPanelExpanded()).toBe(true);
+        expect(component.detectedTrips()).toEqual([]);
+        expect(component.detectedHomeArea()).toEqual(homeArea);
+        expect(component.detectedTripsPanelExpanded()).toBe(true);
+      } finally {
+        restoreMediaQuery();
+      }
     });
 
     it('keeps Home first while sorting trips newest-first by default and persists sort changes', () => {
@@ -2236,7 +2281,10 @@ describe('TracksComponent', () => {
         'Oldest trip',
         'Newest trip',
       ]);
-      expect(component.tripSortToggleLabel()).toBe('Showing oldest trips first. Show newest trips first.');
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector(
+        'button[aria-label="Showing oldest trips first. Show newest trips first."]',
+      )).not.toBeNull();
     });
 
     it('toggles detected-trips panel state without changing settings', () => {
@@ -2255,6 +2303,7 @@ describe('TracksComponent', () => {
     });
 
     it('should generate suggestions from activities in the selected range', async () => {
+      const restoreMediaQuery = stubMediaQueryMatch(true);
       const event = createMockEvent('trip-nepal-1', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
       const homeEvent = createMockEvent('home-athens-1', '2024-08-08T08:00:00Z', 37.9838, 23.7275);
       const setHomeAreaSpy = vi.spyOn((component as any).tracksMapManager, 'setHomeArea');
@@ -2302,30 +2351,49 @@ describe('TracksComponent', () => {
         label: 'Kathmandu, Nepal',
       });
 
-      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
-      await waitForAsyncWork();
+      try {
+        await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+        await waitForAsyncWork();
 
-      expect(mockTripDetectionService.detectTripsWithContext).toHaveBeenCalledTimes(1);
-      expect(mockTripDetectionService.detectTripsWithContext.mock.calls[0][0]).toEqual([
-        expect.objectContaining({ eventId: 'trip-nepal-1' })
-      ]);
-      expect(mockTripDetectionService.detectTripsWithContext.mock.calls[0][1]).toEqual({
-        homeInferenceInputs: [
-          expect.objectContaining({ eventId: 'home-athens-1' })
-        ]
-      });
-      expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenCalledWith([
-        { latitudeDegrees: 27.7172, longitudeDegrees: 85.3240 }
-      ]);
-      expect(mockTripLocationLabelService.resolveTripLocation).not.toHaveBeenCalled();
-      expect(setHomeAreaSpy).toHaveBeenCalledWith(expect.objectContaining({
-        destinationId: 'destination-home',
-        radiusKm: 3.2,
+        expect(mockTripDetectionService.detectTripsWithContext).toHaveBeenCalledTimes(1);
+        expect(mockTripDetectionService.detectTripsWithContext.mock.calls[0][0]).toEqual([
+          expect.objectContaining({ eventId: 'trip-nepal-1' })
+        ]);
+        expect(mockTripDetectionService.detectTripsWithContext.mock.calls[0][1]).toEqual({
+          homeInferenceInputs: [
+            expect.objectContaining({ eventId: 'home-athens-1' })
+          ]
+        });
+        expect(mockTripLocationLabelService.resolveTripLocationFromCandidates).toHaveBeenCalledWith([
+          { latitudeDegrees: 27.7172, longitudeDegrees: 85.3240 }
+        ]);
+        expect(mockTripLocationLabelService.resolveTripLocation).not.toHaveBeenCalled();
+        expect(setHomeAreaSpy).toHaveBeenCalledWith(expect.objectContaining({
+          destinationId: 'destination-home',
+          radiusKm: 3.2,
+        }));
+        expect(component.detectedTrips().length).toBe(1);
+        expect(component.detectedTripsPanelExpanded()).toBe(true);
+        expect(component.detectedTrips()[0].locationLabel).toBe('Kathmandu, Nepal');
+        expect(component.hasEvaluatedTripDetection()).toBe(true);
+      } finally {
+        restoreMediaQuery();
+      }
+    });
+
+    it('keeps the detected-trips panel collapsed after the initial mobile detection', async () => {
+      const restoreMediaQuery = stubMediaQueryMatch(false);
+      mockTripDetectionService.detectTripsWithContext.mockReturnValue(createTripDetectionResult({
+        trips: [createDetectedTrip()],
       }));
-      expect(component.detectedTrips().length).toBe(1);
-      expect(component.detectedTripsPanelExpanded()).toBe(true);
-      expect(component.detectedTrips()[0].locationLabel).toBe('Kathmandu, Nepal');
-      expect(component.hasEvaluatedTripDetection()).toBe(true);
+
+      try {
+        await (component as any).updateDetectedTripsForCurrentLoad([], [], 0);
+
+        expect(component.detectedTripsPanelExpanded()).toBe(false);
+      } finally {
+        restoreMediaQuery();
+      }
     });
 
     it('should detect and commit trips before the final polyline render', async () => {

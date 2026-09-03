@@ -35,7 +35,7 @@ import {
     removeMapSearchScopeOverlay,
     upsertMapSearchScopeOverlay,
 } from '../../services/map/map-search-scope-overlay.utils';
-import { DetectedHomeArea, TripBounds } from '../../services/my-tracks-trip-detection.service';
+import type { DetectedHomeArea, TripBounds } from '../../services/my-tracks-trip-detection.service';
 
 type TrackStyleMode = 'dark-glow' | 'light-contrast';
 type TrackLayerRole = 'glow' | 'casing' | 'main';
@@ -44,6 +44,16 @@ interface TrackRenderRecord {
     activity: any;
     coordinates: number[][];
     baseColor: string;
+}
+
+export interface TracksMapPreparedTrack {
+    activity: any;
+    coordinates: number[][];
+}
+
+export interface TracksMapFitOptions {
+    padding?: number;
+    animate?: boolean;
 }
 
 export interface TrackStartPoint {
@@ -473,7 +483,7 @@ export class TracksMapManager {
         });
     }
 
-    public setTracksFromPrepared(tracks: Array<{ activity: any; coordinates: number[][] }>): void {
+    public setTracksFromPrepared(tracks: readonly TracksMapPreparedTrack[]): void {
         if (!this.map) return;
         const renderEpoch = this.trackRenderEpoch;
         this.batchRenderingEnabled = true;
@@ -640,7 +650,7 @@ export class TracksMapManager {
         });
     }
 
-    public fitBoundsToCoordinates(coordinates: number[][]) {
+    public fitBoundsToCoordinates(coordinates: number[][], options: TracksMapFitOptions = {}) {
         if (!this.map || !this.mapboxgl || !coordinates || !coordinates.length) return;
 
         const bounds = new this.mapboxgl.LngLatBounds();
@@ -650,8 +660,8 @@ export class TracksMapManager {
 
         this.zone.runOutsideAngular(() => {
             this.map.fitBounds(bounds, {
-                padding: 50,
-                animate: true,
+                padding: options.padding ?? 50,
+                animate: options.animate ?? true,
                 pitch: this.map.getPitch(),
                 bearing: this.map.getBearing()
             });

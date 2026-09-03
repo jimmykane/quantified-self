@@ -58,12 +58,14 @@ function getGarminRoutePermissionSourceVersion(tokenLike: unknown): string {
   }
 
   const token = tokenLike as {
+    permissionsUpdatedAtMs?: unknown;
     permissionsLastChangedAt?: unknown;
+    connectedAtMs?: unknown;
     dateCreated?: unknown;
   };
 
-  return toStableTimestampSource(token.permissionsLastChangedAt)
-    || toStableTimestampSource(token.dateCreated)
+  return toStableTimestampSource(token.permissionsUpdatedAtMs ?? token.permissionsLastChangedAt)
+    || toStableTimestampSource(token.connectedAtMs ?? token.dateCreated)
     || 'unknown';
 }
 
@@ -72,7 +74,8 @@ function getProviderUserId(tokenLike: unknown): string | null {
     return null;
   }
 
-  return normalizeNonEmptyString((tokenLike as { userID?: unknown }).userID);
+  const token = tokenLike as { providerUserId?: unknown; userID?: unknown };
+  return normalizeNonEmptyString(token.providerUserId) || normalizeNonEmptyString(token.userID);
 }
 
 export function buildGarminRoutePermissionPromptSource(

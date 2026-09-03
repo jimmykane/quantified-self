@@ -478,21 +478,21 @@ describe('activity-sync/dispatcher', () => {
     expect(updateOlderUndispatched).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
   });
 
-  it('pages past future COROS status polls so they do not starve newer undispatched work', async () => {
+  it('pages past future COROS and Wahoo status polls so they do not starve newer undispatched work', async () => {
     const nowMs = 1_700_000_000_000;
     const scheduledPollPages = Array.from({ length: 5 }, (_, pageIndex) => ({
       empty: false,
       docs: Array.from({ length: 100 }, (_, itemIndex) => {
         const index = (pageIndex * 100) + itemIndex;
         return {
-          id: `scheduled-coros-poll-${index}`,
+          id: `scheduled-provider-poll-${index}`,
           data: () => ({
             dispatchedToCloudTask: nowMs + (15 * 60 * 1000),
             dateCreated: index,
-            userID: `coros-user-${index}`,
-            destinationServiceName: 'corosAPI',
-            destinationUploadID: `coros-upload-${index}`,
-            destinationProviderUserID: `coros-provider-user-${index}`,
+            userID: `provider-user-${index}`,
+            destinationServiceName: index % 2 === 0 ? 'corosAPI' : 'wahooAPI',
+            destinationUploadID: `provider-upload-${index}`,
+            ...(index % 2 === 0 ? { destinationProviderUserID: `coros-provider-user-${index}` } : {}),
           }),
           ref: { update: vi.fn().mockResolvedValue(undefined) },
         };
@@ -533,6 +533,100 @@ describe('activity-sync/dispatcher', () => {
     } finally {
       mockQueueGet.mockReset();
     }
+  });
+
+  it('keeps full-size reads while paging past future polls near the candidate limit', async () => {
+    const nowMs = 1_700_000_000_000;
+    const recentDispatchedAt = nowMs - (10 * 60 * 1000);
+    const recentPages = Array.from({ length: 4 }, (_, pageIndex) => ({
+      empty: false,
+      docs: Array.from({ length: 100 }, (_, itemIndex) => {
+        const index = (pageIndex * 100) + itemIndex;
+        return {
+          id: `recent-item-${index}`,
+          data: () => ({
+            dispatchedToCloudTask: recentDispatchedAt,
+            dateCreated: index,
+            userID: `recent-user-${index}`,
+          }),
+          ref: { update: vi.fn().mockResolvedValue(undefined) },
+        };
+      }),
+    }));
+    const nearLimitPage = {
+      empty: false,
+      docs: [
+        ...Array.from({ length: 99 }, (_, index) => ({
+          id: `near-limit-recent-item-${index}`,
+          data: () => ({
+            dispatchedToCloudTask: recentDispatchedAt,
+            dateCreated: 400 + index,
+            userID: `near-limit-user-${index}`,
+          }),
+          ref: { update: vi.fn().mockResolvedValue(undefined) },
+        })),
+        {
+          id: 'near-limit-future-poll',
+          data: () => ({
+            dispatchedToCloudTask: nowMs + (15 * 60 * 1000),
+            dateCreated: 499,
+            userID: 'near-limit-provider-user',
+            destinationServiceName: 'wahooAPI',
+            destinationUploadID: 'near-limit-upload',
+          }),
+          ref: { update: vi.fn().mockResolvedValue(undefined) },
+        },
+      ],
+    };
+    const futurePollPage = {
+      empty: false,
+      docs: Array.from({ length: 100 }, (_, index) => ({
+        id: `future-poll-${index}`,
+        data: () => ({
+          dispatchedToCloudTask: nowMs + (15 * 60 * 1000),
+          dateCreated: 500 + index,
+          userID: `provider-user-${index}`,
+          destinationServiceName: index % 2 === 0 ? 'corosAPI' : 'wahooAPI',
+          destinationUploadID: `provider-upload-${index}`,
+          ...(index % 2 === 0 ? { destinationProviderUserID: `coros-provider-user-${index}` } : {}),
+        }),
+        ref: { update: vi.fn().mockResolvedValue(undefined) },
+      })),
+    };
+    const updateUndispatched = vi.fn().mockResolvedValue(undefined);
+    const undispatchedDocs = Array.from({ length: 100 }, (_, index) => ({
+      id: `newer-undispatched-item-${index}`,
+      data: () => ({
+        dispatchedToCloudTask: null,
+        dateCreated: 600 + index,
+        userID: `newer-user-${index}`,
+      }),
+      ref: {
+        update: index === 0 ? updateUndispatched : vi.fn().mockResolvedValue(undefined),
+        currentData: { processed: false, dispatchedToCloudTask: null, dateCreated: 600 + index },
+      },
+    }));
+    mockQueueGet
+      .mockResolvedValueOnce(recentPages[0])
+      .mockResolvedValueOnce(recentPages[1])
+      .mockResolvedValueOnce(recentPages[2])
+      .mockResolvedValueOnce(recentPages[3])
+      .mockResolvedValueOnce(nearLimitPage)
+      .mockResolvedValueOnce(futurePollPage)
+      .mockResolvedValueOnce({ empty: false, docs: undispatchedDocs });
+
+    const result = await reconcileActivitySyncQueueDispatches(nowMs);
+
+    expect(result).toEqual({
+      inspected: 700,
+      dispatched: 1,
+      skippedRecent: 600,
+    });
+    expect(mockQueueLimit).toHaveBeenCalledTimes(7);
+    expect(mockQueueLimit.mock.calls.every(([limit]) => limit === 100)).toBe(true);
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledTimes(1);
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith('newer-undispatched-item-0', 600);
+    expect(updateUndispatched).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
   });
 
   it('deletes user-owned queue items instead of dispatching when account deletion is active', async () => {

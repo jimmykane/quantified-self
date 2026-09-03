@@ -20,6 +20,9 @@ describe('help.content', () => {
     expect(supportedActivitiesSection?.content).toContain('We do not add missing information.');
     expect(supportedActivitiesSection?.content).toContain('Swim Lengths** when the data includes individual pool lengths');
     expect(supportedActivitiesSection?.content).toContain('Jumps** when the activity includes jump events');
+    expect(supportedActivitiesSection?.content).toContain('running flight time');
+    expect(supportedActivitiesSection?.content).toContain('contact-time-to-flight-time ratio');
+    expect(supportedActivitiesSection?.content).toContain('summaries under **Performance** when available');
     expect(supportedActivitiesSection?.content).toContain('Boating is listed in Motorized but can use sailing-oriented charts');
     expect(supportedActivitiesSection?.content).toContain('Wheel Chair is listed in Adaptive Mobility but can use cycling-oriented charts');
     expect(supportedActivitiesSection?.content).toContain('We do not estimate or fill in missing dive data.');
@@ -73,13 +76,20 @@ describe('help.content', () => {
 
     expect(healthSection?.title).toBe('Health');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
-    expect(healthSection?.content).toContain('only metrics found anywhere in your imported history');
+    expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
+    expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
+    expect(healthSection?.content).toContain('**Weight from workouts is fallback profile context, not a weigh-in.**');
+    expect(healthSection?.content).toContain('future manual measurement');
+    expect(healthSection?.content).toContain('**Workout VO₂ max is separate evidence.**');
+    expect(healthSection?.content).toContain('never merges them with provider Health User Metrics');
+    expect(healthSection?.content).toContain('not copied into Health storage');
+    expect(healthSection?.content).toContain('omits workout IDs, names, locations, account IDs, and raw creator details');
     expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
     expect(healthSection?.content).toContain('**Today**, **14d**, **30d**, **90d**, or **1y**');
-    expect(healthSection?.content).toContain('range is saved to your account without adding URL query parameters');
-    expect(healthSection?.content).toContain('selected metric and older/newer position remain local');
+    expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
+    expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
     expect(healthSection?.content).toContain('Detailed sample streams load for Today, 14-day, and 30-day windows');
@@ -211,6 +221,22 @@ describe('help.content', () => {
       expect(action.label.trim().length).toBeGreaterThan(0);
       expect(action.icon.trim().length).toBeGreaterThan(0);
       expect(action.target.trim().length).toBeGreaterThan(0);
+    });
+  });
+
+  it('classifies every email destination separately from new-tab web links', () => {
+    const links = [
+      ...HELP_ACTIONS,
+      ...HELP_SECTIONS.flatMap(section => section.links),
+    ];
+
+    links.forEach(link => {
+      if (link.target.startsWith('mailto:')) {
+        expect(link.kind).toBe('email');
+      }
+      if (link.kind === 'email') {
+        expect(link.target).toMatch(/^mailto:/);
+      }
     });
   });
 
@@ -472,7 +498,7 @@ describe('help.content', () => {
     expect(trainingSection?.links).toContainEqual({
       label: 'Email Training Feedback',
       icon: 'email',
-      kind: 'external',
+      kind: 'email',
       target: expect.stringMatching(/^mailto:.*subject=Training%20feedback$/),
     });
   });
@@ -610,10 +636,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('both metric and activity labels');
     expect(gettingStartedSection?.content).toContain('[Features hub](/features)');
     expect(gettingStartedSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
-    expect(gettingStartedSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(gettingStartedSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(gettingStartedSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
-    expect(gettingStartedSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(gettingStartedSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(gettingStartedSection?.content).toContain('[Tools -> Compare](/tools/compare/saved)');
     expect(gettingStartedSection?.content).toContain('sortable, filterable, paginated table with device, activity type, and review tag filters, selected-row bulk delete, distance, ascent, descent, visible benchmark pairs, GNSS/heart-rate/altitude benchmark error metrics colored by low/moderate/high error, clickable draft metric cells that open the benchmark flow, quick description notes, and custom reviewer tags');
@@ -791,6 +815,9 @@ describe('help.content', () => {
     expect(plansSection?.content).toContain('**Unlimited saved routes**');
     expect(plansSection?.content).toContain('public pricing page shows the exact trial length as an offer for eligible new members');
     expect(plansSection?.content).toContain('Trial eligibility is confirmed after sign-in');
+    expect(plansSection?.content).toContain('## Complimentary extensions');
+    expect(plansSection?.content).toContain('without changing the plan, creating a charge or proration, or turning automatic renewal back on');
+    expect(plansSection?.content).toContain('internal admin notes are never included');
     expect(plansSection?.content).toContain('Existing activities and routes are retained. New uploads follow your current plan limits.');
     expect(uploadsSection?.content).toContain(`**Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**`);
     expect(uploadsSection?.content).toContain(`**Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
@@ -821,10 +848,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[File Comparison Tool](/tools/compare)');
     expect(serviceConnectionsSection?.content).toContain('[Features hub](/features)');
     expect(serviceConnectionsSection?.content).toContain('[Workout Data Comparison](/features/workout-data-comparison)');
-    expect(serviceConnectionsSection?.content).toContain('[Workout File Comparison](/features/workout-file-comparison)');
     expect(serviceConnectionsSection?.content).toContain('[Workout File Analyzer](/features/fit-gpx-tcx-file-analyzer)');
     expect(serviceConnectionsSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
-    expect(serviceConnectionsSection?.content).toContain('[Sports Watch Benchmark](/features/sports-watch-benchmark)');
     expect(serviceConnectionsSection?.content).toContain('[Garmin to Suunto sync guide](/guides/sync-garmin-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[COROS to Suunto sync guide](/guides/sync-coros-to-suunto)');
     expect(serviceConnectionsSection?.content).toContain('[Wahoo to Suunto sync guide](/guides/sync-wahoo-to-suunto)');
@@ -1064,6 +1089,13 @@ describe('help.content', () => {
     });
   });
 
+  it('should explain that connection screens use the safe account summary', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+
+    expect(gettingStartedSection?.content).toContain('Connection screens use a limited account summary once it is available');
+    expect(gettingStartedSection?.content).toContain('existing connections continue to work');
+  });
+
   it('documents Wahoo FIT imports, activity and route delivery, skip rules, and retained imported activities', () => {
     const serviceConnectionsSection = HELP_SECTIONS.find(section => section.id === 'service-connections');
     expect(serviceConnectionsSection?.content).toContain('## Wahoo');
@@ -1074,6 +1106,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('Wahoo rejects repeated token refreshes');
     expect(serviceConnectionsSection?.content).toContain('keeps unaccepted automatic activity and saved-route deliveries parked');
     expect(serviceConnectionsSection?.content).toContain('does not turn your saved route settings off');
+    expect(serviceConnectionsSection?.content).toContain('automatically synced from Garmin, COROS, or Suunto');
+    expect(serviceConnectionsSection?.content).toContain("keeps Wahoo's inferred type instead of guessing");
+    expect(serviceConnectionsSection?.content).toContain("Direct FIT activity uploads keep Wahoo's inferred type");
     expect(serviceConnectionsSection?.content).toContain('send a GPX or FIT course or route file directly to Wahoo');
     expect(serviceConnectionsSection?.content).toContain('select **Reconnect Wahoo** in the displayed dialog');
     expect(serviceConnectionsSection?.content).toContain('Direct course/route delivery accepts GPX and FIT files');

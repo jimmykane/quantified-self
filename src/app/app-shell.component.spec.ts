@@ -68,8 +68,7 @@ describe('AppShellComponent', () => {
     const mockRemoteConfigService = {
         maintenanceMode: signal(false),
         maintenanceMessage: signal(''),
-        isLoading: signal(false),
-        configLoaded: signal(true)
+        isLoading: signal(true),
     };
 
     const mockSeoService = {
@@ -660,14 +659,13 @@ describe('AppShellComponent', () => {
         privateFixture.destroy();
     });
 
-    it('should render metric loader component while initial loader is visible', () => {
-        component.authState = true;
-        component.showInitialLoader = true;
+    it('does not render a shell overlay while maintenance configuration is still resolving', () => {
+        mockRemoteConfigService.maintenanceMode.set(false);
+        mockRemoteConfigService.isLoading.set(true);
         fixture.detectChanges();
 
-        const overlay = fixture.nativeElement.querySelector('.qs-loader-overlay') as HTMLElement | null;
-        expect(overlay).toBeTruthy();
-        expect(overlay?.querySelector('app-metric-loader')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('.loading-overlay')).toBeNull();
+        expect(fixture.nativeElement.querySelector('.logo-spinner')).toBeNull();
     });
 
     it('should no-op when hideInitialLoader is called while already hidden', () => {

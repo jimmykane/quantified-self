@@ -57,6 +57,12 @@ const strokeRateMetricDescriptor = {
   unit: 'spm',
   unitSystem: 'metric' as const,
 };
+const runningFlightTimeMetricDescriptor = {
+  type: 'Average Running Flight Time',
+  displayType: 'Average Running Flight Time',
+  unit: 'ms',
+  unitSystem: 'metric' as const,
+};
 const activityStats = {
   durationSeconds: 3_600,
   distanceMeters: 10_000,
@@ -523,7 +529,11 @@ function createFixtureDataService(
       },
     }),
     listMetrics: vi.fn().mockResolvedValue({
-      eventMetrics: [metricDescriptor, strokeRateMetricDescriptor],
+      eventMetrics: [
+        metricDescriptor,
+        strokeRateMetricDescriptor,
+        runningFlightTimeMetricDescriptor,
+      ],
       nextCursor: NEXT_CURSOR,
       scannedEventCount: 1,
       eventScanTruncated: false,

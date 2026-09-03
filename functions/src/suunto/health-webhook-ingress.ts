@@ -590,7 +590,7 @@ export const fanOutSuuntoHealthWebhookIngress = onDocumentCreated({
   document: `${SUUNTO_HEALTH_WEBHOOK_INGRESS_COLLECTION_NAME}/{ingressID}`,
   region: 'europe-west2',
   timeoutSeconds: 120,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 50,
   concurrency: 1,
   retry: true,

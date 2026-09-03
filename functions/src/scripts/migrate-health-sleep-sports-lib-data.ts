@@ -1,4 +1,5 @@
 import {
+    hasBlockingSportsLibDataMigrationResult,
     runSportsLibDataMigration,
 } from '../health/sports-lib-data-migration';
 
@@ -7,7 +8,7 @@ const LOG_PREFIX = '[sports-lib-health-sleep-migration]';
 async function main(): Promise<void> {
     const summary = await runSportsLibDataMigration(process.argv.slice(2));
     process.stdout.write(`${LOG_PREFIX} Summary ${JSON.stringify(summary)}\n`);
-    if (summary.failed > 0) process.exitCode = 1;
+    if (hasBlockingSportsLibDataMigrationResult(summary)) process.exitCode = 1;
 }
 
 if (require.main === module) {

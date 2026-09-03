@@ -189,7 +189,7 @@
     <a mat-stroked-button class="sidenav-cta-button source-code-cta" [href]="sourceCodeUrl" target="_blank"
       rel="noopener noreferrer">
       <mat-icon>code</mat-icon>
-      <span>Source code &amp; {{ openSourceLicense }}</span>
+      <span>Source code</span>
     </a>
 
     <div class="sidenav-footer-links">
@@ -201,9 +201,9 @@
       <button mat-icon-button matTooltip="Star on GitHub" (click)="gitHubStar()">
         <mat-icon>star</mat-icon>
       </button>
-      <button mat-icon-button matTooltip="Contact Support" (click)="contactSupport()">
+      <a mat-icon-button matTooltip="Contact Support" aria-label="Contact Support" [href]="supportMailtoHref">
         <mat-icon>email</mat-icon>
-      </button>
+      </a>
       <button mat-icon-button matTooltip="Report a Bug" (click)="reportBug()">
         <mat-icon>bug_report</mat-icon>
       </button>

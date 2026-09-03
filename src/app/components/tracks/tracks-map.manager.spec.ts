@@ -1236,6 +1236,17 @@ describe('TracksMapManager', () => {
                 expect.objectContaining({ padding: 50, animate: true })
             );
         });
+
+        it('should allow previews to fit without an entrance animation', () => {
+            const coordinates = [[0, 0], [1, 1]];
+
+            manager.fitBoundsToCoordinates(coordinates, { padding: 36, animate: false });
+
+            expect(mockMap.fitBounds).toHaveBeenCalledWith(
+                expect.any(Object),
+                expect.objectContaining({ padding: 36, animate: false })
+            );
+        });
     });
 
     describe('toggleTerrain', () => {

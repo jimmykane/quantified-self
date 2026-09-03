@@ -1,0 +1,71 @@
+:host {
+  display: block;
+  min-width: 0;
+  margin-top: 1rem;
+}
+
+:host,
+:host > * {
+  box-sizing: border-box;
+}
+
+.preview-placeholder,
+.map-stage {
+  width: 100%;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, transparent 25%, color-mix(in srgb, var(--mat-sys-primary) 5%, transparent) 50%, transparent 75%),
+    var(--mat-sys-surface-container-low);
+}
+
+.preview-placeholder--training,
+.preview-placeholder--flow {
+  min-height: 22rem;
+}
+
+.preview-placeholder--dashboard {
+  min-height: 30rem;
+}
+
+.preview-placeholder--reviewer {
+  min-height: 116rem;
+}
+
+.preview-placeholder--assistant,
+.preview-placeholder--mcp {
+  min-height: 12rem;
+}
+
+.preview-placeholder--signals {
+  min-height: 43rem;
+}
+
+.preview-placeholder--workout {
+  min-height: 40rem;
+}
+
+.map-stage {
+  height: clamp(20rem, 48vw, 32.5rem);
+  overflow: hidden;
+}
+
+.preview-placeholder--map {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+@media (max-width: 440px) {
+  .preview-placeholder--signals {
+    min-height: 64rem;
+  }
+
+  .preview-placeholder--workout {
+    min-height: 64rem;
+  }
+
+  .preview-placeholder--reviewer {
+    min-height: 161rem;
+  }
+}

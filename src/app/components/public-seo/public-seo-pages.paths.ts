@@ -2,12 +2,12 @@ export type PublicSeoPageKey =
   | 'featuresHub'
   | 'activityCalendar'
   | 'trainingAnalysis'
+  | 'trainingDashboard'
+  | 'activityMap'
   | 'mcpServer'
   | 'assistant'
-  | 'workoutFileComparison'
   | 'fitGpxTcxFileAnalyzer'
   | 'routeFiles'
-  | 'sportsWatchBenchmark'
   | 'guidesHub'
   | 'syncGarminToSuunto'
   | 'syncCorosToSuunto'
@@ -21,12 +21,12 @@ export const PUBLIC_FEATURE_PATHS = {
   hub: 'features',
   activityCalendar: 'features/activity-calendar',
   trainingAnalysis: 'features/training-analysis',
+  trainingDashboard: 'features/training-dashboard',
+  activityMap: 'features/activity-map',
   mcpServer: 'features/mcp-server',
   assistant: 'features/ai-insights',
-  workoutFileComparison: 'features/workout-file-comparison',
   fitGpxTcxFileAnalyzer: 'features/fit-gpx-tcx-file-analyzer',
   routeFiles: 'features/fit-gpx-route-files',
-  sportsWatchBenchmark: 'features/sports-watch-benchmark',
 } as const;
 
 export const PUBLIC_GUIDE_PATHS = {

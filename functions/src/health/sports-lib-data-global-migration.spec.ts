@@ -40,6 +40,7 @@ function migrationSummary(
 ): SportsLibDataMigrationSummary {
     return {
         dryRun: true,
+        removeLegacyScalars: false,
         kind,
         concurrency: 5,
         scanned: 1,
@@ -104,14 +105,19 @@ describe('global Health and Sleep Sports Lib data migration', () => {
             '--start-after', 'a'.repeat(64),
         ])).toEqual({
             execute: false,
+            removeLegacyScalars: false,
             maxUsers: 25,
             scanLimit: 500,
             documentLimit: 200,
             documentConcurrency: 8,
             startAfter: 'a'.repeat(64),
         });
-        expect(parseSportsLibDataGlobalMigrationOptions(['--execute'])).toEqual({
+        expect(parseSportsLibDataGlobalMigrationOptions([
+            '--execute',
+            '--remove-legacy-scalars',
+        ])).toEqual({
             execute: true,
+            removeLegacyScalars: true,
             maxUsers: 5,
             scanLimit: 100,
             documentLimit: 100,
@@ -130,6 +136,8 @@ describe('global Health and Sleep Sports Lib data migration', () => {
         ['--start-after', 'raw-user-id'],
         ['--execute=true'],
         ['--execute', '--execute'],
+        ['--remove-legacy-scalars=true'],
+        ['--remove-legacy-scalars', '--remove-legacy-scalars'],
         ['--unknown'],
     ])('rejects unsafe or unbounded arguments %#', (...argv) => {
         expect(() => parseSportsLibDataGlobalMigrationOptions(argv)).toThrow();
@@ -142,6 +150,7 @@ describe('global Health and Sleep Sports Lib data migration', () => {
         expect(checkpoint).not.toContain('private-user-id');
         expect(checkpoint).not.toBe(sportsLibDataGlobalCheckpoint('other-user-id', false));
         expect(checkpoint).not.toBe(sportsLibDataGlobalCheckpoint('private-user-id', true));
+        expect(checkpoint).not.toBe(sportsLibDataGlobalCheckpoint('private-user-id', false, true));
     });
 
     it('resolves an opaque checkpoint using field-masked user document names', async () => {
@@ -178,6 +187,48 @@ describe('global Health and Sleep Sports Lib data migration', () => {
             true,
         )).rejects.toThrow('checkpoint could not be resolved');
         expect(lookup.select).toHaveBeenCalledWith();
+    });
+
+    it('rejects a backfill checkpoint when starting a legacy-scalar cleanup cohort', async () => {
+        const lookup = fakeQuery(querySnapshot(['private-user-1']));
+        const db = {
+            collection: vi.fn(() => lookup),
+        } as unknown as admin.firestore.Firestore;
+
+        await expect(listUsersForGlobalMigration(
+            db,
+            sportsLibDataGlobalCheckpoint('private-user-1', false),
+            1,
+            false,
+            true,
+        )).rejects.toThrow('checkpoint could not be resolved');
+        expect(lookup.select).toHaveBeenCalledWith();
+    });
+
+    it('forwards legacy cleanup mode through every collection pass', async () => {
+        const runMigration = vi.fn(async (argv: readonly string[]) => migrationSummary(
+            kindFromArgs(argv),
+            {
+                removeLegacyScalars: true,
+                candidates: 1,
+                unchanged: 0,
+            },
+        ));
+        const deps = dependencies(['private-user-1'], runMigration);
+
+        const summary = await runSportsLibDataGlobalMigration([
+            '--remove-legacy-scalars',
+        ], deps);
+
+        expect(summary).toMatchObject({
+            dryRun: true,
+            removeLegacyScalars: true,
+            usersProcessed: 1,
+        });
+        expect(runMigration).toHaveBeenCalledTimes(2);
+        expect(runMigration.mock.calls.every(([argv]) => (
+            argv.includes('--remove-legacy-scalars') && !argv.includes('--execute')
+        ))).toBe(true);
     });
 
     it('runs a bounded dry-run cohort and exposes only an opaque user checkpoint', async () => {

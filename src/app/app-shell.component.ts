@@ -127,8 +127,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   public dialog = inject(MatDialog);
   public maintenanceMode = this.remoteConfigService.maintenanceMode;
   public maintenanceMessage = this.remoteConfigService.maintenanceMessage;
-  public maintenanceLoading = this.remoteConfigService.isLoading;
-  public configLoaded = this.remoteConfigService.configLoaded;
   public isAdminUser = false;
   public currentTheme$: Observable<AppThemes> = this.themeService.getAppTheme();
   private readonly headerHiddenSignal = signal(false);

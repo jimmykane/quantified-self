@@ -18,6 +18,8 @@ export const FUNCTIONS_MANIFEST = {
     impersonateUser: { name: 'impersonateUser', region: 'europe-west2' },
     stopImpersonation: { name: 'stopImpersonation', region: 'europe-west2' },
     getFinancialStats: { name: 'getFinancialStats', region: 'europe-west2' },
+    previewAdminSubscriptionGift: { name: 'previewAdminSubscriptionGift', region: 'europe-west2' },
+    grantAdminSubscriptionGift: { name: 'grantAdminSubscriptionGift', region: 'europe-west2' },
 
     // User Functions
     deleteSelf: { name: 'deleteSelf', region: 'europe-west2' },
@@ -26,6 +28,7 @@ export const FUNCTIONS_MANIFEST = {
     listMcpConnections: { name: 'listMcpConnections', region: 'europe-west2' },
     revokeMcpConnection: { name: 'revokeMcpConnection', region: 'europe-west2' },
     queryHealthRange: { name: 'queryHealthRange', region: 'europe-west2' },
+    queryActivityHealthRange: { name: 'queryActivityHealthRange', region: 'europe-west2' },
 
     // COROS Functions
     getCOROSAPIAuthRequestTokenRedirectURI: { name: 'getCOROSAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
@@ -73,7 +76,6 @@ export const FUNCTIONS_MANIFEST = {
     importRouteToGarminAPI: { name: 'importRouteToGarminAPI', region: 'europe-west2' },
     backfillGarminAPIActivities: { name: 'backfillGarminAPIActivities', region: 'europe-west2' },
     backfillGarminAPIHealth: { name: 'backfillGarminAPIHealth', region: 'europe-west2' },
-    backfillGarminAPISleep: { name: 'backfillGarminAPISleep', region: 'europe-west2' },
     getGarminHealthSyncAvailability: { name: 'getGarminHealthSyncAvailability', region: 'europe-west2' },
     receiveGarminAPIDeregistration: { name: 'receiveGarminAPIDeregistration', region: 'europe-west2' },
     receiveGarminAPIUserPermissions: { name: 'receiveGarminAPIUserPermissions', region: 'europe-west2' },

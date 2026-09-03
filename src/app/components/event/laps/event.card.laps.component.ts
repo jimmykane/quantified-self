@@ -347,9 +347,28 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     });
 
     const activeFamily = this.activeLapColumnMenuGroup?.family;
+    const existingGroupsByFamily = new Map(
+      this.lapColumnMenuGroups.map((group) => [group.family, group]),
+    );
     const metricGroups = getEventLapMetricOptionGroups();
     this.lapColumnMenuGroups = Array.from(sportFamilies).map((family) => {
       const presentation = getEventLapSportFamilyPresentation(family);
+      const existingGroup = existingGroupsByFamily.get(family);
+      if (existingGroup) {
+        existingGroup.label = presentation.label;
+        existingGroup.icon = presentation.icon;
+        existingGroup.selectedMetricTypes = getSelectedEventLapMetricTypes(
+          this.eventDetailsSettings,
+          family,
+        );
+        existingGroup.metricGroups = metricGroups;
+        existingGroup.filteredMetricGroups = filterLapMetricGroups(
+          metricGroups,
+          existingGroup.searchTerm,
+        );
+        return existingGroup;
+      }
+
       return {
         family,
         label: presentation.label,

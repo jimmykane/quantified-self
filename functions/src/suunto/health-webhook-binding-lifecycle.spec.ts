@@ -93,7 +93,6 @@ import {
   captureCurrentSuuntoWebhookWriteLifecycleGuards,
   ensureSuuntoWebhookAccountBindingForProviderVerifiedToken,
   getSuuntoWebhookWriteLifecycleAuthorityDigest,
-  repairSuuntoLegacyWebhookBindingForProviderVerifiedToken,
 } from './health-webhook-binding-lifecycle';
 
 describe('Suunto Health webhook account binding lifecycle', () => {
@@ -306,125 +305,6 @@ describe('Suunto Health webhook account binding lifecycle', () => {
         userID: 'user-1',
       }),
     );
-  });
-
-  it('atomically records the resumable repair marker with a provider-verified child-only repair', async () => {
-    hoisted.state.token = {
-      ...hoisted.state.token,
-      tokenCredentialGeneration: undefined,
-    };
-    hoisted.state.tokenRoot = undefined;
-    const repairedAtMs = 1_777_777_777_000;
-    const incidentStartMs = 1_777_500_000_000;
-
-    await expect(repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
-      hoisted.db as never,
-      'user-1',
-      hoisted.tokenSnapshot as never,
-      incidentStartMs,
-      repairedAtMs,
-    )).resolves.toBe('created');
-
-    expect(hoisted.transactionSet).toHaveBeenCalledWith(
-      hoisted.tokenRef,
-      {
-        suuntoLegacyWebhookBindingRepairVersion: 1,
-        suuntoLegacyWebhookBindingRepairedAtMs: repairedAtMs,
-        suuntoLegacyWebhookBindingRepairIncidentStartMs: incidentStartMs,
-      },
-      { merge: true },
-    );
-    expect(hoisted.transactionSet).toHaveBeenCalledWith(
-      hoisted.bindingRef,
-      expect.objectContaining({ authorizationSource: 'provider_refresh' }),
-    );
-  });
-
-  it('force-verifies an already current binding before recording the repair marker', async () => {
-    hoisted.state.binding = {
-      schemaVersion: 3,
-      authorizationSource: 'oauth_callback',
-      userID: 'user-1',
-      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
-      tokenCredentialGeneration: 'token-generation-1',
-    };
-    const repairedAtMs = 1_777_777_777_000;
-
-    await expect(repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
-      hoisted.db as never,
-      'user-1',
-      hoisted.tokenSnapshot as never,
-      1_777_500_000_000,
-      repairedAtMs,
-    )).resolves.toBe('current');
-
-    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
-    expect(hoisted.transactionSet).toHaveBeenCalledWith(
-      hoisted.tokenRef,
-      expect.objectContaining({
-        suuntoLegacyWebhookBindingRepairVersion: 1,
-        suuntoLegacyWebhookBindingRepairedAtMs: repairedAtMs,
-      }),
-      { merge: true },
-    );
-  });
-
-  it('does not migrate legacy lifecycle state before forced provider verification', async () => {
-    hoisted.state.binding = {
-      schemaVersion: 3,
-      authorizationSource: 'oauth_callback',
-      userID: 'user-1',
-      providerAccountDigest: PROVIDER_ACCOUNT_DIGEST,
-      tokenCredentialGeneration: 'token-generation-1',
-    };
-    hoisted.state.serviceMeta = { connectionState: 'connected' };
-    hoisted.getTokenData.mockImplementationOnce(async () => {
-      expect(hoisted.transactionSet).not.toHaveBeenCalled();
-      return { userName: 'provider-1' };
-    });
-
-    await expect(repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
-      hoisted.db as never,
-      'user-1',
-      hoisted.tokenSnapshot as never,
-      1_777_500_000_000,
-    )).resolves.toBe('current');
-
-    expect(hoisted.transactionSet).toHaveBeenCalledWith(
-      hoisted.serviceMetaRef,
-      {
-        connectionState: 'connected',
-        connectionStateGeneration: expect.any(String),
-      },
-      { merge: true },
-    );
-  });
-
-  it('fails closed when connected service metadata disappears during provider verification', async () => {
-    hoisted.state.token = {
-      ...hoisted.state.token,
-      tokenCredentialGeneration: undefined,
-    };
-    hoisted.state.tokenRoot = undefined;
-    hoisted.tokenRef.get.mockImplementationOnce(async () => {
-      hoisted.state.serviceMeta = undefined;
-      return {
-        id: 'provider-1',
-        ref: hoisted.tokenRef,
-        exists: true,
-        data: () => hoisted.state.token,
-      };
-    });
-
-    await expect(repairSuuntoLegacyWebhookBindingForProviderVerifiedToken(
-      hoisted.db as never,
-      'user-1',
-      hoisted.tokenSnapshot as never,
-      1_777_500_000_000,
-    )).resolves.toBe('inactive');
-
-    expect(hoisted.getTokenData).toHaveBeenCalledOnce();
-    expect(hoisted.transactionSet).not.toHaveBeenCalled();
   });
 
   it('does not apply provider proof after the refreshed credential is replaced', async () => {

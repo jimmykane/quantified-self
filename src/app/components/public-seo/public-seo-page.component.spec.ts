@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -6,6 +7,8 @@ import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PublicSeoPageComponent } from './public-seo-page.component';
 import { PUBLIC_SEO_PAGES, PublicSeoPage } from './public-seo-pages.content';
+import { PublicFeaturePreviewComponent } from './public-feature-preview.component';
+import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
 
 describe('PublicSeoPageComponent', () => {
   let fixture: ComponentFixture<PublicSeoPageComponent>;
@@ -15,7 +18,7 @@ describe('PublicSeoPageComponent', () => {
     routeStub = {
       snapshot: {
         data: {
-          publicSeoPage: PUBLIC_SEO_PAGES.workoutFileComparison,
+          publicSeoPage: PUBLIC_SEO_PAGES.fitGpxTcxFileAnalyzer,
         },
       },
     };
@@ -38,23 +41,27 @@ describe('PublicSeoPageComponent', () => {
 
   it('renders page content, sections, FAQ items, and CTAs from route data', () => {
     const text = fixture.nativeElement.textContent as string;
-    const cards = fixture.nativeElement.querySelectorAll('.feature-card');
+    const featureRows = fixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent));
     const faqItems = fixture.nativeElement.querySelectorAll('.faq-item');
     const links = Array.from(fixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
 
-    expect(cards.length).toBe(6);
-    expect(faqItems.length).toBe(3);
-    expect(text).toContain('Compare FIT, TCX, GPX, JSON, and SML workout files');
-    expect(text).toContain('Manual uploads and benchmark comparisons are available on the free plan');
-    expect(text).toContain('custom exports');
-    expect(text).toContain('Provider data beside files');
-    expect(text).toContain('Workout File Comparison FAQ');
+    expect(featureRows).toHaveLength(6);
+    expect(fixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelectorAll('.compact-feature-row-stack')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelectorAll('app-compact-feature-row.compact-feature-row-host--without-divider')).toHaveLength(2);
+    expect(faqItems.length).toBe(4);
+    expect(text).toContain('Analyze FIT, GPX, and TCX workout files');
+    expect(text).toContain('maps, charts, stats, exports');
+    expect(text).toContain('Workout File Analyzer FAQ');
     expect(fixture.nativeElement.querySelector('.how-to-list')).toBeNull();
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/features/workout-data-comparison');
     expect(hrefs).toContain('/help#uploads-and-imports');
-    expect(hrefs).toContain('/features/sports-watch-benchmark');
+    expect(hrefs).toContain('/features/fit-gpx-route-files');
+    const workoutPreview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
+      .find(preview => preview.componentInstance.previewKey() === 'workout-analysis');
+    expect(workoutPreview).toBeTruthy();
   });
 
   it('renders visible HowTo steps when route data includes HowTo structured data', () => {
@@ -76,6 +83,25 @@ describe('PublicSeoPageComponent', () => {
     guideFixture.destroy();
   });
 
+  it('uses the shared compact-row surface for every public feature-page section', () => {
+    for (const page of Object.values(PUBLIC_SEO_PAGES)) {
+      routeStub.snapshot.data.publicSeoPage = page;
+      const pageFixture = TestBed.createComponent(PublicSeoPageComponent);
+      pageFixture.detectChanges();
+
+      const expectedItemCount = page.sections.reduce(
+        (total, section) => total + section.items.length,
+        0,
+      );
+
+      expect(pageFixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))).toHaveLength(expectedItemCount);
+      expect(pageFixture.nativeElement.querySelectorAll('.compact-feature-row-stack')).toHaveLength(page.sections.length);
+      expect(pageFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(0);
+
+      pageFixture.destroy();
+    }
+  });
+
   it('renders the public MCP capabilities, boundaries, and setup links', () => {
     routeStub.snapshot.data.publicSeoPage = PUBLIC_SEO_PAGES.mcpServer;
 
@@ -86,21 +112,18 @@ describe('PublicSeoPageComponent', () => {
     const links = Array.from(mcpFixture.nativeElement.querySelectorAll('a')) as HTMLAnchorElement[];
     const hrefs = links.map(link => link.getAttribute('href') ?? '');
 
-    expect(text).toContain('Connect ChatGPT to your training data with a read-only MCP server');
-    expect(text).toContain('Activity, body measurement, and Training analysis');
-    expect(text).toContain('body measurements, individual activity details');
-    expect(text).toContain('identity-free body-weight history');
-    expect(text).toContain('Sleep trends, live readiness, and a daily report');
-    expect(text).toContain('one bounded sleep trend');
-    expect(text).toContain('Saved-route summaries and optional locations');
-    expect(text).toContain('Individual activity details and charts');
-    expect(text).toContain('canonical Sports Lib activity types');
-    expect(text).toContain('latest run');
-    expect(text).toContain('explicit IANA timezone');
-    expect(text).toContain('route-name text');
+    expect(text).toContain('Connect ChatGPT or Claude to your training data');
+    expect(text).toContain('Training and measurement trends');
+    expect(text).toContain('training metrics, measurements, workout details');
+    expect(text).toContain('body-weight history');
+    expect(text).toContain('Sleep, readiness, and daily context');
+    expect(text).toContain('Saved routes and optional locations');
+    expect(text).toContain('Workout details and charts');
+    expect(text).toContain('Find recent activities');
+    expect(text).toContain('plan your next workout');
     expect(text).toContain('No settings or data writes');
-    expect(text).toContain('ChatGPT is an external client with its own privacy and retention practices');
-    expect(mcpFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(8);
+    expect(text).toContain('External clients have their own privacy and retention practices');
+    expect(mcpFixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))).toHaveLength(8);
     expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(5);
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/help#data-and-privacy');
@@ -123,9 +146,9 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Week, Month, and Year views');
     expect(text).toContain('Duration-scaled activity circles');
     expect(text).toContain('independent from dashboard event-search filters');
-    expect(calendarFixture.nativeElement.querySelectorAll('.feature-card')).toHaveLength(6);
+    expect(calendarFixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))).toHaveLength(6);
     expect(calendarFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(4);
-    expect(hrefs).toContain('/calendar');
+    expect(hrefs).not.toContain('/calendar');
     expect(hrefs).toContain('/help#activity-calendar');
     expect(hrefs).toContain('/features/training-analysis');
 

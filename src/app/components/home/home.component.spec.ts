@@ -1,7 +1,6 @@
 import {
     ComponentFixture,
     DeferBlockBehavior,
-    DeferBlockState,
     TestBed,
 } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -16,7 +15,6 @@ import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
-import { ASSISTANT_STARTER_PROMPTS } from '@shared/assistant.prompts';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { signal } from '@angular/core';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -24,6 +22,7 @@ import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
+import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 
 describe('HomeComponent', () => {
     let component: HomeComponent;
@@ -97,6 +96,16 @@ describe('HomeComponent', () => {
         userSubject.next(null);
 
         expect(mockRouter.navigate).not.toHaveBeenCalled();
+    });
+
+    it('keeps every homepage CTA on an auth entry or public product page', () => {
+        const ctaLinks = Array.from(fixture.nativeElement.querySelectorAll('.landing-page a[href]')) as HTMLAnchorElement[];
+        const paths = ctaLinks.map(link => new URL(link.href).pathname);
+        const privateWorkspacePaths = ['/dashboard', '/mytracks', '/training', '/calendar', '/health', '/routes', '/services', '/settings'];
+
+        expect(paths.filter(path => path === '/login')).toHaveLength(2);
+        expect(paths.some(path => privateWorkspacePaths.includes(path))).toBe(false);
+        expect(paths.every(path => path === '/login' || path === '/integrations' || path.startsWith('/features/'))).toBe(true);
     });
 
     it('should keep passive homepage tooltips from claiming touch gestures', () => {
@@ -182,8 +191,8 @@ describe('HomeComponent', () => {
             'performance',
             'ai-insights',
             'footprint',
-            'sovereignty',
             'hardware',
+            'sovereignty',
         ]);
     });
 
@@ -246,50 +255,34 @@ describe('HomeComponent', () => {
             '.features-section:not(.ai-insights-section) .features-grid .feature-card'
         );
         const trainingPreview = fixture.nativeElement.querySelector('.training-preview-row');
-        const trainingPreviewIndicators = fixture.nativeElement.querySelectorAll(
-            '.training-preview-row app-metric-indicator'
-        );
         const signalPreviews = fixture.nativeElement.querySelectorAll('.signal-preview-widget');
-        const deferredPreviewPlaceholders = fixture.nativeElement.querySelectorAll('.home-preview-placeholder');
+        const publicPreviews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
+        const previewKeys = publicPreviews.map(preview => preview.componentInstance.previewKey());
 
         expect(performanceCards.length).toBe(3);
         expect(trainingPreview).toBeTruthy();
+        expect(trainingPreview.classList).toContain('compact-feature-row-host--without-divider');
+        expect(performanceCards[0].classList).not.toContain('compact-feature-row-host--without-divider');
         expect(trainingPreview.querySelector('.training-preview-data[data-nosnippet]')).toBeTruthy();
-        expect(trainingPreview.querySelector('app-training-summary-cards')).toBeTruthy();
-        expect(trainingPreview.querySelectorAll('app-training-metric-grid')).toHaveLength(2);
-        expect(trainingPreviewIndicators.length).toBe(3);
         expect(signalPreviews.length).toBe(0);
-        expect(deferredPreviewPlaceholders.length).toBe(3);
-        expect(fixture.nativeElement.querySelector('.home-preview-placeholder--signals[data-nosnippet]')).toBeTruthy();
+        expect(previewKeys).toContain('training-snapshot');
+        expect(previewKeys).toContain('training-signals');
+        expect(previewKeys).toContain('dashboard');
+        expect(previewKeys).toContain('workout-analysis');
         expect(text).toContain('Bring It In. Keep It Moving.');
         expect(text).toContain('Training Load, Readiness, and Recovery');
         expect(text).toContain('See your current load, fitness, fatigue, form, recovery, intensity balance, and efficiency');
         expect(text).not.toContain('Illustrative data');
         expect(text).toContain('Your Training Snapshot');
-        expect(text).toContain('Balanced');
-        expect(text).toContain('TSS-only load model');
-        expect(text).toContain('Readiness today');
-        expect(text).toContain('Load + recorded sleep signals');
-        expect(text).toContain('Training time');
-        expect(text).toContain('18h 42m');
-        expect(text).toContain('Workouts');
-        expect(text).toContain('ACWR');
-        expect(text).toContain('Monotony');
-        expect(text).toContain('Strain');
-        expect(text).toContain('Form now');
-        expect(text).toContain('Form +7 days');
-        expect(text).toContain('Fitness (CTL)');
-        expect(text).toContain('Fatigue (ATL)');
-        expect(text).toContain('Recovery debt');
-        expect(text).toContain('Recovery left');
-        expect(text).toContain('Intensity balance');
-        expect(text).toContain('Efficiency');
-        expect(text).toContain('Explore Training');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/training-analysis"], a[ng-reflect-router-link="/features/training-analysis"]')).toBeTruthy();
-        expect(text).toContain('Freshness Forecast');
-        expect(text).toContain('Intensity Distribution');
-        expect(text).toContain('Efficiency Trend');
-        expect(text).toContain('Cycling Power Curve');
+        expect(text).toContain('Explore Training Analysis');
+        const trainingCta = fixture.nativeElement.querySelector(
+            '.training-actions a[routerlink="/features/training-analysis"], .training-actions a[ng-reflect-router-link="/features/training-analysis"]'
+        ) as HTMLAnchorElement | null;
+        expect(trainingCta).toBeTruthy();
+        expect(trainingPreview.querySelector('[compactFeatureRowAction]')).toBeNull();
+        expect(
+            fixture.nativeElement.querySelector('.features-grid')?.compareDocumentPosition(trainingCta!) & Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
         expect(text).toContain('sleep views');
         expect(text).not.toContain('Training Load & Readiness Engine');
         expect(text).not.toContain('Derived metrics turn your activity history into load, fatigue, form, recovery, ramp, and intensity signals');
@@ -314,9 +307,9 @@ describe('HomeComponent', () => {
         expect(text).not.toContain('12 map styles');
         expect(text).not.toContain('recorded streams');
         expect(text).not.toContain('routes with heatmaps');
-        expect(text).toContain('Open Your Dashboard');
+        expect(text).not.toContain('Open Your Dashboard');
         expect(text).not.toContain('Explore Activity Calendar');
-        expect(fixture.nativeElement.querySelector('a[routerlink="/dashboard"], a[ng-reflect-router-link="/dashboard"]')).toBeTruthy();
+        expect(fixture.nativeElement.querySelector('a[routerlink="/dashboard"], a[ng-reflect-router-link="/dashboard"]')).toBeNull();
         expect(text).not.toContain('Read-only MCP Server');
         expect(text).not.toContain('KPI Lane for Fast Decisions');
         expect(text).not.toContain('Connected Training Data');
@@ -325,62 +318,66 @@ describe('HomeComponent', () => {
     it('uses the shared compact row primitive for every top-level homepage card', () => {
         const compactRows = fixture.nativeElement.querySelectorAll('app-compact-feature-row');
 
-        expect(compactRows.length).toBe(14);
+        expect(compactRows.length).toBe(11);
         expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
-        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(6);
+        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(5);
         expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-feature-row'))).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-public-feature-preview[previewkey="reviewer-benchmark"]')).toBeTruthy();
     });
 
-    it('should render the shared signal charts when the deferred section completes', async () => {
-        const deferBlocks = await fixture.getDeferBlocks();
+    it('should delegate every visual to the shared deferred preview boundary', () => {
+        const previews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
+        const previewKeys = previews.map(preview => preview.componentInstance.previewKey());
 
-        expect(deferBlocks.length).toBe(3);
-        await deferBlocks[0].render(DeferBlockState.Complete);
-        await fixture.whenStable();
-
-        expect(fixture.nativeElement.querySelectorAll('.signal-preview-widget').length).toBe(4);
-        expect(fixture.nativeElement.querySelector('.signal-preview-form-widget')).toBeTruthy();
-        expect(fixture.nativeElement.querySelector('.home-preview-placeholder--signals')).toBeNull();
-        expect(eChartsLoader.setOption).toHaveBeenCalledTimes(5);
+        expect(previewKeys).toEqual([
+            'training-snapshot',
+            'training-signals',
+            'dashboard',
+            'workout-analysis',
+            'assistant-example',
+            'mcp-flow',
+            'activity-map',
+            'reviewer-benchmark',
+        ]);
+        expect(previews.every(preview => preview.nativeElement.hasAttribute('data-nosnippet'))).toBe(true);
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {
         const text = fixture.nativeElement.textContent as string;
-        const analysisCards = fixture.nativeElement.querySelectorAll('.analysis-section .analysis-card');
+        const publicPreviews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
+        const previewKeys = publicPreviews.map(preview => preview.componentInstance.previewKey());
 
-        expect(analysisCards.length).toBe(3);
+        expect(previewKeys).toContain('reviewer-benchmark');
         expect(text).toContain('Map Your Activities');
-        expect(text).toContain('Own Your Data');
-        expect(text).toContain('Compare Your Devices');
-        expect(text).toContain('Merge same-session recordings, choose a reference device');
-        expect(text).toContain('Benchmark Merge Workflow');
-        expect(text).toContain('keep it out of normal training totals');
-        expect(text).toContain('Ref / Test');
-        expect(text).toContain('+/-15s');
-        expect(text).toContain('GNSS Trace Comparison');
-        expect(text).toContain('CEP50, CEP95, RMSE, max deviation, and');
-        expect(text).toContain('Sensor Quality Reports');
-        expect(text).toContain('correlation, MAE, and RMSE');
-        expect(text).toContain('dropouts, stuck values, and cadence-lock');
-        expect(text).toContain('Save / Share');
-        expect(text).toContain('Compare Workout Data');
-        expect(text).toContain('Device Benchmarks');
+        expect(text).toContain('See every GPS activity together');
+        expect(text).toContain('filter by date or activity type');
+        expect(text).toContain('Real activity traces');
+        expect(previewKeys).toContain('activity-map');
+        expect(fixture.nativeElement.querySelector('app-home-my-tracks-preview')).toBeNull();
+        const mapStage = fixture.nativeElement.querySelector('.footprint-map-stage') as HTMLElement;
+        const mapCta = fixture.nativeElement.querySelector('.footprint-cta') as HTMLElement;
+        expect(mapStage.compareDocumentPosition(mapCta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(text).toContain('Your Data. Yours to Keep.');
+        expect(text).toContain('Download your original activity files whenever you want');
+        expect(text).toContain('creating a backup, changing services');
+        expect(text).not.toContain('No hidden mining');
+        expect(text).toContain('Built for Device Reviewers');
+        expect(text).toContain('Compare same-session recordings from watches, bike computers, and sensors');
+        expect(text).toContain('turn GNSS and sensor differences into repeatable evidence');
+        expect(fixture.nativeElement.querySelector('.analysis-header-icon')?.textContent?.trim()).toBe('rate_review');
+        expect(text).toContain('Compare Workouts and Devices');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/workout-data-comparison"], a[ng-reflect-router-link="/features/workout-data-comparison"]')).toBeTruthy();
-        expect(fixture.nativeElement.querySelector('a[routerlink="/features/sports-watch-benchmark"], a[ng-reflect-router-link="/features/sports-watch-benchmark"]')).toBeTruthy();
         expect(text).not.toContain('Benchmark your devices with high-fidelity trace comparison.');
         expect(text).not.toContain('Sync Quality');
     });
 
-    it('should render the shared typed prompt rotator in the examples area', () => {
-        const sharedHeroPrompts = ASSISTANT_STARTER_PROMPTS;
-        const text = fixture.nativeElement.textContent as string;
-        expect(text).toContain('What you can ask');
-        expect(text).not.toContain('Auto-rotating:');
-        expect(fixture.nativeElement.querySelector('app-typed-prompt-rotator')).toBeTruthy();
-        expect(fixture.nativeElement.querySelector('.hero-prompt-caret')).toBeTruthy();
-        expect(component.assistantPromptExamples).toEqual(sharedHeroPrompts);
-        const promptText = fixture.nativeElement.querySelector('.hero-prompt-text') as HTMLElement | null;
-        expect(promptText?.textContent?.trim()).toBe((sharedHeroPrompts[0] ?? '').slice(0, 1));
+    it('should delegate Assistant examples to the shared deferred preview', () => {
+        const assistantPreview = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent))
+            .find(preview => preview.componentInstance.previewKey() === 'assistant-example');
+
+        expect(assistantPreview).toBeTruthy();
+        expect(assistantPreview?.nativeElement.hasAttribute('data-nosnippet')).toBe(true);
+        expect(fixture.nativeElement.querySelector('app-typed-prompt-rotator')).toBeNull();
     });
 
     it('should keep animated content visible when IntersectionObserver is unavailable', () => {
@@ -467,17 +464,4 @@ describe('HomeComponent', () => {
         }
     });
 
-    describe('navigateToDashboardOrLogin', () => {
-        it('should navigate to dashboard if user is logged in', async () => {
-            mockAuthService.getUser.mockResolvedValue({ uid: '123' });
-            await component.navigateToDashboardOrLogin();
-            expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
-        });
-
-        it('should navigate to login if user is not logged in', async () => {
-            mockAuthService.getUser.mockResolvedValue(null);
-            await component.navigateToDashboardOrLogin();
-            expect(mockRouter.navigate).toHaveBeenCalledWith(['/login']);
-        });
-    });
 });

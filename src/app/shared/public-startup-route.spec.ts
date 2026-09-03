@@ -33,6 +33,11 @@ describe('public-startup-route', () => {
     expect(isPublicStartupPath('/tools/compare/saved')).toBe(true);
   });
 
+  it('keeps legacy comparison URLs public while their client redirects resolve', () => {
+    expect(isPublicStartupPath('/features/workout-file-comparison')).toBe(true);
+    expect(isPublicStartupPath('/features/sports-watch-benchmark')).toBe(true);
+  });
+
   it('keeps dynamic share routes visible during auth startup', () => {
     expect(isPublicStartupPath('/share/event/user-1/event-1')).toBe(true);
     expect(isPublicStartupPath('/share/comparison/user-1/event-1?utm_source=test')).toBe(true);
@@ -47,6 +52,8 @@ describe('public-startup-route', () => {
     expect(isPublicContentPath('/features/activity-calendar')).toBe(true);
     expect(isPublicContentPath('/features/supported-activities')).toBe(true);
     expect(isPublicContentPath('/features/mcp-server')).toBe(true);
+    expect(isPublicContentPath('/features/training-dashboard')).toBe(true);
+    expect(isPublicContentPath('/features/activity-map')).toBe(true);
     expect(isPublicContentPath('/guides/import-activities-to-suunto')).toBe(true);
     expect(isPublicContentPath('/guides/import-activities-to-wahoo')).toBe(true);
     expect(isPublicContentPath('/mcp/authorize')).toBe(false);

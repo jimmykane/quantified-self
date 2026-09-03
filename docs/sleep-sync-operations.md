@@ -51,8 +51,7 @@ See [Suunto 24/7 Health integration](suunto-integration.md).
 
 Garmin Daily, Stress Details, HRV, User Metrics, Body Composition, Pulse Ox, All-day Respiration,
 Blood Pressure, Skin Temperature, and Health Snapshot summaries are likewise separate Health records.
-They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint; the old
-`receiveGarminAPISleepData` endpoint is a temporary Sleep-compatible alias. The handler deduplicates
+They enter through the canonical `receiveGarminAPIHealthData` Ping endpoint. The handler deduplicates
 validated descriptors, resolves unique accounts with bounded lookups, and durably queues compact
 UID-scoped callback batches before acknowledging. A retryable Firestore trigger dispatches each newly created
 or replacement batch revision outside the HTTP acknowledgement path without redispatching same-revision retry-state
@@ -171,8 +170,7 @@ queue row permanently stuck.
    `sleepSyncState/SuuntoApp` and that Activity, daily-statistics, and Recovery remain separate
    source-record types.
 
-The Garmin history control calls `backfillGarminAPIHealth`. The legacy `backfillGarminAPISleep` callable is a
-temporary alias for cached clients, with removal tracked by #625. The canonical callable requests Sleep for every eligible connected
+The Garmin history control calls `backfillGarminAPIHealth`. The callable requests Sleep for every eligible connected
 Pro user and, while Garmin Health is enabled, adds one durable cursor for all ten Health families.
 The UI waits for `getGarminHealthSyncAvailability` before enabling the control, then labels the action and
 completion from the server response. If the operational switch is disabled, the same control retains Sleep-only behavior.
@@ -199,7 +197,7 @@ gain the SpO₂ aggregate only when Garmin redelivers the session or the user ru
 **Import Sleep History** flow after the updated worker is deployed; deploying or rescanning an
 MCP client does not rewrite sleep documents.
 
-## One-Off COROS Sleep and Health Backfill
+## COROS Sleep and Health Backfill
 
 COROS retains daily data for up to three months and permits a maximum 30-day range per request.
 Connected Pro users can choose **Import Sleep & Health History** in COROS History Import. The
@@ -207,8 +205,7 @@ user-requested backfill queues their available three-month window in 30-day rang
 once every seven days. It uses the same guarded worker and ordered Sleep/Health writes as routine polling.
 
 The `backfill-coros-daily-health` Functions script queues the current eligible COROS accounts through
-the normal sleep queue in 30-day windows. The compatibility alias `backfill-coros-sleep` runs the same
-script. It neither logs tokens nor fetches raw provider data itself; the deployed worker performs the
+the normal sleep queue in 30-day windows. It neither logs tokens nor fetches raw provider data itself; the deployed worker performs the
 guarded token use and Sleep/Health writes.
 
 Deploy the enabled scheduler and sleep worker before queueing a backfill:
@@ -246,45 +243,6 @@ non-overlapping range of at most 28 days for every connected Suunto account. The
 and behavior remain available. A partial enqueue failure clears the cooldown claim so the user can retry immediately;
 deterministic queue identities make already accepted ranges duplicate-safe.
 
-## Legacy COROS Sleep Sample Migration
-
-Before the daily Health adapter, COROS daily extras and detailed HRV were stored inside normalized
-Sleep documents. Inspect the bounded migration plan first; dry-run is the default and performs no writes:
-
-```bash
-npm --prefix functions run migrate-coros-sleep-to-health -- --uid <Firebase UID>
-```
-
-Execute the reviewed single-user plan explicitly:
-
-```bash
-npm --prefix functions run migrate-coros-sleep-to-health -- --uid <Firebase UID> --execute
-```
-
-For a global execution, a prior dry-run is required operationally and the command requires the additional
-`--confirm-all-users` guard. The projected query defaults to 100 Sleep documents and has a hard 250-document
-page maximum. Use `--limit` and the reported `nextStartAfter` with `--start-after` to page:
-
-```bash
-npm --prefix functions run migrate-coros-sleep-to-health -- --execute --confirm-all-users --limit 250
-```
-
-The migration writes the Health replacement first. Only after the exact content is successfully written or is
-already present unchanged does a deletion-guarded transaction remove legacy `hrvSamples` and the moved COROS
-daily fields from that Sleep document. It also handles a narrowly bounded rollout race where a current daily
-backfill has already written the same provider date and revision while scalar-only legacy fields remain on the
-same referenced Sleep document. That cleanup requires the stored Health record to match the user, provider,
-source type, receipt revision, day, interval, coverage, metric identities and definitions, and exact Sleep
-references, with no incoming samples or stored sample chunks. The current Health scalar values may supersede
-older retained Sleep-side summaries; `healthRecordsSuperseded` reports this case. The Health record and unchanged
-legacy fingerprint are both rechecked inside the cleanup transaction.
-
-A stale result or any conflict containing sample-series data does not prove that every legacy value is durable,
-so the source fields remain for operator review. Aggregate Sleep vitals and timing remain. A concurrent Sleep or
-Health change fails the cleanup closed, and rerunning is idempotent. Malformed, out-of-window, or inconsistent
-legacy samples/vitals also remain untouched and are counted as invalid so an operator can review them without
-data loss.
-
 ## Health and Sleep Sports Lib JSON Migration
 
 After the Sports Lib 20.3 dual-reader/new-writer release is deployed, migrate one user and one collection at a time. The
@@ -301,15 +259,17 @@ npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --u
 npm --prefix functions run migrate-health-sleep-sports-lib-data -- --execute --uid <uid> --kind health --limit 100 --concurrency 5 --start-after <opaque-document-id>
 ```
 
-For each candidate, execution rechecks account deletion and re-reads the exact document in the update transaction. It
-updates only the derived canonical field and never changes provider revisions, receipt timestamps, source metadata,
-stage/session structure, or raw provider fields. A concurrent delete becomes `skipped_missing`; a deletion race becomes
-`skipped_deleted_user`; malformed or conflicting Sports Lib JSON is counted and left untouched. A retryable failure
-stops new transaction batches, exits nonzero, and returns the cursor immediately before the earliest failed document;
-already-started transactions in that bounded batch may finish, and rerunning from the returned cursor safely rechecks
-them. `--concurrency` defaults to 5 and is capped at 10; start at 5 and increase only after a clean pilot while keeping
-users and Health/Sleep collections sequential. Re-running the same page is safe. Finish by repeating both dry runs and
-require `candidates: 0`, `skippedInvalid: 0`, and `failed: 0`.
+In additive mode, execution rechecks account deletion for each candidate and re-reads the exact document in the update
+transaction. It updates only the derived canonical field and never changes provider revisions, receipt timestamps,
+source metadata, stage/session structure, or raw provider fields. A concurrent delete becomes `skipped_missing`; a
+deletion race becomes
+`skipped_deleted_user`; malformed or conflicting Sports Lib JSON becomes `skippedInvalid` and is left untouched. Any
+of those blocking outcomes or a retryable failure stops new transaction batches, exits nonzero, and returns the cursor
+immediately before the earliest document that was not safely handled. Already-started transactions in that bounded
+batch may finish, and rerunning from the returned cursor safely rechecks them. `--concurrency` defaults to 5 and is
+capped at 10; start at 5 and increase only after a clean pilot while keeping users and Health/Sleep collections
+sequential. Re-running the same page is safe. Finish by repeating both dry runs and require `candidates: 0`,
+`skippedInvalid: 0`, `skippedDeletedUser: 0`, `skippedMissing: 0`, and `failed: 0`.
 
 The migration does not require provider reconnects or history refetches. Ordinary disconnect intentionally retains
 imported history, so disconnecting during the migration does not remove a valid historical candidate. Account deletion
@@ -346,10 +306,33 @@ checkpoint user root was deleted between cohorts, restart without `--start-after
 advance through already-current users again. Start with 5 users, review logs and the derived-metrics queues, then increase
 to 25 before processing the remainder.
 
-After the global execution and a complete zero-candidate dry run, deploy the legacy-write cleanup separately. It removes
-duplicate Health `canonical` values and normalized Sleep aggregate paths from new or changed documents while preserving
-the Sports Lib envelope and every non-scalar/source field. Keep dual readers in place through the observation window;
-reader removal is not part of the writer cleanup and requires another reviewed release.
+After the additive migration, writer cleanup, and observation window are complete, the same runners can remove the
+historical duplicate scalar fields. This is an explicit, destructive mode and remains a dry run unless `--execute` is
+also present:
+
+```bash
+# Read-only pilot: report historical documents whose duplicate scalars are safe to remove.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --remove-legacy-scalars --max-users 5
+
+# Execute one bounded cleanup cohort.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --remove-legacy-scalars --max-users 5 --document-concurrency 5
+
+# Resume only with the checkpoint returned by the same cleanup/execution mode.
+npm --prefix functions run migrate-health-sleep-sports-lib-data-global -- --execute --remove-legacy-scalars --max-users 25 --document-concurrency 5 --start-after <opaque-checkpoint>
+```
+
+Cleanup checkpoints use a separate domain from additive-migration checkpoints and remain separately bound to dry-run
+or execution mode. The runner refuses to remove anything unless the existing Sports Lib envelope strictly decodes and
+round-trips to the legacy values. Health cleanup removes only duplicate `canonical` value/goal maps while retaining
+provider-native values and other goal metadata. Sleep cleanup removes only the duplicate duration, in-bed duration,
+stage-duration, vital, and numeric score paths while retaining session structure, stages, samples, provenance, score
+qualifiers/components, and provider fields. Unexpected legacy map fields, malformed/conflicting envelopes, deletion
+races, and failures stop the cohort before its checkpoint advances. Repeat the cleanup dry run through the entire user
+inventory and require zero candidates, invalid records, and failures. Because `--execute --remove-legacy-scalars`
+deletes historical Firestore fields, running it in production requires separate approval for the exact cohort.
+
+Keep dual readers in place through the rollback window. Removing legacy readers is not part of this migration and
+requires another reviewed release.
 
 ## Temporarily Disable A Provider
 

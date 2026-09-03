@@ -7,6 +7,19 @@ export const SERVICE_CONNECTION_STATES = {
 export type ServiceConnectionState = typeof SERVICE_CONNECTION_STATES[keyof typeof SERVICE_CONNECTION_STATES];
 export type ProviderBindingState = 'bound' | 'unbound';
 
+/**
+ * Browser-safe account information derived by the backend from an OAuth token
+ * document. This projection must never contain credentials or lifecycle
+ * generations. Provider identifiers are included only where the connection UX
+ * needs to distinguish retained accounts.
+ */
+export interface ServiceConnectionAccountProjection {
+  providerUserId?: string;
+  connectedAtMs?: number;
+  permissions?: string[];
+  permissionsUpdatedAtMs?: number;
+}
+
 export const SERVICE_DISCONNECT_RETRY_REASON = 'service_disconnect_in_progress' as const;
 
 export const SERVICE_DISCONNECT_RETRY_BLOCKERS = {
@@ -30,6 +43,10 @@ export interface ServiceConnectionMetaFields {
    * Never use this field for OAuth credentials, access tokens, or refresh tokens.
    */
   providerUserId?: string | null;
+  /** Browser-safe account summaries; OAuth documents remain server-only. */
+  connectionAccounts?: ServiceConnectionAccountProjection[];
+  /** Monotonic nanosecond-precision event key used to reject out-of-order projection triggers. */
+  connectionAccountsRevisionKey?: string | null;
   providerBindingState?: ProviderBindingState | null;
   providerBindingCheckedAt?: number | null;
   providerBindingCheckLeaseId?: string | null;

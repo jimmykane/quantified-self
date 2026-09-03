@@ -16,8 +16,9 @@ import {
     AppMyTracksSettings,
     AppEventDetailsSettingsInterface,
     AppEventLapSportFamily,
-    AppHealthWorkspaceRange,
+    AppHealthWorkspaceSettingsInterface,
     AppUserInterface,
+    APP_HEALTH_WORKSPACE_METRICS,
     APP_HEALTH_WORKSPACE_RANGES,
     TrainingWorkspacePreferences,
 } from '../models/app-user.interface';
@@ -219,31 +220,36 @@ export class AppUserSettingsQueryService {
     }
 
     /**
-     * Persists the Health workspace range as an account-owned display
-     * preference. The expected UID fences a queued selection across sign-out
-     * or an account switch.
+     * Persists the complete Health workspace selection as one account-owned
+     * preference. Writing metric and range together prevents concurrent UI
+     * changes from replacing one another. The expected UID fences queued
+     * selections across sign-out or an account switch.
      */
-    public async updateHealthWorkspaceRange(
+    public async updateHealthWorkspacePreferences(
         expectedUserUID: string,
-        range: AppHealthWorkspaceRange,
+        preferences: Required<Pick<AppHealthWorkspaceSettingsInterface, 'metric' | 'range'>>,
     ): Promise<void> {
-        if (!expectedUserUID || !APP_HEALTH_WORKSPACE_RANGES.includes(range)) {
-            throw new Error('A signed-in account and supported Health range are required.');
+        if (
+            !expectedUserUID
+            || !APP_HEALTH_WORKSPACE_METRICS.includes(preferences.metric)
+            || !APP_HEALTH_WORKSPACE_RANGES.includes(preferences.range)
+        ) {
+            throw new Error('A signed-in account and supported Health metric and range are required.');
         }
         const user = await this.getCurrentUser();
         if (!user?.uid || user.uid !== expectedUserUID) {
-            throw new Error('The signed-in account changed before the Health range could be saved.');
+            throw new Error('The signed-in account changed before the Health workspace preferences could be saved.');
         }
 
-        this.logger.info('[AppUserSettingsQueryService] Updating Health workspace range.', { range });
+        this.logger.info('[AppUserSettingsQueryService] Updating Health workspace preferences.', preferences);
         return this.userService.updateUserProperties(user, {
             settings: {
                 appSettings: {
-                    healthWorkspace: { range },
+                    healthWorkspace: preferences,
                 },
             },
         }).catch(err => {
-            this.logger.error('[AppUserSettingsQueryService] Failed to update Health workspace range.', err);
+            this.logger.error('[AppUserSettingsQueryService] Failed to update Health workspace preferences.', err);
             throw err;
         });
     }
@@ -303,19 +309,31 @@ export class AppUserSettingsQueryService {
 
     /**
      * Updates Chart settings by merging the provided partial settings.
+     * Serialized same-setting callers can force a write when the read signal may
+     * still represent an earlier queued value.
      */
-    public async updateChartSettings(settings: Partial<AppChartSettingsInterface>): Promise<void> {
-        const currentSettings = this.chartSettings();
-        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof AppChartSettingsInterface], currentSettings[key as keyof AppChartSettingsInterface]));
-        if (!hasChanges) {
-            return;
+    public async updateChartSettings(
+        settings: Partial<AppChartSettingsInterface>,
+        options: { force?: boolean } = {},
+    ): Promise<void> {
+        if (!options.force) {
+            const currentSettings = this.chartSettings();
+            const hasChanges = Object.keys(settings).some(key =>
+                !equal(
+                    settings[key as keyof AppChartSettingsInterface],
+                    currentSettings[key as keyof AppChartSettingsInterface],
+                )
+            );
+            if (!hasChanges) {
+                return;
+            }
         }
 
         this.logger.info(`[AppUserSettingsQueryService] Updating Chart Settings:`, settings);
         const user = await this.getCurrentUser();
         if (!user) {
             this.logger.warn(`[AppUserSettingsQueryService] Cannot update Chart Settings. No user logged in.`);
-            return;
+            throw new Error('Sign in to save chart settings.');
         }
 
         const updatedSettings = {
@@ -324,7 +342,10 @@ export class AppUserSettingsQueryService {
 
         return this.userService.updateUserProperties(user, { settings: updatedSettings })
             .then(() => this.logger.info(`[AppUserSettingsQueryService] Chart Settings updated successfully.`))
-            .catch(err => this.logger.error(`[AppUserSettingsQueryService] Failed to update Chart Settings:`, err));
+            .catch(err => {
+                this.logger.error(`[AppUserSettingsQueryService] Failed to update Chart Settings:`, err);
+                throw err;
+            });
     }
 
     /**

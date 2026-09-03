@@ -17,6 +17,7 @@ import {
 
 const LOG_PREFIX = '[sports-lib-health-sleep-global-migration]';
 const CHECKPOINT_DOMAIN = 'sports-lib-health-sleep-global-v2';
+const CLEANUP_CHECKPOINT_DOMAIN = 'sports-lib-health-sleep-global-cleanup-v1';
 const DEFAULT_MAX_USERS = 5;
 const MAX_MAX_USERS = 100;
 const DEFAULT_SCAN_LIMIT = 100;
@@ -31,6 +32,7 @@ const MAX_DOCUMENT_PAGES_PER_KIND = 100_000;
 
 export interface SportsLibDataGlobalMigrationOptions {
     execute: boolean;
+    removeLegacyScalars: boolean;
     maxUsers: number;
     scanLimit: number;
     documentLimit: number;
@@ -53,6 +55,7 @@ export interface SportsLibDataGlobalKindSummary {
 
 export interface SportsLibDataGlobalMigrationSummary {
     dryRun: boolean;
+    removeLegacyScalars: boolean;
     maxUsers: number;
     documentConcurrency: number;
     scannedUsers: number;
@@ -125,6 +128,7 @@ export interface SportsLibDataGlobalMigrationDependencies {
         startAfter: string | undefined,
         scanLimit: number,
         execute: boolean,
+        removeLegacyScalars: boolean,
     ) => Promise<UserInventoryPage>;
     runMigration?: typeof runSportsLibDataMigration;
 }
@@ -154,15 +158,15 @@ export function parseSportsLibDataGlobalMigrationOptions(
         '--start-after',
     ]);
     const values = new Map<string, string>();
-    let execute = false;
+    const booleans = new Set<string>();
     for (let index = 0; index < argv.length; index += 1) {
         const argument = argv[index];
         const name = argument.split('=', 1)[0];
-        if (name === '--execute') {
-            if (argument !== name || execute) {
-                throw new Error('--execute is a boolean flag and may be specified only once.');
+        if (name === '--execute' || name === '--remove-legacy-scalars') {
+            if (argument !== name || booleans.has(name)) {
+                throw new Error(`${name} is a boolean flag and may be specified only once.`);
             }
-            execute = true;
+            booleans.add(name);
             continue;
         }
         if (!knownValueArguments.has(name)) {
@@ -187,7 +191,8 @@ export function parseSportsLibDataGlobalMigrationOptions(
         throw new Error('--start-after must be an opaque 64-character checkpoint.');
     }
     return {
-        execute,
+        execute: booleans.has('--execute'),
+        removeLegacyScalars: booleans.has('--remove-legacy-scalars'),
         maxUsers: parseBoundedInteger(values, '--max-users', DEFAULT_MAX_USERS, MAX_MAX_USERS),
         scanLimit: parseBoundedInteger(values, '--scan-limit', DEFAULT_SCAN_LIMIT, MAX_SCAN_LIMIT),
         documentLimit: parseBoundedInteger(
@@ -206,9 +211,19 @@ export function parseSportsLibDataGlobalMigrationOptions(
     };
 }
 
-export function sportsLibDataGlobalCheckpoint(userID: string, execute: boolean): string {
+export function sportsLibDataGlobalCheckpoint(
+    userID: string,
+    execute: boolean,
+    removeLegacyScalars = false,
+): string {
+    const checkpointDomain = removeLegacyScalars
+        ? CLEANUP_CHECKPOINT_DOMAIN
+        : CHECKPOINT_DOMAIN;
     return createHash('sha256')
-        .update(`${CHECKPOINT_DOMAIN}\0${execute ? 'execute' : 'dry-run'}\0${userID}`, 'utf8')
+        .update(
+            `${checkpointDomain}\0${execute ? 'execute' : 'dry-run'}\0${userID}`,
+            'utf8',
+        )
         .digest('hex');
 }
 
@@ -216,6 +231,7 @@ async function resolveCheckpointUserID(
     db: admin.firestore.Firestore,
     checkpoint: string,
     execute: boolean,
+    removeLegacyScalars: boolean,
 ): Promise<string> {
     let lastUserID: string | undefined;
     while (true) {
@@ -225,7 +241,7 @@ async function resolveCheckpointUserID(
         if (lastUserID) query = query.startAfter(lastUserID);
         const snapshot = await query.select().get();
         const match = snapshot.docs.find(document => (
-            sportsLibDataGlobalCheckpoint(document.id, execute) === checkpoint
+            sportsLibDataGlobalCheckpoint(document.id, execute, removeLegacyScalars) === checkpoint
         ));
         if (match) return match.id;
         if (snapshot.size < CHECKPOINT_LOOKUP_PAGE_SIZE) break;
@@ -239,9 +255,10 @@ export async function listUsersForGlobalMigration(
     startAfter: string | undefined,
     scanLimit: number,
     execute: boolean,
+    removeLegacyScalars = false,
 ): Promise<UserInventoryPage> {
     const startAfterUserID = startAfter
-        ? await resolveCheckpointUserID(db, startAfter, execute)
+        ? await resolveCheckpointUserID(db, startAfter, execute, removeLegacyScalars)
         : undefined;
     let query = db.collection('users')
         .orderBy(FieldPath.documentId())
@@ -319,6 +336,7 @@ async function runKindPass(
             '--concurrency', `${options.documentConcurrency}`,
         ];
         if (execute) argv.unshift('--execute');
+        if (options.removeLegacyScalars) argv.unshift('--remove-legacy-scalars');
         if (startAfter) argv.push('--start-after', startAfter);
         let summary: SportsLibDataMigrationSummary;
         try {
@@ -504,9 +522,16 @@ export async function runSportsLibDataGlobalMigration(
     const hasUserData = dependencies.hasUserData || userDataPresence;
     const getDeletionGuard = dependencies.getDeletionGuard || getUserDeletionGuardState;
     const runMigration = dependencies.runMigration || runSportsLibDataMigration;
-    const inventory = await listUsers(db, options.startAfter, options.scanLimit, options.execute);
+    const inventory = await listUsers(
+        db,
+        options.startAfter,
+        options.scanLimit,
+        options.execute,
+        options.removeLegacyScalars,
+    );
     const summary: SportsLibDataGlobalMigrationSummary = {
         dryRun: !options.execute,
+        removeLegacyScalars: options.removeLegacyScalars,
         maxUsers: options.maxUsers,
         documentConcurrency: options.documentConcurrency,
         scannedUsers: 0,
@@ -575,7 +600,11 @@ export async function runSportsLibDataGlobalMigration(
         || inventory.hasMore;
     if (summary.hasMoreUsers) {
         summary.nextStartAfter = lastSafeUserID
-            ? sportsLibDataGlobalCheckpoint(lastSafeUserID, options.execute)
+            ? sportsLibDataGlobalCheckpoint(
+                lastSafeUserID,
+                options.execute,
+                options.removeLegacyScalars,
+            )
             : options.startAfter ?? null;
     }
     logger.info(`${LOG_PREFIX} ${options.execute ? 'Execution' : 'Dry run'} complete.`, {

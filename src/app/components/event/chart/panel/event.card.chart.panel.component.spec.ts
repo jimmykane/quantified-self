@@ -1,8 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
+import { NO_ERRORS_SCHEMA, NgZone, SimpleChange } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   DataAirPower,
   DataAltitude,
@@ -59,6 +61,7 @@ describe('EventCardChartPanelComponent', () => {
       ]
     }),
     setOption: vi.fn(),
+    convertFromPixel: vi.fn((_finder: unknown, value: number | number[]) => value),
     resize: vi.fn(),
     dispose: vi.fn(),
     isDisposed: vi.fn().mockReturnValue(false),
@@ -86,6 +89,14 @@ describe('EventCardChartPanelComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    chart.getOption.mockReturnValue({
+      dataZoom: [
+        {
+          startValue: 0,
+          endValue: 120,
+        }
+      ]
+    });
     intersectionObserverCallbacks = [];
     intersectionObserverObserveSpies = [];
     intersectionObserverDisconnectSpies = [];
@@ -245,6 +256,49 @@ describe('EventCardChartPanelComponent', () => {
 
   function getRenderedOption(): any {
     return eChartsLoaderMock.setOption.mock.calls.findLast(([, option]) => option?.series)?.[1] as any;
+  }
+
+  function createTouch(identifier: number, clientX: number, clientY: number): Touch {
+    return { identifier, clientX, clientY } as Touch;
+  }
+
+  function createTouchList(touches: Touch[]): TouchList {
+    return {
+      length: touches.length,
+      item: (index: number) => touches[index] ?? null,
+      ...touches,
+    } as unknown as TouchList;
+  }
+
+  function dispatchChartTouch(
+    type: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
+    touches: Touch[],
+    changedTouches = touches,
+  ): TouchEvent {
+    const event = new Event(type, { bubbles: true, cancelable: true }) as TouchEvent;
+    Object.defineProperties(event, {
+      touches: { configurable: true, value: createTouchList(touches) },
+      changedTouches: { configurable: true, value: createTouchList(changedTouches) },
+    });
+    component.chartDiv.nativeElement.dispatchEvent(event);
+    return event;
+  }
+
+  function setMobileViewport(): void {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: true,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
   }
 
   function buildTestPanel(
@@ -719,61 +773,141 @@ describe('EventCardChartPanelComponent', () => {
     expect(tooltipHtml).toContain('background:#ff0000;');
   });
 
-  it('keeps mobile panel interactions disabled until first tap, then enables them', async () => {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      writable: true,
-      value: vi.fn().mockImplementation(() => ({
-        matches: true,
-        media: '',
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
-
+  it('enables mobile chart interactions immediately while reserving native vertical touch gestures', async () => {
+    setMobileViewport();
     component.showZoomBar = false;
+    const runOutsideAngularSpy = vi.spyOn(TestBed.inject(NgZone), 'runOutsideAngular');
     await renderComponent();
 
     const option = getRenderedOption();
-    expect(option?.tooltip?.triggerOn).toBe('none');
-    expect(option?.tooltip?.show).toBe(false);
-    expect(option?.dataZoom?.[0]?.disabled).toBe(true);
+    const styles = readFileSync(resolve(
+      process.cwd(),
+      'src/app/components/event/chart/panel/event.card.chart.panel.component.scss',
+    ), 'utf8');
+    expect(option?.tooltip?.triggerOn).toBe('click');
+    expect(option?.tooltip?.show).toBe(true);
+    expect(option?.dataZoom?.[0]?.disabled).toBe(false);
+    expect(zr.on).not.toHaveBeenCalledWith('click', expect.any(Function));
+    expect(runOutsideAngularSpy).toHaveBeenCalled();
+    expect(styles).toMatch(/\.event-chart-panel__chart\s*\{[^}]*touch-action:\s*pan-y pinch-zoom/s);
+  });
 
-    const tapHandler = zr.on.mock.calls.find(([eventName]) => eventName === 'click')?.[1] as ((event: unknown) => void);
-    expect(tapHandler).toBeTypeOf('function');
-
-    eChartsLoaderMock.setOption.mockClear();
+  it('leaves a mobile vertical swipe native without changing chart selection or zoom', async () => {
+    setMobileViewport();
+    await renderComponent();
     chart.dispatchAction.mockClear();
 
-    tapHandler({});
+    dispatchChartTouch('touchstart', [createTouch(1, 60, 40)]);
+    const moveEvent = dispatchChartTouch('touchmove', [createTouch(1, 63, 100)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 64, 150)]);
 
-    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
-      chart,
-      {
-        tooltip: {
-          show: true,
-          triggerOn: 'click',
-        },
-        dataZoom: [
-          {
-            disabled: false,
-          }
-        ],
-      },
-      expect.objectContaining({ lazyUpdate: true, silent: true })
-    );
-    expect(chart.dispatchAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'takeGlobalCursor',
-        brushOption: expect.objectContaining({
-          brushType: 'lineX',
-        }),
-      })
-    );
+    expect(moveEvent.defaultPrevented).toBe(false);
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'brush' }));
+    expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+  });
+
+  it('zooms from the first horizontal mobile drag', async () => {
+    setMobileViewport();
+    await renderComponent();
+    const boundsSpy = vi.spyOn(component.chartDiv.nativeElement, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 320,
+      bottom: 360,
+      width: 320,
+      height: 360,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    chart.dispatchAction.mockClear();
+
+    try {
+      dispatchChartTouch('touchstart', [createTouch(1, 20, 100)]);
+      const moveEvent = dispatchChartTouch('touchmove', [createTouch(1, 80, 103)]);
+      dispatchChartTouch('touchend', [], [createTouch(1, 80, 103)]);
+
+      expect(moveEvent.defaultPrevented).toBe(false);
+      expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'brush',
+        areas: [expect.objectContaining({ coordRange: [20, 80] })],
+      }));
+      expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'dataZoom',
+        startValue: 20,
+        endValue: 80,
+      }));
+    } finally {
+      boundsSpy.mockRestore();
+    }
+  });
+
+  it('selects from the first horizontal mobile drag', async () => {
+    setMobileViewport();
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    const selectedRangeEmit = vi.spyOn(component.selectedRangeChange, 'emit');
+    await renderComponent();
+    const boundsSpy = vi.spyOn(component.chartDiv.nativeElement, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 320,
+      bottom: 360,
+      width: 320,
+      height: 360,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    chart.dispatchAction.mockClear();
+
+    try {
+      dispatchChartTouch('touchstart', [createTouch(1, 25, 100)]);
+      dispatchChartTouch('touchmove', [createTouch(1, 70, 102)]);
+      dispatchChartTouch('touchend', [], [createTouch(1, 70, 102)]);
+
+      expect(selectedRangeEmit).toHaveBeenCalledWith({ start: 25, end: 70 });
+      expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    } finally {
+      boundsSpy.mockRestore();
+    }
+  });
+
+  it('cancels an active mobile selection when the interaction mode changes', async () => {
+    setMobileViewport();
+    component.cursorBehaviour = ChartCursorBehaviours.SelectX;
+    const previewRangeEmit = vi.spyOn(component.previewRangeChange, 'emit');
+    const selectedRangeEmit = vi.spyOn(component.selectedRangeChange, 'emit');
+    await renderComponent();
+    const boundsSpy = vi.spyOn(component.chartDiv.nativeElement, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 320,
+      bottom: 360,
+      width: 320,
+      height: 360,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    try {
+      dispatchChartTouch('touchstart', [createTouch(1, 25, 100)]);
+      dispatchChartTouch('touchmove', [createTouch(1, 70, 102)]);
+      expect(previewRangeEmit).toHaveBeenCalledWith({ start: 25, end: 70 });
+
+      chart.dispatchAction.mockClear();
+      component.cursorBehaviour = ChartCursorBehaviours.ZoomX;
+      component.ngOnChanges({
+        cursorBehaviour: new SimpleChange(ChartCursorBehaviours.SelectX, ChartCursorBehaviours.ZoomX, false),
+      });
+      dispatchChartTouch('touchend', [], [createTouch(1, 90, 102)]);
+
+      expect(previewRangeEmit).toHaveBeenLastCalledWith(null);
+      expect(selectedRangeEmit).not.toHaveBeenCalled();
+      expect(chart.dispatchAction).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'dataZoom' }));
+    } finally {
+      boundsSpy.mockRestore();
+    }
   });
 
   it('shows a fullscreen toggle only for real data panels', async () => {
@@ -1124,6 +1258,31 @@ describe('EventCardChartPanelComponent', () => {
       'refresh-end',
       'sync',
     ]);
+  });
+
+  it('rebinds chart interactions when a theme change replaces the ECharts instance', async () => {
+    await renderComponent();
+    const replacementChart = {
+      ...chart,
+      on: vi.fn(),
+      off: vi.fn(),
+      dispatchAction: vi.fn(),
+      getOption: vi.fn().mockReturnValue({
+        dataZoom: [{ startValue: 0, endValue: 120 }],
+      }),
+      isDisposed: vi.fn().mockReturnValue(false),
+    } as any;
+    eChartsLoaderMock.init.mockResolvedValueOnce(replacementChart);
+
+    component.darkTheme = true;
+    component.ngOnChanges({
+      darkTheme: new SimpleChange(false, true, false),
+    });
+    await flushQueuedChartRefreshes();
+
+    expect(replacementChart.on).toHaveBeenCalledWith('datazoom', expect.any(Function));
+    expect(replacementChart.on).toHaveBeenCalledWith('brush', expect.any(Function));
+    expect(replacementChart.on).toHaveBeenCalledWith('brushEnd', expect.any(Function));
   });
 
   it('recomputes canonical x-axis interval and visible-range y-axis scale from the zoomed visible range', async () => {
@@ -1948,46 +2107,84 @@ describe('EventCardChartPanelComponent', () => {
     expect(option?.dataZoom?.[0]?.labelFormatter(65)).toBe('01:05');
   });
 
-  it('keeps mobile zoom-bar interactions disabled until first tap, then enables slider drag', async () => {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      writable: true,
-      value: vi.fn().mockImplementation(() => ({
-        matches: true,
-        media: '',
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
-
+  it('drags a mobile zoom-bar handle on the first horizontal gesture', async () => {
+    setMobileViewport();
     component.panel = null;
     component.showZoomBar = true;
+    chart.getOption.mockReturnValue({
+      dataZoom: [{ startValue: 20, endValue: 80 }],
+    });
     await renderComponent();
+    const boundsSpy = vi.spyOn(component.chartDiv.nativeElement, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 320,
+      bottom: 56,
+      width: 320,
+      height: 56,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
 
     const option = eChartsLoaderMock.setOption.mock.calls.at(-1)?.[1] as any;
-    expect(option?.dataZoom?.[0]?.disabled).toBe(true);
+    expect(option?.dataZoom?.[0]?.disabled).toBe(false);
+    chart.dispatchAction.mockClear();
 
-    const tapHandler = zr.on.mock.calls.find(([eventName]) => eventName === 'click')?.[1] as ((event: unknown) => void);
-    expect(tapHandler).toBeTypeOf('function');
+    try {
+      // Track: left 12, width 264. Value 20 is at x=56; x=100 maps to value 40.
+      dispatchChartTouch('touchstart', [createTouch(1, 56, 20)]);
+      dispatchChartTouch('touchmove', [createTouch(1, 100, 22)]);
+      dispatchChartTouch('touchend', [], [createTouch(1, 100, 22)]);
 
-    eChartsLoaderMock.setOption.mockClear();
-    tapHandler({});
+      expect(chart.dispatchAction).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'dataZoom',
+        startValue: 40,
+        endValue: 80,
+      }));
+    } finally {
+      boundsSpy.mockRestore();
+    }
+  });
 
-    expect(eChartsLoaderMock.setOption).toHaveBeenCalledWith(
-      chart,
-      {
-        dataZoom: [
-          {
-            disabled: false,
-          }
-        ],
-      },
-      expect.objectContaining({ lazyUpdate: true, silent: true })
-    );
+  it('restores the mobile zoom-bar range when a second touch cancels the drag', async () => {
+    setMobileViewport();
+    component.panel = null;
+    component.showZoomBar = true;
+    chart.getOption.mockReturnValue({
+      dataZoom: [{ startValue: 20, endValue: 80 }],
+    });
+    await renderComponent();
+    const boundsSpy = vi.spyOn(component.chartDiv.nativeElement, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 320,
+      bottom: 56,
+      width: 320,
+      height: 56,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    chart.dispatchAction.mockClear();
+
+    try {
+      dispatchChartTouch('touchstart', [createTouch(1, 56, 20)]);
+      dispatchChartTouch('touchmove', [createTouch(1, 100, 22)]);
+      dispatchChartTouch(
+        'touchstart',
+        [createTouch(1, 100, 22), createTouch(2, 140, 22)],
+        [createTouch(2, 140, 22)],
+      );
+
+      expect(chart.dispatchAction).toHaveBeenLastCalledWith(expect.objectContaining({
+        type: 'dataZoom',
+        startValue: 20,
+        endValue: 80,
+      }));
+    } finally {
+      boundsSpy.mockRestore();
+    }
   });
 
   it('refreshes zoom-bar-only mode when overview data changes', async () => {
@@ -3244,6 +3441,24 @@ describe('EventCardChartPanelComponent', () => {
     expect(intersectionObserverDisconnectSpies[0]).toHaveBeenCalledTimes(1);
   });
 
+  it('does not resume initialization after being destroyed during chart loading', async () => {
+    let resolveInit: (value: typeof chart) => void = () => { };
+    eChartsLoaderMock.init.mockReturnValueOnce(new Promise((resolve) => {
+      resolveInit = resolve;
+    }));
+
+    fixture.detectChanges();
+    await Promise.resolve();
+    component.ngOnDestroy();
+    resolveInit(chart);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(eChartsLoaderMock.init).toHaveBeenCalledTimes(1);
+    expect(chart.on).not.toHaveBeenCalled();
+    expect(intersectionObserverObserveSpies).toHaveLength(0);
+  });
+
   it('hides and restores zoom-bar slider based on viewport visibility', async () => {
     component.panel = null;
     component.showZoomBar = true;
@@ -3279,6 +3494,24 @@ describe('EventCardChartPanelComponent', () => {
     component.chartDiv.nativeElement.dispatchEvent(new Event('wheel', { bubbles: true, cancelable: true }));
 
     expect(bubbleWheelSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a touch long-press context menu as a desktop chart copy', async () => {
+    setMobileViewport();
+    await renderComponent();
+
+    dispatchChartTouch('touchstart', [createTouch(1, 80, 80)]);
+    dispatchChartTouch('touchend', [], [createTouch(1, 80, 80)]);
+    const touchContextMenu = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+    });
+    component.chartDiv.nativeElement.dispatchEvent(touchContextMenu);
+    await waitForChartStabilization(2);
+
+    expect(touchContextMenu.defaultPrevented).toBe(true);
+    expect(shareServiceMock.copyElementImageToClipboard).not.toHaveBeenCalled();
   });
 
   it('copies a themed panel image on right click while suppressing native canvas copy', async () => {

@@ -570,12 +570,6 @@ export const receiveGarminAPIHealthData = functions.region('europe-west2').runWi
     memory: '1GB',
 }).https.onRequest(handleGarminAPIHealthData);
 
-/** Temporary compatibility alias while Garmin is moved to the canonical URL. */
-export const receiveGarminAPISleepData = functions.region('europe-west2').runWith({
-    timeoutSeconds: 60,
-    memory: '1GB',
-}).https.onRequest(handleGarminAPIHealthData);
-
 async function handleSuunto247DataWebhook(
     req: functions.https.Request,
     res: functions.Response,

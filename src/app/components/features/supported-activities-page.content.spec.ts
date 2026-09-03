@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ActivityTypeGroups, ActivityTypes } from '@sports-alliance/sports-lib';
 import {
   SUPPORTED_ACTIVITIES_PATH,
+  SUPPORTED_ACTIVITIES_DESCRIPTION,
   SUPPORTED_ACTIVITIES_ROUTE_DATA,
   SUPPORTED_ACTIVITIES_URL,
   SUPPORTED_ACTIVITY_FAMILIES,
@@ -58,12 +59,15 @@ describe('supported-activities-page.content', () => {
       preload: true,
       animation: 'Features',
     });
+    expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).toBe(SUPPORTED_ACTIVITIES_DESCRIPTION);
     expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).toContain('activity types Quantified Self recognizes');
-    expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).toContain('device, connected service, or uploaded file');
+    expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).toContain('sport-specific details may be available');
+    expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description.length).toBeLessThanOrEqual(160);
     expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.description).not.toContain('every provider');
     expect(SUPPORTED_ACTIVITIES_ROUTE_DATA.jsonLd).toMatchObject({
       '@context': 'https://schema.org',
       '@type': 'WebPage',
+      description: SUPPORTED_ACTIVITIES_DESCRIPTION,
       url: SUPPORTED_ACTIVITIES_URL,
       inLanguage: 'en',
     });

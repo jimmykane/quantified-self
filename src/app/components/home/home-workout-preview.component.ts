@@ -38,8 +38,7 @@ import { buildHomeWorkoutPerformancePreviewActivity } from './home-workout-perfo
 
 const PREVIEW_DURATION_SECONDS = 3_258;
 const PREVIEW_ZOOM_RANGE: EventChartRange = { start: 1_040, end: 2_260 };
-const PREVIEW_SELECTION_DELAY_MS = 900;
-const PREVIEW_SELECTION_DURATION_MS = 850;
+const PREVIEW_ZOOM_DELAY_MS = 900;
 const PREVIEW_ZOOM_DURATION_MS = 720;
 const PREVIEW_ZOOM_HOLD_MS = 1_000;
 const PREVIEW_ZOOM_STEPS = 8;
@@ -182,7 +181,6 @@ export class HomeWorkoutPreviewComponent implements AfterViewInit, OnDestroy {
   readonly xAxisType = XAxisTypes.Duration;
   readonly cursorBehaviour = ChartCursorBehaviours.ZoomX;
   readonly xDomain = { start: 0, end: PREVIEW_DURATION_SECONDS };
-  readonly previewRange = signal<EventChartRange | null>(null);
   readonly sharedZoomRange = signal<EventChartRange | null>(null);
   readonly depthAreaFillOrigin = 'start' as const;
   readonly depthFillColor = computed(() => (
@@ -259,24 +257,14 @@ export class HomeWorkoutPreviewComponent implements AfterViewInit, OnDestroy {
     }
 
     this.hasPlayedAnimation = true;
-    this.previewRange.set(null);
     this.sharedZoomRange.set(null);
 
-    this.scheduleAnimationStep(PREVIEW_SELECTION_DELAY_MS, () => {
-      this.previewRange.set(PREVIEW_ZOOM_RANGE);
+    this.scheduleAnimationStep(PREVIEW_ZOOM_DELAY_MS, () => {
+      this.animateZoomRange(null, PREVIEW_ZOOM_RANGE, PREVIEW_ZOOM_DURATION_MS);
     });
 
     this.scheduleAnimationStep(
-      PREVIEW_SELECTION_DELAY_MS + PREVIEW_SELECTION_DURATION_MS,
-      () => {
-        this.previewRange.set(null);
-        this.animateZoomRange(null, PREVIEW_ZOOM_RANGE, PREVIEW_ZOOM_DURATION_MS);
-      },
-    );
-
-    this.scheduleAnimationStep(
-      PREVIEW_SELECTION_DELAY_MS
-        + PREVIEW_SELECTION_DURATION_MS
+      PREVIEW_ZOOM_DELAY_MS
         + PREVIEW_ZOOM_DURATION_MS
         + PREVIEW_ZOOM_HOLD_MS,
       () => {

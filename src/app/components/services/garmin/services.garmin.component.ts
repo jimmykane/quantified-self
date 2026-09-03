@@ -141,23 +141,24 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   get garminUserID(): string | undefined {
     const token = this.preferredGarminToken;
-    const userID = `${token?.userID || ''}`.trim();
+    const userID = `${token?.providerUserId || token?.userID || ''}`.trim();
     return userID || undefined;
   }
 
   get routeSendGarminUserID(): string | undefined {
     const token = this.preferredGarminRouteSendToken;
-    const userID = `${token?.userID || ''}`.trim();
+    const userID = `${token?.providerUserId || token?.userID || ''}`.trim();
     return userID || undefined;
   }
 
   get connectedAt(): string | number | Date | null {
-    const value = this.preferredGarminToken?.dateCreated;
+    const value = this.preferredGarminToken?.connectedAtMs ?? this.preferredGarminToken?.dateCreated;
     return typeof value === 'string' || typeof value === 'number' || value instanceof Date ? value : null;
   }
 
   get routeSendConnectedAt(): string | number | Date | null {
-    const value = this.preferredGarminRouteSendToken?.dateCreated;
+    const value = this.preferredGarminRouteSendToken?.connectedAtMs
+      ?? this.preferredGarminRouteSendToken?.dateCreated;
     return typeof value === 'string' || typeof value === 'number' || value instanceof Date ? value : null;
   }
 
@@ -169,7 +170,12 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   get permissionsLastChangedAt(): number | undefined {
     const timestamps = this.permissionLoadedTokens
-      .map(token => Number(token.permissionsLastChangedAt))
+      .map(token => {
+        const projectedTimestampMs = Number(token.permissionsUpdatedAtMs);
+        if (Number.isFinite(projectedTimestampMs)) return projectedTimestampMs;
+        const legacyTimestampSeconds = Number(token.permissionsLastChangedAt);
+        return Number.isFinite(legacyTimestampSeconds) ? legacyTimestampSeconds * 1000 : Number.NaN;
+      })
       .filter(timestamp => Number.isFinite(timestamp));
     return timestamps.length ? Math.max(...timestamps) : undefined;
   }
@@ -282,8 +288,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   private get preferredGarminToken(): Record<string, unknown> | null {
     return this.bestPermissionLoadedToken
-      || this.garminTokens.find(token => `${token.userID || ''}`.trim().length > 0)
-      || this.garminTokens.find(token => `${token.accessToken || ''}`.trim().length > 0)
+      || this.garminTokens.find(token => !!getGarminProviderUserIdFromTokenLike(token))
       || null;
   }
 

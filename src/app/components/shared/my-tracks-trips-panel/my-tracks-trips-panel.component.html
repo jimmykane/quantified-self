@@ -1,0 +1,73 @@
+<app-peek-panel
+  class="tracks-trips-peek"
+  position="left"
+  toggleLengthSize="small"
+  [expanded]="expanded()"
+  (expandedChange)="panelExpandedChange.emit($event)"
+  [expandedSizePx]="expandedSizePx()"
+  [collapsedSizePx]="28"
+  ariaLabelExpand="Expand trips"
+  ariaLabelCollapse="Collapse trips"
+  [title]="title()"
+  icon="route"
+>
+  <div peek-header-actions class="detected-trips-summary-row">
+    <button
+      mat-icon-button
+      type="button"
+      (click)="sortToggle.emit()"
+      [matTooltip]="sortToggleLabel()"
+      [attr.aria-label]="sortToggleLabel()"
+    >
+      <mat-icon>{{ sortIcon() }}</mat-icon>
+    </button>
+    <span class="detected-trips-badge">
+      <span class="detected-trips-badge-count">{{ trips().length }}</span>
+      <span class="detected-trips-badge-label">{{ trips().length === 1 ? 'trip' : 'trips' }}</span>
+    </span>
+  </div>
+
+  <ul class="detected-trips-list qs-scrollbar">
+    @if (homeArea(); as home) {
+      <li>
+        <button
+          type="button"
+          class="detected-trip-button detected-home-button"
+          [class.is-selected]="homeSelected()"
+          [attr.aria-pressed]="homeSelected()"
+          (pointerenter)="homeHovered.emit()"
+          (pointerleave)="homeHoverEnded.emit()"
+          (focus)="homeHovered.emit()"
+          (blur)="homeHoverEnded.emit()"
+          (click)="homeSelectedChange.emit()"
+        >
+          <span class="trip-location">Home</span>
+          <span class="trip-dates">Home area</span>
+          <span class="trip-count">
+            {{ home.pointCount }} {{ home.pointCount === 1 ? 'activity' : 'activities' }} used
+          </span>
+        </button>
+      </li>
+    }
+
+    @for (trip of trips(); track trip.tripId) {
+      <li>
+        <button
+          type="button"
+          class="detected-trip-button"
+          [class.is-selected]="selectedTripId() === trip.tripId"
+          [attr.aria-pressed]="selectedTripId() === trip.tripId"
+          (pointerenter)="tripHovered.emit(trip)"
+          (pointerleave)="tripHoverEnded.emit(trip)"
+          (focus)="tripHovered.emit(trip)"
+          (blur)="tripHoverEnded.emit(trip)"
+          (click)="tripSelected.emit(trip)"
+        >
+          <span class="trip-location">{{ trip.locationLabel || 'Trip' }}</span>
+          <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} – {{ trip.endDate | date:'mediumDate' }}</span>
+          <span class="trip-count">{{ trip.activityCount }} {{ trip.activityCount === 1 ? 'activity' : 'activities' }}</span>
+        </button>
+      </li>
+    }
+  </ul>
+</app-peek-panel>

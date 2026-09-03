@@ -1,19 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
   HEALTH_RECORDING_METHODS,
   HEALTH_VALUE_ORIGINS,
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
+import { AppDataColors } from '../services/color/app.data.colors';
 import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
 import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
 import { HealthWorkspaceSeries } from './health-workspace.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+interface HealthMetricColorOption {
+  series: Array<{
+    lineStyle: { color: string };
+    itemStyle: { color: string };
+  }>;
+}
+
+interface StressStateColorOption {
+  visualMap: {
+    pieces: Array<{ value: string; color: string }>;
+  };
+  tooltip: {
+    formatter: (params: { value?: unknown }) => string;
+  };
+}
+
+interface RecoveryBalanceColorOption {
+  series: Array<{
+    type: string;
+    itemStyle: { color: (params: { value?: unknown }) => string };
+  }>;
+  tooltip: {
+    formatter: (params: { value?: unknown }) => string;
+  };
+}
+
 function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspaceSeries {
   return {
     id: 'series-1',
+    metricId: HEALTH_METRIC_IDS.RestingHeartRate,
     provider: HEALTH_PROVIDERS.GarminAPI,
     providerLabel: 'Garmin',
     sourceLabel: 'Garmin',
@@ -106,6 +135,129 @@ describe('Health metric chart helpers', () => {
     ) as any;
     expect(option.series[0]).toMatchObject({ type: 'line', step: 'end', connectNulls: false });
     expect(option.yAxis).toMatchObject({ type: 'category', data: ['rest', 'high'] });
+  });
+
+  it('uses the established app data colors for matching Health metrics', () => {
+    const style = buildDashboardEChartsStyleTokens(false, 640);
+    const cases = [
+      [HEALTH_METRIC_IDS.HeartRate, AppDataColors['Heart Rate']],
+      [HEALTH_METRIC_IDS.BloodOxygenSaturation, AppDataColors['Blood Oxygen']],
+      [HEALTH_METRIC_IDS.RespirationRate, AppDataColors.Respiration],
+      [HEALTH_METRIC_IDS.Steps, AppDataColors.Distance],
+      [HEALTH_METRIC_IDS.FloorsClimbed, AppDataColors.Altitude],
+      [HEALTH_METRIC_IDS.SleepDuration, AppDataColors.Duration],
+      [HEALTH_METRIC_IDS.BodyEnergy, AppDataColors.Energy],
+      [HEALTH_METRIC_IDS.RecoveryScore, AppDataColors['Recovery Time']],
+      [HEALTH_METRIC_IDS.BodyWeight, AppDataColors['Body Composition']],
+      [HEALTH_METRIC_IDS.SkinTemperatureDeviation, AppDataColors.Temperature],
+    ] as const;
+
+    for (const [metricId, color] of cases) {
+      const model = buildHealthChartModels([series({ metricId })], 0, DAY_MS)[0];
+      const option = buildHealthMetricEChartsOption(
+        model,
+        0,
+        DAY_MS,
+        style,
+        false,
+      ) as HealthMetricColorOption;
+      expect(option.series[0].lineStyle.color).toBe(color);
+      expect(option.series[0].itemStyle.color).toBe(color);
+    }
+
+    for (const metricId of Object.values(HEALTH_METRIC_IDS)) {
+      const model = buildHealthChartModels([series({ metricId })], 0, DAY_MS)[0];
+      const option = buildHealthMetricEChartsOption(
+        model,
+        0,
+        DAY_MS,
+        style,
+        false,
+      ) as HealthMetricColorOption;
+      expect(option.series[0].lineStyle.color).not.toBe(style.trendLineColor);
+    }
+  });
+
+  it('colors known Stress states without treating unknown provider values as severe', () => {
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.StressState,
+      chartKind: 'step',
+      valueType: HEALTH_VALUE_TYPES.Category,
+      unit: 'category',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 'relaxing', qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 'active', qualityCode: null },
+        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 'stressful', qualityCode: null },
+        { timestampMs: DAY_MS * 3, calendarDate: '1970-01-04', value: 'provider-specific', qualityCode: null },
+      ],
+    })], 0, DAY_MS * 3)[0];
+    const style = buildDashboardEChartsStyleTokens(false, 640);
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 3,
+      style,
+      false,
+    ) as StressStateColorOption;
+
+    expect(option.visualMap.pieces).toEqual([
+      { value: 'relaxing', color: AppDataColors.Altitude },
+      { value: 'active', color: AppDataColors.Stress },
+      { value: 'stressful', color: AppDataColors['Heart Rate_0'] },
+      { value: 'provider specific', color: style.trendLineColor },
+    ]);
+    expect(option.tooltip.formatter({ value: [DAY_MS * 3, 'provider-specific'] }))
+      .toContain(`background:${style.trendLineColor}`);
+  });
+
+  it('renders provider-specific Body Energy as separately graded resource bars', () => {
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.BodyEnergy,
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+      providerLabel: 'Suunto',
+      sourceLabel: 'Suunto',
+      semanticVariant: 'recovery_balance',
+      chartKind: 'bar',
+      unit: 'percent',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 20, qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 45, qualityCode: null },
+        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 70, qualityCode: null },
+        { timestampMs: DAY_MS * 3, calendarDate: '1970-01-04', value: 90, qualityCode: null },
+      ],
+    })], 0, DAY_MS * 3)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 3,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as RecoveryBalanceColorOption;
+    const color = option.series[0].itemStyle.color;
+
+    expect(option.series[0].type).toBe('bar');
+    expect(color({ value: [0, 20] })).toBe(AppDataColors['Body Energy Low']);
+    expect(color({ value: [DAY_MS, 45] })).toBe(AppDataColors['Body Energy Reduced']);
+    expect(color({ value: [DAY_MS * 2, 70] })).toBe(AppDataColors['Body Energy Moderate']);
+    expect(color({ value: [DAY_MS * 3, 90] })).toBe(AppDataColors['Body Energy High']);
+    expect(option.tooltip.formatter({ value: [DAY_MS * 3, 90] }))
+      .toContain(`background:${AppDataColors['Body Energy High']}`);
+
+    const garminModel = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.BodyEnergy,
+      semanticVariant: 'garmin_body_battery',
+      chartKind: 'bar',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 45, qualityCode: null }],
+    })], 0, DAY_MS)[0];
+    const garminOption = buildHealthMetricEChartsOption(
+      garminModel,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as RecoveryBalanceColorOption;
+    expect(garminOption.series[0].itemStyle.color({ value: [0, 45] }))
+      .toBe(AppDataColors['Body Energy Reduced']);
   });
 
   it('bounds visual DOM points while preserving the first and last reading', () => {

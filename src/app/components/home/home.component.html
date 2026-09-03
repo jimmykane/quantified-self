@@ -20,10 +20,10 @@
       </p>
 
       <div class="hero-actions" data-nosnippet>
-        <button mat-flat-button class="cta-button primary qs-mat-primary"  (click)="navigateToDashboardOrLogin()">
+        <a mat-flat-button class="cta-button primary qs-mat-primary" routerLink="/login">
           Get Started Free
           <mat-icon iconPositionEnd>arrow_forward</mat-icon>
-        </button>
+        </a>
         <a mat-stroked-button routerLink="/features/training-analysis">
           Explore Training Analysis
           <mat-icon iconPositionEnd>monitoring</mat-icon>
@@ -118,32 +118,13 @@
         iconTone="secondary"
         title="Your Training Snapshot"
         summary="Current state, recovery-aware readiness, recent volume, and exact load-model values in the same hierarchy used by Training."
+        [showDivider]="false"
       >
-        <a
-          compactFeatureRowAction
-          mat-stroked-button
-          routerLink="/features/training-analysis"
-          >Explore Training</a
-        >
-        <div class="training-preview-data" data-nosnippet>
-          <app-training-summary-cards
-            mode="preview"
-            [cards]="trainingPreviewCards"
-            ariaLabel="Current Training overview"
-          ></app-training-summary-cards>
-
-          <app-training-metric-grid
-            mode="preview-load"
-            [metrics]="trainingPreviewLoadMetrics"
-            ariaLabel="Training load metrics"
-          ></app-training-metric-grid>
-
-          <app-training-metric-grid
-            mode="preview-context"
-            [metrics]="trainingPreviewContextMetrics"
-            ariaLabel="Training context"
-          ></app-training-metric-grid>
-        </div>
+        <app-public-feature-preview
+          class="training-preview-data"
+          data-nosnippet
+          previewKey="training-snapshot"
+        ></app-public-feature-preview>
       </app-compact-feature-row>
     </div>
 
@@ -155,19 +136,7 @@
         title="Charts Behind Every Signal"
         summary="See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and sleep views available in Training."
       >
-        @defer (on viewport) {
-          <app-home-signal-charts-preview></app-home-signal-charts-preview>
-        } @placeholder {
-          <div
-            class="home-preview-placeholder home-preview-placeholder--signals"
-            data-nosnippet
-          >
-            <p class="home-preview-placeholder__summary">
-              Preview charts: Freshness Forecast, Intensity Distribution,
-              Efficiency Trend, Cycling Power Curve, and Form.
-            </p>
-          </div>
-        }
+        <app-public-feature-preview data-nosnippet previewKey="training-signals"></app-public-feature-preview>
       </app-compact-feature-row>
 
       <!-- Feature 3: Dashboard Manager -->
@@ -177,17 +146,7 @@
         title="Build the Dashboard You Need"
         summary="Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters; maps add style and marker-clustering controls."
       >
-        @defer (on viewport; prefetch on idle) {
-          <app-home-dashboard-preview></app-home-dashboard-preview>
-        } @placeholder {
-          <div
-            class="home-preview-placeholder home-preview-placeholder--dashboard"
-            aria-hidden="true"
-          ></div>
-        }
-        <a compactFeatureRowAction mat-stroked-button routerLink="/dashboard">
-          Open Your Dashboard
-        </a>
+        <app-public-feature-preview data-nosnippet previewKey="dashboard"></app-public-feature-preview>
       </app-compact-feature-row>
 
       <!-- Feature 4: Deep Analysis -->
@@ -197,15 +156,15 @@
         title="Analyze Every Workout"
         summary="Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. Inspect intensity zones, grade-colored elevation, inverse depth, aerobic durability, and cadence versus power. Switch between distance, duration, or time where supported, then select a range for stats or zoom in."
       >
-        @defer (on viewport; prefetch on idle) {
-          <app-home-workout-preview></app-home-workout-preview>
-        } @placeholder {
-          <div
-            class="home-preview-placeholder home-preview-placeholder--workout"
-            aria-hidden="true"
-          ></div>
-        }
+        <app-public-feature-preview data-nosnippet previewKey="workout-analysis"></app-public-feature-preview>
       </app-compact-feature-row>
+    </div>
+
+    <div class="section-actions training-actions animate-on-scroll">
+      <a mat-stroked-button routerLink="/features/training-analysis">
+        Explore Training Analysis
+        <mat-icon iconPositionEnd>monitoring</mat-icon>
+      </a>
     </div>
   </section>
 
@@ -242,14 +201,13 @@
       ></app-compact-feature-row>
     </div>
 
-    <div class="ai-insights-examples animate-on-scroll">
-      <p class="examples-label">What you can ask</p>
-      <div class="example-prompts">
-        <app-typed-prompt-rotator [prompts]="assistantPromptExamples"></app-typed-prompt-rotator>
-      </div>
-    </div>
+    <app-public-feature-preview
+      class="ai-insights-examples animate-on-scroll"
+      data-nosnippet
+      previewKey="assistant-example"
+    ></app-public-feature-preview>
 
-    <div class="ai-insights-actions animate-on-scroll">
+    <div class="section-actions ai-insights-actions animate-on-scroll">
       <a mat-stroked-button routerLink="/features/ai-insights">
         Explore the Assistant
       </a>
@@ -271,6 +229,7 @@
           routerLink="/features/mcp-server"
           >Connect ChatGPT or Claude</a
         >
+        <app-public-feature-preview data-nosnippet previewKey="mcp-flow"></app-public-feature-preview>
       </app-compact-feature-row>
     </div>
   </section>
@@ -282,192 +241,62 @@
         <mat-icon class="footprint-icon">map</mat-icon>
         <h2>Map Your Activities</h2>
         <p>
-          Every run, ride, and hike — visualized on a single map.
-          Explore your entire athletic history.
+          See every GPS activity together, then filter by date or activity type and explore the trips across your
+          history.
         </p>
-        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
-          Explore MyTracks
-          <mat-icon iconPositionEnd>explore</mat-icon>
-        </button>
       </div>
+      <app-public-feature-preview
+        class="footprint-map-stage"
+        data-nosnippet
+        previewKey="activity-map"
+      ></app-public-feature-preview>
+      <p class="footprint-map-caption" data-nosnippet>
+        Real activity traces · open-water swimming, trail running, and mountain biking.
+      </p>
+      <a class="footprint-cta" mat-stroked-button routerLink="/features/activity-map">
+        Explore Activity Map
+        <mat-icon iconPositionEnd>explore</mat-icon>
+      </a>
     </div>
   </section>
 
-  <!-- 6. Data Sovereignty (Full Width) -->
+  <!-- 6. Hardware Benchmark Section (Precise Analysis) -->
+  <section class="analysis-section container public-below-fold">
+    <div class="analysis-header animate-on-scroll">
+      <mat-icon class="analysis-header-icon">rate_review</mat-icon>
+      <h2 class="section-title">Built for Device Reviewers</h2>
+      <p class="section-subtitle">
+        Compare same-session recordings from watches, bike computers, and sensors. Set reference and test devices,
+        auto-align their timelines, and turn GNSS and sensor differences into repeatable evidence.
+      </p>
+      <div class="analysis-actions">
+        <a mat-stroked-button class="analysis-link" routerLink="/features/workout-data-comparison">
+          Compare Workouts and Devices
+        </a>
+      </div>
+    </div>
+
+    <app-public-feature-preview
+      class="analysis-grid animate-on-scroll"
+      data-nosnippet
+      previewKey="reviewer-benchmark"
+    ></app-public-feature-preview>
+  </section>
+
+  <!-- 7. Data Sovereignty (Full Width) -->
   <section class="sovereignty-section public-below-fold">
     <div class="content-wrapper">
       <div class="text-content">
         <mat-icon class="large-icon">security</mat-icon>
-        <h2>Own Your Data</h2>
+        <h2>Your Data. Yours to Keep.</h2>
         <p>
-          We believe athletes should own their performance data. Export your original files anytime.
-          No hidden mining, no lock-in, just pure analytics.
+          Download your original activity files whenever you want—whether you’re creating a backup, changing services,
+          or analyzing them elsewhere.
         </p>
-        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
+        <a mat-stroked-button routerLink="/login">
           Start Analyzing Now
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <!-- 7. Hardware Benchmark Section (Precise Analysis) -->
-  <section class="analysis-section container public-below-fold">
-    <div class="analysis-header animate-on-scroll">
-      <h2 class="section-title">Compare Your Devices</h2>
-      <p class="section-subtitle">
-        Merge same-session recordings, choose a reference device, and compare hardware across GNSS accuracy, sensor
-        agreement, stat deltas, and data-quality artifacts.
-      </p>
-      <div class="analysis-actions">
-        <a mat-stroked-button class="analysis-link" routerLink="/features/workout-data-comparison">
-          Compare Workout Data
-        </a>
-        <a mat-stroked-button class="analysis-link" routerLink="/features/sports-watch-benchmark">
-          Device Benchmarks
         </a>
       </div>
-    </div>
-
-    <div class="compact-row-stack analysis-grid">
-      <!-- Benchmark Merge Workflow -->
-      <app-compact-feature-row
-        class="analysis-card animate-on-scroll"
-        icon="merge_type"
-        iconTone="secondary"
-        title="Benchmark Merge Workflow"
-        summary="Combine recordings from multiple devices into a benchmark event, keep it out of normal training totals, then pick reference and test activities for a clean device-to-device report."
-      >
-        <div class="analysis-row-content">
-          <div class="visual-box chart-preview">
-            <svg class="chart-svg" viewBox="0 -80 1000 560" preserveAspectRatio="xMidYMid meet">
-              <defs>
-                <linearGradient id="activeGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="var(--mat-sys-primary)" stop-opacity="0.2" />
-                  <stop offset="100%" stop-color="var(--mat-sys-primary)" stop-opacity="0" />
-                </linearGradient>
-              </defs>
-              <g opacity="0.1">
-                <line x1="0" y1="80" x2="1000" y2="80" stroke="currentColor" stroke-width="1" />
-                <line x1="0" y1="240" x2="1000" y2="240" stroke="currentColor" stroke-width="1" />
-                <line x1="0" y1="400" x2="1000" y2="400" stroke="currentColor" stroke-width="1" />
-              </g>
-              <path d="M0,350 Q200,50 400,200 T800,100 T1000,250" class="ghost-path" />
-              <path d="M0,360 Q210,60 410,210 T810,110 T1000,240" class="active-path" />
-              <g transform="translate(450, 220)" class="hardware-label primary">
-                <rect x="-60" y="-35" width="120" height="24" rx="6" />
-                <text x="0" y="-19" text-anchor="middle">FENIX 8 (1S)</text>
-              </g>
-              <g transform="translate(450, 160)" class="hardware-label secondary">
-                <rect x="-60" y="-35" width="120" height="24" rx="6" />
-                <text x="0" y="-19" text-anchor="middle">WATCH ULTRA 2</text>
-              </g>
-            </svg>
-          </div>
-          <div class="stat-preview">
-            <div class="stat-item">
-              <span class="stat-label">Merge Type</span>
-              <span class="stat-value">Benchmark</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Roles</span>
-              <span class="stat-value">Ref / Test</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Auto Align</span>
-              <span class="stat-value success">+/-15s</span>
-            </div>
-          </div>
-        </div>
-      </app-compact-feature-row>
-
-      <!-- GNSS Trace Comparison -->
-      <app-compact-feature-row
-        class="analysis-card animate-on-scroll"
-        icon="route"
-        iconTone="secondary"
-        title="GNSS Trace Comparison"
-        summary="Compare GPS tracks point by point and quantify trace disagreement with CEP50, CEP95, RMSE, max deviation, and total distance difference."
-      >
-        <div class="analysis-row-content">
-          <div class="visual-box map-preview">
-            <div class="map-tile-bg"></div>
-            <svg class="map-svg" viewBox="-100 -50 1000 700" preserveAspectRatio="xMidYMid meet">
-              <path d="M100,600 L120,400 L130,200 C140,0 400,0 600,10 L780,20" class="track-ghost" />
-              <path d="M100,600 L110,400 L115,200 C120,0 400,0 600,0 L800,0" class="track-active" />
-              <circle cx="100" cy="600" r="10" class="marker start" />
-              <g transform="translate(130, 100)" class="accuracy-callout">
-                <rect x="10" y="-35" width="140" height="28" rx="6" />
-                <text x="80" y="-17" text-anchor="middle">&#916; OFFSET: 1.2M</text>
-              </g>
-            </svg>
-            <div class="scale-bar"></div>
-            <span class="scale-label">500M</span>
-          </div>
-          <div class="stat-preview">
-            <div class="stat-item">
-              <span class="stat-label">CEP (50%)</span>
-              <span class="stat-value">0.8m</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">CEP (95%)</span>
-              <span class="stat-value">2.4m</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">RMSE</span>
-              <span class="stat-value warning">1.1m</span>
-            </div>
-          </div>
-        </div>
-      </app-compact-feature-row>
-
-      <!-- Sensor Agreement + Quality -->
-      <app-compact-feature-row
-        class="analysis-card animate-on-scroll"
-        icon="sensors"
-        iconTone="secondary"
-        title="Sensor Quality Reports"
-        summary="Grade shared streams with correlation, MAE, and RMSE, then surface dropouts, stuck values, and cadence-lock warnings before a device shapes your decisions."
-      >
-        <div class="analysis-row-content">
-          <div class="visual-box quality-preview">
-            <div class="quality-verdict">
-              <mat-icon>verified</mat-icon>
-              <div>
-                <strong>Good Agreement</strong>
-                <span>Saved benchmark report</span>
-              </div>
-            </div>
-            <div class="quality-rows">
-              <div class="quality-row">
-                <span>Heart Rate</span>
-                <strong>98.7% correlation</strong>
-              </div>
-              <div class="quality-row">
-                <span>Power</span>
-                <strong>MAE 4.2w</strong>
-              </div>
-              <div class="quality-row warning">
-                <span>Data Quality</span>
-                <strong>Dropouts grouped</strong>
-              </div>
-            </div>
-          </div>
-          <div class="stat-preview">
-            <div class="stat-item">
-              <span class="stat-label">Streams</span>
-              <span class="stat-value">Corr / MAE</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Artifacts</span>
-              <span class="stat-value warning">Detected</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Reports</span>
-              <span class="stat-value success">Save / Share</span>
-            </div>
-          </div>
-        </div>
-      </app-compact-feature-row>
     </div>
   </section>
 

@@ -26,21 +26,28 @@ const {
     };
 });
 
-const { mockStripeInstance, mockRetrieveUpcoming, mockCreatePreview, mockRetrieveSubscription } = vi.hoisted(() => {
-    const retrieveUpcoming = vi.fn();
+const {
+    mockStripeInstance,
+    mockCreatePreview,
+    mockRetrieveSubscription,
+    mockRetrieveCoupon,
+} = vi.hoisted(() => {
     const createPreview = vi.fn();
     const retrieveSubscription = vi.fn();
+    const retrieveCoupon = vi.fn();
     return {
         mockCreatePreview: createPreview,
-        mockRetrieveUpcoming: retrieveUpcoming,
         mockRetrieveSubscription: retrieveSubscription,
+        mockRetrieveCoupon: retrieveCoupon,
         mockStripeInstance: {
             invoices: {
-                createPreview,
-                retrieveUpcoming
+                createPreview
             },
             subscriptions: {
                 retrieve: retrieveSubscription
+            },
+            coupons: {
+                retrieve: retrieveCoupon
             }
         }
     };
@@ -91,19 +98,15 @@ describe('getUpcomingRenewalAmount', () => {
             ]
         });
         (mockStripeInstance.invoices as { createPreview: typeof mockCreatePreview }).createPreview = mockCreatePreview;
-        (mockStripeInstance.invoices as { retrieveUpcoming: typeof mockRetrieveUpcoming }).retrieveUpcoming = mockRetrieveUpcoming;
 
         mockCreatePreview.mockResolvedValue({
             amount_due: 2500,
             currency: 'usd'
         });
         mockRetrieveSubscription.mockResolvedValue({
-            discount: null
+            discounts: []
         });
-        mockRetrieveUpcoming.mockResolvedValue({
-            amount_due: 2500,
-            currency: 'usd'
-        });
+        mockRetrieveCoupon.mockResolvedValue({ duration: 'once' });
     });
 
     it('should throw unauthenticated when called without auth', async () => {
@@ -122,15 +125,14 @@ describe('getUpcomingRenewalAmount', () => {
             docs: []
         });
 
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         const result = await handler(baseRequest);
 
         expect(result).toEqual({ status: 'no_upcoming_charge' });
-        expect(mockRetrieveUpcoming).not.toHaveBeenCalled();
     });
 
     it('should return ready with amountMinor and currency when Stripe upcoming invoice exists', async () => {
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         const result = await handler(baseRequest);
 
         expect(result).toEqual({
@@ -141,7 +143,6 @@ describe('getUpcomingRenewalAmount', () => {
         expect(mockCreatePreview).toHaveBeenCalledWith({
             subscription: 'sub_123'
         });
-        expect(mockRetrieveUpcoming).not.toHaveBeenCalled();
         expect(mockCollection).toHaveBeenCalledWith('customers/user_123/subscriptions');
         expect(mockWhere).toHaveBeenCalledWith('status', 'in', ['active', 'trialing']);
         expect(mockOrderBy).toHaveBeenCalledWith('created', 'desc');
@@ -155,10 +156,10 @@ describe('getUpcomingRenewalAmount', () => {
             currency: 'eur'
         });
         mockRetrieveSubscription.mockResolvedValueOnce({
-            discount: null
+            discounts: []
         });
 
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         const result = await handler(baseRequest);
 
         expect(result).toEqual({
@@ -167,7 +168,7 @@ describe('getUpcomingRenewalAmount', () => {
             currency: 'EUR'
         });
         expect(mockRetrieveSubscription).toHaveBeenCalledWith('sub_123', {
-            expand: ['discount.coupon']
+            expand: ['discounts.source.coupon', 'items.data.discounts']
         });
     });
 
@@ -178,19 +179,142 @@ describe('getUpcomingRenewalAmount', () => {
             currency: 'eur'
         });
         mockRetrieveSubscription.mockResolvedValueOnce({
-            discount: {
-                coupon: {
-                    duration: 'repeating'
+            discounts: [{
+                source: {
+                    coupon: {
+                        duration: 'repeating'
+                    }
                 }
-            }
+            }]
         });
 
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         const result = await handler(baseRequest);
 
         expect(result).toEqual({
             status: 'ready',
             amountMinor: 0,
+            currency: 'EUR'
+        });
+    });
+
+    it('should inspect every expanded subscription discount', async () => {
+        mockCreatePreview.mockResolvedValueOnce({
+            amount_due: 0,
+            subtotal: 399,
+            currency: 'eur'
+        });
+        mockRetrieveSubscription.mockResolvedValueOnce({
+            discounts: [
+                'di_unexpanded',
+                { source: { coupon: { duration: 'once' } } },
+                { source: { coupon: { duration: 'forever' } } },
+            ]
+        });
+
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
+        const result = await handler(baseRequest);
+
+        expect(result).toEqual({
+            status: 'ready',
+            amountMinor: 0,
+            currency: 'EUR'
+        });
+    });
+
+    it('should inspect item-level discounts and retrieve their coupon source when needed', async () => {
+        mockCreatePreview.mockResolvedValueOnce({
+            amount_due: 0,
+            subtotal: 399,
+            currency: 'eur'
+        });
+        mockRetrieveSubscription.mockResolvedValueOnce({
+            discounts: [],
+            items: {
+                data: [{
+                    discounts: [{ source: { coupon: 'coupon_item_forever' } }],
+                }],
+            },
+        });
+        mockRetrieveCoupon.mockResolvedValueOnce({ duration: 'forever' });
+
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
+        const result = await handler(baseRequest);
+
+        expect(result).toEqual({
+            status: 'ready',
+            amountMinor: 0,
+            currency: 'EUR'
+        });
+        expect(mockRetrieveCoupon).toHaveBeenCalledWith('coupon_item_forever');
+    });
+
+    it('should not treat one discounted item as covering a multi-item subscription', async () => {
+        mockCreatePreview.mockResolvedValueOnce({
+            amount_due: 0,
+            subtotal: 899,
+            currency: 'eur'
+        });
+        mockRetrieveSubscription.mockResolvedValueOnce({
+            discounts: [],
+            items: {
+                data: [
+                    { discounts: [{ source: { coupon: { duration: 'forever' } } }] },
+                    { discounts: [] },
+                ],
+            },
+        });
+
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
+        const result = await handler(baseRequest);
+
+        expect(result).toEqual({
+            status: 'ready',
+            amountMinor: 899,
+            currency: 'EUR'
+        });
+    });
+
+    it('should keep zero when every item has a long-running discount', async () => {
+        mockCreatePreview.mockResolvedValueOnce({
+            amount_due: 0,
+            subtotal: 899,
+            currency: 'eur'
+        });
+        mockRetrieveSubscription.mockResolvedValueOnce({
+            discounts: [],
+            items: {
+                data: [
+                    { discounts: [{ source: { coupon: { duration: 'forever' } } }] },
+                    { discounts: [{ source: { coupon: { duration: 'repeating' } } }] },
+                ],
+            },
+        });
+
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
+        const result = await handler(baseRequest);
+
+        expect(result).toEqual({
+            status: 'ready',
+            amountMinor: 0,
+            currency: 'EUR'
+        });
+    });
+
+    it('should fall back to the subtotal when Stripe discount inspection fails', async () => {
+        mockCreatePreview.mockResolvedValueOnce({
+            amount_due: 0,
+            subtotal: 399,
+            currency: 'eur'
+        });
+        mockRetrieveSubscription.mockRejectedValueOnce(new Error('Transient Stripe failure'));
+
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
+        const result = await handler(baseRequest);
+
+        expect(result).toEqual({
+            status: 'ready',
+            amountMinor: 399,
             currency: 'EUR'
         });
     });
@@ -206,12 +330,11 @@ describe('getUpcomingRenewalAmount', () => {
             ]
         });
 
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         const result = await handler(baseRequest);
 
         expect(result).toEqual({ status: 'unavailable' });
         expect(mockCreatePreview).not.toHaveBeenCalled();
-        expect(mockRetrieveUpcoming).not.toHaveBeenCalled();
     });
 
     it('should choose latest period end when created timestamps are tied', async () => {
@@ -235,7 +358,7 @@ describe('getUpcomingRenewalAmount', () => {
             ]
         });
 
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         await handler(baseRequest);
 
         expect(mockCreatePreview).toHaveBeenCalledWith({
@@ -264,27 +387,11 @@ describe('getUpcomingRenewalAmount', () => {
             ]
         });
 
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         await handler(baseRequest);
 
         expect(mockCreatePreview).toHaveBeenCalledWith({
             subscription: 'sub_zzz'
-        });
-    });
-
-    it('should fallback to retrieveUpcoming when createPreview is unavailable', async () => {
-        (mockStripeInstance.invoices as { createPreview?: typeof mockCreatePreview }).createPreview = undefined;
-
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
-        const result = await handler(baseRequest);
-
-        expect(result).toEqual({
-            status: 'ready',
-            amountMinor: 2500,
-            currency: 'USD'
-        });
-        expect(mockRetrieveUpcoming).toHaveBeenCalledWith({
-            subscription: 'sub_123'
         });
     });
 
@@ -294,7 +401,7 @@ describe('getUpcomingRenewalAmount', () => {
             message: 'No upcoming invoice available'
         });
 
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         const result = await handler(baseRequest);
 
         expect(result).toEqual({ status: 'no_upcoming_charge' });
@@ -303,7 +410,7 @@ describe('getUpcomingRenewalAmount', () => {
     it('should return unavailable when Stripe upcoming invoice retrieval fails unexpectedly', async () => {
         mockCreatePreview.mockRejectedValueOnce(new Error('Stripe API unavailable'));
 
-        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<any>;
+        const handler = getUpcomingRenewalAmount as unknown as (req: CallableRequest) => Promise<unknown>;
         const result = await handler(baseRequest);
 
         expect(result).toEqual({ status: 'unavailable' });

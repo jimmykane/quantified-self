@@ -1,5 +1,8 @@
 import { RenderMode, ServerRoute } from '@angular/ssr';
-import { WORKOUT_DATA_COMPARISON_PATH } from './components/features/workout-data-comparison-page.paths';
+import {
+  LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
+  WORKOUT_DATA_COMPARISON_PATH,
+} from './components/features/workout-data-comparison-page.paths';
 import { SUPPORTED_ACTIVITIES_PATH } from './components/features/supported-activities-page.paths';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
 
@@ -17,13 +20,15 @@ export const PRERENDERED_FEATURE_ROUTES = [
   SUPPORTED_ACTIVITIES_PATH,
   PUBLIC_FEATURE_PATHS.activityCalendar,
   PUBLIC_FEATURE_PATHS.trainingAnalysis,
+  PUBLIC_FEATURE_PATHS.trainingDashboard,
+  PUBLIC_FEATURE_PATHS.activityMap,
   PUBLIC_FEATURE_PATHS.mcpServer,
   PUBLIC_FEATURE_PATHS.assistant,
-  PUBLIC_FEATURE_PATHS.workoutFileComparison,
   PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,
   PUBLIC_FEATURE_PATHS.routeFiles,
-  PUBLIC_FEATURE_PATHS.sportsWatchBenchmark,
 ] as const;
+
+export const PUBLIC_REDIRECT_ROUTES = LEGACY_WORKOUT_DATA_COMPARISON_PATHS;
 
 export const PRERENDERED_GUIDE_ROUTES = [
   PUBLIC_GUIDE_PATHS.hub,
@@ -98,6 +103,10 @@ export const serverRoutes: ServerRoute[] = [
   ...PRERENDERED_PUBLIC_ROUTES.map(path => ({
     path,
     renderMode: RenderMode.Prerender,
+  } as const)),
+  ...PUBLIC_REDIRECT_ROUTES.map(path => ({
+    path,
+    renderMode: RenderMode.Client,
   } as const)),
   ...CLIENT_RENDERED_APP_ROUTES.map(path => ({
     path,

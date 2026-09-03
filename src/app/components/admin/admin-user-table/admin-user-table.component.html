@@ -165,6 +165,14 @@
                 <ng-container matColumnDef="actions">
                     <th mat-header-cell *matHeaderCellDef>Actions</th>
                     <td mat-cell *matCellDef="let row">
+                        @if (row.canOpenSubscriptionGiftDialog) {
+                        <button mat-icon-button class="qs-mat-primary"
+                            [matTooltip]="row.isSubscriptionGiftEligible ? 'Gift subscription time' : 'Review subscription gift operation'"
+                            [attr.aria-label]="row.isSubscriptionGiftEligible ? 'Gift subscription time' : 'Review subscription gift operation'"
+                            (click)="onGiftSubscriptionTime(row.user)">
+                            <mat-icon>{{ row.isSubscriptionGiftEligible ? 'redeem' : 'manage_history' }}</mat-icon>
+                        </button>
+                        }
                         @if (!row.isAdmin) {
                         <button mat-icon-button class="qs-mat-primary" matTooltip="Impersonate User"
                             aria-label="Impersonate user" (click)="onImpersonate(row.user)">

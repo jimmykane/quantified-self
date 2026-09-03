@@ -8,6 +8,7 @@ import {
   PRERENDERED_FEATURE_ROUTES,
   PRERENDERED_GUIDE_ROUTES,
   PRERENDERED_PUBLIC_ROUTES,
+  PUBLIC_REDIRECT_ROUTES,
   PRERENDERED_STATIC_PUBLIC_ROUTES,
   PRERENDERED_TOOLS_ROUTES,
   serverRoutes,
@@ -67,12 +68,12 @@ describe('serverRoutes', () => {
       'features/supported-activities',
       'features/activity-calendar',
       'features/training-analysis',
+      'features/training-dashboard',
+      'features/activity-map',
       'features/mcp-server',
       'features/ai-insights',
-      'features/workout-file-comparison',
       'features/fit-gpx-tcx-file-analyzer',
       'features/fit-gpx-route-files',
-      'features/sports-watch-benchmark',
     ]);
     expect(PRERENDERED_GUIDE_ROUTES).toEqual([
       'guides',
@@ -116,12 +117,14 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('features/supported-activities')).toBe(true);
     expect(prerenderedPaths.has('features/activity-calendar')).toBe(true);
     expect(prerenderedPaths.has('features/training-analysis')).toBe(true);
+    expect(prerenderedPaths.has('features/training-dashboard')).toBe(true);
+    expect(prerenderedPaths.has('features/activity-map')).toBe(true);
     expect(prerenderedPaths.has('features/mcp-server')).toBe(true);
     expect(prerenderedPaths.has('features/ai-insights')).toBe(true);
-    expect(prerenderedPaths.has('features/workout-file-comparison')).toBe(true);
+    expect(prerenderedPaths.has('features/workout-file-comparison')).toBe(false);
     expect(prerenderedPaths.has('features/fit-gpx-tcx-file-analyzer')).toBe(true);
     expect(prerenderedPaths.has('features/fit-gpx-route-files')).toBe(true);
-    expect(prerenderedPaths.has('features/sports-watch-benchmark')).toBe(true);
+    expect(prerenderedPaths.has('features/sports-watch-benchmark')).toBe(false);
     expect(prerenderedPaths.has('guides')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-garmin-to-suunto')).toBe(true);
     expect(prerenderedPaths.has('guides/sync-coros-to-suunto')).toBe(true);
@@ -136,7 +139,14 @@ describe('serverRoutes', () => {
     const clientRoutes = serverRoutes.filter(route => route.renderMode === RenderMode.Client);
     const fallbackRoute = clientRoutes.at(-1);
 
-    expect(clientRoutes.slice(0, -1).map(route => route.path)).toEqual([...CLIENT_RENDERED_APP_ROUTES]);
+    expect(clientRoutes.slice(0, -1).map(route => route.path)).toEqual([
+      ...PUBLIC_REDIRECT_ROUTES,
+      ...CLIENT_RENDERED_APP_ROUTES,
+    ]);
+    expect(PUBLIC_REDIRECT_ROUTES).toEqual([
+      'features/workout-file-comparison',
+      'features/sports-watch-benchmark',
+    ]);
     expect(CLIENT_RENDERED_APP_ROUTES.every(path => !path.includes('**'))).toBe(true);
     expect(fallbackRoute).toMatchObject({
       path: '**',
@@ -161,6 +171,7 @@ describe('serverRoutes', () => {
   it('keeps every app route represented in the server render config', () => {
     const serverRoutePaths = new Set([
       ...PRERENDERED_PUBLIC_ROUTES,
+      ...PUBLIC_REDIRECT_ROUTES,
       ...CLIENT_RENDERED_APP_ROUTES,
     ]);
 
@@ -179,6 +190,7 @@ describe('serverRoutes', () => {
 
     const staleServerRoutes = [
       ...PRERENDERED_PUBLIC_ROUTES,
+      ...PUBLIC_REDIRECT_ROUTES,
       ...CLIENT_RENDERED_APP_ROUTES,
     ].filter(path => !validServerPaths.has(path));
 
