@@ -117,11 +117,17 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     ).subscribe(async (results) => {
       const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
       const shouldConnect = this.route.snapshot.queryParamMap.get('connect');
+      const authorizationCode = this.route.snapshot.queryParamMap.get('code');
+      const authorizationState = this.route.snapshot.queryParamMap.get('state');
+      const hasOAuthCallback = Boolean(authorizationCode && authorizationState);
       if (!serviceName || serviceName !== this.serviceName) {
         this.isLoading = false;
         return;
       }
-      if (!shouldConnect) {
+      // Some providers drop static redirect-uri query parameters after an
+      // external identity-provider sign-in. A returned OAuth code and state
+      // are sufficient evidence that this is the connection callback.
+      if (!shouldConnect && !hasOAuthCallback) {
         this.isLoading = false;
         return;
       }

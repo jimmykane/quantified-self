@@ -598,6 +598,32 @@ describe('ServicesGarminComponent', () => {
             expect(component.isConnecting).toBe(false);
         });
 
+        it('ngOnChanges should auto-connect from an OAuth callback without the legacy connect parameter', async () => {
+            const user = { uid: 'u1' } as any;
+            component.user = user;
+            queryParams = {
+                serviceName: component.serviceName,
+                state: 'state-token',
+                code: 'auth-code'
+            };
+            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'token-1' }]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce(undefined);
+
+            await component.ngOnChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).toHaveBeenCalledWith('state-token', 'auth-code');
+            expect(mockRouter.navigate).toHaveBeenCalledWith(
+                ['services'],
+                {
+                    queryParams: { serviceName: component.serviceName },
+                    queryParamsHandling: ''
+                }
+            );
+            expect(component.forceConnected).toBe(true);
+        });
+
         it('ngOnChanges should map 502 during auto-connect to partner unavailable message', async () => {
             const snackBar = TestBed.inject(MatSnackBar);
             const snackBarSpy = vi.spyOn(snackBar, 'open');
