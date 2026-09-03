@@ -112,6 +112,7 @@
 .lap-selected-summary-row .mat-mdc-footer-cell {
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-label-large);
+  font-family: 'Barlow Condensed', 'Inter', sans-serif;
 }
 
 .lap-selected-summary-label {

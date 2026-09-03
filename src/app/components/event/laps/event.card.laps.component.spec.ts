@@ -721,6 +721,8 @@ describe('EventCardLapsComponent', () => {
         expect(styles).toContain('.lap-column-search-field');
         expect(styles).toContain('box-sizing: border-box;');
         expect(styles).toContain('width: calc(100% - 32px) !important;');
+        expect(styles).toContain(".lap-selected-summary-row .mat-mdc-footer-cell");
+        expect(styles).toContain("font-family: 'Barlow Condensed', 'Inter', sans-serif;");
     });
 
     it('renders checkbox-only lap selection and a sticky selected-summary footer', () => {
