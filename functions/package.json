@@ -66,6 +66,7 @@
     "backfill-event-processing-entity": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-event-processing-entity.ts",
     "backfill-route-processing-entity": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-route-processing-entity.ts",
     "backfill-service-connection-projections": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-service-connection-account-projections.ts",
+    "audit-service-oauth-roots": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/audit-service-oauth-roots.ts",
     "replace-stripe-price": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/replace-stripe-price.ts"
   },
   "engines": {

@@ -28,6 +28,7 @@ import {
   recordServiceDisconnectRetryFailure,
 } from '../service-disconnect-pending';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { reconcileExpiredServiceOAuthRoots } from '../service-oauth-root-reconciliation';
 
 interface PendingDisconnectCollectionConfig {
   serviceName: ServiceNames;
@@ -640,6 +641,23 @@ export const retryPendingServiceDisconnects = onSchedule({
         });
       }
     }
+  }
+
+  try {
+    const oauthRootReconciliation = await reconcileExpiredServiceOAuthRoots(
+      admin.firestore(),
+      now.toMillis(),
+    );
+    logger.info('[RetryPendingServiceDisconnects] Reconciled expired OAuth roots and disconnect fences.', {
+      rootsScanned: oauthRootReconciliation.rootsScanned,
+      cleaned: oauthRootReconciliation.cleaned,
+      failed: oauthRootReconciliation.failed,
+      byOutcome: oauthRootReconciliation.byOutcome,
+    });
+  } catch {
+    logger.error('[RetryPendingServiceDisconnects] OAuth root reconciliation scan failed.', {
+      reason: 'oauth_root_reconciliation_scan_failed',
+    });
   }
 });
 

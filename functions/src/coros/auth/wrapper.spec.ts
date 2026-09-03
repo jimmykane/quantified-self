@@ -137,7 +137,15 @@ describe('COROS Auth Wrapper', () => {
         });
 
         it('should validate state and set tokens', async () => {
-            await requestAndSetCOROSAPIAccessToken(data, context);
+            vi.mocked(oauth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValueOnce({
+                connected: true,
+                outcome: 'connected',
+            });
+
+            await expect(requestAndSetCOROSAPIAccessToken(data, context)).resolves.toEqual({
+                connected: true,
+                outcome: 'connected',
+            });
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(oauth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', SERVICE_NAME, 'validState');
