@@ -95,14 +95,15 @@ describe('EventSummaryComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('uses client-side routing for the supported activities reference', () => {
+    it('does not show a supported activity types shortcut in event details', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/event-summary/event-summary.component.html'),
             'utf8'
         );
 
-        expect(template).toContain('routerLink="/features/supported-activities"');
-        expect(template).not.toContain('href="/features/supported-activities"');
+        expect(template).not.toContain('routerLink="/features/supported-activities"');
+        expect(template).not.toContain('Supported activity types');
+        expect(template).not.toContain('<mat-icon>category</mat-icon>');
     });
 
     it('keeps the event detail summary out of an outer glass card surface', () => {
