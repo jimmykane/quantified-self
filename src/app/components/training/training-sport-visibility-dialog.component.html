@@ -1,7 +1,7 @@
 <h2 mat-dialog-title>Sport shortcuts</h2>
 
 <mat-dialog-content>
-  <p class="dialog-intro">Pin up to {{ shortcutLimit }} sports for faster switching. Every sport remains available from the selector.</p>
+  <p class="dialog-intro">Pin up to {{ shortcutLimit }} sports for faster switching. Every available sport remains in the selector.</p>
 
   @if (data.isAutomatic) {
     <div class="automatic-note">
@@ -25,7 +25,7 @@
     }
   </div>
 
-  <p class="scope-note">Shortcuts change navigation only. They never hide a sport from Training totals or the All sports selector.</p>
+  <p class="scope-note">Shortcuts change navigation only. They never hide an available sport from Training totals or the All sports selector.</p>
 
   @if (errorMessage) {
     <p class="dialog-error" role="alert">{{ errorMessage }}</p>

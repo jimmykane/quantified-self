@@ -295,7 +295,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     description: 'Understand training load, readiness, intensity, durability, sleep, power, and sport-specific trends from your recorded activities.',
     h1: 'Training analysis for endurance athletes',
     intro: 'See how your recent training compares with your usual workload, then explore readiness, load, intensity, durability, sleep, power, and sport-specific trends in one curated workspace.',
-    chips: ['Training readiness', 'Eight sport families', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
+    chips: ['Training readiness', 'Sport-aware training mix', 'Gravity MTB', 'Context summaries', 'Durability', 'Best build'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Training Help', '/help', 'stroked', undefined, 'getting-started'),
@@ -327,7 +327,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
-        copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, or paddling. Multisport legs stay attributed to their recorded disciplines.',
+        copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, paddling, or recorded fitness and other training. Multisport legs stay attributed to their recorded disciplines.',
         items: [
           {
             icon: 'directions_run',
@@ -377,7 +377,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Which sports does Training support?',
-        answer: 'Training has focused views for Running; Cycling including road, indoor, virtual, e-bike, MTB, Enduro, and Downhill; Pool and Open Water Swimming; indoor and on-water Rowing; Walking and Hiking; Nordic and Roller Skiing; Strength; and Paddling. Multisport activities use their recorded legs when available, while other activities remain visible in All training.',
+        answer: 'Training has modeled views for Running; Cycling including road, indoor, virtual, e-bike, MTB, Enduro, and Downhill; Pool and Open Water Swimming; indoor and on-water Rowing; Walking and Hiking; Nordic and Roller Skiing; Strength; and Paddling. Recorded general fitness and gym sessions appear in Fitness & Gym, while other known sports remain visible in the volume-only Other training view. Multisport activities use their recorded legs when available.',
       },
       {
         question: 'Does Training tell me what workout to do?',

@@ -50,7 +50,9 @@ describe('resolveTrainingSportVisibility', () => {
       { discipline: 'walking-hiking', label: 'Walking & Hiking' },
       { discipline: 'nordic-skiing', label: 'Nordic Skiing' },
       { discipline: 'strength', label: 'Strength' },
+      { discipline: 'fitness-gym', label: 'Fitness & Gym' },
       { discipline: 'paddling', label: 'Paddling' },
+      { discipline: 'other-training', label: 'Other training' },
     ]);
     expect(formatTrainingVisibleDisciplinesLabel(['rowing', 'strength'])).toBe('Rowing + Strength');
     expect(formatTrainingVisibleDisciplinesScopeLabel(['cycling'])).toBe('Cycling/MTB');

@@ -11,7 +11,11 @@ import {
 } from '../../../shared/derived-metrics';
 import { enforceAppCheck } from '../utils';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
-import { isTrainingDiscipline, resolveTrainingDisciplineFromActivityType } from '../../../shared/training-disciplines';
+import {
+    hasTrainingSportCapability,
+    isTrainingDiscipline,
+    resolveTrainingDisciplineFromActivityType,
+} from '../../../shared/training-disciplines';
 import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import {
     normalizeTrainingBuildBenchmarkSelection,
@@ -61,10 +65,10 @@ function toMillis(value: unknown): number | null {
 }
 
 function requireDiscipline(value: unknown): DerivedTrainingDiscipline {
-    if (isTrainingDiscipline(value)) {
+    if (isTrainingDiscipline(value) && hasTrainingSportCapability(value, 'best-build')) {
         return value;
     }
-    throw new HttpsError('invalid-argument', 'discipline must be a supported Training sport.');
+    throw new HttpsError('invalid-argument', 'discipline must support Training build benchmarks.');
 }
 
 export function parseTrainingBuildBenchmarkRequest(value: unknown): SetTrainingBuildBenchmarkRequest {

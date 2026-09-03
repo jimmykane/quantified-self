@@ -1650,7 +1650,7 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         expect(running?.current?.activeWeekCount).toBe(12);
     });
 
-    it('supports benchmarks for every sport and omits misleading gravity and strength metrics', async () => {
+    it('supports every benchmark-capable sport and keeps volume-only families out of benchmark claims', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 10, 12);
         const benchmarkEndDayMs = Date.UTC(2026, 3, 30);
@@ -1707,7 +1707,8 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         const strength = result.payload.disciplines.find(item => item.discipline === 'strength');
 
         expect(result.payload.disciplines.map(item => item.discipline)).toEqual([
-            'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength', 'paddling',
+            'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
+            'fitness-gym', 'paddling', 'other-training',
         ]);
         [cycling, strength].forEach((discipline) => {
             expect(discipline?.status).toBe('ready');
@@ -1725,6 +1726,14 @@ describe('buildTrainingBuildComparisonMetricPayload', () => {
         });
         expect(cycling?.current).toMatchObject({ distanceMeters: 12_000, distanceEventCount: 1 });
         expect(strength?.current).toMatchObject({ distanceMeters: null, distanceEventCount: 0 });
+        ['fitness-gym', 'other-training'].forEach((discipline) => {
+            expect(result.payload.disciplines.find(item => item.discipline === discipline)).toMatchObject({
+                status: 'not-configured',
+                selection: null,
+                suggestedRaces: [],
+                suggestedEvents: [],
+            });
+        });
         expect(cycling?.current?.contexts).toEqual([expect.objectContaining({
             context: 'downhill',
             profile: 'gravity',
@@ -2963,6 +2972,44 @@ describe('buildTrainingSummaryMetricPayload', () => {
         ]));
     });
 
+    it('keeps generic fitness and known unmodeled sports visible as volume-only training', async () => {
+        const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
+        const currentDay = Date.UTC(2026, 6, 8);
+        const result = buildTrainingSummaryMetricPayload(buildTrainingActivitySources([
+            createEvent(currentDay, ActivityTypes.Training, 'Suunto'),
+            createEvent(currentDay, ActivityTypes.Surfing, 'Garmin'),
+            createEvent(currentDay, ActivityTypes.Triathlon, 'Garmin'),
+        ]), nowMs);
+        const fitness = result.payload.disciplines.find(item => item.discipline === 'fitness-gym');
+        const other = result.payload.disciplines.find(item => item.discipline === 'other-training');
+
+        expect(result.sourceEventCount).toBe(2);
+        expect(fitness?.current28d).toMatchObject({
+            activityCount: 1,
+            durationSeconds: 3_600,
+            easySeconds: 0,
+            moderateSeconds: 0,
+            hardSeconds: 0,
+        });
+        expect(fitness?.current28d.contexts).toEqual([expect.objectContaining({
+            context: 'general-fitness',
+            profile: 'general',
+            activityCount: 1,
+        })]);
+        expect(other?.current28d).toMatchObject({
+            activityCount: 1,
+            durationSeconds: 3_600,
+            easySeconds: 0,
+            moderateSeconds: 0,
+            hardSeconds: 0,
+        });
+        expect(other?.current28d.contexts).toEqual([expect.objectContaining({
+            context: 'other-training',
+            profile: 'general',
+            activityCount: 1,
+        })]);
+    });
+
     it('keeps the longest MTB jump as a maximum without scaling the normalized baseline', async () => {
         const { buildTrainingSummaryMetricPayload } = await import('./derived-metrics.service');
         const docs = [
@@ -3110,7 +3157,7 @@ describe('training explanation and durability metrics', () => {
         expect(result.payload.baselineMedian.parentTrainingStressScore).toBe(70);
         expect(result.payload.current.sportLoads).toEqual(expect.arrayContaining([
             expect.objectContaining({ sport: 'running', activityCount: 1, trainingStressScore: 60 }),
-            expect.objectContaining({ sport: 'other', activityCount: 1, trainingStressScore: null }),
+            expect.objectContaining({ sport: 'fitness-gym', activityCount: 1, trainingStressScore: null }),
             expect.objectContaining({ sport: 'unclassified', activityCount: 1, trainingStressScore: null }),
         ]));
         expect(result.payload.current.rhythms.find(item => item.discipline === 'running')).toMatchObject({
@@ -3157,7 +3204,9 @@ describe('training explanation and durability metrics', () => {
             { sport: 'walking-hiking', label: 'Walking & Hiking' },
             { sport: 'nordic-skiing', label: 'Nordic Skiing' },
             { sport: 'strength', label: 'Strength' },
+            { sport: 'fitness-gym', label: 'Fitness & Gym' },
             { sport: 'paddling', label: 'Paddling' },
+            { sport: 'other-training', label: 'Other training' },
             { sport: 'other', label: 'Other' },
             { sport: 'unclassified', label: 'Unclassified' },
         ]);
@@ -3176,20 +3225,26 @@ describe('training explanation and durability metrics', () => {
             loadActivityCount: 0,
             trainingStressScore: null,
         });
+        expect(sportLoads.find(item => item.sport === 'fitness-gym')).toMatchObject({
+            activityCount: 1,
+            loadActivityCount: 0,
+            trainingStressScore: null,
+        });
         expect(result.payload.current).toMatchObject({
             childActivityCount: 4,
-            childLoadActivityCount: 2,
-            childTrainingStressScore: 90,
+            childLoadActivityCount: 1,
+            childTrainingStressScore: 50,
             childLoadCoverage: {
                 totalCount: 4,
-                loadedCount: 2,
+                loadedCount: 1,
                 classifiedCount: 4,
                 unclassifiedCount: 0,
-                ratio: 0.5,
+                ratio: 0.25,
             },
         });
         expect(result.payload.current.rhythms.find(item => item.discipline === 'rowing')?.sessionCount).toBe(1);
         expect(result.payload.current.rhythms.find(item => item.discipline === 'strength')?.sessionCount).toBe(1);
+        expect(result.payload.current.rhythms.find(item => item.discipline === 'fitness-gym')?.sessionCount).toBe(1);
     });
 
     it('aggregates only persisted eligible evidence into current, usual, weekly, and Best Build contexts', async () => {
@@ -3574,7 +3629,9 @@ describe('activity-level Training sources and swimming performance', () => {
             ['walking-hiking', 0],
             ['nordic-skiing', 0],
             ['strength', 0],
+            ['fitness-gym', 0],
             ['paddling', 0],
+            ['other-training', 0],
         ]);
     });
 
@@ -4512,7 +4569,9 @@ describe('writeDerivedMetricSnapshotsReady', () => {
                 { discipline: 'walking-hiking', current28d: { activityCount: 0 } },
                 { discipline: 'nordic-skiing', current28d: { activityCount: 0 } },
                 { discipline: 'strength', current28d: { activityCount: 0 } },
+                { discipline: 'fitness-gym', current28d: { activityCount: 0 } },
                 { discipline: 'paddling', current28d: { activityCount: 0 } },
+                { discipline: 'other-training', current28d: { activityCount: 0 } },
             ],
         });
     });

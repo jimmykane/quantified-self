@@ -166,6 +166,7 @@ import {
     createTrainingSportRecord,
     getTrainingProfileMetricDefinition,
     getTrainingSportDefinition,
+    hasTrainingSportCapability,
     POWER_CAPACITY_DISCIPLINES,
     TRAINING_DISCIPLINES,
     TRAINING_SPORT_CONTEXT_IDS,
@@ -3075,6 +3076,9 @@ export function resolveTrainingBuildBenchmarkSelections(
 
     return TRAINING_DISCIPLINES.reduce<Partial<Record<DerivedTrainingDiscipline, TrainingBuildBenchmarkSelection>>>(
         (benchmarks, discipline) => {
+            if (!hasTrainingSportCapability(discipline, 'best-build')) {
+                return benchmarks;
+            }
             const selection = normalizeTrainingBuildBenchmarkSelection(rawBenchmarks[discipline]);
             if (selection) {
                 benchmarks[discipline] = selection;
@@ -4097,6 +4101,19 @@ export function buildTrainingBuildComparisonMetricPayload(
 
     const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
     const disciplines = TRAINING_DISCIPLINES.map((discipline): DerivedTrainingBuildComparisonDiscipline => {
+        if (!hasTrainingSportCapability(discipline, 'best-build')) {
+            return {
+                discipline,
+                status: 'not-configured',
+                selection: null,
+                current: null,
+                benchmark: null,
+                recovery: null,
+                durabilityComparisons: [],
+                suggestedRaces: [],
+                suggestedEvents: [],
+            };
+        }
         const selection = selections[discipline] || null;
         const events = eventsByDiscipline[discipline];
         // Keep anchors that can be valid for at least the shortest supported build.

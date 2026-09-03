@@ -214,6 +214,14 @@ describe('setTrainingBuildBenchmark', () => {
 
     it('rejects malformed selections before reads or writes', () => {
         expect(() => parseTrainingBuildBenchmarkRequest({
+            discipline: 'fitness-gym',
+            selection: null,
+        })).toThrow('discipline must support Training build benchmarks');
+        expect(() => parseTrainingBuildBenchmarkRequest({
+            discipline: 'other-training',
+            selection: null,
+        })).toThrow('discipline must support Training build benchmarks');
+        expect(() => parseTrainingBuildBenchmarkRequest({
             discipline: 'running',
             selection: { mode: 'period', durationWeeks: 9, endDayMs: 1 },
         })).toThrow('selection must be a valid');

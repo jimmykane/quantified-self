@@ -21,6 +21,7 @@ import {
 } from '@shared/derived-metrics';
 import {
   createTrainingSportRecord,
+  hasTrainingSportCapability,
   resolveTrainingDisciplineFromActivityType,
   type TrainingSportId,
 } from '@shared/training-disciplines';
@@ -114,7 +115,7 @@ export function groupTrainingPowerSystemsActivityTypeViewModels(
   const other: TrainingPowerSystemsActivityTypeViewModel[] = [];
   activityTypes.forEach((activityType) => {
     const sport = resolveTrainingDisciplineFromActivityType(activityType.activityType);
-    if (sport) {
+    if (sport && hasTrainingSportCapability(sport, 'power-systems')) {
       bySport[sport].push(activityType);
     } else {
       other.push(activityType);

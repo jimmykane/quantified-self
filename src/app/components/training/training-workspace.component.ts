@@ -1083,10 +1083,10 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         statuses.push(this.derivedState.recoveryNowStatus);
       }
     } else if (this.isSportDestination) {
-      statuses.push(
-        this.derivedState.trainingSummaryStatus,
-        this.derivedState.trainingBuildComparisonStatus,
-      );
+      statuses.push(this.derivedState.trainingSummaryStatus);
+      if (this.hasVisibleTrainingCapability('best-build')) {
+        statuses.push(this.derivedState.trainingBuildComparisonStatus);
+      }
       if (this.hasVisibleTrainingCapability('capacity')) {
         statuses.push(this.derivedState.trainingCapacityStatus);
       }
@@ -1188,6 +1188,16 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
   }
 
   private refreshTrainingDestinationOptions(): void {
+    const summaries = this.derivedState.trainingSummary?.disciplines || [];
+    const recordedSportIds = new Set(summaries
+      .filter(summary => summary.current28d.activityCount > 0 || summary.baseline28d.activityCount > 0)
+      .map(summary => summary.discipline));
+    const availableSports = TRAINING_SPORT_DEFINITIONS.filter(sport => (
+      sport.selectionAvailability === 'always'
+      || recordedSportIds.has(sport.id)
+      || this.selectedTrainingDestination === sport.id
+      || this.sportShortcuts.includes(sport.id)
+    ));
     this.trainingDestinationOptions = [
       {
         id: 'overview',
@@ -1196,7 +1206,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         sport: null,
         materialIcon: 'monitoring',
       },
-      ...TRAINING_SPORT_DEFINITIONS.map(sport => ({
+      ...availableSports.map(sport => ({
         id: sport.id,
         label: sport.label,
         details: sport.details,
@@ -1484,6 +1494,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         userUID,
         visibleDisciplines: [...this.sportShortcuts],
         isAutomatic: this.isAutomaticSportVisibility,
+        availableDisciplines: [
+          ...new Set([
+            ...this.trainingDestinationOptions.flatMap(option => option.sport ? [option.sport.id] : []),
+            ...this.sportShortcuts,
+          ]),
+        ],
       },
     });
     this.trainingSportVisibilityDialogRef = dialogRef;

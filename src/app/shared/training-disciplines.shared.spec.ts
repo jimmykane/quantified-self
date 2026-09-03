@@ -11,7 +11,7 @@ import {
 } from '@shared/training-disciplines';
 
 describe('shared Training sport registry', () => {
-  it('defines the eight curated sport families in presentation order', () => {
+  it('defines modeled and fallback sport families in presentation order', () => {
     expect(TRAINING_DISCIPLINES).toEqual([
       'running',
       'cycling',
@@ -20,7 +20,9 @@ describe('shared Training sport registry', () => {
       'walking-hiking',
       'nordic-skiing',
       'strength',
+      'fitness-gym',
       'paddling',
+      'other-training',
     ]);
     expect(TRAINING_SPORT_DEFINITIONS.map(({ id, label }) => ({ id, label }))).toEqual([
       { id: 'running', label: 'Running' },
@@ -30,7 +32,9 @@ describe('shared Training sport registry', () => {
       { id: 'walking-hiking', label: 'Walking & Hiking' },
       { id: 'nordic-skiing', label: 'Nordic Skiing' },
       { id: 'strength', label: 'Strength' },
+      { id: 'fitness-gym', label: 'Fitness & Gym' },
       { id: 'paddling', label: 'Paddling' },
+      { id: 'other-training', label: 'Other training' },
     ]);
   });
 
@@ -65,6 +69,8 @@ describe('shared Training sport registry', () => {
     expect(resolveTrainingDisciplineFromActivityType('cross_country_skiing')).toBe('nordic-skiing');
     expect(resolveTrainingDisciplineFromActivityType('strength_training')).toBe('strength');
     expect(resolveTrainingDisciplineFromActivityType('stand_up_paddleboarding')).toBe('paddling');
+    expect(resolveTrainingDisciplineFromActivityType('training')).toBe('fitness-gym');
+    expect(resolveTrainingDisciplineFromActivityType('indoor_training')).toBe('fitness-gym');
   });
 
   it('keeps endurance MTB, Enduro, and Downhill in Cycling with distinct policies', () => {
@@ -116,17 +122,40 @@ describe('shared Training sport registry', () => {
     });
   });
 
-  it('keeps intentionally unsupported broad-family members in Other', () => {
+  it('uses volume-only Fitness & Gym contexts for generic training and classes', () => {
     [
       ActivityTypes.Crossfit,
+      ActivityTypes.Training,
+      ActivityTypes['Indoor Training'],
+      ActivityTypes.HIIT,
+      ActivityTypes['Cardio Training'],
+      ActivityTypes.Yoga,
+    ].forEach(activityType => expect(resolveTrainingSportContextFromActivityType(activityType)).toMatchObject({
+      sport: 'fitness-gym',
+      profile: 'general',
+      intensityPolicy: 'volume-only',
+      loadPolicy: 'volume-only',
+      distancePolicy: 'omit',
+    }));
+  });
+
+  it('places known unmodeled sports in Other Training without classifying aggregate parents', () => {
+    [
       ActivityTypes.SkiTouring,
       ActivityTypes.BackCountrySkiing,
       ActivityTypes.Snowshoeing,
       ActivityTypes.Surfing,
       ActivityTypes.Sailing,
-      ActivityTypes.Triathlon,
-      ActivityTypes.Multisport,
-    ].forEach(activityType => expect(resolveTrainingDisciplineFromActivityType(activityType)).toBeNull());
+    ].forEach(activityType => expect(resolveTrainingSportContextFromActivityType(activityType)).toMatchObject({
+      sport: 'other-training',
+      context: 'other-training',
+      profile: 'general',
+      intensityPolicy: 'volume-only',
+      loadPolicy: 'volume-only',
+      distancePolicy: 'omit',
+    }));
+    [ActivityTypes.Triathlon, ActivityTypes.Multisport, ActivityTypes.Transition, ActivityTypes.Route]
+      .forEach(activityType => expect(resolveTrainingDisciplineFromActivityType(activityType)).toBeNull());
     expect(resolveTrainingDisciplineFromActivityType('not-a-sport')).toBeNull();
     expect(resolveTrainingDisciplineFromActivityType('__proto__')).toBeNull();
     expect(resolveTrainingDisciplineFromActivityType('toString')).toBeNull();
@@ -142,11 +171,17 @@ describe('shared Training sport registry', () => {
       'walking-hiking': 'Walking & Hiking',
       'nordic-skiing': 'Nordic Skiing',
       strength: 'Strength',
+      'fitness-gym': 'Fitness & Gym',
       paddling: 'Paddling',
+      'other-training': 'Other training',
     });
     expect(getTrainingSportDefinition('cycling')?.capabilities).toContain('durability');
     expect(getTrainingSportDefinition('rowing')?.capabilities).not.toContain('durability');
-    expect(getTrainingSportDefinition('strength')?.capabilities).toEqual(['training-mix', 'best-build']);
+    expect(getTrainingSportDefinition('strength')?.capabilities).toEqual(['training-mix', 'best-build', 'power-systems']);
+    expect(getTrainingSportDefinition('fitness-gym')?.capabilities).toEqual(['training-mix']);
+    expect(getTrainingSportDefinition('other-training')?.capabilities).toEqual(['training-mix']);
+    expect(getTrainingSportDefinition('fitness-gym')?.selectionAvailability).toBe('recorded');
+    expect(getTrainingSportDefinition('other-training')?.selectionAvailability).toBe('recorded');
     const sportIds = TRAINING_SPORT_DEFINITIONS.map(sport => sport.id);
     const contextIds = TRAINING_SPORT_DEFINITIONS.flatMap(sport => sport.contexts.map(context => context.id));
     expect(new Set(sportIds).size).toBe(sportIds.length);
