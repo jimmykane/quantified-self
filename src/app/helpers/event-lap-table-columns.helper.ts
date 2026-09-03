@@ -10,6 +10,7 @@ import {
   DataDistance,
   DataDuration,
   DataEnergy,
+  DataEffortPaceAvg,
   DataEHPE,
   DataEHPEAvg,
   DataEHPEMax,
@@ -22,11 +23,14 @@ import {
   DataHeartRateMax,
   DataInterface,
   DataGNSSDistance,
+  DataGradeAdjustedPaceAvg,
+  DataGradeAdjustedSpeedAvg,
   DataMovingTime,
   DataNumberOfSatellites,
   DataNumberOfSatellitesAvg,
   DataNumberOfSatellitesMax,
   DataNumberOfSatellitesMin,
+  DataPaceAvg,
   DataPaceMax,
   DataPaceMin,
   DataPowerAvg,
@@ -74,6 +78,11 @@ export interface EventLapSportFamilyPresentation {
 export interface EventLapAverageMetric {
   type: string;
   display: string;
+}
+
+export interface EventLapSelectedSummaryMetric extends EventLapAverageMetric {
+  availableCount: number;
+  selectedCount: number;
 }
 
 const SPORT_FAMILY_PRESENTATIONS: EventLapSportFamilyPresentation[] = [
@@ -250,6 +259,18 @@ const ACCUMULATED_LAP_METRIC_TYPES = new Set([
   DataAccumulatedPower.type,
   DataPowerWork.type,
   DataTotalGrit.type,
+]);
+
+const DISTANCE_WEIGHTED_LAP_METRIC_TYPES = new Set([
+  DataPaceAvg.type,
+  DataSwimPaceAvg.type,
+  DataGradeAdjustedPaceAvg.type,
+  DataEffortPaceAvg.type,
+]);
+
+const DURATION_WEIGHTED_LAP_METRIC_TYPES = new Set([
+  DataSpeedAvg.type,
+  DataGradeAdjustedSpeedAvg.type,
 ]);
 
 export const EVENT_LAP_TABLE_FIXED_COLUMN = '#';
@@ -451,5 +472,94 @@ export const getAverageEventLapMetrics = (
     }
 
     return averages;
+  }, [])
+);
+
+const getFiniteEventLapMetricValue = (
+  lap: LapInterface,
+  metricType: string,
+): number | null => {
+  const value = getEventLapMetricStat(lap, metricType)?.getValue?.();
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+};
+
+const getSelectedEventLapSummaryValue = (
+  laps: readonly LapInterface[],
+  metricType: string,
+): { value: number; availableCount: number } | null => {
+  const weightingMetricType = DISTANCE_WEIGHTED_LAP_METRIC_TYPES.has(metricType)
+    ? DataDistance.type
+    : DURATION_WEIGHTED_LAP_METRIC_TYPES.has(metricType)
+      ? DataDuration.type
+      : null;
+
+  if (!weightingMetricType) {
+    const values = laps
+      .map((lap) => getFiniteEventLapMetricValue(lap, metricType))
+      .filter((value): value is number => value !== null);
+    if (values.length === 0) {
+      return null;
+    }
+    return {
+      value: values.reduce((total, value) => total + value, 0) / values.length,
+      availableCount: values.length,
+    };
+  }
+
+  let weightedTotal = 0;
+  let totalWeight = 0;
+  let availableCount = 0;
+  laps.forEach((lap) => {
+    const value = getFiniteEventLapMetricValue(lap, metricType);
+    const weight = getFiniteEventLapMetricValue(lap, weightingMetricType);
+    if (value === null || weight === null || weight <= 0) {
+      return;
+    }
+    weightedTotal += value * weight;
+    totalWeight += weight;
+    availableCount += 1;
+  });
+
+  return totalWeight > 0
+    ? { value: weightedTotal / totalWeight, availableCount }
+    : null;
+};
+
+/**
+ * Summarizes a temporary selection of rows in the Event Details Laps table.
+ * Unlike the persistent all-laps Avg row, accumulated metrics are intentionally
+ * included and every result reports how many selected laps contributed.
+ */
+export const getSelectedEventLapSummaryMetrics = (
+  laps: readonly LapInterface[],
+  metricTypes: readonly string[],
+  unitSettings: UserUnitSettingsInterface | null | undefined,
+  activityType: unknown,
+): EventLapSelectedSummaryMetric[] => (
+  metricTypes.reduce<EventLapSelectedSummaryMetric[]>((summaries, metricType) => {
+    const summaryValue = getSelectedEventLapSummaryValue(laps, metricType);
+    if (!summaryValue) {
+      return summaries;
+    }
+
+    try {
+      const summaryStat = DynamicDataLoader.getDataInstanceFromDataType(
+        metricType,
+        summaryValue.value,
+      );
+      const display = formatEventLapMetric(summaryStat, metricType, unitSettings, activityType);
+      if (display) {
+        summaries.push({
+          type: metricType,
+          display,
+          availableCount: summaryValue.availableCount,
+          selectedCount: laps.length,
+        });
+      }
+    } catch {
+      // A malformed or non-numeric sports-lib metric should not block the Laps table.
+    }
+
+    return summaries;
   }, [])
 );

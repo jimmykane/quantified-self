@@ -1210,6 +1210,65 @@ describe('OAuth2', () => {
             expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationLeaseExpiresAt');
         });
 
+        it('starts OAuth immediately when an active disconnect operation has no tokens left', async () => {
+            mockTransactionDocumentData = {
+                oauthFlowGeneration: 'disconnect-flow',
+                disconnectOperationGeneration: 'disconnect-operation',
+                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
+            };
+            mockGet.mockResolvedValueOnce({
+                empty: true,
+                size: 0,
+                docs: [],
+            } as unknown as admin.firestore.QuerySnapshot);
+
+            await expect(getServiceOAuth2CodeRedirectAndSaveStateToUser(
+                userID,
+                ServiceNames.SuuntoApp,
+                redirectUri,
+            )).resolves.toContain('https://');
+
+            expect(mockTransactionDocumentData).toEqual(expect.objectContaining({
+                state: expect.any(String),
+                oauthFlowGeneration: expect.any(String),
+            }));
+            expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationGeneration');
+            expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationLeaseExpiresAt');
+        });
+
+        it('keeps OAuth blocked while an active disconnect operation still owns a token', async () => {
+            const leaseExpiresAt = Date.now() + 60_000;
+            mockTransactionDocumentData = {
+                oauthFlowGeneration: 'disconnect-flow',
+                disconnectOperationGeneration: 'disconnect-operation',
+                disconnectOperationLeaseExpiresAt: leaseExpiresAt,
+            };
+            mockGet.mockResolvedValueOnce({
+                empty: false,
+                size: 1,
+                docs: [{ id: 'retained-token' }],
+            } as unknown as admin.firestore.QuerySnapshot);
+
+            await expect(getServiceOAuth2CodeRedirectAndSaveStateToUser(
+                userID,
+                ServiceNames.SuuntoApp,
+                redirectUri,
+            )).rejects.toMatchObject({
+                name: 'ServiceDisconnectInProgressError',
+                code: 'unavailable',
+                details: {
+                    reason: 'service_disconnect_in_progress',
+                    blocker: 'disconnect_operation',
+                    retryDeadlineAt: leaseExpiresAt,
+                },
+            });
+
+            expect(mockTransactionDocumentData).toMatchObject({
+                disconnectOperationGeneration: 'disconnect-operation',
+                disconnectOperationLeaseExpiresAt: leaseExpiresAt,
+            });
+        });
+
         it('does not publish delayed OAuth preparation after an explicit disconnect invalidates the flow', async () => {
             const { SuuntoAuthAdapter } = await import('./suunto/auth/adapter');
             const originalGetAuthorizationData = SuuntoAuthAdapter.prototype.getAuthorizationData;

@@ -40,9 +40,20 @@ export const getWahooAPIAuthRequestTokenRedirectURI = onCall({
   const userID = await requireWahooConnectAccess(request);
   const redirectUri = `${request.data?.redirectUri || ''}`.trim();
   if (!redirectUri) throw new HttpsError('invalid-argument', 'Missing redirect_uri');
-  return {
-    redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectUri),
-  };
+  try {
+    return {
+      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectUri),
+    };
+  } catch (error) {
+    if (isServiceDisconnectInProgressError(error)) {
+      logger.info('[WahooAuth] OAuth start is waiting for an in-progress disconnect.', {
+        serviceName: SERVICE_NAME,
+        blocker: error.details.blocker,
+      });
+      throw new HttpsError('unavailable', error.message, error.details);
+    }
+    throw error;
+  }
 });
 
 export const requestAndSetWahooAPIAccessToken = onCall({

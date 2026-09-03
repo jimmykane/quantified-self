@@ -3,6 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -79,6 +80,7 @@ import {
   selectActivityHealthObservations,
 } from '../../helpers/health-workspace.helper';
 import { buildDashboardSleepTrendContext } from '../../helpers/dashboard-sleep-chart.helper';
+import { healthMetricIcon } from '../../helpers/health-metric-icon.helper';
 import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
 
 type HealthLoadStatus = 'loading' | 'ready' | 'denied' | 'error';
@@ -141,6 +143,7 @@ const HEALTH_SYNC_DELAYED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
     MatButtonToggleModule,
     MatFormFieldModule,
     MatIconModule,
+    MatMenuModule,
     MatProgressSpinnerModule,
     MatSelectModule,
     MatTooltipModule,
@@ -182,6 +185,7 @@ export class HealthWorkspaceComponent {
     label: RANGE_LABELS[range],
     buttonLabel: range === 'today' ? RANGE_LABELS[range] : range,
   }));
+  readonly healthMetricIcon = healthMetricIcon;
   private readonly completeMetricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
   readonly selectedMetric = signal<HealthWorkspaceMetricSelection>(HEALTH_METRIC_IDS.RestingHeartRate);
   readonly selectedRange = signal<HealthWorkspaceRange>(HEALTH_WORKSPACE_DEFAULT_RANGE);
@@ -443,7 +447,7 @@ export class HealthWorkspaceComponent {
       priorityCard(
         'sleep',
         'Sleep',
-        'bedtime',
+        healthMetricIcon('sleep'),
         'sleep',
         buildSleepPriorityRows(this.prioritySleepSessions()),
         this.prioritySleepStatus(),
@@ -453,7 +457,7 @@ export class HealthWorkspaceComponent {
       priorityCard(
         'heart_rate',
         'Heart rate',
-        'favorite',
+        healthMetricIcon(HEALTH_METRIC_IDS.HeartRate),
         HEALTH_METRIC_IDS.HeartRate,
         buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
         this.priorityHeartRateStatus(),
@@ -463,7 +467,7 @@ export class HealthWorkspaceComponent {
       priorityCard(
         'heart_rate_variability',
         'HRV',
-        'ecg_heart',
+        healthMetricIcon(HEALTH_METRIC_IDS.HeartRateVariability),
         HEALTH_METRIC_IDS.HeartRateVariability,
         buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
         this.priorityHrvStatus(),

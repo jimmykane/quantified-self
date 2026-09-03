@@ -103,20 +103,50 @@
     <section class="table-container">
       <table mat-table [dataSource]="lapTable.dataSource">
         @for (column of lapTable.columns; track column) {
-        <ng-container [matColumnDef]="column" [sticky]="column === '#'">
-          <mat-header-cell *matHeaderCellDef [class.lap-index-cell]="column === '#'"
+        <ng-container [matColumnDef]="column" [sticky]="column === 'selection' || column === '#'">
+          <mat-header-cell *matHeaderCellDef [class.lap-selection-cell]="column === 'selection'"
+            [class.lap-index-cell]="column === '#'"
             [class.lap-duration-cell]="column === 'Duration'">
-            @if (column !== '#') {
+            @if (column === 'selection') {
+            <mat-checkbox [checked]="lapTable.allLapRowsSelected"
+              [indeterminate]="lapTable.someLapRowsSelected"
+              (change)="toggleAllLapSelections(lapTable)"
+              aria-label="Select all laps in this table">
+            </mat-checkbox>
+            } @else if (column !== '#') {
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
             }
           </mat-header-cell>
-          <mat-cell *matCellDef="let row" [class.lap-index-cell]="column === '#'"
+          <mat-cell *matCellDef="let row" [class.lap-selection-cell]="column === 'selection'"
+            [class.lap-index-cell]="column === '#'"
             [class.lap-duration-cell]="column === 'Duration'"
-            [class.lap-average-cell]="row.isLapAverage">{{ row[column] }}</mat-cell>
+            [class.lap-average-cell]="row.isLapAverage">
+            @if (column === 'selection' && !row.isLapAverage) {
+            <mat-checkbox [checked]="row.isSelected"
+              (change)="toggleLapSelection(lapTable, row)"
+              [attr.aria-label]="'Select lap ' + row['#']">
+            </mat-checkbox>
+            } @else if (column !== 'selection') {
+            {{ row[column] }}
+            }
+          </mat-cell>
+          <mat-footer-cell *matFooterCellDef [class.lap-selection-cell]="column === 'selection'"
+            [class.lap-index-cell]="column === '#'"
+            [class.lap-duration-cell]="column === 'Duration'"
+            [class.lap-selected-summary-label]="column === 'selection'"
+            [class.lap-selected-summary-index-spacer]="column === '#'">
+            @if (column === 'selection') {
+            {{ lapTable.selectedSummaryLabel }}
+            } @else if (column !== '#') {
+            {{ lapTable.selectedSummary[column] }}
+            }
+          </mat-footer-cell>
         </ng-container>
         }
         <mat-header-row *matHeaderRowDef="lapTable.columns"></mat-header-row>
         <mat-row *matRowDef="let row; columns: lapTable.columns;" [class.lap-average-row]="row.isLapAverage"></mat-row>
+        <mat-footer-row *matFooterRowDef="lapTable.columns; sticky: true" class="lap-selected-summary-row"
+          [attr.hidden]="lapTable.selectedCount === 0 ? '' : null"></mat-footer-row>
       </table>
     </section>
   </section>

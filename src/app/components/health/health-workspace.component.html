@@ -72,8 +72,10 @@
             [class.health-metric-option-selected]="routeState().metric === 'sleep'"
             [attr.aria-pressed]="routeState().metric === 'sleep'"
             (click)="selectMetric('sleep')">
-            <mat-icon aria-hidden="true">bedtime</mat-icon>
-            <span>Sleep overview</span>
+            <span class="health-metric-option-content">
+              <mat-icon class="health-metric-option-icon" aria-hidden="true">{{ healthMetricIcon('sleep') }}</mat-icon>
+              <span>Sleep overview</span>
+            </span>
           </button>
         }
         @for (group of metricCatalogGroups(); track group.id) {
@@ -87,7 +89,10 @@
                 [class.health-metric-option-selected]="routeState().metric === metric.id"
                 [attr.aria-pressed]="routeState().metric === metric.id"
                 (click)="selectMetric(metric.id)">
-                <span>{{ metric.label }}</span>
+                <span class="health-metric-option-content">
+                  <mat-icon class="health-metric-option-icon" aria-hidden="true">{{ healthMetricIcon(metric.id) }}</mat-icon>
+                  <span>{{ metric.label }}</span>
+                </span>
               </button>
             }
           </section>
@@ -339,19 +344,30 @@
             }
             @if (state.historyImportActionLabel) {
               <button
-                mat-button
+                mat-icon-button
                 type="button"
-                class="health-sync-import"
+                class="health-sync-actions"
                 [disabled]="state.historyImportBusy"
-                [attr.aria-label]="state.historyImportActionLabel + ' for ' + state.label"
-                (click)="startHistoryImport(state.provider)">
+                [matMenuTriggerFor]="historyImportMenu"
+                [attr.aria-label]="'More actions for ' + state.label"
+                matTooltip="More actions">
                 @if (state.historyImportBusy) {
                   <mat-spinner diameter="14" aria-hidden="true"></mat-spinner>
                 } @else {
-                  <mat-icon aria-hidden="true">history</mat-icon>
+                  <mat-icon aria-hidden="true">more_horiz</mat-icon>
                 }
-                <span>{{ state.historyImportActionLabel }}</span>
               </button>
+              <mat-menu #historyImportMenu="matMenu" class="qs-menu-panel">
+                <button
+                  mat-menu-item
+                  type="button"
+                  [disabled]="state.historyImportBusy"
+                  [attr.aria-label]="state.historyImportActionLabel + ' for ' + state.label"
+                  (click)="startHistoryImport(state.provider)">
+                  <mat-icon aria-hidden="true">history</mat-icon>
+                  <span>{{ state.historyImportActionLabel }}</span>
+                </button>
+              </mat-menu>
             }
           </li>
         }
