@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "10.13.0",
+  "version": "10.13.1",
   "license": "AGPL-3.0-only",
   "scripts": {
     "ng": "ng",
