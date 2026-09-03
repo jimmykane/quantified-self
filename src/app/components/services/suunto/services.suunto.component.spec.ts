@@ -43,6 +43,8 @@ describe('ServicesSuuntoComponent', () => {
         mockUserService = {
             isAdmin: vi.fn(),
             requestAndSetCurrentUserSuuntoAppAccessToken: vi.fn(),
+            getServiceToken: vi.fn().mockReturnValue(of([])),
+            getUserMetaForService: vi.fn().mockReturnValue(of(undefined)),
             watchGarminRouteSendContext: vi.fn().mockReturnValue(of({
                 connected: false,
                 reconnectRequired: false,
@@ -146,6 +148,24 @@ describe('ServicesSuuntoComponent', () => {
 
         await expect(component.requestAndSetToken())
             .rejects.toThrow('Suunto authorization callback is missing state or code.');
+    });
+
+    it('completes a Suunto callback with code and state when connect is absent', async () => {
+        component.user = { uid: 'user-1' } as any;
+        vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
+        vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockImplementation((key: string) => ({
+            serviceName: component.serviceName,
+            state: 'state-token',
+            code: 'auth-code',
+            connect: null,
+        }[key] ?? null));
+
+        await component.ngOnChanges();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockUserService.requestAndSetCurrentUserSuuntoAppAccessToken)
+            .toHaveBeenCalledWith('state-token', 'auth-code');
+        expect(component.forceConnected).toBe(true);
     });
 
     it('shows a useful retry message while a disconnect is still finishing', async () => {
