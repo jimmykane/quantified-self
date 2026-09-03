@@ -16,6 +16,7 @@ import { FUNCTIONS_MANIFEST } from '../../../../shared/functions-manifest';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { extractRefreshFailureDetails } from '../../service-auth-lifecycle';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
+import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 
@@ -85,7 +86,7 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10
-}, async (request): Promise<void> => {
+}, async (request): Promise<ServiceOAuthCompletionResult> => {
   // App Check verification
   enforceAppCheck(request);
 
@@ -114,7 +115,7 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   }
 
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
+    return await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (e: any) {
     const failure = extractRefreshFailureDetails(e);
     const status = failure.statusCode || 500;

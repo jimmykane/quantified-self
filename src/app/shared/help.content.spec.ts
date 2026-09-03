@@ -823,6 +823,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('When a disconnect begins, automatic activity and saved-route delivery');
     expect(serviceConnectionsSection?.content).toContain('you do not need to keep the page open');
     expect(serviceConnectionsSection?.content).toContain('Health history, and Sleep sessions stay in your account');
+    expect(serviceConnectionsSection?.content).toContain('shows a successful connection only after the server confirms');
+    expect(serviceConnectionsSection?.content).toContain('shows an error and you can start the connection again');
+    expect(serviceConnectionsSection?.content).toContain('instead of showing it as connected');
+    expect(serviceConnectionsSection?.content).toContain('partial cleanup remains visible as pending');
     expect(serviceConnectionsSection?.content).toContain('an automated subscription check disconnects');
     expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
     expect(serviceConnectionsSection?.content).toContain('Choose an action');

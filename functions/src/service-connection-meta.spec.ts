@@ -67,6 +67,8 @@ vi.mock('./health/writer', () => ({
 }));
 
 vi.mock('./service-token-store', () => ({
+  OAUTH_FLOW_CREATED_AT_FIELD: 'oauthFlowCreatedAt',
+  OAUTH_FLOW_EXPIRES_AT_FIELD: 'oauthFlowExpiresAt',
   OAUTH_FLOW_GENERATION_FIELD: 'oauthFlowGeneration',
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
   getServiceDisconnectOperationGeneration: (data: Record<string, unknown> | undefined) => {
@@ -852,7 +854,11 @@ describe('service-connection-meta', () => {
 
     expect(hoisted.metaSet).toHaveBeenCalledWith(
       expect.objectContaining({ path: hoisted.tokenRootRef.path }),
-      { oauthFlowGeneration: 'delete-sentinel' },
+      {
+        oauthFlowGeneration: 'delete-sentinel',
+        oauthFlowCreatedAt: 'delete-sentinel',
+        oauthFlowExpiresAt: 'delete-sentinel',
+      },
       { merge: true },
     );
   });

@@ -279,11 +279,9 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return token.redirect_uri
   }
 
-  async requestAndSetToken() {
-    const state = this.route.snapshot.queryParamMap.get('state');
-    const code = this.route.snapshot.queryParamMap.get('code');
-    if (!state || !code) throw new Error('Suunto authorization callback is missing state or code.');
-    await this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
+  async requestAndSetToken(params = this.route.snapshot.queryParamMap) {
+    const { state, code } = this.getOAuthCallbackParameters(params);
+    return this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
   }
 
   async queueRoutesFromSuunto(event: Event): Promise<void> {

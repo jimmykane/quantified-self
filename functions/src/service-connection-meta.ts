@@ -38,6 +38,8 @@ import {
 import {
   getServiceTokenRootDocumentRef,
   getServiceDisconnectOperationGeneration,
+  OAUTH_FLOW_CREATED_AT_FIELD,
+  OAUTH_FLOW_EXPIRES_AT_FIELD,
 } from './service-token-store';
 import {
   doesRootMatchServiceDisconnectLifecycleGuard,
@@ -544,6 +546,8 @@ async function setServiceMetaIfUserActive(
     if (expectedOAuthFlowGeneration) {
       transaction.set(expectedOAuthFlowGeneration.documentRef, {
         [expectedOAuthFlowGeneration.fieldName]: FieldValue.delete(),
+        [OAUTH_FLOW_CREATED_AT_FIELD]: FieldValue.delete(),
+        [OAUTH_FLOW_EXPIRES_AT_FIELD]: FieldValue.delete(),
       }, { merge: true });
     }
     return true;

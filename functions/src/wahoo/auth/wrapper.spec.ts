@@ -95,7 +95,10 @@ import {
 describe('Wahoo Auth Wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue(undefined);
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue({
+      connected: true,
+      outcome: 'connected',
+    });
     mocks.disconnectServiceForUser.mockReset().mockResolvedValue(undefined);
     mocks.getServiceConnectionMeta.mockResolvedValue(null);
     mocks.getActiveWahooTokenSnapshot.mockRejectedValue(new Error('No Wahoo account'));
@@ -138,7 +141,10 @@ describe('Wahoo Auth Wrapper', () => {
         code: 'oauth-code',
         redirectUri: 'https://localhost/callback',
       },
-    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).resolves.toBeUndefined();
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).resolves.toEqual({
+      connected: true,
+      outcome: 'connected',
+    });
 
     expect(mocks.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
       'user-1',

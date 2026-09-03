@@ -20,6 +20,7 @@ import {
   isWahooOAuthAccountMismatchError,
   normalizeWahooUserID,
 } from '../account';
+import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
 
 async function requireWahooConnectAccess(request: { auth?: { uid: string } | null }): Promise<string> {
   enforceAppCheck(request as any);
@@ -62,7 +63,7 @@ export const requestAndSetWahooAPIAccessToken = onCall({
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10,
-}, async (request): Promise<void> => {
+}, async (request): Promise<ServiceOAuthCompletionResult> => {
   const userID = await requireWahooConnectAccess(request);
   const state = `${request.data?.state || ''}`.trim();
   const code = `${request.data?.code || ''}`.trim();
@@ -74,7 +75,7 @@ export const requestAndSetWahooAPIAccessToken = onCall({
     throw new HttpsError('permission-denied', 'Invalid OAuth state');
   }
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
+    return await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (error) {
     logger.error('Wahoo authorization code flow failed', getWahooErrorLogDetails(error));
     const statusCode = (error as { statusCode?: number })?.statusCode;

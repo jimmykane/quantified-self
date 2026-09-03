@@ -35,7 +35,11 @@ import { ROUTE_DELIVERY_SYNC_ROUTES, RouteDeliverySyncRoute } from '@shared/rout
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import equal from 'fast-deep-equal';
-import { ServiceConnectionAccountProjection } from '@shared/service-connection';
+import {
+  SERVICE_OAUTH_COMPLETION_OUTCOMES,
+  ServiceConnectionAccountProjection,
+  ServiceOAuthCompletionResult,
+} from '@shared/service-connection';
 
 type ServiceSyncRouteImpact = ActivitySyncRoute | RouteDeliverySyncRoute;
 
@@ -136,7 +140,35 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       }
       this.isConnecting = true;
       try {
-        await this.requestAndSetToken(this.route.snapshot.queryParamMap)
+        const completion = await this.requestAndSetToken(this.route.snapshot.queryParamMap);
+        if (
+          completion?.connected !== true
+          || completion.outcome !== SERVICE_OAUTH_COMPLETION_OUTCOMES.Connected
+        ) {
+          if (completion?.outcome === SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryCompleted) {
+            this.forceConnected = false;
+            this.emitConnectionState();
+            this.snackBar.open(
+              `The previous ${this.getPartnerDisplayName()} connection was removed. A Pro subscription is required to connect again.`,
+              undefined,
+              { duration: 10000 },
+            );
+            this.hapticsService.success();
+            return;
+          }
+          if (completion?.outcome === SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryPending) {
+            this.forceConnected = false;
+            this.emitConnectionState();
+            this.snackBar.open(
+              `The previous ${this.getPartnerDisplayName()} connection could not be fully removed yet. Please try again later.`,
+              undefined,
+              { duration: 10000 },
+            );
+            this.hapticsService.error();
+            return;
+          }
+          throw new Error(`${this.getPartnerDisplayName()} did not confirm that the connection was saved.`);
+        }
         this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
         this.emitConnectionState();
@@ -294,6 +326,21 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     return this.getServiceDisplayName(this.serviceName);
   }
 
+  protected getOAuthCallbackParameters(params: ParamMap): { state: string; code: string } {
+    const partnerName = this.getPartnerDisplayName();
+    if (params.get('error')) {
+      throw new Error(`${partnerName} authorization was not completed.`);
+    }
+
+    const state = params.get('state');
+    const code = params.get('code');
+    if (!state || !code) {
+      throw new Error(`${partnerName} authorization callback is missing state or code.`);
+    }
+
+    return { state, code };
+  }
+
   private getServiceDisplayName(serviceName: ServiceNames): string {
     return getProviderDisplayName(serviceName, 'destination');
   }
@@ -378,7 +425,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   abstract buildRedirectURIFromServiceToken(redirectUri: { redirect_uri: string } | { redirect_uri: string, state: string, oauthToken: string }): string
 
-  abstract requestAndSetToken(params: ParamMap)
+  abstract requestAndSetToken(params: ParamMap): Promise<ServiceOAuthCompletionResult>
 
   onHistoryImportInitiated(stats?: any) {
     this.serviceMeta = {
