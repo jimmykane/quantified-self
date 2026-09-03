@@ -168,6 +168,23 @@ describe('ServicesSuuntoComponent', () => {
         expect(component.forceConnected).toBe(true);
     });
 
+    it('starts only one OAuth flow while the authorization URL request is pending', async () => {
+        component.hasProAccess = true;
+        let resolveAuthorization!: (value: { redirect_uri: string }) => void;
+        const authorizationRequest = new Promise<{ redirect_uri: string }>(resolve => {
+            resolveAuthorization = resolve;
+        });
+        mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockReturnValue(authorizationRequest);
+
+        const firstAttempt = component.connectWithService(new MouseEvent('click'));
+        const duplicateAttempt = component.connectWithService(new MouseEvent('click'));
+
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledTimes(1);
+
+        resolveAuthorization({ redirect_uri: 'https://suunto.example.test/authorize' });
+        await Promise.all([firstAttempt, duplicateAttempt]);
+    });
+
     it('shows a useful retry message while a disconnect is still finishing', async () => {
         component.hasProAccess = true;
         mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockRejectedValueOnce({

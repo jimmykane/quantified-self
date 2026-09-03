@@ -193,6 +193,9 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async connectWithService(event) {
+    if (this.isConnecting) {
+      return;
+    }
     if (!this.canConnectServiceWithCurrentAccess) {
       this.triggerUpsell('connection_card', 'connection');
       return;
