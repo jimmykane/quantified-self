@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 const hoisted = vi.hoisted(() => ({
   deletionGuard: {
@@ -29,6 +30,7 @@ vi.mock('./shared/user-deletion-guard', () => ({
 }));
 
 import {
+  auditServiceOAuthRoots,
   classifyServiceOAuthRootForReconciliation,
   serviceOAuthRootReconciliationTestInternals,
 } from './service-oauth-root-reconciliation';
@@ -131,7 +133,7 @@ describe('service OAuth root reconciliation', () => {
     }, 1_000).outcome).toBe('legacy_unbounded_disconnect_fence');
   });
 
-  it('clears an expired abandoned root but retains the empty parent as an orphan-write fence', async () => {
+  it('clears expired flow fields while retaining the orphan-token generation fence', async () => {
     const harness = buildRootHarness({
       initialData: {
         state: 'state',
@@ -156,7 +158,6 @@ describe('service OAuth root reconciliation', () => {
       oauthFlowGeneration: hoisted.fieldDelete,
       oauthFlowCreatedAt: hoisted.fieldDelete,
       oauthFlowExpiresAt: hoisted.fieldDelete,
-      activeOAuthCredentialGeneration: hoisted.fieldDelete,
     });
     expect(harness.transaction.delete).not.toHaveBeenCalled();
   });
@@ -333,5 +334,57 @@ describe('service OAuth root reconciliation', () => {
 
     expect(expired.db.runTransaction).not.toHaveBeenCalled();
     expect(legacy.db.runTransaction).not.toHaveBeenCalled();
+  });
+
+  it('reports when a bounded audit leaves additional roots uninspected', async () => {
+    const queries = new Map<string, {
+      get: ReturnType<typeof vi.fn>;
+      orderBy: ReturnType<typeof vi.fn>;
+      limit: ReturnType<typeof vi.fn>;
+      startAfter: ReturnType<typeof vi.fn>;
+    }>();
+    const makeRoot = (collectionName: string, id: string) => ({
+      id,
+      data: () => ({}),
+      ref: {
+        path: `${collectionName}/${id}`,
+        collection: vi.fn(() => ({
+          limit: vi.fn(() => ({ get: vi.fn(async () => ({ empty: true })) })),
+        })),
+      },
+    });
+    const db = {
+      collection: vi.fn((collectionName: string) => {
+        let query = queries.get(collectionName);
+        if (!query) {
+          query = {
+            get: vi.fn()
+              .mockResolvedValueOnce({ empty: false, size: 1, docs: [makeRoot(collectionName, 'user-1')] })
+              .mockResolvedValueOnce({ empty: false, size: 1, docs: [makeRoot(collectionName, 'user-2')] }),
+            orderBy: vi.fn(),
+            limit: vi.fn(),
+            startAfter: vi.fn(),
+          };
+          query.orderBy.mockReturnValue(query);
+          query.limit.mockReturnValue(query);
+          query.startAfter.mockReturnValue(query);
+          queries.set(collectionName, query);
+        }
+        return query;
+      }),
+    };
+
+    await expect(auditServiceOAuthRoots(db as never, 1_000, 1, 1)).resolves.toEqual(
+      expect.objectContaining({
+        rootsScanned: 4,
+        truncated: true,
+        truncatedServices: expect.arrayContaining([
+          ServiceNames.SuuntoApp,
+          ServiceNames.COROSAPI,
+          ServiceNames.GarminAPI,
+          ServiceNames.WahooAPI,
+        ]),
+      }),
+    );
   });
 });

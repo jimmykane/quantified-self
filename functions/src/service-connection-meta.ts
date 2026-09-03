@@ -500,6 +500,7 @@ async function setServiceMetaIfUserActive(
   payload: Record<string, unknown>,
   expectedTokenCredentialGeneration?: DocumentGenerationGuard,
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
+  requireNoPendingDisconnect = false,
 ): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
@@ -519,12 +520,15 @@ async function setServiceMetaIfUserActive(
       return false;
     }
 
-    const [credentialGenerationSnapshot, oauthFlowGenerationSnapshot] = await Promise.all([
+    const [credentialGenerationSnapshot, oauthFlowGenerationSnapshot, pendingDisconnectRootSnapshot] = await Promise.all([
       expectedTokenCredentialGeneration
         ? transaction.get(expectedTokenCredentialGeneration.documentRef)
         : Promise.resolve(null),
       expectedOAuthFlowGeneration
         ? transaction.get(expectedOAuthFlowGeneration.documentRef)
+        : Promise.resolve(null),
+      requireNoPendingDisconnect
+        ? transaction.get(getServiceTokenRootDocumentRef(userID, serviceName))
         : Promise.resolve(null),
     ]);
     if (expectedTokenCredentialGeneration && credentialGenerationSnapshot && (
@@ -538,6 +542,14 @@ async function setServiceMetaIfUserActive(
       !oauthFlowGenerationSnapshot.exists
       || oauthFlowGenerationSnapshot.data()?.[expectedOAuthFlowGeneration.fieldName]
         !== expectedOAuthFlowGeneration.expectedGeneration
+    )) {
+      return false;
+    }
+    if (requireNoPendingDisconnect && (
+      !pendingDisconnectRootSnapshot?.exists
+      || isServiceDisconnectPendingData(
+        pendingDisconnectRootSnapshot.data() as Record<string, unknown> | undefined,
+      )
     )) {
       return false;
     }
@@ -1247,7 +1259,7 @@ export async function markServiceConnected(
     providerBindingCheckLeaseId: FieldValue.delete(),
     providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
     providerBindingCheckNextRetryAt: FieldValue.delete(),
-  }, expectedTokenCredentialGeneration, expectedOAuthFlowGeneration);
+  }, expectedTokenCredentialGeneration, expectedOAuthFlowGeneration, !!expectedOAuthFlowGeneration);
   if (!didWrite) {
     return didWrite;
   }

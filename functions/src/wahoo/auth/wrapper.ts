@@ -77,8 +77,14 @@ export const requestAndSetWahooAPIAccessToken = onCall({
   try {
     return await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (error) {
-    logger.error('Wahoo authorization code flow failed', getWahooErrorLogDetails(error));
     const statusCode = (error as { statusCode?: number })?.statusCode;
+    // Provider message fields can echo the submitted authorization code.
+    // Keep token-exchange logs to allowlisted, non-secret transport metadata.
+    logger.error('Wahoo authorization code flow failed', {
+      statusCode: typeof statusCode === 'number' && Number.isFinite(statusCode)
+        ? statusCode
+        : null,
+    });
     if (isOAuthFlowContextMismatchError(error)) {
       throw new HttpsError('permission-denied', 'Invalid OAuth state.');
     }

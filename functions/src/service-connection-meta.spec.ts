@@ -863,6 +863,36 @@ describe('service-connection-meta', () => {
     );
   });
 
+  it('does not promote an OAuth credential while its root remains disconnect pending', async () => {
+    hoisted.tokenRootGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        activeOAuthCredentialGeneration: 'credential-generation',
+        oauthFlowGeneration: 'oauth-flow-generation',
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'disconnect-generation',
+      }),
+    });
+
+    await expect(markServiceConnected(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      null,
+      {
+        documentRef: hoisted.tokenRootRef as unknown as admin.firestore.DocumentReference,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: 'credential-generation',
+      },
+      {
+        documentRef: hoisted.tokenRootRef as unknown as admin.firestore.DocumentReference,
+        fieldName: 'oauthFlowGeneration',
+        expectedGeneration: 'oauth-flow-generation',
+      },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
+  });
+
   it('keeps the first opaque Wahoo refresh failure retryable without disabling routes', async () => {
     await expect(recordWahooOpaqueRefreshFailure('user-1', getCurrentWahooRefreshClaim(), 1_000)).resolves.toEqual({
       failureCount: 1,
