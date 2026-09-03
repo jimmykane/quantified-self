@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
 import { createHash } from 'node:crypto';
+import * as logger from 'firebase-functions/logger';
+
+vi.mock('firebase-functions/logger', () => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+}));
 
 // Define stable mocks first
 const mockDelete = vi.fn().mockResolvedValue({});
@@ -529,6 +536,7 @@ describe('OAuth2', () => {
             vi.clearAllMocks();
             mockGet.mockReset();
             mockDelete.mockReset();
+            mockDocInstance.set.mockReset().mockResolvedValue({});
             (getTokenData as Mock).mockReset();
 
             // Default: 1 token found
@@ -574,6 +582,44 @@ describe('OAuth2', () => {
             expect(getTokenData).toHaveBeenCalled();
             expect(requestPromise.get).toHaveBeenCalled();
             expect(mockDelete).toHaveBeenCalledTimes(2); // token + root cleanup
+            expect(logger.info).toHaveBeenCalledWith(
+                '[OAuthDisconnect] Lifecycle transition.',
+                expect.objectContaining({
+                    lifecycleEvent: 'disconnect_operation_claimed',
+                    serviceName,
+                    operationCorrelationId: expect.stringMatching(/^[a-f0-9]{16}$/),
+                    tokenCount: 1,
+                }),
+            );
+            expect(logger.info).toHaveBeenCalledWith(
+                '[OAuthDisconnect] Lifecycle transition.',
+                expect.objectContaining({
+                    lifecycleEvent: 'disconnect_cleanup_completed',
+                    serviceName,
+                    deletedTokenCount: 1,
+                }),
+            );
+            expect(logger.info).toHaveBeenCalledWith(
+                '[OAuthDisconnect] Lifecycle transition.',
+                expect.objectContaining({
+                    lifecycleEvent: 'disconnect_finalization_completed',
+                    serviceName,
+                    finalizationStatus: expect.stringMatching(/^(cleared|root_missing)$/),
+                }),
+            );
+        });
+
+        it('does not let an observability failure interrupt disconnect cleanup', async () => {
+            vi.mocked(logger.info).mockImplementationOnce(() => {
+                throw new Error('logger unavailable');
+            });
+
+            await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.toEqual(
+                expect.objectContaining({ reason: 'user_disconnect' }),
+            );
+
+            expect(getTokenData).toHaveBeenCalled();
+            expect(mockDelete).toHaveBeenCalledTimes(2);
         });
 
         it('invalidates claimed OAuth flow context before explicit disconnect cleanup', async () => {
@@ -668,6 +714,73 @@ describe('OAuth2', () => {
             );
 
             expect(clearServiceConnectionState).not.toHaveBeenCalled();
+            expect(logger.error).toHaveBeenCalledWith(
+                '[OAuthDisconnect] Lifecycle transition.',
+                expect.objectContaining({
+                    lifecycleEvent: 'disconnect_cleanup_failed',
+                    serviceName,
+                    operationCorrelationId: expect.stringMatching(/^[a-f0-9]{16}$/),
+                    errorName: 'ServiceConnectionCleanupError',
+                }),
+            );
+        });
+
+        it('records a privacy-safe diagnostic when final lease cleanup fails', async () => {
+            mockDocInstance.set.mockImplementation(async (data: Record<string, unknown>) => {
+                const isFinalLeaseCleanup = data.oauthFlowGeneration === 'delete-sentinel'
+                    && data.disconnectOperationGeneration === 'delete-sentinel';
+                if (isFinalLeaseCleanup) {
+                    throw Object.assign(new Error('sensitive firestore failure detail'), {
+                        code: 'unavailable',
+                    });
+                }
+                return {};
+            });
+
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toThrow(
+                'sensitive firestore failure detail',
+            );
+
+            const finalizationFailure = vi.mocked(logger.error).mock.calls.find(
+                ([message, fields]) => message === '[OAuthDisconnect] Lifecycle transition.'
+                    && (fields as { lifecycleEvent?: unknown })?.lifecycleEvent === 'disconnect_finalization_failed',
+            );
+            expect(finalizationFailure?.[1]).toEqual(expect.objectContaining({
+                lifecycleEvent: 'disconnect_finalization_failed',
+                serviceName,
+                operationCorrelationId: expect.stringMatching(/^[a-f0-9]{16}$/),
+                errorName: 'Error',
+                errorCode: 'unavailable',
+            }));
+            expect(finalizationFailure?.[1]).not.toHaveProperty('errorMessage');
+        });
+
+        it('drops untrusted error labels from disconnect diagnostics', async () => {
+            mockDocInstance.set.mockImplementation(async (data: Record<string, unknown>) => {
+                const isFinalLeaseCleanup = data.oauthFlowGeneration === 'delete-sentinel'
+                    && data.disconnectOperationGeneration === 'delete-sentinel';
+                if (isFinalLeaseCleanup) {
+                    throw Object.assign(new Error('sensitive failure detail'), {
+                        name: 'Invalid name with credential-shaped text',
+                        code: 'invalid code with credential-shaped text',
+                    });
+                }
+                return {};
+            });
+
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toThrow(
+                'sensitive failure detail',
+            );
+
+            const finalizationFailure = vi.mocked(logger.error).mock.calls.find(
+                ([message, fields]) => message === '[OAuthDisconnect] Lifecycle transition.'
+                    && (fields as { lifecycleEvent?: unknown })?.lifecycleEvent === 'disconnect_finalization_failed',
+            );
+            expect(finalizationFailure?.[1]).toEqual(expect.objectContaining({
+                errorName: 'UnknownError',
+            }));
+            expect(finalizationFailure?.[1]).not.toHaveProperty('errorCode');
+            expect(JSON.stringify(finalizationFailure?.[1])).not.toContain('credential-shaped');
         });
 
         it('should make correct Suunto API call for deauthorization', async () => {
@@ -1234,6 +1347,20 @@ describe('OAuth2', () => {
             }));
             expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationGeneration');
             expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationLeaseExpiresAt');
+            const recoveryLog = vi.mocked(logger.warn).mock.calls.find(
+                ([message, fields]) => message === '[OAuthDisconnect] Lifecycle transition.'
+                    && (fields as { lifecycleEvent?: unknown })?.lifecycleEvent === 'empty_disconnect_lease_reclaimed',
+            );
+            expect(recoveryLog?.[1]).toEqual(expect.objectContaining({
+                lifecycleEvent: 'empty_disconnect_lease_reclaimed',
+                serviceName: ServiceNames.SuuntoApp,
+                operationCorrelationId: createHash('sha256')
+                    .update('disconnect-operation')
+                    .digest('hex')
+                    .slice(0, 16),
+                leaseRemainingMs: expect.any(Number),
+            }));
+            expect(JSON.stringify(recoveryLog?.[1])).not.toContain('disconnect-operation');
         });
 
         it('keeps OAuth blocked while an active disconnect operation still owns a token', async () => {
