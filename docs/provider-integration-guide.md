@@ -314,6 +314,8 @@ Maintain the projection from trusted backend token writes with retryable, idempo
 
 Do not combine or reverse steps 4 and 5 in the initial release: an older frontend and the projection-aware frontend's field-absent fallback may continue to use the legacy read temporarily, but denying credential reads before the existing-account projections are verified makes connected accounts appear disconnected. The initial projection release must preserve both compatibility layers; the follow-up release removes both together.
 
+Garmin, Suunto, and COROS completed this rollout in September 2026: the production backfill converged with no pending updates or failures, the frontend fallback was removed, and browser reads and writes against their token roots and descendants are denied. Their backend projection triggers remain the only synchronization path for connection-account metadata.
+
 ### Subscription enforcement
 
 If a provider is Pro-only, add it to the scheduled entitlement scan and its token-root discovery. Decide whether an entitlement restoration clears a pending disconnect or requires a fresh user connection; document the result in the provider-specific guide and Help content.
