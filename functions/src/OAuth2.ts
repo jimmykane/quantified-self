@@ -77,6 +77,49 @@ interface ClaimedOAuthFlowContext {
 interface ExplicitDisconnectOperation {
   lifecycleGuard: ServiceDisconnectLifecycleGuard;
   tokenQuerySnapshot: admin.firestore.QuerySnapshot;
+  startedAtMs: number;
+  leaseExpiresAtMs: number;
+}
+
+type ExplicitDisconnectFinishStatus = 'cleared' | 'root_missing' | 'stale';
+
+function getDisconnectOperationCorrelationId(
+  disconnectOperationGeneration: string | null | undefined,
+): string {
+  const generation = `${disconnectOperationGeneration || ''}`.trim();
+  return generation
+    ? crypto.createHash('sha256').update(generation).digest('hex').slice(0, 16)
+    : 'missing';
+}
+
+function getDisconnectErrorTelemetry(error: unknown): {
+  errorName: string;
+  errorCode?: string | number;
+} {
+  const rawErrorName = error instanceof Error ? error.name : typeof error;
+  const errorName = /^[a-z0-9_.:-]{1,64}$/i.test(rawErrorName)
+    ? rawErrorName
+    : 'UnknownError';
+  if (!error || typeof error !== 'object') return { errorName };
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === 'number' && Number.isFinite(code)) {
+    return { errorName, errorCode: code };
+  }
+  if (typeof code === 'string' && /^[a-z0-9_.:-]{1,64}$/i.test(code)) {
+    return { errorName, errorCode: code };
+  }
+  return { errorName };
+}
+
+function logDisconnectLifecycle(
+  level: 'error' | 'info' | 'warn',
+  fields: Record<string, unknown>,
+): void {
+  try {
+    logger[level]('[OAuthDisconnect] Lifecycle transition.', fields);
+  } catch {
+    // Observability must never change OAuth or credential-cleanup behavior.
+  }
 }
 
 class OAuthServiceConnectionSkippedForDeletedUserError extends Error {
@@ -172,7 +215,7 @@ async function beginOAuthFlowIfUserActive(
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
   const generation = crypto.randomUUID();
-  await db.runTransaction(async transaction => {
+  const reclaimedDisconnect = await db.runTransaction(async transaction => {
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
@@ -186,6 +229,8 @@ async function beginOAuthFlowIfUserActive(
     const rootSnapshot = await transaction.get(tokenRootRef);
     const rootData = rootSnapshot.data() as Record<string, unknown> | undefined;
     const nowMs = Date.now();
+    let reclaimedDisconnectOperationGeneration: string | null = null;
+    let reclaimedDisconnectLeaseExpiresAtMs: number | null = null;
     if (getActiveServiceDisconnectOperationGeneration(rootData, nowMs)) {
       const tokenSnapshot = await transaction.get(tokenRootRef.collection('tokens').limit(1));
       if (!tokenSnapshot.empty) {
@@ -200,9 +245,12 @@ async function beginOAuthFlowIfUserActive(
       // token left for a new OAuth flow to race with. Rotating the OAuth flow
       // generation below makes any remaining disconnect cleanup stale, so an
       // abandoned lease must not keep a disconnected user locked out.
-      logger.info('[OAuth] Reclaiming an empty disconnect operation for a new OAuth flow.', {
-        serviceName,
-      });
+      reclaimedDisconnectOperationGeneration = `${
+        rootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD] || ''
+      }`.trim() || null;
+      reclaimedDisconnectLeaseExpiresAtMs = Number(
+        rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] || 0,
+      );
     }
 
     // This is the first durable action in an OAuth-start request. Disconnects
@@ -224,7 +272,26 @@ async function beginOAuthFlowIfUserActive(
       [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
       [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
     }, { merge: true });
+    return {
+      operationGeneration: reclaimedDisconnectOperationGeneration,
+      leaseExpiresAtMs: reclaimedDisconnectLeaseExpiresAtMs,
+      observedAtMs: nowMs,
+    };
   });
+  if (reclaimedDisconnect.operationGeneration) {
+    logDisconnectLifecycle('warn', {
+      lifecycleEvent: 'empty_disconnect_lease_reclaimed',
+      serviceName,
+      operationCorrelationId: getDisconnectOperationCorrelationId(
+        reclaimedDisconnect.operationGeneration,
+      ),
+      leaseExpiresAtMs: reclaimedDisconnect.leaseExpiresAtMs,
+      leaseRemainingMs: Math.max(
+        0,
+        Number(reclaimedDisconnect.leaseExpiresAtMs || 0) - reclaimedDisconnect.observedAtMs,
+      ),
+    });
+  }
   return generation;
 }
 
@@ -433,6 +500,8 @@ async function beginExplicitDisconnectOperation(
         codeVerifier: undefined,
       }),
       tokenQuerySnapshot: tokenSnapshots,
+      startedAtMs: nowMs,
+      leaseExpiresAtMs: nowMs + EXPLICIT_DISCONNECT_OPERATION_LEASE_MS,
     };
   });
 }
@@ -441,23 +510,24 @@ async function finishExplicitDisconnectOperation(
   userID: string,
   serviceName: ServiceNames,
   guard: ServiceDisconnectLifecycleGuard,
-): Promise<void> {
+): Promise<ExplicitDisconnectFinishStatus> {
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
-  await admin.firestore().runTransaction(async transaction => {
+  return admin.firestore().runTransaction(async transaction => {
     const snapshot = await transaction.get(rootRef);
-    if (!snapshot.exists) return;
+    if (!snapshot.exists) return 'root_missing';
     const current = getServiceDisconnectLifecycleGuardFromRootData(
       snapshot.data() as Record<string, unknown>,
     );
     if (
       current.oauthFlowGeneration !== guard.oauthFlowGeneration
       || current.disconnectOperationGeneration !== guard.disconnectOperationGeneration
-    ) return;
+    ) return 'stale';
     transaction.set(rootRef, {
       [OAUTH_FLOW_GENERATION_FIELD]: FieldValue.delete(),
       [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
       [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
     }, { merge: true });
+    return 'cleared';
   });
 }
 
@@ -947,25 +1017,92 @@ export async function deauthorizeServiceForUser(
     adapter.tokenCollectionName,
   );
   const disconnectLifecycleGuard = disconnectOperation.lifecycleGuard;
+  const operationCorrelationId = getDisconnectOperationCorrelationId(
+    disconnectLifecycleGuard.disconnectOperationGeneration,
+  );
+  logDisconnectLifecycle('info', {
+    lifecycleEvent: 'disconnect_operation_claimed',
+    serviceName,
+    operationCorrelationId,
+    tokenCount: disconnectOperation.tokenQuerySnapshot.size,
+    leaseExpiresAtMs: disconnectOperation.leaseExpiresAtMs,
+  });
+  const cleanupResult = await (async () => {
+    try {
+      const outcome = await cleanupServiceConnectionForUser(
+        userID,
+        serviceName,
+        SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
+        {
+          missingTokensBehavior: options.missingTokensBehavior || 'throw',
+          disconnectLifecycleGuard,
+          initialTokenQuerySnapshot: disconnectOperation.tokenQuerySnapshot,
+          tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
+            recoverTerminalAuthFailure: false,
+            expectedDisconnectOperationGeneration:
+              disconnectLifecycleGuard.disconnectOperationGeneration || undefined,
+          }),
+        },
+      );
+      logDisconnectLifecycle('info', {
+        lifecycleEvent: 'disconnect_cleanup_completed',
+        serviceName,
+        operationCorrelationId,
+        durationMs: Date.now() - disconnectOperation.startedAtMs,
+        tokenCount: outcome.tokenCount,
+        deletedTokenCount: outcome.deletedTokenCount,
+        preservedTokenCount: outcome.preservedTokenCount,
+        partnerDeauthorizeAttempted: outcome.partnerDeauthorizeAttempted,
+        partnerDeauthorizeFailed: outcome.partnerDeauthorizeFailed,
+        localCleanupStatus: outcome.localCleanupStatus,
+        connectionStateUpdate: outcome.connectionStateUpdate,
+        skippedByCondition: outcome.skippedByCondition === true,
+      });
+      return { ok: true as const, outcome };
+    } catch (error) {
+      logDisconnectLifecycle('error', {
+        lifecycleEvent: 'disconnect_cleanup_failed',
+        serviceName,
+        operationCorrelationId,
+        durationMs: Date.now() - disconnectOperation.startedAtMs,
+        ...getDisconnectErrorTelemetry(error),
+      });
+      return { ok: false as const, error };
+    }
+  })();
+
+  logDisconnectLifecycle('info', {
+    lifecycleEvent: 'disconnect_finalization_started',
+    serviceName,
+    operationCorrelationId,
+    durationMs: Date.now() - disconnectOperation.startedAtMs,
+  });
   try {
-    return await cleanupServiceConnectionForUser(
+    const finalizationStatus = await finishExplicitDisconnectOperation(
       userID,
       serviceName,
-      SERVICE_AUTH_CLEANUP_REASONS.UserDisconnect,
-      {
-        missingTokensBehavior: options.missingTokensBehavior || 'throw',
-        disconnectLifecycleGuard,
-        initialTokenQuerySnapshot: disconnectOperation.tokenQuerySnapshot,
-        tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
-          recoverTerminalAuthFailure: false,
-          expectedDisconnectOperationGeneration:
-            disconnectLifecycleGuard.disconnectOperationGeneration || undefined,
-        }),
-      },
+      disconnectLifecycleGuard,
     );
-  } finally {
-    await finishExplicitDisconnectOperation(userID, serviceName, disconnectLifecycleGuard);
+    logDisconnectLifecycle('info', {
+      lifecycleEvent: 'disconnect_finalization_completed',
+      serviceName,
+      operationCorrelationId,
+      durationMs: Date.now() - disconnectOperation.startedAtMs,
+      finalizationStatus,
+    });
+  } catch (error) {
+    logDisconnectLifecycle('error', {
+      lifecycleEvent: 'disconnect_finalization_failed',
+      serviceName,
+      operationCorrelationId,
+      durationMs: Date.now() - disconnectOperation.startedAtMs,
+      ...getDisconnectErrorTelemetry(error),
+    });
+    throw error;
   }
+
+  if (!cleanupResult.ok) throw cleanupResult.error;
+  return cleanupResult.outcome;
 }
 
 export async function deauthorizeServiceForSubscriptionEnforcement(

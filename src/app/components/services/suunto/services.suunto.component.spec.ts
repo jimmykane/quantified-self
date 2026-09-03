@@ -129,6 +129,25 @@ describe('ServicesSuuntoComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('exchanges a returned OAuth code and state', async () => {
+        vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockImplementation((key: string) => ({
+            state: 'state-token',
+            code: 'auth-code',
+        }[key] ?? null));
+
+        await component.requestAndSetToken();
+
+        expect(mockUserService.requestAndSetCurrentUserSuuntoAppAccessToken)
+            .toHaveBeenCalledWith('state-token', 'auth-code');
+    });
+
+    it('rejects an incomplete OAuth callback', async () => {
+        vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockReturnValue(null);
+
+        await expect(component.requestAndSetToken())
+            .rejects.toThrow('Suunto authorization callback is missing state or code.');
+    });
+
     it('shows a useful retry message while a disconnect is still finishing', async () => {
         component.hasProAccess = true;
         mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockRejectedValueOnce({

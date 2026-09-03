@@ -282,9 +282,8 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   async requestAndSetToken() {
     const state = this.route.snapshot.queryParamMap.get('state');
     const code = this.route.snapshot.queryParamMap.get('code');
-    if (state && code) {
-      await this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
-    }
+    if (!state || !code) throw new Error('Suunto authorization callback is missing state or code.');
+    await this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
   }
 
   async queueRoutesFromSuunto(event: Event): Promise<void> {

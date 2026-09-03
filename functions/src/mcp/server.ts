@@ -22,6 +22,7 @@ import {
 } from './measurement-catalog';
 import {
   createMcpOAuthService,
+  McpBearerAuthenticationError,
   McpOAuthClientAuthenticationError,
   McpOAuthAuthorizationRedirectError,
   McpOAuthError,
@@ -1554,6 +1555,130 @@ export interface McpBearerFailure {
   retryAfterSeconds?: number;
 }
 
+/**
+ * These categories are deliberately coarse. They make operational failures
+ * diagnosable without retaining authentication material or a stable user/client
+ * identifier in Cloud Logging.
+ */
+export type McpDiagnosticClientFamily =
+  | 'codex'
+  | 'claude'
+  | 'browser'
+  | 'automation'
+  | 'other'
+  | 'unknown';
+
+export function classifyMcpDiagnosticClientFamily(
+  userAgent: unknown,
+): McpDiagnosticClientFamily {
+  if (typeof userAgent !== 'string' || !userAgent.trim()) {
+    return 'unknown';
+  }
+  const normalized = userAgent.toLowerCase();
+  if (normalized.includes('codex') || normalized.includes('openai-mcp')) {
+    return 'codex';
+  }
+  if (normalized.includes('claude')) {
+    return 'claude';
+  }
+  if (normalized.includes('mozilla/') || normalized.includes('safari/')) {
+    return 'browser';
+  }
+  if (
+    normalized.includes('curl/')
+    || normalized.includes('python-')
+    || normalized.includes('httpx/')
+    || normalized.includes('aiohttp/')
+  ) {
+    return 'automation';
+  }
+  return 'other';
+}
+
+export type McpBearerRejectionReason =
+  | 'missing_or_malformed_bearer'
+  | 'request_rate_limited'
+  | 'unclassified_bearer_state'
+  | 'unexpected_authentication_error'
+  | McpBearerAuthenticationError['reason'];
+
+export function classifyMcpBearerRejectionReason(
+  error: unknown,
+): McpBearerRejectionReason {
+  if (error instanceof McpBearerAuthenticationError) {
+    return error.reason;
+  }
+  if (error instanceof McpOAuthError && error.statusCode === 429) {
+    return 'request_rate_limited';
+  }
+  if (error instanceof McpOAuthError && error.statusCode === 401) {
+    return 'unclassified_bearer_state';
+  }
+  return 'unexpected_authentication_error';
+}
+
+export type McpTransportRejectionReason =
+  | 'invalid_json'
+  | 'invalid_json_rpc'
+  | 'unsupported_protocol_version'
+  | 'unacceptable_accept_header'
+  | 'unsupported_content_type'
+  | 'invalid_initialization'
+  | 'unexpected_transport_error';
+
+export function classifyMcpTransportRejectionReason(
+  error: unknown,
+): McpTransportRejectionReason {
+  if (!(error instanceof Error)) {
+    return 'unexpected_transport_error';
+  }
+  const message = error.message;
+  if (message.includes('Invalid JSON-RPC')) {
+    return 'invalid_json_rpc';
+  }
+  if (message.includes('Invalid JSON') || message.startsWith('Parse error')) {
+    return 'invalid_json';
+  }
+  if (message.includes('Unsupported protocol version')) {
+    return 'unsupported_protocol_version';
+  }
+  if (message.startsWith('Not Acceptable:')) {
+    return 'unacceptable_accept_header';
+  }
+  if (message.startsWith('Unsupported Media Type:')) {
+    return 'unsupported_content_type';
+  }
+  if (
+    message.includes('initialization request')
+    || message.includes('Server already initialized')
+    || message.includes('Server not initialized')
+    || message.includes('Mcp-Session-Id')
+  ) {
+    return 'invalid_initialization';
+  }
+  return 'unexpected_transport_error';
+}
+
+function logMcpBearerRejection(
+  reason: McpBearerRejectionReason,
+  request: Request,
+): void {
+  logger.warn('[MCP] Bearer authentication rejected', {
+    reason,
+    clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
+  });
+}
+
+function logMcpTransportRejection(
+  error: unknown,
+  request: Request,
+): void {
+  logger.warn('[MCP] Streamable HTTP request rejected', {
+    reason: classifyMcpTransportRejectionReason(error),
+    clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
+  });
+}
+
 export function classifyMcpBearerFailure(error: unknown): McpBearerFailure {
   if (error instanceof McpOAuthError && error.statusCode === 429) {
     return {
@@ -1712,6 +1837,7 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
   }
   const bearerToken = parseMcpBearerToken(request.get('authorization'));
   if (!bearerToken) {
+    logMcpBearerRejection('missing_or_malformed_bearer', request);
     response.set(
       'WWW-Authenticate',
       `Bearer resource_metadata="${metadataUrl}", scope="${Object.values(MCP_OAUTH_SCOPES).join(' ')}"`,
@@ -1725,6 +1851,9 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     auth = await getOAuthService().authenticateBearer(bearerToken, resource);
   } catch (error) {
     const failure = classifyMcpBearerFailure(error);
+    if (failure.statusCode === 401 || failure.statusCode === 429) {
+      logMcpBearerRejection(classifyMcpBearerRejectionReason(error), request);
+    }
     if (failure.challengeError) {
       response.set(
         'WWW-Authenticate',
@@ -1770,6 +1899,7 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   });
+  transport.onerror = (error) => logMcpTransportRejection(error, request);
   try {
     await server.connect(transport);
     await transport.handleRequest(request, response, request.body);
