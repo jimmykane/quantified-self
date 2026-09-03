@@ -147,7 +147,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         ) {
           if (completion?.outcome === SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryCompleted) {
             this.forceConnected = false;
-            this.emitConnectionState();
+            this.connectionStateChanged.emit(false);
             this.snackBar.open(
               `The previous ${this.getPartnerDisplayName()} connection was removed. A Pro subscription is required to connect again.`,
               undefined,
@@ -158,7 +158,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
           }
           if (completion?.outcome === SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryPending) {
             this.forceConnected = false;
-            this.emitConnectionState();
+            this.connectionStateChanged.emit(false);
             this.snackBar.open(
               `The previous ${this.getPartnerDisplayName()} connection could not be fully removed yet. Please try again later.`,
               undefined,
@@ -179,12 +179,19 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       } catch (e: any) {
         this.logger.error(e);
         const status = e?.status;
+        const code = `${e?.code || ''}`;
+        const errorText = [e?.error, e?.message, e?.details]
+          .filter(value => typeof value === 'string')
+          .join(' ');
         let message: string;
 
-        if (status === 502) {
+        if (status === 502 || code === 'functions/unavailable' || code === 'unavailable') {
           const partnerName = this.getPartnerDisplayName();
           message = `${partnerName} is temporarily unavailable. Please try again later.`;
-        } else if (status === 403 && e?.error?.includes?.('Pro')) {
+        } else if (
+          (status === 403 || code === 'functions/permission-denied' || code === 'permission-denied')
+          && /\bpro\b/i.test(errorText)
+        ) {
           message = 'This feature requires a Pro subscription.';
         } else {
           message = `Could not connect due to ${e.message || 'Unknown error'}`;

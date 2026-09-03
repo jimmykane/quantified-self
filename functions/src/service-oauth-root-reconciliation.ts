@@ -17,7 +17,6 @@ import {
   getUserDeletionGuardState,
   getUserDeletionGuardStateInTransaction,
 } from './shared/user-deletion-guard';
-import { ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD } from './token-refresh-coordinator';
 
 export const SERVICE_OAUTH_ROOT_RECONCILIATION_BATCH_LIMIT = 50;
 export const SERVICE_OAUTH_ROOT_RECONCILIATION_CURSOR_COLLECTION = 'serviceOAuthRootReconciliationCursors';
@@ -86,6 +85,11 @@ export interface ServiceOAuthRootReconciliationSummary {
     failed: number;
     byOutcome: Partial<Record<ServiceOAuthRootReconciliationOutcome, number>>;
   }>>;
+}
+
+export interface ServiceOAuthRootAuditSummary extends ServiceOAuthRootReconciliationSummary {
+  truncated: boolean;
+  truncatedServices: ServiceNames[];
 }
 
 function nonEmptyString(value: unknown): string | null {
@@ -264,12 +268,6 @@ async function reconcileServiceOAuthRootSnapshot(
       markDeleted(OAUTH_FLOW_GENERATION_FIELD);
       markDeleted(OAUTH_FLOW_CREATED_AT_FIELD);
       markDeleted(OAUTH_FLOW_EXPIRES_AT_FIELD);
-      if (
-        nonEmptyString(currentData[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD])
-        === currentDecision.lifecycle.oauthFlowGeneration
-      ) {
-        markDeleted(ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD);
-      }
     }
 
     if (currentDecision.expiredDisconnectFence) {
@@ -283,9 +281,10 @@ async function reconcileServiceOAuthRootSnapshot(
       }
     }
 
-    // Keep an empty root after clearing its last lifecycle field. At least one
-    // legacy maintenance writer can create a token child without reading the
-    // root, so deleting only the parent document could orphan that credential.
+    // Keep an empty root and its active credential-generation sentinel after
+    // clearing transient lifecycle fields. At least one legacy maintenance
+    // writer can create a generation-less token child without reading the
+    // root; the non-null sentinel keeps that delayed child fail-closed.
     transaction.update(rootSnapshot.ref, cleanupUpdate);
     return 'cleaned_fields';
   });
@@ -418,8 +417,9 @@ export async function auditServiceOAuthRoots(
   nowMs = Date.now(),
   pageSize = 100,
   maxRootsPerService = 2_000,
-): Promise<ServiceOAuthRootReconciliationSummary> {
+): Promise<ServiceOAuthRootAuditSummary> {
   const summary = emptySummary();
+  const truncatedServices: ServiceNames[] = [];
   for (const config of SERVICE_OAUTH_ROOT_COLLECTIONS) {
     const serviceSummary = {
       rootsScanned: 0,
@@ -454,8 +454,21 @@ export async function auditServiceOAuthRoots(
       lastSnapshot = page.docs[page.docs.length - 1];
       if (page.size < Math.min(pageSize, remaining)) break;
     }
+
+    if (serviceSummary.rootsScanned >= maxRootsPerService && lastSnapshot) {
+      const lookAhead = await db.collection(config.collectionName)
+        .orderBy(FieldPath.documentId())
+        .startAfter(lastSnapshot)
+        .limit(1)
+        .get();
+      if (!lookAhead.empty) truncatedServices.push(config.serviceName);
+    }
   }
-  return summary;
+  return {
+    ...summary,
+    truncated: truncatedServices.length > 0,
+    truncatedServices,
+  };
 }
 
 export const serviceOAuthRootReconciliationTestInternals = {

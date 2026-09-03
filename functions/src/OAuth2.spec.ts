@@ -55,7 +55,7 @@ const {
     mockArchiveOrphanedServiceToken: vi.fn().mockResolvedValue(undefined),
     mockGetWahooUserID: vi.fn().mockResolvedValue('60462'),
     mockMarkServiceConnected: vi.fn().mockResolvedValue(true),
-    mockClearServiceDisconnectPending: vi.fn().mockResolvedValue(undefined),
+    mockClearServiceDisconnectPending: vi.fn().mockResolvedValue('no_pending'),
     mockResumeServiceDisconnectRetryAfterRecoveryFailure: vi.fn().mockResolvedValue(true),
 }));
 
@@ -265,7 +265,7 @@ vi.mock('./wahoo/account', () => ({
 
 vi.mock('./service-connection-meta', () => ({
     markServiceConnected: mockMarkServiceConnected,
-    clearServiceConnectionState: vi.fn().mockResolvedValue(undefined),
+    clearServiceConnectionState: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('./service-disconnect-pending', () => ({
@@ -364,7 +364,8 @@ describe('OAuth2', () => {
         mockArchiveOrphanedServiceToken.mockReset().mockResolvedValue(undefined);
         mockGetWahooUserID.mockReset().mockResolvedValue('60462');
         mockMarkServiceConnected.mockReset().mockResolvedValue(true);
-        mockClearServiceDisconnectPending.mockReset().mockResolvedValue(undefined);
+        mockClearServiceDisconnectPending.mockReset().mockResolvedValue('no_pending');
+        (clearServiceConnectionState as Mock).mockReset().mockResolvedValue(true);
         mockResumeServiceDisconnectRetryAfterRecoveryFailure.mockReset().mockResolvedValue(true);
         (hasProAccess as Mock).mockReset().mockResolvedValue(true);
     });
@@ -1350,6 +1351,24 @@ describe('OAuth2', () => {
             expect(mockDelete).not.toHaveBeenCalled();
         });
 
+        it('keeps the COROS orphan-token fence when missing-root preparation fails', async () => {
+            const { COROSAuthAdapter } = await import('./coros/auth/adapter');
+            mockTransactionDocumentExists = false;
+            vi.spyOn(COROSAuthAdapter.prototype, 'getAuthorizationData')
+                .mockRejectedValueOnce(new Error('provider preparation failed'));
+
+            await expect(getServiceOAuth2CodeRedirectAndSaveStateToUser(
+                userID,
+                ServiceNames.COROSAPI,
+                redirectUri,
+            )).rejects.toThrow('provider preparation failed');
+
+            expect(mockTransactionDocumentData).toEqual({
+                activeOAuthCredentialGeneration: expect.any(String),
+            });
+            expect(mockDelete).not.toHaveBeenCalled();
+        });
+
         it('keeps OAuth blocked while an active disconnect operation has no tokens left', async () => {
             const leaseExpiresAt = Date.now() + 60_000;
             mockTransactionDocumentData = {
@@ -1811,6 +1830,7 @@ describe('OAuth2', () => {
                 state: 'some-state',
                 codeVerifier: 'some-verifier',
                 oauthFlowGeneration: 'oauth-flow-generation',
+                oauthFlowExpiresAt: Date.now() + OAUTH_FLOW_TTL_MS,
             };
         });
 
@@ -1856,6 +1876,7 @@ describe('OAuth2', () => {
                 state: 'some-state',
                 codeVerifier: 'some-verifier',
                 oauthFlowGeneration: 'oauth-flow-generation',
+                oauthFlowExpiresAt: Date.now() + OAUTH_FLOW_TTL_MS,
             };
 
             // Explicitly restore any spies from previous tests if they weren't cleaned up
@@ -1941,6 +1962,27 @@ describe('OAuth2', () => {
             );
             expect(mockClearServiceDisconnectPending.mock.invocationCallOrder[0])
                 .toBeLessThan(mockMarkServiceConnected.mock.invocationCallOrder[0]);
+        });
+
+        it('does not mark connected when pending-disconnect clearing loses its lifecycle guard', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { user: 'test-external-user', access_token: 'mock-token' },
+                expired: () => false,
+            } as any);
+            mockClearServiceDisconnectPending.mockResolvedValueOnce('stale_lifecycle');
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(
+                userID,
+                ServiceNames.SuuntoApp,
+                redirectUri,
+                code,
+                'some-state',
+            )).rejects.toMatchObject({
+                phase: `oauth_clear_disconnect_pending:${ServiceNames.SuuntoApp}`,
+            });
+
+            expect(mockMarkServiceConnected).not.toHaveBeenCalled();
         });
 
         it('stores the Wahoo provider account ID in safe connection metadata after OAuth', async () => {
@@ -2179,6 +2221,45 @@ describe('OAuth2', () => {
             );
         });
 
+        it('keeps non-Pro recovery pending until connection metadata is cleared', async () => {
+            (hasProAccess as Mock).mockResolvedValue(false);
+            (clearServiceConnectionState as Mock).mockResolvedValue(false);
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: {
+                    user: 'test-external-user',
+                    access_token: 'mock-token',
+                    refresh_token: 'mock-refresh-token',
+                    expires_in: 3600,
+                    scope: 'workout',
+                },
+                expired: () => false,
+            } as any);
+            const tokenDoc = {
+                id: 'test-external-user',
+                ref: mockDocInstance,
+                data: () => mockTransactionDocumentData,
+            };
+            mockGet
+                .mockResolvedValueOnce({ empty: false, size: 1, docs: [tokenDoc] } as any)
+                .mockResolvedValueOnce({ empty: false, size: 1, docs: [tokenDoc] } as any);
+            (getTokenData as Mock).mockImplementationOnce(async () => ({
+                ...mockTransactionDocumentData,
+            }));
+            (requestPromise.get as Mock).mockResolvedValueOnce({});
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(
+                userID,
+                ServiceNames.SuuntoApp,
+                redirectUri,
+                code,
+                'some-state',
+            )).resolves.toEqual({
+                connected: false,
+                outcome: 'disconnect_recovery_pending',
+            });
+        });
+
         it('resumes pending disconnect retries when non-Pro OAuth recovery deauthorization fails retryably', async () => {
             (hasProAccess as Mock).mockResolvedValue(false);
             const tokenNow = Date.now();
@@ -2301,6 +2382,35 @@ describe('OAuth2', () => {
                 oauthFlowGeneration: 'oauth-flow-generation',
                 oauthFlowCreatedAt: Date.now() - OAUTH_FLOW_TTL_MS - 1,
                 oauthFlowExpiresAt: Date.now() - 1,
+            };
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(
+                userID,
+                ServiceNames.GarminAPI,
+                redirectUri,
+                code,
+                'some-state',
+            )).rejects.toMatchObject({ name: 'OAuthFlowContextMismatchError' });
+
+            expect(getTokenSpy).not.toHaveBeenCalled();
+            expect(mockUpdate).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['missing', undefined],
+            ['malformed', 'not-a-timestamp'],
+            ['future numeric string', `${Date.now() + OAUTH_FLOW_TTL_MS}`],
+            ['coercible object', { valueOf: () => Date.now() + OAUTH_FLOW_TTL_MS }],
+            ['infinite', Number.POSITIVE_INFINITY],
+        ])('rejects a callback with a %s OAuth expiry', async (_label, oauthFlowExpiresAt) => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            const getTokenSpy = vi.spyOn(MockAuthCode.prototype, 'getToken')
+                .mockRejectedValue(new Error('Exchange should not run'));
+            mockTransactionDocumentData = {
+                state: 'some-state',
+                codeVerifier: 'some-verifier',
+                oauthFlowGeneration: 'oauth-flow-generation',
+                oauthFlowExpiresAt,
             };
 
             await expect(getAndSetServiceOAuth2AccessTokenForUser(
@@ -2941,6 +3051,7 @@ describe('OAuth2', () => {
                 state: 'matches',
                 codeVerifier: 'mockVerifier',
                 oauthFlowGeneration: 'oauth-flow-generation',
+                oauthFlowExpiresAt: Date.now() + OAUTH_FLOW_TTL_MS,
             };
         });
 

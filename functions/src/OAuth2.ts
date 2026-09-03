@@ -334,12 +334,12 @@ async function finishRejectedOAuthFlowIfCurrent(
       [OAUTH_FLOW_CREATED_AT_FIELD]: FieldValue.delete(),
       [OAUTH_FLOW_EXPIRES_AT_FIELD]: FieldValue.delete(),
     };
-    if (rootData[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD] === generation) {
-      cleanupUpdate[ACTIVE_OAUTH_CREDENTIAL_GENERATION_FIELD] = FieldValue.delete();
-    }
     // Retain the root even when this clears its final field. A legacy
     // maintenance writer can create a token child without reading the root;
-    // deleting the parent document could therefore orphan that child.
+    // deleting the parent document could therefore orphan that child. Keep
+    // the active credential generation as a fail-closed sentinel too: a
+    // delayed generation-less child must not become authorized after this
+    // rejected flow removes its transient context.
     transaction.set(tokenRootRef, cleanupUpdate, { merge: true });
   });
 }
@@ -377,12 +377,14 @@ async function claimOAuthFlowContext(
     const generation = typeof data?.[OAUTH_FLOW_GENERATION_FIELD] === 'string'
       ? data[OAUTH_FLOW_GENERATION_FIELD].trim()
       : '';
-    const expiresAt = Number(data?.[OAUTH_FLOW_EXPIRES_AT_FIELD]);
+    const expiresAt = data?.[OAUTH_FLOW_EXPIRES_AT_FIELD];
     if (
       !snapshot.exists
       || data?.state !== expectedState
       || !generation
-      || (Number.isFinite(expiresAt) && expiresAt <= Date.now())
+      || typeof expiresAt !== 'number'
+      || !Number.isFinite(expiresAt)
+      || expiresAt <= Date.now()
     ) {
       throw new OAuthFlowContextMismatchError(serviceName);
     }
@@ -889,12 +891,33 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
     if (!persistedOAuthCredentialGuard) {
       throw new Error(`Missing persisted ${serviceName} credential guard after OAuth token write.`);
     }
-    await clearServiceDisconnectPending(
+    const pendingDisconnectClearResult = await clearServiceDisconnectPending(
       userID,
       serviceName,
       persistedOAuthCredentialGuard.rootGenerationGuard,
       persistedOAuthCredentialGuard.oauthFlowGenerationGuard,
     );
+    if (
+      pendingDisconnectClearResult !== 'cleared'
+      && pendingDisconnectClearResult !== 'no_pending'
+    ) {
+      logger.warn(`Skipping stale ${serviceName} OAuth callback for user ${userID} because pending disconnect state was not cleared.`, {
+        pendingDisconnectClearResult,
+      });
+      const deletedSupersededCredential = await deleteSupersededOAuthCredentialIfCurrent(
+        userID,
+        serviceName,
+        persistedOAuthCredentialGuard,
+      );
+      if (deletedSupersededCredential) {
+        await deauthorizeUnpersistedOAuthToken(adapter, userID, serviceName, results);
+      }
+      throw new OAuthServiceConnectionSkippedForDeletedUserError(
+        userID,
+        serviceName,
+        `oauth_clear_disconnect_pending:${serviceName}`,
+      );
+    }
     const didMarkConnected = (serviceName === ServiceNames.WahooAPI
       || serviceName === ServiceNames.COROSAPI
       || serviceName === ServiceNames.GarminAPI) && uniqueId
@@ -954,6 +977,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
     const disconnectRecoveryCompleted = outcome.preservedTokenCount === 0
       && outcome.skippedByCondition !== true
       && !outcome.retryableDisconnectFailures?.length
+      && outcome.connectionStateUpdate === 'cleared'
       && (outcome.localCleanupStatus === 'completed'
         || outcome.localCleanupStatus === 'no_tokens_found');
     return {

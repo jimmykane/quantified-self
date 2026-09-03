@@ -691,7 +691,8 @@ describe('ServicesGarminComponent', () => {
                 state: 'state-token',
                 code: 'auth-code'
             };
-            mockUserService.getServiceToken.mockReturnValueOnce(of([]));
+            const connectionStateEmitSpy = vi.spyOn(component.connectionStateChanged, 'emit');
+            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'stale-token' }]));
             mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
             mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce({
                 connected: false,
@@ -708,6 +709,7 @@ describe('ServicesGarminComponent', () => {
             );
             expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('connected_to_service', expect.anything());
             expect(component.forceConnected).toBe(false);
+            expect(connectionStateEmitSpy).toHaveBeenLastCalledWith(false);
         });
 
         it('ngOnChanges should expose a pending disconnect recovery as an error', async () => {
@@ -743,7 +745,7 @@ describe('ServicesGarminComponent', () => {
             const snackBar = TestBed.inject(MatSnackBar);
             const snackBarSpy = vi.spyOn(snackBar, 'open');
             const user = { uid: 'u1' } as any;
-            const error502 = { status: 502, message: 'Bad Gateway' };
+            const error502 = { code: 'functions/unavailable', message: 'Bad Gateway' };
             component.user = user;
             queryParams = {
                 serviceName: component.serviceName,
@@ -780,7 +782,7 @@ describe('ServicesGarminComponent', () => {
             const snackBar = TestBed.inject(MatSnackBar);
             const snackBarSpy = vi.spyOn(snackBar, 'open');
             const user = { uid: 'u1' } as any;
-            const error403 = { status: 403, error: 'Pro subscription required', message: 'Forbidden' };
+            const error403 = { code: 'functions/permission-denied', message: 'Pro subscription required' };
             component.user = user;
             queryParams = {
                 serviceName: component.serviceName,
