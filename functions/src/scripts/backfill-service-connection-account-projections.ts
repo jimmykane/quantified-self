@@ -7,6 +7,7 @@ import {
   readServiceConnectionAccountProjection,
   refreshServiceConnectionAccountProjection,
 } from '../service-connection-account-projection';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { ServiceConnectionAccountProjection } from '../../../shared/service-connection';
 
 const APPLY_CONFIRMATION = 'BACKFILL_CONNECTION_PROJECTIONS';
@@ -168,6 +169,13 @@ export async function runServiceConnectionProjectionBackfill(
         serviceSummary.rootsScanned++;
         summary.rootsScanned++;
         try {
+          const deletionGuard = await getUserDeletionGuardState(db, root.id);
+          if (deletionGuard.shouldSkip) {
+            serviceSummary.skippedDeletedUser++;
+            summary.skippedDeletedUser++;
+            continue;
+          }
+
           const accounts = await readServiceConnectionAccountProjection({
             db,
             userID: root.id,

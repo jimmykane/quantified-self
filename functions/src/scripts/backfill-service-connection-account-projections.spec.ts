@@ -6,6 +6,7 @@ const hoisted = vi.hoisted(() => {
   const metaByPath = new Map<string, Record<string, unknown>>();
   const readProjection = vi.fn();
   const refreshProjection = vi.fn();
+  const getDeletionGuard = vi.fn();
   const initializeApp = vi.fn();
   const adminApps: unknown[] = [{}];
 
@@ -39,6 +40,7 @@ const hoisted = vi.hoisted(() => {
     metaByPath,
     readProjection,
     refreshProjection,
+    getDeletionGuard,
     initializeApp,
     adminApps,
     collection,
@@ -75,6 +77,10 @@ vi.mock('../service-connection-account-projection', () => ({
   refreshServiceConnectionAccountProjection: hoisted.refreshProjection,
 }));
 
+vi.mock('../shared/user-deletion-guard', () => ({
+  getUserDeletionGuardState: hoisted.getDeletionGuard,
+}));
+
 import {
   parseServiceConnectionProjectionBackfillOptions,
   runServiceConnectionProjectionBackfill,
@@ -87,6 +93,11 @@ describe('service connection projection backfill', () => {
     hoisted.metaByPath.clear();
     hoisted.readProjection.mockResolvedValue([{ providerUserId: 'provider-user' }]);
     hoisted.refreshProjection.mockResolvedValue('updated');
+    hoisted.getDeletionGuard.mockResolvedValue({
+      userExists: true,
+      deletionInProgress: false,
+      shouldSkip: false,
+    });
   });
 
   it('defaults to a dry run across all supported providers', () => {
@@ -145,6 +156,39 @@ describe('service connection projection backfill', () => {
       failed: 0,
     });
     expect(hoisted.readProjection).toHaveBeenCalledTimes(3);
+    expect(hoisted.refreshProjection).not.toHaveBeenCalled();
+  });
+
+  it('excludes missing or deleting users from dry-run updates', async () => {
+    hoisted.rootsByCollection.set('garminAPITokens', [
+      { id: 'active-user' },
+      { id: 'missing-user' },
+      { id: 'deleting-user' },
+    ]);
+    hoisted.getDeletionGuard.mockImplementation(async (_db: unknown, userID: string) => ({
+      userExists: userID !== 'missing-user',
+      deletionInProgress: userID === 'deleting-user',
+      shouldSkip: userID !== 'active-user',
+    }));
+
+    const summary = await runServiceConnectionProjectionBackfill([
+      '--services=garmin',
+    ], { db: {
+      collection: hoisted.collection,
+      doc: () => ({
+        get: async () => ({ data: () => undefined }),
+      }),
+    } as never, revisionAtMs: 1234 });
+
+    expect(summary).toMatchObject({
+      dryRun: true,
+      rootsScanned: 3,
+      accountsProjected: 1,
+      wouldUpdate: 1,
+      skippedDeletedUser: 2,
+      failed: 0,
+    });
+    expect(hoisted.readProjection).toHaveBeenCalledTimes(1);
     expect(hoisted.refreshProjection).not.toHaveBeenCalled();
   });
 
