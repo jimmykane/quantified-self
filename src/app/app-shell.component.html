@@ -49,14 +49,6 @@
       <div class="app-shell-scroll-content" [style.padding-top.px]="layoutTopOffsetPx">
         <app-impersonation-banner></app-impersonation-banner>
         <div class="router-outlet-container" [@routeAnimations]="routeAnimationState()">
-          @if (maintenanceLoading()) {
-          <div class="loading-overlay">
-            <div class="logo-spinner">
-              <mat-icon svgIcon="logo"></mat-icon>
-            </div>
-          </div>
-          }
-
           <router-outlet #outlet="outlet"></router-outlet>
         </div>
       </div>
