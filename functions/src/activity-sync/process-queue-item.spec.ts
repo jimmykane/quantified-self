@@ -1186,6 +1186,8 @@ describe('activity-sync/process-queue-item', () => {
   });
 
   it('persists a pending Wahoo upload token and retries status checks without posting the FIT file again', async () => {
+    const pollSchedulingStartedAtMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(pollSchedulingStartedAtMs);
     const queueItem: ActivitySyncQueueItemInterface = {
       ...baseQueueItem,
       routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
@@ -1200,7 +1202,9 @@ describe('activity-sync/process-queue-item', () => {
 
     const firstResult = await processActivitySyncQueueItem(queueItem);
 
-    expect(firstResult).toBe(QueueResult.RetryIncremented);
+    dateNowSpy.mockRestore();
+
+    expect(firstResult).toBe(QueueResult.ProviderStatusPending);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledWith('user-1', Buffer.from('FITDATA'), expect.objectContaining({
       filename: 'original.fit',
     }));
@@ -1213,16 +1217,63 @@ describe('activity-sync/process-queue-item', () => {
     }));
     expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
       queueItem,
-      expect.objectContaining({ code: 'deadline-exceeded' }),
+      expect.objectContaining({
+        name: 'ProviderOperationError',
+        serviceName: ServiceNames.WahooAPI,
+        operation: 'activity_upload_status',
+        disposition: 'retryable',
+        retryMode: 'resume',
+        code: 'deadline-exceeded',
+        providerOperationId: 'wahoo-upload-1',
+      }),
       1,
       undefined,
+      'WAHOO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
     );
+    const retryParams = mockIncreaseRetryCountIfCurrentParams.mock.calls.at(-1)?.[0] as MockActivitySyncRetryParams | undefined;
+    expect(retryParams?.retryDispatchMarkerAtMs?.(1)).toBe(
+      pollSchedulingStartedAtMs + (15 * 60 * 1000),
+    );
+    expect(queueItem.dispatchedToCloudTask).toBe(
+      pollSchedulingStartedAtMs + (15 * 60 * 1000),
+    );
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
 
     await processActivitySyncQueueItem(queueItem);
 
     expect(mockGetWahooActivityUploadStatus).toHaveBeenCalledWith('user-1', 'wahoo-upload-1', 9);
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(mockUploadActivityFileToWahoo).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps exhausted Wahoo pending polling visible as a terminal failure', async () => {
+    const queueItem: ActivitySyncQueueItemInterface = {
+      ...baseQueueItem,
+      routeId: ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_WahooAPI,
+      destinationServiceName: ServiceNames.WahooAPI,
+      ref: createMockActivitySyncQueueItemRef(),
+    };
+    mockUploadActivityFileToWahoo.mockResolvedValueOnce({
+      status: 'pending',
+      message: 'processing',
+      uploadId: 'wahoo-upload-1',
+    });
+    mockIncreaseRetryCountForQueueItem.mockResolvedValueOnce(QueueResult.MovedToDLQ);
+
+    const result = await processActivitySyncQueueItem(queueItem);
+
+    expect(result).toBe(QueueResult.MovedToDLQ);
+    expect(mockSetActivitySyncRetryingMetadata).not.toHaveBeenCalled();
+    expect(mockSetActivitySyncFailedMetadata).toHaveBeenCalledWith(expect.objectContaining({
+      destinationServiceName: ServiceNames.WahooAPI,
+    }));
+    expect(logger.error).toHaveBeenCalledWith(
+      '[ActivitySync] Destination provider failure moved to DLQ.',
+      expect.objectContaining({
+        destinationServiceName: ServiceNames.WahooAPI,
+        outcome: 'dlq',
+      }),
+    );
   });
 
   it('persists COROS async identifiers and resumes status without uploading the FIT file again', async () => {

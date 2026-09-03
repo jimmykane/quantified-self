@@ -1066,48 +1066,56 @@ async function clearPendingDestinationUploadForRestart(
 function buildPendingDestinationUploadError(
     queueItem: ActivitySyncQueueItemInterface,
     uploadResult: UploadActivityFileResult,
-): Error {
-    if (destinationRequiresProviderUserId(queueItem.destinationServiceName)) {
-        const persistedResumeState = hasPersistedDestinationUpload(queueItem);
-        const providerOperationId = uploadResult.uploadId
-            || (persistedResumeState ? queueItem.destinationUploadID || undefined : undefined);
-        const providerUserId = uploadResult.providerUserId
-            || (persistedResumeState ? queueItem.destinationProviderUserID || undefined : undefined);
-        if (!providerOperationId || !providerUserId) {
-            return buildInvalidProviderResumeStateError(
-                queueItem,
-                providerOperationId,
-                providerUserId,
-            );
-        }
-        return new ProviderOperationError({
-            serviceName: queueItem.destinationServiceName,
-            operation: 'activity_upload_status',
-            disposition: 'retryable',
-            retryMode: 'resume',
-            code: 'deadline-exceeded',
-            message: uploadResult.message || `${queueItem.destinationServiceName} is still processing the activity.`,
-            providerStatus: queueItem.destinationServiceName === ServiceNames.COROSAPI ? 1 : undefined,
-            providerUserId,
+): ProviderOperationError {
+    const persistedResumeState = hasPersistedDestinationUpload(queueItem);
+    const providerOperationId = uploadResult.uploadId
+        || (persistedResumeState ? queueItem.destinationUploadID || undefined : undefined);
+    const providerUserId = uploadResult.providerUserId
+        || (persistedResumeState ? queueItem.destinationProviderUserID || undefined : undefined);
+    if (!providerOperationId || (
+        destinationRequiresProviderUserId(queueItem.destinationServiceName)
+        && !providerUserId
+    )) {
+        return buildInvalidProviderResumeStateError(
+            queueItem,
             providerOperationId,
-            dlqContext: queueItem.destinationServiceName === ServiceNames.SuuntoApp
-                ? 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED'
-                : 'COROS_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
-        });
+            providerUserId,
+        );
     }
 
-    return Object.assign(new Error('Wahoo is still processing the activity.'), {
+    return new ProviderOperationError({
+        serviceName: queueItem.destinationServiceName,
+        operation: 'activity_upload_status',
+        disposition: 'retryable',
+        retryMode: 'resume',
         code: 'deadline-exceeded',
+        message: uploadResult.message || `${queueItem.destinationServiceName} is still processing the activity.`,
+        providerStatus: queueItem.destinationServiceName === ServiceNames.COROSAPI ? 1 : undefined,
+        providerUserId,
+        providerOperationId,
+        dlqContext: queueItem.destinationServiceName === ServiceNames.SuuntoApp
+            ? 'SUUNTO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED'
+            : queueItem.destinationServiceName === ServiceNames.WahooAPI
+                ? 'WAHOO_ACTIVITY_UPLOAD_RETRY_EXHAUSTED'
+                : 'COROS_ACTIVITY_UPLOAD_RETRY_EXHAUSTED',
     });
 }
 
-function isExpectedCOROSActivityUploadPending(error: ProviderOperationError): boolean {
-    return error.serviceName === ServiceNames.COROSAPI
-        && error.operation === 'activity_upload_status'
+function isExpectedActivityUploadPending(error: ProviderOperationError): boolean {
+    const isExpectedPendingStatus = error.operation === 'activity_upload_status'
         && error.disposition === 'retryable'
         && error.retryMode === 'resume'
-        && error.code === 'deadline-exceeded'
-        && error.providerStatus === 1;
+        && error.code === 'deadline-exceeded';
+    if (!isExpectedPendingStatus || !error.providerOperationId) {
+        return false;
+    }
+
+    return error.serviceName === ServiceNames.WahooAPI
+        || (
+            error.serviceName === ServiceNames.COROSAPI
+            && error.providerStatus === 1
+            && !!error.providerUserId
+        );
 }
 
 function buildInvalidProviderResumeStateError(
@@ -1629,26 +1637,7 @@ export async function processActivitySyncQueueItem(
             expectedWahooWorkoutType.workoutTypeId,
         );
         if (uploadResult.status === 'pending') {
-            const pendingError = buildPendingDestinationUploadError(queueItem, uploadResult);
-            if (isProviderOperationError(pendingError)) {
-                throw pendingError;
-            }
-            let persisted: boolean;
-            try {
-                persisted = await persistDestinationUploadState(queueItem, uploadResult);
-            } catch (persistenceError) {
-                return moveUploadStatePersistenceFailureToDlq(
-                    queueItem,
-                    uploadResult,
-                    persistenceError,
-                    bulkWriter,
-                    routeMeta,
-                );
-            }
-            if (!persisted) {
-                return QueueResult.Processed;
-            }
-            throw pendingError;
+            throw buildPendingDestinationUploadError(queueItem, uploadResult);
         }
         duringDestinationUpload = false;
 
@@ -2038,7 +2027,7 @@ export async function processActivitySyncQueueItem(
                     }
                 }
 
-                if (isExpectedCOROSActivityUploadPending(actionableError)) {
+                if (isExpectedActivityUploadPending(actionableError)) {
                     const pollSchedulingStartedAtMs = Date.now();
                     const pollResult = await increaseActivitySyncRetryCountIfCurrent(
                         queueItem,

@@ -204,7 +204,7 @@ describe('processActivitySyncTask', () => {
       data: () => ({
         processed: false,
         errors: [{
-          error: 'Wahoo is still processing the activity. Bearer sensitive-token token=another-secret https://api.example.test/status?x-sig=secret',
+          error: 'Provider request failed. Bearer sensitive-token token=another-secret https://api.example.test/status?x-sig=secret',
           atRetryCount: 1,
           date: 1,
         }],
@@ -216,7 +216,7 @@ describe('processActivitySyncTask', () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe(
-      'Item queue-item-1 failed and was scheduled for retry: Wahoo is still processing the activity. Bearer [redacted] token=[redacted] [url]',
+      'Item queue-item-1 failed and was scheduled for retry: Provider request failed. Bearer [redacted] token=[redacted] [url]',
     );
   });
 
@@ -276,9 +276,64 @@ describe('processActivitySyncTask', () => {
       '[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.',
       expect.objectContaining({
         queueItemId: 'queue-item-1',
+        providerState: 'pending',
         providerStatus: 1,
         pollDelaySeconds: 1500,
         retryCount: 2,
+        taskEnqueued: true,
+      }),
+    );
+    expect(mockLoggerWarn).not.toHaveBeenCalled();
+    expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it('schedules a pending Wahoo status poll and completes at info level', async () => {
+    const nowMs = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 0,
+        userID: 'user-1',
+        destinationServiceName: 'wahooAPI',
+      }),
+    });
+    mockProcessActivitySyncQueueItem.mockImplementationOnce(async (queueItem: {
+      retryCount?: number;
+      dispatchedToCloudTask?: number | null;
+      destinationUploadID?: string;
+    }) => {
+      queueItem.retryCount = 1;
+      queueItem.destinationUploadID = 'wahoo-upload-1';
+      queueItem.dispatchedToCloudTask = nowMs + (15 * 60 * 1000);
+      return 'PROVIDER_STATUS_PENDING';
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(true);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'queue-item-1',
+      nowMs + (15 * 60 * 1000),
+      900,
+    );
+    expect(mockShouldSkipQueueWorkForDeletedUser).toHaveBeenCalledWith(
+      'user-1',
+      'wahooAPI',
+      'queue-item-1',
+      'before_activity_sync_pending_status_poll_enqueue',
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Wahoo activity upload is still processing; status poll is scheduled.',
+      expect.objectContaining({
+        queueItemId: 'queue-item-1',
+        providerState: 'pending',
+        pollDelaySeconds: 900,
+        retryCount: 1,
         taskEnqueued: true,
       }),
     );
@@ -324,6 +379,45 @@ describe('processActivitySyncTask', () => {
     expect(mockLoggerInfo).toHaveBeenCalledWith(
       '[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.',
       expect.objectContaining({
+        taskEnqueued: false,
+        reschedulingExistingPoll: true,
+      }),
+    );
+    expect(mockLoggerError).not.toHaveBeenCalled();
+  });
+
+  it('re-enqueues an already planned Wahoo status poll without polling early', async () => {
+    const nowMs = 1_700_000_000_000;
+    const scheduledAtMs = nowMs + (15 * 60 * 1000);
+    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    mockQueueGet.mockResolvedValueOnce({
+      exists: true,
+      id: 'queue-item-1',
+      ref: { path: 'activitySyncQueue/queue-item-1' },
+      data: () => ({
+        processed: false,
+        retryCount: 1,
+        userID: 'user-1',
+        destinationServiceName: 'wahooAPI',
+        destinationUploadID: 'wahoo-upload-1',
+        dispatchedToCloudTask: scheduledAtMs,
+      }),
+    });
+    mockEnqueueActivitySyncTask.mockResolvedValueOnce(false);
+
+    await expect(invokeWorker({ data: { queueItemId: 'queue-item-1' } })).resolves.toBeUndefined();
+    dateNowSpy.mockRestore();
+
+    expect(mockProcessActivitySyncQueueItem).not.toHaveBeenCalled();
+    expect(mockEnqueueActivitySyncTask).toHaveBeenCalledWith(
+      'queue-item-1',
+      scheduledAtMs,
+      900,
+    );
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      '[ActivitySyncTaskWorker] Wahoo activity upload is still processing; status poll is scheduled.',
+      expect.objectContaining({
+        providerState: 'pending',
         taskEnqueued: false,
         reschedulingExistingPoll: true,
       }),

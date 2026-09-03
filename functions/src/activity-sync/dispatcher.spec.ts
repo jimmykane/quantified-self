@@ -478,21 +478,21 @@ describe('activity-sync/dispatcher', () => {
     expect(updateOlderUndispatched).toHaveBeenCalledWith({ dispatchedToCloudTask: nowMs });
   });
 
-  it('pages past future COROS status polls so they do not starve newer undispatched work', async () => {
+  it('pages past future COROS and Wahoo status polls so they do not starve newer undispatched work', async () => {
     const nowMs = 1_700_000_000_000;
     const scheduledPollPages = Array.from({ length: 5 }, (_, pageIndex) => ({
       empty: false,
       docs: Array.from({ length: 100 }, (_, itemIndex) => {
         const index = (pageIndex * 100) + itemIndex;
         return {
-          id: `scheduled-coros-poll-${index}`,
+          id: `scheduled-provider-poll-${index}`,
           data: () => ({
             dispatchedToCloudTask: nowMs + (15 * 60 * 1000),
             dateCreated: index,
-            userID: `coros-user-${index}`,
-            destinationServiceName: 'corosAPI',
-            destinationUploadID: `coros-upload-${index}`,
-            destinationProviderUserID: `coros-provider-user-${index}`,
+            userID: `provider-user-${index}`,
+            destinationServiceName: index % 2 === 0 ? 'corosAPI' : 'wahooAPI',
+            destinationUploadID: `provider-upload-${index}`,
+            ...(index % 2 === 0 ? { destinationProviderUserID: `coros-provider-user-${index}` } : {}),
           }),
           ref: { update: vi.fn().mockResolvedValue(undefined) },
         };

@@ -23,9 +23,33 @@ interface ActivitySyncTaskPayload {
 const MAX_RETRY_REASON_LENGTH = 300;
 const PENDING_STATUS_POLL_SCHEDULING_GRACE_MS = 5 * 1000;
 
-interface PendingCOROSStatusPollOptions {
+interface PendingProviderStatusPollOptions {
     reschedulingExistingPoll?: boolean;
     scheduledAtMs?: number;
+}
+
+function hasExpectedProviderStatusPollResumeState(
+    queueItem: ActivitySyncQueueItemInterface,
+): boolean {
+    if (!queueItem.destinationUploadID) {
+        return false;
+    }
+    if (queueItem.destinationServiceName === ServiceNames.WahooAPI) {
+        return true;
+    }
+    return queueItem.destinationServiceName === ServiceNames.COROSAPI
+        && !!queueItem.destinationProviderUserID;
+}
+
+function getPendingProviderLabel(destinationServiceName: ServiceNames): string {
+    switch (destinationServiceName) {
+        case ServiceNames.COROSAPI:
+            return 'COROS';
+        case ServiceNames.WahooAPI:
+            return 'Wahoo';
+        default:
+            return `${destinationServiceName}`;
+    }
 }
 
 function getScheduledProviderStatusPollAtMs(
@@ -44,15 +68,11 @@ function getScheduledProviderStatusPollAtMs(
     ) ? Math.floor(scheduledAtMs) : null;
 }
 
-function getScheduledCOROSStatusPollAtMs(
+function getScheduledExpectedProviderStatusPollAtMs(
     queueItem: ActivitySyncQueueItemInterface,
     nowMs = Date.now(),
 ): number | null {
-    if (
-        queueItem.destinationServiceName !== ServiceNames.COROSAPI
-        || !queueItem.destinationUploadID
-        || !queueItem.destinationProviderUserID
-    ) {
+    if (!hasExpectedProviderStatusPollResumeState(queueItem)) {
         return null;
     }
     const scheduledAtMs = getScheduledProviderStatusPollAtMs(queueItem, nowMs);
@@ -76,18 +96,19 @@ function getProviderStatusPollDelaySeconds(
     return getCloudTaskRetryBackoffSeconds(queueItem.retryCount);
 }
 
-async function enqueuePendingCOROSStatusPoll(
+async function enqueuePendingProviderStatusPoll(
     queueItem: ActivitySyncQueueItemInterface,
     queueItemId: string,
-    options: PendingCOROSStatusPollOptions = {},
+    options: PendingProviderStatusPollOptions = {},
 ): Promise<void> {
+    const providerLabel = getPendingProviderLabel(queueItem.destinationServiceName);
     if (await shouldSkipQueueWorkForDeletedUser(
         queueItem.userID,
         queueItem.destinationServiceName,
         queueItemId,
         'before_activity_sync_pending_status_poll_enqueue',
     )) {
-        logger.info(`[ActivitySyncTaskWorker] Skipping pending COROS status poll for item ${queueItemId} because the account is deleted or deleting.`);
+        logger.info(`[ActivitySyncTaskWorker] Skipping pending ${providerLabel} status poll for item ${queueItemId} because the account is deleted or deleting.`);
         return;
     }
 
@@ -107,10 +128,11 @@ async function enqueuePendingCOROSStatusPoll(
         scheduledAtMs ?? nowMs,
         pollDelaySeconds,
     );
-    logger.info('[ActivitySyncTaskWorker] COROS activity upload is still processing; status poll is scheduled.', {
+    logger.info(`[ActivitySyncTaskWorker] ${providerLabel} activity upload is still processing; status poll is scheduled.`, {
         queueItemId,
         destinationServiceName: queueItem.destinationServiceName,
-        providerStatus: 1,
+        providerState: 'pending',
+        ...(queueItem.destinationServiceName === ServiceNames.COROSAPI ? { providerStatus: 1 } : {}),
         pollDelaySeconds,
         retryCount: queueItem.retryCount,
         taskEnqueued,
@@ -178,14 +200,14 @@ export const processActivitySyncTask = onTaskDispatched({
             id: queueDoc.id,
             ref: queueDoc.ref,
         }, queueItem) as ActivitySyncQueueItemInterface;
-        const scheduledCOROSStatusPollAtMs = getScheduledCOROSStatusPollAtMs(processingQueueItem);
-        if (scheduledCOROSStatusPollAtMs !== null) {
+        const scheduledProviderStatusPollAtMs = getScheduledExpectedProviderStatusPollAtMs(processingQueueItem);
+        if (scheduledProviderStatusPollAtMs !== null) {
             // The prior worker committed the retry transition but its response
             // may have been retried before the planned poll is due. Re-enqueue
-            // the same deterministic delayed task rather than polling COROS
+            // the same deterministic delayed task rather than polling the provider
             // early and consuming another polling budget entry.
-            await enqueuePendingCOROSStatusPoll(processingQueueItem, queueItemId, {
-                scheduledAtMs: scheduledCOROSStatusPollAtMs,
+            await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId, {
+                scheduledAtMs: scheduledProviderStatusPollAtMs,
                 reschedulingExistingPoll: true,
             });
             return;
@@ -203,7 +225,7 @@ export const processActivitySyncTask = onTaskDispatched({
                 logger.warn(`[ActivitySyncTaskWorker] Deferred item ${queueItemId}; it remains queued for a future dispatcher run.`);
                 break;
             case QueueResult.ProviderStatusPending: {
-                await enqueuePendingCOROSStatusPoll(processingQueueItem, queueItemId);
+                await enqueuePendingProviderStatusPoll(processingQueueItem, queueItemId);
                 break;
             }
             case QueueResult.MovedToDLQ:
