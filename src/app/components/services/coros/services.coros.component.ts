@@ -1,5 +1,6 @@
 import { Component, Input } from '@angular/core';
-import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import { ServiceConnectionAccountProjection } from '@shared/service-connection';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute } from '@angular/router';
@@ -25,6 +26,12 @@ import {
 import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 
 const COROS_BINDING_STATE_STALE_RETRY_FALLBACK_MS = 15_000;
+
+type COROSConnectionAccountLike = ServiceConnectionAccountProjection & {
+  openId?: string;
+  dateCreated?: string | number | Date | null;
+  dateRefreshed?: unknown;
+};
 
 @Component({
   selector: 'app-services-coros',
@@ -164,7 +171,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
   }
 
   get corosOpenId(): string | undefined {
-    return this.activeCorosServiceToken?.openId;
+    return this.getCOROSProviderUserId(this.activeCorosServiceToken);
   }
 
   /**
@@ -172,23 +179,23 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
    * service metadata; legacy connections use the same deterministic fallback
    * as the backend until their first delivery persists that pin.
    */
-  get activeCorosServiceToken(): Auth2ServiceTokenInterface | undefined {
-    const tokens = ((this.serviceTokens || []) as Auth2ServiceTokenInterface[])
-      .filter(token => `${token?.openId || ''}`.trim().length > 0);
+  get activeCorosServiceToken(): COROSConnectionAccountLike | undefined {
+    const tokens = ((this.serviceTokens || []) as COROSConnectionAccountLike[])
+      .filter(token => !!this.getCOROSProviderUserId(token));
     const pinnedOpenId = `${this.corosServiceMeta?.providerUserId || ''}`.trim();
     if (pinnedOpenId) {
-      return tokens.find(token => `${token.openId || ''}`.trim() === pinnedOpenId);
+      return tokens.find(token => this.getCOROSProviderUserId(token) === pinnedOpenId);
     }
 
     return [...tokens].sort((left, right) => (
-      this.getTokenTimestamp(right.dateRefreshed) - this.getTokenTimestamp(left.dateRefreshed)
-      || this.getTokenTimestamp(right.dateCreated) - this.getTokenTimestamp(left.dateCreated)
-      || `${right.openId || ''}`.localeCompare(`${left.openId || ''}`)
+      this.getTokenTimestamp(right.connectedAtMs ?? right.dateRefreshed ?? right.dateCreated)
+      - this.getTokenTimestamp(left.connectedAtMs ?? left.dateRefreshed ?? left.dateCreated)
+      || `${this.getCOROSProviderUserId(right) || ''}`.localeCompare(`${this.getCOROSProviderUserId(left) || ''}`)
     ))[0];
   }
 
-  getCorosOpenId(token: Auth2ServiceTokenInterface | Auth1ServiceTokenInterface): string | undefined {
-    return (token as Auth2ServiceTokenInterface).openId;
+  getCorosOpenId(token: COROSConnectionAccountLike): string | undefined {
+    return this.getCOROSProviderUserId(token);
   }
 
   private getTokenTimestamp(value: unknown): number {
@@ -196,10 +203,15 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return Number.isFinite(timestamp) ? timestamp : 0;
   }
 
+  private getCOROSProviderUserId(account: COROSConnectionAccountLike | undefined): string | undefined {
+    const providerUserId = `${account?.providerUserId || account?.openId || ''}`.trim();
+    return providerUserId || undefined;
+  }
+
   private async checkCOROSBindingStateIfEligible(force = false): Promise<void> {
     if (this.isDestroyed) return;
     const userID = `${this.user?.uid || ''}`.trim();
-    const providerUserId = `${this.activeCorosServiceToken?.openId || ''}`.trim();
+    const providerUserId = `${this.getCOROSProviderUserId(this.activeCorosServiceToken) || ''}`.trim();
     const isEligible = this.showConnectionSummary
       && !!userID
       && !!providerUserId
@@ -269,7 +281,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       if (this.isDestroyed || this.corosBindingStateAutomaticStaleRetryKey !== checkKey) return;
 
       const currentUserID = `${this.user?.uid || ''}`.trim();
-      const currentProviderUserId = `${this.activeCorosServiceToken?.openId || ''}`.trim();
+      const currentProviderUserId = `${this.getCOROSProviderUserId(this.activeCorosServiceToken) || ''}`.trim();
       if (`${currentUserID}:${currentProviderUserId}` !== checkKey) {
         this.corosBindingStateAutomaticStaleRetryKey = null;
         return;

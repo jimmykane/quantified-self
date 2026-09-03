@@ -345,7 +345,7 @@ describe('ServicesGarminComponent', () => {
             expect(component.missingPermissions).toEqual([]);
             expect(component.garminUserID).toBe('fresh-garmin-user');
             expect(component.connectedAt).toBe(freshConnectedAt);
-            expect(component.permissionsLastChangedAt).toBe(200);
+            expect(component.permissionsLastChangedAt).toBe(200_000);
             expect(component.isHistoryImportLoading).toBe(false);
         });
 

@@ -127,7 +127,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'service_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('preserves Garmin owner reads while denying root and credential mutations', async () => {
+        it('preserves Garmin owner reads during projection rollout while denying credential mutations', async () => {
             const db = testEnv.authenticatedContext(userId, authClaims).firestore();
             const tokenRef = db.doc(`garminAPITokens/${userId}/tokens/token-1`);
 
@@ -282,7 +282,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'suunto_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('preserves owner reads while denying root, credential, and provider-identity mutations', async () => {
+        it('preserves Suunto owner reads during projection rollout while denying credential or provider-identity mutations', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc(`suuntoAppAccessTokens/${userId}`).set({
                     state: 'server-oauth-state',
@@ -322,7 +322,7 @@ describe('Firestore Security Rules', () => {
         const userId = 'coros_user';
         const authClaims = { firebase: { sign_in_provider: 'password' } };
 
-        it('preserves owner reads while denying client credential and identity mutations', async () => {
+        it('preserves COROS owner reads during projection rollout while denying client credential or identity mutations', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
                 await context.firestore().doc(`COROSAPIAccessTokens/${userId}/tokens/open-id`).set({
                     accessToken: 'stored-access-token',
@@ -361,6 +361,34 @@ describe('Firestore Security Rules', () => {
 
             await assertFails(rootRef.update({ state: 'client-replacement-state' }));
             await assertFails(rootRef.delete());
+        });
+    });
+
+    describe('Provider connection account projections', () => {
+        const userId = 'provider_projection_user';
+
+        it.each([
+            'Garmin API',
+            'Suunto app',
+            'COROS API',
+        ])('allows only the owner to read the safe %s projection', async (serviceName) => {
+            const path = `users/${userId}/meta/${serviceName}`;
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().doc(path).set({
+                    connectionState: 'connected',
+                    connectionAccounts: [{
+                        providerUserId: 'display-account',
+                        connectedAtMs: 1_700_000_000_000,
+                    }],
+                });
+            });
+
+            await assertSucceeds(testEnv.authenticatedContext(userId).firestore().doc(path).get());
+            await assertFails(testEnv.authenticatedContext('other_user').firestore().doc(path).get());
+            await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+            await assertFails(testEnv.authenticatedContext(userId).firestore().doc(path).update({
+                connectionAccounts: [],
+            }));
         });
     });
 

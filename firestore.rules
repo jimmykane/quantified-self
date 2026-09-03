@@ -402,6 +402,9 @@ service cloud.firestore {
 
 
     match /suuntoAppAccessTokens/{userID} {
+      // Temporary rollout compatibility for older frontends and for the new
+      // frontend's field-absent fallback. Remove only after production
+      // projections have been backfilled and verified. Browser writes remain denied.
       allow read: if isNonAnonymousOwner(userID);
       // Suunto OAuth state, credentials, stable provider identity, and
       // lifecycle fences are server-owned. In particular, an owner must not
@@ -416,6 +419,8 @@ service cloud.firestore {
     }
 
     match /COROSAPIAccessTokens/{userID} {
+      // Temporary rollout compatibility; remove with the post-backfill Rules
+      // lockdown after the projection-aware frontend is verified.
       allow read: if isNonAnonymousOwner(userID);
       // COROS OAuth state, credentials, and deauthorization are server-owned.
       // Keeping every root mutation behind callables prevents an owner from
@@ -425,13 +430,14 @@ service cloud.firestore {
        match /tokens/{document=**} {
           allow read: if isNonAnonymousOwner(userID);
           // COROS OAuth exchange, refresh, and disconnect flows use Admin SDK.
-          // Legacy browser reads still derive connection state from this tree,
-          // but credentials and stable provider identity are server-owned for writes.
+          // Legacy owner reads remain only as a staged-rollout fallback.
           allow write: if false;
        }
     }
 
     match /garminAPITokens/{userID} {
+      // Temporary rollout compatibility; remove only after the projection
+      // backfill and projection-aware frontend have been verified in production.
       allow read: if isNonAnonymousOwner(userID);
       // Garmin OAuth state, credentials, provider identity, and lifecycle
       // fences authorize backend Health callback processing and are server-owned.

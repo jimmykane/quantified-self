@@ -55,7 +55,7 @@
         <mat-icon class="connected-account-icon" (click)="clicks = clicks+1">account_circle</mat-icon>
         <div class="connected-account-copy">
           <div class="connected-account-title">{{ account.userName }}</div>
-          <div class="connected-account-line">Connected: {{ account.serviceToken.dateCreated | date:'short' }}</div>
+          <div class="connected-account-line">Connected: {{ account.serviceToken.connectedAtMs || account.serviceToken.dateCreated | date:'short' }}</div>
         </div>
       </div>
       }

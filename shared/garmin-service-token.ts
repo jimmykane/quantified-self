@@ -39,7 +39,8 @@ export function getGarminProviderUserIdFromTokenLike(tokenLike: unknown): string
         return null;
     }
 
-    return normalizeNonEmptyString((tokenLike as { userID?: unknown }).userID);
+    const token = tokenLike as { providerUserId?: unknown; userID?: unknown };
+    return normalizeNonEmptyString(token.providerUserId) || normalizeNonEmptyString(token.userID);
 }
 
 export function getGarminPermissionsFromTokenLike(tokenLike: unknown): string[] {
@@ -94,7 +95,10 @@ export function selectPreferredGarminTokenLike<T>(
             providerUserId: getGarminProviderUserIdFromTokenLike(tokenLike),
             missingPermissions: getMissingGarminPermissionsForTokenLike(tokenLike, requiredPermissions),
             permissionsLoaded: Array.isArray((tokenLike as { permissions?: unknown } | null)?.permissions),
-            createdAtMs: toTimestampMs((tokenLike as { dateCreated?: unknown } | null)?.dateCreated),
+            createdAtMs: toTimestampMs(
+                (tokenLike as { connectedAtMs?: unknown; dateCreated?: unknown } | null)?.connectedAtMs
+                ?? (tokenLike as { dateCreated?: unknown } | null)?.dateCreated,
+            ),
         }))
         .filter((candidate): candidate is {
             tokenLike: T;

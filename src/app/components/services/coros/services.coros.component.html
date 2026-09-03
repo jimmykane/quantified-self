@@ -43,7 +43,7 @@
         <mat-icon class="connected-account-icon">account_circle</mat-icon>
         <div class="connected-account-copy">
           <div class="connected-account-title">{{ getCorosOpenId(activeCorosServiceToken!) }}</div>
-          <div class="connected-account-line">Active account · Connected: {{ activeCorosServiceToken!.dateCreated | date:'short' }}</div>
+          <div class="connected-account-line">Active account · Connected: {{ activeCorosServiceToken!.connectedAtMs || activeCorosServiceToken!.dateCreated | date:'short' }}</div>
         </div>
       </div>
     </div>

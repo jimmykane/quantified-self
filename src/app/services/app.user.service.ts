@@ -80,7 +80,7 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, collection, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import {
@@ -114,6 +114,7 @@ import {
   SERVICE_DISCONNECT_RETRY_REASON,
   SERVICE_CONNECTION_STATES,
   type ServiceDisconnectRetryDetails,
+  type ServiceConnectionAccountProjection,
 } from '@shared/service-connection';
 import {
   getUserLegalAgreementsPath,
@@ -988,21 +989,40 @@ export class AppUserService implements OnDestroy {
     }
   }
 
-  public getServiceToken(user: User, serviceName: ServiceNames) {
+  public getServiceToken(
+    user: User,
+    serviceName: ServiceNames,
+  ): Observable<ServiceConnectionAccountProjection[]> {
     switch (serviceName) {
       default:
         throw new Error(`Not implemented for service ${serviceName}`);
       case ServiceNames.COROSAPI:
       case ServiceNames.SuuntoApp:
-        return this.getServiceTokens(user, serviceName);
-      case ServiceNames.WahooAPI:
-        // Wahoo OAuth credentials are deliberately server-only. Expose a token-like
-        // connection marker derived from the safe user service metadata projection.
-        return this.getUserMetaForService(user, serviceName).pipe(
-          map(serviceMeta => serviceMeta?.connectionState === SERVICE_CONNECTION_STATES.Connected ? [{}] : []),
-        );
       case ServiceNames.GarminAPI:
-        return this.getGarminAPITokens(user);
+      case ServiceNames.WahooAPI:
+        return this.getUserMetaForService(user, serviceName).pipe(
+          switchMap(serviceMeta => {
+            const hasConnectionAccountProjection = !!serviceMeta
+              && Object.prototype.hasOwnProperty.call(serviceMeta, 'connectionAccounts');
+            if (serviceName !== ServiceNames.WahooAPI && !hasConnectionAccountProjection) {
+              // Temporary rollout compatibility: the projection triggers and frontend
+              // ship before the existing-account backfill. Remove this token-tree read
+              // together with the temporary owner-read Rule after backfill verification.
+              return this.getLegacyServiceConnectionAccounts(user, serviceName);
+            }
+            const accounts = Array.isArray(serviceMeta?.connectionAccounts)
+              ? serviceMeta.connectionAccounts
+              : [];
+            if (accounts.length > 0) return of(accounts);
+            if (serviceName !== ServiceNames.WahooAPI
+              || serviceMeta?.connectionState !== SERVICE_CONNECTION_STATES.Connected) {
+              return of([]);
+            }
+            const providerUserId = `${serviceMeta.providerUserId || ''}`.trim();
+            return of(providerUserId ? [{ providerUserId }] : [{}]);
+          }),
+          catchError(() => of([])),
+        );
     }
   }
 
@@ -1032,7 +1052,10 @@ export class AppUserService implements OnDestroy {
 
     if (serviceName === ServiceNames.COROSAPI) {
       const connectedOpenIds = tokens
-        .map(token => `${(token as { openId?: unknown } | null)?.openId || ''}`.trim())
+        .map(token => {
+          const account = token as { providerUserId?: unknown; openId?: unknown } | null;
+          return `${account?.providerUserId || account?.openId || ''}`.trim();
+        })
         .filter(Boolean);
       const pinnedOpenId = `${serviceMeta?.providerUserId || ''}`.trim();
       return pinnedOpenId
@@ -1818,30 +1841,82 @@ export class AppUserService implements OnDestroy {
     // Required to satisfy OnDestroy interface
   }
 
-  private getServiceTokens(user: User, serviceName: ServiceNames): Observable<any[]> {
-    const serviceNamesToCollectionName: Partial<Record<ServiceNames, string>> = {
-      [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
-      [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
-    };
-    const collectionName = serviceNamesToCollectionName[serviceName];
-    if (!collectionName) return of([]);
-
-    const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
+  private getLegacyServiceConnectionAccounts(
+    user: User,
+    serviceName: ServiceNames.GarminAPI | ServiceNames.SuuntoApp | ServiceNames.COROSAPI,
+  ): Observable<ServiceConnectionAccountProjection[]> {
+    const config = {
+      [ServiceNames.GarminAPI]: { collectionName: 'garminAPITokens', providerUserIdField: 'userID' },
+      [ServiceNames.SuuntoApp]: { collectionName: 'suuntoAppAccessTokens', providerUserIdField: 'userName' },
+      [ServiceNames.COROSAPI]: { collectionName: 'COROSAPIAccessTokens', providerUserIdField: 'openId' },
+    }[serviceName];
+    const collectionRef = collection(this.firestore, config.collectionName, user.uid, 'tokens');
     return collectionData(collectionRef).pipe(
-      catchError(() => {
-        return of([]);
-      })
+      map(tokens => tokens
+        .map(token => this.buildLegacyServiceConnectionAccountProjection(
+          token as Record<string, unknown>,
+          config.providerUserIdField,
+          serviceName === ServiceNames.GarminAPI,
+        ))
+        .filter((account): account is ServiceConnectionAccountProjection => !!account)
+        .sort((left, right) => `${left.providerUserId || ''}`.localeCompare(`${right.providerUserId || ''}`))
+        .slice(0, 32)),
+      catchError(() => of([])),
     );
   }
 
-  private getGarminAPITokens(user: User): Observable<any[]> {
-    // Garmin tokens are stored in: garminAPITokens/{userID}/tokens/{garminUserID}
-    const collectionRef = collection(this.firestore, 'garminAPITokens', user.uid, 'tokens');
-    return collectionData(collectionRef).pipe(
-      catchError(() => {
-        return of([]);
-      })
-    );
+  private buildLegacyServiceConnectionAccountProjection(
+    token: Record<string, unknown>,
+    providerUserIdField: string,
+    includePermissions: boolean,
+  ): ServiceConnectionAccountProjection | null {
+    const providerUserId = typeof token[providerUserIdField] === 'string'
+      ? token[providerUserIdField].trim()
+      : '';
+    if (!providerUserId || providerUserId.length > 512) return null;
+
+    const connectedAtMs = this.toLegacyProjectionTimestampMs(token.dateCreated);
+    const permissions = includePermissions && Array.isArray(token.permissions)
+      ? [...new Set(token.permissions
+        .filter((permission): permission is string => typeof permission === 'string')
+        .map(permission => permission.trim())
+        .filter(permission => !!permission && permission.length <= 128))]
+        .sort((left, right) => left.localeCompare(right))
+        .slice(0, 64)
+      : null;
+    const rawPermissionsUpdatedAtMs = includePermissions
+      ? this.toLegacyProjectionTimestampMs(token.permissionsLastChangedAt)
+      : null;
+    const permissionsUpdatedAtMs = rawPermissionsUpdatedAtMs !== null
+      && rawPermissionsUpdatedAtMs > 0
+      && rawPermissionsUpdatedAtMs < 100_000_000_000
+      ? rawPermissionsUpdatedAtMs * 1000
+      : rawPermissionsUpdatedAtMs;
+
+    return {
+      providerUserId,
+      ...(connectedAtMs === null ? {} : { connectedAtMs }),
+      ...(permissions === null ? {} : { permissions }),
+      ...(permissionsUpdatedAtMs === null ? {} : { permissionsUpdatedAtMs }),
+    };
+  }
+
+  private toLegacyProjectionTimestampMs(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return Math.floor(value);
+    }
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isFinite(time) && time >= 0 ? time : null;
+    }
+    if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+      const time = (value as { toMillis: () => number }).toMillis();
+      return Number.isFinite(time) && time >= 0 ? Math.floor(time) : null;
+    }
+    if (value && typeof value === 'object' && typeof (value as { toDate?: unknown }).toDate === 'function') {
+      return this.toLegacyProjectionTimestampMs((value as { toDate: () => Date }).toDate());
+    }
+    return null;
   }
 
   private createEmptyActivityServiceConnectionState(): ActivityServiceConnectionState {

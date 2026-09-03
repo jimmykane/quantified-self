@@ -38,7 +38,8 @@ export function getSuuntoProviderUserIdFromTokenLike(serviceToken: unknown): str
     return null;
   }
 
-  const userName = (serviceToken as { userName?: unknown }).userName;
+  const token = serviceToken as { providerUserId?: unknown; userName?: unknown };
+  const userName = token.providerUserId ?? token.userName;
   return typeof userName === 'string' && userName.trim().length > 0
     ? userName.trim()
     : null;
@@ -49,13 +50,13 @@ export function buildSuuntoServiceTokenFingerprint(serviceToken: unknown): strin
     return null;
   }
 
-  const token = serviceToken as { dateCreated?: unknown; userName?: unknown };
+  const token = serviceToken as { connectedAtMs?: unknown; dateCreated?: unknown; userName?: unknown };
   const userName = getSuuntoProviderUserIdFromTokenLike(token);
   if (!userName) {
     return null;
   }
 
-  const createdAt = toDate(token.dateCreated)?.getTime() ?? 'unknown-created';
+  const createdAt = toDate(token.connectedAtMs ?? token.dateCreated)?.getTime() ?? 'unknown-created';
 
   return `${userName}:${createdAt}`;
 }
