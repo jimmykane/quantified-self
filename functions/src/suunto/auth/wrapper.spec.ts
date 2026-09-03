@@ -9,6 +9,7 @@ import * as serviceOAuthAccess from '../../service-oauth-access';
 const hoisted = vi.hoisted(() => ({
     logger: {
         error: vi.fn(),
+        info: vi.fn(),
         warn: vi.fn(),
     },
 }));
@@ -153,6 +154,30 @@ describe('Suunto Auth Wrapper', () => {
 
             await expect(getSuuntoAPIAuthRequestTokenRedirectURI(request as any))
                 .rejects.toThrow('User must be authenticated.');
+        });
+
+        it('returns a retryable callable error when a disconnect still owns a token', async () => {
+            const details = {
+                reason: 'service_disconnect_in_progress',
+                blocker: 'disconnect_operation',
+                retryAt: Date.now() + 2_000,
+                retryDeadlineAt: Date.now() + 60_000,
+            };
+            vi.mocked(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).mockRejectedValueOnce(
+                Object.assign(new Error('Suunto app is already being disconnected. Please retry shortly.'), {
+                    name: 'ServiceDisconnectInProgressError',
+                    details,
+                }),
+            );
+
+            await expect(getSuuntoAPIAuthRequestTokenRedirectURI(createMockRequest({
+                data: { redirectUri: 'https://app.com/callback' },
+            }) as any)).rejects.toMatchObject({
+                name: 'HttpsError',
+                code: 'unavailable',
+                message: 'Suunto app is already being disconnected. Please retry shortly.',
+                details,
+            });
         });
     });
 

@@ -187,12 +187,22 @@ async function beginOAuthFlowIfUserActive(
     const rootData = rootSnapshot.data() as Record<string, unknown> | undefined;
     const nowMs = Date.now();
     if (getActiveServiceDisconnectOperationGeneration(rootData, nowMs)) {
-      throw new ServiceDisconnectInProgressError(
+      const tokenSnapshot = await transaction.get(tokenRootRef.collection('tokens').limit(1));
+      if (!tokenSnapshot.empty) {
+        throw new ServiceDisconnectInProgressError(
+          serviceName,
+          SERVICE_DISCONNECT_RETRY_BLOCKERS.DisconnectOperation,
+          Number(rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] || 0),
+          nowMs,
+        );
+      }
+      // Once the disconnect has removed every credential there is no provider
+      // token left for a new OAuth flow to race with. Rotating the OAuth flow
+      // generation below makes any remaining disconnect cleanup stale, so an
+      // abandoned lease must not keep a disconnected user locked out.
+      logger.info('[OAuth] Reclaiming an empty disconnect operation for a new OAuth flow.', {
         serviceName,
-        SERVICE_DISCONNECT_RETRY_BLOCKERS.DisconnectOperation,
-        Number(rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] || 0),
-        nowMs,
-      );
+      });
     }
 
     // This is the first durable action in an OAuth-start request. Disconnects

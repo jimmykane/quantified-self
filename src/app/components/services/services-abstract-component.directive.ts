@@ -202,9 +202,12 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.isConnecting = false;
       this.logger.error(e);
       const status = e?.status;
+      const reason = e?.details?.reason;
       let message: string;
 
-      if (status === 502) {
+      if (reason === 'service_disconnect_in_progress') {
+        message = `${this.getPartnerDisplayName()} is still finishing a disconnect. Please try connecting again shortly.`;
+      } else if (status === 502) {
         const partnerName = this.getPartnerDisplayName();
         message = `${partnerName} is temporarily unavailable. Please try again later.`;
       } else {

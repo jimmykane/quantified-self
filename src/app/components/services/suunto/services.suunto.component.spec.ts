@@ -129,6 +129,28 @@ describe('ServicesSuuntoComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('shows a useful retry message while a disconnect is still finishing', async () => {
+        component.hasProAccess = true;
+        mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockRejectedValueOnce({
+            code: 'functions/unavailable',
+            message: 'internal',
+            details: {
+                reason: 'service_disconnect_in_progress',
+                blocker: 'disconnect_operation',
+                retryAt: Date.now() + 2_000,
+                retryDeadlineAt: Date.now() + 60_000,
+            },
+        });
+
+        await component.connectWithService(new MouseEvent('click'));
+
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Suunto App is still finishing a disconnect. Please try connecting again shortly.',
+            undefined,
+            expect.objectContaining({ duration: 5000 }),
+        );
+    });
+
     it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {
         component.forceConnected = true;
         component.serviceTokens = undefined;
