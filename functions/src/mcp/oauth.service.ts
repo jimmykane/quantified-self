@@ -138,6 +138,34 @@ export class McpOAuthError extends Error {
   }
 }
 
+/**
+ * Fixed, non-sensitive rejection categories for bearer-token diagnostics.
+ * These must never contain a token, client ID, connection ID, or UID.
+ */
+export const MCP_BEARER_AUTHENTICATION_FAILURE_REASONS = [
+  'invalid_or_expired_access_token',
+  'invalid_scope_dependencies',
+  'inactive_connection',
+  'invalid_client_binding',
+  'superseded_connection',
+  'superseded_grant',
+  'connection_scope_reduced',
+  'user_deleted',
+] as const;
+
+export type McpBearerAuthenticationFailureReason =
+  typeof MCP_BEARER_AUTHENTICATION_FAILURE_REASONS[number];
+
+export class McpBearerAuthenticationError extends McpOAuthError {
+  constructor(
+    readonly reason: McpBearerAuthenticationFailureReason,
+    message: string,
+  ) {
+    super('invalid_grant', message, 401);
+    this.name = 'McpBearerAuthenticationError';
+  }
+}
+
 export const MCP_OAUTH_CLIENT_AUTHENTICATION_STAGES = [
   'parameters',
   'encoding',
@@ -968,10 +996,9 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
           nowMs,
         );
         if (guard.shouldSkip) {
-          throw new McpOAuthError(
-            'invalid_grant',
+          throw new McpBearerAuthenticationError(
+            'user_deleted',
             'The MCP account is no longer available.',
-            401,
           );
         }
         const rateLimit = documentData<{ count?: number }>(await transaction.get(rateLimitRef));
@@ -991,34 +1018,33 @@ export function buildFirestoreMcpOAuthStore(): McpOAuthStore {
             && logicalConnection.clientId !== token.clientId
           )
         ) {
-          throw new McpOAuthError(
-            'invalid_grant',
+          throw new McpBearerAuthenticationError(
+            'invalid_client_binding',
             'The MCP client binding is invalid.',
-            401,
           );
         }
         if (isSupersededLegacyConnection(token.connectionId, logicalConnection)) {
-          throw new McpOAuthError(
-            'invalid_grant',
+          throw new McpBearerAuthenticationError(
+            'superseded_connection',
             'The MCP connection was superseded.',
-            401,
           );
         }
         if (!isActiveMcpConnection(connection)) {
-          throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.', 401);
+          throw new McpBearerAuthenticationError(
+            'inactive_connection',
+            'The MCP connection is no longer active.',
+          );
         }
         if (!isCurrentMcpGrant(token.connectionId, connection, token.grantId)) {
-          throw new McpOAuthError(
-            'invalid_grant',
+          throw new McpBearerAuthenticationError(
+            'superseded_grant',
             'The MCP authorization grant was superseded.',
-            401,
           );
         }
         if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
-          throw new McpOAuthError(
-            'invalid_grant',
+          throw new McpBearerAuthenticationError(
+            'connection_scope_reduced',
             'The MCP connection no longer authorizes this access token.',
-            401,
           );
         }
         const nextCount = Number(rateLimit?.count || 0) + 1;
@@ -2322,18 +2348,29 @@ export function createMcpOAuthService(
       const token = await store.getAccessToken(tokenHash);
       const nowMs = resolvedDependencies.now();
       if (!token || token.expiresAtMs <= nowMs || token.audience !== audience) {
-        throw new McpOAuthError('invalid_grant', 'The access token is invalid or expired.', 401);
+        throw new McpBearerAuthenticationError(
+          'invalid_or_expired_access_token',
+          'The access token is invalid or expired.',
+        );
       }
       if (!hasValidMcpScopeDependencies(token.scopes)) {
-        throw new McpOAuthError(
-          'invalid_grant',
+        throw new McpBearerAuthenticationError(
+          'invalid_scope_dependencies',
           'The access token contains an invalid dependent scope.',
-          401,
         );
       }
       const connection = await store.getConnection(token.uid, token.connectionId);
-      if (!isActiveMcpConnection(connection) || connection.clientId !== token.clientId) {
-        throw new McpOAuthError('invalid_grant', 'The MCP connection is no longer active.', 401);
+      if (!isActiveMcpConnection(connection)) {
+        throw new McpBearerAuthenticationError(
+          'inactive_connection',
+          'The MCP connection is no longer active.',
+        );
+      }
+      if (connection.clientId !== token.clientId) {
+        throw new McpBearerAuthenticationError(
+          'invalid_client_binding',
+          'The MCP client binding is invalid.',
+        );
       }
       const logicalConnectionId = buildMcpLogicalConnectionId(token.clientId);
       if (token.connectionId !== logicalConnectionId) {
@@ -2345,32 +2382,28 @@ export function createMcpOAuthService(
           logicalConnection
           && logicalConnection.clientId !== token.clientId
         ) {
-          throw new McpOAuthError(
-            'invalid_grant',
+          throw new McpBearerAuthenticationError(
+            'invalid_client_binding',
             'The MCP client binding is invalid.',
-            401,
           );
         }
         if (isSupersededLegacyConnection(token.connectionId, logicalConnection)) {
-          throw new McpOAuthError(
-            'invalid_grant',
+          throw new McpBearerAuthenticationError(
+            'superseded_connection',
             'The MCP connection was superseded.',
-            401,
           );
         }
       }
       if (!isCurrentMcpGrant(token.connectionId, connection, token.grantId)) {
-        throw new McpOAuthError(
-          'invalid_grant',
+        throw new McpBearerAuthenticationError(
+          'superseded_grant',
           'The MCP authorization grant was superseded.',
-          401,
         );
       }
       if (token.scopes.some(scope => !connection.scopes.includes(scope))) {
-        throw new McpOAuthError(
-          'invalid_grant',
+        throw new McpBearerAuthenticationError(
+          'connection_scope_reduced',
           'The MCP connection no longer authorizes this access token.',
-          401,
         );
       }
       await store.recordAuthorizedRequest(token, nowMs);

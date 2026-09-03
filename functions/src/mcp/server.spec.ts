@@ -7,6 +7,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { McpDataError } from './data.service';
 import {
+  McpBearerAuthenticationError,
   McpOAuthError,
   MCP_OAUTH_SCOPES,
   rejectRepeatedOAuthParameters,
@@ -14,7 +15,10 @@ import {
 import {
   buildMcpAuthorizationServerMetadata,
   buildMcpProtectedResourceMetadata,
+  classifyMcpBearerRejectionReason,
   classifyMcpBearerFailure,
+  classifyMcpDiagnosticClientFamily,
+  classifyMcpTransportRejectionReason,
   createMcpServer,
   formatMcpToolError,
   handleMcpRevocationRequest,
@@ -1299,6 +1303,38 @@ describe('MCP HTTP scope enforcement', () => {
       statusCode: 503,
       error: 'temporarily_unavailable',
     });
+  });
+
+  it('classifies bearer diagnostics without retaining authentication material', () => {
+    expect(classifyMcpDiagnosticClientFamily('codex-mcp-client/0.151.0-alpha.7.2'))
+      .toBe('codex');
+    expect(classifyMcpDiagnosticClientFamily('Claude-User')).toBe('claude');
+    expect(classifyMcpDiagnosticClientFamily('curl/8.7.1')).toBe('automation');
+    expect(classifyMcpDiagnosticClientFamily(undefined)).toBe('unknown');
+
+    const rejection = classifyMcpBearerRejectionReason(
+      new McpBearerAuthenticationError(
+        'superseded_grant',
+        'The MCP authorization grant was superseded.',
+      ),
+    );
+    expect(rejection).toBe('superseded_grant');
+    expect(JSON.stringify({ rejection })).not.toContain('token-value');
+    expect(classifyMcpBearerRejectionReason(
+      new McpOAuthError('temporarily_unavailable', 'limited', 429),
+    )).toBe('request_rate_limited');
+  });
+
+  it('classifies Streamable HTTP rejections to a fixed safe vocabulary', () => {
+    expect(classifyMcpTransportRejectionReason(
+      new Error('Parse error: Invalid JSON-RPC message'),
+    )).toBe('invalid_json_rpc');
+    expect(classifyMcpTransportRejectionReason(
+      new Error('Bad Request: Unsupported protocol version: untrusted-value'),
+    )).toBe('unsupported_protocol_version');
+    expect(classifyMcpTransportRejectionReason(
+      new Error('untrusted request body: secret-value'),
+    )).toBe('unexpected_transport_error');
   });
 
   it('reports unsupported OAuth token grants with the standard error code', () => {
