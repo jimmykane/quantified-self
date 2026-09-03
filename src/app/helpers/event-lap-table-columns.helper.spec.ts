@@ -26,6 +26,9 @@ import {
 } from '@sports-alliance/sports-lib';
 import {
   DataDuration,
+  DataEffortPaceAvg,
+  DataGradeAdjustedPaceAvg,
+  DataGradeAdjustedSpeedAvg,
 } from '@sports-alliance/sports-lib';
 import {
   EVENT_LAP_TABLE_FIXED_COLUMN,
@@ -33,6 +36,7 @@ import {
   getAverageEventLapMetrics,
   getDefaultEventLapMetricTypes,
   getEventLapMetricOptionGroups,
+  getSelectedEventLapSummaryMetrics,
   getSelectedEventLapMetricTypes,
   isEventLapSportFamily,
   normalizeEventDetailsSettings,
@@ -168,6 +172,197 @@ describe('event lap table columns helper', () => {
       'Running',
     )).toEqual([
       { type: DataPaceAvg.type, display: '08:26 min/m' },
+    ]);
+  });
+
+  it('summarizes selected accumulated and ordinary metrics with available coverage', () => {
+    const laps = [
+      { duration: 120, distance: 1000, energy: 300, heartRate: 160 },
+      { duration: 180, distance: 1500, energy: undefined, heartRate: 180 },
+    ].map(({ duration, distance, energy, heartRate }) => ({
+      getDuration: () => new DataDuration(duration),
+      getDistance: () => new DataDistance(distance),
+      getStat: (type: string) => type === DataEnergy.type && energy !== undefined
+        ? new DataEnergy(energy)
+        : type === DataHeartRateMax.type
+          ? new DataHeartRateMax(heartRate)
+          : undefined,
+    } as unknown as LapInterface));
+
+    const summaries = getSelectedEventLapSummaryMetrics(
+      laps,
+      [DataDuration.type, DataDistance.type, DataEnergy.type, DataHeartRateMax.type],
+      unitSettings,
+      'Running',
+    );
+
+    expect(summaries).toEqual([
+      {
+        type: DataDuration.type,
+        display: formatEventLapMetric(new DataDuration(150), DataDuration.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+      {
+        type: DataDistance.type,
+        display: formatEventLapMetric(new DataDistance(1250), DataDistance.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+      {
+        type: DataEnergy.type,
+        display: formatEventLapMetric(new DataEnergy(300), DataEnergy.type, unitSettings, 'Running'),
+        availableCount: 1,
+        selectedCount: 2,
+      },
+      {
+        type: DataHeartRateMax.type,
+        display: formatEventLapMetric(new DataHeartRateMax(170), DataHeartRateMax.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+    ]);
+  });
+
+  it('weights every supported average pace and speed variant by its required metric', () => {
+    const laps = [
+      {
+        duration: 120,
+        distance: 1000,
+        pace: 300,
+        swimPace: 90,
+        gradeAdjustedPace: 310,
+        effortPace: 320,
+        speed: 5,
+        gradeAdjustedSpeed: 4,
+      },
+      {
+        duration: 480,
+        distance: 3000,
+        pace: 400,
+        swimPace: 150,
+        gradeAdjustedPace: 430,
+        effortPace: 440,
+        speed: 10,
+        gradeAdjustedSpeed: 8,
+      },
+    ].map((values) => ({
+      getDuration: () => new DataDuration(values.duration),
+      getDistance: () => new DataDistance(values.distance),
+      getStat: (type: string) => {
+        const stats = new Map<string, number>([
+          [DataPaceAvg.type, values.pace],
+          [DataSwimPaceAvg.type, values.swimPace],
+          [DataGradeAdjustedPaceAvg.type, values.gradeAdjustedPace],
+          [DataEffortPaceAvg.type, values.effortPace],
+          [DataSpeedAvg.type, values.speed],
+          [DataGradeAdjustedSpeedAvg.type, values.gradeAdjustedSpeed],
+          [DataPaceMax.type, values.pace],
+        ]);
+        const value = stats.get(type);
+        if (value === undefined) {
+          return undefined;
+        }
+        if (type === DataPaceAvg.type) return new DataPaceAvg(value);
+        if (type === DataSwimPaceAvg.type) return new DataSwimPaceAvg(value);
+        if (type === DataGradeAdjustedPaceAvg.type) return new DataGradeAdjustedPaceAvg(value);
+        if (type === DataEffortPaceAvg.type) return new DataEffortPaceAvg(value);
+        if (type === DataSpeedAvg.type) return new DataSpeedAvg(value);
+        if (type === DataGradeAdjustedSpeedAvg.type) return new DataGradeAdjustedSpeedAvg(value);
+        return new DataPaceMax(value);
+      },
+    } as unknown as LapInterface));
+    const metricTypes = [
+      DataPaceAvg.type,
+      DataSwimPaceAvg.type,
+      DataGradeAdjustedPaceAvg.type,
+      DataEffortPaceAvg.type,
+      DataSpeedAvg.type,
+      DataGradeAdjustedSpeedAvg.type,
+      DataPaceMax.type,
+    ];
+
+    const summaries = getSelectedEventLapSummaryMetrics(laps, metricTypes, unitSettings, 'Running');
+
+    expect(summaries).toEqual([
+      {
+        type: DataPaceAvg.type,
+        display: formatEventLapMetric(new DataPaceAvg(375), DataPaceAvg.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+      {
+        type: DataSwimPaceAvg.type,
+        display: formatEventLapMetric(new DataSwimPaceAvg(135), DataSwimPaceAvg.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+      {
+        type: DataGradeAdjustedPaceAvg.type,
+        display: formatEventLapMetric(new DataGradeAdjustedPaceAvg(400), DataGradeAdjustedPaceAvg.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+      {
+        type: DataEffortPaceAvg.type,
+        display: formatEventLapMetric(new DataEffortPaceAvg(410), DataEffortPaceAvg.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+      {
+        type: DataSpeedAvg.type,
+        display: formatEventLapMetric(new DataSpeedAvg(9), DataSpeedAvg.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+      {
+        type: DataGradeAdjustedSpeedAvg.type,
+        display: formatEventLapMetric(new DataGradeAdjustedSpeedAvg(7.2), DataGradeAdjustedSpeedAvg.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+      {
+        type: DataPaceMax.type,
+        display: formatEventLapMetric(new DataPaceMax(350), DataPaceMax.type, unitSettings, 'Running'),
+        availableCount: 2,
+        selectedCount: 2,
+      },
+    ]);
+  });
+
+  it('skips invalid weighted contributions instead of treating unavailable weights as zero', () => {
+    const laps = [
+      { distance: 1000, duration: 120, pace: 300, speed: 5 },
+      { distance: 0, duration: 0, pace: 600, speed: 10 },
+      { distance: 1000, duration: 120, pace: Number.NaN, speed: Number.NaN },
+    ].map((values) => ({
+      getDuration: () => new DataDuration(values.duration),
+      getDistance: () => new DataDistance(values.distance),
+      getStat: (type: string) => type === DataPaceAvg.type
+        ? new DataPaceAvg(values.pace)
+        : type === DataSpeedAvg.type
+          ? new DataSpeedAvg(values.speed)
+          : undefined,
+    } as unknown as LapInterface));
+
+    expect(getSelectedEventLapSummaryMetrics(
+      laps,
+      [DataPaceAvg.type, DataSpeedAvg.type],
+      unitSettings,
+      'Running',
+    )).toEqual([
+      {
+        type: DataPaceAvg.type,
+        display: formatEventLapMetric(new DataPaceAvg(300), DataPaceAvg.type, unitSettings, 'Running'),
+        availableCount: 1,
+        selectedCount: 3,
+      },
+      {
+        type: DataSpeedAvg.type,
+        display: formatEventLapMetric(new DataSpeedAvg(5), DataSpeedAvg.type, unitSettings, 'Running'),
+        availableCount: 1,
+        selectedCount: 3,
+      },
     ]);
   });
 

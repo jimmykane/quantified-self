@@ -373,7 +373,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - To change it, open **Laps -> Columns**, choose Running, Cycling, Swimming, or Other activities, then tick the metrics you want to see. Use the typed metric search to quickly narrow long lists.
 - Quantified Self remembers a separate column list for each of those sport families. A triathlon can therefore keep different running, cycling, and swimming lap layouts.
 - Running and trail-running laps use pace, cycling laps use speed, and swimming laps use swim pace. These values, along with other convertible metrics, follow your unit preferences in **Settings -> Units**.
-- Each lap table includes an **Avg** row directly below its headers, with averageable lap metrics in their matching columns and using those same units. Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged.
+- Each lap table includes a persistent **Avg** row directly below its headers, with averageable lap metrics in their matching columns and using those same units. Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged.
+- Use the checkboxes beside lap rows to compare a temporary selection. A sticky **Selected avg · N** footer appears while rows are selected and averages the selected values in the visible columns. It includes how many selected laps contributed to each value, uses distance-weighted pace and duration-weighted speed where appropriate, and disappears when the selection is cleared.
 - Satellite diagnostics and EHPE/EVPE position-error metrics are intentionally left out of the column picker. Related Average, Minimum, and Maximum values are grouped under their shared metric name.
 - The menu includes the Event Summary metric families, but a column appears only when a current lap has a valid value. Missing values stay unavailable rather than becoming zero.
 
