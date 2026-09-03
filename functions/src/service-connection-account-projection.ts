@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import {
@@ -146,11 +147,11 @@ export async function readServiceConnectionAccountProjection(options: {
   const tokenRootRef = db.collection(config.tokenCollectionName).doc(normalizedUserID);
   const [tokenRootSnapshot, tokenSnapshots] = await Promise.all([
     tokenRootRef.get(),
-    tokenRootRef.collection('tokens').limit(MAX_PROJECTED_ACCOUNTS + 1).get(),
+    tokenRootRef.collection('tokens')
+      .orderBy(FieldPath.documentId())
+      .limit(MAX_PROJECTED_ACCOUNTS)
+      .get(),
   ]);
-  if (tokenSnapshots.docs.length > MAX_PROJECTED_ACCOUNTS) {
-    throw new Error(`Connection projection exceeds the ${MAX_PROJECTED_ACCOUNTS}-account bound.`);
-  }
   return tokenRootSnapshot.exists
     ? buildServiceConnectionAccountProjection(options.serviceName, tokenSnapshots.docs)
     : [];

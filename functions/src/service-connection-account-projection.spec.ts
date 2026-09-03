@@ -16,6 +16,7 @@ import {
   buildServiceConnectionAccountProjection,
   projectionRevisionKeyFromEventTime,
   projectionRevisionKeyFromMs,
+  readServiceConnectionAccountProjection,
   refreshServiceConnectionAccountProjection,
 } from './service-connection-account-projection';
 
@@ -82,6 +83,39 @@ describe('service connection account projection', () => {
     }]);
   });
 
+  it('deterministically bounds oversized retained account sets', async () => {
+    const tokenChildren = Array.from({ length: 33 }, (_, index) => snapshot(
+      `token-${`${index}`.padStart(2, '0')}`,
+      { userID: `garmin-user-${index}` },
+    ));
+    const orderBy = vi.fn();
+    const limit = vi.fn((maximum: number) => ({
+      get: vi.fn(async () => ({ docs: tokenChildren.slice(0, maximum) })),
+    }));
+    orderBy.mockReturnValue({ limit });
+    const db = {
+      collection: vi.fn(() => ({
+        doc: vi.fn(() => ({
+          get: vi.fn(async () => ({ exists: true })),
+          collection: vi.fn(() => ({ orderBy })),
+        })),
+      })),
+    };
+
+    const result = await readServiceConnectionAccountProjection({
+      db: db as never,
+      userID: 'user-1',
+      serviceName: ServiceNames.GarminAPI,
+    });
+
+    expect(result).toHaveLength(32);
+    expect(result[0]).toEqual({ providerUserId: 'garmin-user-0' });
+    expect(result.map(account => account.providerUserId)).toContain('garmin-user-31');
+    expect(result.map(account => account.providerUserId)).not.toContain('garmin-user-32');
+    expect(orderBy).toHaveBeenCalledTimes(1);
+    expect(limit).toHaveBeenCalledWith(32);
+  });
+
   it('writes the exact safe projection when the event revision is current', async () => {
     const transactionSet = vi.fn();
     const metaRef = { path: 'users/user-1/meta/Garmin API' };
@@ -97,7 +131,9 @@ describe('service connection account projection', () => {
             return {
               get: vi.fn(async () => ({ exists: true })),
               collection: vi.fn(() => ({
-                limit: vi.fn(() => ({ get: vi.fn(async () => ({ docs: tokenChildren })) })),
+                orderBy: vi.fn(() => ({
+                  limit: vi.fn(() => ({ get: vi.fn(async () => ({ docs: tokenChildren })) })),
+                })),
               })),
             };
           }
@@ -142,7 +178,9 @@ describe('service connection account projection', () => {
           : {
             get: vi.fn(async () => ({ exists: true })),
             collection: vi.fn(() => ({
-              limit: vi.fn(() => ({ get: vi.fn(async () => ({ docs: [] })) })),
+              orderBy: vi.fn(() => ({
+                limit: vi.fn(() => ({ get: vi.fn(async () => ({ docs: [] })) })),
+              })),
             })),
           }),
       })),
@@ -170,7 +208,9 @@ describe('service connection account projection', () => {
           : {
             get: vi.fn(async () => ({ exists: true })),
             collection: vi.fn(() => ({
-              limit: vi.fn(() => ({ get: vi.fn(async () => ({ docs: [] })) })),
+              orderBy: vi.fn(() => ({
+                limit: vi.fn(() => ({ get: vi.fn(async () => ({ docs: [] })) })),
+              })),
             })),
           }),
       })),
