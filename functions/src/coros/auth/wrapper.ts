@@ -143,6 +143,7 @@ interface DeauthorizeResponse {
 export const deauthorizeCOROSAPI = functions
   .runWith({
     memory: '256MB',
+    timeoutSeconds: 120,
     secrets: FUNCTION_SECRET_BINDINGS.deauthorizeCOROSAPI,
   })
   .region(FUNCTIONS_MANIFEST.deauthorizeCOROSAPI.region)
