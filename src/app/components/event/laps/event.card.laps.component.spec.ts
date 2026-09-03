@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatTableModule } from '@angular/material/table';
 import { MatSelectionListChange } from '@angular/material/list';
 import {
     ActivityInterface,
@@ -70,7 +72,7 @@ describe('EventCardLapsComponent', () => {
         updateLapTableColumns = vi.fn().mockResolvedValue(undefined);
         snackBar = { open: vi.fn() };
         await TestBed.configureTestingModule({
-            imports: [CommonModule, MatMenuModule],
+            imports: [CommonModule, MatCheckboxModule, MatMenuModule, MatTableModule],
             declarations: [EventCardLapsComponent],
             providers: [
                 { provide: AppEventColorService, useValue: {} },
@@ -316,6 +318,7 @@ describe('EventCardLapsComponent', () => {
         );
 
         expect(component.getColumns(activity, LapTypes.Manual)).toEqual([
+            'selection',
             '#',
             DataSpeedAvg.type,
             DataSpeedMin.type,
@@ -389,6 +392,7 @@ describe('EventCardLapsComponent', () => {
         expect(runningGroup.searchTerm).toBe('maximum heart rate');
         expect(runningGroup.selectedMetricTypes).toEqual([DataHeartRateMax.type]);
         expect(component.getColumns(activity, LapTypes.Manual)).toEqual([
+            'selection',
             '#',
             DataHeartRateMax.type,
         ]);
@@ -608,6 +612,106 @@ describe('EventCardLapsComponent', () => {
         expect(fixture.nativeElement.querySelector('app-event-section-header')).toBeNull();
     });
 
+    it('selects only lap rows, updates the selected footer, and supports select all', () => {
+        const activity = createActivity([120, 180].map((duration, index) => ({
+            ...createRenderableLap(LapTypes.Manual),
+            getDuration: () => new DataDuration(duration),
+            getStat: (type: string) => type === DataHeartRateMax.type
+                ? new DataHeartRateMax(index === 0 ? 160 : 180)
+                : undefined,
+        } as unknown as LapInterface)));
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+        fixture.detectChanges();
+
+        const table = component.lapTableGroups[0]?.tables[0];
+        if (!table) {
+            throw new Error('Expected a lap table');
+        }
+        const [averageRow, firstLapRow, secondLapRow] = table.dataSource.data;
+        if (!averageRow || !firstLapRow || !secondLapRow) {
+            throw new Error('Expected the average row and two lap rows');
+        }
+
+        component.toggleLapSelection(table, averageRow);
+        expect(table.selectedCount).toBe(0);
+        expect(table.selection.selected).toEqual([]);
+
+        component.toggleLapSelection(table, firstLapRow);
+        fixture.detectChanges();
+
+        expect(table.selectedCount).toBe(1);
+        expect(table.selectedSummaryLabel).toBe('Selected avg · 1');
+        expect(table.selectedSummary[DataDuration.type]).toContain(' · 1/1');
+        expect(table.allLapRowsSelected).toBe(false);
+        expect(table.someLapRowsSelected).toBe(true);
+        expect(fixture.nativeElement.querySelector('.lap-selected-summary-row')).toBeTruthy();
+
+        component.toggleAllLapSelections(table);
+        expect(table.selectedCount).toBe(2);
+        expect(table.allLapRowsSelected).toBe(true);
+        expect(table.someLapRowsSelected).toBe(false);
+
+        component.toggleAllLapSelections(table);
+        fixture.detectChanges();
+        expect(table.selectedCount).toBe(0);
+        expect(fixture.nativeElement.querySelector('.lap-selected-summary-row')?.getAttribute('hidden')).toBe('');
+    });
+
+    it('keeps lap selections isolated per table and preserves them across column refreshes', async () => {
+        const running = createActivity([createRenderableLap(LapTypes.Manual)]);
+        const cycling = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]),
+            getID: () => 'activity-2',
+            type: 'Cycling',
+        } as ActivityInterface;
+        component.canCustomize = true;
+        component.selectedActivities = [running, cycling];
+        component.ngOnChanges();
+
+        const runningTable = component.lapTableGroups[0]?.tables.find((table) => table.activity === running);
+        const cyclingTable = component.lapTableGroups[0]?.tables.find((table) => table.activity === cycling);
+        const runningLapRow = runningTable?.dataSource.data.find((row) => !row.isLapAverage);
+        if (!runningTable || !cyclingTable || !runningLapRow) {
+            throw new Error('Expected independent running and cycling lap tables');
+        }
+
+        component.toggleLapSelection(runningTable, runningLapRow);
+        expect(runningTable.selectedCount).toBe(1);
+        expect(cyclingTable.selectedCount).toBe(0);
+
+        await component.onLapColumnSelectionChange(
+            'running',
+            createLapColumnSelectionChange([DataHeartRateMax.type]),
+        );
+
+        const refreshedRunningTable = component.lapTableGroups[0]?.tables.find((table) => table.activity === running);
+        const refreshedCyclingTable = component.lapTableGroups[0]?.tables.find((table) => table.activity === cycling);
+        expect(refreshedRunningTable?.selectedCount).toBe(1);
+        expect(refreshedCyclingTable?.selectedCount).toBe(0);
+    });
+
+    it('clears a table selection once that activity or lap type no longer appears', () => {
+        const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+
+        const table = component.lapTableGroups[0]?.tables[0];
+        const lapRow = table?.dataSource.data.find((row) => !row.isLapAverage);
+        if (!table || !lapRow) {
+            throw new Error('Expected a selectable lap row');
+        }
+        component.toggleLapSelection(table, lapRow);
+        expect(table.selectedCount).toBe(1);
+
+        component.selectedActivities = [];
+        component.ngOnChanges();
+        component.selectedActivities = [activity];
+        component.ngOnChanges();
+
+        expect(component.lapTableGroups[0]?.tables[0]?.selectedCount).toBe(0);
+    });
+
     it('should keep the metric search field within the lap column menu', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.css'),
@@ -617,15 +721,25 @@ describe('EventCardLapsComponent', () => {
         expect(styles).toContain('.lap-column-search-field');
         expect(styles).toContain('box-sizing: border-box;');
         expect(styles).toContain('width: calc(100% - 32px) !important;');
+        expect(styles).toContain(".lap-selected-summary-row .mat-mdc-footer-cell");
+        expect(styles).toContain("font-family: 'Barlow Condensed', 'Inter', sans-serif;");
     });
 
-    it('should not render the index column header icon', () => {
+    it('renders checkbox-only lap selection and a sticky selected-summary footer', () => {
         const template = readFileSync(
             resolve(process.cwd(), 'src/app/components/event/laps/event.card.laps.component.html'),
             'utf8',
         );
 
-        expect(template).toContain("@if (column !== '#')");
+        expect(template).toContain("column === 'selection' || column === '#'");
+        expect(template).toContain('Select all laps in this table');
+        expect(template).toContain("[attr.aria-label]=\"'Select lap ' + row['#']\"");
+        expect(template).toContain("column === 'selection' && !row.isLapAverage");
+        expect(template).toContain('toggleAllLapSelections(lapTable)');
+        expect(template).toContain('toggleLapSelection(lapTable, row)');
+        expect(template).toContain('lapTable.selectedSummaryLabel');
+        expect(template).toContain('*matFooterRowDef="lapTable.columns; sticky: true"');
+        expect(template).toContain('lap-selected-summary-row');
         expect(template).toContain('<app-data-type-icon [dataType]="column"></app-data-type-icon>');
         expect(template).toContain("[class.lap-index-cell]=\"column === '#'");
         expect(template).toContain("[class.lap-duration-cell]=\"column === 'Duration'");

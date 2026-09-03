@@ -10,9 +10,11 @@ import {
 } from '@angular/core';
 import { MatSelectionListChange } from '@angular/material/list';
 import { MatTableDataSource } from '@angular/material/table';
+import { SelectionModel } from '@angular/cdk/collections';
 import {
   ActivityInterface,
   EventInterface,
+  LapInterface,
   LapTypes,
   UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
@@ -27,6 +29,7 @@ import {
   getEventLapMetricOptionGroups,
   getEventLapSportFamilyPresentation,
   getEventLapMetricStat,
+  getSelectedEventLapSummaryMetrics,
   getSelectedEventLapMetricTypes,
   normalizeEventDetailsSettings,
   resolveEventLapSportFamily,
@@ -36,9 +39,12 @@ import {
   AppEventLapSportFamily,
 } from '../../../models/app-user.interface';
 
-interface LapTableRow extends Record<string, string | number | boolean> {
+interface LapTableRow extends Record<string, string | number | boolean | LapInterface | undefined> {
   '#': string | number;
   isLapAverage?: boolean;
+  isSelected?: boolean;
+  lap?: LapInterface;
+  selectionKey?: string;
 }
 
 interface LapColumnMenuGroup {
@@ -56,12 +62,20 @@ interface LapTableView {
   activity: ActivityInterface;
   dataSource: MatTableDataSource<LapTableRow>;
   columns: string[];
+  selection: SelectionModel<LapTableRow>;
+  selectedCount: number;
+  selectedSummary: Record<string, string>;
+  selectedSummaryLabel: string;
+  allLapRowsSelected: boolean;
+  someLapRowsSelected: boolean;
 }
 
 interface LapTableGroup {
   lapType: LapTypes;
   tables: LapTableView[];
 }
+
+const LAP_TABLE_SELECTION_COLUMN = 'selection';
 
 function filterLapMetricGroups(
   metricGroups: EventLapMetricOptionGroup[],
@@ -149,6 +163,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   private updateData() {
+    const selectedLapKeysByTable = this.getSelectedLapKeysByTable();
     this.dataSourcesMap.clear();
     this.columnsMap.clear();
     this.lapTableGroups = [];
@@ -160,6 +175,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     }
 
     const lapTypesWithData = new Set<LapTypes>();
+    const tablesByKey = new Map<string, LapTableView>();
 
     this.selectedActivities.forEach(activity => {
       this.availableLapTypes.forEach(lapType => {
@@ -170,7 +186,28 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
           lapTypesWithData.add(lapType);
           const dataSource = new MatTableDataSource(data);
           this.dataSourcesMap.set(key, dataSource);
-          this.columnsMap.set(key, this.calculateColumns(dataSource, activity.type));
+          const columns = this.calculateColumns(dataSource, activity.type);
+          this.columnsMap.set(key, columns);
+          const selection = new SelectionModel<LapTableRow>(true);
+          const selectedLapKeys = selectedLapKeysByTable.get(key);
+          const selectableRows = data.filter((row) => !row.isLapAverage);
+          if (selectedLapKeys) {
+            selection.select(...selectableRows.filter((row) => selectedLapKeys.has(row.selectionKey || '')));
+          }
+          const table: LapTableView = {
+            key,
+            activity,
+            dataSource,
+            columns,
+            selection,
+            selectedCount: 0,
+            selectedSummary: {},
+            selectedSummaryLabel: '',
+            allLapRowsSelected: false,
+            someLapRowsSelected: false,
+          };
+          this.refreshSelectedSummary(table);
+          tablesByKey.set(key, table);
         }
       });
     });
@@ -186,7 +223,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
           if (!dataSource || !columns) {
             return null;
           }
-          return { key, activity, dataSource, columns };
+          return tablesByKey.get(key) || null;
         })
         .filter((table): table is LapTableView => !!table),
     })).filter((group) => group.tables.length > 0);
@@ -205,6 +242,15 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       const row: LapTableRow = {
         '#': index + 1,
       };
+      const lapIdentity = Number.isFinite(lap.lapId) ? lap.lapId : index;
+      Object.defineProperties(row, {
+        isSelected: { value: false, writable: true, enumerable: false },
+        lap: { value: lap, enumerable: false },
+        selectionKey: {
+          value: `${this.getKey(activity, lapType)}-${lapIdentity}`,
+          enumerable: false,
+        },
+      });
 
       metricTypes.forEach((metricType) => {
         row[metricType] = formatEventLapMetric(
@@ -235,8 +281,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   }
 
   private calculateColumns(dataSource: MatTableDataSource<LapTableRow>, activityType: unknown): string[] {
-    return this.getColumnsToDisplay(activityType).filter(column => {
-      if (column === '#') {
+    return [LAP_TABLE_SELECTION_COLUMN, ...this.getColumnsToDisplay(activityType)].filter(column => {
+      if (column === LAP_TABLE_SELECTION_COLUMN || column === '#') {
         return true;
       }
       return dataSource.data.some(row => {
@@ -266,12 +312,32 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     ];
   }
 
-  isSticky(column: string) {
-    return column === '#'
+  isSticky(column: string): boolean {
+    return column === LAP_TABLE_SELECTION_COLUMN || column === '#';
   }
 
-  isStickyEnd(_column: string) {
+  isStickyEnd(_column: string): boolean {
     return false;
+  }
+
+  public toggleLapSelection(table: LapTableView, row: LapTableRow): void {
+    if (row.isLapAverage) {
+      return;
+    }
+    table.selection.toggle(row);
+    this.refreshSelectedSummary(table);
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public toggleAllLapSelections(table: LapTableView): void {
+    const selectableRows = table.dataSource.data.filter((row) => !row.isLapAverage);
+    if (table.allLapRowsSelected) {
+      table.selection.clear();
+    } else {
+      table.selection.select(...selectableRows);
+    }
+    this.refreshSelectedSummary(table);
+    this.changeDetectorRef.markForCheck();
   }
 
   public async onLapColumnSelectionChange(
@@ -382,6 +448,49 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.activeLapColumnMenuGroup = this.lapColumnMenuGroups.find(
       (group) => group.family === activeFamily,
     ) || this.lapColumnMenuGroups[0] || null;
+  }
+
+  private getSelectedLapKeysByTable(): Map<string, Set<string>> {
+    return new Map(this.lapTableGroups.flatMap((group) => group.tables.map((table) => [
+      table.key,
+      new Set(table.selection.selected
+        .map((row) => row.selectionKey)
+        .filter((selectionKey): selectionKey is string => !!selectionKey)),
+    ])));
+  }
+
+  private refreshSelectedSummary(table: LapTableView): void {
+    const selectableRows = table.dataSource.data.filter((row) => !row.isLapAverage);
+    selectableRows.forEach((row) => {
+      row.isSelected = table.selection.isSelected(row);
+    });
+    const selectedRows = selectableRows.filter((row) => row.isSelected && row.lap);
+    const selectedLaps = selectedRows
+      .map((row) => row.lap)
+      .filter((lap): lap is LapInterface => !!lap);
+    const selectedCount = selectedLaps.length;
+    const metricTypes = table.columns.filter((column) => (
+      column !== LAP_TABLE_SELECTION_COLUMN && column !== '#'
+    ));
+    const summary = Object.fromEntries(metricTypes.map((metricType) => [
+      metricType,
+      `— · 0/${selectedCount}`,
+    ]));
+
+    getSelectedEventLapSummaryMetrics(
+      selectedLaps,
+      metricTypes,
+      this.unitSettings,
+      table.activity.type,
+    ).forEach(({ type, display, availableCount }) => {
+      summary[type] = `${display} · ${availableCount}/${selectedCount}`;
+    });
+
+    table.selectedCount = selectedCount;
+    table.selectedSummary = summary;
+    table.selectedSummaryLabel = selectedCount > 0 ? `Selected avg · ${selectedCount}` : '';
+    table.allLapRowsSelected = selectableRows.length > 0 && selectedCount === selectableRows.length;
+    table.someLapRowsSelected = selectedCount > 0 && !table.allLapRowsSelected;
   }
 
   private setLapColumnMetricSearchTerm(group: LapColumnMenuGroup, searchTerm: string): void {
