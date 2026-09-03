@@ -1323,58 +1323,13 @@ describe('OAuth2', () => {
             expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationLeaseExpiresAt');
         });
 
-        it('starts OAuth immediately when an active disconnect operation has no tokens left', async () => {
-            mockTransactionDocumentData = {
-                oauthFlowGeneration: 'disconnect-flow',
-                disconnectOperationGeneration: 'disconnect-operation',
-                disconnectOperationLeaseExpiresAt: Date.now() + 60_000,
-            };
-            mockGet.mockResolvedValueOnce({
-                empty: true,
-                size: 0,
-                docs: [],
-            } as unknown as admin.firestore.QuerySnapshot);
-
-            await expect(getServiceOAuth2CodeRedirectAndSaveStateToUser(
-                userID,
-                ServiceNames.SuuntoApp,
-                redirectUri,
-            )).resolves.toContain('https://');
-
-            expect(mockTransactionDocumentData).toEqual(expect.objectContaining({
-                state: expect.any(String),
-                oauthFlowGeneration: expect.any(String),
-            }));
-            expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationGeneration');
-            expect(mockTransactionDocumentData).not.toHaveProperty('disconnectOperationLeaseExpiresAt');
-            const recoveryLog = vi.mocked(logger.warn).mock.calls.find(
-                ([message, fields]) => message === '[OAuthDisconnect] Lifecycle transition.'
-                    && (fields as { lifecycleEvent?: unknown })?.lifecycleEvent === 'empty_disconnect_lease_reclaimed',
-            );
-            expect(recoveryLog?.[1]).toEqual(expect.objectContaining({
-                lifecycleEvent: 'empty_disconnect_lease_reclaimed',
-                serviceName: ServiceNames.SuuntoApp,
-                operationCorrelationId: createHash('sha256')
-                    .update('disconnect-operation')
-                    .digest('hex')
-                    .slice(0, 16),
-                leaseRemainingMs: expect.any(Number),
-            }));
-            expect(JSON.stringify(recoveryLog?.[1])).not.toContain('disconnect-operation');
-        });
-
-        it('keeps OAuth blocked while an active disconnect operation still owns a token', async () => {
+        it('keeps OAuth blocked while an active disconnect operation has no tokens left', async () => {
             const leaseExpiresAt = Date.now() + 60_000;
             mockTransactionDocumentData = {
                 oauthFlowGeneration: 'disconnect-flow',
                 disconnectOperationGeneration: 'disconnect-operation',
                 disconnectOperationLeaseExpiresAt: leaseExpiresAt,
             };
-            mockGet.mockResolvedValueOnce({
-                empty: false,
-                size: 1,
-                docs: [{ id: 'retained-token' }],
-            } as unknown as admin.firestore.QuerySnapshot);
 
             await expect(getServiceOAuth2CodeRedirectAndSaveStateToUser(
                 userID,
@@ -1394,6 +1349,7 @@ describe('OAuth2', () => {
                 disconnectOperationGeneration: 'disconnect-operation',
                 disconnectOperationLeaseExpiresAt: leaseExpiresAt,
             });
+            expect(mockGet).not.toHaveBeenCalled();
         });
 
         it('does not publish delayed OAuth preparation after an explicit disconnect invalidates the flow', async () => {
