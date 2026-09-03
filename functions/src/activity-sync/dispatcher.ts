@@ -40,18 +40,29 @@ function toUserID(value: unknown): string | null {
     return userID.length > 0 ? userID : null;
 }
 
-function isFutureScheduledCOROSStatusPoll(
+function hasExpectedProviderStatusPollResumeState(
+    queueItem: Partial<ActivitySyncQueueItemInterface>,
+): boolean {
+    if (`${queueItem.destinationUploadID ?? ''}`.trim().length === 0) {
+        return false;
+    }
+    if (queueItem.destinationServiceName === ServiceNames.WahooAPI) {
+        return true;
+    }
+    return queueItem.destinationServiceName === ServiceNames.COROSAPI
+        && `${queueItem.destinationProviderUserID ?? ''}`.trim().length > 0;
+}
+
+function isFutureScheduledProviderStatusPoll(
     queueItem: Partial<ActivitySyncQueueItemInterface>,
     nowMs: number,
 ): boolean {
     const scheduledAtMs = toDispatchTimestamp(queueItem.dispatchedToCloudTask);
-    return queueItem.destinationServiceName === ServiceNames.COROSAPI
-        && scheduledAtMs !== null
+    return scheduledAtMs !== null
         && scheduledAtMs > nowMs
         && scheduledAtMs !== PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER
         && scheduledAtMs !== PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER
-        && `${queueItem.destinationUploadID ?? ''}`.trim().length > 0
-        && `${queueItem.destinationProviderUserID ?? ''}`.trim().length > 0;
+        && hasExpectedProviderStatusPollResumeState(queueItem);
 }
 
 async function deleteActivitySyncCandidateBeforeDispatch(
@@ -127,18 +138,17 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
     const pageSize = Math.min(ACTIVITY_SYNC_RECONCILIATION_PAGE_SIZE, MAX_ACTIVITY_SYNC_QUEUE_SCAN, MAX_PENDING_TASKS);
     const candidateDocs: admin.firestore.QueryDocumentSnapshot[] = [];
     let inspected = 0;
-    let skippedScheduledCOROSPolls = 0;
+    let skippedScheduledProviderPolls = 0;
     let pageCursor: admin.firestore.QueryDocumentSnapshot | undefined;
 
     while (candidateDocs.length < scanLimit) {
         const remainingScanCapacity = scanLimit - candidateDocs.length;
-        const currentPageSize = Math.min(pageSize, remainingScanCapacity);
 
         let query = admin.firestore()
             .collection(ACTIVITY_SYNC_QUEUE_COLLECTION_NAME)
             .where('processed', '==', false)
             .orderBy('dateCreated', 'asc')
-            .limit(currentPageSize);
+            .limit(pageSize);
 
         if (pageCursor) {
             query = query.startAfter(pageCursor);
@@ -152,14 +162,14 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         inspected += pageSnapshot.docs.length;
         const nonScheduledPollDocs = pageSnapshot.docs.filter(doc => {
             const data = doc.data() as Partial<ActivitySyncQueueItemInterface>;
-            return !isFutureScheduledCOROSStatusPoll(data, nowMs);
+            return !isFutureScheduledProviderStatusPoll(data, nowMs);
         });
-        // A future COROS status-only poll is already backed by a delayed Cloud
+        // A future provider status-only poll is already backed by a delayed Cloud
         // Task. It must not consume this reconciliation pass's finite
         // candidate budget, otherwise enough old polls hide newer work.
-        skippedScheduledCOROSPolls += pageSnapshot.docs.length - nonScheduledPollDocs.length;
-        candidateDocs.push(...nonScheduledPollDocs);
-        if (pageSnapshot.docs.length < currentPageSize) {
+        skippedScheduledProviderPolls += pageSnapshot.docs.length - nonScheduledPollDocs.length;
+        candidateDocs.push(...nonScheduledPollDocs.slice(0, remainingScanCapacity));
+        if (pageSnapshot.docs.length < pageSize) {
             break;
         }
 
@@ -170,7 +180,7 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         return {
             inspected,
             dispatched: 0,
-            skippedRecent: skippedScheduledCOROSPolls,
+            skippedRecent: skippedScheduledProviderPolls,
         };
     }
 
@@ -213,7 +223,7 @@ export async function reconcileActivitySyncQueueDispatches(nowMs = Date.now()): 
         });
 
     let dispatched = 0;
-    let skippedRecent = skippedScheduledCOROSPolls;
+    let skippedRecent = skippedScheduledProviderPolls;
     const dispatchLimit = Math.min(availableSlots, candidates.length);
 
     for (const candidate of candidates) {
