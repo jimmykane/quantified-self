@@ -106,8 +106,24 @@
   width: 100%;
 }
 
-.health-metric-option-sleep {
-  gap: 0.35rem;
+.health-metric-option-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.health-metric-option-icon {
+  color: var(--mat-sys-primary);
+  flex: 0 0 auto;
+  font-size: 18px;
+  height: 18px;
+  line-height: 18px;
+  width: 18px;
+}
+
+.health-metric-option-selected .health-metric-option-icon {
+  color: currentColor;
 }
 
 .health-metric-option-selected {

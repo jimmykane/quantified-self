@@ -80,6 +80,7 @@ import {
   selectActivityHealthObservations,
 } from '../../helpers/health-workspace.helper';
 import { buildDashboardSleepTrendContext } from '../../helpers/dashboard-sleep-chart.helper';
+import { healthMetricIcon } from '../../helpers/health-metric-icon.helper';
 import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
 
 type HealthLoadStatus = 'loading' | 'ready' | 'denied' | 'error';
@@ -184,6 +185,7 @@ export class HealthWorkspaceComponent {
     label: RANGE_LABELS[range],
     buttonLabel: range === 'today' ? RANGE_LABELS[range] : range,
   }));
+  readonly healthMetricIcon = healthMetricIcon;
   private readonly completeMetricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
   readonly selectedMetric = signal<HealthWorkspaceMetricSelection>(HEALTH_METRIC_IDS.RestingHeartRate);
   readonly selectedRange = signal<HealthWorkspaceRange>(HEALTH_WORKSPACE_DEFAULT_RANGE);
@@ -445,7 +447,7 @@ export class HealthWorkspaceComponent {
       priorityCard(
         'sleep',
         'Sleep',
-        'bedtime',
+        healthMetricIcon('sleep'),
         'sleep',
         buildSleepPriorityRows(this.prioritySleepSessions()),
         this.prioritySleepStatus(),
@@ -455,7 +457,7 @@ export class HealthWorkspaceComponent {
       priorityCard(
         'heart_rate',
         'Heart rate',
-        'favorite',
+        healthMetricIcon(HEALTH_METRIC_IDS.HeartRate),
         HEALTH_METRIC_IDS.HeartRate,
         buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
         this.priorityHeartRateStatus(),
@@ -465,7 +467,7 @@ export class HealthWorkspaceComponent {
       priorityCard(
         'heart_rate_variability',
         'HRV',
-        'ecg_heart',
+        healthMetricIcon(HEALTH_METRIC_IDS.HeartRateVariability),
         HEALTH_METRIC_IDS.HeartRateVariability,
         buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
         this.priorityHrvStatus(),

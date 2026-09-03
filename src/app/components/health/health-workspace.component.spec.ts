@@ -398,6 +398,10 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-footer')?.tagName).toBe('FOOTER');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
+    const metricOptionIcons = (fixture.nativeElement as HTMLElement).querySelectorAll(
+      '.health-metric-option .health-metric-option-icon',
+    );
+    expect(metricOptionIcons).toHaveLength((fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option').length);
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(3);
     const priorityProviderIcons = fixture.debugElement.queryAll(By.css(
       '.health-priority-card app-service-source-icon',
@@ -491,7 +495,7 @@ describe('HealthWorkspaceComponent', () => {
 
     const host = fixture.nativeElement as HTMLElement;
     const metricLabels = [...host.querySelectorAll('.health-metric-option')]
-      .map(option => option.textContent?.trim());
+      .map(option => option.querySelector('.health-metric-option-content > span:last-child')?.textContent?.trim());
     expect(metricLabels).toEqual(['Heart rate', 'Steps', 'Body weight', 'VO2 max']);
     expect(host.textContent).not.toContain('Sleep overview');
     expect(host.textContent).not.toContain('Resting heart rate');
@@ -522,7 +526,7 @@ describe('HealthWorkspaceComponent', () => {
     });
 
     const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option')]
-      .map(option => option.textContent?.replace('bedtime', '').trim());
+      .map(option => option.querySelector('.health-metric-option-content > span:last-child')?.textContent?.trim());
     expect(labels).toEqual(['Sleep overview', 'Steps', 'Body weight', 'VO2 max']);
     expect(component.routeState().metric).toBe('sleep');
   });
