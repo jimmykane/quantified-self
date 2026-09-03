@@ -28,6 +28,7 @@ export const ACTIVITY_HEALTH_MAX_CANDIDATES = 2_048;
 export const ACTIVITY_HEALTH_MAX_PROJECTED_OUTPUT_BYTES = 1024 * 1024;
 export const ACTIVITY_HEALTH_MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
 const ACTIVITY_HEALTH_RESULT_ENVELOPE_RESERVE_BYTES = 512;
+const VO2_MAX_STATISTIC_FIELD = new FieldPath('stats', DataVO2Max.type);
 
 export const ACTIVITY_HEALTH_QUERY_PLANS = Object.freeze({
     [HEALTH_METRIC_IDS.BodyWeight]: Object.freeze({
@@ -50,12 +51,12 @@ export const ACTIVITY_HEALTH_QUERY_PLANS = Object.freeze({
         collectionId: 'activities',
         timestampField: 'startDate',
         observationTimestampField: 'startDate',
-        statisticField: `stats.\`${DataVO2Max.type}\``,
+        statisticField: VO2_MAX_STATISTIC_FIELD,
         statisticKey: DataVO2Max.type,
         selectedFields: Object.freeze([
             'startDate',
             'type',
-            `stats.\`${DataVO2Max.type}\``,
+            VO2_MAX_STATISTIC_FIELD,
             'serviceName',
             'sourceServiceName',
             'creator.name',
@@ -69,9 +70,9 @@ interface ActivityHealthQueryPlan {
     collectionId: 'events' | 'activities';
     timestampField: 'startDate';
     observationTimestampField: 'startDate';
-    statisticField: string;
+    statisticField: string | FieldPath;
     statisticKey: string;
-    selectedFields: readonly string[];
+    selectedFields: readonly (string | FieldPath)[];
 }
 
 export interface ActivityHealthQueryPageDocument {

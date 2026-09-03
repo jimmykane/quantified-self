@@ -1,4 +1,4 @@
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, Timestamp } from 'firebase-admin/firestore';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
@@ -162,9 +162,11 @@ describe('readActivityHealthRange', () => {
             collectionId: 'activities',
             timestampField: 'startDate',
             observationTimestampField: 'startDate',
-            statisticField: 'stats.`VO2 Max`',
             statisticKey: 'VO2 Max',
         });
+        expect(ACTIVITY_HEALTH_QUERY_PLANS.vo2_max.statisticField).toBeInstanceOf(FieldPath);
+        expect((ACTIVITY_HEALTH_QUERY_PLANS.vo2_max.statisticField as FieldPath)
+            .isEqual(new FieldPath('stats', 'VO2 Max'))).toBe(true);
         expect(result.observations.map(item => ({ value: item.value, discipline: item.discipline }))).toEqual([
             { value: 51, discipline: 'running' },
             { value: 48, discipline: 'cycling' },
@@ -432,8 +434,15 @@ describe('default Firestore query construction', () => {
             ['startDate', '>=', START_MS],
             ['startDate', '<=', END_MS],
         ]);
-        expect(calls.where[2]).toEqual(['stats.`VO2 Max`', '>', 0]);
+        const statisticField = calls.where[2][0];
+        expect(statisticField).toBeInstanceOf(FieldPath);
+        expect((statisticField as FieldPath).isEqual(new FieldPath('stats', 'VO2 Max'))).toBe(true);
+        expect(calls.where[2].slice(1)).toEqual(['>', 0]);
         expect(calls.select).toEqual(ACTIVITY_HEALTH_QUERY_PLANS.vo2_max.selectedFields);
+        expect(calls.select.some(field => (
+            field instanceof FieldPath && field.isEqual(new FieldPath('stats', 'VO2 Max'))
+        ))).toBe(true);
+        expect(calls.select).not.toContain('stats.`VO2 Max`');
         expect(calls.select).not.toContain('eventStartDate');
     });
 });
