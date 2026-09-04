@@ -1164,6 +1164,20 @@ tr.mat-row:focus,
   @include qs-scrollbar-skin;
 }
 
+/* Material's default 275px panel height cuts through its 48px option rows.
+   Training uses the public panelClass API to keep five complete rows visible
+   and snap pointer scrolling back to a complete option. */
+div.training-all-sports-panel[role='listbox'] {
+  max-height: 240px;
+  padding-block: 0;
+  scroll-snap-type: y mandatory;
+}
+
+.training-all-sports-panel .training-all-sports-option {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
 .mat-mdc-autocomplete-panel {
   --mat-autocomplete-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;

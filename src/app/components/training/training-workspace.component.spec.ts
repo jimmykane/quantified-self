@@ -385,6 +385,23 @@ describe('TrainingWorkspaceComponent', () => {
     );
   });
 
+  it('keeps the desktop all-sports panel aligned to complete option rows', () => {
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
+      'utf8',
+    );
+    const globalStyles = readFileSync(resolve(process.cwd(), 'src/styles.scss'), 'utf8');
+
+    expect(template).toContain('panelClass="training-all-sports-panel"');
+    expect(template).toContain('<mat-option class="training-all-sports-option"');
+    expect(globalStyles).toMatch(
+      /div\.training-all-sports-panel\[role='listbox'\]\s*\{[^}]*max-height:\s*240px;[^}]*padding-block:\s*0;[^}]*scroll-snap-type:\s*y mandatory;/s,
+    );
+    expect(globalStyles).toMatch(
+      /\.training-all-sports-panel \.training-all-sports-option\s*\{[^}]*scroll-snap-align:\s*start;[^}]*scroll-snap-stop:\s*always;/s,
+    );
+  });
+
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');

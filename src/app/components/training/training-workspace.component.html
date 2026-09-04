@@ -94,11 +94,12 @@
         <mat-label>All sports</mat-label>
         <mat-select
           #desktopAllSportsSelect
+          panelClass="training-all-sports-panel"
           [value]="desktopAllSportsSelectorValue"
           (selectionChange)="selectDesktopTrainingDestination($event.value, desktopAllSportsSelect)">
           @for (option of trainingDestinationOptions; track option.id) {
             @if (option.id !== 'overview') {
-              <mat-option [value]="option.id">
+              <mat-option class="training-all-sports-option" [value]="option.id">
                 <span class="training-destination-option">
                   @if (option.sport; as sport) {
                     <app-activity-type-icon

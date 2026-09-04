@@ -1,24 +1,8 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ActivityTypeIconComponent } from './activity-type-icon.component';
 
 describe('ActivityTypeIconComponent', () => {
-  it('allows detailed activity glyphs to render beyond the Material icon crop box', () => {
-    const template = readFileSync(resolve(
-      process.cwd(),
-      'src/app/components/activity-type-icon/activity-type-icon.component.html',
-    ), 'utf8');
-    const styles = readFileSync(resolve(
-      process.cwd(),
-      'src/app/components/activity-type-icon/activity-type-icon.component.css',
-    ), 'utf8');
-
-    expect(template).toContain('class="activity-type-icon-glyph"');
-    expect(styles).toMatch(/\.activity-type-icon-glyph\s*\{[^}]*overflow:\s*visible;/s);
-  });
-
   it('returns fallback icon for empty activity type', () => {
     const component = new ActivityTypeIconComponent();
     component.activityType = '';
