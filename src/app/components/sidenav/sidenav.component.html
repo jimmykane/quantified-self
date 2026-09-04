@@ -198,10 +198,6 @@
           [matBadge]="whatsNewService.unreadCount()" [matBadgeHidden]="whatsNewService.unreadCount() === 0"
           matBadgeSize="small" aria-hidden="false">campaign</mat-icon>
       </button>
-      <a mat-icon-button matTooltip="System status" aria-label="System status" [href]="statusPageUrl" target="_blank"
-        rel="noopener noreferrer">
-        <mat-icon>monitor_heart</mat-icon>
-      </a>
       <button mat-icon-button matTooltip="Star on GitHub" (click)="gitHubStar()">
         <mat-icon>star</mat-icon>
       </button>
