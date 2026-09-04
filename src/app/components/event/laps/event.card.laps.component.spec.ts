@@ -793,7 +793,6 @@ describe('EventCardLapsComponent', () => {
         expect(styles).toContain('box-sizing: border-box;');
         expect(styles).toContain('width: calc(100% - 32px) !important;');
         expect(styles).toContain('.lap-column-availability-summary');
-        expect(styles).toContain('.lap-column-option-availability');
         expect(styles).toContain(".lap-selected-summary-row .mat-mdc-footer-cell");
         expect(styles).toContain("font-family: 'Barlow Condensed', 'Inter', sans-serif;");
     });
@@ -827,7 +826,8 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain('group.selectedUnavailableMetricCount');
         expect(template).toContain('group.metricAvailability[metric.type]?.label');
         expect(template).toContain('unavailable in these laps and hidden from the table');
-        expect(template).toContain('lap-column-option-availability');
+        expect(template).toContain('matListItemTitle');
+        expect(template).toContain('matListItemLine');
         expect(template).toContain('No matching metrics.');
         expect(template).toContain('row.isLapAverage');
         expect(template).toContain('lap-average-row');

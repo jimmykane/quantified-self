@@ -86,22 +86,6 @@
   padding: 8px 16px 0;
 }
 
-.lap-column-option {
-  align-items: center;
-  display: inline-flex;
-  gap: 8px;
-}
-
-.lap-column-option-copy {
-  display: grid;
-  gap: 2px;
-}
-
-.lap-column-option-availability {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-small);
-}
-
 .lap-tab-label {
   align-items: center;
   display: inline-flex;

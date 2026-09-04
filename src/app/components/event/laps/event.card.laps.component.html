@@ -59,15 +59,11 @@
         <div mat-subheader>{{ metricGroup.label }}</div>
         @for (metric of metricGroup.metrics; track metric.type) {
         <mat-list-option [selected]="group.selectedMetricTypes.includes(metric.type)" [value]="metric.type">
-          <span class="lap-column-option">
-            <app-data-type-icon [dataType]="metric.type" size="18px"></app-data-type-icon>
-            <span class="lap-column-option-copy">
-              <span>{{ metric.label }}</span>
-              @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
-              <span class="lap-column-option-availability">{{ availabilityLabel }}</span>
-              }
-            </span>
-          </span>
+          <app-data-type-icon matListItemIcon [dataType]="metric.type" size="18px"></app-data-type-icon>
+          <span matListItemTitle>{{ metric.label }}</span>
+          @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
+          <span matListItemLine>{{ availabilityLabel }}</span>
+          }
         </mat-list-option>
         }
         }
