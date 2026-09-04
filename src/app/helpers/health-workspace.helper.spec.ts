@@ -519,7 +519,7 @@ describe('Health workspace helpers', () => {
     expect(filtered.conflicts).toEqual([]);
   });
 
-  it('uses workout Weight only as fallback context after applying provider filters', () => {
+  it('suppresses workout Weight only for sources with a real Weight measurement', () => {
     const directWeight = sourceRecord({
       id: 'health-weight',
       provider: HEALTH_PROVIDERS.GarminAPI,
@@ -537,8 +537,26 @@ describe('Health workspace helpers', () => {
       metricIds: [HEALTH_METRIC_IDS.BodyWeight],
     }, { sourceRecordsComplete: true, samplesComplete: true });
     const workout = activityObservation();
+    const garminWorkout = activityObservation({
+      id: 'garmin-workout-weight',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+    });
 
-    expect(selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [workout])).toEqual([]);
+    expect(selectActivityHealthObservations(
+      HEALTH_METRIC_IDS.BodyWeight,
+      result,
+      [garminWorkout, workout],
+    )).toEqual([workout]);
+
+    const allSourcesView = buildHealthMetricWorkspaceView(
+      result,
+      [],
+      selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [garminWorkout, workout]),
+    );
+    expect(allSourcesView.series.map(series => series.provider)).toEqual([
+      HEALTH_PROVIDERS.COROSAPI,
+      HEALTH_PROVIDERS.GarminAPI,
+    ]);
 
     const corosOnly = filterHealthRangeResultByProviders(result, [HEALTH_PROVIDERS.COROSAPI]);
     const fallback = selectActivityHealthObservations(
@@ -588,7 +606,7 @@ describe('Health workspace helpers', () => {
     expect(selectActivityHealthObservations(
       HEALTH_METRIC_IDS.BodyWeight,
       result,
-      [activityObservation({ provider: HEALTH_PROVIDERS.QuantifiedSelf })],
+      [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
     )).toEqual([]);
   });
 

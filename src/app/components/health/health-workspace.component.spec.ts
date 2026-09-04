@@ -169,7 +169,10 @@ function rangeLoad(metricId: HealthMetricId, empty = false): HealthWorkspaceRang
 }
 
 function activityRangeResult(
-  options: { metricId?: typeof HEALTH_METRIC_IDS.BodyWeight | typeof HEALTH_METRIC_IDS.Vo2Max } = {},
+  options: {
+    metricId?: typeof HEALTH_METRIC_IDS.BodyWeight | typeof HEALTH_METRIC_IDS.Vo2Max;
+    provider?: HealthProvider;
+  } = {},
 ): ActivityHealthRangeResult {
   const metricId = options.metricId || HEALTH_METRIC_IDS.BodyWeight;
   const isWeight = metricId === HEALTH_METRIC_IDS.BodyWeight;
@@ -180,7 +183,7 @@ function activityRangeResult(
       observedAtMs: todayStartMs + 10_000,
       value: isWeight ? 72 : 51,
       unit: isWeight ? 'kg' : 'ml_per_kg_per_min',
-      provider: HEALTH_PROVIDERS.GarminAPI,
+      provider: options.provider || HEALTH_PROVIDERS.GarminAPI,
       sourceAccountKey: 'opaque-workout-account',
       sourceKind: isWeight
         ? ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutProfileContext
@@ -926,6 +929,65 @@ describe('HealthWorkspaceComponent', () => {
     expect(host.textContent).toContain('Not applicable');
     expect(host.textContent).not.toContain('opaque-workout-account');
     expect(host.querySelectorAll('.health-chart-panel')).toHaveLength(1);
+  });
+
+  it('restores every Weight source after switching from one provider back to all sources', async () => {
+    const garminWeight = sourceRecord(
+      HEALTH_METRIC_IDS.BodyWeight,
+      HEALTH_PROVIDERS.GarminAPI,
+      71,
+      'garmin-weight',
+    );
+    const garminOnlyLoad = (): HealthWorkspaceRangeLoad => {
+      const result = projectLoadedHealthRange([garminWeight], [], {
+        startDate: new Date(todayStartMs - (29 * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10),
+        endDate: todayDate,
+        metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+        includeSamples: false,
+      }, { sourceRecordsComplete: true, samplesComplete: true });
+      return {
+        result,
+        limitReached: null,
+        sourceRecordCount: 1,
+        sampleChunkCount: 0,
+        samplePointCount: 0,
+        serializedBytes: 500,
+        hasMatchingSourceRecords: true,
+        hasSampleBackedMetric: false,
+        providers: [HEALTH_PROVIDERS.GarminAPI],
+        sampleBackedProviders: [],
+      };
+    };
+    await createComponent(metricId => Promise.resolve(
+      metricId === HEALTH_METRIC_IDS.BodyWeight ? garminOnlyLoad() : rangeLoad(metricId),
+    ));
+    loadActivityHealthRange.mockResolvedValue(activityRangeResult({
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+    }));
+
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.metricView().series.map(series => series.provider)).toEqual([
+      HEALTH_PROVIDERS.GarminAPI,
+      HEALTH_PROVIDERS.SuuntoApp,
+    ]);
+
+    component.toggleProvider(HEALTH_PROVIDERS.SuuntoApp);
+    fixture.detectChanges();
+    expect(component.metricView().series.map(series => series.provider)).toEqual([
+      HEALTH_PROVIDERS.SuuntoApp,
+    ]);
+
+    component.showAllProviders();
+    fixture.detectChanges();
+    expect(component.metricView().series.map(series => series.provider)).toEqual([
+      HEALTH_PROVIDERS.GarminAPI,
+      HEALTH_PROVIDERS.SuuntoApp,
+    ]);
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-chart-panel')).toHaveLength(2);
   });
 
   it('keeps a later workout-metric response when an earlier request resolves late', async () => {

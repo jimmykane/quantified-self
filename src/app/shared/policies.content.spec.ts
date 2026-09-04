@@ -228,7 +228,8 @@ describe('workout context Health policy', () => {
 
     expect(content).toContain('Workout context in Health');
     expect(content).toContain('profile context rather than a weigh-in');
-    expect(content).toContain('hidden when a real Health Weight measurement exists');
+    expect(content).toContain('hidden for a source when that source has a real Health Weight measurement');
+    expect(content).toContain('a manual Weight measurement hides workout fallback across the view');
     expect(content).toContain('separate by provider, local account label, and discipline');
     expect(content).toContain('do not copy workout values into Health storage');
     expect(content).toContain('excludes workout identifiers, names, locations, provider account IDs, and raw creator details');
