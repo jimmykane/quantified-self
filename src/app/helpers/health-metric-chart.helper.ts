@@ -10,7 +10,13 @@ import {
 } from './echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS, HealthMetricId } from '@shared/health';
+import {
+  HEALTH_METRIC_IDS,
+  HEALTH_PROVIDERS,
+  HEALTH_UNITS,
+  HealthMetricId,
+  getHealthMetricDefinition,
+} from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
 import {
   HealthWorkspaceSeries,
@@ -350,7 +356,13 @@ function buildSeriesModel(
   const numericValues = displayedPoints
     .map(point => typeof point.value === 'number' && Number.isFinite(point.value) ? point.value : null)
     .filter((value): value is number => value !== null);
-  const numericBounds = series.chartKind === 'step' ? null : resolveYBounds(numericValues, series.chartKind);
+  const numericBounds = series.chartKind === 'step'
+    ? null
+    : resolveYBounds(
+      numericValues,
+      series.chartKind,
+      getHealthMetricDefinition(series.metricId).canonicalUnit === HEALTH_UNITS.Percent ? 100 : null,
+    );
   const latest = sortedPoints.at(-1);
   const latestText = latest
     ? formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings)
@@ -440,9 +452,10 @@ function downsamplePoints(
 function resolveYBounds(
   values: readonly number[],
   chartKind: HealthWorkspaceSeries['chartKind'],
+  maximum: number | null = null,
 ): { min: number; max: number } {
   if (!values.length) {
-    return { min: 0, max: 1 };
+    return { min: 0, max: maximum ?? 1 };
   }
   let min = Math.min(...values);
   let max = Math.max(...values);
@@ -460,6 +473,9 @@ function resolveYBounds(
     const padding = (max - min) * 0.08;
     min -= padding;
     max += padding;
+  }
+  if (maximum !== null) {
+    max = maximum;
   }
   return { min, max };
 }

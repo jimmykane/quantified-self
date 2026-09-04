@@ -161,6 +161,43 @@ describe('Health metric chart helpers', () => {
     expect(model.data).toEqual([[0, -10], [DAY_MS, 15]]);
   });
 
+  it('caps percentage Health charts at a Sports Lib-formatted 100%', () => {
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.BloodOxygenSaturation,
+      unit: 'percent',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 96, qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 99, qualityCode: null },
+      ],
+    })], 0, DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as {
+      yAxis: {
+        max: number;
+        axisLabel: { formatter: (value: number) => string };
+      };
+    };
+
+    expect(model.numericBounds?.min).toBeLessThan(96);
+    expect(model.numericBounds?.max).toBe(100);
+    expect(model.yMaxLabel).toBe('100%');
+    expect(option.yAxis.max).toBe(100);
+    expect(option.yAxis.axisLabel.formatter(100)).toBe('100%');
+
+    const emptyModel = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.BodyFat,
+      unit: 'percent',
+      points: [],
+    })], 0, DAY_MS)[0];
+    expect(emptyModel.numericBounds).toEqual({ min: 0, max: 100 });
+    expect(emptyModel.yMaxLabel).toBe('100%');
+  });
+
   it('creates an ECharts stepped categorical series without coercing categories to numbers', () => {
     const model = buildHealthChartModels([series({
       chartKind: 'step',
