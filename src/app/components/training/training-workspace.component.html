@@ -94,25 +94,15 @@
         <mat-label>All sports</mat-label>
         <mat-select
           #desktopAllSportsSelect
-          panelClass="training-all-sports-panel"
           [value]="desktopAllSportsSelectorValue"
-          (openedChange)="alignDesktopTrainingDestinationOptions($event, desktopAllSportsSelect)"
           (selectionChange)="selectDesktopTrainingDestination($event.value, desktopAllSportsSelect)">
           @for (option of trainingDestinationOptions; track option.id) {
             @if (option.id !== 'overview') {
-              <mat-option class="training-all-sports-option" [value]="option.id">
-                <span class="training-destination-option">
-                  @if (option.sport; as sport) {
-                    <app-activity-type-icon
-                      [activityType]="sport.iconActivityType"
-                      size="24px"
-                      aria-hidden="true">
-                    </app-activity-type-icon>
-                  } @else if (option.materialIcon) {
-                    <mat-icon aria-hidden="true">{{ option.materialIcon }}</mat-icon>
-                  }
-                  <span>{{ option.label }}</span>
-                </span>
+              <mat-option [value]="option.id">
+                @if (option.materialIcon) {
+                  <mat-icon aria-hidden="true" [style.color]="option.iconColor">{{ option.materialIcon }}</mat-icon>
+                }
+                <span>{{ option.label }}</span>
               </mat-option>
             }
           }

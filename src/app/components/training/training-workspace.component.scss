@@ -29,9 +29,6 @@
 .training-destination-scope { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 20px; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); }
 .training-destination-scope strong { color: var(--mat-sys-on-surface); }
 .training-destination-saving { display: inline-flex; align-items: center; gap: 7px; color: var(--mat-sys-primary); white-space: nowrap; }
-.training-destination-option { display: inline-flex; align-items: center; gap: 8px; }
-.training-destination-option mat-icon,
-.training-destination-option app-activity-type-icon { flex: 0 0 24px; width: 24px; height: 24px; font-size: 24px; line-height: 24px; }
 .training-mobile-shortcut-scroller { display: flex; align-items: center; min-width: 0; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; }
 .training-mobile-shortcut-scroller::-webkit-scrollbar { display: none; }
 .training-mobile-shortcuts { display: inline-flex; align-items: center; gap: 2px; width: max-content; min-height: 48px; }

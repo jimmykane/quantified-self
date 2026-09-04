@@ -23,10 +23,7 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import {
-  alignTrainingDestinationPanelScroll,
-  TrainingWorkspaceComponent,
-} from './training-workspace.component';
+import { TrainingWorkspaceComponent } from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
@@ -371,58 +368,17 @@ describe('TrainingWorkspaceComponent', () => {
     expect(template).toContain('matTooltip="All sports"');
   });
 
-  it('reserves a full Material icon slot for desktop all-sports options', () => {
-    const styles = readFileSync(
-      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
-      'utf8',
-    );
+  it('uses Material option icon projection for desktop all-sports options', () => {
     const template = readFileSync(
       resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
       'utf8',
     );
-    const desktopOptionMarkup = template.match(/<span class="training-destination-option">([\s\S]*?)<\/mat-option>/)?.[1];
 
-    expect(desktopOptionMarkup).toContain('size="24px"');
-    expect(styles).toMatch(
-      /\.training-destination-option app-activity-type-icon\s*\{[^}]*flex:\s*0 0 24px;[^}]*width:\s*24px;[^}]*height:\s*24px;/s,
-    );
-  });
-
-  it('keeps the desktop all-sports panel aligned to complete option rows', () => {
-    const template = readFileSync(
-      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
-      'utf8',
-    );
-    const globalStyles = readFileSync(resolve(process.cwd(), 'src/styles.scss'), 'utf8');
-
-    expect(template).toContain('panelClass="training-all-sports-panel"');
-    expect(template).toContain('(openedChange)="alignDesktopTrainingDestinationOptions($event, desktopAllSportsSelect)"');
-    expect(template).toContain('<mat-option class="training-all-sports-option"');
-    expect(globalStyles).toMatch(
-      /div\.training-all-sports-panel\[role='listbox'\]\s*\{[^}]*max-height:\s*240px;[^}]*padding-block:\s*0;[^}]*scroll-snap-type:\s*y mandatory;/s,
-    );
-    expect(globalStyles).toMatch(
-      /\.training-all-sports-panel \.training-all-sports-option\s*\{[^}]*scroll-snap-align:\s*start;[^}]*scroll-snap-stop:\s*always;/s,
-    );
-  });
-
-  it('moves a partially visible desktop sport option to the nearest complete row', () => {
-    const panel = document.createElement('div');
-    Object.defineProperties(panel, {
-      clientHeight: { configurable: true, value: 240 },
-      scrollHeight: { configurable: true, value: 480 },
-      scrollTop: { configurable: true, value: 70, writable: true },
-    });
-    for (const offsetTop of [0, 48, 96, 144, 192, 240, 288, 336, 384, 432]) {
-      const option = document.createElement('div');
-      option.className = 'training-all-sports-option';
-      Object.defineProperty(option, 'offsetTop', { configurable: true, value: offsetTop });
-      panel.append(option);
-    }
-
-    alignTrainingDestinationPanelScroll(panel);
-
-    expect(panel.scrollTop).toBe(48);
+    const desktopSelectMarkup = template.match(/<mat-select\s+[\s\S]*?<\/mat-select>/)?.[0] || '';
+    expect(desktopSelectMarkup).toMatch(/<mat-option \[value\]="option\.id">\s*@if \(option\.materialIcon\) \{\s*<mat-icon/s);
+    expect(desktopSelectMarkup).not.toContain('training-destination-option');
+    expect(desktopSelectMarkup).not.toContain('<app-activity-type-icon');
+    expect(template).not.toContain('alignDesktopTrainingDestinationOptions');
   });
 
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
@@ -1739,13 +1695,14 @@ describe('TrainingWorkspaceComponent', () => {
     component.sportShortcuts = ['cycling', 'swimming'];
     component.isAutomaticSportVisibility = true;
     component.trainingDestinationOptions = [
-      { id: 'overview', label: 'All training', details: 'All', sport: null, materialIcon: 'monitoring' },
+      { id: 'overview', label: 'All training', details: 'All', sport: null, materialIcon: 'monitoring', iconColor: null },
       {
         id: 'cycling',
         label: 'Cycling',
         details: 'Cycling',
         sport: { id: 'cycling', iconActivityType: 'Cycling' } as any,
-        materialIcon: null,
+        materialIcon: 'directions_bike',
+        iconColor: '#FF7C3B',
       },
     ];
 

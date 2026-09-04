@@ -21,6 +21,10 @@ import {
   resolveDashboardRampRateContextFromPoints,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import {
+  resolveActivityTypeIconColor,
+  resolveActivityTypeMaterialIcon,
+} from '../../helpers/activity-type-presentation.helper';
 import { resolveDashboardChartInfoTooltip } from '../../helpers/dashboard-chart-info.helper';
 import {
   DASHBOARD_FORM_CHART_TYPE,
@@ -190,6 +194,7 @@ interface TrainingDestinationOptionViewModel {
   details: string;
   sport: TrainingSportDefinition | null;
   materialIcon: string | null;
+  iconColor: string | null;
 }
 
 type TrainingDestinationSelectionSource = 'shortcut' | 'desktop_selector' | 'mobile_selector';
@@ -1205,13 +1210,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         details: 'Global readiness, load, sleep, intensity, and sport mix',
         sport: null,
         materialIcon: 'monitoring',
+        iconColor: null,
       },
       ...availableSports.map(sport => ({
         id: sport.id,
         label: sport.label,
         details: sport.details,
         sport,
-        materialIcon: null,
+        materialIcon: resolveActivityTypeMaterialIcon(sport.iconActivityType),
+        iconColor: resolveActivityTypeIconColor(sport.iconActivityType),
       })),
       ...(this.hasOtherPowerActivities || this.isOtherPowerDestination ? [{
         id: 'other-power' as const,
@@ -1219,6 +1226,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         details: 'Exact power activity types outside the Training sport registry',
         sport: null,
         materialIcon: 'bolt',
+        iconColor: null,
       }] : []),
     ];
     this.visibleSportShortcutOptions = this.visibleSportShortcuts
@@ -1299,22 +1307,6 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     // null and Angular has no changed input to write back, so clear it through
     // the component's public value API to avoid showing the destination twice.
     select.value = this.desktopAllSportsSelectorValue;
-  }
-
-  public alignDesktopTrainingDestinationOptions(opened: boolean, select: MatSelect): void {
-    if (!opened) {
-      return;
-    }
-
-    // MatSelect can restore a programmatic scroll offset between two option rows.
-    // Wait until its overlay positioning has settled, then align the viewport to
-    // the nearest option boundary so the first visible sport icon is never cut.
-    globalThis.setTimeout(() => {
-      if (!select.panelOpen) {
-        return;
-      }
-      alignTrainingDestinationPanelScroll(select.panel.nativeElement);
-    });
   }
 
   public refreshDurabilityChartsAfterTabAnimation(): void {
@@ -2884,23 +2876,6 @@ function resolveTrainingZoneSeconds(
   summary: DashboardTrainingDisciplineSummary['current28d'],
 ): number {
   return summary.easySeconds + summary.moderateSeconds + summary.hardSeconds;
-}
-
-export function alignTrainingDestinationPanelScroll(panel: HTMLElement): void {
-  const optionOffsets = Array.from(
-    panel.querySelectorAll<HTMLElement>('.training-all-sports-option'),
-    option => option.offsetTop,
-  );
-  if (!optionOffsets.length) {
-    return;
-  }
-
-  const currentScrollTop = panel.scrollTop;
-  const nearestOptionOffset = optionOffsets.reduce((nearest, offset) => (
-    Math.abs(offset - currentScrollTop) < Math.abs(nearest - currentScrollTop) ? offset : nearest
-  ));
-  const maxScrollTop = Math.max(0, panel.scrollHeight - panel.clientHeight);
-  panel.scrollTop = Math.min(maxScrollTop, Math.max(0, nearestOptionOffset));
 }
 
 function resolveTrainingZonePercentage(seconds: number, totalSeconds: number): number | null {
