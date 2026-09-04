@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS } from '../../../shared/health';
+import { HEALTH_METRIC_IDS } from '../../../shared/health';
 
 const hoisted = vi.hoisted(() => {
     const get = vi.fn();
@@ -47,29 +47,28 @@ describe('derived Health source queries', () => {
             '2026-02-28',
         );
 
-        expect(hoisted.where).toHaveBeenNthCalledWith(1, 'calendarDate', '>=', '2026-01-01');
-        expect(hoisted.where).toHaveBeenNthCalledWith(2, 'calendarDate', '<=', '2026-02-28');
-        expect(hoisted.where).toHaveBeenNthCalledWith(3, 'metricIds', 'array-contains', HEALTH_METRIC_IDS.BodyWeight);
+        expect(hoisted.where).toHaveBeenNthCalledWith(1, 'metricIds', 'array-contains', HEALTH_METRIC_IDS.BodyWeight);
+        expect(hoisted.where).toHaveBeenNthCalledWith(2, 'calendarDate', '>=', '2026-01-01');
+        expect(hoisted.where).toHaveBeenNthCalledWith(3, 'calendarDate', '<=', '2026-02-28');
         expect(hoisted.orderBy).toHaveBeenNthCalledWith(1, 'calendarDate', 'asc');
         expect(hoisted.orderBy).toHaveBeenNthCalledWith(2, '__name__', 'asc');
         expect(hoisted.limit).toHaveBeenCalledWith(2_049);
         expect(docs).toEqual([{ id: 'weight' }]);
     });
 
-    it('uses the existing provider/date index for bounded manual VO2 reads', async () => {
+    it('keeps VO2 reads metric-first so unrelated manual Weight cannot consume the cap', async () => {
         await fetchDerivedMetricsHealthDocs(
             'owner',
             HEALTH_METRIC_IDS.Vo2Max,
             '2000-01-01',
             '2026-02-28',
-            HEALTH_PROVIDERS.QuantifiedSelf,
         );
 
         expect(hoisted.where).toHaveBeenNthCalledWith(
-            3,
-            'source.provider',
-            '==',
-            HEALTH_PROVIDERS.QuantifiedSelf,
+            1,
+            'metricIds',
+            'array-contains',
+            HEALTH_METRIC_IDS.Vo2Max,
         );
     });
 

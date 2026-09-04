@@ -30,6 +30,8 @@ import {
   type ActivityHealthMetricId,
 } from '@shared/activity-health';
 import {
+  MANUAL_HEALTH_AGGREGATION,
+  MANUAL_HEALTH_SOURCE_RECORD_TYPE,
   MANUAL_VO2_CONTEXTS,
   MANUAL_VO2_METHODS,
   type ManualHealthMetricId,
@@ -1086,7 +1088,9 @@ function manualObservationEdit(
 ): ManualHealthObservationEdit | null {
   const entry = observation.entry;
   if (observation.provider !== HEALTH_PROVIDERS.QuantifiedSelf
+    || observation.sourceRecordType !== MANUAL_HEALTH_SOURCE_RECORD_TYPE
     || entry.kind !== 'value'
+    || entry.aggregation !== MANUAL_HEALTH_AGGREGATION
     || entry.origin !== HEALTH_VALUE_ORIGINS.Recorded
     || entry.recordingMethod !== HEALTH_RECORDING_METHODS.Manual
     || (entry.metricId !== HEALTH_METRIC_IDS.BodyWeight && entry.metricId !== HEALTH_METRIC_IDS.Vo2Max)

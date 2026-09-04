@@ -64,6 +64,7 @@ import {
     type HealthMetricId,
 } from '../../../shared/health';
 import { encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
+import { MANUAL_HEALTH_SOURCE_RECORD_TYPE } from '../../../shared/manual-health';
 
 function healthMeasurementDoc(options: {
     id: string;
@@ -84,6 +85,7 @@ function healthMeasurementDoc(options: {
             source: {
                 provider: options.provider || HEALTH_PROVIDERS.QuantifiedSelf,
                 accountKey: options.accountKey || 'opaque-account',
+                sourceRecordType: MANUAL_HEALTH_SOURCE_RECORD_TYPE,
             },
             endTimeMs: options.observedAtMs,
             metrics: [encodeHealthMetricSportsLibData({
@@ -2078,6 +2080,14 @@ describe('buildTrainingCapacityMetricPayload', () => {
             metricId: HEALTH_METRIC_IDS.Vo2Max,
             value: 57,
             observedAtMs: manualAtMs,
+            semanticVariant: 'manual_running_lab_test',
+            qualifiers: { context: 'running', method: 'lab_test' },
+        }), healthMeasurementDoc({
+            id: 'provider-running-lab-lookalike',
+            metricId: HEALTH_METRIC_IDS.Vo2Max,
+            value: 63,
+            observedAtMs: manualAtMs + 1_000,
+            provider: HEALTH_PROVIDERS.GarminAPI,
             semanticVariant: 'manual_running_lab_test',
             qualifiers: { context: 'running', method: 'lab_test' },
         })];

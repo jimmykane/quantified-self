@@ -74,6 +74,10 @@ function plainObject(value: unknown, field: string): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new ManualHealthValidationError(`${field} must be an object.`);
     }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+        throw new ManualHealthValidationError(`${field} must be a plain object.`);
+    }
     return value as Record<string, unknown>;
 }
 
@@ -83,7 +87,8 @@ function assertExactKeys(
     optional: readonly string[] = [],
 ): void {
     const permitted = new Set([...required, ...optional]);
-    if (required.some(key => !(key in value)) || Object.keys(value).some(key => !permitted.has(key))) {
+    if (required.some(key => !Object.prototype.hasOwnProperty.call(value, key))
+        || Object.keys(value).some(key => !permitted.has(key))) {
         throw new ManualHealthValidationError('Manual Health measurement has unknown or missing fields.');
     }
 }

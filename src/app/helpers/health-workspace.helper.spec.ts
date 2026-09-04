@@ -585,6 +585,7 @@ describe('Health workspace helpers', () => {
         canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
       })],
     });
+    manualWeight.source.sourceRecordType = 'manual_measurement';
     const result = projectLoadedHealthRange([manualWeight], [], {
       startDate: '2026-08-01',
       endDate: '2026-08-03',
@@ -618,6 +619,7 @@ describe('Health workspace helpers', () => {
       })],
     });
     manualWeight.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    manualWeight.source.sourceRecordType = 'manual_measurement';
     manualWeight.timezoneOffsetSeconds = 10_800;
     manualWeight.source.revision.order = 4;
     const result = projectLoadedHealthRange([manualWeight], [], {
@@ -636,6 +638,14 @@ describe('Health workspace helpers', () => {
         timezoneOffsetSeconds: 10_800,
       },
     });
+
+    manualWeight.source.sourceRecordType = 'daily';
+    const nonManualResult = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    expect(buildHealthMetricWorkspaceView(nonManualResult).rows[0]?.manualMeasurement).toBeNull();
   });
 
   it('keeps workout VO2 separate from provider Health and manual series by discipline and origin', () => {
@@ -663,6 +673,7 @@ describe('Health workspace helpers', () => {
         canonical: { value: 50, unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute },
       })],
     });
+    manualVo2.source.sourceRecordType = 'manual_measurement';
     const result = projectLoadedHealthRange([providerVo2, manualVo2], [], {
       startDate: '2026-08-01',
       endDate: '2026-08-03',

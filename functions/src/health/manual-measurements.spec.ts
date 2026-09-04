@@ -125,6 +125,10 @@ describe('manual Health measurement mutations', () => {
             ...createWeightRequest(),
             vo2Context: 'running',
         }, OBSERVED_AT_MS + 1_000)).toThrow(ManualHealthValidationError);
+        expect(() => validateSaveManualHealthMeasurementRequest(
+            Object.assign(Object.create({ mode: 'create' }), createWeightRequest()),
+            OBSERVED_AT_MS + 1_000,
+        )).toThrow(ManualHealthValidationError);
         expect(() => validateSaveManualHealthMeasurementRequest({
             mode: 'update',
             sourceRecordId: 'a'.repeat(64),

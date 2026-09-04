@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
-import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS } from '../../../shared/health';
+import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import {
     abandonDerivedMetricsProcessingAfterWriteBlock,
     areOnlyProjectionSensitiveMetricKinds,
@@ -176,7 +176,6 @@ export const processDerivedMetricsTask = onTaskDispatched({
                     HEALTH_METRIC_IDS.Vo2Max,
                     '2000-01-01',
                     healthEndDate,
-                    HEALTH_PROVIDERS.QuantifiedSelf,
                 )
                 : Promise.resolve([]),
         ]);

@@ -219,7 +219,6 @@ describe('processDerivedMetricsTask', () => {
             'vo2_max',
             '2000-01-01',
             expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-            'QuantifiedSelf',
         );
         expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith(
             'user-health',

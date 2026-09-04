@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MatTooltip } from '@angular/material/tooltip';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -33,10 +34,11 @@ import {
 } from '@shared/activity-health';
 import { SLEEP_PROVIDERS, SleepProvider, SleepSession, SleepSyncState } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppEventService } from '../../services/app.event.service';
 import { AppHealthService, HealthWorkspaceRangeLoad } from '../../services/app.health.service';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -163,6 +165,7 @@ function manualSourceRecord(
     timezoneOffsetSeconds: 7_200,
     source: {
       ...record.source,
+      sourceRecordType: 'manual_measurement',
       revision: { ...record.source.revision, order: 4 },
     },
     metrics: [{
@@ -413,6 +416,10 @@ describe('HealthWorkspaceComponent', () => {
             deleteManualMeasurement,
             watchSyncStates: () => syncStates.asObservable(),
           },
+        },
+        {
+          provide: BrowserCompatibilityService,
+          useValue: { createRandomUUID: () => '123e4567-e89b-42d3-a456-426614174000' },
         },
         {
           provide: HealthActivityQueryService,
@@ -1148,6 +1155,67 @@ describe('HealthWorkspaceComponent', () => {
       timezoneOffsetSeconds: 7_200,
     });
     expect(loadMetricRange.mock.calls.length).toBeGreaterThan(callsBeforeMutation);
+    expect(component.manualMutationBusy()).toBe(false);
+  });
+
+  it('reuses the same idempotency key when the user retries an ambiguous create failure', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    const retryAction = new Subject<void>();
+    const snackBar = TestBed.inject(MatSnackBar);
+    vi.spyOn(snackBar, 'open').mockReturnValue({
+      onAction: () => retryAction.asObservable(),
+    } as never);
+    saveManualMeasurement
+      .mockRejectedValueOnce(new Error('ambiguous response'))
+      .mockResolvedValueOnce({ sourceRecordId: 'opaque', revisionOrder: 1 });
+    const mutationId = '123e4567-e89b-42d3-a456-426614174000';
+    const value = {
+      canonicalValue: 72.4,
+      observedAtMs: todayStartMs + 10_000,
+      timezoneOffsetSeconds: 7_200,
+    };
+
+    await (component as unknown as {
+      createManualMeasurement: (
+        metricId: typeof HEALTH_METRIC_IDS.BodyWeight,
+        measurement: typeof value,
+        clientMutationId: string,
+      ) => Promise<void>;
+    }).createManualMeasurement(HEALTH_METRIC_IDS.BodyWeight, value, mutationId);
+    retryAction.next();
+
+    await vi.waitFor(() => expect(saveManualMeasurement).toHaveBeenCalledTimes(2));
+    expect(saveManualMeasurement.mock.calls.map(([request]) => request.clientMutationId))
+      .toEqual([mutationId, mutationId]);
+  });
+
+  it('does not submit a manual measurement when the browser cannot create a secure UUID', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    vi.spyOn(TestBed.inject(BrowserCompatibilityService), 'createRandomUUID').mockReturnValue(null);
+    const snackBar = TestBed.inject(MatSnackBar);
+    const notice = vi.spyOn(snackBar, 'open');
+
+    await (component as unknown as {
+      createManualMeasurement: (
+        metricId: typeof HEALTH_METRIC_IDS.BodyWeight,
+        measurement: {
+          canonicalValue: number;
+          observedAtMs: number;
+          timezoneOffsetSeconds: number;
+        },
+      ) => Promise<void>;
+    }).createManualMeasurement(HEALTH_METRIC_IDS.BodyWeight, {
+      canonicalValue: 72.4,
+      observedAtMs: todayStartMs + 10_000,
+      timezoneOffsetSeconds: 7_200,
+    });
+
+    expect(saveManualMeasurement).not.toHaveBeenCalled();
+    expect(notice).toHaveBeenCalledWith(
+      'This browser cannot create a secure measurement ID.',
+      'Dismiss',
+      { duration: 5000 },
+    );
     expect(component.manualMutationBusy()).toBe(false);
   });
 

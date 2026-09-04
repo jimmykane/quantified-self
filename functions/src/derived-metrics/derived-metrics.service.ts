@@ -178,8 +178,10 @@ import {
 } from '../../../shared/health';
 import {
     MANUAL_HEALTH_AGGREGATION,
+    MANUAL_HEALTH_SOURCE_RECORD_TYPE,
     MANUAL_VO2_CONTEXTS,
     MANUAL_VO2_METHODS,
+    manualVo2SemanticVariant,
 } from '../../../shared/manual-health';
 import {
     createTrainingSportRecord,
@@ -1710,6 +1712,7 @@ function buildManualTrainingCapacityVo2References(
         const record = (doc.data() || {}) as Partial<HealthSourceRecord>;
         if (record.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
             || record.source?.provider !== HEALTH_PROVIDERS.QuantifiedSelf
+            || record.source.sourceRecordType !== MANUAL_HEALTH_SOURCE_RECORD_TYPE
             || !Array.isArray(record.metrics)) {
             return;
         }
@@ -1738,7 +1741,8 @@ function buildManualTrainingCapacityVo2References(
             if ((context !== 'running' && context !== 'cycling')
                 || !MANUAL_VO2_CONTEXTS.includes(context)
                 || (method !== 'lab_test' && method !== 'field_test')
-                || !MANUAL_VO2_METHODS.includes(method)) {
+                || !MANUAL_VO2_METHODS.includes(method)
+                || entry.semanticVariant !== manualVo2SemanticVariant(context, method)) {
                 return;
             }
             candidates[context].push({
@@ -5498,17 +5502,14 @@ export async function fetchDerivedMetricsHealthDocs(
     metricId: HealthMetricId,
     startDate: string,
     endDate: string,
-    provider?: HealthProvider,
 ): Promise<FirestoreQueryDocumentSnapshot[]> {
-    let query = admin.firestore()
+    const query = admin.firestore()
         .collection('users')
         .doc(uid)
         .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
+        .where('metricIds', 'array-contains', metricId)
         .where('calendarDate', '>=', startDate)
         .where('calendarDate', '<=', endDate);
-    query = provider
-        ? query.where('source.provider', '==', provider)
-        : query.where('metricIds', 'array-contains', metricId);
     const snapshot = await query
         .orderBy('calendarDate', 'asc')
         .orderBy(admin.firestore.FieldPath.documentId(), 'asc')

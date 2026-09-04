@@ -33,7 +33,7 @@
         <p class="health-eyebrow">Metric explorer</p>
         <h2 id="health-explorer-title">Your Health metrics</h2>
       </div>
-      <p>Choose a metric found in your imported history.</p>
+      <p>Choose an imported metric, or add Weight and VO₂ max yourself.</p>
     </div>
 
     @if (metricAvailabilityNotice()) {
@@ -317,7 +317,13 @@
             <mat-icon aria-hidden="true">monitor_heart</mat-icon>
             <div>
               <strong>No {{ detailTitle() }} data in this window</strong>
-              <span>Choose another date range or a metric with imported readings.</span>
+              <span>
+                @if (selectedManualMetric()) {
+                  Add a measurement, choose another date range, or select another metric.
+                } @else {
+                  Choose another date range or a metric with imported readings.
+                }
+              </span>
             </div>
           </div>
         } @else if (selectedIsSleep()) {

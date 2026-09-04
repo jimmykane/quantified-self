@@ -38,12 +38,13 @@ import {
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
 import type { ManualHealthMetricId } from '@shared/manual-health';
 import { combineLatest, of, Subscription } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import {
   AppHealthService,
   HealthWorkspaceRangeLoad,
 } from '../../services/app.health.service';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -186,6 +187,7 @@ export class HealthWorkspaceComponent {
   private readonly themeService = inject(AppThemeService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly browserCompatibilityService = inject(BrowserCompatibilityService);
   private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
   readonly unitSettings = this.userSettingsService.unitSettings;
   private readonly todayDate = localCalendarDate();
@@ -1092,20 +1094,39 @@ export class HealthWorkspaceComponent {
   private async createManualMeasurement(
     metricId: ManualHealthMetricId,
     value: ManualHealthMeasurementDialogResult,
+    clientMutationId?: string,
+    requestedForUserID = this.signedInUserID(),
   ): Promise<void> {
+    if (!requestedForUserID || requestedForUserID !== this.signedInUserID()) return;
+    const resolvedMutationId = clientMutationId ?? this.browserCompatibilityService.createRandomUUID();
+    if (!resolvedMutationId) {
+      this.snackBar.open('This browser cannot create a secure measurement ID.', 'Dismiss', { duration: 5000 });
+      return;
+    }
     this.manualMutationBusy.set(true);
     try {
       await this.healthService.saveManualMeasurement({
         mode: 'create',
-        clientMutationId: crypto.randomUUID(),
+        clientMutationId: resolvedMutationId,
         metricId,
         ...value,
       });
+      if (requestedForUserID !== this.signedInUserID()) return;
       this.selectedProviders.set([]);
       this.markManualMetricAvailable(metricId);
       this.snackBar.open('Measurement added', undefined, { duration: 2500 });
     } catch {
-      this.snackBar.open('Measurement could not be added. Try again.', 'Dismiss', { duration: 5000 });
+      if (requestedForUserID !== this.signedInUserID()) return;
+      const retryNotice = this.snackBar.open(
+        'Measurement could not be added.',
+        'Retry',
+        { duration: 7000 },
+      );
+      retryNotice.onAction().pipe(take(1)).subscribe(() => {
+        if (requestedForUserID === this.signedInUserID() && !this.manualMutationBusy()) {
+          void this.createManualMeasurement(metricId, value, resolvedMutationId, requestedForUserID);
+        }
+      });
     } finally {
       this.manualMutationBusy.set(false);
     }
