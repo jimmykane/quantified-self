@@ -56,6 +56,13 @@
   padding: 12px 16px 4px;
 }
 
+.lap-column-availability-summary {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-medium);
+  margin: 0;
+  padding: 4px 16px 0;
+}
+
 .lap-column-search-field {
   box-sizing: border-box;
   display: block;
@@ -77,12 +84,6 @@
   font: var(--mat-sys-label-medium);
   gap: 8px;
   padding: 8px 16px 0;
-}
-
-.lap-column-option {
-  align-items: center;
-  display: inline-flex;
-  gap: 8px;
 }
 
 .lap-tab-label {

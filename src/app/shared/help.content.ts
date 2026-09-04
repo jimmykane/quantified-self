@@ -375,6 +375,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Running and trail-running laps use pace, cycling laps use speed, and swimming laps use swim pace. These values, along with other convertible metrics, follow your unit preferences in **Settings -> Units**.
 - Each lap table includes a persistent **Avg** row directly below its headers, with averageable lap metrics in their matching columns and using those same units. Accumulated totals, such as duration, distance, elevation, energy, and work, are not averaged.
 - Use the checkboxes beside lap rows to compare a temporary selection. A sticky **Selected avg · N** footer appears while rows are selected and averages the selected values in the visible columns. It includes how many selected laps contributed to each value, uses distance-weighted pace and duration-weighted speed where appropriate, and disappears when the selection is cleared.
+- A saved lap column stays selected even when the current laps do not contain that metric. The column chooser marks it as unavailable and hidden from the table, or shows when it is available in only some of the current lap tables.
 - Satellite diagnostics and EHPE/EVPE position-error metrics are intentionally left out of the column picker. Related Average, Minimum, and Maximum values are grouped under their shared metric name.
 - The menu includes the Event Summary metric families, but a column appears only when a current lap has a valid value. Missing values stay unavailable rather than becoming zero.
 

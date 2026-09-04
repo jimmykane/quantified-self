@@ -556,6 +556,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('checkboxes beside lap rows');
     expect(gettingStartedSection?.content).toContain('**Selected avg · N** footer');
     expect(gettingStartedSection?.content).toContain('distance-weighted pace and duration-weighted speed');
+    expect(gettingStartedSection?.content).toContain('A saved lap column stays selected even when the current laps do not contain that metric');
+    expect(gettingStartedSection?.content).toContain('available in only some of the current lap tables');
     expect(gettingStartedSection?.content).toContain('Satellite diagnostics and EHPE/EVPE position-error metrics');
     expect(gettingStartedSection?.content).toContain('Missing values stay unavailable rather than becoming zero');
   });
