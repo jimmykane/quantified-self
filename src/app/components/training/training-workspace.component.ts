@@ -1301,6 +1301,22 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
     select.value = this.desktopAllSportsSelectorValue;
   }
 
+  public alignDesktopTrainingDestinationOptions(opened: boolean, select: MatSelect): void {
+    if (!opened) {
+      return;
+    }
+
+    // MatSelect can restore a programmatic scroll offset between two option rows.
+    // Wait until its overlay positioning has settled, then align the viewport to
+    // the nearest option boundary so the first visible sport icon is never cut.
+    globalThis.setTimeout(() => {
+      if (!select.panelOpen) {
+        return;
+      }
+      alignTrainingDestinationPanelScroll(select.panel.nativeElement);
+    });
+  }
+
   public refreshDurabilityChartsAfterTabAnimation(): void {
     this.durabilityTrajectoryCharts?.forEach(chart => chart.refreshAfterTabAnimation());
   }
@@ -2868,6 +2884,23 @@ function resolveTrainingZoneSeconds(
   summary: DashboardTrainingDisciplineSummary['current28d'],
 ): number {
   return summary.easySeconds + summary.moderateSeconds + summary.hardSeconds;
+}
+
+export function alignTrainingDestinationPanelScroll(panel: HTMLElement): void {
+  const optionOffsets = Array.from(
+    panel.querySelectorAll<HTMLElement>('.training-all-sports-option'),
+    option => option.offsetTop,
+  );
+  if (!optionOffsets.length) {
+    return;
+  }
+
+  const currentScrollTop = panel.scrollTop;
+  const nearestOptionOffset = optionOffsets.reduce((nearest, offset) => (
+    Math.abs(offset - currentScrollTop) < Math.abs(nearest - currentScrollTop) ? offset : nearest
+  ));
+  const maxScrollTop = Math.max(0, panel.scrollHeight - panel.clientHeight);
+  panel.scrollTop = Math.min(maxScrollTop, Math.max(0, nearestOptionOffset));
 }
 
 function resolveTrainingZonePercentage(seconds: number, totalSeconds: number): number | null {

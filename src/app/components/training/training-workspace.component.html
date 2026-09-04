@@ -96,6 +96,7 @@
           #desktopAllSportsSelect
           panelClass="training-all-sports-panel"
           [value]="desktopAllSportsSelectorValue"
+          (openedChange)="alignDesktopTrainingDestinationOptions($event, desktopAllSportsSelect)"
           (selectionChange)="selectDesktopTrainingDestination($event.value, desktopAllSportsSelect)">
           @for (option of trainingDestinationOptions; track option.id) {
             @if (option.id !== 'overview') {

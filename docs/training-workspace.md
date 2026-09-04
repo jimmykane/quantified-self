@@ -630,7 +630,9 @@ with the complete **All sports** selector and shortcut editor grouped at the opp
 with its final choice rather than stretch across unused row space. The selector reserves a full 24 px Material icon
 slot for every option; compact shortcut icons keep their smaller navigation size. Its public Material `panelClass` is a
 documented overlay exception: the panel removes the default vertical padding, shows exactly five complete 48 px option
-rows, and snaps scrolling to row starts because Material's default 275 px maximum cuts through an option. Selecting a
+rows, snaps pointer scrolling to row starts, and realigns Material's restored opening offset to the nearest row boundary
+so the first visible sport icon is not clipped. Material's default 275 px maximum and arbitrary restored offsets can both
+cut through an option. Selecting a
 sport outside the four saved slots temporarily places it in the visible toggle group without mutating the saved shortcut
 set. At intermediate desktop/tablet
 widths the compact shortcut group occupies its own row. At 800 px and below, a horizontally swipeable rail of compact

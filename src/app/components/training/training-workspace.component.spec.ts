@@ -23,7 +23,10 @@ import {
   TRAINING_WORKSPACE_DERIVED_METRIC_KINDS,
   type DashboardDerivedMetricsState,
 } from '../../services/dashboard-derived-metrics.service';
-import { TrainingWorkspaceComponent } from './training-workspace.component';
+import {
+  alignTrainingDestinationPanelScroll,
+  TrainingWorkspaceComponent,
+} from './training-workspace.component';
 import { TrainingMetricTextComponent } from './training-metric-text.component';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
@@ -393,6 +396,7 @@ describe('TrainingWorkspaceComponent', () => {
     const globalStyles = readFileSync(resolve(process.cwd(), 'src/styles.scss'), 'utf8');
 
     expect(template).toContain('panelClass="training-all-sports-panel"');
+    expect(template).toContain('(openedChange)="alignDesktopTrainingDestinationOptions($event, desktopAllSportsSelect)"');
     expect(template).toContain('<mat-option class="training-all-sports-option"');
     expect(globalStyles).toMatch(
       /div\.training-all-sports-panel\[role='listbox'\]\s*\{[^}]*max-height:\s*240px;[^}]*padding-block:\s*0;[^}]*scroll-snap-type:\s*y mandatory;/s,
@@ -400,6 +404,25 @@ describe('TrainingWorkspaceComponent', () => {
     expect(globalStyles).toMatch(
       /\.training-all-sports-panel \.training-all-sports-option\s*\{[^}]*scroll-snap-align:\s*start;[^}]*scroll-snap-stop:\s*always;/s,
     );
+  });
+
+  it('moves a partially visible desktop sport option to the nearest complete row', () => {
+    const panel = document.createElement('div');
+    Object.defineProperties(panel, {
+      clientHeight: { configurable: true, value: 240 },
+      scrollHeight: { configurable: true, value: 480 },
+      scrollTop: { configurable: true, value: 70, writable: true },
+    });
+    for (const offsetTop of [0, 48, 96, 144, 192, 240, 288, 336, 384, 432]) {
+      const option = document.createElement('div');
+      option.className = 'training-all-sports-option';
+      Object.defineProperty(option, 'offsetTop', { configurable: true, value: offsetTop });
+      panel.append(option);
+    }
+
+    alignTrainingDestinationPanelScroll(panel);
+
+    expect(panel.scrollTop).toBe(48);
   });
 
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
