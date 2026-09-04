@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -175,6 +175,7 @@ export class HealthWorkspaceComponent {
   private readonly todayDate = localCalendarDate();
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
+  private priorityHealthUserID: string | null = null;
   private metricAvailabilityGeneration = 0;
   private latestSyncStates = new Map<HealthProvider, HealthSyncState>();
   private hasSeenSyncStateSnapshot = false;
@@ -656,7 +657,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       const window = this.selectedWindow();
       let subscription: Subscription | null = null;
       this.selectedSleepSessions.set([]);
@@ -674,7 +675,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(() => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       const window = this.selectedWindow();
       const metric = this.routeState().metric;
       this.refreshRevision();
@@ -725,7 +726,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       let subscription: Subscription | null = null;
       this.prioritySleepSessions.set([]);
       this.prioritySleepStatus.set('loading');
@@ -744,13 +745,23 @@ export class HealthWorkspaceComponent {
     });
 
     effect(() => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       this.refreshRevision();
       const generation = ++this.priorityLoadGeneration;
-      this.priorityHeartRateLoad.set(null);
-      this.priorityHrvLoad.set(null);
-      this.priorityHeartRateStatus.set('loading');
-      this.priorityHrvStatus.set('loading');
+      const userChanged = uid !== this.priorityHealthUserID;
+      const currentHeartRateLoad = untracked(this.priorityHeartRateLoad);
+      const currentHrvLoad = untracked(this.priorityHrvLoad);
+      this.priorityHealthUserID = uid;
+      if (userChanged) {
+        this.priorityHeartRateLoad.set(null);
+        this.priorityHrvLoad.set(null);
+      }
+      if (!currentHeartRateLoad || userChanged) {
+        this.priorityHeartRateStatus.set('loading');
+      }
+      if (!currentHrvLoad || userChanged) {
+        this.priorityHrvStatus.set('loading');
+      }
       if (!uid) {
         return;
       }
@@ -761,7 +772,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       let subscription: Subscription | null = null;
       this.syncStates.set([]);
       this.syncStatesStatus.set(uid ? 'loading' : 'ready');
@@ -941,9 +952,13 @@ export class HealthWorkspaceComponent {
         return;
       }
       if (metricId === HEALTH_METRIC_IDS.HeartRate) {
-        this.priorityHeartRateStatus.set(loadErrorStatus(error));
+        if (!this.priorityHeartRateLoad()) {
+          this.priorityHeartRateStatus.set(loadErrorStatus(error));
+        }
       } else {
-        this.priorityHrvStatus.set(loadErrorStatus(error));
+        if (!this.priorityHrvLoad()) {
+          this.priorityHrvStatus.set(loadErrorStatus(error));
+        }
       }
     }
   }

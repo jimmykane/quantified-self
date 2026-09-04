@@ -692,6 +692,32 @@ describe('HealthWorkspaceComponent', () => {
     });
   });
 
+  it('keeps loaded highlights mounted when same-user metric and range settings change', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    const priorityGrid = host.querySelector('.health-priority-grid');
+    const sleepSummary = host.querySelector('app-health-sleep-stage-summary');
+    const priorityCalls = (metricId: HealthMetricId) => loadMetricRange.mock.calls
+      .filter(([, request]) => request.metricId === metricId);
+    expect(priorityCalls(HEALTH_METRIC_IDS.HeartRate)).toHaveLength(1);
+    expect(priorityCalls(HEALTH_METRIC_IDS.HeartRateVariability)).toHaveLength(1);
+
+    loadMetricRange.mockImplementation(() => new Promise<HealthWorkspaceRangeLoad>(() => undefined));
+    hydrateSavedMetric(HEALTH_METRIC_IDS.Steps);
+    fixture.detectChanges();
+    await Promise.resolve();
+    hydrateSavedRange('90d');
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(host.querySelector('.health-priority-grid')).toBe(priorityGrid);
+    expect(host.querySelector('app-health-sleep-stage-summary')).toBe(sleepSummary);
+    expect(priorityGrid?.textContent).not.toContain('Loading sources…');
+    expect(priorityCalls(HEALTH_METRIC_IDS.HeartRate)).toHaveLength(1);
+    expect(priorityCalls(HEALTH_METRIC_IDS.HeartRateVariability)).toHaveLength(1);
+  });
+
   it('serializes rapid metric and range changes without losing either preference', async () => {
     await createComponent();
     let resolveFirstWrite: () => void;
@@ -934,6 +960,30 @@ describe('HealthWorkspaceComponent', () => {
 
     expect(loadMetricRange.mock.calls.length).toBeGreaterThanOrEqual(6);
     expect(loadAvailableMetricIds).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps rendered highlights mounted while a sync-driven refresh is pending', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    const priorityGrid = host.querySelector('.health-priority-grid');
+    const sleepSummary = host.querySelector('app-health-sleep-stage-summary');
+    const originalText = priorityGrid?.textContent;
+    loadMetricRange.mockImplementation(() => new Promise<HealthWorkspaceRangeLoad>(() => undefined));
+
+    syncStates.next([{
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      status: HEALTH_SYNC_STATUSES.Ready,
+      lastSyncedAtMs: todayStartMs + 1_000,
+      updatedAtMs: 2,
+    }]);
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(host.querySelector('.health-priority-grid')).toBe(priorityGrid);
+    expect(host.querySelector('app-health-sleep-stage-summary')).toBe(sleepSummary);
+    expect(priorityGrid?.textContent).toBe(originalText);
+    expect(priorityGrid?.textContent).not.toContain('Loading sources…');
   });
 
   it('shows the newest provider sync timestamp even when an older field is also present', async () => {
