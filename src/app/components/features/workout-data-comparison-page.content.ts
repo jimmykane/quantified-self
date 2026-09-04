@@ -2,6 +2,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { USAGE_LIMITS } from '@shared/limits';
 import { getProviderDisplayName } from '@shared/provider-presentation';
 import { WORKOUT_DATA_COMPARISON_PATH } from './workout-data-comparison-page.paths';
+import { SOCIAL_IMAGES, type SocialImageRouteData } from '../../shared/social-image-route-data';
 
 export { WORKOUT_DATA_COMPARISON_PATH } from './workout-data-comparison-page.paths';
 
@@ -21,7 +22,7 @@ export interface ComparisonFaqItem {
   answer: string;
 }
 
-export interface ComparisonRouteData {
+export interface ComparisonRouteData extends SocialImageRouteData {
   title: string;
   preload: boolean;
   animation: string;
@@ -131,6 +132,7 @@ export const WORKOUT_DATA_COMPARISON_ROUTE_DATA: ComparisonRouteData = {
   preload: true,
   animation: 'Features',
   description: 'Compare Garmin, Suunto, COROS, Wahoo, FIT, TCX, GPX, JSON, and SML workouts with synchronized charts, GNSS analysis, and reviewer-ready benchmarks.',
+  ...SOCIAL_IMAGES.workoutDataComparison,
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'WebPage',

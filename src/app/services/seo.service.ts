@@ -5,6 +5,10 @@ import { filter, map, mergeMap } from 'rxjs/operators';
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { environment } from '../../environments/environment';
+import {
+    DEFAULT_SOCIAL_IMAGE,
+    DEFAULT_SOCIAL_IMAGE_ALT,
+} from '../shared/social-image-route-data';
 
 const PRODUCTION_CANONICAL_ORIGIN = 'https://quantified-self.io';
 
@@ -71,6 +75,7 @@ export class SeoService implements OnDestroy {
         }
 
         this.updateRobotsTag(data['robots']);
+        this.updateSocialImageTags(data);
 
         // URL
         this.updateOgUrl();
@@ -83,6 +88,20 @@ export class SeoService implements OnDestroy {
         }
 
         this.metaService.removeTag("name='robots'");
+    }
+
+    private updateSocialImageTags(data: Record<string, unknown>) {
+        const socialImage = typeof data['socialImage'] === 'string' && data['socialImage'].trim()
+            ? data['socialImage']
+            : DEFAULT_SOCIAL_IMAGE;
+        const socialImageAlt = typeof data['socialImageAlt'] === 'string' && data['socialImageAlt'].trim()
+            ? data['socialImageAlt']
+            : DEFAULT_SOCIAL_IMAGE_ALT;
+
+        this.metaService.updateTag({ property: 'og:image', content: socialImage });
+        this.metaService.updateTag({ property: 'og:image:alt', content: socialImageAlt });
+        this.metaService.updateTag({ name: 'twitter:image', content: socialImage });
+        this.metaService.updateTag({ name: 'twitter:image:alt', content: socialImageAlt });
     }
 
     private updateOgUrl() {

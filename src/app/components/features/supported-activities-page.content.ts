@@ -5,6 +5,7 @@ import { AppActivityTypeGroupColors } from '../../services/color/app.activity-ty
 import { AppActivityTypeGroupGradients } from '../../services/color/app.activity-type-group.gradients';
 import { AppActivityTypeGroupIcons } from '../../services/color/app.activity-type-group.icons';
 import { SUPPORTED_ACTIVITIES_PATH } from './supported-activities-page.paths';
+import type { SocialImageRouteData } from '../../shared/social-image-route-data';
 
 export { SUPPORTED_ACTIVITIES_PATH } from './supported-activities-page.paths';
 
@@ -24,7 +25,7 @@ export interface SupportedActivityContentItem {
   copy: string;
 }
 
-export interface SupportedActivitiesRouteData {
+export interface SupportedActivitiesRouteData extends SocialImageRouteData {
   title: string;
   preload: boolean;
   animation: string;
