@@ -254,15 +254,14 @@ describe('Health workspace helpers', () => {
     expect(resolveHealthWorkspaceWindow({ ...state, range: '90d' }, '2026-08-30').includeSamples).toBe(false);
   });
 
-  it('loads Today as one sample-enabled day and pages it one day at a time', () => {
+  it('labels one-day history by its inspected date and pages it one day at a time', () => {
     const state = { metric: HEALTH_METRIC_IDS.HeartRate, range: 'today' as const, endDate: '2026-08-30' };
-    const explicitTodayLabel = new Intl.DateTimeFormat(undefined, {
-      weekday: 'long',
+    const relativeDateFormatter = new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
       timeZone: 'UTC',
-    }).format(new Date('2026-08-30T00:00:00.000Z'));
+    });
+    const explicitTodayLabel = relativeDateFormatter.format(new Date('2026-08-30T00:00:00.000Z'));
 
     expect(resolveHealthWorkspaceWindow(state, '2026-08-30')).toMatchObject({
       startDate: '2026-08-30',
@@ -275,15 +274,21 @@ describe('Health workspace helpers', () => {
       label: `Today · ${explicitTodayLabel}`,
     });
     const older = navigateHealthWorkspaceWindow(state, 'older', '2026-08-30');
+    const explicitYesterdayLabel = relativeDateFormatter.format(new Date('2026-08-29T00:00:00.000Z'));
+    expect(older.endDate).toBe('2026-08-29');
+    expect(resolveHealthWorkspaceWindow(older, '2026-08-30')).toMatchObject({
+      canNavigateNewer: true,
+      label: `Yesterday · ${explicitYesterdayLabel}`,
+    });
+    const olderAgain = navigateHealthWorkspaceWindow(older, 'older', '2026-08-30');
     const explicitOlderLabel = new Intl.DateTimeFormat(undefined, {
       weekday: 'long',
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       timeZone: 'UTC',
-    }).format(new Date('2026-08-29T00:00:00.000Z'));
-    expect(older.endDate).toBe('2026-08-29');
-    expect(resolveHealthWorkspaceWindow(older, '2026-08-30').label).toBe(explicitOlderLabel);
+    }).format(new Date('2026-08-28T00:00:00.000Z'));
+    expect(resolveHealthWorkspaceWindow(olderAgain, '2026-08-30').label).toBe(explicitOlderLabel);
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
   });
 

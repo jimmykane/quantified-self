@@ -87,12 +87,13 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
-    expect(healthSection?.content).toContain('**Today**, **14d**, **30d**, **90d**, or **1y**');
+    expect(healthSection?.content).toContain('**1d**, **14d**, **30d**, **90d**, or **1y**');
+    expect(healthSection?.content).toContain('identifies **Today**, **Yesterday**, or the inspected date');
     expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
-    expect(healthSection?.content).toContain('Detailed sample streams load for Today, 14-day, and 30-day windows');
+    expect(healthSection?.content).toContain('Detailed sample streams load for 1d, 14-day, and 30-day windows');
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');

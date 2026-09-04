@@ -116,7 +116,7 @@ interface QueuedHealthWorkspacePreferenceWrite {
 }
 
 const RANGE_LABELS: Record<HealthWorkspaceRange, string> = {
-  today: 'Today',
+  today: '1 day',
   '14d': '14 days',
   '30d': '30 days',
   '90d': '90 days',
@@ -184,7 +184,7 @@ export class HealthWorkspaceComponent {
   readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({
     range,
     label: RANGE_LABELS[range],
-    buttonLabel: range === 'today' ? RANGE_LABELS[range] : range,
+    buttonLabel: range === 'today' ? '1d' : range,
   }));
   readonly healthMetricIcon = healthMetricIcon;
   private readonly completeMetricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
@@ -793,6 +793,13 @@ export class HealthWorkspaceComponent {
     this.selectedEndDate.set(
       navigateHealthWorkspaceWindow(this.routeState(), direction, this.todayDate).endDate,
     );
+  }
+
+  jumpToToday(): void {
+    if (!this.selectedWindow().canNavigateNewer) {
+      return;
+    }
+    this.selectedEndDate.set(this.todayDate);
   }
 
   retryPreferenceSave(): void {

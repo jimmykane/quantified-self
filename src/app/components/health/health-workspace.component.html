@@ -119,7 +119,7 @@
               aria-label="Health range"
               (change)="selectRange($event.value)">
               @for (option of ranges; track option.range) {
-                <mat-button-toggle [value]="option.range">{{ option.buttonLabel }}</mat-button-toggle>
+                <mat-button-toggle [value]="option.range" [aria-label]="option.label">{{ option.buttonLabel }}</mat-button-toggle>
               }
             </mat-button-toggle-group>
             <button
@@ -131,6 +131,16 @@
               (click)="navigateWindow('newer')">
               <mat-icon aria-hidden="true">chevron_right</mat-icon>
             </button>
+            @if (selectedWindow().canNavigateNewer) {
+              <button
+                mat-icon-button
+                type="button"
+                matTooltip="Jump to today"
+                aria-label="Jump to today"
+                (click)="jumpToToday()">
+                <mat-icon aria-hidden="true">today</mat-icon>
+              </button>
+            }
           </div>
         </header>
 

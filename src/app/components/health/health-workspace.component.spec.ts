@@ -459,7 +459,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.isSavingPreferences()).toBe(false);
   });
 
-  it('loads and remembers Today as a sample-enabled one-day window', async () => {
+  it('loads and remembers the 1d sample-enabled window', async () => {
     await createComponent();
 
     component.selectRange('today');
@@ -475,15 +475,15 @@ describe('HealthWorkspaceComponent', () => {
       includeSamples: true,
     });
     const explicitTodayLabel = new Intl.DateTimeFormat(undefined, {
-      weekday: 'long',
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
       timeZone: 'UTC',
     }).format(new Date(`${todayDate}T00:00:00.000Z`));
     expect(component.selectedWindow().label).toBe(`Today · ${explicitTodayLabel}`);
     expect(component.detailSubtitle()).toBe(component.selectedWindow().label);
-    expect(component.ranges[0]).toMatchObject({ range: 'today', buttonLabel: 'Today' });
+    expect(component.ranges[0]).toMatchObject({ range: 'today', label: '1 day', buttonLabel: '1d' });
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-range-selector')?.textContent).toContain('1d');
+    expect((fixture.nativeElement as HTMLElement).querySelector('button[aria-label="1 day"]')?.textContent).toContain('1d');
     expect(updateHealthWorkspacePreferences).toHaveBeenCalledWith('user-1', {
       metric: HEALTH_METRIC_IDS.RestingHeartRate,
       range: 'today',
@@ -492,6 +492,35 @@ describe('HealthWorkspaceComponent', () => {
       && request.endDate === todayDate
       && request.includeSamples === true)).toBe(true);
     expect(router.url).not.toContain('?');
+  });
+
+  it('identifies one-day history and jumps back to today without changing saved range', async () => {
+    await createComponent();
+
+    component.selectRange('today');
+    await fixture.whenStable();
+    component.navigateWindow('older');
+    fixture.detectChanges();
+
+    const yesterdayDate = new Date(
+      Date.parse(`${todayDate}T00:00:00.000Z`) - (24 * 60 * 60 * 1000),
+    ).toISOString().slice(0, 10);
+    expect(component.selectedEndDate()).toBe(yesterdayDate);
+    expect(component.selectedWindow().label).toMatch(/^Yesterday · /);
+    const todayButton = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('[aria-label="Jump to today"]');
+    expect(todayButton).not.toBeNull();
+
+    todayButton?.click();
+    fixture.detectChanges();
+
+    expect(component.selectedEndDate()).toBe(todayDate);
+    expect(component.selectedWindow().label).toMatch(/^Today · /);
+    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Jump to today"]')).toBeNull();
+    expect(updateHealthWorkspacePreferences).toHaveBeenLastCalledWith('user-1', {
+      metric: HEALTH_METRIC_IDS.RestingHeartRate,
+      range: 'today',
+    });
   });
 
   it('shows only metrics with stored history and falls back from an unavailable default', async () => {

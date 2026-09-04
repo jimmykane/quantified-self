@@ -263,23 +263,32 @@ export function resolveHealthWorkspaceWindow(
 ): HealthWorkspaceWindow {
   const dayCount = healthWorkspaceRangeDays(state.range);
   const endDayMs = parseCalendarDate(state.endDate) ?? parseCalendarDate(todayDate) ?? Date.now();
+  const endDate = new Date(endDayMs).toISOString().slice(0, 10);
+  const todayDayMs = parseCalendarDate(todayDate) ?? endDayMs;
+  const yesterdayDate = new Date(todayDayMs - DAY_MS).toISOString().slice(0, 10);
   const startDayMs = endDayMs - ((dayCount - 1) * DAY_MS);
   const startDate = new Date(startDayMs).toISOString().slice(0, 10);
   const nextEndDate = new Date(endDayMs + DAY_MS).toISOString().slice(0, 10);
   const startTimeMs = localCalendarDateStartMs(startDate) ?? startDayMs;
   const endTimeMs = (localCalendarDateStartMs(nextEndDate) ?? (endDayMs + DAY_MS)) - 1;
   const explicitWindowLabel = formatWindowLabel(startDayMs, endDayMs);
+  const oneDayLabel = state.range !== 'today'
+    ? null
+    : endDate === todayDate
+      ? `Today · ${formatRelativeDayDate(endDayMs)}`
+      : endDate === yesterdayDate
+        ? `Yesterday · ${formatRelativeDayDate(endDayMs)}`
+        : null;
   return {
     ...state,
+    endDate,
     startDate,
     startTimeMs,
     endTimeMs,
     dayCount,
     includeSamples: dayCount <= 30,
-    canNavigateNewer: state.endDate < todayDate,
-    label: state.range === 'today' && state.endDate === todayDate
-      ? `Today · ${explicitWindowLabel}`
-      : explicitWindowLabel,
+    canNavigateNewer: endDate < todayDate,
+    label: oneDayLabel || explicitWindowLabel,
   };
 }
 
@@ -1020,6 +1029,14 @@ function formatWindowLabel(startMs: number, endMs: number): string {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(startMs));
+}
+
+function formatRelativeDayDate(timestampMs: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(timestampMs));
 }
 
 function formatDate(timestampMs: number): string {
