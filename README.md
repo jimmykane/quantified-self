@@ -239,6 +239,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Connected-provider attribution audit](docs/connected-provider-attribution-audit.md)
 - [Event merge idempotency and recovery](docs/event-merge-idempotency.md)
 - [Pricing and usage limits](docs/PRICING_AND_LIMITS.md)
+- [Public pricing prerendering](docs/public-pricing-prerender.md)
 - [User deletion workflow](docs/user-deletion-workflow.html)
 
 ## Contributing

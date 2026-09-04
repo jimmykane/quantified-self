@@ -6,7 +6,7 @@ import { assistantGuard } from './authentication/assistant.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { toolsCompareAuthResolver } from './resolvers/tools-compare-auth.resolver';
-import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
+import { lazyPublicPricingJsonLdResolver, lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PUBLIC_FEATURE_PATHS, PUBLIC_GUIDE_PATHS } from './components/public-seo/public-seo-pages.paths';
 import {
   LEGACY_WORKOUT_DATA_COMPARISON_PATHS,
@@ -116,10 +116,9 @@ describe('AppRoutingModule routes', () => {
     });
   });
 
-  it('should define a public pricing route with membership JSON-LD', async () => {
+  it('should define a public pricing route with a catalog-backed membership JSON-LD resolver', async () => {
     const pricingRoute = routes.find(route => route.path === 'pricing');
     const subscriptionsRoute = routes.find(route => route.path === 'subscriptions');
-    const jsonLd = pricingRoute?.data?.['jsonLd'] as Record<string, unknown> | undefined;
 
     expect(pricingRoute).toBeTruthy();
     expect(pricingRoute?.loadComponent).toBeTypeOf('function');
@@ -130,13 +129,8 @@ describe('AppRoutingModule routes', () => {
     expect(pricingRoute?.data?.['title']).toBe('Membership');
     expect(pricingRoute?.data?.['description']).toContain('Support the development of Quantified Self');
     expect(pricingRoute?.data?.['keywords']).toBeUndefined();
-    expect(jsonLd).toMatchObject({
-      '@context': 'https://schema.org',
-      '@type': 'WebPage',
-      name: 'Quantified Self Membership',
-      url: 'https://quantified-self.io/pricing',
-      inLanguage: 'en',
-    });
+    expect(pricingRoute?.data?.['jsonLd']).toBeUndefined();
+    expect(pricingRoute?.resolve).toEqual({ jsonLd: lazyPublicPricingJsonLdResolver });
   });
 
   it('should allow any authenticated onboarded user to access mytracks', () => {

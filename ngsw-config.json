@@ -43,7 +43,6 @@
     "/admin/queues/reparse",
     "/admin/queues/route-reparse",
     "/admin/queues/derived-metrics",
-    "/pricing",
     "/subscriptions",
     "/payment/success",
     "/payment/cancel",

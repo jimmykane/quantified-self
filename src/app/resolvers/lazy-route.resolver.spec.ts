@@ -3,7 +3,11 @@ import { convertToParamMap } from '@angular/router';
 import type { ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import { firstValueFrom, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
-import { lazyRouteResolver } from './lazy-route.resolver';
+import { lazyPublicPricingJsonLdResolver, lazyRouteResolver } from './lazy-route.resolver';
+
+const { publicPricingJsonLdResolverMock } = vi.hoisted(() => ({
+  publicPricingJsonLdResolverMock: vi.fn(),
+}));
 
 const { routeResolverMock } = vi.hoisted(() => ({
   routeResolverMock: vi.fn(),
@@ -11,6 +15,10 @@ const { routeResolverMock } = vi.hoisted(() => ({
 
 vi.mock('./route.resolver', () => ({
   routeResolver: routeResolverMock,
+}));
+
+vi.mock('./public-pricing-json-ld.resolver', () => ({
+  publicPricingJsonLdResolver: publicPricingJsonLdResolverMock,
 }));
 
 describe('lazyRouteResolver', () => {
@@ -27,5 +35,20 @@ describe('lazyRouteResolver', () => {
     const result = TestBed.runInInjectionContext(() => lazyRouteResolver(route, state));
     await expect(firstValueFrom(result as ReturnType<typeof of>)).resolves.toBe(resolvedRoute);
     expect(routeResolverMock).toHaveBeenCalledWith(route, state);
+  });
+});
+
+describe('lazyPublicPricingJsonLdResolver', () => {
+  it('loads the public pricing resolver only while resolving the pricing route', async () => {
+    const resolvedJsonLd = { '@type': 'WebPage', name: 'Quantified Self Membership' };
+    publicPricingJsonLdResolverMock.mockReturnValue(of(resolvedJsonLd));
+    const route = {} as ActivatedRouteSnapshot;
+    const state = { url: '/pricing' } as RouterStateSnapshot;
+
+    expect(publicPricingJsonLdResolverMock).not.toHaveBeenCalled();
+
+    const result = TestBed.runInInjectionContext(() => lazyPublicPricingJsonLdResolver(route, state));
+    await expect(firstValueFrom(result as ReturnType<typeof of>)).resolves.toBe(resolvedJsonLd);
+    expect(publicPricingJsonLdResolverMock).toHaveBeenCalledWith(route, state);
   });
 });

@@ -211,10 +211,6 @@
           "destination": "/index.csr.html"
         },
         {
-          "source": "/pricing",
-          "destination": "/index.csr.html"
-        },
-        {
           "source": "/subscriptions",
           "destination": "/index.csr.html"
         },
@@ -487,10 +483,6 @@
         },
         {
           "source": "/admin/queues/derived-metrics",
-          "destination": "/index.csr.html"
-        },
-        {
-          "source": "/pricing",
           "destination": "/index.csr.html"
         },
         {

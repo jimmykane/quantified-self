@@ -19,7 +19,7 @@ import {
   PUBLIC_GUIDE_PATHS,
 } from './components/public-seo/public-seo-pages.paths';
 import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.paths';
-import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
+import { lazyPublicPricingJsonLdResolver, lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
 const HOME_SEO_DESCRIPTION = 'Connect Garmin, Suunto, COROS, and Wahoo in one training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.';
@@ -136,46 +136,13 @@ const topLevelRoutes: Routes = [
     loadComponent: () => import('./components/public-pricing/public-pricing.component').then(m => m.PublicPricingComponent),
     // Public route
     canMatch: [pricingRedirectGuard],
+    resolve: {
+      jsonLd: lazyPublicPricingJsonLdResolver,
+    },
     data: {
       title: 'Membership',
       preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
-      jsonLd: {
-        "@context": "https://schema.org",
-        "@type": "WebPage",
-        "name": "Quantified Self Membership",
-        "description": "Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.",
-        "url": "https://quantified-self.io/pricing",
-        "inLanguage": "en",
-        "isPartOf": {
-          "@type": "WebSite",
-          "name": "Quantified Self",
-          "url": "https://quantified-self.io"
-        },
-        "mainEntity": {
-          "@type": "OfferCatalog",
-          "name": "Quantified Self memberships",
-          "itemListElement": [
-            {
-              "@type": "Offer",
-              "name": "Starter",
-              "price": "0",
-              "priceCurrency": "USD",
-              "description": "Free plan with manual uploads and core analysis tools."
-            },
-            {
-              "@type": "Offer",
-              "name": "Basic",
-              "description": "Paid membership for higher activity limits and deeper tracking."
-            },
-            {
-              "@type": "Offer",
-              "name": "Pro",
-              "description": "Paid membership for service connections, cross-service sync, and unlimited tracking."
-            }
-          ]
-        }
-      }
     }
   },
   {
