@@ -686,7 +686,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       itemStyle: {
         color: series.color,
       },
-      emphasis: { focus: 'series' },
+      emphasis: STACK_BAR_EMPHASIS,
       data,
       ...extras,
     };
