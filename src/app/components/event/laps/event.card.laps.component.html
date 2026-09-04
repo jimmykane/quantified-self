@@ -26,6 +26,11 @@
       }
       @if (activeLapColumnMenuGroup; as group) {
       <p class="lap-column-menu-copy">Choose columns for {{ group.label.toLowerCase() }} laps. Values use your saved units.</p>
+      @if (group.selectedUnavailableMetricCount > 0) {
+      <p class="lap-column-availability-summary" role="status">
+        {{ group.selectedUnavailableMetricCount }} selected {{ group.selectedUnavailableMetricCount === 1 ? 'column is' : 'columns are' }} unavailable in these laps and hidden from the table.
+      </p>
+      }
       <mat-form-field appearance="outline" class="lap-column-search-field" subscriptSizing="dynamic">
         <mat-label>Search metrics</mat-label>
         <input matInput [value]="group.searchTerm" (click)="$event.stopPropagation()"
@@ -56,7 +61,12 @@
         <mat-list-option [selected]="group.selectedMetricTypes.includes(metric.type)" [value]="metric.type">
           <span class="lap-column-option">
             <app-data-type-icon [dataType]="metric.type" size="18px"></app-data-type-icon>
-            <span>{{ metric.label }}</span>
+            <span class="lap-column-option-copy">
+              <span>{{ metric.label }}</span>
+              @if (group.metricAvailability[metric.type]?.label; as availabilityLabel) {
+              <span class="lap-column-option-availability">{{ availabilityLabel }}</span>
+              }
+            </span>
           </span>
         </mat-list-option>
         }
