@@ -30,6 +30,7 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
+  buildHealthPriorityRows,
   buildSleepObservationRows,
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
@@ -424,6 +425,41 @@ describe('Health workspace helpers', () => {
     expect(view.series.map(series => series.chartKind).sort()).toEqual(['line', 'line', 'step']);
     expect(view.series.filter(series => series.nativeOnly)).toHaveLength(1);
     expect(view.rows.every(row => row.valueText.includes('samples'))).toBe(true);
+  });
+
+  it('puts the newest sample-backed Health highlight before older provider summaries', () => {
+    const result = projectLoadedHealthRange([
+      sourceRecord({
+        id: 'garmin-summary',
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        accountKey: 'garmin-one',
+        calendarDate: '2026-07-31',
+        metrics: [valueEntry({
+          metricId: HEALTH_METRIC_IDS.HeartRate,
+          semanticVariant: 'rolling_7_day_average',
+          native: { metric: 'heartRate', value: 54, unit: 'bpm' },
+          canonical: { value: 54, unit: HEALTH_UNITS.BeatsPerMinute },
+        })],
+      }),
+    ], [
+      sampleChunk({
+        id: 'suunto-heart-rate',
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        accountKey: 'suunto-one',
+        metricId: HEALTH_METRIC_IDS.HeartRate,
+        values: [68, 69, 70],
+      }),
+    ], {
+      startDate: '2026-07-31',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.HeartRate],
+      includeSamples: true,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const rows = buildHealthPriorityRows(result);
+
+    expect(rows.map(row => row.sourceLabel)).toEqual(['Suunto', 'Garmin']);
+    expect(rows[0]).toMatchObject({ valueText: '70 bpm', observedAtMs: Date.parse('2026-08-01T00:02:00.000Z') });
   });
 
   it('renders provider-specific Body Energy scores as bars without changing other series', () => {

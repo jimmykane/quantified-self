@@ -530,7 +530,9 @@ export function buildHealthPriorityRows(
       contextText: `${formatCalendarDate(latest.calendarDate)} · ${humanize(series.aggregation)} · ${humanize(series.semanticVariant)}${series.nativeOnly ? ' · native only' : ''}`,
       observedAtMs: latest.timestampMs,
     }];
-  });
+  }).sort((left, right) => right.observedAtMs - left.observedAtMs
+    || compareText(left.sourceLabel, right.sourceLabel)
+    || compareText(left.id, right.id));
 }
 
 export function buildSleepPriorityRows(

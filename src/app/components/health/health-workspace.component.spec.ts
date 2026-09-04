@@ -439,6 +439,14 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('mat-chip-listbox')).toBeNull();
     expect(router.url).not.toContain('?');
     expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    expect(loadMetricRange).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      metricId: HEALTH_METRIC_IDS.HeartRate,
+      includeSamples: true,
+    }));
+    expect(loadMetricRange).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      includeSamples: true,
+    }));
   }, 10_000);
 
   it('restores and persists the account-owned metric and range without adding query parameters', async () => {

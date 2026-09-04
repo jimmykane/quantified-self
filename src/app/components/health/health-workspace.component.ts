@@ -912,7 +912,7 @@ export class HealthWorkspaceComponent {
         startDate,
         endDate: this.todayDate,
         metricId,
-        includeSamples: false,
+        includeSamples: true,
       });
       if (generation !== this.priorityLoadGeneration) {
         return;
