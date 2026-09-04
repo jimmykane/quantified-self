@@ -36,6 +36,11 @@ describe('PublicFooterComponent', () => {
     expect(footer?.querySelector('a[href="/privacy"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/terms"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/policies"]')).toBeTruthy();
+    const statusLink = footer?.querySelector('a[href="https://status.quantified-self.io"]') as HTMLAnchorElement | null;
+    expect(statusLink).toBeTruthy();
+    expect(statusLink?.textContent).toContain('System status');
+    expect(statusLink?.target).toBe('_blank');
+    expect(statusLink?.rel).toBe('noopener noreferrer');
     expect(text).not.toContain('contributors.');
     expect(text).not.toContain('provided without warranty');
     expect(text).toContain('AGPL-3.0-only');

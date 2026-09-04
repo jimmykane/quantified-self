@@ -16,6 +16,7 @@ import { environment } from '../../../environments/environment';
 import { AppThemePreference, SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
 import { getAssistantRequestLimitForRole } from '@shared/limits';
 import { QUANTIFIED_SELF_SOURCE_URL } from '../../shared/open-source-license';
+import { QUANTIFIED_SELF_STATUS_PAGE_URL } from '../../shared/status-page-url';
 
 @Component({
   selector: 'app-sidenav',
@@ -28,6 +29,7 @@ export class SideNavComponent {
   public events: EventInterface[] = [];
   public appVersion = environment.appVersion;
   public readonly sourceCodeUrl = QUANTIFIED_SELF_SOURCE_URL;
+  public readonly statusPageUrl = QUANTIFIED_SELF_STATUS_PAGE_URL;
   public readonly supportMailtoHref = `mailto:${environment.supportEmail}`;
 
   private themeService = inject(AppThemeService);

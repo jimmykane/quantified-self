@@ -109,6 +109,18 @@ describe('SideNavComponent', () => {
         expect(sourceLink?.rel).toBe('noopener noreferrer');
     });
 
+    it('offers the external system status page safely', () => {
+        fixture.detectChanges();
+
+        const statusLink = fixture.nativeElement.querySelector('a[aria-label="System status"]') as HTMLAnchorElement | null;
+
+        expect(statusLink).toBeTruthy();
+        expect(statusLink?.href).toBe('https://status.quantified-self.io/');
+        expect(statusLink?.textContent).toContain('monitor_heart');
+        expect(statusLink?.target).toBe('_blank');
+        expect(statusLink?.rel).toBe('noopener noreferrer');
+    });
+
     it('should delegate theme changes to the theme service', async () => {
         const event = new MouseEvent('click');
 
