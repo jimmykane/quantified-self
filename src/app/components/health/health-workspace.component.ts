@@ -80,6 +80,7 @@ import {
   resolveHealthWorkspaceWindow,
   selectActivityHealthObservations,
   selectHealthPriorityTrendSeries,
+  sleepSessionHasHrv,
 } from '../../helpers/health-workspace.helper';
 import {
   buildDashboardSleepTrendContext,
@@ -239,14 +240,36 @@ export class HealthWorkspaceComponent {
 
   readonly healthMetricFilteringActive = computed(() => this.healthMetricAvailabilityStatus() === 'ready');
   readonly sleepMetricFilteringActive = computed(() => this.sleepMetricAvailabilityStatus() === 'ready');
+  readonly hasLoadedSleepHrv = computed(() => [
+    ...this.selectedSleepSessions(),
+    ...this.prioritySleepSessions(),
+  ].some(sleepSessionHasHrv));
+  readonly sleepHrvAvailabilityStatus = computed<HealthLoadStatus>(() => {
+    if (this.hasLoadedSleepHrv()) {
+      return 'ready';
+    }
+    const statuses = [this.selectedSleepStatus(), this.prioritySleepStatus()];
+    if (statuses.every(status => status === 'ready')) {
+      return 'ready';
+    }
+    if (statuses.some(status => status === 'loading')) {
+      return 'loading';
+    }
+    return statuses.some(status => status === 'denied') ? 'denied' : 'error';
+  });
   readonly availabilityChecksSettled = computed(() =>
     this.healthMetricAvailabilityStatus() !== 'loading'
-    && this.sleepMetricAvailabilityStatus() !== 'loading');
+    && this.sleepMetricAvailabilityStatus() !== 'loading'
+    && this.sleepHrvAvailabilityStatus() !== 'loading');
   readonly metricCatalogGroups = computed<readonly HealthMetricCatalogGroup[]>(() => {
     if (!this.healthMetricFilteringActive()) {
       return this.completeMetricCatalogGroups;
     }
-    return buildHealthMetricCatalogGroups(this.availableHealthMetricIds() || []);
+    const availableMetricIds = new Set(this.availableHealthMetricIds() || []);
+    if (this.sleepHrvAvailabilityStatus() !== 'ready' || this.hasLoadedSleepHrv()) {
+      availableMetricIds.add(HEALTH_METRIC_IDS.HeartRateVariability);
+    }
+    return buildHealthMetricCatalogGroups([...availableMetricIds]);
   });
   readonly showSleepMetric = computed(() =>
     !this.sleepMetricFilteringActive() || this.hasAnySleepSession() === true);
@@ -258,8 +281,10 @@ export class HealthWorkspaceComponent {
   readonly metricAvailabilityNotice = computed(() => {
     const healthStatus = this.healthMetricAvailabilityStatus();
     const sleepStatus = this.sleepMetricAvailabilityStatus();
+    const sleepHrvStatus = this.sleepHrvAvailabilityStatus();
     if (healthStatus !== 'error' && healthStatus !== 'denied'
-      && sleepStatus !== 'error' && sleepStatus !== 'denied') {
+      && sleepStatus !== 'error' && sleepStatus !== 'denied'
+      && sleepHrvStatus !== 'error' && sleepHrvStatus !== 'denied') {
       return null;
     }
     return 'Some metric availability could not be verified. Unverified entries remain visible so valid data is not hidden.';
@@ -336,6 +361,7 @@ export class HealthWorkspaceComponent {
     buildSleepObservationRows(this.filteredSleepSessions(), this.unitSettings()));
   readonly availableProviders = computed<HealthProvider[]>(() => {
     const loadedResult = this.selectedHealthLoad()?.result;
+    const selectedMetric = this.routeState().metric;
     const providers = this.selectedIsSleep()
       ? this.windowedSleepSessions().map(session => session.source.provider as HealthProvider)
       : [
@@ -343,6 +369,11 @@ export class HealthWorkspaceComponent {
         ...(loadedResult?.observations.map(item => item.provider) || []),
         ...(loadedResult?.sampleChunks.map(item => item.provider) || []),
         ...(this.selectedActivityHealthResult()?.observations.map(item => item.provider) || []),
+        ...(selectedMetric === HEALTH_METRIC_IDS.HeartRateVariability
+          ? this.windowedSleepSessions()
+            .filter(sleepSessionHasHrv)
+            .map(session => session.source.provider as HealthProvider)
+          : []),
       ];
     return [...new Set(providers)].sort((left, right) => providerLabel(left).localeCompare(providerLabel(right)));
   });
@@ -437,6 +468,13 @@ export class HealthWorkspaceComponent {
       return 'Workout VO₂ max is separate evidence grouped by source and discipline. It is never combined with provider Health or manual VO₂ max.';
     }
     return null;
+  });
+  readonly sleepHrvNotice = computed(() => {
+    if (this.routeState().metric !== HEALTH_METRIC_IDS.HeartRateVariability
+      || !this.metricView().series.some(series => series.semanticVariant.startsWith('sleep_'))) {
+      return null;
+    }
+    return 'Sleep HRV is read from normalized Sleep sessions and shown as its own labeled series. It is never averaged with standalone HRV.';
   });
   readonly revisionNotice = computed(() => {
     const count = this.selectedHealthLoad()?.result.pageInfo.sampleRevisionMismatchCount || 0;

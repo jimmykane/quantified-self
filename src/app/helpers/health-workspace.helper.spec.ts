@@ -44,6 +44,7 @@ import {
   resolveSleepReferenceValue,
   selectHealthPriorityTrendSeries,
   selectActivityHealthObservations,
+  sleepSessionHasHrv,
 } from './health-workspace.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -662,6 +663,128 @@ describe('Health workspace helpers', () => {
     expect(resolveSleepReferenceValue(session, 'vitals.restingHeartRateBpm')).toBe(51);
     expect(resolveSleepReferenceValue(session, 'vitals.averageHrvMs')).toBe(62);
     expect(resolveSleepReferenceValue(session, 'vitals.maxSpo2Percent')).toBeNull();
+  });
+
+  it('projects unreferenced Sleep HRV as a source-separated Health series', () => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    const view = buildHealthMetricWorkspaceView(result, [sleepSession()]);
+
+    expect(view.series).toHaveLength(1);
+    expect(view.series[0]).toMatchObject({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      sourceLabel: 'Garmin',
+      semanticVariant: 'sleep_session_average_hrv',
+      semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+      unit: HEALTH_UNITS.Millisecond,
+      nativeOnly: false,
+    });
+    expect(view.series[0].points).toEqual([expect.objectContaining({ value: 62, calendarDate: '2026-08-02' })]);
+    expect(view.rows[0]).toMatchObject({
+      valueText: '62 ms',
+      semanticsText: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+      coverageText: 'Sleep session',
+    });
+    expect(JSON.stringify(view)).not.toContain('raw-provider-user');
+  });
+
+  it('keeps average and overnight Sleep HRV as distinct semantic series', () => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const session = sleepSession({
+      vitals: { averageHrvMs: 62, overnightHrvMs: 59 },
+    });
+
+    const view = buildHealthMetricWorkspaceView(result, [session]);
+
+    expect(view.series).toHaveLength(2);
+    expect(view.series.map(series => series.semanticVariant)).toEqual([
+      'sleep_session_average_hrv',
+      'sleep_overnight_hrv',
+    ]);
+    expect(view.series.map(series => series.points[0]?.value)).toEqual([62, 59]);
+  });
+
+  it('does not advertise or project nap-only HRV', () => {
+    const nap = sleepSession({ isNap: true });
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(sleepSessionHasHrv(nap)).toBe(false);
+    expect(buildHealthMetricWorkspaceView(result, [nap]).series).toEqual([]);
+  });
+
+  it('keeps standalone and Sleep HRV separate without duplicating typed Sleep references', () => {
+    const session = sleepSession();
+    const standalone = sourceRecord({
+      id: 'standalone-hrv',
+      provider: HEALTH_PROVIDERS.COROSAPI,
+      accountKey: 'coros-account',
+      calendarDate: '2026-08-02',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        semanticVariant: 'overnight_summary',
+        native: { metric: 'hrv', value: 55, unit: 'ms' },
+        canonical: { value: 55, unit: HEALTH_UNITS.Millisecond },
+      })],
+    });
+    const query = {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+    };
+    const standaloneResult = projectLoadedHealthRange([standalone], [], query, {
+      sourceRecordsComplete: true,
+      samplesComplete: true,
+    });
+
+    const separateView = buildHealthMetricWorkspaceView(standaloneResult, [session]);
+    expect(separateView.series).toHaveLength(2);
+    expect(separateView.series.map(series => series.semanticVariant)).toEqual(expect.arrayContaining([
+      'overnight_summary',
+      'sleep_session_average_hrv',
+    ]));
+
+    const reference = sourceRecord({
+      id: 'sleep-hrv-reference',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      accountKey: 'garmin-account',
+      calendarDate: '2026-08-02',
+      metrics: [{
+        kind: 'sleep_reference',
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        valueType: HEALTH_VALUE_TYPES.Number,
+        aggregation: 'average',
+        semanticVariant: 'sleep_session_average_hrv',
+        origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+        recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+        quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        reference: {
+          domain: 'sleep',
+          documentId: 'sleep-one',
+          field: 'vitals.averageHrvMs',
+        },
+      }],
+    });
+    const referenceResult = projectLoadedHealthRange([reference], [], query, {
+      sourceRecordsComplete: true,
+      samplesComplete: true,
+    });
+
+    const referencedView = buildHealthMetricWorkspaceView(referenceResult, [session]);
+    expect(referencedView.series).toHaveLength(1);
+    expect(referencedView.series[0].points).toHaveLength(1);
   });
 
   it('uses local account ordinals for Sleep priority rows and never exposes provider IDs', () => {

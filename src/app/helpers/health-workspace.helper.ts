@@ -176,6 +176,7 @@ interface MetricDatum {
   unit: string;
   normalizationStatus: string;
   nativeOnly: boolean;
+  semanticLabel: string | null;
   valueType: HealthValueType;
   timestampMs: number;
   calendarDate: string;
@@ -184,13 +185,14 @@ interface MetricDatum {
   qualityCode: string | null;
   observationId: string | null;
   rowId: string;
-  rowKind: 'observation' | 'chunk' | 'activity';
+  rowKind: 'observation' | 'chunk' | 'activity' | 'sleep';
   sampleCount: number;
   coverageStatus: HealthCoverageStatus;
   expectedUpdateIntervalMs: number | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS = 36 * 60 * 60 * 1000;
 const TABLE_ROW_LIMIT = 250;
 const CATEGORY_ORDER: readonly HealthMetricDefinition['category'][] = [
   'cardiovascular',
@@ -397,6 +399,9 @@ export function buildHealthMetricWorkspaceView(
   for (const chunk of result.sampleChunks) {
     datums.push(...chunkDatums(chunk));
   }
+  if (result.query.metricIds.includes(HEALTH_METRIC_IDS.HeartRateVariability)) {
+    datums.push(...sleepHrvDatums(sleepSessions, result));
+  }
   for (const observation of activityObservations) {
     datums.push(activityObservationDatum(observation));
   }
@@ -437,7 +442,8 @@ export function buildHealthMetricWorkspaceView(
       providerLabel: providerLabel(first.provider),
       sourceLabel,
       accountLabel: sourceLabel === providerLabel(first.provider) ? null : sourceLabel,
-      semanticLabel: `${humanize(first.aggregation)} · ${humanize(first.semanticVariant)} · ${humanize(first.origin)} · ${humanize(first.recordingMethod)}`,
+      semanticLabel: first.semanticLabel
+        || `${humanize(first.aggregation)} · ${humanize(first.semanticVariant)} · ${humanize(first.origin)} · ${humanize(first.recordingMethod)}`,
       aggregation: first.aggregation,
       semanticVariant: first.semanticVariant,
       origin: first.origin,
@@ -479,11 +485,14 @@ export function buildHealthMetricWorkspaceView(
       valueText: datum.rowKind === 'chunk'
         ? `${datum.sampleCount.toLocaleString()} samples · latest ${formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings)}`
         : formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings),
-      semanticsText: `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)} · ${humanize(datum.origin)} · ${humanize(datum.recordingMethod)}${datum.nativeOnly ? ' · native only' : ''}`,
+      semanticsText: `${datum.semanticLabel
+        || `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)} · ${humanize(datum.origin)} · ${humanize(datum.recordingMethod)}`}${datum.nativeOnly ? ' · native only' : ''}`,
       coverageText: datum.rowKind === 'activity'
         ? 'Not applicable'
+        : datum.rowKind === 'sleep'
+          ? 'Sleep session'
         : coverageStatusLabel(datum.coverageStatus),
-      freshnessText: datum.rowKind === 'activity'
+      freshnessText: datum.rowKind === 'activity' || datum.rowKind === 'sleep'
         ? `Last observed ${formatCalendarDate(datum.calendarDate)}`
         : freshnessStatusByRowId.get(datum.rowId) || 'Unknown',
       conflict: !!datum.observationId && conflictingObservationIds.has(datum.observationId),
@@ -517,6 +526,10 @@ export function selectActivityHealthObservations(
   const hasRealWeight = result.observations.some(observation => observation.entry.metricId === HEALTH_METRIC_IDS.BodyWeight)
     || result.sampleChunks.some(chunk => chunk.metricId === HEALTH_METRIC_IDS.BodyWeight);
   return hasRealWeight ? [] : filtered;
+}
+
+export function sleepSessionHasHrv(session: SleepSession | null | undefined): boolean {
+  return session?.isNap !== true && sleepHrvValues(session).length > 0;
 }
 
 export function buildHealthPriorityRows(
@@ -847,6 +860,7 @@ function observationDatum(
     unit,
     normalizationStatus,
     nativeOnly,
+    semanticLabel: null,
     valueType: entry.valueType,
     timestampMs: observation.endTimeMs,
     calendarDate: observation.calendarDate,
@@ -877,6 +891,7 @@ function activityObservationDatum(observation: ActivityHealthObservation): Metri
     unit: observation.unit,
     normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
     nativeOnly: false,
+    semanticLabel: null,
     valueType: HEALTH_VALUE_TYPES.Number,
     timestampMs: observation.observedAtMs,
     calendarDate: localCalendarDate(observation.observedAtMs),
@@ -913,6 +928,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       unit,
       normalizationStatus: chunk.normalizationStatus,
       nativeOnly: !useCanonical,
+      semanticLabel: null,
       valueType: chunk.valueType,
       timestampMs: chunk.startTimeMs + (Number(chunk.offsetMs[index]) || 0),
       calendarDate: chunk.calendarDate,
@@ -927,6 +943,98 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       expectedUpdateIntervalMs: positiveNumberOrNull(chunk.coverage.expectedUpdateIntervalMs),
     } satisfies MetricDatum];
   });
+}
+
+function sleepHrvDatums(
+  sessions: readonly SleepSession[],
+  result: HealthRangeResult,
+): MetricDatum[] {
+  const representedReferences = new Set(result.observations.flatMap(observation => {
+    const entry = observation.entry;
+    return entry.kind === 'sleep_reference'
+      && entry.metricId === HEALTH_METRIC_IDS.HeartRateVariability
+      ? [sleepHrvReferenceIdentity(entry.reference.documentId, entry.reference.field)]
+      : [];
+  }));
+
+  return sessions.flatMap((session, sessionIndex) => {
+    if (session.isNap) {
+      return [];
+    }
+    const provider = normalizeSleepProvider(session.source?.provider);
+    const timestampMs = Number(session.endTimeMs);
+    if (!provider || !Number.isFinite(timestampMs)) {
+      return [];
+    }
+    const calendarDate = parseCalendarDate(session.sleepDate) === null
+      ? localCalendarDate(timestampMs)
+      : session.sleepDate;
+    if (calendarDate < result.query.startDate
+      || calendarDate > result.query.endDate) {
+      return [];
+    }
+    const documentId = `${session.id || `loaded-${sessionIndex + 1}`}`;
+    return sleepHrvValues(session).flatMap(({ field, value, semanticVariant, semanticLabel }) => {
+      if (session.id && representedReferences.has(sleepHrvReferenceIdentity(session.id, field))) {
+        return [];
+      }
+      return [{
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        provider,
+        accountKey: `${session.source?.providerUserId || 'default'}`,
+        aggregation: 'average',
+        semanticVariant,
+        origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+        recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+        unit: HEALTH_UNITS.Millisecond,
+        normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+        nativeOnly: false,
+        semanticLabel,
+        valueType: HEALTH_VALUE_TYPES.Number,
+        timestampMs,
+        calendarDate,
+        value,
+        deviceLabel: null,
+        qualityCode: HEALTH_QUALITY_STATUSES.Valid,
+        observationId: null,
+        rowId: `sleep:${documentId}:${field}`,
+        rowKind: 'sleep',
+        sampleCount: 1,
+        coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
+        expectedUpdateIntervalMs: SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS,
+      } satisfies MetricDatum];
+    });
+  });
+}
+
+function sleepHrvValues(session: SleepSession | null | undefined): Array<{
+  field: HealthSleepReferenceField;
+  value: number;
+  semanticVariant: string;
+  semanticLabel: string;
+}> {
+  if (!session) {
+    return [];
+  }
+  const values = [
+    {
+      field: 'vitals.averageHrvMs' as const,
+      value: Number(session.vitals?.averageHrvMs),
+      semanticVariant: 'sleep_session_average_hrv',
+      semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+    },
+    {
+      field: 'vitals.overnightHrvMs' as const,
+      value: Number(session.vitals?.overnightHrvMs),
+      semanticVariant: 'sleep_overnight_hrv',
+      semanticLabel: 'Overnight HRV · Sleep session · Provider summary · Provider calculated',
+    },
+  ];
+  return values.filter(item => Number.isFinite(item.value) && item.value > 0);
+}
+
+function sleepHrvReferenceIdentity(documentId: string, field: HealthSleepReferenceField): string {
+  return JSON.stringify([documentId, field]);
 }
 
 function buildAccountLabels(

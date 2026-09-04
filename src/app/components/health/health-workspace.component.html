@@ -228,6 +228,12 @@
             <span>{{ workoutMetricNotice() }}</span>
           </div>
         }
+        @if (sleepHrvNotice()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">bedtime</mat-icon>
+            <span>{{ sleepHrvNotice() }}</span>
+          </div>
+        }
         @if (!selectedIsSleep() && metricView().conflictCount > 0) {
           <div class="health-notice health-notice-conflict" role="alert">
             <mat-icon aria-hidden="true">difference</mat-icon>

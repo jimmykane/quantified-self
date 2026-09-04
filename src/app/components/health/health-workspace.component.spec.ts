@@ -195,7 +195,7 @@ function activityRangeResult(
   };
 }
 
-function sleepSession(): SleepSession {
+function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
   return {
     id: 'sleep-one',
     userID: 'user-1',
@@ -220,6 +220,7 @@ function sleepSession(): SleepSession {
     vitals: { averageHrvMs: 58, averageHeartRateBpm: 52 },
     createdAtMs: todayStartMs,
     updatedAtMs: todayStartMs,
+    ...overrides,
   };
 }
 
@@ -328,6 +329,8 @@ describe('HealthWorkspaceComponent', () => {
     backfillCorosSleepForCurrentUser = vi.fn().mockResolvedValue(backfillResponse);
     hasProAccess = signal(true);
 
+    const defaultSleepSessions = (availability.hasSleep ?? true) ? [sleepSession()] : [];
+
     await TestBed.configureTestingModule({
       imports: [HealthWorkspaceComponent],
       providers: [
@@ -366,7 +369,7 @@ describe('HealthWorkspaceComponent', () => {
         {
           provide: AppSleepService,
           useValue: {
-            watchForDashboard: () => of([...(availability.sleepSessions || [sleepSession()])]),
+            watchForDashboard: () => of([...(availability.sleepSessions || defaultSleepSessions)]),
             watchHasAnySleepSession: () => availability.sleepError
               ? throwError(() => availability.sleepError)
               : of(availability.hasSleep ?? true),
@@ -466,7 +469,9 @@ describe('HealthWorkspaceComponent', () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(
       metricId,
       metricId === HEALTH_METRIC_IDS.HeartRateVariability,
-    )));
+    )), undefined, {
+      sleepSessions: [sleepSession({ vitals: { averageHeartRateBpm: 52 } })],
+    });
 
     expect(component.visiblePriorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate']);
     const cards = Array.from(
@@ -476,6 +481,32 @@ describe('HealthWorkspaceComponent', () => {
     expect(cards.map(card => card.querySelector('h3')?.textContent?.trim())).toEqual(['Sleep', 'Heart rate']);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.classList)
       .toContain('health-priority-grid-double');
+  });
+
+  it('surfaces normalized Sleep HRV when standalone Health HRV is unavailable', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(
+      metricId,
+      metricId === HEALTH_METRIC_IDS.HeartRateVariability,
+    )), undefined, {
+      metricIds: [HEALTH_METRIC_IDS.HeartRate],
+      sleepSessions: [sleepSession()],
+    }, HEALTH_METRIC_IDS.HeartRateVariability);
+
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRateVariability);
+    expect(component.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id)))
+      .toContain(HEALTH_METRIC_IDS.HeartRateVariability);
+    expect(component.metricView().series).toEqual([
+      expect.objectContaining({
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        semanticVariant: 'sleep_session_average_hrv',
+        semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+      }),
+    ]);
+    expect(component.providerFilterOptions().map(provider => provider.label)).toContain('Garmin');
+    expect(component.sleepHrvNotice()).toContain('never averaged with standalone HRV');
+    expect(component.visiblePriorityCards().map(card => card.label)).toContain('HRV');
+    expect((fixture.nativeElement as HTMLElement).textContent)
+      .toContain('Sleep HRV is read from normalized Sleep sessions');
   });
 
   it('restores and persists the account-owned metric and range without adding query parameters', async () => {
@@ -582,7 +613,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(host.textContent).not.toContain('Resting heart rate');
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
     expect((host.querySelector('[aria-label="Open Heart rate"]') as HTMLButtonElement).disabled).toBe(false);
-    expect((host.querySelector('[aria-label="Open Sleep"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(host.querySelector('[aria-label="Open Sleep"]')).toBeNull();
     expect((host.querySelector('[aria-label="Open HRV"]') as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -644,7 +675,7 @@ describe('HealthWorkspaceComponent', () => {
 
     const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option')]
       .map(option => option.querySelector('.health-metric-option-content > span:last-child')?.textContent?.trim());
-    expect(labels).toEqual(['Sleep overview', 'Steps', 'Body weight', 'VO2 max']);
+    expect(labels).toEqual(['Sleep overview', 'Heart rate variability', 'Steps', 'Body weight', 'VO2 max']);
     expect(component.routeState().metric).toBe('sleep');
   });
 
