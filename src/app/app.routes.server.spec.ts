@@ -53,6 +53,7 @@ describe('serverRoutes', () => {
 
     expect(prerenderRoutes.map(route => route.path)).toEqual([...PRERENDERED_PUBLIC_ROUTES]);
     expect(PRERENDERED_STATIC_PUBLIC_ROUTES).toEqual([
+      'pricing',
       'help',
       'policies',
       'privacy',
@@ -102,7 +103,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('routes')).toBe(false);
     expect(prerenderedPaths.has('share/event/:userID/:eventID')).toBe(false);
     expect(prerenderedPaths.has('share/comparison/:userID/:eventID')).toBe(false);
-    expect(prerenderedPaths.has('pricing')).toBe(false);
+    expect(prerenderedPaths.has('pricing')).toBe(true);
     expect(prerenderedPaths.has('help')).toBe(true);
     expect(prerenderedPaths.has('policies')).toBe(true);
     expect(prerenderedPaths.has('privacy')).toBe(true);
@@ -156,7 +157,7 @@ describe('serverRoutes', () => {
     expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'health')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'mcp/authorize')?.status).toBeUndefined();
-    expect(clientRoutes.find(route => route.path === 'pricing')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'pricing')).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'tools/compare/saved')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'settings')?.status).toBeUndefined();

@@ -12,6 +12,7 @@ const prerenderedPageSourcePatterns = [
   /^src\/app\/components\/home\/home\.component\.ts$/,
   /^src\/app\/components\/help\/help-page\.component\.ts$/,
   /^src\/app\/components\/policies\/policies\.component\.ts$/,
+  /^src\/app\/components\/public-pricing\/public-pricing\.component\.ts$/,
   /^src\/app\/components\/integrations\/integrations-hub-page\.component\.ts$/,
   /^src\/app\/components\/integrations\/provider-integration-page\.component\.ts$/,
   /^src\/app\/components\/features\/workout-data-comparison-page\.component\.ts$/,

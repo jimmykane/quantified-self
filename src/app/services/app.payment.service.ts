@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
-import { environment } from '../../environments/environment';
 import { Firestore, collection, collectionData, doc, docData, getDocsFromServer, limit, query, setDoc, where } from 'app/firebase/firestore';
 
 // ... (other imports)
@@ -14,6 +13,7 @@ import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
+import { getPublicPricingProductsFromFirestore } from './public-pricing-catalog.store';
 
 export interface StripeProduct {
     id: string;
@@ -105,190 +105,7 @@ export class AppPaymentService {
     }
 
     private async getProductsFromServer(): Promise<StripeProduct[]> {
-        const productsRef = collection(this.firestore, 'products');
-        const activeProductsQuery = query(productsRef, where('active', '==', true));
-        const productsSnapshot = await getDocsFromServer(activeProductsQuery);
-        const products = productsSnapshot.docs.map((productDoc) => ({
-            id: productDoc.id,
-            ...(productDoc.data() as Omit<StripeProduct, 'id'>)
-        } as StripeProduct));
-
-        const productsWithPrices = await Promise.all(products.map(async product => this.getProductWithPrices(product)));
-        return this.transformProductsForPricing(productsWithPrices);
-    }
-
-    private async getProductWithPrices(product: StripeProduct): Promise<StripeProduct> {
-        const pricesRef = collection(this.firestore, `products/${product.id}/prices`);
-        const activePricesQuery = query(pricesRef, where('active', '==', true));
-
-        const pricesSnapshot = await getDocsFromServer(activePricesQuery);
-        const prices = pricesSnapshot.docs.map((priceDoc) => ({
-            id: priceDoc.id,
-            ...(priceDoc.data() as Omit<StripePrice, 'id'>)
-        } as StripePrice));
-
-        return { ...product, prices };
-    }
-
-    private transformProductsForPricing(products: StripeProduct[]): StripeProduct[] {
-        const virtualProducts: StripeProduct[] = [];
-
-        this.logger.log('getProducts raw input:', products);
-
-        // Flatten/Split logic
-        for (const product of products) {
-            this.logger.log(`Processing product ${product.id}`, product);
-
-            const paidRecurringPrices = (product.prices ?? []).filter((price) => this.isPaidRecurringPrice(price));
-
-            // Check if this product has prices with 'firebaseRole' metadata
-            const getRole = (p: StripePrice) => p.metadata?.firebaseRole?.toLowerCase();
-
-            const basicPrices = paidRecurringPrices.filter(p => getRole(p) === 'basic');
-            const proPrices = paidRecurringPrices.filter(p => getRole(p) === 'pro');
-
-            this.logger.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
-
-            if ((basicPrices && basicPrices.length > 0) || (proPrices && proPrices.length > 0)) {
-                // Split this product into virtual products per price/role
-                if (basicPrices && basicPrices.length > 0) {
-                    virtualProducts.push({
-                        ...product,
-                        id: `${product.id}_basic`, // Virtual ID
-                        name: 'Basic', // Override name
-                        description: 'Essential features for everyday users.',
-                        role: 'basic',
-                        metadata: { ...product.metadata, role: 'basic' },
-                        prices: basicPrices
-                    });
-                }
-
-                if (proPrices && proPrices.length > 0) {
-                    virtualProducts.push({
-                        ...product,
-                        id: `${product.id}_pro`, // Virtual ID
-                        name: 'Pro', // Override name
-                        description: 'Advanced tools for power users.',
-                        role: 'pro',
-                        metadata: { ...product.metadata, role: 'pro' },
-                        prices: proPrices
-                    });
-                }
-            } else {
-                // Legacy/Fallback behavior: Use product-level metadata
-                if (!product.metadata?.role && product.metadata?.firebaseRole) {
-                    product.metadata.role = product.metadata.firebaseRole;
-                }
-
-                // Ignore strictly free products if we are killing the free tier?
-                if (product.metadata?.role !== 'free' && paidRecurringPrices.length > 0) {
-                    virtualProducts.push({
-                        ...product,
-                        prices: paidRecurringPrices
-                    });
-                }
-            }
-        }
-
-        const mergedRoleProducts = this.mergeRecurringProductsByRole(virtualProducts);
-        this.logger.log('getProducts virtual output:', mergedRoleProducts);
-
-        // Sort: Basic first, then Pro
-        const roleOrder: Record<string, number> = { 'basic': 1, 'pro': 2 };
-        return mergedRoleProducts.sort((a, b) => {
-            const rA = (a.role || a.metadata?.role || '') as string;
-            const rB = (b.role || b.metadata?.role || '') as string;
-            return (roleOrder[rA] || 99) - (roleOrder[rB] || 99);
-        });
-    }
-
-    private mergeRecurringProductsByRole(products: StripeProduct[]): StripeProduct[] {
-        const mergedByRole = new Map<'basic' | 'pro', StripeProduct>();
-        const passthroughProducts: StripeProduct[] = [];
-
-        for (const product of products) {
-            const normalizedRole = this.normalizePlanRole(product.role ?? product.metadata?.role ?? null);
-            if (!normalizedRole) {
-                passthroughProducts.push(product);
-                continue;
-            }
-
-            const existingProduct = mergedByRole.get(normalizedRole);
-            if (!existingProduct) {
-                mergedByRole.set(normalizedRole, {
-                    ...product,
-                    role: normalizedRole,
-                    metadata: { ...product.metadata, role: normalizedRole },
-                    prices: this.sortRecurringPrices(product.prices ?? [])
-                });
-                continue;
-            }
-
-            existingProduct.prices = this.sortRecurringPrices([
-                ...(existingProduct.prices ?? []),
-                ...(product.prices ?? [])
-            ]);
-        }
-
-        return [...mergedByRole.values(), ...passthroughProducts];
-    }
-
-    private normalizePlanRole(role: string | null | undefined): 'basic' | 'pro' | null {
-        if (typeof role !== 'string') {
-            return null;
-        }
-
-        const normalizedRole = role.toLowerCase();
-        if (normalizedRole === 'basic' || normalizedRole === 'pro') {
-            return normalizedRole;
-        }
-
-        return null;
-    }
-
-    private sortRecurringPrices(prices: StripePrice[]): StripePrice[] {
-        const seenPriceIds = new Set<string>();
-        const recurringIntervalOrder: Record<string, number> = { month: 1, year: 2 };
-
-        return prices
-            .filter((price) => {
-                if (!price?.id || seenPriceIds.has(price.id)) {
-                    return false;
-                }
-                seenPriceIds.add(price.id);
-                return true;
-            })
-            .sort((leftPrice, rightPrice) => {
-                const leftInterval = leftPrice.recurring?.interval ?? leftPrice.interval ?? '';
-                const rightInterval = rightPrice.recurring?.interval ?? rightPrice.interval ?? '';
-                const intervalDelta = (recurringIntervalOrder[leftInterval] ?? 99) - (recurringIntervalOrder[rightInterval] ?? 99);
-                if (intervalDelta !== 0) {
-                    return intervalDelta;
-                }
-
-                const leftIntervalCount = leftPrice.recurring?.interval_count ?? leftPrice.interval_count ?? 1;
-                const rightIntervalCount = rightPrice.recurring?.interval_count ?? rightPrice.interval_count ?? 1;
-                if (leftIntervalCount !== rightIntervalCount) {
-                    return leftIntervalCount - rightIntervalCount;
-                }
-
-                const leftAmount = typeof leftPrice.unit_amount === 'number' ? leftPrice.unit_amount : Number.MAX_SAFE_INTEGER;
-                const rightAmount = typeof rightPrice.unit_amount === 'number' ? rightPrice.unit_amount : Number.MAX_SAFE_INTEGER;
-                if (leftAmount !== rightAmount) {
-                    return leftAmount - rightAmount;
-                }
-
-                return leftPrice.id.localeCompare(rightPrice.id);
-            });
-    }
-
-    private isPaidRecurringPrice(price: StripePrice): boolean {
-        if (price.type !== 'recurring') {
-            return false;
-        }
-
-        const interval = price.recurring?.interval ?? price.interval;
-        return interval === 'month' || interval === 'year';
+        return getPublicPricingProductsFromFirestore(this.firestore);
     }
 
     /**

@@ -3,8 +3,9 @@ import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppPaymentService, StripeProduct } from '../../services/app.payment.service';
+import type { StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
+import { PublicPricingCatalogService } from '../../services/public-pricing-catalog.service';
 import { PublicPricingComponent, buildPublicPricingCatalog } from './public-pricing.component';
 
 const PAID_PRODUCTS: StripeProduct[] = [
@@ -79,7 +80,7 @@ describe('PublicPricingComponent', () => {
         await TestBed.configureTestingModule({
             imports: [PublicPricingComponent],
             providers: [
-                { provide: AppPaymentService, useValue: paymentService },
+                { provide: PublicPricingCatalogService, useValue: paymentService },
                 { provide: Router, useValue: router },
                 {
                     provide: LoggerService,

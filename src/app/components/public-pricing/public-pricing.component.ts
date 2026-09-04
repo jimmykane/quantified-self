@@ -7,8 +7,9 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router } from '@angular/router';
 import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
 import { Observable, catchError, defer, map, of, shareReplay, timeout } from 'rxjs';
-import { AppPaymentService, StripePrice, StripeProduct } from '../../services/app.payment.service';
+import type { StripePrice, StripeProduct } from '../../services/app.payment.service';
 import { LoggerService } from '../../services/logger.service';
+import { PublicPricingCatalogService } from '../../services/public-pricing-catalog.service';
 
 type PublicPlanRole = 'free' | 'basic' | 'pro';
 type RecurringInterval = 'day' | 'week' | 'month' | 'year';
@@ -81,11 +82,11 @@ const PUBLIC_PLAN_COPY: Record<PublicPlanRole, { title: string; subtitle: string
     styleUrls: ['../pricing/pricing.component.scss', './public-pricing.component.scss'],
 })
 export class PublicPricingComponent {
-    private readonly paymentService = inject(AppPaymentService);
+    private readonly pricingCatalogService = inject(PublicPricingCatalogService);
     private readonly logger = inject(LoggerService);
     private readonly router = inject(Router);
 
-    readonly catalog$: Observable<PublicPricingCatalog> = defer(() => this.paymentService.getProducts()).pipe(
+    readonly catalog$: Observable<PublicPricingCatalog> = defer(() => this.pricingCatalogService.getProducts()).pipe(
         timeout({ first: PUBLIC_PRODUCTS_TIMEOUT_MS }),
         map((products) => buildPublicPricingCatalog(products)),
         catchError((error: unknown) => {
@@ -111,6 +112,38 @@ export function buildPublicPricingCatalog(products: StripeProduct[]): PublicPric
     return {
         plans: [buildStarterPlan(), ...paidPlans],
         paidPlansUnavailable: paidPlans.length === 0,
+    };
+}
+
+/** Uses the exact plans and prices rendered on /pricing for its public structured data. */
+export function buildPublicPricingJsonLd(products: StripeProduct[]): Record<string, unknown> {
+    const catalog = buildPublicPricingCatalog(products);
+
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'WebPage',
+        name: 'Quantified Self Membership',
+        description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
+        url: 'https://quantified-self.io/pricing',
+        inLanguage: 'en',
+        isPartOf: {
+            '@type': 'WebSite',
+            name: 'Quantified Self',
+            url: 'https://quantified-self.io',
+        },
+        mainEntity: {
+            '@type': 'OfferCatalog',
+            name: 'Quantified Self memberships',
+            itemListElement: catalog.plans.flatMap(plan => plan.prices.map(price => ({
+                '@type': 'Offer',
+                name: price.intervalLabel ? `${plan.title} (${price.intervalLabel})` : plan.title,
+                description: plan.subtitle,
+                price: String(price.amount),
+                priceCurrency: price.currency,
+                availability: 'https://schema.org/InStock',
+                url: 'https://quantified-self.io/pricing',
+            }))),
+        },
     };
 }
 
