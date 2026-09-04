@@ -14,6 +14,7 @@ import {
     decodeSleepSessionSportsLibData,
     encodeHealthMetricSportsLibData,
     encodeSleepSessionSportsLibData,
+    formatCanonicalHealthMetricSportsLibValue,
     sportsLibClassTypeForHealthMetric,
     sportsLibClassTypeForSleepMetric,
     SportsLibDataValidationError,
@@ -96,6 +97,26 @@ function sleepSession(): SleepSession {
 }
 
 describe('Sports Lib Health and sleep storage codec', () => {
+    it('uses every canonical Health data class for display values and units', () => {
+        for (const metricId of HEALTH_METRIC_IDS_IN_ORDER) {
+            const definition = HEALTH_METRIC_CATALOG[metricId];
+            const display = formatCanonicalHealthMetricSportsLibValue(
+                metricId,
+                definition.valueType === 'category' ? 'rest' : 42,
+            );
+
+            expect(display?.value).toBeTruthy();
+            expect(typeof display?.unit).toBe('string');
+        }
+
+        expect(formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.Vo2Max, 52))
+            .toEqual({ value: '52.00', unit: 'ml/kg/min' });
+        expect(formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.Distance, 1_234))
+            .toEqual({ value: '1.23', unit: 'Km' });
+        expect(formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.ActiveDuration, 3_600))
+            .toEqual({ value: '01h 00m 00s', unit: '' });
+    });
+
     it.each(HEALTH_METRIC_IDS_IN_ORDER)('round-trips Health metric %s through its explicit Sports Lib class', metricId => {
         const legacy = healthMetric(metricId);
         const encoded = encodeHealthMetricSportsLibData(legacy) as HealthMetricValue;

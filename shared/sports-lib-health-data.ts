@@ -77,6 +77,8 @@ import {
 
 interface SportsLibScalarData {
   getValue(): unknown;
+  getDisplayUnit(): unknown;
+  getDisplayValue(): unknown;
   toJSON(): DataJSONInterface;
 }
 
@@ -160,6 +162,35 @@ export class SportsLibDataValidationError extends Error {
 
   constructor(message: string) {
     super(message);
+  }
+}
+
+export interface HealthMetricSportsLibDisplay {
+  value: string;
+  unit: string;
+}
+
+/**
+ * Formats a canonical Health metric with the same Sports Lib data class used
+ * for its persisted representation. Provider-native values deliberately do
+ * not pass through this function because their units are provider-specific.
+ */
+export function formatCanonicalHealthMetricSportsLibValue(
+  metricId: HealthMetricId,
+  value: HealthScalar,
+): HealthMetricSportsLibDisplay | null {
+  const dataClass = HEALTH_SPORTS_LIB_CLASSES[metricId];
+  try {
+    const data = new dataClass(value as never);
+    const displayValue = data.getDisplayValue();
+    const displayUnit = data.getDisplayUnit();
+    if ((typeof displayValue !== 'string' && typeof displayValue !== 'number')
+      || (typeof displayUnit !== 'string' && typeof displayUnit !== 'number')) {
+      return null;
+    }
+    return { value: `${displayValue}`, unit: `${displayUnit}` };
+  } catch {
+    return null;
   }
 }
 

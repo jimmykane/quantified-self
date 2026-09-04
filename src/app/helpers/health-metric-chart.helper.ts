@@ -11,7 +11,12 @@ import {
 import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
 import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS, HealthMetricId } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
-import { HealthWorkspaceSeries, HealthWorkspaceSeriesPoint, formatHealthValue } from './health-workspace.helper';
+import {
+  HealthWorkspaceSeries,
+  HealthWorkspaceSeriesPoint,
+  formatHealthAxisValue,
+  formatHealthValue,
+} from './health-workspace.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -98,7 +103,12 @@ export function buildHealthMetricEChartsOption(
           subtitle: model.series.sourceLabel,
           rows: [{
             label: 'Reading',
-            value: formatHealthValue(point.value, model.series.unit),
+            value: formatHealthValue(
+              model.series.metricId,
+              point.value,
+              model.series.unit,
+              model.series.nativeOnly,
+            ),
             markerColor: resolveHealthValueColor(
               model.series.metricId,
               point.value,
@@ -152,7 +162,12 @@ export function buildHealthMetricEChartsOption(
           color: style.secondaryTextColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: style.axisFontSize,
-          formatter: (value: number) => formatAxisValue(value, model.series.unit),
+          formatter: (value: number) => formatHealthAxisValue(
+            model.series.metricId,
+            value,
+            model.series.unit,
+            model.series.nativeOnly,
+          ),
         },
       },
     visualMap: useStressStateColors
@@ -329,7 +344,9 @@ function buildSeriesModel(
     .filter((value): value is number => value !== null);
   const numericBounds = series.chartKind === 'step' ? null : resolveYBounds(numericValues, series.chartKind);
   const latest = sortedPoints.at(-1);
-  const latestText = latest ? formatHealthValue(latest.value, series.unit) : 'No reading';
+  const latestText = latest
+    ? formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly)
+    : 'No reading';
   const readingCountText = `${sortedPoints.length.toLocaleString()} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
 
   return {
@@ -339,10 +356,10 @@ function buildSeriesModel(
     numericBounds,
     yMinLabel: series.chartKind === 'step'
       ? categoryLabels[0] || ''
-      : formatAxisValue(numericBounds?.min ?? 0, series.unit),
+      : formatHealthAxisValue(series.metricId, numericBounds?.min ?? 0, series.unit, series.nativeOnly),
     yMaxLabel: series.chartKind === 'step'
       ? categoryLabels.at(-1) || ''
-      : formatAxisValue(numericBounds?.max ?? 1, series.unit),
+      : formatHealthAxisValue(series.metricId, numericBounds?.max ?? 1, series.unit, series.nativeOnly),
     startLabel: formatAxisDate(startTimeMs),
     endLabel: formatAxisDate(endTimeMs),
     categoryLabels,
@@ -440,14 +457,6 @@ function categoryValueLabel(value: number | string | boolean): string {
     return value ? 'Yes' : 'No';
   }
   return humanize(`${value}`) || 'Unknown';
-}
-
-function formatAxisValue(value: number, unit: string): string {
-  const rounded = Math.abs(value) >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
-  if (unit === 'percent') {
-    return `${rounded}%`;
-  }
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(rounded);
 }
 
 function formatAxisDate(timestampMs: number): string {

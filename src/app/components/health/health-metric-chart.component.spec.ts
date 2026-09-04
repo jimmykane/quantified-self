@@ -74,6 +74,7 @@ describe('HealthMetricChartComponent', () => {
     const host = await render('Garmin Test');
 
     expect(host.textContent).toContain('Device: Garmin Test');
+    expect(host.textContent).toContain('bpm');
   });
 
   it('does not render an empty device label when attribution is unavailable', async () => {

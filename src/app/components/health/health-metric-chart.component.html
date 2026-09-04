@@ -31,7 +31,9 @@
       </mat-card-content>
 
       <mat-card-footer class="health-chart-footer">
-        <span>{{ model.series.unit }}</span>
+        @if (formatSeriesUnit(model); as displayUnit) {
+          <span>{{ displayUnit }}</span>
+        }
         @if (model.series.deviceLabel) {
           <span>Device: {{ model.series.deviceLabel }}</span>
         }

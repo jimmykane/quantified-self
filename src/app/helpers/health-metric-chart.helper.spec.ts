@@ -77,6 +77,25 @@ describe('Health metric chart helpers', () => {
     expect(model.ariaLabel).toContain('not combined with other sources');
   });
 
+  it('uses Sports Lib formatting in chart accessibility text and tooltips', () => {
+    const vo2Series = series({
+      metricId: HEALTH_METRIC_IDS.Vo2Max,
+      unit: 'ml_per_kg_per_min',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 52, qualityCode: null }],
+    });
+    const model = buildHealthChartModels([vo2Series], 0, DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as { tooltip: { formatter: (params: { value?: unknown }) => string } };
+
+    expect(model.ariaLabel).toContain('Latest 52.00 ml/kg/min');
+    expect(option.tooltip.formatter({ value: [0, 52] })).toContain('52.00 ml/kg/min');
+  });
+
   it('uses an ECharts bar series for totals and starts positive totals at zero', () => {
     const model = buildHealthChartModels([series({
       aggregation: 'total',

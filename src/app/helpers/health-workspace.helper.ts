@@ -31,6 +31,9 @@ import {
 } from '@shared/activity-health';
 import { SleepSession, normalizeSleepProvider } from '@shared/sleep';
 import {
+  formatCanonicalHealthMetricSportsLibValue,
+} from '@shared/sports-lib-health-data';
+import {
   APP_HEALTH_WORKSPACE_METRICS,
   APP_HEALTH_WORKSPACE_RANGES,
   AppHealthWorkspaceMetric,
@@ -446,8 +449,8 @@ export function buildHealthMetricWorkspaceView(
       sourceLabel,
       deviceLabel: datum.deviceLabel || 'Not reported',
       valueText: datum.rowKind === 'chunk'
-        ? `${datum.sampleCount.toLocaleString()} samples · latest ${formatHealthValue(datum.value, datum.unit)}`
-        : formatHealthValue(datum.value, datum.unit),
+        ? `${datum.sampleCount.toLocaleString()} samples · latest ${formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly)}`
+        : formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly),
       semanticsText: `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)} · ${humanize(datum.origin)} · ${humanize(datum.recordingMethod)}${datum.nativeOnly ? ' · native only' : ''}`,
       coverageText: datum.rowKind === 'activity'
         ? 'Not applicable'
@@ -506,7 +509,7 @@ export function buildHealthPriorityRows(
       provider: series.provider,
       providerLabel: series.providerLabel,
       sourceLabel: series.sourceLabel,
-      valueText: formatHealthValue(latest.value, series.unit),
+      valueText: formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly),
       contextText: `${formatCalendarDate(latest.calendarDate)} · ${humanize(series.aggregation)} · ${humanize(series.semanticVariant)}${series.nativeOnly ? ' · native only' : ''}`,
       observedAtMs: latest.timestampMs,
     }];
@@ -599,7 +602,52 @@ export function providerLabel(provider: HealthProvider): string {
   }
 }
 
-export function formatHealthValue(value: number | string | boolean, unit: string): string {
+export function formatHealthValue(
+  metricId: HealthMetricId,
+  value: number | string | boolean,
+  unit: string,
+  nativeOnly = false,
+): string {
+  if (!nativeOnly) {
+    const display = formatCanonicalHealthMetricSportsLibValue(metricId, value);
+    if (display) {
+      return [display.value, display.unit].filter(Boolean).join(' ');
+    }
+  }
+  return formatNativeHealthValue(value, unit);
+}
+
+export function formatHealthUnit(
+  metricId: HealthMetricId,
+  value: number | string | boolean,
+  unit: string,
+  nativeOnly = false,
+): string {
+  if (!nativeOnly) {
+    return formatCanonicalHealthMetricSportsLibValue(metricId, value)?.unit || '';
+  }
+  return humanize(unit);
+}
+
+export function formatHealthAxisValue(
+  metricId: HealthMetricId,
+  value: number,
+  unit: string,
+  nativeOnly = false,
+): string {
+  if (!nativeOnly) {
+    const display = formatCanonicalHealthMetricSportsLibValue(metricId, value);
+    if (display) {
+      return display.unit === '%' ? `${display.value}%` : display.value;
+    }
+  }
+  const rounded = Math.abs(value) >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
+  return unit === HEALTH_UNITS.Percent ? `${rounded}%` : new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 1,
+  }).format(rounded);
+}
+
+function formatNativeHealthValue(value: number | string | boolean, unit: string): string {
   if (typeof value === 'boolean') {
     return value ? 'Yes' : 'No';
   }

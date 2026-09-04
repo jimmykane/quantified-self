@@ -30,6 +30,9 @@ import {
   buildHealthMetricWorkspaceView,
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
+  formatHealthAxisValue,
+  formatHealthUnit,
+  formatHealthValue,
   navigateHealthWorkspaceWindow,
   normalizeHealthWorkspaceMetric,
   normalizeHealthWorkspaceRange,
@@ -189,6 +192,27 @@ function activityObservation(overrides: Partial<ActivityHealthObservation> = {})
 }
 
 describe('Health workspace helpers', () => {
+  it('formats canonical values and units through Sports Lib while keeping native-only values provider-specific', () => {
+    expect(formatHealthValue(
+      HEALTH_METRIC_IDS.Vo2Max,
+      52,
+      HEALTH_UNITS.MillilitersPerKilogramPerMinute,
+    )).toBe('52.00 ml/kg/min');
+    expect(formatHealthValue(HEALTH_METRIC_IDS.ActiveDuration, 3_600, HEALTH_UNITS.Second))
+      .toBe('01h 00m 00s');
+    expect(formatHealthUnit(HEALTH_METRIC_IDS.Vo2Max, 52, HEALTH_UNITS.MillilitersPerKilogramPerMinute))
+      .toBe('ml/kg/min');
+    expect(formatHealthAxisValue(HEALTH_METRIC_IDS.Vo2Max, 52, HEALTH_UNITS.MillilitersPerKilogramPerMinute))
+      .toBe('52.00');
+
+    expect(formatHealthValue(
+      HEALTH_METRIC_IDS.BodyEnergy,
+      55,
+      'garmin_body_battery_points',
+      true,
+    )).toBe('55 Garmin body battery points');
+  });
+
   it('normalizes saved Health ranges and falls back invalid settings to 30 days', () => {
     expect(normalizeHealthWorkspaceRange('today')).toBe('today');
     expect(normalizeHealthWorkspaceRange('14d')).toBe('14d');
