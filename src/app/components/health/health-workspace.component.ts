@@ -463,7 +463,7 @@ export class HealthWorkspaceComponent {
       return null;
     }
     if (metric === HEALTH_METRIC_IDS.BodyWeight) {
-      return 'Workout Weight is profile context embedded in an imported workout, not a weigh-in. It is shown only because no Health Weight measurement exists in this filtered window.';
+      return 'Workout Weight is profile context embedded in an imported workout, not a weigh-in. It is shown only for sources without a Health Weight measurement in this filtered window.';
     }
     if (metric === HEALTH_METRIC_IDS.Vo2Max) {
       return 'Workout VO₂ max is separate evidence grouped by source and discipline. It is never combined with provider Health or manual VO₂ max.';

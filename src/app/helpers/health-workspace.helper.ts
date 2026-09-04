@@ -527,9 +527,18 @@ export function selectActivityHealthObservations(
     return filtered;
   }
 
-  const hasRealWeight = result.observations.some(observation => observation.entry.metricId === HEALTH_METRIC_IDS.BodyWeight)
-    || result.sampleChunks.some(chunk => chunk.metricId === HEALTH_METRIC_IDS.BodyWeight);
-  return hasRealWeight ? [] : filtered;
+  const measuredWeightProviders = new Set([
+    ...result.observations
+      .filter(observation => observation.entry.metricId === HEALTH_METRIC_IDS.BodyWeight)
+      .map(observation => observation.provider),
+    ...result.sampleChunks
+      .filter(chunk => chunk.metricId === HEALTH_METRIC_IDS.BodyWeight)
+      .map(chunk => chunk.provider),
+  ]);
+  if (measuredWeightProviders.has(HEALTH_PROVIDERS.QuantifiedSelf)) {
+    return [];
+  }
+  return filtered.filter(observation => !measuredWeightProviders.has(observation.provider));
 }
 
 export function sleepSessionHasHrv(session: SleepSession | null | undefined): boolean {
