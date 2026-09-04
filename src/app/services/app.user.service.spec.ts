@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService, isActionableProfileReadState } from './app.user.service';
 import { Auth, authState, user } from 'app/firebase/auth';
-import { Firestore, collection, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -1417,31 +1417,17 @@ describe('AppUserService', () => {
         });
 
         it.each([
-            [ServiceNames.SuuntoApp, 'suuntoAppAccessTokens', { userName: 'suunto-user', accessToken: 'secret' }],
-            [ServiceNames.COROSAPI, 'COROSAPIAccessTokens', { openId: 'coros-user', refreshToken: 'secret' }],
-            [ServiceNames.GarminAPI, 'garminAPITokens', {
-                userID: 'garmin-user',
-                accessToken: 'secret',
-                permissions: ['COURSE_IMPORT'],
-                permissionsLastChangedAt: 1710000000,
-            }],
-        ])('getServiceToken should temporarily fall back to legacy %s tokens when the projection is absent', async (
-            serviceName,
-            collectionName,
-            legacyToken,
-        ) => {
-            const user = { uid: 'legacy-user' } as any;
+            ServiceNames.SuuntoApp,
+            ServiceNames.COROSAPI,
+            ServiceNames.GarminAPI,
+        ])('getServiceToken should fail closed without a %s projection', async (serviceName) => {
+            const user = { uid: 'missing-projection-user' } as any;
             (docData as any).mockReturnValueOnce(of({ connectionState: 'connected' }));
-            (collectionData as any).mockReturnValueOnce(of([legacyToken]));
 
             const result = await firstValueFrom(service.getServiceToken(user, serviceName));
 
-            expect(collection).toHaveBeenCalledWith(expect.anything(), collectionName, 'legacy-user', 'tokens');
-            expect(result).toEqual([expect.objectContaining({
-                providerUserId: expect.stringMatching(/-user$/),
-            })]);
-            expect(result[0]).not.toHaveProperty('accessToken');
-            expect(result[0]).not.toHaveProperty('refreshToken');
+            expect(result).toEqual([]);
+            expect(collectionData).not.toHaveBeenCalled();
         });
 
         it('getServiceToken should treat an explicit empty projection as authoritative', async () => {
@@ -1566,7 +1552,6 @@ describe('AppUserService', () => {
             const result = await firstValueFrom(service.watchHasAnyActivityServiceConnection(user));
 
             expect(result).toBe(false);
-            expect(collectionData).toHaveBeenCalledTimes(3);
         });
 
         it('watchHasAnyActivityServiceConnection should emit true when any activity service has a token', async () => {
