@@ -821,6 +821,12 @@ export const backfillCorosAPISleep = onCall({
 
     return {
         queued,
+        // A COROS daily poll is the shared provider request for both domains:
+        // it persists Sleep and every available daily Health value together.
+        // Report both scopes so clients do not mistake this single queue item
+        // for a Sleep-only backfill.
+        sleepQueued: queued,
+        healthQueued: queued,
         startDate: new Date(startMs).toISOString(),
         endDate: new Date(nowMs).toISOString(),
         nextAllowedAtMs,

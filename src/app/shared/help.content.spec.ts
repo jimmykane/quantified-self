@@ -908,11 +908,12 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('minimum sleep heart rate');
     expect(serviceConnectionsSection?.content).toContain('range-average reference lines');
     expect(serviceConnectionsSection?.content).toContain('max SpO2');
-    expect(serviceConnectionsSection?.content).toContain('select **Sleep & Health history**');
-    expect(serviceConnectionsSection?.content).toContain('Import Sleep History');
-    expect(serviceConnectionsSection?.content).toContain('Import Sleep & Health History');
+    expect(serviceConnectionsSection?.content).toContain('see **Sleep & daily Health history**');
+    expect(serviceConnectionsSection?.content).toContain('Import Sleep history');
+    expect(serviceConnectionsSection?.content).toContain('Sleep & 24/7 Health history');
+    expect(serviceConnectionsSection?.content).toContain('Sleep & available Health history');
     expect(serviceConnectionsSection?.content).toContain('available detailed HRV samples in the unified Health model');
-    expect(serviceConnectionsSection?.content).toContain('Connected Suunto users see **Sleep & Health history**');
+    expect(serviceConnectionsSection?.content).toContain('Connected Suunto users see **Sleep & 24/7 Health history**');
     expect(serviceConnectionsSection?.content).toContain('Body Energy Balance');
     expect(serviceConnectionsSection?.content).toContain('separate from workout FIT metrics and Sleep sessions');
     expect(serviceConnectionsSection?.content).toContain('raw webhook samples');
@@ -924,7 +925,7 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('only the latest rolling **5 years** of activity data');
     expect(serviceConnectionsSection?.content).toContain('does not support an arbitrary older five-year period');
     expect(serviceConnectionsSection?.content).toContain('Garmin Sleep and Health history import is separate from activity history import');
-    expect(serviceConnectionsSection?.content).toContain('If Garmin Health is temporarily disabled, the control falls back to **Import Sleep History**');
+    expect(serviceConnectionsSection?.content).toContain('If Garmin Health is temporarily disabled, the control falls back to **Import Sleep history**');
     expect(serviceConnectionsSection?.content).toContain('COROS to Suunto activity sync requires');
     expect(serviceConnectionsSection?.content).toContain('COROS FIT activity uploads in Services are asynchronous and use per-file status');
     expect(serviceConnectionsSection?.content).toContain('short provider upload pacing');

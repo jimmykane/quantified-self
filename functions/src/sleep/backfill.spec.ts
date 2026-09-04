@@ -702,6 +702,8 @@ describe('backfillCorosAPISleep', () => {
 
         expect(result).toEqual({
             queued: expectedWindows.length,
+            sleepQueued: expectedWindows.length,
+            healthQueued: expectedWindows.length,
             startDate: new Date(startMs).toISOString(),
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + cooldownMs,
