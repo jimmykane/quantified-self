@@ -118,8 +118,7 @@
   min-width: 0;
 }
 
-.health-priority-state,
-.health-source-identity {
+.health-priority-state {
   align-items: center;
   display: flex;
 }
@@ -142,10 +141,7 @@
 }
 
 .health-priority-source-row {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
+  display: block;
   min-height: 27px;
   min-width: 0;
   padding: 0.15rem 0;
@@ -155,36 +151,19 @@
   border-top: var(--health-priority-divider);
 }
 
-.health-source-identity {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-label-medium);
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.health-source-identity > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.health-source-identity mat-icon {
-  font-size: 18px;
-  height: 18px;
-  line-height: 18px;
-  width: 18px;
-}
-
-.health-source-identity app-service-source-icon {
-  flex: 0 0 auto;
-}
-
 .health-priority-value {
   display: grid;
-  flex: 1 1 auto;
   gap: 0.05rem;
   min-width: 0;
-  text-align: right;
+  text-align: left;
+}
+
+.health-priority-reading {
+  align-items: baseline;
+  display: flex;
+  gap: 0.35rem;
+  justify-content: space-between;
+  min-width: 0;
 }
 
 .health-priority-value strong {
@@ -192,6 +171,13 @@
   font-size: 1rem;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+
+.health-priority-source-label {
+  color: var(--mat-sys-on-surface-variant);
+  flex: 0 0 auto;
+  font: var(--mat-sys-label-small);
+  white-space: nowrap;
 }
 
 .health-priority-value small {
@@ -223,11 +209,5 @@
 
   .health-section-heading > p {
     display: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .health-priority-source-row {
-    align-items: flex-start;
   }
 }

@@ -50,22 +50,11 @@
             <span class="health-priority-source-list">
               @for (row of card.rows; track row.id) {
                 <span class="health-priority-source-row">
-                  <span class="health-source-identity">
-                    @if (row.presentation) {
-                      <app-service-source-icon
-                        [presentation]="row.presentation"
-                        [showText]="false"
-                        [showTooltip]="false"
-                        [iconWidth]="32"
-                        [iconHeight]="18">
-                      </app-service-source-icon>
-                    } @else {
-                      <mat-icon aria-hidden="true">monitor_heart</mat-icon>
-                    }
-                    <span>{{ row.sourceLabel }}</span>
-                  </span>
                   <span class="health-priority-value">
-                    <strong>{{ row.valueText }}</strong>
+                    <span class="health-priority-reading">
+                      <strong>{{ row.valueText }}</strong>
+                      <span class="health-priority-source-label">{{ row.sourceLabel }}</span>
+                    </span>
                     <small>{{ row.contextText }}</small>
                   </span>
                 </span>

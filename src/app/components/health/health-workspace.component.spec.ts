@@ -416,12 +416,14 @@ describe('HealthWorkspaceComponent', () => {
     );
     expect(metricOptionIcons).toHaveLength((fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option').length);
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(3);
-    const priorityProviderIcons = fixture.debugElement.queryAll(By.css(
+    expect(fixture.debugElement.queryAll(By.css(
       '.health-priority-card app-service-source-icon',
-    ));
-    expect(priorityProviderIcons.length).toBeGreaterThan(0);
-    expect(priorityProviderIcons.every(icon => icon.componentInstance.iconWidth === 32)).toBe(true);
-    expect(priorityProviderIcons.every(icon => icon.componentInstance.iconHeight === 18)).toBe(true);
+    ))).toHaveLength(0);
+    const prioritySourceLabels = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-source-label'),
+    );
+    expect(prioritySourceLabels.length).toBeGreaterThan(0);
+    expect(prioritySourceLabels.some(label => label.textContent?.trim() === 'Garmin')).toBe(true);
     const filterProviderIcons = fixture.debugElement.queryAll(By.css(
       '.health-provider-filter app-service-source-icon',
     ));

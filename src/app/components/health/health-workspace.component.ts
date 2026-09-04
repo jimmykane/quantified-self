@@ -1067,7 +1067,7 @@ function priorityCard(
     label,
     icon,
     metric,
-    rows: rows.map(row => ({ ...row, presentation: providerView(row.provider).presentation })),
+    rows,
     available,
     loading: status === 'loading',
     error: status === 'error' || status === 'denied',
