@@ -6,8 +6,8 @@ describe('shared panel elevation styles', () => {
   const panelStyles = readFileSync(resolve(process.cwd(), 'src/styles/_panels.scss'), 'utf8');
   const globalStyles = readFileSync(resolve(process.cwd(), 'src/styles.scss'), 'utf8');
 
-  it('uses a subtle card token for glass panels and default Material cards', () => {
-    expect(panelStyles).toContain('--qs-card-shadow:');
+  it('keeps glass panels and default Material cards flat', () => {
+    expect(panelStyles).toContain('--qs-card-shadow: none;');
     expect(panelStyles).toContain('--qs-overlay-shadow:');
     expect(panelStyles).toMatch(/\.qs-glass-card-panel\s*\{[^}]*box-shadow:\s*var\(--qs-card-shadow\)/s);
     expect(panelStyles).toMatch(/--mat-card-elevated-container-elevation:\s*var\(--qs-card-shadow\)/);

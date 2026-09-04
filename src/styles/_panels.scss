@@ -8,9 +8,7 @@
   --qs-glass-panel-border: var(--mat-sys-outline-variant);
   --qs-glass-panel-radius: 20px;
   --qs-glass-panel-blur: 12px;
-  --qs-card-shadow:
-    0 1px 2px color-mix(in srgb, var(--mat-sys-shadow) 5%, transparent),
-    0 3px 8px color-mix(in srgb, var(--mat-sys-shadow) 4%, transparent);
+  --qs-card-shadow: none;
   --qs-overlay-shadow:
     0 2px 8px color-mix(in srgb, var(--mat-sys-shadow) 12%, transparent),
     0 12px 28px -4px color-mix(in srgb, var(--mat-sys-shadow) 10%, transparent);
@@ -48,9 +46,6 @@
 
 .dark-theme {
   --qs-glass-panel-bg: var(--mat-sys-surface, #121212);
-  --qs-card-shadow:
-    0 1px 2px color-mix(in srgb, var(--mat-sys-shadow) 12%, transparent),
-    0 3px 8px color-mix(in srgb, var(--mat-sys-shadow) 10%, transparent);
   --qs-overlay-shadow:
     0 2px 8px color-mix(in srgb, var(--mat-sys-shadow) 24%, transparent),
     0 12px 28px -4px color-mix(in srgb, var(--mat-sys-shadow) 18%, transparent);

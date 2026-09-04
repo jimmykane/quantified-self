@@ -52,7 +52,7 @@ projected `role="alert"` state.
 ## Surface elevation
 
 Use `.qs-glass-card-panel` for shared content surfaces that are not already represented by an ordinary Material card.
-Both that primitive and default Material cards use the subtle `--qs-card-shadow`; their border remains the primary
-separation from the workspace background. Floating menus, dialogs, datepickers, configuration submenus, and bottom
-sheets use the stronger `--qs-overlay-shadow` so their temporary layer remains visually distinct. Do not reuse the
-overlay shadow for in-flow cards or add route-local card shadows.
+Both that primitive and default Material cards are intentionally flat through `--qs-card-shadow: none`; their border is
+the primary separation from the workspace background. Floating menus, dialogs, datepickers, configuration submenus,
+and bottom sheets use `--qs-overlay-shadow` so their temporary layer remains visually distinct. Do not reuse the overlay
+shadow for in-flow cards or add route-local card shadows.

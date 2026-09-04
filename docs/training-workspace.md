@@ -1526,8 +1526,8 @@ UI principles:
   nested neutral containers. Their null observations remain visible gaps, and their shared safe tooltip surface keeps
   the detail readable without being cropped by the card.
 - Durability evidence and its trajectory inherit their parent Training card surface. Borders and dividers preserve the
-  hierarchy without stacking gray inset surfaces inside the card. Training panels use the shared subtle card-elevation
-  token; menus, dialogs, and other temporary surfaces retain the stronger shared overlay elevation.
+  hierarchy without stacking gray inset surfaces inside the card. Training panels use the shared flat card treatment;
+  menus, dialogs, and other temporary surfaces retain the shared overlay elevation.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.
