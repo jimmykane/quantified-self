@@ -1085,15 +1085,17 @@ describe('HealthWorkspaceComponent', () => {
     expect(loadMetricRange.mock.calls.length).toBeGreaterThanOrEqual(callCountAfterGarminAdvanced + 3);
   });
 
-  it('maps denied and empty reads to clear Connectivity actions', async () => {
+  it('maps denied reads to Connectivity, but keeps empty windows actionable in place', async () => {
     await createComponent(() => Promise.reject({ code: 'permission-denied' }));
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Health data access was denied');
     expect((fixture.nativeElement as HTMLElement).querySelector('[routerlink="/services"]')).toBeTruthy();
 
     TestBed.resetTestingModule();
     await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No Resting heart rate data in this window');
-    expect((fixture.nativeElement as HTMLElement).querySelector('[routerlink="/services"]')).toBeTruthy();
+    const emptyState = (fixture.nativeElement as HTMLElement).querySelector('.health-detail-state');
+    expect(emptyState?.textContent).toContain('No Resting heart rate data in this window');
+    expect(emptyState?.textContent).toContain('Choose another date range or a metric with imported readings.');
+    expect(emptyState?.querySelector('[routerlink="/services"]')).toBeNull();
   });
 
   it('explains sample-only metrics instead of implying an empty 90-day aggregate', async () => {
