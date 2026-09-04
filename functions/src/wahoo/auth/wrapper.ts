@@ -100,6 +100,7 @@ export const deauthorizeWahooAPI = onCall({
   cors: ALLOWED_CORS_ORIGINS,
   memory: '256MiB',
   maxInstances: 10,
+  timeoutSeconds: 120,
 }, async (request): Promise<{ result: string }> => {
   enforceAppCheck(request);
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be authenticated.');

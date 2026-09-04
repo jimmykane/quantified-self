@@ -4568,7 +4568,9 @@ describe('MCP data service', () => {
       'walking-hiking': ['hiking', 'vertical-endurance'],
       'nordic-skiing': ['roller-skiing', 'vertical-endurance'],
       strength: ['strength', 'strength'],
+      'fitness-gym': ['general-fitness', 'general'],
       paddling: ['kayaking', 'paddling'],
+      'other-training': ['other-training', 'general'],
     } as const;
     const window = (discipline: typeof TRAINING_DISCIPLINES[number]) => ({
       periodDays: 28,
@@ -4583,7 +4585,9 @@ describe('MCP data service', () => {
         context: contextByDiscipline[discipline][0],
         profile: contextByDiscipline[discipline][1],
         activityCount: 1,
-        metrics: discipline === 'cycling'
+        metrics: discipline === 'fitness-gym' || discipline === 'other-training'
+          ? [{ metric: 'elapsed-time', value: 3_600, sourceActivityCount: 1 }]
+          : discipline === 'cycling'
           ? [{ metric: 'max-jump-distance', value: 7.4, sourceActivityCount: 1 }]
           : discipline === 'rowing'
             ? [{ metric: 'stroke-rate', value: 28, sourceActivityCount: 1 }]
@@ -4595,7 +4599,7 @@ describe('MCP data service', () => {
       status: 'ready',
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: 123,
-      sourceEventCount: 8,
+      sourceEventCount: 10,
       payload: {
         dayBoundary: 'UTC',
         asOfDayMs: 2,
@@ -4699,7 +4703,9 @@ describe('MCP data service', () => {
       ['walking-hiking', 'Walking & Hiking', 50],
       ['nordic-skiing', 'Nordic Skiing', 60],
       ['strength', 'Strength', null],
+      ['fitness-gym', 'Fitness & Gym', null],
       ['paddling', 'Paddling', 70],
+      ['other-training', 'Other training', null],
       ['other', 'Other', 80],
       ['unclassified', 'Unclassified', 90],
     ] as Array<[string, string, number | null]>).map(([sport, label, trainingStressScore]) => ({
@@ -4711,18 +4717,18 @@ describe('MCP data service', () => {
       loadSharePercent: trainingStressScore === null ? null : 10,
     }));
     const coverage = {
-      totalCount: 10,
+      totalCount: 12,
       loadedCount: 9,
-      classifiedCount: 9,
+      classifiedCount: 11,
       unclassifiedCount: 1,
-      ratio: 0.9,
+      ratio: 0.75,
     };
     const windowMetrics = {
-      parentEventCount: 10,
+      parentEventCount: 12,
       parentLoadEventCount: 9,
       parentTrainingStressScore: 450,
       parentLoadCoverage: coverage,
-      childActivityCount: 10,
+      childActivityCount: 12,
       childLoadActivityCount: 9,
       childTrainingStressScore: 450,
       childLoadCoverage: coverage,
@@ -4746,7 +4752,7 @@ describe('MCP data service', () => {
       status: 'ready',
       schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
       updatedAtMs: 123,
-      sourceEventCount: 10,
+      sourceEventCount: 12,
       payload: {
         dayBoundary: 'UTC',
         asOfDayMs: 2,
@@ -4779,7 +4785,7 @@ describe('MCP data service', () => {
     expect(payload.current.sportLoads.map(load => load.sport))
       .toEqual(['running', 'cycling', 'swimming', 'other', 'unclassified']);
     expect(payload.current.sportLoads.find(load => load.sport === 'other')).toMatchObject({
-      activityCount: 6,
+      activityCount: 8,
       loadActivityCount: 5,
       trainingStressScore: 300,
     });

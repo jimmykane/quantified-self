@@ -32,6 +32,7 @@ import {
   resolveMcpAuthorizationRequesterKey,
   resolvePublicBaseUrl,
   requireMcpTokenGrantType,
+  sanitizeMcpProtocolVersionForDiagnostics,
   summarizeMcpOutputValidationIssues,
   supportsMcpTransportMethod,
 } from './server';
@@ -1335,6 +1336,13 @@ describe('MCP HTTP scope enforcement', () => {
     expect(classifyMcpTransportRejectionReason(
       new Error('untrusted request body: secret-value'),
     )).toBe('unexpected_transport_error');
+  });
+
+  it('retains only safe MCP protocol versions for rejection diagnostics', () => {
+    expect(sanitizeMcpProtocolVersionForDiagnostics('2026-01-15')).toBe('2026-01-15');
+    expect(sanitizeMcpProtocolVersionForDiagnostics(' DRAFT-2026-v1 ')).toBe('DRAFT-2026-v1');
+    expect(sanitizeMcpProtocolVersionForDiagnostics('unsupported-version-secret')).toBe('invalid_or_absent');
+    expect(sanitizeMcpProtocolVersionForDiagnostics(undefined)).toBe('invalid_or_absent');
   });
 
   it('reports unsupported OAuth token grants with the standard error code', () => {

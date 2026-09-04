@@ -950,21 +950,23 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
-Internal derived schema 18 includes the eight sport families and context/profile summaries introduced in schema 16,
-the reusable maximum aggregation used for MTB longest-jump distance in schema 17, and canonical swimming, rowing, and
-paddling stroke-rate profile metrics with bounded pre-19 Cadence read compatibility. The registered MCP contract maps
+Internal derived schema 19 includes the original eight modeled families, the data-backed Fitness & Gym and Other
+training volume groups, and the context/profile summaries introduced in schema 16. It retains the reusable maximum
+aggregation used for MTB longest-jump distance in schema 17 and canonical swimming, rowing, and paddling stroke-rate
+profile metrics with bounded pre-19 Cadence read compatibility. The registered MCP contract maps
 current snapshots to its frozen wire schema version 15 and three-family shape through an explicit projection before
 redaction and strict validation:
 
 - `training_summary` and `training_build_comparison` retain only Running, Cycling, and Swimming and reconstruct their
   exact registered window objects, so internal `contexts`, profile IDs, and profile metrics cannot leak.
 - `training_explanation` retains those three named families, folds Rowing, Walking & Hiking, Nordic Skiing, Strength,
-  and Paddling into Other for complete load/composition totals, and exposes rhythm only for the registered three.
+  Fitness & Gym, Paddling, and Other training into Other for complete load/composition totals, and exposes rhythm only
+  for the registered three.
 - `training_durability` retains its existing Running, Cycling, Pool, and Open-water scopes. Its workspace-only exact
   supporting-workout start time is reduced to the existing UTC `startDayMs` public field.
 
 The same projection protects the compact briefing and daily report Training summary. Negative fixtures include all
-eight internal families, gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and
+all ten internal groups, general/gravity/rowing contexts, the internal maximum-jump and stroke-rate profile metrics, and
 undeclared private fields, then prove the public result validates and contains none of them. Because advertised tools, schemas,
 instructions, plugin metadata, and starter prompts do not change, this internal expansion needs neither a
 registered-app rescan nor a local plugin sync.

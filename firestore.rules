@@ -401,55 +401,21 @@ service cloud.firestore {
     }
 
 
-    match /suuntoAppAccessTokens/{userID} {
-      // Temporary rollout compatibility for older frontends and for the new
-      // frontend's field-absent fallback. Remove only after production
-      // projections have been backfilled and verified. Browser writes remain denied.
-      allow read: if isNonAnonymousOwner(userID);
-      // Suunto OAuth state, credentials, stable provider identity, and
-      // lifecycle fences are server-owned. In particular, an owner must not
-      // be able to create a token child that a backend scheduler could promote
-      // into webhook delivery authority. Parent deletion is also denied
-      // because Firestore would retain its token subcollection as an orphan.
-      allow create, update, delete: if false;
-       match /tokens/{document=**} {
-          allow read: if isNonAnonymousOwner(userID);
-          allow write: if false;
-       }
+    // Provider OAuth state, credentials, stable identities, and lifecycle
+    // fences are server-owned. The browser reads only the bounded connection
+    // projection under users/{uid}/meta/{service}.
+    match /suuntoAppAccessTokens/{userID}/{document=**} {
+      allow read, write: if false;
     }
 
-    match /COROSAPIAccessTokens/{userID} {
-      // Temporary rollout compatibility; remove with the post-backfill Rules
-      // lockdown after the projection-aware frontend is verified.
-      allow read: if isNonAnonymousOwner(userID);
-      // COROS OAuth state, credentials, and deauthorization are server-owned.
-      // Keeping every root mutation behind callables prevents an owner from
-      // deleting only the parent or reviving a legacy orphaned token child by
-      // recreating an empty root.
-      allow create, update, delete: if false;
-       match /tokens/{document=**} {
-          allow read: if isNonAnonymousOwner(userID);
-          // COROS OAuth exchange, refresh, and disconnect flows use Admin SDK.
-          // Legacy owner reads remain only as a staged-rollout fallback.
-          allow write: if false;
-       }
+    match /COROSAPIAccessTokens/{userID}/{document=**} {
+      allow read, write: if false;
     }
 
-    match /garminAPITokens/{userID} {
-      // Temporary rollout compatibility; remove only after the projection
-      // backfill and projection-aware frontend have been verified in production.
-      allow read: if isNonAnonymousOwner(userID);
-      // Garmin OAuth state, credentials, provider identity, and lifecycle
-      // fences authorize backend Health callback processing and are server-owned.
-      allow create, update, delete: if false;
-       match /tokens/{tokenId} {
-          allow read: if isNonAnonymousOwner(userID);
-          allow write: if false;
-       }
+    match /garminAPITokens/{userID}/{document=**} {
+      allow read, write: if false;
     }
 
-    // Wahoo OAuth credentials are server-owned. The app reads safe connection
-    // state from users/{uid}/meta/Wahoo API.
     match /wahooAPIAccessTokens/{userID}/{document=**} {
       allow read, write: if false;
     }

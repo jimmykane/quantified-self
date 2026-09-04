@@ -153,7 +153,10 @@ export const requestAndSetGarminAPIAccessToken = functions
 
 
 export const deauthorizeGarminAPI = functions
-  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.deauthorizeGarminAPI })
+  .runWith({
+    timeoutSeconds: 120,
+    secrets: FUNCTION_SECRET_BINDINGS.deauthorizeGarminAPI,
+  })
   .region(FUNCTIONS_MANIFEST.deauthorizeGarminAPI.region)
   .https.onCall(async (data: any, context) => {
   // 1. App Check Verification

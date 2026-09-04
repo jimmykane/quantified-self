@@ -12,6 +12,7 @@ export interface TrainingSportVisibilityDialogData {
   userUID: string;
   visibleDisciplines: TrainingVisibleDiscipline[];
   isAutomatic: boolean;
+  availableDisciplines?: TrainingVisibleDiscipline[];
 }
 
 export interface TrainingSportVisibilityDialogResult {
@@ -27,7 +28,7 @@ export interface TrainingSportVisibilityDialogResult {
   standalone: false,
 })
 export class TrainingSportVisibilityDialogComponent {
-  public readonly disciplineOptions = TRAINING_VISIBLE_DISCIPLINE_OPTIONS;
+  public readonly disciplineOptions: typeof TRAINING_VISIBLE_DISCIPLINE_OPTIONS;
   public readonly shortcutLimit = TRAINING_SPORT_SHORTCUT_LIMIT;
   public readonly saveActionLabel: string;
   public selectedDisciplines: Record<TrainingVisibleDiscipline, boolean>;
@@ -44,6 +45,10 @@ export class TrainingSportVisibilityDialogComponent {
     private readonly userSettingsService: AppUserSettingsQueryService,
     private readonly changeDetector: ChangeDetectorRef,
   ) {
+    const availableDisciplines = new Set(data.availableDisciplines || TRAINING_VISIBLE_DISCIPLINE_OPTIONS
+      .map(option => option.discipline));
+    this.disciplineOptions = TRAINING_VISIBLE_DISCIPLINE_OPTIONS
+      .filter(option => availableDisciplines.has(option.discipline));
     this.saveActionLabel = data.isAutomatic ? 'Keep these sports' : 'Save selection';
     this.selectedDisciplines = Object.fromEntries(
       this.disciplineOptions.map(option => [option.discipline, data.visibleDisciplines.includes(option.discipline)]),

@@ -215,7 +215,7 @@ async function beginOAuthFlowIfUserActive(
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
   const generation = crypto.randomUUID();
-  const reclaimedDisconnect = await db.runTransaction(async transaction => {
+  await db.runTransaction(async transaction => {
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
@@ -229,27 +229,12 @@ async function beginOAuthFlowIfUserActive(
     const rootSnapshot = await transaction.get(tokenRootRef);
     const rootData = rootSnapshot.data() as Record<string, unknown> | undefined;
     const nowMs = Date.now();
-    let reclaimedDisconnectOperationGeneration: string | null = null;
-    let reclaimedDisconnectLeaseExpiresAtMs: number | null = null;
     if (getActiveServiceDisconnectOperationGeneration(rootData, nowMs)) {
-      const tokenSnapshot = await transaction.get(tokenRootRef.collection('tokens').limit(1));
-      if (!tokenSnapshot.empty) {
-        throw new ServiceDisconnectInProgressError(
-          serviceName,
-          SERVICE_DISCONNECT_RETRY_BLOCKERS.DisconnectOperation,
-          Number(rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] || 0),
-          nowMs,
-        );
-      }
-      // Once the disconnect has removed every credential there is no provider
-      // token left for a new OAuth flow to race with. Rotating the OAuth flow
-      // generation below makes any remaining disconnect cleanup stale, so an
-      // abandoned lease must not keep a disconnected user locked out.
-      reclaimedDisconnectOperationGeneration = `${
-        rootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD] || ''
-      }`.trim() || null;
-      reclaimedDisconnectLeaseExpiresAtMs = Number(
-        rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] || 0,
+      throw new ServiceDisconnectInProgressError(
+        serviceName,
+        SERVICE_DISCONNECT_RETRY_BLOCKERS.DisconnectOperation,
+        Number(rootData?.[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] || 0),
+        nowMs,
       );
     }
 
@@ -272,26 +257,7 @@ async function beginOAuthFlowIfUserActive(
       [SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD]: FieldValue.delete(),
       [SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD]: FieldValue.delete(),
     }, { merge: true });
-    return {
-      operationGeneration: reclaimedDisconnectOperationGeneration,
-      leaseExpiresAtMs: reclaimedDisconnectLeaseExpiresAtMs,
-      observedAtMs: nowMs,
-    };
   });
-  if (reclaimedDisconnect.operationGeneration) {
-    logDisconnectLifecycle('warn', {
-      lifecycleEvent: 'empty_disconnect_lease_reclaimed',
-      serviceName,
-      operationCorrelationId: getDisconnectOperationCorrelationId(
-        reclaimedDisconnect.operationGeneration,
-      ),
-      leaseExpiresAtMs: reclaimedDisconnect.leaseExpiresAtMs,
-      leaseRemainingMs: Math.max(
-        0,
-        Number(reclaimedDisconnect.leaseExpiresAtMs || 0) - reclaimedDisconnect.observedAtMs,
-      ),
-    });
-  }
   return generation;
 }
 

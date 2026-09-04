@@ -171,7 +171,8 @@ export const deauthorizeSuuntoApp = onCall({
   secrets: FUNCTION_SECRET_BINDINGS.deauthorizeSuuntoApp,
   cors: ALLOWED_CORS_ORIGINS,
   memory: '512MiB',
-  maxInstances: 10
+  maxInstances: 10,
+  timeoutSeconds: 120,
 }, async (request): Promise<DeauthorizeResponse> => {
   // App Check verification
   enforceAppCheck(request);

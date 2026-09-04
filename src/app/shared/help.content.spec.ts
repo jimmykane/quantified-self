@@ -406,7 +406,10 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('no suitable comparison rather than zero');
     expect(trainingSection?.content).toContain('**All sports**');
     expect(trainingSection?.content).toContain('compact swipeable sport buttons');
-    expect(trainingSection?.content).toContain('compact **All sports** arrow button opens every sport');
+    expect(trainingSection?.content).toContain('compact **All sports** arrow button opens every currently available sport');
+    expect(trainingSection?.content).toContain('**Fitness & Gym** appears when recorded');
+    expect(trainingSection?.content).toContain('**Other training** appears when a recorded sport');
+    expect(trainingSection?.content).toContain('not from TSS, zones, power, or durability evidence');
     expect(trainingSection?.content).toContain('available TSS summary');
     expect(trainingSection?.content).toContain('median of the three preceding 28-day blocks');
     expect(trainingSection?.content).toContain('**Manage sport shortcuts**');

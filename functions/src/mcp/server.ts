@@ -1626,6 +1626,25 @@ export type McpTransportRejectionReason =
   | 'invalid_initialization'
   | 'unexpected_transport_error';
 
+const SAFE_MCP_PROTOCOL_VERSION_PATTERN = /^(?:\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|DRAFT-\d{4}-v\d{1,2})$/;
+
+/**
+ * The raw header is client-controlled, but a protocol version is useful when
+ * diagnosing transport compatibility. Preserve only the bounded protocol
+ * formats; never put arbitrary header text into Cloud Logging.
+ */
+export function sanitizeMcpProtocolVersionForDiagnostics(
+  value: unknown,
+): string | 'invalid_or_absent' {
+  if (typeof value !== 'string') {
+    return 'invalid_or_absent';
+  }
+  const normalized = value.trim();
+  return SAFE_MCP_PROTOCOL_VERSION_PATTERN.test(normalized)
+    ? normalized
+    : 'invalid_or_absent';
+}
+
 export function classifyMcpTransportRejectionReason(
   error: unknown,
 ): McpTransportRejectionReason {
@@ -1673,9 +1692,13 @@ function logMcpTransportRejection(
   error: unknown,
   request: Request,
 ): void {
+  const reason = classifyMcpTransportRejectionReason(error);
   logger.warn('[MCP] Streamable HTTP request rejected', {
-    reason: classifyMcpTransportRejectionReason(error),
+    reason,
     clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
+    ...(reason === 'unsupported_protocol_version'
+      ? { protocolVersion: sanitizeMcpProtocolVersionForDiagnostics(request.get('mcp-protocol-version')) }
+      : {}),
   });
 }
 
