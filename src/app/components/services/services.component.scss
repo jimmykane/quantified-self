@@ -1,6 +1,8 @@
 @use '../../../styles/breakpoints' as bp;
 
 .settings-container {
+    --services-surface-border: color-mix(in srgb, var(--mat-sys-outline-variant) 55%, transparent);
+
     display: block;
     position: relative;
 }
@@ -37,7 +39,7 @@
     --mat-expansion-container-elevation-shadow: none;
 
     margin-bottom: 20px;
-    border: 1px solid var(--mat-sys-outline-variant);
+    border: 1px solid var(--services-surface-border);
     border-radius: 12px;
     box-shadow: none;
 }
@@ -274,6 +276,7 @@
 .service-sync-summary {
     --mat-card-outlined-container-color: var(--mat-sys-surface-container-lowest);
     --mat-card-outlined-container-elevation: none;
+    --mat-card-outlined-outline-color: var(--services-surface-border);
 
     margin-top: 12px;
 }
@@ -341,7 +344,7 @@
     align-items: center;
     gap: 16px;
     padding: 16px 18px;
-    border: 1px solid var(--mat-sys-outline-variant);
+    border: 1px solid var(--services-surface-border);
     border-radius: 12px;
     background: var(--mat-sys-surface-container-lowest);
 }

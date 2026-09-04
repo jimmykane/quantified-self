@@ -404,6 +404,23 @@ describe('ServicesComponent', () => {
         expect(dataFlowRule).toContain('--mat-expansion-container-elevation-shadow: none');
     });
 
+    it('uses one subtle outline tone for Connectivity surfaces', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8',
+        );
+        const dataFlowRule = styles.match(/\.service-data-flow\s*\{[^}]*\}/)?.[0] ?? '';
+        const syncSummaryRule = styles.match(/\.service-sync-summary\s*\{[^}]*\}/)?.[0] ?? '';
+        const overviewCardRule = styles.match(/\.service-overview-card\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(styles).toContain(
+            '--services-surface-border: color-mix(in srgb, var(--mat-sys-outline-variant) 55%, transparent)',
+        );
+        expect(dataFlowRule).toContain('border: 1px solid var(--services-surface-border)');
+        expect(syncSummaryRule).toContain('--mat-card-outlined-outline-color: var(--services-surface-border)');
+        expect(overviewCardRule).toContain('border: 1px solid var(--services-surface-border)');
+    });
+
     it('shows a single-service import state before the matrix becomes useful', () => {
         component.processUser({ uid: 'test-user-uid' } as User, true);
         component.setServiceConnectionState('garmin', true);
