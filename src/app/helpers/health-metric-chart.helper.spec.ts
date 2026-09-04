@@ -119,6 +119,7 @@ describe('Health metric chart helpers', () => {
     };
 
     expect(model.ariaLabel).toContain('Latest 6.22 mi');
+    expect(model.displayUnit).toBe('mi');
     expect(option.tooltip.formatter({ value: [0, 10_000] })).toContain('6.22 mi');
     expect(option.yAxis.axisLabel.formatter(10_000)).toBe('6.22');
   });

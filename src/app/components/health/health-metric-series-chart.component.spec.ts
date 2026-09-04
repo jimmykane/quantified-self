@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
@@ -6,6 +7,7 @@ import {
   HEALTH_VALUE_ORIGINS,
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildHealthChartModels } from '../../helpers/health-metric-chart.helper';
 import { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
@@ -15,7 +17,7 @@ import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.c
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function series(): HealthWorkspaceSeries {
+function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspaceSeries {
   return {
     id: 'garmin-resting-heart-rate',
     metricId: HEALTH_METRIC_IDS.RestingHeartRate,
@@ -41,6 +43,7 @@ function series(): HealthWorkspaceSeries {
     coverageText: '2/14 days',
     freshnessText: 'Fresh',
     hasConflict: false,
+    ...overrides,
   };
 }
 
@@ -94,5 +97,26 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(eChartsLoader.setOption).toHaveBeenCalledTimes(1);
     const option = eChartsLoader.setOption.mock.calls[0][1] as { series: Array<{ type: string }> };
     expect(option.series[0].type).toBe('line');
+  });
+
+  it('refreshes chart labels when the signed-in user changes display units', async () => {
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.Distance,
+      unit: 'meter',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 10_000, qualityCode: null }],
+    })], 0, DAY_MS)[0]);
+    fixture.componentRef.setInput('unitSettings', normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(eChartsLoader.setOption).toHaveBeenCalledTimes(2);
+    });
+
+    const option = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as {
+      tooltip: { formatter: (params: { value?: unknown }) => string };
+      yAxis: { axisLabel: { formatter: (value: number) => string } };
+    };
+    expect(option.tooltip.formatter({ value: [0, 10_000] })).toContain('6.22 mi');
+    expect(option.yAxis.axisLabel.formatter(10_000)).toBe('6.22');
   });
 });

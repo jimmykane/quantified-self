@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import { formatHealthUnit, HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
-import { buildHealthChartModels, HealthChartSeriesModel } from '../../helpers/health-metric-chart.helper';
+import { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
+import { buildHealthChartModels } from '../../helpers/health-metric-chart.helper';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
 
 @Component({
@@ -26,17 +26,4 @@ export class HealthMetricChartComponent {
     this.endTimeMs(),
     this.unitSettings(),
   ));
-
-  formatSeriesUnit(model: HealthChartSeriesModel): string {
-    const latest = model.displayedPoints.at(-1);
-    return latest
-      ? formatHealthUnit(
-        model.series.metricId,
-        latest.value,
-        model.series.unit,
-        model.series.nativeOnly,
-        this.unitSettings(),
-      )
-      : '';
-  }
 }

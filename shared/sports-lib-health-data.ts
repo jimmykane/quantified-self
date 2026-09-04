@@ -166,7 +166,7 @@ export class SportsLibDataValidationError extends Error {
   }
 }
 
-export interface SportsLibScalarDisplay {
+export interface HealthMetricSportsLibDisplay {
   value: string;
   unit: string;
 }
@@ -176,7 +176,7 @@ function formatSportsLibScalarValue(
   value: HealthScalar,
   unitSettings?: UserUnitSettingsInterface | null,
   options?: ResolveUnitAwareDisplayOptions,
-): SportsLibScalarDisplay | null {
+): HealthMetricSportsLibDisplay | null {
   try {
     const display = resolveUnitAwareDisplayStat(new dataClass(value as never), unitSettings, options);
     return display ? { value: display.value, unit: display.unit } : null;
@@ -194,7 +194,7 @@ export function formatCanonicalHealthMetricSportsLibValue(
   metricId: HealthMetricId,
   value: HealthScalar,
   unitSettings?: UserUnitSettingsInterface | null,
-): SportsLibScalarDisplay | null {
+): HealthMetricSportsLibDisplay | null {
   return formatSportsLibScalarValue(HEALTH_SPORTS_LIB_CLASSES[metricId], value, unitSettings);
 }
 
@@ -207,7 +207,7 @@ export function formatCanonicalSleepMetricSportsLibValue(
   value: HealthScalar,
   unitSettings?: UserUnitSettingsInterface | null,
   options?: ResolveUnitAwareDisplayOptions,
-): SportsLibScalarDisplay | null {
+): HealthMetricSportsLibDisplay | null {
   return formatSportsLibScalarValue(SLEEP_SPORTS_LIB_CLASSES[field], value, unitSettings, options);
 }
 

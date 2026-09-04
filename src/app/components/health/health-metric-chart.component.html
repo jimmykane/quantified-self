@@ -32,7 +32,7 @@
       </mat-card-content>
 
       <mat-card-footer class="health-chart-footer">
-        @if (formatSeriesUnit(model); as displayUnit) {
+        @if (model.displayUnit; as displayUnit) {
           <span>{{ displayUnit }}</span>
         }
         @if (model.series.deviceLabel) {

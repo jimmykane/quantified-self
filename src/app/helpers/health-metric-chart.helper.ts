@@ -16,6 +16,7 @@ import {
   HealthWorkspaceSeries,
   HealthWorkspaceSeriesPoint,
   formatHealthAxisValue,
+  formatHealthUnit,
   formatHealthValue,
 } from './health-workspace.helper';
 
@@ -35,6 +36,7 @@ export interface HealthChartSeriesModel {
   categoryLabels: string[];
   displayedPointCount: number;
   omittedPointCount: number;
+  displayUnit: string;
   ariaLabel: string;
 }
 
@@ -353,6 +355,9 @@ function buildSeriesModel(
   const latestText = latest
     ? formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings)
     : 'No reading';
+  const displayUnit = latest
+    ? formatHealthUnit(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings)
+    : '';
   const readingCountText = `${sortedPoints.length.toLocaleString()} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
 
   return {
@@ -371,6 +376,7 @@ function buildSeriesModel(
     categoryLabels,
     displayedPointCount: displayedPoints.length,
     omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
+    displayUnit,
     ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${readingCountText}. Latest ${latestText}. Values are not combined with other sources.`,
   };
 }
