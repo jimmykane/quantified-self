@@ -451,7 +451,7 @@ describe('ServicesComponent', () => {
         const dataFlow = fixture.nativeElement.querySelector('.service-data-flow');
         const matrix = dataFlow.querySelector('.provider-data-flow-matrix__table');
 
-        expect(dataFlow.textContent).toContain('Connected services import new activities into Quantified Self');
+        expect(dataFlow.textContent).toContain('Choose how activities and routes in Quantified Self are sent to your other services');
         expect(matrix.textContent).toContain('Garmin');
         expect(matrix.textContent).toContain('Suunto');
         expect(matrix.textContent).toContain('Needs connection');
