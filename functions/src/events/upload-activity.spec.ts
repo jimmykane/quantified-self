@@ -150,9 +150,7 @@ vi.mock('firebase-admin', () => {
 
 vi.mock('../utils', () => ({
   ALLOWED_CORS_ORIGINS: [],
-  get ENFORCE_APP_CHECK() {
-    return hoisted.mockEnforceAppCheckFlag.value;
-  },
+  shouldEnforceAppCheck: () => hoisted.mockEnforceAppCheckFlag.value,
   hasProAccess: (...args: unknown[]) => hoisted.mockHasProAccess(...args),
   hasBasicAccess: (...args: unknown[]) => hoisted.mockHasBasicAccess(...args),
   assertEventWriteUserActive: (...args: unknown[]) => hoisted.mockAssertEventWriteUserActive(...args),

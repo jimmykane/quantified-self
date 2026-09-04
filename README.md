@@ -38,97 +38,126 @@ The main repository areas are:
 
 ## Prerequisites
 
-For the frontend and the repository's CI-compatible workflow, install:
+Install:
 
 - Git.
-- Node.js 20.19 or later in the Node 20 line. The committed `.nvmrc` selects Node 20, so `nvm use` is the easiest way to match CI.
+- Node.js 20.19 or later in the Node 20 line. The committed `.nvmrc` selects Node 20, so `nvm use` matches the frontend CI environment.
 - npm, which is included with Node.js.
-- [Gitleaks](https://github.com/gitleaks/gitleaks), used by the pre-commit credential scan.
-- A [Mapbox public access token](https://docs.mapbox.com/help/getting-started/access-tokens/) for maps and geocoding.
+- Java 21 for the Firestore and Storage emulators.
+- A [Mapbox public access token](https://docs.mapbox.com/help/getting-started/access-tokens/) for local maps and geocoding.
 
-For Firebase emulators and Rules tests, also install:
-
-- [Firebase CLI](https://firebase.google.com/docs/cli).
-- Java 21, matching the CI environment.
+The repository pins its own Firebase CLI; do not install or log in to a global CLI for the local workflow. [Gitleaks](https://github.com/gitleaks/gitleaks) is additionally required when committing through the repository hooks.
 
 > [!NOTE]
 > `functions/package.json` declares Node.js 22 as the Cloud Functions runtime. Installing Functions dependencies under Node 20 may show an engine warning. Use Node 22 when developing or deploying Functions runtime behavior; the root `.nvmrc` remains the frontend and CI default.
 
 ## Quick start
 
+### Choose a runtime mode
+
+| Mode | Entry point | Services and data | Intended use |
+| --- | --- | --- | --- |
+| Isolated demo (recommended) | Follow the steps below and run `npm start` | Disposable `demo-quantified-self-local` project, loopback emulators, and synthetic roles without Stripe | Normal contributor development |
+| Hosted project (maintainers only) | See [Intentional hosted opt-in](docs/local-development.md#intentional-hosted-opt-in) | Real hosted Firebase configuration; the app can read and write hosted resources | Narrow, explicitly confirmed maintainer debugging |
+| Self-hosted deployment | See [Deployment and self-hosting](#deployment-and-self-hosting) | A fork owner's Firebase project, provider accounts, secrets, domains, and infrastructure | Advanced operators; not a turnkey setup |
+
+The Quick Start below is exclusively for the isolated demo mode. Do not substitute the hosted-project workflow into these steps.
+
 ### 1. Clone and install
 
 ```bash
 git clone https://github.com/jimmykane/quantified-self.git
 cd quantified-self
-nvm use
 npm ci
 npm --prefix functions ci
 ```
 
-The root application and Functions use separate lockfiles, so both installs are required for the full development workflow.
+Activate Node 20.19 or later in the Node 20 line before installing (`nvm use` on systems with nvm). The root application and Functions use separate lockfiles, so both installs are required for the full development workflow.
 
-### 2. Add a local Mapbox token
+### 2. Create the ignored local files
 
-The local Angular build expects a file that is intentionally excluded from Git. Create `src/environments/mapbox-token.local.ts` with your own public token:
+Copy the safe Mapbox template:
 
-```ts
-export const mapboxAccessToken = 'YOUR_PUBLIC_MAPBOX_TOKEN';
-```
-
-Do not copy a maintainer token or commit this file. A valid token is required for map and geocoding features.
-
-### 3. Understand the local Firebase boundary
-
-> [!WARNING]
-> The current development configuration is **hybrid, not fully isolated**. Callable Functions are routed to the Functions emulator, but browser Auth, Firestore, Storage, Analytics, App Check, and Remote Config still use the configured hosted Firebase project. Starting additional emulators does not connect those browser SDKs automatically.
-
-Use a dedicated development Firebase project and test account for authenticated work. Do not perform writes until you have confirmed which project the browser is using. Development credentials placed in `functions/.secret.local` can also call real provider APIs, and Cloud Tasks uses its configured external API unless a task emulator host is supplied.
-
-The Functions emulator does not require a service-account JSON or Google Application Default Credentials when Admin SDK traffic stays on the Auth, Firestore, and Storage emulators. The shared Admin bootstrap uses the emulator hosts locally and the assigned runtime identity in Cloud Functions. Do not add a service-account key to the Functions source tree.
-
-### 4. Build Functions and start the emulators
-
-In the first terminal:
+macOS/Linux:
 
 ```bash
-npm --prefix functions run build
-firebase emulators:start --only auth,functions,firestore,storage
+cp src/environments/mapbox-token.local.example.ts src/environments/mapbox-token.local.ts
 ```
 
-The Functions emulator loads compiled output from `functions/lib`, so the build must finish before the emulators start.
+Windows PowerShell:
 
-### 5. Start Angular
+```powershell
+Copy-Item src/environments/mapbox-token.local.example.ts src/environments/mapbox-token.local.ts
+```
 
-In a second terminal:
+Edit only `src/environments/mapbox-token.local.ts` and replace `YOUR_PUBLIC_MAPBOX_TOKEN` with your own `pk.*` public Mapbox token. On first start, the launcher creates `functions/.secret.local` from its safe sentinel template if the file is missing. Do not edit the `LOCAL_EMULATOR_DISABLED` values: they stop Firebase from falling back to Secret Manager.
+
+The copied Mapbox file and generated Functions secret file are ignored by Git. Never put a maintainer credential, production secret, service-account file, or private user data in a local checkout.
+
+### 3. Start the isolated app
+
+Run one command from the repository root:
 
 ```bash
-npm run start:functions:emu -- --ssl=false
+npm start
 ```
 
 Open:
 
-- Application: [http://localhost:4200](http://localhost:4200)
-- Firebase Emulator UI: [http://localhost:4000](http://localhost:4000)
+- Application: [http://127.0.0.1:4200](http://127.0.0.1:4200)
+- Firebase Emulator UI: [http://127.0.0.1:4000](http://127.0.0.1:4000)
 
-The `--ssl=false` override provides a predictable fresh-clone path without relying on a local trusted certificate. If you need HTTPS for an integration flow, generate and trust your own localhost certificate rather than reusing or sharing private key material. The `certs/` directory is ignored and must never be committed:
+`npm start` validates the local-only configuration, refuses real Firebase project IDs, inherited cloud credentials, backend secrets, linked secret placeholders, non-public Mapbox tokens, unsupported hosts, occupied ports, unsafe saved-state links, and Functions environment, runtime-config, or service-account files. It then builds Functions and starts Angular plus the Auth, Firestore, Storage, Functions, and Cloud Tasks emulators. The first run downloads the Firebase emulator binaries.
+
+Sign in with a fake local identity. Email magic links appear in the emulator output/UI instead of being sent; Google and GitHub use the Auth emulator's mock provider flow. Complete onboarding normally. No real Firebase account or OAuth login is needed.
+
+Press Ctrl+C once to stop the stack and export emulator state. The next `npm start` imports it automatically.
+
+### 4. Test Free and Pro locally without Stripe
+
+Local accounts start on Free. After creating an account and completing onboarding, change only that fake account's synthetic role from another terminal:
 
 ```bash
-mkdir -p certs
-umask 077
-openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 \
-  -keyout certs/localhost.key -out certs/localhost.crt \
-  -subj '/CN=localhost' \
-  -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1'
+npm run local:role -- --email you@example.com --role pro
+npm run local:role -- --email you@example.com --role free
 ```
 
-Public pages such as `/`, `/help`, `/integrations`, and `/tools/compare` are useful first smoke tests. Authenticated flows additionally require correctly configured Firebase Auth providers, authorized domains, and App Check settings.
+The command requires the emulators to be running. It writes a local-only subscription document and Auth claim; it never creates a Stripe customer, checkout, invoice, payment, or portal session. Refresh or sign in again if the displayed role does not update immediately.
 
-`npm start` and `npm run start:functions:emu` start Angular only; neither command starts Firebase emulators. Avoid `npm run start:functions:prod` during normal contributor work because it routes callable requests to the configured hosted Functions.
+### 5. Verify or reset
 
-## Optional backend and provider configuration
+Run the disposable full-stack smoke test while `npm start` is stopped:
 
-Copy `functions/.secret.local.example` to the ignored `functions/.secret.local` only when an emulator or operational script needs provider credentials. Add development-only values for the integration you are testing; builds and unit tests do not require the file. See [Firebase Function secret management](docs/function-secret-management.md) for binding, deployment, and rotation rules.
+```bash
+npm run local:smoke
+```
+
+It proves local Auth, Firestore, synthetic Pro-to-Free roles, Storage, a callable Function, and an authenticated upload endpoint work together without App Check. To erase saved emulator data, stop the stack and run:
+
+```bash
+npm run local:reset
+```
+
+This reset is not recoverable unless you copied `.local/firebase-emulator-data` yourself. Clear browser site data for `127.0.0.1` separately if you also want to remove cached browser state.
+
+### Local boundary
+
+| Capability | Local behavior |
+| --- | --- |
+| Firebase project | Fixed `demo-quantified-self-local` project; non-emulated Firebase services fail closed |
+| Auth, Firestore, Storage, Functions, Tasks | Loopback emulators only |
+| Stripe and billing | Disabled in the UI and service layer; use `npm run local:role` |
+| App Check | Disabled only inside the Functions emulator; hosted configurations retain enforcement |
+| Analytics, Remote Config, Performance, Sentry | Disabled |
+| Hosting, Extensions, Secret Manager | Not configured or started |
+| Garmin, Suunto, COROS, Wahoo, Gemini, backend Mapbox, email delivery | Credentials disabled; cloud-backed workflows are not part of the isolated local setup |
+| Browser maps/geocoding | Uses the public Mapbox token you supplied and can contact Mapbox |
+
+This workflow is for development, not turnkey self-hosting. See [Isolated local development](docs/local-development.md) for the security model, command reference, persistence behavior, and maintainer notes.
+
+## Hosted backend and provider configuration
+
+Provider credentials are intentionally unsupported by the isolated `npm start` path. The launcher rejects real values in `functions/.secret.local` and masks workstation Google credentials before starting child processes. Maintainers testing a provider must use a separately reviewed workflow and development-only provider accounts; never weaken the default local guard or reuse production credentials. See [Firebase Function secret management](docs/function-secret-management.md) and the [provider integration guide](docs/provider-integration-guide.md).
 
 Operational scripts that intentionally access managed Google Cloud or Firebase resources use Application Default Credentials. Authenticate your local user with `gcloud auth application-default login`, or use an approved least-privilege service-account impersonation flow, and pass the target project explicitly to any write-capable script. Emulator-only development does not require this login.
 
@@ -144,12 +173,17 @@ Operational scripts that intentionally access managed Google Cloud or Firebase r
 | Optional task emulator | `CLOUD_TASKS_EMULATOR_HOST` |
 | Release source maps | `SENTRY_AUTH_TOKEN` |
 
-Never commit environment files, service-account JSON, API tokens, private keys, decrypted credentials, personal data, or production exports. Emulator code can still reach external services when real credentials are configured.
+Never commit environment files, service-account JSON, API tokens, private keys, decrypted credentials, personal data, or production exports.
 
 ## Development commands
 
 | Purpose | Command | Notes |
 | --- | --- | --- |
+| Start the isolated local stack | `npm start` | Builds Functions, starts all required emulators and Angular, and persists emulator state on exit |
+| Verify local safety configuration | `npm run local:config:test` | Tests project, endpoint, credential, and CLI-argument guards |
+| Run disposable local smoke test | `npm run local:smoke` | Verifies a synthetic Pro-to-Free transition too; requires the local stack to be stopped and never imports or exports persistent state |
+| Change a fake local role | `npm run local:role -- --email you@example.com --role pro` | Accepts `free` or `pro`; requires the stack to be running and never calls Stripe |
+| Erase saved local emulator state | `npm run local:reset` | Requires the stack to be stopped; browser site data is separate |
 | Frontend tests once | `npm test -- --run` | Deterministic command used by CI |
 | Frontend tests in watch mode | `npm test` | Keeps Vitest running |
 | Frontend coverage | `npm run test-coverage` | Writes the coverage report locally |
@@ -220,6 +254,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
 - [Garmin Health integration](docs/garmin-integration.md)
+- [Isolated local development](docs/local-development.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)
 - [Suunto 24/7 Health integration and rollout](docs/suunto-integration.md)
 - [COROS integration architecture and release checklist](docs/coros-integration.md)

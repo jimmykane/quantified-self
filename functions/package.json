@@ -28,7 +28,7 @@
   },
   "scripts": {
     "lint": "eslint . --fix",
-    "build": "rm -rf lib && tsc",
+    "build": "node scripts/build.mjs",
     "serve": "npm run build && firebase serve --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",

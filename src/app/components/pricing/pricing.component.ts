@@ -56,6 +56,7 @@ interface SubscriptionSummary {
     styleUrls: ['./pricing.component.scss']
 })
 export class PricingComponent implements OnInit, OnDestroy {
+    readonly billingDisabled = environment.billingMode === 'disabled';
     @Input() isOnboarding = false;
     @Input() onboardingUser: User | null = null;
     @Output() planSelected = new EventEmitter<void>();
