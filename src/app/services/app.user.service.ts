@@ -113,6 +113,7 @@ import {
   SERVICE_DISCONNECT_RETRY_BLOCKERS,
   SERVICE_DISCONNECT_RETRY_REASON,
   SERVICE_CONNECTION_STATES,
+  type ServiceOAuthCompletionResult,
   type ServiceDisconnectRetryDetails,
   type ServiceConnectionAccountProjection,
 } from '@shared/service-connection';
@@ -1536,10 +1537,10 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
-  public async requestAndSetCurrentUserGarminAPIAccessToken(state: string, code: string) {
+  public async requestAndSetCurrentUserGarminAPIAccessToken(state: string, code: string): Promise<ServiceOAuthCompletionResult> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.GarminAPI}&connect=1`);
-    const result = await this.functionsService.call('requestAndSetGarminAPIAccessToken', {
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, ServiceOAuthCompletionResult>('requestAndSetGarminAPIAccessToken', {
       state,
       code,
       redirectUri,
@@ -1547,30 +1548,30 @@ export class AppUserService implements OnDestroy {
     return result.data;
   }
 
-  public async requestAndSetCurrentUserSuuntoAppAccessToken(state: string, code: string) {
+  public async requestAndSetCurrentUserSuuntoAppAccessToken(state: string, code: string): Promise<ServiceOAuthCompletionResult> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`);
-    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, ServiceOAuthCompletionResult>(
       'requestAndSetSuuntoAPIAccessToken',
       { state, code, redirectUri }
     );
     return result.data;
   }
 
-  public async requestAndSetCurrentUserCOROSAPIAccessToken(state: string, code: string) {
+  public async requestAndSetCurrentUserCOROSAPIAccessToken(state: string, code: string): Promise<ServiceOAuthCompletionResult> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`);
-    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, ServiceOAuthCompletionResult>(
       'requestAndSetCOROSAPIAccessToken',
       { state, code, redirectUri }
     );
     return result.data;
   }
 
-  public async requestAndSetCurrentUserWahooAPIAccessToken(state: string, code: string) {
+  public async requestAndSetCurrentUserWahooAPIAccessToken(state: string, code: string): Promise<ServiceOAuthCompletionResult> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.WahooAPI}&connect=1`);
-    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, ServiceOAuthCompletionResult>(
       'requestAndSetWahooAPIAccessToken',
       { state, code, redirectUri },
     );

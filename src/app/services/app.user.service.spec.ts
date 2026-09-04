@@ -2498,8 +2498,13 @@ describe('AppUserService', () => {
         });
 
         describe('requestAndSetCurrentUserWahooAPIAccessToken', () => {
-            it('should call cloud function', async () => {
-                await service.requestAndSetCurrentUserWahooAPIAccessToken('state', 'code');
+            it('should return the backend completion result', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: { connected: true, outcome: 'connected' },
+                });
+
+                await expect(service.requestAndSetCurrentUserWahooAPIAccessToken('state', 'code'))
+                    .resolves.toEqual({ connected: true, outcome: 'connected' });
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetWahooAPIAccessToken', {
                     state: 'state',
@@ -2510,8 +2515,13 @@ describe('AppUserService', () => {
         });
 
         describe('requestAndSetCurrentUserCOROSAPIAccessToken', () => {
-            it('should call cloud function', async () => {
-                await service.requestAndSetCurrentUserCOROSAPIAccessToken('state', 'code');
+            it('should return the backend completion result', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: { connected: true, outcome: 'connected' },
+                });
+
+                await expect(service.requestAndSetCurrentUserCOROSAPIAccessToken('state', 'code'))
+                    .resolves.toEqual({ connected: true, outcome: 'connected' });
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetCOROSAPIAccessToken', {
                     state: 'state',
@@ -2551,8 +2561,13 @@ describe('AppUserService', () => {
         });
 
         describe('requestAndSetCurrentUserSuuntoAppAccessToken', () => {
-            it('should call cloud function', async () => {
-                await service.requestAndSetCurrentUserSuuntoAppAccessToken('state', 'code');
+            it('should return the backend completion result', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: { connected: true, outcome: 'connected' },
+                });
+
+                await expect(service.requestAndSetCurrentUserSuuntoAppAccessToken('state', 'code'))
+                    .resolves.toEqual({ connected: true, outcome: 'connected' });
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetSuuntoAPIAccessToken', {
                     state: 'state',
@@ -2563,8 +2578,13 @@ describe('AppUserService', () => {
         });
 
         describe('requestAndSetCurrentUserGarminAPIAccessToken', () => {
-            it('should call cloud function', async () => {
-                await service.requestAndSetCurrentUserGarminAPIAccessToken('state', 'code');
+            it('should return the backend completion result', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: { connected: true, outcome: 'connected' },
+                });
+
+                await expect(service.requestAndSetCurrentUserGarminAPIAccessToken('state', 'code'))
+                    .resolves.toEqual({ connected: true, outcome: 'connected' });
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetGarminAPIAccessToken', {
                     state: 'state',

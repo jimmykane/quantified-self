@@ -745,6 +745,8 @@ From an activity action menu you can also:
 
 Garmin, Suunto, COROS, and Wahoo connections are part of **Pro**.
 
+After you return from a provider, Quantified Self shows a successful connection only after the server confirms that the authorization was saved. If you deny access, the provider returns an incomplete response, the authorization expires, or saving fails, Connections shows an error and you can start the connection again. A recovery attempt that removes an old connection says so instead of showing it as connected; partial cleanup remains visible as pending rather than claiming removal.
+
 The **Connections** page is available to every signed-in account. Starter and Basic accounts open on the free **MCP** tab by default and can select every provider tab to review its capabilities. Provider tabs are marked **PRO**, while MCP is marked **FREE**. Connecting a provider, importing history, uploading to a provider, and automatic sync still require Pro.
 
 Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card. For non-Pro accounts, the action opens the Pro subscription page. For Pro accounts, it opens the provider tool in a dialog; close the dialog to return to the unchanged overview. A connected provider can always be disconnected after Pro access ends. Once any grace period expires, an automated subscription check disconnects remaining expired Pro provider connections.

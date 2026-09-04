@@ -147,11 +147,15 @@ describe('ServicesSuuntoComponent', () => {
         vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockReturnValue(null);
 
         await expect(component.requestAndSetToken())
-            .rejects.toThrow('Suunto authorization callback is missing state or code.');
+            .rejects.toThrow('Suunto App authorization callback is missing state or code.');
     });
 
     it('completes a Suunto callback with code and state when connect is absent', async () => {
         component.user = { uid: 'user-1' } as any;
+        mockUserService.requestAndSetCurrentUserSuuntoAppAccessToken.mockResolvedValueOnce({
+            connected: true,
+            outcome: 'connected',
+        });
         vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
         vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockImplementation((key: string) => ({
             serviceName: component.serviceName,

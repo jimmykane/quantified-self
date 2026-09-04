@@ -183,6 +183,10 @@ describe('Suunto Auth Wrapper', () => {
 
     describe('requestAndSetSuuntoAPIAccessToken', () => {
         it('should validate state and set tokens', async () => {
+            vi.mocked(oauth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValueOnce({
+                connected: true,
+                outcome: 'connected',
+            });
             const request = createMockRequest({
                 data: {
                     state: 'validState',
@@ -191,7 +195,10 @@ describe('Suunto Auth Wrapper', () => {
                 }
             });
 
-            await requestAndSetSuuntoAPIAccessToken(request as any);
+            await expect(requestAndSetSuuntoAPIAccessToken(request as any)).resolves.toEqual({
+                connected: true,
+                outcome: 'connected',
+            });
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp);
             expect(oauth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp, 'validState');

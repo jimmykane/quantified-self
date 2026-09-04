@@ -165,7 +165,8 @@ describe('service-disconnect-pending', () => {
       }),
     });
 
-    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
+    await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp))
+      .resolves.toBe('cleared');
 
     expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).toHaveBeenCalledWith(
       'user-1',
@@ -207,11 +208,11 @@ describe('service-disconnect-pending', () => {
       }
       : { exists: true, data: () => ({ disconnectState: 'disconnect_pending' }) });
 
-    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp, {
+    await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp, {
       documentRef: staleTokenRef as any,
       fieldName: 'activeOAuthCredentialGeneration',
       expectedGeneration: 'old-generation',
-    });
+    })).resolves.toBe('stale_lifecycle');
 
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
@@ -238,12 +239,12 @@ describe('service-disconnect-pending', () => {
       }),
     });
 
-    await clearServiceDisconnectPending(
+    await expect(clearServiceDisconnectPending(
       'user-1',
       ServiceNames.SuuntoApp,
       credentialGuard,
       staleFlowGuard,
-    );
+    )).resolves.toBe('stale_lifecycle');
 
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).not.toHaveBeenCalled();
@@ -416,7 +417,7 @@ describe('service-disconnect-pending', () => {
     );
 
     await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp))
-      .resolves.toBeUndefined();
+      .resolves.toBe('cleared');
 
     expect(hoisted.beginPendingDisconnectQueueReleaseRepair).toHaveBeenCalledWith(
       'user-1',
@@ -463,7 +464,8 @@ describe('service-disconnect-pending', () => {
       data: () => ({ connectionState: 'connected' }),
     });
 
-    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
+    await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp))
+      .resolves.toBe('no_pending');
 
     expect(hoisted.releaseQueueItemsDeferredForPendingDisconnect).not.toHaveBeenCalled();
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
@@ -488,7 +490,8 @@ describe('service-disconnect-pending', () => {
       throw new Error('Unexpected transaction target');
     });
 
-    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
+    await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp))
+      .resolves.toBe('cleared');
 
     expect(hoisted.transactionSet).not.toHaveBeenCalled();
     expect(hoisted.clearServiceConnectionState).toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp, {
@@ -517,7 +520,8 @@ describe('service-disconnect-pending', () => {
       shouldSkip: true,
     });
 
-    await clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp);
+    await expect(clearServiceDisconnectPending('user-1', ServiceNames.SuuntoApp))
+      .resolves.toBe('skipped_user');
 
     expect(hoisted.transactionGet).not.toHaveBeenCalled();
     expect(hoisted.transactionSet).not.toHaveBeenCalled();

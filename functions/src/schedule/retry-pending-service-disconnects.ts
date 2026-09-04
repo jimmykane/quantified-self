@@ -28,6 +28,7 @@ import {
   recordServiceDisconnectRetryFailure,
 } from '../service-disconnect-pending';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { reconcileExpiredServiceOAuthRoots } from '../service-oauth-root-reconciliation';
 
 interface PendingDisconnectCollectionConfig {
   serviceName: ServiceNames;
@@ -325,7 +326,10 @@ async function clearPendingDisconnectRootIfEntitled(
     return false;
   }
 
-  await clearServiceDisconnectPending(userID, config.serviceName);
+  const clearResult = await clearServiceDisconnectPending(userID, config.serviceName);
+  if (clearResult !== 'cleared' && clearResult !== 'no_pending') {
+    return false;
+  }
   logger.info('[RetryPendingServiceDisconnects] Cleared pending disconnect because entitlement is active again.', {
     userID,
     serviceName: config.serviceName,
@@ -382,7 +386,10 @@ async function retryPendingDisconnectRoot(
   }
 
   if (await shouldKeepConnectionForCurrentEntitlement(userID)) {
-    await clearServiceDisconnectPending(userID, config.serviceName);
+    const clearResult = await clearServiceDisconnectPending(userID, config.serviceName);
+    if (clearResult !== 'cleared' && clearResult !== 'no_pending') {
+      return;
+    }
     logger.info('[RetryPendingServiceDisconnects] Cleared pending disconnect because entitlement is active again.', {
       userID,
       serviceName: config.serviceName,
@@ -591,6 +598,26 @@ export const retryPendingServiceDisconnects = onSchedule({
   memory: '512MiB',
 }, async () => {
   const now = Timestamp.now();
+
+  // Reserve the beginning of the invocation for bounded Firestore-only OAuth
+  // cleanup. Provider disconnect I/O can consume the remaining execution
+  // budget, but must not repeatedly starve expired-state reconciliation.
+  try {
+    const oauthRootReconciliation = await reconcileExpiredServiceOAuthRoots(
+      admin.firestore(),
+      now.toMillis(),
+    );
+    logger.info('[RetryPendingServiceDisconnects] Reconciled expired OAuth roots and disconnect fences.', {
+      rootsScanned: oauthRootReconciliation.rootsScanned,
+      cleaned: oauthRootReconciliation.cleaned,
+      failed: oauthRootReconciliation.failed,
+      byOutcome: oauthRootReconciliation.byOutcome,
+    });
+  } catch {
+    logger.error('[RetryPendingServiceDisconnects] OAuth root reconciliation scan failed.', {
+      reason: 'oauth_root_reconciliation_scan_failed',
+    });
+  }
 
   // Repair already-connected accounts first. Pending-disconnect scans can
   // involve provider I/O, so putting these bounded pages first prevents a

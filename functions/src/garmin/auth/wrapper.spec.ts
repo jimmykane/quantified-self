@@ -186,9 +186,15 @@ describe('Garmin Auth Wrapper', () => {
         it('should exchange tokens if state is valid', async () => {
             const data = { state: 'validState', code: 'validCode', redirectUri: 'https://callback' };
             vi.mocked(OAuth2.validateOAuth2State).mockResolvedValue(true);
-            vi.mocked(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValue(undefined);
+            vi.mocked(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValue({
+                connected: true,
+                outcome: 'connected',
+            });
 
-            await (requestAndSetGarminAPIAccessToken as any)(data, context);
+            await expect((requestAndSetGarminAPIAccessToken as any)(data, context)).resolves.toEqual({
+                connected: true,
+                outcome: 'connected',
+            });
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
             expect(OAuth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'validState');

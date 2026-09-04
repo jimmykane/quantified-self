@@ -77,7 +77,16 @@ const clearPendingServiceDisconnectsForRestoredEntitlement = async (
                 return;
             }
 
-            await clearServiceDisconnectPending(uid, serviceName);
+            const clearResult = await clearServiceDisconnectPending(uid, serviceName);
+            if (clearResult !== 'cleared' && clearResult !== 'no_pending') {
+                logger.warn(`[onSubscriptionUpdated] Pending ${serviceName} disconnect was not cleared for ${uid}.`, {
+                    uid,
+                    serviceName,
+                    reason,
+                    clearResult,
+                });
+                return;
+            }
             logger.info(`[onSubscriptionUpdated] Cleared pending ${serviceName} disconnect for ${uid} because entitlement is restored.`, {
                 uid,
                 serviceName,
