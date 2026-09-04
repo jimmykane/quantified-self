@@ -398,6 +398,9 @@ describe('HealthWorkspaceComponent', () => {
       endDate: todayDate,
     });
     expect(component.priorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate', 'HRV']);
+    const prioritySection = (fixture.nativeElement as HTMLElement).querySelector('.health-priority-section');
+    expect(prioritySection?.textContent).toContain('Highlights');
+    expect(prioritySection?.textContent).not.toContain('Last 30 days');
     expect((fixture.nativeElement as HTMLElement).querySelector('#health-detail-title')?.textContent).toContain('Resting heart rate');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.tagName).toBe('MAT-CARD');
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card')).toHaveLength(3);
