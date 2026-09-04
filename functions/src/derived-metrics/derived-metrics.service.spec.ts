@@ -50,6 +50,66 @@ import {
 import { getActivityTypesForGroup } from '../../../shared/activity-type-group.metadata';
 import { POWER_CURVE_STAT_TYPE } from '../../../shared/power-curve';
 import { resolveTrainingDisciplineFromActivityType } from '../../../shared/training-disciplines';
+import {
+    HEALTH_COVERAGE_STATUSES,
+    HEALTH_METRIC_IDS,
+    HEALTH_NORMALIZATION_STATUSES,
+    HEALTH_PROVIDERS,
+    HEALTH_QUALITY_STATUSES,
+    HEALTH_RECORDING_METHODS,
+    HEALTH_SOURCE_RECORD_KINDS,
+    HEALTH_UNITS,
+    HEALTH_VALUE_ORIGINS,
+    HEALTH_VALUE_TYPES,
+    type HealthMetricId,
+} from '../../../shared/health';
+import { encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
+
+function healthMeasurementDoc(options: {
+    id: string;
+    metricId: HealthMetricId;
+    value: number;
+    observedAtMs: number;
+    provider?: typeof HEALTH_PROVIDERS[keyof typeof HEALTH_PROVIDERS];
+    accountKey?: string;
+    semanticVariant?: string;
+    qualifiers?: Record<string, string>;
+}) {
+    const isWeight = options.metricId === HEALTH_METRIC_IDS.BodyWeight;
+    const unit = isWeight ? HEALTH_UNITS.Kilogram : HEALTH_UNITS.MillilitersPerKilogramPerMinute;
+    return {
+        id: options.id,
+        data: () => ({
+            kind: HEALTH_SOURCE_RECORD_KINDS.PointMeasurement,
+            source: {
+                provider: options.provider || HEALTH_PROVIDERS.QuantifiedSelf,
+                accountKey: options.accountKey || 'opaque-account',
+            },
+            endTimeMs: options.observedAtMs,
+            metrics: [encodeHealthMetricSportsLibData({
+                kind: 'value',
+                metricId: options.metricId,
+                valueType: HEALTH_VALUE_TYPES.Number,
+                aggregation: 'measurement',
+                semanticVariant: options.semanticVariant || 'point',
+                origin: HEALTH_VALUE_ORIGINS.Recorded,
+                recordingMethod: options.provider
+                    ? HEALTH_RECORDING_METHODS.Device
+                    : HEALTH_RECORDING_METHODS.Manual,
+                quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+                coverage: { status: HEALTH_COVERAGE_STATUSES.Complete },
+                normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+                native: {
+                    metric: isWeight ? DataWeight.type : DataVO2Max.type,
+                    value: options.value,
+                    unit,
+                    qualifiers: options.qualifiers,
+                },
+                canonical: { value: options.value, unit },
+            })],
+        }),
+    };
+}
 
 function buildTrainingActivitySources(docs: readonly any[]): any[] {
     return docs.flatMap((doc, index) => {
@@ -471,6 +531,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -490,6 +552,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -504,6 +568,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -518,6 +584,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: true,
         });
     });
 
@@ -532,6 +600,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -546,6 +616,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -564,6 +636,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
                 needsTrainingBuildBenchmarkSettings: false,
                 needsTrainingBuildSleepDocs: false,
                 needsTrainingReadinessSleepDocs: false,
+                needsBodyWeightHealthDocs: false,
+                needsVo2HealthDocs: false,
             });
         }
     });
@@ -579,6 +653,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: true,
             needsTrainingBuildSleepDocs: true,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -593,6 +669,8 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
@@ -607,10 +685,12 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: true,
+            needsBodyWeightHealthDocs: false,
+            needsVo2HealthDocs: false,
         });
     });
 
-    it('uses persisted event stats for the body-weight trend', async () => {
+    it('uses Health Weight plus workout fallback inputs for the body-weight trend', async () => {
         const { resolveDerivedMetricSourceRequirements } = await import('./derived-metrics.service');
 
         expect(resolveDerivedMetricSourceRequirements([DERIVED_METRIC_KINDS.BodyWeightTrend])).toEqual({
@@ -621,11 +701,75 @@ describe('resolveDerivedMetricSourceRequirements', () => {
             needsTrainingBuildBenchmarkSettings: false,
             needsTrainingBuildSleepDocs: false,
             needsTrainingReadinessSleepDocs: false,
+            needsBodyWeightHealthDocs: true,
+            needsVo2HealthDocs: false,
         });
     });
 });
 
 describe('buildBodyWeightTrendMetricPayload', () => {
+    it('prefers true Health measurements globally and keeps their sources separate', async () => {
+        const { buildBodyWeightTrendMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const workoutDocs = [{
+            id: 'workout',
+            data: () => ({
+                startDate: nowMs,
+                serviceName: 'Garmin',
+                stats: { [DataWeight.type]: 99 },
+            }),
+        }];
+        const healthDocs = [
+            healthMeasurementDoc({
+                id: 'manual', metricId: HEALTH_METRIC_IDS.BodyWeight, value: 70,
+                observedAtMs: nowMs, accountKey: 'manual-account',
+            }),
+            healthMeasurementDoc({
+                id: 'garmin', metricId: HEALTH_METRIC_IDS.BodyWeight, value: 71,
+                observedAtMs: nowMs - 86_400_000, provider: HEALTH_PROVIDERS.GarminAPI,
+                accountKey: 'garmin-account',
+            }),
+        ];
+
+        const result = buildBodyWeightTrendMetricPayload(workoutDocs as any, nowMs, healthDocs as any);
+
+        expect(result.sourceEventCount).toBe(2);
+        expect(result.payload.series).toHaveLength(2);
+        expect(result.payload.series.map(series => series.sourceKind)).toEqual([
+            'health-measurement',
+            'health-measurement',
+        ]);
+        expect(result.payload.series.map(series => series.provider)).toEqual([
+            HEALTH_PROVIDERS.GarminAPI,
+            HEALTH_PROVIDERS.QuantifiedSelf,
+        ]);
+        expect(result.payload.series.flatMap(series => [
+            series.latestWeightKg,
+            ...series.points.map(point => point.weightKg),
+        ])).not.toContain(99);
+        expect(result.payload.latestWeightKg).toBeNull();
+        expect(result.payload.points.every(point => point.weightKg === null)).toBe(true);
+    });
+
+    it('suppresses recent workout Weight when an older Health measurement exists', async () => {
+        const { buildBodyWeightTrendMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 6, 16, 12);
+        const workoutDocs = [{
+            id: 'workout',
+            data: () => ({
+                startDate: nowMs,
+                serviceName: 'Garmin',
+                stats: { [DataWeight.type]: 99 },
+            }),
+        }];
+
+        const result = buildBodyWeightTrendMetricPayload(workoutDocs as any, nowMs, [], true);
+
+        expect(result.sourceEventCount).toBe(0);
+        expect(result.payload.series).toEqual([]);
+        expect(result.payload.latestWeightKg).toBeNull();
+    });
+
     it('builds daily medians, leaves gaps explicit, and withholds sparse comparison claims', async () => {
         const { buildBodyWeightTrendMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 6, 16, 12);
@@ -1919,6 +2063,48 @@ describe('buildTrainingCapacityMetricPayload', () => {
                 ...overrides,
             },
         }),
+    });
+
+    it('keeps a dated manual lab reference separate and compares only nearby workout evidence', async () => {
+        const { buildTrainingCapacityMetricPayload } = await import('./derived-metrics.service');
+        const workoutAtMs = Date.UTC(2026, 6, 8, 8);
+        const manualAtMs = Date.UTC(2026, 6, 9, 8);
+        const docs = [createDoc('running-vo2', workoutAtMs, {
+            [DataActivityTypes.type]: [ActivityTypes.Running],
+            [DataVO2Max.type]: 55,
+        })];
+        const healthDocs = [healthMeasurementDoc({
+            id: 'manual-running-lab',
+            metricId: HEALTH_METRIC_IDS.Vo2Max,
+            value: 57,
+            observedAtMs: manualAtMs,
+            semanticVariant: 'manual_running_lab_test',
+            qualifiers: { context: 'running', method: 'lab_test' },
+        })];
+
+        const result = buildTrainingCapacityMetricPayload(
+            buildTrainingActivitySources(docs),
+            nowMs,
+            healthDocs as any,
+        );
+        const running = result.payload.disciplines.find(item => item.discipline === 'running');
+
+        expect(running?.importedVo2Max).toMatchObject({ value: 55, provenance: 'imported-activity-stat' });
+        expect(running?.referenceVo2Max).toEqual({
+            kind: 'vo2-max',
+            value: 57,
+            context: 'running',
+            method: 'lab-test',
+            observedAtMs: manualAtMs,
+            provenance: 'manual-health-measurement',
+            comparison: {
+                value: 55,
+                observedAtMs: workoutAtMs,
+                delta: 2,
+                gapDays: 1,
+            },
+        });
+        expect(result.sourceEventCount).toBe(2);
     });
 
     it('deduplicates carried imported settings without adding a modeled capacity value', async () => {

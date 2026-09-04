@@ -185,6 +185,31 @@ describe('AppHealthService', () => {
         expect(collection).not.toHaveBeenCalled();
     });
 
+    it('routes manual Health mutations through typed callable boundaries', async () => {
+        functions.call
+            .mockResolvedValueOnce({ data: { sourceRecordId: 'a'.repeat(64), revisionOrder: 1 } })
+            .mockResolvedValueOnce({ data: { deleted: true } });
+        const createRequest = {
+            mode: 'create' as const,
+            clientMutationId: '123e4567-e89b-42d3-a456-426614174000',
+            metricId: HEALTH_METRIC_IDS.BodyWeight,
+            canonicalValue: 72.4,
+            observedAtMs: Date.UTC(2026, 0, 2, 8),
+            timezoneOffsetSeconds: 7_200,
+        };
+
+        await expect(service.saveManualMeasurement(createRequest)).resolves.toEqual({
+            sourceRecordId: 'a'.repeat(64), revisionOrder: 1,
+        });
+        await expect(service.deleteManualMeasurement({
+            sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 1,
+        })).resolves.toEqual({ deleted: true });
+        expect(functions.call).toHaveBeenNthCalledWith(1, 'saveManualHealthMeasurement', createRequest);
+        expect(functions.call).toHaveBeenNthCalledWith(2, 'deleteManualHealthMeasurement', {
+            sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 1,
+        });
+    });
+
     it('uses the shared provider-first plan for the default direct Firestore read', async () => {
         vi.mocked(collectionData).mockImplementation((target: unknown) => {
             const path = (target as { collectionRef?: { path?: string[] } }).collectionRef?.path || [];

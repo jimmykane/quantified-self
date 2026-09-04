@@ -37,6 +37,8 @@ const hoisted = vi.hoisted(() => ({
     failDerivedMetricsProcessing: vi.fn(),
     fetchDerivedMetricsActivityDocs: vi.fn(),
     fetchDerivedMetricsEventDocs: vi.fn(),
+    fetchDerivedMetricsHealthDocs: vi.fn(),
+    hasAnyDerivedMetricsHealthRecord: vi.fn(),
     fetchRecoveryLookbackEventDocs: vi.fn(),
     fetchTrainingBuildBenchmarkSettings: vi.fn(),
     fetchTrainingBuildSleepDocs: vi.fn(),
@@ -62,6 +64,8 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
         failDerivedMetricsProcessing: hoisted.failDerivedMetricsProcessing,
         fetchDerivedMetricsActivityDocs: hoisted.fetchDerivedMetricsActivityDocs,
         fetchDerivedMetricsEventDocs: hoisted.fetchDerivedMetricsEventDocs,
+        fetchDerivedMetricsHealthDocs: hoisted.fetchDerivedMetricsHealthDocs,
+        hasAnyDerivedMetricsHealthRecord: hoisted.hasAnyDerivedMetricsHealthRecord,
         fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
         fetchTrainingBuildBenchmarkSettings: hoisted.fetchTrainingBuildBenchmarkSettings,
         fetchTrainingBuildSleepDocs: hoisted.fetchTrainingBuildSleepDocs,
@@ -96,6 +100,8 @@ describe('processDerivedMetricsTask', () => {
         hoisted.isDerivedMetricsUserWriteBlocked.mockResolvedValue(false);
         hoisted.markDerivedMetricSnapshotsBuilding.mockResolvedValue(undefined);
         hoisted.fetchDerivedMetricsEventDocs.mockResolvedValue([{ id: 'form-doc' }] as any);
+        hoisted.fetchDerivedMetricsHealthDocs.mockResolvedValue([] as any);
+        hoisted.hasAnyDerivedMetricsHealthRecord.mockResolvedValue(false);
         hoisted.fetchDerivedMetricsActivityDocs.mockResolvedValue([{ id: 'activity-doc' }] as any);
         hoisted.fetchRecoveryLookbackEventDocs.mockResolvedValue([{ id: 'recovery-doc' }] as any);
         hoisted.fetchTrainingBuildBenchmarkSettings.mockResolvedValue({ trainingSettings: {} });
@@ -174,6 +180,57 @@ describe('processDerivedMetricsTask', () => {
             formSourceEventCount: null,
             formSourceDocCount: null,
         });
+    });
+
+    it('loads true Health Weight and only manual Health VO2 for their targeted snapshots', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [
+                DERIVED_METRIC_KINDS.BodyWeightTrend,
+                DERIVED_METRIC_KINDS.TrainingCapacity,
+            ],
+            startedAtMs: Date.now(),
+            eventMutationVersion: 15,
+        });
+        hoisted.fetchDerivedMetricsHealthDocs
+            .mockResolvedValueOnce([{ id: 'weight-health' }] as any)
+            .mockResolvedValueOnce([{ id: 'manual-vo2' }] as any);
+        hoisted.hasAnyDerivedMetricsHealthRecord.mockResolvedValueOnce(true);
+
+        await (processDerivedMetricsTask as any)({
+            data: { uid: 'user-health', generation: 16 },
+        });
+
+        expect(hoisted.fetchDerivedMetricsHealthDocs).toHaveBeenNthCalledWith(
+            1,
+            'user-health',
+            'body_weight',
+            expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+            expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        );
+        expect(hoisted.hasAnyDerivedMetricsHealthRecord).toHaveBeenCalledWith(
+            'user-health',
+            'body_weight',
+            '2000-01-01',
+            expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        );
+        expect(hoisted.fetchDerivedMetricsHealthDocs).toHaveBeenNthCalledWith(
+            2,
+            'user-health',
+            'vo2_max',
+            '2000-01-01',
+            expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+            'QuantifiedSelf',
+        );
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith(
+            'user-health',
+            [DERIVED_METRIC_KINDS.BodyWeightTrend, DERIVED_METRIC_KINDS.TrainingCapacity],
+            expect.objectContaining({
+                bodyWeightHealthDocs: [{ id: 'weight-health' }],
+                hasAnyBodyWeightHealthRecord: true,
+                vo2HealthDocs: [{ id: 'manual-vo2' }],
+            }),
+            expect.any(Object),
+        );
     });
 
     it('uses projection form snapshot seed for projection-only kinds without full event scan', async () => {

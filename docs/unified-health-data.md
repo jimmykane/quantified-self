@@ -2,7 +2,7 @@
 
 This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path; issue #612 adds production Suunto 24/7 Activity, daily-statistics, and Recovery ingestion; issue #613 adds production Garmin Health API 1.2.4 ingestion.
 
-Issue #614 adds the authenticated **Health** workspace on top of this foundation. COROS, Suunto, and Garmin ingestion still does not make provider-specific Health records part of the existing MCP or Training contracts; normalized Sleep remains separate and is resolved through typed references. Weight profile context and activity-level VO2 max already embedded in imported workouts can also be read on demand for Health without copying them into Health storage or changing the activity contract.
+Issue #614 adds the authenticated **Health** workspace on top of this foundation. Normalized Sleep remains separate and is resolved through typed references. Weight profile context and activity-level VO2 max already embedded in imported workouts can be read on demand for Health without copying them into Health storage or changing the activity contract. Canonical Health Weight can also supply source-separated Training context and the identity-free body-measurement MCP projection; qualifying manual VO2 max can provide a separately labelled Training reference without changing the public MCP wire schema.
 
 ## Goals
 
@@ -59,6 +59,16 @@ users/{uid}/activities (activity VO2 max) ──┼─ queryActivityHealthRange
                                             └─ bounded identity-free observations
                                                         │
                                                         └─ /health only; no Health write
+
+/health manual Weight or VO2 max
+        │
+        ├─ saveManualHealthMeasurement (auth + App Check)
+        └─ deleteManualHealthMeasurement (auth + App Check)
+                │
+                └─ users/{uid}/healthSourceRecords (provider: QuantifiedSelf)
+                        ├─ /health source-separated workspace
+                        ├─ Training Weight / qualifying VO2 reference
+                        └─ identity-free MCP body Weight projection
 ```
 
 The shared implementation is split intentionally:
@@ -69,6 +79,7 @@ The shared implementation is split intentionally:
 - `functions/src/health/validation.ts` validates untrusted adapter input at runtime.
 - `functions/src/health/writer.ts` owns opaque IDs, revisions, sample chunking, replacement, deletion guards, and sync state.
 - `functions/src/health/query.ts` and `functions/src/health/callable.ts` provide the server adapter.
+- `shared/manual-health.ts` and `functions/src/health/manual-measurements.ts` define owner-scoped manual Weight/VO2 mutations, idempotency, revision fences, and deletion-safe writes; `manual-callable.ts` enforces Authentication and App Check.
 - `shared/activity-health.ts` and `functions/src/health/activity-query.ts` define the separate bounded workout-evidence projection used only by Health; `activity-callable.ts` enforces Authentication and App Check.
 - `src/app/services/app.health.service.ts` provides the default direct listener, the bounded cross-page workspace loader, and the explicit callable alternative.
 - `src/app/components/health/health-activity-query.service.ts` is the lazy workspace-only client for workout evidence, keeping the direct Health-record service and result contract unchanged.
@@ -316,7 +327,9 @@ units.
 
 Weight and VO2 max are always discoverable in the Health catalog because either may exist only in imported workouts rather than `healthSourceRecords`. Selecting either metric starts the direct Health-record load and the bounded workout-evidence callable together for the same remembered window. Request generations discard both stale results after metric, range, or older/newer navigation. A failed workout query does not hide successfully loaded provider Health measurements; the workspace identifies that partial source explicitly. Workout coverage is shown as not applicable rather than implying daily measurement completeness, raw creator fields are not presented as device attribution, and the latest workout observation still supplies last-observed context.
 
-Future manual measurements use the existing Health schema rather than another store: provider `QuantifiedSelf`, origin `recorded`, recording method `manual`, and the canonical catalog metric/unit. A provider Health Weight suppresses workout Weight fallback only for that provider in the active filtered window, so another provider's fallback context remains visible; a manual Weight is a real Health observation and suppresses workout Weight fallback across the view. Manual VO2 max remains separate from provider Health and workout series through source, origin, recording method, and semantic variant. Manual Sleep remains in `sleepSessions` and is exposed to Health only through typed Sleep references. This compatibility is intentional; this implementation adds no manual-entry form, write callable, migration, or persistence path.
+Manual Weight and VO2 max use the existing Health schema rather than another store. The workspace exposes Material add, edit, and delete flows for those two metric IDs. The save and delete callables derive the owner from Authentication, require App Check, validate strict request shapes and Sports Lib values, reject future or pre-2000 timestamps, and recheck the account-deletion guard inside the write transaction. Creates use a client UUID only as an idempotency key; persisted source/account keys are opaque hashes. Updates and deletes require the exact current source-record revision, so a stale tab cannot overwrite or remove a newer edit. Manual records are canonical point measurements with provider `QuantifiedSelf`, origin `recorded`, recording method `manual`, aggregation `measurement`, the user's observed timestamp and timezone offset, and no sample chunks.
+
+A provider or manual Health Weight is a true measurement. Workout Weight remains contextual fallback and is shown only when the active provider-filtered view contains no true Health Weight; it is never plotted or exposed as a weigh-in. Manual VO2 max remains separate from provider Health and workout series through provider/account, origin, recording method, and semantic variant. The user records a `general`, `running`, or `cycling` context plus `lab_test`, `field_test`, or `other_estimate` method. Only Running/Cycling lab or field observations become separately labelled Training references; general and other-estimate values remain Health-only. The nearest imported workout VO2 value within 14 days may be shown as a neutral comparison, never merged into or used to reinterpret the reference. Manual Sleep is not implemented; Sleep remains in `sleepSessions` and appears in Health only through typed references. No migration, backfill, Firestore schema change, or new composite index is required.
 
 The compact provider footer reads the existing Health and Sleep sync-state documents. For a ready Garmin, Suunto, or COROS connection owned by an eligible Pro account, it offers the existing provider history callable only when a successful owner-scoped sync-state read proves that no prior Sleep/Health history request was made, or when that request failed and is retryable. A denied or failed state read cannot be interpreted as an absent backfill. A prior or cooldown-bound request suppresses the action, while Garmin's granular Health backfill state also exposes queued and running progress. The workspace does not invent progress states that Suunto and COROS do not publish. Wahoo and disconnected, permission-blocked, or reconnect-required sources never receive this action. The callable remains authoritative for plan access, provider rollout, connection credentials, permissions, deletion state, and cooldown enforcement. Request generations are UID-scoped so account/profile changes and component teardown cannot publish or clear another request's local state.
 

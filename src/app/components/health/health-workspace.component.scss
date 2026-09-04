@@ -143,6 +143,19 @@
   margin-bottom: 0.5rem;
 }
 
+.health-detail-controls {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+}
+
+.health-add-measurement {
+  --mat-button-filled-container-height: 36px;
+
+  white-space: nowrap;
+}
+
 .health-window-navigation {
   flex: 0 0 auto;
   gap: 0;
@@ -426,6 +439,15 @@
   .health-detail-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .health-detail-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .health-add-measurement {
+    align-self: flex-start;
   }
 
   .health-section-heading > p {

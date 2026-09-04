@@ -9,6 +9,7 @@ import {
   type TrainingSportContextId,
 } from './training-disciplines';
 import type { SleepProvider } from './sleep';
+import type { HealthProvider } from './health';
 import type { ReadinessConfidence, ReadinessLabel } from './readiness';
 
 export const DERIVED_METRIC_KINDS = {
@@ -93,7 +94,7 @@ export const CALENDAR_SENSITIVE_DERIVED_METRIC_KINDS: DerivedMetricKind[] = [
 
 export const DERIVED_METRICS_COLLECTION_ID = 'derivedMetrics';
 export const DERIVED_METRICS_COORDINATOR_DOC_ID = 'coordinator';
-export const DERIVED_METRIC_SCHEMA_VERSION = 19;
+export const DERIVED_METRIC_SCHEMA_VERSION = 20;
 export const DERIVED_RECOVERY_MAX_SUPPORTED_SECONDS = 14 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_QUERY_DURATION_BUFFER_SECONDS = 2 * 24 * 60 * 60;
 export const DERIVED_RECOVERY_LOOKBACK_WINDOW_SECONDS =
@@ -502,6 +503,22 @@ export interface DerivedTrainingCapacityDiscipline {
   discipline: DerivedPowerCapacityDiscipline;
   ftpSetting: DerivedTrainingCapacityImportedMetric | null;
   importedVo2Max: DerivedTrainingCapacityImportedMetric | null;
+  referenceVo2Max: DerivedTrainingCapacityReferenceVo2Max | null;
+}
+
+export interface DerivedTrainingCapacityReferenceVo2Max {
+  kind: 'vo2-max';
+  value: number;
+  context: DerivedPowerCapacityDiscipline;
+  method: 'lab-test' | 'field-test';
+  observedAtMs: number;
+  provenance: 'manual-health-measurement';
+  comparison: {
+    value: number;
+    observedAtMs: number;
+    delta: number;
+    gapDays: number;
+  } | null;
 }
 
 export interface DerivedTrainingCapacityMetricPayload {
@@ -991,6 +1008,26 @@ export interface DerivedBodyWeightTrendPoint {
   weightKg: number | null;
 }
 
+export type DerivedBodyWeightSourceKind = 'health-measurement' | 'workout-profile-context';
+
+export interface DerivedBodyWeightTrendSeries {
+  sourceKind: DerivedBodyWeightSourceKind;
+  provider: HealthProvider | null;
+  /** Opaque Health account key or bounded workout-source label. Never expose through MCP. */
+  sourceKey: string;
+  latestWeightKg: number | null;
+  latestWeightDayMs: number | null;
+  median7dKg: number | null;
+  median28dKg: number | null;
+  change7dKg: number | null;
+  change7dPercent: number | null;
+  change28dKg: number | null;
+  change28dPercent: number | null;
+  recordedDayCount7d: number;
+  recordedDayCount28d: number;
+  points: DerivedBodyWeightTrendPoint[];
+}
+
 export interface DerivedBodyWeightTrendMetricPayload {
   dayBoundary: 'UTC';
   asOfDayMs: number;
@@ -1008,6 +1045,8 @@ export interface DerivedBodyWeightTrendMetricPayload {
   recordedDayCount7d: number;
   recordedDayCount28d: number;
   points: DerivedBodyWeightTrendPoint[];
+  /** Source-separated series; legacy scalar fields are populated only for a single source. */
+  series: DerivedBodyWeightTrendSeries[];
 }
 
 export type DerivedPowerCurveScope = DerivedPowerCapacityDiscipline;

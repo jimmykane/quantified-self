@@ -734,15 +734,19 @@ catalog. It does not decide whether a Sports Lib metric exists or is numerically
 `metric-catalog.ts`. It decides only which canonical metrics are safe and meaningful as personal body measurements.
 Adding a numeric Sports Lib class still does not silently expose it as a body measurement.
 
-The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` values in persisted event stats.
+The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` point measurements in
+`users/{uid}/healthSourceRecords`. Provider-imported and Quantified Self manual Weight share the same canonical metric
+while retaining separate internal provenance.
 `list_measurement_types` describes its kilogram storage unit, median default, supported median/average/minimum/maximum/
 latest aggregations, day/week/month intervals, 366-day range limit, and the optional ready
 `body_weight_trend` Training snapshot, including that snapshot's separate `metrics:read` requirement and UTC day
 boundary.
 
-`query_measurements` reads the same bounded event pages as `query_metric`, excludes benchmark merges, resolves the
-requested persisted value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
-records in an explicit IANA timezone. It returns only the semantic type, canonical metric metadata, query parameters,
+`query_measurements` executes an owner-scoped, metric-first Health query in bounded pages, filters the widened calendar
+envelope to the exact requested timestamps, accepts only canonical point measurements with `aggregation=measurement`,
+resolves each value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
+records in an explicit IANA timezone. Workout profile Weight is deliberately excluded because it is not a weigh-in. It
+returns only the semantic type, canonical metric metadata, query parameters,
 bucket start, aggregate value, bucket count, and first/latest change summary. It never returns the Firestore document
 ID, exact source measurement timestamp, activity type, event/activity identity, name, label, provider/device metadata,
 or source provenance. Multiple same-bucket values default to a median; `latest` means the chronologically latest value
@@ -754,11 +758,16 @@ authorization for the new scope before the measurement tools are registered. The
 remains the fast 28-day Training view under the pre-existing Training metric permission, not the historical measurement
 API. No new Firestore collection, composite index, persistence format, reparse, or backfill is required.
 
+This source change does not alter a registered MCP tool name, input, output, scope, prompt, or bundled-skill contract.
+The strict derived projections explicitly remove the internal source-separated Weight series and manual VO2 reference
+before validating the frozen public schemas. The focused measurement, Training, and cross-domain skills therefore need
+no text change, and neither a registered ChatGPT app rescan nor a local plugin sync is required.
+
 To add another first-class measurement, add one explicit semantic definition backed by an already eligible canonical
 Sports Lib numeric type, define its value-validity rule, supported aggregations and intervals, and user-facing meaning,
 then update the tool-schema enum from the same exported ID tuple. Add positive catalog/query coverage, a negative
-sensitive-field leakage test, consent/Help/Policy/feature copy, and reconsider whether the existing 366-day event-read
-and 128 KiB response bounds remain appropriate. Do not infer measurement eligibility from a display name, unit, provider
+sensitive-field leakage test, consent/Help/Policy/feature copy, and reconsider whether the existing 366-day Health-record
+scan and 128 KiB response bounds remain appropriate. Do not infer measurement eligibility from a display name, unit, provider
 payload, or arbitrary persisted stat key.
 
 When a Sports Lib metric is added or changed:
@@ -950,7 +959,7 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
-Internal derived schema 19 includes the original eight modeled families, the data-backed Fitness & Gym and Other
+Internal derived schema 20 includes the original eight modeled families, the data-backed Fitness & Gym and Other
 training volume groups, and the context/profile summaries introduced in schema 16. It retains the reusable maximum
 aggregation used for MTB longest-jump distance in schema 17 and canonical swimming, rowing, and paddling stroke-rate
 profile metrics with bounded pre-19 Cadence read compatibility. The registered MCP contract maps
@@ -1011,8 +1020,9 @@ requested bounded period, their units, and session coverage. It lets clients dis
 grouped values without returning readings, raw samples, provider identity, or source provenance in the discovery result.
 
 COROS daily ingestion also writes steps, its native calorie value, and detailed HRV/interval-heart-rate series to the
-separate unified Health collections. Existing MCP tools do not query `healthSourceRecords` or `healthSampleChunks`, and
-this adapter does not widen any registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
+separate unified Health collections. The body-measurement path reads only canonical Weight point measurements from
+`healthSourceRecords`; no MCP path reads `healthSampleChunks` or exposes Health source metadata, and this change does not
+widen any registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
 through the same normalized Sleep allowlist described above. Negative fixtures include Health-shaped source metadata
 and sample payloads and prove they cannot enter Sleep tool output. No registered-app rescan or local plugin sync is
 required for this internal ingestion change.

@@ -111,6 +111,18 @@
             <h2 id="health-detail-title">{{ detailTitle() }}</h2>
             <p>{{ detailSubtitle() }}</p>
           </div>
+          <div class="health-detail-controls">
+            @if (selectedManualMetric()) {
+              <button
+                mat-flat-button
+                type="button"
+                class="health-add-measurement"
+                [disabled]="manualMutationBusy()"
+                (click)="openManualMeasurement()">
+                <mat-icon aria-hidden="true">add</mat-icon>
+                <span>Add {{ selectedManualMetric() === 'body_weight' ? 'weight' : 'VO₂ max' }}</span>
+              </button>
+            }
           <div class="health-window-navigation" aria-label="Health data window">
             <button
               mat-icon-button
@@ -152,6 +164,7 @@
                 <mat-icon aria-hidden="true">today</mat-icon>
               </button>
             }
+          </div>
           </div>
         </header>
 
@@ -233,6 +246,16 @@
           <div class="health-notice" role="note">
             <mat-icon aria-hidden="true">fitness_center</mat-icon>
             <span>{{ workoutMetricNotice() }}</span>
+          </div>
+        }
+        @if (workoutWeightFallback()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">fitness_center</mat-icon>
+            <span>
+              No measured weight is available in this view. Latest workout profile context:
+              {{ workoutWeightFallback()!.valueText }} from {{ workoutWeightFallback()!.sourceLabel }}
+              on {{ workoutWeightFallback()!.observedText }}. It is not plotted as a weigh-in.
+            </span>
           </div>
         }
         @if (sleepHrvNotice()) {
@@ -326,7 +349,9 @@
             [detailTitle]="detailTitle()"
             [sleepRows]="sleepRows()"
             [metricRows]="metricRows()"
-            [truncationText]="tableTruncationText()">
+            [truncationText]="tableTruncationText()"
+            (editManualMeasurement)="editManualMeasurement($event)"
+            (deleteManualMeasurement)="deleteManualMeasurement($event)">
           </app-health-source-observation-table>
         }
       </article>

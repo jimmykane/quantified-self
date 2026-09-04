@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
+import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
@@ -20,17 +21,21 @@ function resolveEventTimeMs(event: { time?: unknown }): number | null {
 
 function resolveDerivedMetricsSourceId(
     event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
-    source: 'event' | 'activity' | 'sleep',
+    source: 'event' | 'activity' | 'sleep' | 'health',
 ): string | null {
     const sourceId = source === 'event'
         ? event.params?.eventId
-        : (source === 'activity' ? event.params?.activityId : event.params?.sleepSessionId);
+        : source === 'activity'
+            ? event.params?.activityId
+            : source === 'sleep'
+                ? event.params?.sleepSessionId
+                : event.params?.sourceRecordId;
     return `${sourceId || ''}`.trim() || null;
 }
 
 async function handleDerivedMetricsSourceWrite(
     event: Parameters<Parameters<typeof onDocumentWritten>[1]>[0],
-    source: 'event' | 'activity' | 'sleep',
+    source: 'event' | 'activity' | 'sleep' | 'health',
 ): Promise<void> {
     const uid = `${event.params?.uid || ''}`.trim();
     if (!uid) {
@@ -73,8 +78,30 @@ async function handleDerivedMetricsSourceWrite(
             incrementEventMutationVersion: false,
         } as const
         : undefined;
-    const queued = sleepIngressOptions
-        ? await enqueueDerivedMetricsIngressTask(uid, undefined, eventTimeMs ?? undefined, sleepIngressOptions)
+    const healthMetricIds = source === 'health'
+        ? new Set([event.data?.before?.data(), event.data?.after?.data()].flatMap((data) => {
+            const metricIds = (data as { metricIds?: unknown } | undefined)?.metricIds;
+            return Array.isArray(metricIds) ? metricIds.filter(value => typeof value === 'string') : [];
+        }))
+        : null;
+    const healthMetricKinds = healthMetricIds
+        ? [
+            ...(healthMetricIds.has(HEALTH_METRIC_IDS.BodyWeight) ? [DERIVED_METRIC_KINDS.BodyWeightTrend] : []),
+            ...(healthMetricIds.has(HEALTH_METRIC_IDS.Vo2Max) ? [DERIVED_METRIC_KINDS.TrainingCapacity] : []),
+        ]
+        : [];
+    if (source === 'health' && healthMetricKinds.length === 0) {
+        return;
+    }
+    const targetedIngressOptions = sleepIngressOptions || (source === 'health'
+        ? {
+            taskScope: 'health',
+            metricKinds: healthMetricKinds,
+            incrementEventMutationVersion: false,
+        } as const
+        : undefined);
+    const queued = targetedIngressOptions
+        ? await enqueueDerivedMetricsIngressTask(uid, undefined, eventTimeMs ?? undefined, targetedIngressOptions)
         : (Number.isFinite(eventTimeMs)
             ? await enqueueDerivedMetricsIngressTask(uid, undefined, eventTimeMs as number)
             : await enqueueDerivedMetricsIngressTask(uid));
@@ -115,3 +142,12 @@ export const onDashboardDerivedMetricsSleepWrite = onDocumentWritten({
     concurrency: 1,
     retry: true,
 }, event => handleDerivedMetricsSourceWrite(event, 'sleep'));
+
+export const onDashboardDerivedMetricsHealthWrite = onDocumentWritten({
+    region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
+    document: 'users/{uid}/healthSourceRecords/{sourceRecordId}',
+    memory: DERIVED_METRICS_SOURCE_TRIGGER_MEMORY,
+    maxInstances: 50,
+    concurrency: 1,
+    retry: true,
+}, event => handleDerivedMetricsSourceWrite(event, 'health'));

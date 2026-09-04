@@ -45,6 +45,7 @@ import {
   resolveSleepReferenceValue,
   selectHealthPriorityTrendSeries,
   selectActivityHealthObservations,
+  selectWorkoutWeightContextFallback,
   sleepSessionHasHrv,
 } from './health-workspace.helper';
 
@@ -519,7 +520,7 @@ describe('Health workspace helpers', () => {
     expect(filtered.conflicts).toEqual([]);
   });
 
-  it('suppresses workout Weight only for sources with a real Weight measurement', () => {
+  it('keeps workout Weight out of measurement series and exposes it only as fallback context', () => {
     const directWeight = sourceRecord({
       id: 'health-weight',
       provider: HEALTH_PROVIDERS.GarminAPI,
@@ -546,41 +547,28 @@ describe('Health workspace helpers', () => {
       HEALTH_METRIC_IDS.BodyWeight,
       result,
       [garminWorkout, workout],
-    )).toEqual([workout]);
+    )).toEqual([]);
 
     const allSourcesView = buildHealthMetricWorkspaceView(
       result,
       [],
       selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [garminWorkout, workout]),
     );
-    expect(allSourcesView.series.map(series => series.provider)).toEqual([
-      HEALTH_PROVIDERS.COROSAPI,
-      HEALTH_PROVIDERS.GarminAPI,
-    ]);
+    expect(allSourcesView.series.map(series => series.provider)).toEqual([HEALTH_PROVIDERS.GarminAPI]);
+    expect(selectWorkoutWeightContextFallback(result, [garminWorkout, workout])).toBeNull();
 
     const corosOnly = filterHealthRangeResultByProviders(result, [HEALTH_PROVIDERS.COROSAPI]);
-    const fallback = selectActivityHealthObservations(
-      HEALTH_METRIC_IDS.BodyWeight,
+    const fallback = selectWorkoutWeightContextFallback(
       corosOnly,
       [workout],
       [HEALTH_PROVIDERS.COROSAPI],
     );
-    expect(fallback).toEqual([workout]);
-    const view = buildHealthMetricWorkspaceView(corosOnly, [], fallback);
-    expect(view.series).toHaveLength(1);
-    expect(view.series[0]).toMatchObject({
-      provider: HEALTH_PROVIDERS.COROSAPI,
-      semanticVariant: 'workout_profile_context',
-      coverageText: '1 workout date · coverage not applicable',
-      deviceLabel: null,
+    expect(fallback).toMatchObject({
+      sourceLabel: 'COROS',
+      valueText: '72.0 kg',
+      observedText: 'Aug 2, 2026',
     });
-    expect(view.rows[0].semanticsText).toContain('Workout profile context');
-    expect(view.rows[0]).toMatchObject({
-      deviceLabel: 'Not reported',
-      coverageText: 'Not applicable',
-      freshnessText: 'Last observed Aug 2, 2026',
-    });
-    expect(JSON.stringify(view)).not.toContain('opaque-workout-account');
+    expect(JSON.stringify(fallback)).not.toContain('opaque-workout-account');
   });
 
   it('treats future manual Weight as a real measurement that suppresses workout fallback', () => {
@@ -608,6 +596,46 @@ describe('Health workspace helpers', () => {
       result,
       [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
     )).toEqual([]);
+    expect(selectWorkoutWeightContextFallback(
+      result,
+      [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
+    )).toBeNull();
+  });
+
+  it('exposes optimistic edit metadata only for canonical Quantified Self manual observations', () => {
+    const manualWeight = sourceRecord({
+      id: 'a'.repeat(64),
+      provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        aggregation: 'measurement',
+        semanticVariant: 'point',
+        origin: HEALTH_VALUE_ORIGINS.Recorded,
+        recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+        native: { metric: 'Weight', value: 70, unit: 'kg' },
+        canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
+      })],
+    });
+    manualWeight.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    manualWeight.timezoneOffsetSeconds = 10_800;
+    manualWeight.source.revision.order = 4;
+    const result = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(buildHealthMetricWorkspaceView(result).rows[0]).toMatchObject({
+      sourceLabel: 'Manual',
+      manualMeasurement: {
+        sourceRecordId: 'a'.repeat(64),
+        expectedRevisionOrder: 4,
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        canonicalValue: 70,
+        timezoneOffsetSeconds: 10_800,
+      },
+    });
   });
 
   it('keeps workout VO2 separate from provider Health and manual series by discipline and origin', () => {

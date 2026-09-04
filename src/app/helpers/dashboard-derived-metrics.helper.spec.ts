@@ -333,6 +333,13 @@ describe('dashboard-derived-metrics.helper', () => {
           firstSeenAtMs: Date.UTC(2026, 0, 1), lastSeenAtMs: Date.UTC(2026, 6, 12), observationCount: 14,
           previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
         },
+        referenceVo2Max: {
+          kind: 'vo2-max', value: 57, context: 'running', method: 'lab-test',
+          observedAtMs: Date.UTC(2026, 6, 11), provenance: 'manual-health-measurement',
+          comparison: {
+            value: 55.9, observedAtMs: Date.UTC(2026, 6, 12), delta: 1.1, gapDays: 1,
+          },
+        },
       }, {
         discipline: 'cycling',
         ftpSetting: {
@@ -341,10 +348,12 @@ describe('dashboard-derived-metrics.helper', () => {
           previousValue: 215, previousAtMs: Date.UTC(2025, 9, 30), previousSourceKey: 'garmin', changePct: 3.26,
         },
         importedVo2Max: null,
+        referenceVo2Max: null,
       }],
     });
 
     expect(context?.disciplines[0].importedVo2Max?.value).toBe(55.9);
+    expect(context?.disciplines[0].referenceVo2Max).toMatchObject({ value: 57, method: 'lab-test' });
     expect(context?.disciplines[1].ftpSetting).toMatchObject({ value: 222, observationCount: 28 });
     expect(context?.disciplines[1]).not.toHaveProperty('modeledCriticalPower');
   });
@@ -354,6 +363,7 @@ describe('dashboard-derived-metrics.helper', () => {
       discipline,
       ftpSetting: null,
       importedVo2Max: null,
+      referenceVo2Max: null,
     });
 
     expect(resolveDashboardTrainingCapacityContext({

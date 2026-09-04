@@ -43,6 +43,7 @@ vi.mock('../../../shared/functions-manifest', () => ({
 import {
     onDashboardDerivedMetricsActivityWrite,
     onDashboardDerivedMetricsEventWrite,
+    onDashboardDerivedMetricsHealthWrite,
     onDashboardDerivedMetricsSleepWrite,
 } from './derived-metrics.trigger';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
@@ -110,6 +111,38 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
                 retry: true,
             }),
             expect.any(Function),
+        );
+    });
+
+    it('configures the Health trigger on owner-scoped source records', () => {
+        expect(hoisted.onDocumentWritten).toHaveBeenCalledWith(
+            expect.objectContaining({
+                document: 'users/{uid}/healthSourceRecords/{sourceRecordId}',
+                memory: '512MiB',
+                retry: true,
+            }),
+            expect.any(Function),
+        );
+    });
+
+    it('targets only derived metrics affected by a Health record mutation', async () => {
+        await (onDashboardDerivedMetricsHealthWrite as any)({
+            params: { uid: 'user-1', sourceRecordId: 'health-1' },
+            data: {
+                before: { exists: false, data: () => undefined },
+                after: { exists: true, data: () => ({ metricIds: ['body_weight', 'unrelated'] }) },
+            },
+        });
+
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith(
+            'user-1',
+            undefined,
+            undefined,
+            {
+                taskScope: 'health',
+                metricKinds: [DERIVED_METRIC_KINDS.BodyWeightTrend],
+                incrementEventMutationVersion: false,
+            },
         );
     });
 

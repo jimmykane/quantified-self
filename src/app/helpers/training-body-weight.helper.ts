@@ -1,5 +1,10 @@
 import { DataWeight, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import type { DerivedBodyWeightTrendMetricPayload } from '@shared/derived-metrics';
+import type {
+  DerivedBodyWeightTrendMetricPayload,
+  DerivedBodyWeightTrendSeries,
+  DerivedBodyWeightSourceKind,
+} from '@shared/derived-metrics';
+import { HEALTH_PROVIDERS, type HealthProvider, isHealthProvider } from '@shared/health';
 import { resolveUnitAwareDisplayStat } from '@shared/unit-aware-display';
 
 type UnknownRecord = Record<string, unknown>;
@@ -27,6 +32,24 @@ export interface TrainingBodyWeightViewModel {
   chartStartLabel: string;
   chartEndLabel: string;
   chartPoints: TrainingBodyWeightTrendPointViewModel[];
+  series: TrainingBodyWeightSeriesViewModel[];
+}
+
+export interface TrainingBodyWeightSeriesViewModel {
+  sourceKind: DerivedBodyWeightSourceKind;
+  sourceLabel: string;
+  latestWeightText: string;
+  latestRecordedText: string;
+  median7dText: string;
+  median28dText: string;
+  change7dText: string;
+  change28dText: string;
+  coverageText: string;
+  sourceText: string;
+  chartAriaLabel: string;
+  chartStartLabel: string;
+  chartEndLabel: string;
+  chartPoints: TrainingBodyWeightTrendPointViewModel[];
 }
 
 export function resolveTrainingBodyWeightMetricPayload(
@@ -45,6 +68,9 @@ export function resolveTrainingBodyWeightMetricPayload(
   const recordedDayCount7d = nonNegativeInteger(source?.recordedDayCount7d);
   const recordedDayCount28d = nonNegativeInteger(source?.recordedDayCount28d);
   const points = Array.isArray(source?.points) ? source.points.map(normalizePoint) : [];
+  const series = Array.isArray(source?.series)
+    ? source.series.map(candidate => normalizeSeries(candidate, asOfDayMs))
+    : [];
   const expectedFirstDayMs = asOfDayMs === null ? null : asOfDayMs - (27 * 24 * 60 * 60 * 1000);
   const hasValidPointSeries = expectedFirstDayMs !== null
     && points.length === 28
@@ -52,6 +78,10 @@ export function resolveTrainingBodyWeightMetricPayload(
   const latestValuesArePaired = (latestWeightKg === null) === (latestWeightDayMs === null);
   const deltaPairsAreValid = (change7dKg === null) === (change7dPercent === null)
     && (change28dKg === null) === (change28dPercent === null);
+  const hasValidSeries = series.every(candidate => candidate !== null)
+    && new Set(series.map(candidate => `${candidate!.provider || ''}:${candidate!.sourceKey}`)).size === series.length
+    && !(series.some(candidate => candidate?.sourceKind === 'health-measurement')
+      && series.some(candidate => candidate?.sourceKind === 'workout-profile-context'));
   if (
     !source
     || source.dayBoundary !== 'UTC'
@@ -74,6 +104,7 @@ export function resolveTrainingBodyWeightMetricPayload(
     || !latestValuesArePaired
     || !deltaPairsAreValid
     || !hasValidPointSeries
+    || !hasValidSeries
   ) {
     return null;
   }
@@ -94,6 +125,7 @@ export function resolveTrainingBodyWeightMetricPayload(
     recordedDayCount7d,
     recordedDayCount28d,
     points: points as DerivedBodyWeightTrendMetricPayload['points'],
+    series: series as DerivedBodyWeightTrendSeries[],
   };
 }
 
@@ -103,7 +135,7 @@ export function buildTrainingBodyWeightViewModel(
   unitSettings: UserUnitSettingsInterface | null | undefined,
   locale?: string,
 ): TrainingBodyWeightViewModel {
-  const sourceText = 'This shows recorded body-weight measurements only. Same-day entries are reduced to a median; it does not change Readiness, Form, Training state, or prescribe training.';
+  const sourceText = 'Each source stays separate. Health measurements are preferred; workout profile Weight appears only when no recorded Health measurement exists. Weight does not change Readiness, Form, or Training state.';
   const metricStatus = `${status || ''}`;
   if (!payload) {
     const unavailable = metricStatus === 'failed';
@@ -125,13 +157,19 @@ export function buildTrainingBodyWeightViewModel(
       chartStartLabel: '',
       chartEndLabel: '',
       chartPoints: [],
+      series: [],
     };
   }
 
-  const availablePoints = payload.points.filter(point => point.weightKg !== null);
   const isUpdating = metricStatus !== 'ready';
-  const chart = buildChartViewModel(payload, locale);
-  if (!availablePoints.length || payload.latestWeightKg === null || payload.latestWeightDayMs === null) {
+  const series = payload.series.map((candidate, index, candidates) => buildSeriesViewModel(
+    candidate,
+    buildSourceLabel(candidate, index, candidates),
+    unitSettings,
+    locale,
+  ));
+  const firstSeries = series[0];
+  if (!series.some(candidate => candidate.chartPoints.some(point => point.weightKg !== null))) {
     return {
       state: 'empty',
       isUpdating,
@@ -146,41 +184,99 @@ export function buildTrainingBodyWeightViewModel(
         ? 'Updating recorded measurements; no current 28-day entry is available yet.'
         : 'No body-weight measurement was recorded in the last 28 days.',
       sourceText,
-      ...chart,
+      chartAriaLabel: 'No body-weight measurement was recorded in this 28-day window.',
+      chartStartLabel: formatUtcDate(payload.points[0]?.dayMs, locale),
+      chartEndLabel: formatUtcDate(payload.points.at(-1)?.dayMs, locale),
+      chartPoints: [],
+      series,
     };
   }
 
   return {
     state: 'ready',
     isUpdating,
+    latestWeightText: firstSeries?.latestWeightText || '--',
+    latestRecordedText: firstSeries?.latestRecordedText || 'No recorded measurement in this snapshot',
+    median7dText: firstSeries?.median7dText || '--',
+    median28dText: firstSeries?.median28dText || '--',
+    change7dText: firstSeries?.change7dText || '--',
+    change28dText: firstSeries?.change28dText || '--',
+    coverageText: firstSeries?.coverageText || '0/28 days recorded',
+    statusText: isUpdating
+      ? 'Updating recorded measurements; the latest complete trend remains visible.'
+      : '7-day and 28-day changes compare rolling medians with the preceding equal-length window.',
+    sourceText,
+    chartAriaLabel: firstSeries?.chartAriaLabel || 'No body-weight trend is available.',
+    chartStartLabel: firstSeries?.chartStartLabel || '',
+    chartEndLabel: firstSeries?.chartEndLabel || '',
+    chartPoints: firstSeries?.chartPoints || [],
+    series,
+  };
+}
+
+function buildSeriesViewModel(
+  payload: DerivedBodyWeightTrendSeries,
+  sourceLabel: string,
+  unitSettings: UserUnitSettingsInterface | null | undefined,
+  locale?: string,
+): TrainingBodyWeightSeriesViewModel {
+  const values = payload.points.flatMap(point => point.weightKg === null ? [] : [point.weightKg]);
+  return {
+    sourceKind: payload.sourceKind,
+    sourceLabel,
     latestWeightText: formatWeight(payload.latestWeightKg, unitSettings),
-    latestRecordedText: `Latest recorded ${formatUtcDate(payload.latestWeightDayMs, locale)}`,
+    latestRecordedText: payload.latestWeightDayMs === null
+      ? 'No recorded measurement in this snapshot'
+      : `Latest recorded ${formatUtcDate(payload.latestWeightDayMs, locale)}`,
     median7dText: formatWeight(payload.median7dKg, unitSettings),
     median28dText: formatWeight(payload.median28dKg, unitSettings),
     change7dText: formatChange(payload.change7dKg, payload.change7dPercent, unitSettings, locale),
     change28dText: formatChange(payload.change28dKg, payload.change28dPercent, unitSettings, locale),
     coverageText: `${payload.recordedDayCount28d}/28 days recorded`,
-    statusText: isUpdating
-      ? 'Updating recorded measurements; the latest complete trend remains visible.'
-      : '7-day and 28-day changes compare rolling medians with the preceding equal-length window.',
-    sourceText,
-    ...chart,
+    sourceText: payload.sourceKind === 'health-measurement'
+      ? 'Recorded Health measurements; same-day readings are reduced to a median.'
+      : 'Workout profile context fallback; this is not a weigh-in.',
+    chartAriaLabel: values.length
+      ? `${sourceLabel} body-weight measurements over 28 UTC days. ${values.length} days have recorded measurements; missing days are gaps.`
+      : `${sourceLabel} has no body-weight measurement in this 28-day window.`,
+    chartStartLabel: formatUtcDate(payload.points[0]?.dayMs, locale),
+    chartEndLabel: formatUtcDate(payload.points.at(-1)?.dayMs, locale),
+    chartPoints: values.length
+      ? payload.points.map(point => ({ dayMs: point.dayMs, weightKg: point.weightKg }))
+      : [],
   };
 }
 
-function buildChartViewModel(
-  payload: DerivedBodyWeightTrendMetricPayload,
-  locale?: string,
-): Pick<TrainingBodyWeightViewModel, 'chartAriaLabel' | 'chartStartLabel' | 'chartEndLabel' | 'chartPoints'> {
-  const values = payload.points.flatMap(point => point.weightKg === null ? [] : [point.weightKg]);
-  return {
-    chartAriaLabel: values.length
-      ? `Body-weight measurements over 28 UTC days. ${values.length} days have recorded measurements; missing days are gaps.`
-      : 'No body-weight measurement was recorded in this 28-day window.',
-    chartStartLabel: formatUtcDate(payload.points[0]?.dayMs, locale),
-    chartEndLabel: formatUtcDate(payload.points.at(-1)?.dayMs, locale),
-    chartPoints: payload.points.map(point => ({ dayMs: point.dayMs, weightKg: point.weightKg })),
-  };
+function buildSourceLabel(
+  source: DerivedBodyWeightTrendSeries,
+  index: number,
+  sources: readonly DerivedBodyWeightTrendSeries[],
+): string {
+  if (source.sourceKind === 'workout-profile-context') {
+    const workoutIndex = sources.slice(0, index + 1)
+      .filter(candidate => candidate.sourceKind === 'workout-profile-context').length;
+    const workoutCount = sources.filter(candidate => candidate.sourceKind === 'workout-profile-context').length;
+    return workoutCount > 1 ? `Workout profile context ${workoutIndex}` : 'Workout profile context';
+  }
+  const provider = source.provider;
+  const providerName = provider ? formatProvider(provider) : 'Health measurement';
+  const providerSources = sources.filter(candidate => (
+    candidate.sourceKind === 'health-measurement' && candidate.provider === provider
+  ));
+  const providerIndex = sources.slice(0, index + 1).filter(candidate => (
+    candidate.sourceKind === 'health-measurement' && candidate.provider === provider
+  )).length;
+  return providerSources.length > 1 ? `${providerName} account ${providerIndex}` : providerName;
+}
+
+function formatProvider(provider: HealthProvider): string {
+  switch (provider) {
+    case HEALTH_PROVIDERS.GarminAPI: return 'Garmin';
+    case HEALTH_PROVIDERS.SuuntoApp: return 'Suunto';
+    case HEALTH_PROVIDERS.COROSAPI: return 'COROS';
+    case HEALTH_PROVIDERS.WahooAPI: return 'Wahoo';
+    case HEALTH_PROVIDERS.QuantifiedSelf: return 'Manual';
+  }
 }
 
 function normalizePoint(value: unknown): DerivedBodyWeightTrendMetricPayload['points'][number] | null {
@@ -190,11 +286,84 @@ function normalizePoint(value: unknown): DerivedBodyWeightTrendMetricPayload['po
   return source && dayMs !== null && weightKg !== undefined ? { dayMs, weightKg } : null;
 }
 
+function normalizeSeries(
+  value: unknown,
+  asOfDayMs: number | null,
+): DerivedBodyWeightTrendSeries | null {
+  const source = asRecord(value);
+  const sourceKind = source?.sourceKind;
+  const provider = source?.provider === null ? null : (isHealthProvider(source?.provider) ? source.provider : undefined);
+  const sourceKey = typeof source?.sourceKey === 'string' && source.sourceKey.length > 0 && source.sourceKey.length <= 240
+    ? source.sourceKey
+    : null;
+  const latestWeightKg = nullablePositiveNumber(source?.latestWeightKg);
+  const latestWeightDayMs = nullableFiniteNumber(source?.latestWeightDayMs);
+  const median7dKg = nullablePositiveNumber(source?.median7dKg);
+  const median28dKg = nullablePositiveNumber(source?.median28dKg);
+  const change7dKg = nullableFiniteNumber(source?.change7dKg);
+  const change7dPercent = nullableFiniteNumber(source?.change7dPercent);
+  const change28dKg = nullableFiniteNumber(source?.change28dKg);
+  const change28dPercent = nullableFiniteNumber(source?.change28dPercent);
+  const recordedDayCount7d = nonNegativeInteger(source?.recordedDayCount7d);
+  const recordedDayCount28d = nonNegativeInteger(source?.recordedDayCount28d);
+  const points = Array.isArray(source?.points) ? source.points.map(normalizePoint) : [];
+  const expectedFirstDayMs = asOfDayMs === null ? null : asOfDayMs - (27 * 24 * 60 * 60 * 1000);
+  const hasValidPointSeries = expectedFirstDayMs !== null
+    && points.length === 28
+    && points.every((point, index) => (
+      point !== null && point.dayMs === expectedFirstDayMs + (index * 24 * 60 * 60 * 1000)
+    ));
+  if (
+    !source
+    || (sourceKind !== 'health-measurement' && sourceKind !== 'workout-profile-context')
+    || provider === undefined
+    || (sourceKind === 'health-measurement' && provider === null)
+    || (sourceKind === 'workout-profile-context' && provider !== null)
+    || sourceKey === null
+    || latestWeightKg === undefined
+    || latestWeightDayMs === undefined
+    || (latestWeightKg === null) !== (latestWeightDayMs === null)
+    || median7dKg === undefined
+    || median28dKg === undefined
+    || change7dKg === undefined
+    || change7dPercent === undefined
+    || change28dKg === undefined
+    || change28dPercent === undefined
+    || (change7dKg === null) !== (change7dPercent === null)
+    || (change28dKg === null) !== (change28dPercent === null)
+    || recordedDayCount7d === null
+    || recordedDayCount7d > 7
+    || recordedDayCount28d === null
+    || recordedDayCount28d > 28
+    || !hasValidPointSeries
+  ) {
+    return null;
+  }
+  return {
+    sourceKind,
+    provider,
+    sourceKey,
+    latestWeightKg,
+    latestWeightDayMs,
+    median7dKg,
+    median28dKg,
+    change7dKg,
+    change7dPercent,
+    change28dKg,
+    change28dPercent,
+    recordedDayCount7d,
+    recordedDayCount28d,
+    points: points as DerivedBodyWeightTrendSeries['points'],
+  };
+}
+
 function formatWeight(value: number | null, unitSettings: UserUnitSettingsInterface | null | undefined): string {
   if (value === null) {
     return '--';
   }
-  return resolveUnitAwareDisplayStat(new DataWeight(value), unitSettings)?.text || `${formatNumber(value, 1)} kg`;
+  const data = new DataWeight(value);
+  return resolveUnitAwareDisplayStat(data, unitSettings)?.text
+    || `${data.getDisplayValue()} ${data.getDisplayUnit()}`;
 }
 
 function formatChange(
