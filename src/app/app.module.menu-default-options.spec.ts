@@ -58,7 +58,7 @@ describe('AppModule menu defaults', () => {
     expect(styles).toMatch(/@media \(max-width: 959\.98px\)\s*\{[^}]*\.cdk-overlay-pane\.qs-bottom-sheet-container \.mat-bottom-sheet-container\s*\{[^}]*width:\s*calc\(100vw - 16px\);/s);
     expect(styles).toMatch(/\.mat-mdc-dialog-surface\s*{[^}]*Documented Material overlay exception/s);
     expect(styles).toMatch(/\.mat-mdc-dialog-surface\s*{[^}]*border:\s*1px solid var\(--qs-glass-panel-border\);/s);
-    expect(styles).toMatch(/\.mat-mdc-dialog-surface\s*{[^}]*box-shadow:\s*var\(--qs-glass-panel-shadow\) !important;/s);
+    expect(styles).toMatch(/\.mat-mdc-dialog-surface\s*{[^}]*box-shadow:\s*var\(--qs-overlay-shadow\) !important;/s);
     expect(styles).toMatch(/\.cdk-overlay-container\.dark-theme \.mat-mdc-dialog-surface\s*{[^}]*border:\s*1px solid rgba\(255, 255, 255, 0\.1\);/s);
     expect(styles).toContain('--qs-overlay-section-bg: var(--mat-sys-surface-container-high);');
     expect(styles).toContain('--qs-overlay-section-border: var(--mat-sys-outline-variant);');

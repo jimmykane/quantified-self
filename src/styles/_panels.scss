@@ -8,10 +8,12 @@
   --qs-glass-panel-border: var(--mat-sys-outline-variant);
   --qs-glass-panel-radius: 20px;
   --qs-glass-panel-blur: 12px;
-  --qs-glass-panel-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 2px 4px -1px rgba(0, 0, 0, 0.03),
-    0 10px 15px -3px rgba(0, 0, 0, 0.05);
+  --qs-card-shadow:
+    0 1px 2px color-mix(in srgb, var(--mat-sys-shadow) 5%, transparent),
+    0 3px 8px color-mix(in srgb, var(--mat-sys-shadow) 4%, transparent);
+  --qs-overlay-shadow:
+    0 2px 8px color-mix(in srgb, var(--mat-sys-shadow) 12%, transparent),
+    0 12px 28px -4px color-mix(in srgb, var(--mat-sys-shadow) 10%, transparent);
 }
 
 /* Make Material cards default to glass tokens unless explicitly opted out. */
@@ -23,9 +25,9 @@
   --mat-card-filled-container-color: var(--qs-glass-panel-bg);
   --mat-card-outlined-container-color: var(--qs-glass-panel-bg);
   --mat-card-outlined-outline-color: var(--qs-glass-panel-border);
-  --mat-card-elevated-container-elevation: var(--qs-glass-panel-shadow);
-  --mat-card-filled-container-elevation: var(--qs-glass-panel-shadow);
-  --mat-card-outlined-container-elevation: var(--qs-glass-panel-shadow);
+  --mat-card-elevated-container-elevation: var(--qs-card-shadow);
+  --mat-card-filled-container-elevation: var(--qs-card-shadow);
+  --mat-card-outlined-container-elevation: var(--qs-card-shadow);
   --mat-card-outlined-outline-width: 1px;
 
   backdrop-filter: blur(var(--qs-glass-panel-blur));
@@ -40,21 +42,27 @@
   -webkit-backdrop-filter: blur(var(--qs-glass-panel-blur));
   border: 1px solid var(--qs-glass-panel-border);
   border-radius: var(--qs-glass-panel-radius) !important;
-  box-shadow: var(--qs-glass-panel-shadow) !important;
+  box-shadow: var(--qs-card-shadow) !important;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .dark-theme {
   --qs-glass-panel-bg: var(--mat-sys-surface, #121212);
+  --qs-card-shadow:
+    0 1px 2px color-mix(in srgb, var(--mat-sys-shadow) 12%, transparent),
+    0 3px 8px color-mix(in srgb, var(--mat-sys-shadow) 10%, transparent);
+  --qs-overlay-shadow:
+    0 2px 8px color-mix(in srgb, var(--mat-sys-shadow) 24%, transparent),
+    0 12px 28px -4px color-mix(in srgb, var(--mat-sys-shadow) 18%, transparent);
 
   .mat-mdc-card:not(.qs-card-plain):not(.qs-overlay-flat):not(.mat-mdc-dialog-surface):not(.mat-mdc-dialog-container) {
     --mat-card-elevated-container-color: var(--qs-glass-panel-bg);
     --mat-card-filled-container-color: var(--qs-glass-panel-bg);
     --mat-card-outlined-container-color: var(--qs-glass-panel-bg);
     --mat-card-outlined-outline-color: rgba(255, 255, 255, 0.1);
-    --mat-card-elevated-container-elevation: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-    --mat-card-filled-container-elevation: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-    --mat-card-outlined-container-elevation: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    --mat-card-elevated-container-elevation: var(--qs-card-shadow);
+    --mat-card-filled-container-elevation: var(--qs-card-shadow);
+    --mat-card-outlined-container-elevation: var(--qs-card-shadow);
 
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
@@ -62,6 +70,6 @@
   .qs-glass-card-panel {
     background: var(--qs-glass-panel-bg) !important;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+    box-shadow: var(--qs-card-shadow) !important;
   }
 }

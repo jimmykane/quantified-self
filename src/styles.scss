@@ -674,9 +674,7 @@ mat-table {
   /* Keep only the top corners rounded; bottom edge stays flush with viewport */
   border-radius: 20px 20px 0 0 !important;
   border: 1px solid var(--qs-overlay-surface-border);
-  box-shadow:
-    0 -8px 32px rgba(0, 0, 0, 0.12),
-    0 -2px 8px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
   padding: 16px !important;
   display: flex !important;
   flex-direction: column;
@@ -788,13 +786,13 @@ mat-table {
   -webkit-backdrop-filter: blur(var(--qs-glass-panel-blur));
   border: 1px solid var(--qs-glass-panel-border);
   border-radius: var(--qs-glass-panel-radius) !important;
-  box-shadow: var(--qs-glass-panel-shadow) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
 }
 
 .dark-theme .mat-mdc-dialog-surface,
 .cdk-overlay-container.dark-theme .mat-mdc-dialog-surface {
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
 }
 
 /* ==========================================================================
@@ -854,6 +852,7 @@ tr.mat-row:focus,
   @include qs-scrollbar-skin;
   --mat-menu-container-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
   min-width: 180px !important;
   max-width: min(360px, calc(100vw - 24px)) !important;
   overflow: hidden !important;
@@ -890,6 +889,7 @@ tr.mat-row:focus,
   @extend .qs-glass-card-panel;
   --mat-datepicker-calendar-container-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
   color: var(--mat-sys-on-surface);
 }
 
@@ -1152,6 +1152,7 @@ tr.mat-row:focus,
   @extend .qs-glass-card-panel;
   --mat-select-panel-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
+  box-shadow: var(--qs-overlay-shadow) !important;
   border-radius: 12px !important;
   padding: 4px 0 !important;
   max-width: min(320px, calc(100vw - 24px)) !important;
