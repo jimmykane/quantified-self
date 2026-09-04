@@ -116,7 +116,8 @@ const topLevelRoutes: Routes = [
     data: {
       title: 'Login',
       animation: 'Login',
-      description: 'Login to your Quantified Self account to access your dashboard and activity data.'
+      description: 'Login to your Quantified Self account to access your dashboard and activity data.',
+      robots: 'noindex, nofollow',
     },
   },
   {
@@ -140,42 +141,7 @@ const topLevelRoutes: Routes = [
       title: 'Membership',
       preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.',
-      jsonLd: {
-        "@context": "https://schema.org",
-        "@type": "WebPage",
-        "name": "Quantified Self Membership",
-        "description": "Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Garmin, Suunto, COROS, and Wahoo while helping keep the project independent.",
-        "url": "https://quantified-self.io/pricing",
-        "inLanguage": "en",
-        "isPartOf": {
-          "@type": "WebSite",
-          "name": "Quantified Self",
-          "url": "https://quantified-self.io"
-        },
-        "mainEntity": {
-          "@type": "OfferCatalog",
-          "name": "Quantified Self memberships",
-          "itemListElement": [
-            {
-              "@type": "Offer",
-              "name": "Starter",
-              "price": "0",
-              "priceCurrency": "USD",
-              "description": "Free plan with manual uploads and core analysis tools."
-            },
-            {
-              "@type": "Offer",
-              "name": "Basic",
-              "description": "Paid membership for higher activity limits and deeper tracking."
-            },
-            {
-              "@type": "Offer",
-              "name": "Pro",
-              "description": "Paid membership for service connections, cross-service sync, and unlimited tracking."
-            }
-          ]
-        }
-      }
+      robots: 'noindex, nofollow',
     }
   },
   {
@@ -546,13 +512,7 @@ const topLevelRoutes: Routes = [
       preload: true,
       animation: 'Releases',
       description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
-      jsonLd: {
-        "@context": "https://schema.org",
-        "@type": "ItemList",
-        "name": "Quantified Self Release Notes",
-        "description": "Chronological list of updates and changes to the Quantified Self application.",
-        "itemListElement": [] // We could populate this dynamically if we were rendering on server, but static metadata is better than nothing for the list page itself.
-      }
+      robots: 'noindex, nofollow',
     }
   },
   {

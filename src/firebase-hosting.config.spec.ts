@@ -152,8 +152,36 @@ function isAllowedByRobots(source: string): boolean {
     .map(line => line.replace('Allow: ', ''));
 
   return allowSources.some(allowSource => (
-    source === allowSource || (allowSource !== '/' && source.startsWith(`${allowSource}/`))
+    allowSource === '/' || source === allowSource || source.startsWith(`${allowSource}/`)
   ));
+}
+
+function sitemapUrls(): string[] {
+  return [...sitemapXml.matchAll(/<loc>(https:\/\/quantified-self\.io[^<]*)<\/loc>/g)]
+    .map(([, url]) => url);
+}
+
+function headerSourceMatchesPath(source: string, path: string): boolean {
+  if (source === '**' || source === '/**') {
+    return true;
+  }
+
+  const sourceSegments = source.split('/').filter(Boolean);
+  const pathSegments = path.split('/').filter(Boolean);
+  let pathIndex = 0;
+
+  for (let sourceIndex = 0; sourceIndex < sourceSegments.length; sourceIndex += 1) {
+    const sourceSegment = sourceSegments[sourceIndex];
+    if (sourceSegment === '**') {
+      return true;
+    }
+    if (pathIndex >= pathSegments.length || (sourceSegment !== '*' && sourceSegment !== pathSegments[pathIndex])) {
+      return false;
+    }
+    pathIndex += 1;
+  }
+
+  return pathIndex === pathSegments.length;
 }
 
 function findHtmlFiles(directory: string): string[] {
@@ -266,6 +294,14 @@ describe('Firebase Hosting configuration', () => {
     }
   });
 
+  it('keeps the sitemap exactly aligned with prerendered public routes', () => {
+    const expectedUrls = PRERENDERED_PUBLIC_ROUTES
+      .map(path => `${siteOrigin}${routePathToHostingSource(path)}`)
+      .sort();
+
+    expect(sitemapUrls().sort()).toEqual(expectedUrls);
+  });
+
   it('marks route-delivery SEO launch pages as recently updated in sitemap', () => {
     const expectedLastmod = '2026-06-26';
     const updatedUrls = [
@@ -280,7 +316,6 @@ describe('Firebase Hosting configuration', () => {
 
   it('marks recently updated public discovery surfaces in sitemap', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/pricing`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
@@ -309,7 +344,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
   });
 
-  it('keeps private client-rendered routes out of sitemap and disallowed by robots', () => {
+  it('keeps client-rendered routes out of the sitemap and noindexed at the hosting layer', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/tools/compare/saved</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/event/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
@@ -319,16 +354,29 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/health</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp/authorize</loc>');
-    expect(robotsTxt).toContain('Disallow: /tools/compare/saved');
-    expect(robotsTxt).toContain('Disallow: /routes');
-    expect(robotsTxt).toContain('Disallow: /calendar');
-    expect(robotsTxt).toContain('Disallow: /training');
-    expect(robotsTxt).toContain('Disallow: /health');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/login</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/pricing</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/releases</loc>');
     expect(robotsTxt).toContain('Disallow: /mcp');
-    expect(robotsTxt).toContain('Disallow: /mcp/authorize');
+    expect(robotsTxt).toContain('Allow: /mcp/authorize');
     expect(robotsTxt).toContain('Disallow: /oauth/');
     expect(robotsTxt).toContain('Disallow: /.well-known/oauth-protected-resource');
     expect(robotsTxt).toContain('Disallow: /.well-known/oauth-authorization-server');
+
+    const productionTarget = firebaseConfig.hosting.find(target => target.target === 'production');
+    const noIndexHeaders = productionTarget?.headers?.filter(header => (
+      header.headers.some(headerValue => (
+        headerValue.key === betaNoIndexHeader.key && headerValue.value === betaNoIndexHeader.value
+      ))
+    )) ?? [];
+
+    for (const routePath of CLIENT_RENDERED_APP_ROUTES) {
+      const routeSource = routePathToHostingSource(routePath);
+      expect(
+        noIndexHeaders.some(header => headerSourceMatchesPath(header.source, routeSource)),
+        routePath,
+      ).toBe(true);
+    }
   });
 
   it('marks public share routes noindex at the hosting layer', () => {
@@ -387,7 +435,8 @@ describe('Firebase Hosting configuration', () => {
       expect(reportOnlyPolicy).not.toContain('https://*.mapbox.com');
     }
 
-    expect(targetHeaderSets[1]).toEqual(targetHeaderSets[0]);
+    expect(targetHeaderSets[0]).toContainEqual(betaNoIndexHeader);
+    expect(targetHeaderSets[1]).not.toContainEqual(betaNoIndexHeader);
   });
 
   it('keeps executable scripts and event handlers compatible with a strict script policy', () => {
