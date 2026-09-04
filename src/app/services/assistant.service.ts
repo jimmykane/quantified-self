@@ -10,11 +10,13 @@ import {
   type ResetAssistantConversationRequest,
   type ResetAssistantConversationResponse,
 } from '@shared/assistant.types';
+import type { FunctionName } from '@shared/functions-manifest';
 import {
   validateAssistantChatResponse,
   validateAssistantConversation,
 } from '@shared/assistant-response.contract';
 import { normalizeAssistantConversationEvidence } from '@shared/assistant-evidence-display';
+import { Auth } from 'app/firebase/auth';
 import { AppFunctionsService } from './app.functions.service';
 
 export type AssistantErrorCode =
@@ -42,10 +44,11 @@ export class AssistantError extends Error {
 @Injectable({ providedIn: 'root' })
 export class AssistantService {
   private readonly functionsService = inject(AppFunctionsService);
+  private readonly auth = inject(Auth);
 
   async sendMessage(request: AssistantChatRequest): Promise<AssistantChatResponse> {
     try {
-      const response = await this.functionsService.call<AssistantChatRequest, AssistantChatResponse>(
+      const response = await this.callWithAuthenticationRetry<AssistantChatRequest, AssistantChatResponse>(
         'assistantChat',
         request,
       );
@@ -83,7 +86,7 @@ export class AssistantService {
 
   async getConversationState(): Promise<GetAssistantConversationResponse> {
     try {
-      const response = await this.functionsService.call<void, GetAssistantConversationResponse>(
+      const response = await this.callWithAuthenticationRetry<void, GetAssistantConversationResponse>(
         'getAssistantConversation',
       );
       const pendingRequestId = (
@@ -136,7 +139,7 @@ export class AssistantService {
     locationAccess: AssistantLocationAccess = 'coordinate_free',
   ): Promise<AssistantConversation> {
     try {
-      const response = await this.functionsService.call<
+      const response = await this.callWithAuthenticationRetry<
         ResetAssistantConversationRequest,
         ResetAssistantConversationResponse
       >(
@@ -215,5 +218,40 @@ export class AssistantService {
       return new AssistantError('UNAVAILABLE', message || 'Assistant unavailable.', error);
     }
     return new AssistantError('INTERNAL', message || 'Assistant request failed.', error);
+  }
+
+  private async callWithAuthenticationRetry<RequestData, ResponseData>(
+    functionKey: FunctionName,
+    data?: RequestData,
+  ): Promise<{ data: ResponseData }> {
+    const invoke = () => data === undefined
+      ? this.functionsService.call<RequestData, ResponseData>(functionKey)
+      : this.functionsService.call<RequestData, ResponseData>(functionKey, data);
+
+    try {
+      return await invoke();
+    } catch (error) {
+      if (!this.isUnauthenticatedCallableError(error)) {
+        throw error;
+      }
+
+      const currentUser = this.auth.currentUser;
+      if (!currentUser) {
+        throw error;
+      }
+
+      try {
+        await currentUser.getIdToken(true);
+      } catch {
+        throw error;
+      }
+
+      return invoke();
+    }
+  }
+
+  private isUnauthenticatedCallableError(error: unknown): boolean {
+    const code = `${(error as { code?: unknown } | null)?.code || ''}`;
+    return code.includes('unauthenticated');
   }
 }
