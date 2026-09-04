@@ -79,7 +79,10 @@ import {
   resolveHealthWorkspaceWindow,
   selectActivityHealthObservations,
 } from '../../helpers/health-workspace.helper';
-import { buildDashboardSleepTrendContext } from '../../helpers/dashboard-sleep-chart.helper';
+import {
+  buildDashboardSleepTrendContext,
+  resolveSleepTrendDate,
+} from '../../helpers/dashboard-sleep-chart.helper';
 import { healthMetricIcon } from '../../helpers/health-metric-icon.helper';
 import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
 
@@ -269,11 +272,18 @@ export class HealthWorkspaceComponent {
     const selected = this.selectedProviders().filter(provider => available.has(provider));
     return selected.length ? selected : [];
   });
+  readonly windowedSleepSessions = computed(() => {
+    const window = this.selectedWindow();
+    return this.selectedSleepSessions().filter(session => {
+      const sleepDate = resolveSleepTrendDate(session);
+      return sleepDate !== null && sleepDate >= window.startDate && sleepDate <= window.endDate;
+    });
+  });
   readonly filteredSleepSessions = computed(() => {
     const selected = this.effectiveProviderFilters();
     return selected.length
-      ? this.selectedSleepSessions().filter(session => selected.includes(session.source.provider as HealthProvider))
-      : this.selectedSleepSessions();
+      ? this.windowedSleepSessions().filter(session => selected.includes(session.source.provider as HealthProvider))
+      : this.windowedSleepSessions();
   });
   readonly filteredHealthResult = computed(() => {
     const result = this.selectedHealthLoad()?.result;
@@ -318,7 +328,7 @@ export class HealthWorkspaceComponent {
   readonly availableProviders = computed<HealthProvider[]>(() => {
     const loadedResult = this.selectedHealthLoad()?.result;
     const providers = this.selectedIsSleep()
-      ? this.selectedSleepSessions().map(session => session.source.provider as HealthProvider)
+      ? this.windowedSleepSessions().map(session => session.source.provider as HealthProvider)
       : [
         ...(this.selectedHealthLoad()?.providers || []),
         ...(loadedResult?.observations.map(item => item.provider) || []),

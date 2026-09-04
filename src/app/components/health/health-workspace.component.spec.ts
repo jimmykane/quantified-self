@@ -250,6 +250,7 @@ describe('HealthWorkspaceComponent', () => {
       metricIds?: readonly HealthMetricId[];
       healthError?: unknown;
       hasSleep?: boolean;
+      sleepSessions?: readonly SleepSession[];
       sleepError?: unknown;
       sleepSyncErrors?: readonly SleepProvider[];
     } = {},
@@ -359,7 +360,7 @@ describe('HealthWorkspaceComponent', () => {
         {
           provide: AppSleepService,
           useValue: {
-            watchForDashboard: () => of([sleepSession()]),
+            watchForDashboard: () => of([...(availability.sleepSessions || [sleepSession()])]),
             watchHasAnySleepSession: () => availability.sleepError
               ? throwError(() => availability.sleepError)
               : of(availability.hasSleep ?? true),
@@ -725,6 +726,43 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('table caption')?.textContent)
       .toContain('Normalized Sleep sessions by source');
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('secret-provider-user');
+  });
+
+  it('keeps a 1d Sleep view on the selected sleep date without blending same-day providers', async () => {
+    const yesterdayDate = new Date(todayStartMs - (24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+    const previousSleep = {
+      ...sleepSession(),
+      id: 'sleep-previous',
+      sleepDate: yesterdayDate,
+      startTimeMs: todayStartMs - (26 * 60 * 60 * 1000),
+      endTimeMs: todayStartMs,
+    };
+    const sameDaySuuntoSleep = {
+      ...sleepSession(),
+      id: 'sleep-suunto',
+      source: {
+        ...sleepSession().source,
+        provider: SLEEP_PROVIDERS.SuuntoApp,
+        sourceSessionKey: 'opaque-suunto-sleep',
+      },
+    };
+    await createComponent(undefined, undefined, {
+      sleepSessions: [previousSleep, sleepSession(), sameDaySuuntoSleep],
+    });
+
+    component.selectMetric('sleep');
+    component.selectRange('today');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.windowedSleepSessions().map(session => session.id)).toEqual(['sleep-one', 'sleep-suunto']);
+    expect(component.sleepTrend().points.filter(point => !point.isPlaceholder)).toHaveLength(2);
+    expect(component.sleepRows()).toHaveLength(2);
+    expect(component.availableProviders()).toEqual([
+      HEALTH_PROVIDERS.GarminAPI,
+      HEALTH_PROVIDERS.SuuntoApp,
+    ]);
   });
 
   it('ignores a stale in-flight metric response after local metric navigation changes', async () => {
