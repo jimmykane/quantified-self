@@ -242,6 +242,7 @@ describe('AppRoutingModule routes', () => {
       title: 'Assistant',
       preload: true,
       animation: 'Assistant',
+      disableRouteAnimation: true,
     });
   });
 

@@ -500,6 +500,7 @@ const topLevelRoutes: Routes = [
       title: 'Assistant',
       preload: true,
       animation: 'Assistant',
+      disableRouteAnimation: true,
       description: 'Chat with the built-in Assistant grounded in read-only Quantified Self tools for sleep, readiness, Training, measurements, and activities.',
     }
   },
