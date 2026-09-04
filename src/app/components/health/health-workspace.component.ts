@@ -78,6 +78,7 @@ import {
   normalizeHealthWorkspaceRange,
   providerLabel,
   resolveHealthWorkspaceWindow,
+  isSleepHrvSemanticVariant,
   selectActivityHealthObservations,
   selectHealthPriorityTrendSeries,
   sleepSessionHasHrv,
@@ -471,7 +472,7 @@ export class HealthWorkspaceComponent {
   });
   readonly sleepHrvNotice = computed(() => {
     if (this.routeState().metric !== HEALTH_METRIC_IDS.HeartRateVariability
-      || !this.metricView().series.some(series => series.semanticVariant.startsWith('sleep_'))) {
+      || !this.metricView().series.some(series => isSleepHrvSemanticVariant(series.semanticVariant))) {
       return null;
     }
     return 'Sleep HRV is read from normalized Sleep sessions and shown as its own labeled series. It is never averaged with standalone HRV.';

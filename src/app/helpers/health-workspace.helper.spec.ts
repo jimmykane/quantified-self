@@ -37,6 +37,7 @@ import {
   formatHealthAxisValue,
   formatHealthUnit,
   formatHealthValue,
+  isSleepHrvSemanticVariant,
   navigateHealthWorkspaceWindow,
   normalizeHealthWorkspaceMetric,
   normalizeHealthWorkspaceRange,
@@ -691,6 +692,10 @@ describe('Health workspace helpers', () => {
       coverageText: 'Sleep session',
     });
     expect(JSON.stringify(view)).not.toContain('raw-provider-user');
+
+    const miles = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const preferredUnitView = buildHealthMetricWorkspaceView(result, [sleepSession()], [], miles);
+    expect(preferredUnitView.rows[0]?.valueText).toBe('62 ms');
   });
 
   it('keeps average and overnight Sleep HRV as distinct semantic series', () => {
@@ -723,6 +728,13 @@ describe('Health workspace helpers', () => {
 
     expect(sleepSessionHasHrv(nap)).toBe(false);
     expect(buildHealthMetricWorkspaceView(result, [nap]).series).toEqual([]);
+  });
+
+  it('does not classify provider Health sleep averages as Sleep-session HRV', () => {
+    expect(isSleepHrvSemanticVariant('sleep_session_average_hrv')).toBe(true);
+    expect(isSleepHrvSemanticVariant('sleep_overnight_hrv')).toBe(true);
+    expect(isSleepHrvSemanticVariant('sleep_average')).toBe(false);
+    expect(isSleepHrvSemanticVariant('sleep_window_deviation')).toBe(false);
   });
 
   it('keeps standalone and Sleep HRV separate without duplicating typed Sleep references', () => {

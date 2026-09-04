@@ -193,6 +193,10 @@ interface MetricDatum {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS = 36 * 60 * 60 * 1000;
+const SLEEP_HRV_SEMANTIC_VARIANTS = new Set([
+  'sleep_session_average_hrv',
+  'sleep_overnight_hrv',
+]);
 const TABLE_ROW_LIMIT = 250;
 const CATEGORY_ORDER: readonly HealthMetricDefinition['category'][] = [
   'cardiovascular',
@@ -530,6 +534,10 @@ export function selectActivityHealthObservations(
 
 export function sleepSessionHasHrv(session: SleepSession | null | undefined): boolean {
   return session?.isNap !== true && sleepHrvValues(session).length > 0;
+}
+
+export function isSleepHrvSemanticVariant(semanticVariant: string): boolean {
+  return SLEEP_HRV_SEMANTIC_VARIANTS.has(semanticVariant);
 }
 
 export function buildHealthPriorityRows(
