@@ -6,6 +6,7 @@ import {
   QUANTIFIED_SELF_LICENSE_URL,
   QUANTIFIED_SELF_SOURCE_URL,
 } from '../../shared/open-source-license';
+import { QUANTIFIED_SELF_STATUS_PAGE_URL } from '../../shared/status-page-url';
 
 @Component({
   selector: 'app-public-footer',
@@ -24,4 +25,5 @@ export class PublicFooterComponent {
   public readonly openSourceLicense = QUANTIFIED_SELF_LICENSE_ID;
   public readonly sourceCodeUrl = QUANTIFIED_SELF_SOURCE_URL;
   public readonly licenseUrl = QUANTIFIED_SELF_LICENSE_URL;
+  public readonly statusPageUrl = QUANTIFIED_SELF_STATUS_PAGE_URL;
 }

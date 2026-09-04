@@ -51,7 +51,9 @@ import {
   DataWeight,
   DataWheelchairPushDistance,
   DataWheelchairPushes,
+  type DataInterface,
   type DataJSONInterface,
+  type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_CATALOG,
@@ -74,11 +76,12 @@ import {
   SPORTS_LIB_DATA_SCHEMA_VERSION,
   type SportsLibDataEnvelope,
 } from './sports-lib-data';
+import {
+  resolveUnitAwareDisplayStat,
+  type ResolveUnitAwareDisplayOptions,
+} from './unit-aware-display';
 
-interface SportsLibScalarData {
-  getValue(): unknown;
-  toJSON(): DataJSONInterface;
-}
+type SportsLibScalarData = DataInterface;
 
 interface SportsLibScalarDataClass {
   readonly type: string;
@@ -161,6 +164,51 @@ export class SportsLibDataValidationError extends Error {
   constructor(message: string) {
     super(message);
   }
+}
+
+export interface HealthMetricSportsLibDisplay {
+  value: string;
+  unit: string;
+}
+
+function formatSportsLibScalarValue(
+  dataClass: SportsLibScalarDataClass,
+  value: HealthScalar,
+  unitSettings?: UserUnitSettingsInterface | null,
+  options?: ResolveUnitAwareDisplayOptions,
+): HealthMetricSportsLibDisplay | null {
+  try {
+    const display = resolveUnitAwareDisplayStat(new dataClass(value as never), unitSettings, options);
+    return display ? { value: display.value, unit: display.unit } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Formats a canonical Health metric with the same Sports Lib data class used
+ * for its persisted representation. Provider-native values deliberately do
+ * not pass through this function because their units are provider-specific.
+ */
+export function formatCanonicalHealthMetricSportsLibValue(
+  metricId: HealthMetricId,
+  value: HealthScalar,
+  unitSettings?: UserUnitSettingsInterface | null,
+): HealthMetricSportsLibDisplay | null {
+  return formatSportsLibScalarValue(HEALTH_SPORTS_LIB_CLASSES[metricId], value, unitSettings);
+}
+
+/**
+ * Formats a canonical normalized Sleep aggregate using its explicit Sports
+ * Lib class, including any compatible user-unit conversion.
+ */
+export function formatCanonicalSleepMetricSportsLibValue(
+  field: SleepSportsLibMetricField,
+  value: HealthScalar,
+  unitSettings?: UserUnitSettingsInterface | null,
+  options?: ResolveUnitAwareDisplayOptions,
+): HealthMetricSportsLibDisplay | null {
+  return formatSportsLibScalarValue(SLEEP_SPORTS_LIB_CLASSES[field], value, unitSettings, options);
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

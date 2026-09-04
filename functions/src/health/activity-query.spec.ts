@@ -26,6 +26,7 @@ import {
     ACTIVITY_HEALTH_QUERY_PLANS,
     ActivityHealthQueryValidationError,
     readActivityHealthRange,
+    readTrustedEventProviderMetadata,
     type ActivityHealthQueryPageDocument,
     type ActivityHealthQueryPageRequest,
 } from './activity-query';
@@ -241,8 +242,10 @@ describe('readActivityHealthRange', () => {
                 ? [weightDocument('1'), weightDocument('2')]
                 : [weightDocument('3')]
         ));
+        const readProviderMetadata = vi.fn(async () => new Map());
         const result = await readActivityHealthRange('owner', query('body_weight'), {
             readPage,
+            readProviderMetadata,
             limits: { pageSize: 2, maxCandidates: 2 },
         });
         expect(result).toMatchObject({
@@ -252,6 +255,10 @@ describe('readActivityHealthRange', () => {
         });
         expect(result.observations).toHaveLength(2);
         expect(readPage).toHaveBeenCalledTimes(1);
+        expect(readProviderMetadata).toHaveBeenCalledWith({
+            userID: 'owner',
+            documents: [weightDocument('1'), weightDocument('2')],
+        });
     });
 
     it('walks exact 128-document internal pages without duplicating the cursor document', async () => {
@@ -322,6 +329,45 @@ describe('readActivityHealthRange', () => {
         });
         expect(result).toMatchObject({ complete: true, candidateCount: 1, observations: [] });
         expect(JSON.stringify(result)).not.toContain('Private importer');
+    });
+
+    it('uses one trusted server-owned event provider metadata match for legacy Weight', async () => {
+        const document = weightDocument('legacy-weight', START_MS, 70, '');
+        document.data.creator = {};
+        const readProviderMetadata = vi.fn(async () => new Map([[document.id, {
+            status: 'resolved' as const,
+            provider: HEALTH_PROVIDERS.GarminAPI,
+            sourceAccountSeed: ['event_provider_metadata', 'GarminAPI', 'private-provider-account'],
+        }]]));
+
+        const result = await readActivityHealthRange('owner', query('body_weight'), {
+            readPage: async () => [document],
+            readProviderMetadata,
+        });
+
+        expect(readProviderMetadata).toHaveBeenCalledWith({
+            userID: 'owner',
+            documents: [document],
+        });
+        expect(result.observations).toHaveLength(1);
+        expect(result.observations[0]).toMatchObject({
+            provider: HEALTH_PROVIDERS.GarminAPI,
+            value: 70,
+        });
+        expect(JSON.stringify(result)).not.toContain('legacy-weight');
+        expect(JSON.stringify(result)).not.toContain('private-provider-account');
+    });
+
+    it('drops ambiguous event provider metadata instead of guessing from device text', async () => {
+        const document = weightDocument('ambiguous-weight', START_MS, 70, '');
+        document.data.creator = { manufacturer: 'Garmin' };
+
+        const result = await readActivityHealthRange('owner', query('body_weight'), {
+            readPage: async () => [document],
+            readProviderMetadata: async () => new Map([[document.id, { status: 'ambiguous' }]]),
+        });
+
+        expect(result).toMatchObject({ complete: true, candidateCount: 1, observations: [] });
     });
 
     it('prefers an authoritative source service over a different device brand', async () => {
@@ -444,5 +490,90 @@ describe('default Firestore query construction', () => {
         ))).toBe(true);
         expect(calls.select).not.toContain('stats.`VO2 Max`');
         expect(calls.select).not.toContain('eventStartDate');
+    });
+});
+
+describe('trusted event provider metadata reader', () => {
+    interface FakeMetadataReference {
+        path: string;
+        collection(value: string): FakeMetadataReference;
+        doc(value: string): FakeMetadataReference;
+    }
+
+    function fakeMetadataFirestore(existingPaths: Record<string, Record<string, unknown>>) {
+        const pathParts: string[] = [];
+        const makeRef = (parts: string[]): FakeMetadataReference => ({
+            path: parts.join('/'),
+            collection: (value: string) => makeRef([...parts, value]),
+            doc: (value: string) => makeRef([...parts, value]),
+        });
+        const db = {
+            collection: (value: string) => {
+                pathParts.push(value);
+                return makeRef([value]);
+            },
+            getAll: vi.fn(async (...args: ({ path: string } | { fieldMask: string[] })[]) => (
+                args.filter((arg): arg is { path: string } => 'path' in arg).map(ref => ({
+                exists: Object.prototype.hasOwnProperty.call(existingPaths, ref.path),
+                data: () => existingPaths[ref.path],
+                }))
+            )),
+        };
+        return { db, pathParts };
+    }
+
+    it('reads exact provider metadata documents and derives an opaque account seed', async () => {
+        const { db } = fakeMetadataFirestore({
+            'users/owner/events/event-1/metaData/Garmin API': {
+                serviceName: 'Garmin API',
+                serviceUserID: 'private-provider-account',
+            },
+        });
+        const document = weightDocument('event-1', START_MS, 70, '');
+        document.data.creator = {};
+
+        const result = await readTrustedEventProviderMetadata(db as never, {
+            userID: 'owner',
+            documents: [document],
+        });
+
+        expect(result.get('event-1')).toEqual({
+            status: 'resolved',
+            provider: HEALTH_PROVIDERS.GarminAPI,
+            sourceAccountSeed: ['event_provider_metadata', 'GarminAPI', 'private-provider-account'],
+        });
+        expect(db.getAll).toHaveBeenCalledTimes(1);
+        expect(db.getAll.mock.calls[0]
+            .filter((arg): arg is { path: string } => 'path' in arg)
+            .map(ref => ref.path)).toEqual([
+            'users/owner/events/event-1/metaData/Garmin API',
+            'users/owner/events/event-1/metaData/Suunto app',
+            'users/owner/events/event-1/metaData/COROS API',
+            'users/owner/events/event-1/metaData/Wahoo API',
+        ]);
+        expect(db.getAll.mock.calls[0].at(-1)).toEqual({
+            fieldMask: ['serviceName', 'userID', 'serviceUserID', 'serviceUserName', 'serviceOpenId'],
+        });
+    });
+
+    it('marks multiple trusted provider documents ambiguous and ignores mismatched declarations', async () => {
+        const { db } = fakeMetadataFirestore({
+            'users/owner/events/event-1/metaData/Garmin API': { serviceName: 'Garmin API' },
+            'users/owner/events/event-1/metaData/Suunto app': { serviceName: 'Suunto app' },
+            'users/owner/events/event-2/metaData/Garmin API': { serviceName: 'Private importer' },
+        });
+        const documents = ['event-1', 'event-2'].map(id => {
+            const document = weightDocument(id, START_MS, 70, '');
+            document.data.creator = {};
+            return document;
+        });
+
+        const result = await readTrustedEventProviderMetadata(db as never, {
+            userID: 'owner',
+            documents,
+        });
+
+        expect(result.get('event-1')).toEqual({ status: 'ambiguous' });
+        expect(result.has('event-2')).toBe(false);
     });
 });

@@ -19,8 +19,11 @@
   </app-page-header>
 
   <app-health-priority-summary
-    [cards]="priorityCards()"
-    [selectedMetric]="routeState().metric"
+    [cards]="visiblePriorityCards()"
+    [startTimeMs]="priorityWindow.startTimeMs"
+    [endTimeMs]="priorityWindow.endTimeMs"
+    [darkTheme]="isDarkTheme()"
+    [unitSettings]="unitSettings()"
     (metricSelected)="selectPriorityMetric($event)">
   </app-health-priority-summary>
 
@@ -119,7 +122,7 @@
               aria-label="Health range"
               (change)="selectRange($event.value)">
               @for (option of ranges; track option.range) {
-                <mat-button-toggle [value]="option.range">{{ option.buttonLabel }}</mat-button-toggle>
+                <mat-button-toggle [value]="option.range" [aria-label]="option.label">{{ option.buttonLabel }}</mat-button-toggle>
               }
             </mat-button-toggle-group>
             <button
@@ -131,6 +134,16 @@
               (click)="navigateWindow('newer')">
               <mat-icon aria-hidden="true">chevron_right</mat-icon>
             </button>
+            @if (selectedWindow().canNavigateNewer) {
+              <button
+                mat-icon-button
+                type="button"
+                matTooltip="Jump to today"
+                aria-label="Jump to today"
+                (click)="jumpToToday()">
+                <mat-icon aria-hidden="true">today</mat-icon>
+              </button>
+            }
           </div>
         </header>
 
@@ -214,6 +227,12 @@
             <span>{{ workoutMetricNotice() }}</span>
           </div>
         }
+        @if (sleepHrvNotice()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">bedtime</mat-icon>
+            <span>{{ sleepHrvNotice() }}</span>
+          </div>
+        }
         @if (!selectedIsSleep() && metricView().conflictCount > 0) {
           <div class="health-notice health-notice-conflict" role="alert">
             <mat-icon aria-hidden="true">difference</mat-icon>
@@ -267,8 +286,7 @@
             <mat-icon aria-hidden="true">monitor_heart</mat-icon>
             <div>
               <strong>No {{ detailTitle() }} data in this window</strong>
-              <span>Choose another window or review which providers support this metric.</span>
-              <a mat-stroked-button routerLink="/services">Open Connectivity</a>
+              <span>Choose another date range or a metric with imported readings.</span>
             </div>
           </div>
         } @else if (selectedIsSleep()) {
@@ -289,7 +307,8 @@
             [series]="metricView().series"
             [startTimeMs]="selectedWindow().startTimeMs"
             [endTimeMs]="selectedWindow().endTimeMs"
-            [darkTheme]="isDarkTheme()">
+            [darkTheme]="isDarkTheme()"
+            [unitSettings]="unitSettings()">
           </app-health-metric-chart>
         }
 
@@ -326,7 +345,12 @@
       <ul class="health-sync-list" aria-label="Connected Health sources">
         @for (state of syncStateViews(); track state.provider) {
           <li class="health-sync-item">
-            <span class="health-sync-dot" [attr.data-tone]="state.tone" aria-hidden="true"></span>
+            <span
+              class="health-sync-dot"
+              [attr.data-tone]="state.tone"
+              [matTooltip]="state.statusTooltip"
+              aria-hidden="true">
+            </span>
             <strong class="health-sync-provider">{{ state.label }}</strong>
             <span class="health-sync-status">{{ state.statusLabel }}</span>
             <span aria-hidden="true">·</span>

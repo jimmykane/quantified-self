@@ -195,10 +195,11 @@ export function normalizeUserUnitSettings(raw: unknown): UserUnitSettingsInterfa
   };
 }
 
-interface ResolveUnitAwareDisplayOptions {
+export interface ResolveUnitAwareDisplayOptions {
   preferredType?: string | null;
   stripRepeatedUnit?: boolean;
   compactAscentDescent?: boolean;
+  compactDuration?: boolean;
   locale?: string | null;
 }
 
@@ -244,8 +245,12 @@ export function resolveUnitAwareDisplayStat(
   const rawValue = typeof selectedStat.getValue === 'function' ? Number(selectedStat.getValue()) : null;
   const isDuration = selectedStat instanceof DataDuration;
   const ascentDescentDisplayValue = resolveAscentDescentDisplayValue(selectedStat, selectedType, options);
-  const displayValueRaw = isDuration && rawValue !== null && Number.isFinite(rawValue) && rawValue >= SECONDS_PER_DAY
-    ? selectedStat.getDisplayValue(true, false)
+  const displayValueRaw = isDuration
+    ? rawValue !== null && Number.isFinite(rawValue) && rawValue >= SECONDS_PER_DAY
+      ? selectedStat.getDisplayValue(true, false)
+      : options?.compactDuration === true
+        ? selectedStat.getDisplayValue(false, false)
+        : selectedStat.getDisplayValue()
     : ascentDescentDisplayValue ?? selectedStat.getDisplayValue?.();
   const displayUnitRaw = selectedStat.getDisplayUnit?.();
   const displayUnit = toDisplayText(displayUnitRaw).trim();
@@ -280,7 +285,7 @@ export function resolveUnitAwareDisplayFromValue(
   try {
     const stat = DynamicDataLoader.getDataInstanceFromDataType(dataType, numericValue);
     return resolveUnitAwareDisplayStat(stat, unitSettings, options);
-  } catch (_error) {
+  } catch {
     return null;
   }
 }

@@ -451,6 +451,7 @@ describe('ChartsSleepTrendComponent', () => {
       connectNulls: false,
       lineStyle: { color: AppColors.Blue },
       itemStyle: { color: AppColors.Blue },
+      emphasis: { focus: 'none' },
       data: [48, null],
       markLine: {
         label: {

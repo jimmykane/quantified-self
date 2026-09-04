@@ -194,15 +194,17 @@ Garmin sleep ingestion stores average respiration from positive samples and deri
 normalized maximum SpO₂ aggregate from valid recorded samples. MCP and other aggregate
 consumers can use those values without reading the raw sample series. Existing Garmin sessions
 gain the SpO₂ aggregate only when Garmin redelivers the session or the user runs the normal
-**Import Sleep History** flow after the updated worker is deployed; deploying or rescanning an
+**Import Sleep history** flow after the updated worker is deployed; deploying or rescanning an
 MCP client does not rewrite sleep documents.
 
 ## COROS Sleep and Health Backfill
 
 COROS retains daily data for up to three months and permits a maximum 30-day range per request.
-Connected Pro users can choose **Import Sleep & Health History** in COROS History Import. The
+Connected Pro users can choose **Import Sleep & daily Health history** in COROS History Import. The
 user-requested backfill queues their available three-month window in 30-day ranges and is available
 once every seven days. It uses the same guarded worker and ordered Sleep/Health writes as routine polling.
+Its response reports matching `sleepQueued` and `healthQueued` date-range counts because each COROS
+daily queue item imports both domains from one provider response.
 
 The `backfill-coros-daily-health` Functions script queues the current eligible COROS accounts through
 the normal sleep queue in 30-day windows. It neither logs tokens nor fetches raw provider data itself; the deployed worker performs the
@@ -237,7 +239,7 @@ fails closed.
 ## Suunto Sleep and Health Backfill
 
 The existing Suunto history callable, cooldown, and public Function name remain stable. While the Health
-kill switch is enabled, **Import Sleep & Health History** queues one Sleep item and one Health item for every
+kill switch is enabled, **Import Sleep & 24/7 Health history** queues one Sleep item and one Health item for every
 non-overlapping range of at most 28 days for every connected Suunto account. The response reports the shared range count plus separate
 `sleepQueued` and `healthQueued` counts. A combined request accepts at most eight connected accounts. When the Health kill switch is disabled, the existing Sleep-only copy
 and behavior remain available. A partial enqueue failure clears the cooldown claim so the user can retry immediately;

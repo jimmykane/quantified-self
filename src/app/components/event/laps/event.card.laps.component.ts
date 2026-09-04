@@ -52,9 +52,17 @@ interface LapColumnMenuGroup {
   label: string;
   icon: string;
   selectedMetricTypes: string[];
+  metricAvailability: Record<string, LapMetricAvailability>;
+  selectedUnavailableMetricCount: number;
   metricGroups: EventLapMetricOptionGroup[];
   filteredMetricGroups: EventLapMetricOptionGroup[];
   searchTerm: string;
+}
+
+interface LapMetricAvailability {
+  availableTableCount: number;
+  tableCount: number;
+  label: string | null;
 }
 
 interface LapTableView {
@@ -420,13 +428,24 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.lapColumnMenuGroups = Array.from(sportFamilies).map((family) => {
       const presentation = getEventLapSportFamilyPresentation(family);
       const existingGroup = existingGroupsByFamily.get(family);
+      const selectedMetricTypes = getSelectedEventLapMetricTypes(
+        this.eventDetailsSettings,
+        family,
+      );
+      const metricAvailability = this.getLapMetricAvailability(
+        family,
+        metricGroups,
+        new Set(selectedMetricTypes),
+      );
+      const selectedUnavailableMetricCount = selectedMetricTypes.filter((metricType) => (
+        metricAvailability[metricType]?.availableTableCount === 0
+      )).length;
       if (existingGroup) {
         existingGroup.label = presentation.label;
         existingGroup.icon = presentation.icon;
-        existingGroup.selectedMetricTypes = getSelectedEventLapMetricTypes(
-          this.eventDetailsSettings,
-          family,
-        );
+        existingGroup.selectedMetricTypes = selectedMetricTypes;
+        existingGroup.metricAvailability = metricAvailability;
+        existingGroup.selectedUnavailableMetricCount = selectedUnavailableMetricCount;
         existingGroup.metricGroups = metricGroups;
         existingGroup.filteredMetricGroups = filterLapMetricGroups(
           metricGroups,
@@ -439,7 +458,9 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
         family,
         label: presentation.label,
         icon: presentation.icon,
-        selectedMetricTypes: getSelectedEventLapMetricTypes(this.eventDetailsSettings, family),
+        selectedMetricTypes,
+        metricAvailability,
+        selectedUnavailableMetricCount,
         metricGroups,
         filteredMetricGroups: metricGroups,
         searchTerm: '',
@@ -448,6 +469,31 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     this.activeLapColumnMenuGroup = this.lapColumnMenuGroups.find(
       (group) => group.family === activeFamily,
     ) || this.lapColumnMenuGroups[0] || null;
+  }
+
+  private getLapMetricAvailability(
+    family: AppEventLapSportFamily,
+    metricGroups: EventLapMetricOptionGroup[],
+    selectedMetricTypes: ReadonlySet<string>,
+  ): Record<string, LapMetricAvailability> {
+    const tables = this.lapTableGroups
+      .flatMap((lapTableGroup) => lapTableGroup.tables)
+      .filter((table) => resolveEventLapSportFamily(table.activity.type) === family);
+    const tableCount = tables.length;
+
+    return Object.fromEntries(metricGroups
+      .flatMap((metricGroup) => metricGroup.metrics)
+      .map(({ type }) => {
+        const availableTableCount = tables.filter((table) => table.columns.includes(type)).length;
+        const label = !selectedMetricTypes.has(type)
+          ? null
+          : availableTableCount === 0
+          ? 'No data in current laps — hidden from the table'
+          : availableTableCount < tableCount
+            ? `Available in ${availableTableCount} of ${tableCount} lap tables`
+            : null;
+        return [type, { availableTableCount, tableCount, label }];
+      }));
   }
 
   private getSelectedLapKeysByTable(): Map<string, Set<string>> {

@@ -368,6 +368,19 @@ describe('TrainingWorkspaceComponent', () => {
     expect(template).toContain('matTooltip="All sports"');
   });
 
+  it('uses Material option icon projection for desktop all-sports options', () => {
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
+      'utf8',
+    );
+
+    const desktopSelectMarkup = template.match(/<mat-select\s+[\s\S]*?<\/mat-select>/)?.[0] || '';
+    expect(desktopSelectMarkup).toMatch(/<mat-option \[value\]="option\.id">\s*@if \(option\.materialIcon\) \{\s*<mat-icon/s);
+    expect(desktopSelectMarkup).not.toContain('training-destination-option');
+    expect(desktopSelectMarkup).not.toContain('<app-activity-type-icon');
+    expect(template).not.toContain('alignDesktopTrainingDestinationOptions');
+  });
+
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
@@ -1682,13 +1695,14 @@ describe('TrainingWorkspaceComponent', () => {
     component.sportShortcuts = ['cycling', 'swimming'];
     component.isAutomaticSportVisibility = true;
     component.trainingDestinationOptions = [
-      { id: 'overview', label: 'All training', details: 'All', sport: null, materialIcon: 'monitoring' },
+      { id: 'overview', label: 'All training', details: 'All', sport: null, materialIcon: 'monitoring', iconColor: null },
       {
         id: 'cycling',
         label: 'Cycling',
         details: 'Cycling',
         sport: { id: 'cycling', iconActivityType: 'Cycling' } as any,
-        materialIcon: null,
+        materialIcon: 'directions_bike',
+        iconColor: '#FF7C3B',
       },
     ];
 

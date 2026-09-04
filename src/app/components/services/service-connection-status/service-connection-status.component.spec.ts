@@ -97,6 +97,16 @@ describe('ServiceConnectionStatusComponent', () => {
         expect(connectedStateRule).toContain('color: var(--qs-theme-success)');
     });
 
+    it('uses the Connectivity surface border token', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/service-connection-status/service-connection-status.component.scss'),
+            'utf8'
+        );
+        const contentRule = styles.match(/\.service-connection-status__content\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(contentRule).toContain('border: 1px solid var(--services-surface-border, var(--mat-sys-outline-variant))');
+    });
+
     it('does not make status layout wrappers nested scroll containers', () => {
         const styles = readFileSync(
             resolve(process.cwd(), 'src/app/components/services/service-connection-status/service-connection-status.component.scss'),

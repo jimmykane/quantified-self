@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
@@ -7,6 +8,7 @@ import {
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
 import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
 import { HealthWorkspaceSeries } from './health-workspace.helper';
@@ -77,6 +79,88 @@ describe('Health metric chart helpers', () => {
     expect(model.ariaLabel).toContain('not combined with other sources');
   });
 
+  it('uses Sports Lib formatting in chart accessibility text and tooltips', () => {
+    const vo2Series = series({
+      metricId: HEALTH_METRIC_IDS.Vo2Max,
+      unit: 'ml_per_kg_per_min',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 52, qualityCode: null }],
+    });
+    const model = buildHealthChartModels([vo2Series], 0, DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as { tooltip: { formatter: (params: { value?: unknown }) => string } };
+
+    expect(model.ariaLabel).toContain('Latest 52.00 ml/kg/min');
+    expect(option.tooltip.formatter({ value: [0, 52] })).toContain('52.00 ml/kg/min');
+  });
+
+  it('keeps compact Health charts focused on the trend without duplicate axes', () => {
+    const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 13,
+      buildDashboardEChartsStyleTokens(false, 320),
+      false,
+      null,
+      true,
+    ) as {
+      grid: { left: number; right: number };
+      xAxis: { show: boolean };
+      yAxis: { show: boolean };
+      series: Array<{ showSymbol: boolean }>;
+    };
+
+    expect(option.grid).toMatchObject({ left: 2, right: 2 });
+    expect(option.xAxis.show).toBe(false);
+    expect(option.yAxis.show).toBe(false);
+    expect(option.series[0].showSymbol).toBe(false);
+
+    const sparseModel = buildHealthChartModels([
+      series({ points: [series().points[0]] }),
+    ], 0, DAY_MS * 13)[0];
+    const sparseOption = buildHealthMetricEChartsOption(
+      sparseModel,
+      0,
+      DAY_MS * 13,
+      buildDashboardEChartsStyleTokens(false, 320),
+      false,
+      null,
+      true,
+    ) as { series: Array<{ showSymbol: boolean; symbolSize: number }> };
+    expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
+  });
+
+  it('uses the selected Sports Lib unit conversion consistently across a chart', () => {
+    const unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const distanceSeries = series({
+      metricId: HEALTH_METRIC_IDS.Distance,
+      unit: 'meter',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 10_000, qualityCode: null }],
+    });
+    const model = buildHealthChartModels([distanceSeries], 0, DAY_MS, unitSettings)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+      unitSettings,
+    ) as {
+      tooltip: { formatter: (params: { value?: unknown }) => string };
+      yAxis: { axisLabel: { formatter: (value: number) => string } };
+    };
+
+    expect(model.ariaLabel).toContain('Latest 6.22 mi');
+    expect(model.displayUnit).toBe('mi');
+    expect(option.tooltip.formatter({ value: [0, 10_000] })).toContain('6.22 mi');
+    expect(option.yAxis.axisLabel.formatter(10_000)).toBe('6.22');
+  });
+
   it('uses an ECharts bar series for totals and starts positive totals at zero', () => {
     const model = buildHealthChartModels([series({
       aggregation: 'total',
@@ -112,6 +196,43 @@ describe('Health metric chart helpers', () => {
     })], 0, DAY_MS)[0];
     expect(model.numericBounds).toEqual({ min: -10, max: 15 });
     expect(model.data).toEqual([[0, -10], [DAY_MS, 15]]);
+  });
+
+  it('caps percentage Health charts at a Sports Lib-formatted 100%', () => {
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.BloodOxygenSaturation,
+      unit: 'percent',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 96, qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 99, qualityCode: null },
+      ],
+    })], 0, DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as {
+      yAxis: {
+        max: number;
+        axisLabel: { formatter: (value: number) => string };
+      };
+    };
+
+    expect(model.numericBounds?.min).toBeLessThan(96);
+    expect(model.numericBounds?.max).toBe(100);
+    expect(model.yMaxLabel).toBe('100%');
+    expect(option.yAxis.max).toBe(100);
+    expect(option.yAxis.axisLabel.formatter(100)).toBe('100%');
+
+    const emptyModel = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.BodyFat,
+      unit: 'percent',
+      points: [],
+    })], 0, DAY_MS)[0];
+    expect(emptyModel.numericBounds).toEqual({ min: 0, max: 100 });
+    expect(emptyModel.yMaxLabel).toBe('100%');
   });
 
   it('creates an ECharts stepped categorical series without coercing categories to numbers', () => {

@@ -1,8 +1,11 @@
 import { Component, Input, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
@@ -89,6 +92,7 @@ class HealthMetricChartStubComponent {
   @Input() startTimeMs = 0;
   @Input() endTimeMs = 0;
   @Input() darkTheme = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null = null;
 }
 
 const todayDate = localCalendarDate();
@@ -191,7 +195,7 @@ function activityRangeResult(
   };
 }
 
-function sleepSession(): SleepSession {
+function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
   return {
     id: 'sleep-one',
     userID: 'user-1',
@@ -206,11 +210,17 @@ function sleepSession(): SleepSession {
     durationSeconds: 8 * 60 * 60,
     isNap: false,
     stages: [],
-    stageDurationsSeconds: {},
+    stageDurationsSeconds: {
+      deep: 7_200,
+      light: 14_400,
+      rem: 5_400,
+      awake: 1_800,
+    },
     score: { value: 86 },
     vitals: { averageHrvMs: 58, averageHeartRateBpm: 52 },
     createdAtMs: todayStartMs,
     updatedAtMs: todayStartMs,
+    ...overrides,
   };
 }
 
@@ -247,6 +257,7 @@ describe('HealthWorkspaceComponent', () => {
       metricIds?: readonly HealthMetricId[];
       healthError?: unknown;
       hasSleep?: boolean;
+      sleepSessions?: readonly SleepSession[];
       sleepError?: unknown;
       sleepSyncErrors?: readonly SleepProvider[];
     } = {},
@@ -318,6 +329,8 @@ describe('HealthWorkspaceComponent', () => {
     backfillCorosSleepForCurrentUser = vi.fn().mockResolvedValue(backfillResponse);
     hasProAccess = signal(true);
 
+    const defaultSleepSessions = (availability.hasSleep ?? true) ? [sleepSession()] : [];
+
     await TestBed.configureTestingModule({
       imports: [HealthWorkspaceComponent],
       providers: [
@@ -333,7 +346,13 @@ describe('HealthWorkspaceComponent', () => {
             backfillCorosSleepForCurrentUser,
           },
         },
-        { provide: AppUserSettingsQueryService, useValue: { updateHealthWorkspacePreferences } },
+        {
+          provide: AppUserSettingsQueryService,
+          useValue: {
+            unitSettings: signal(getDefaultUserUnitSettings()),
+            updateHealthWorkspacePreferences,
+          },
+        },
         {
           provide: AppHealthService,
           useValue: {
@@ -350,7 +369,7 @@ describe('HealthWorkspaceComponent', () => {
         {
           provide: AppSleepService,
           useValue: {
-            watchForDashboard: () => of([sleepSession()]),
+            watchForDashboard: () => of([...(availability.sleepSessions || defaultSleepSessions)]),
             watchHasAnySleepSession: () => availability.sleepError
               ? throwError(() => availability.sleepError)
               : of(availability.hasSleep ?? true),
@@ -389,6 +408,9 @@ describe('HealthWorkspaceComponent', () => {
       endDate: todayDate,
     });
     expect(component.priorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate', 'HRV']);
+    const prioritySection = (fixture.nativeElement as HTMLElement).querySelector('.health-priority-section');
+    expect(prioritySection?.textContent).toContain('Highlights');
+    expect(prioritySection?.textContent).not.toContain('Last 30 days');
     expect((fixture.nativeElement as HTMLElement).querySelector('#health-detail-title')?.textContent).toContain('Resting heart rate');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.tagName).toBe('MAT-CARD');
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card')).toHaveLength(3);
@@ -403,12 +425,25 @@ describe('HealthWorkspaceComponent', () => {
     );
     expect(metricOptionIcons).toHaveLength((fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option').length);
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(3);
-    const priorityProviderIcons = fixture.debugElement.queryAll(By.css(
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card-selected')).toBeNull();
+    expect(Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-open-button'),
+    ).every(button => button.getAttribute('aria-pressed') === null)).toBe(true);
+    expect(fixture.debugElement.queryAll(By.css(
       '.health-priority-card app-service-source-icon',
-    ));
-    expect(priorityProviderIcons.length).toBeGreaterThan(0);
-    expect(priorityProviderIcons.every(icon => icon.componentInstance.iconWidth === 32)).toBe(true);
-    expect(priorityProviderIcons.every(icon => icon.componentInstance.iconHeight === 18)).toBe(true);
+    ))).toHaveLength(0);
+    const prioritySourceLabels = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-source-label'),
+    );
+    expect(prioritySourceLabels.length).toBeGreaterThan(0);
+    expect(prioritySourceLabels.some(label => label.textContent?.trim() === 'Garmin')).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-chart-source')).toHaveLength(2);
+    const sleepDetails = (fixture.nativeElement as HTMLElement).querySelector('.health-priority-card:first-child')?.textContent;
+    expect(sleepDetails).toContain('Score86');
+    expect(sleepDetails).toContain('HRV58 ms');
+    expect(sleepDetails).toContain('Avg HR52 bpm');
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('app-health-sleep-stage-summary')).toHaveLength(1);
+    expect(sleepDetails).toContain('Sleep stages');
     const filterProviderIcons = fixture.debugElement.queryAll(By.css(
       '.health-provider-filter app-service-source-icon',
     ));
@@ -424,7 +459,75 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('mat-chip-listbox')).toBeNull();
     expect(router.url).not.toContain('?');
     expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    expect(loadMetricRange).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      metricId: HEALTH_METRIC_IDS.HeartRate,
+      includeSamples: true,
+    }));
+    expect(loadMetricRange).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      includeSamples: true,
+    }));
   }, 10_000);
+
+  it('opens highlight metrics without styling the highlight as selected', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    const openHeartRate = host.querySelector<HTMLButtonElement>('[aria-label="Open Heart rate"]');
+
+    openHeartRate?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
+    expect(host.querySelector('.health-priority-card-selected')).toBeNull();
+    expect(openHeartRate?.getAttribute('aria-pressed')).toBeNull();
+    expect(host.querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('removes unavailable highlights instead of rendering empty cards', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(
+      metricId,
+      metricId === HEALTH_METRIC_IDS.HeartRateVariability,
+    )), undefined, {
+      sleepSessions: [sleepSession({ vitals: { averageHeartRateBpm: 52 } })],
+    });
+
+    expect(component.visiblePriorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate']);
+    const cards = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.health-priority-card'),
+    );
+    expect(cards).toHaveLength(2);
+    expect(cards.map(card => card.querySelector('h3')?.textContent?.trim())).toEqual(['Sleep', 'Heart rate']);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.classList)
+      .toContain('health-priority-grid-double');
+  });
+
+  it('surfaces normalized Sleep HRV when standalone Health HRV is unavailable', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(
+      metricId,
+      metricId === HEALTH_METRIC_IDS.HeartRateVariability,
+    )), undefined, {
+      metricIds: [HEALTH_METRIC_IDS.HeartRate],
+      sleepSessions: [sleepSession()],
+    }, HEALTH_METRIC_IDS.HeartRateVariability);
+
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRateVariability);
+    expect(component.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id)))
+      .toContain(HEALTH_METRIC_IDS.HeartRateVariability);
+    expect(component.metricView().series).toEqual([
+      expect.objectContaining({
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        semanticVariant: 'sleep_session_average_hrv',
+        semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+      }),
+    ]);
+    expect(component.providerFilterOptions().map(provider => provider.label)).toContain('Garmin');
+    expect(component.sleepHrvNotice()).toContain('never averaged with standalone HRV');
+    expect(component.visiblePriorityCards().map(card => card.label)).toContain('HRV');
+    expect((fixture.nativeElement as HTMLElement).textContent)
+      .toContain('Sleep HRV is read from normalized Sleep sessions');
+  });
 
   it('restores and persists the account-owned metric and range without adding query parameters', async () => {
     await createComponent(undefined, '90d', {}, HEALTH_METRIC_IDS.Steps);
@@ -447,7 +550,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.isSavingPreferences()).toBe(false);
   });
 
-  it('loads and remembers Today as a sample-enabled one-day window', async () => {
+  it('loads and remembers the 1d sample-enabled window', async () => {
     await createComponent();
 
     component.selectRange('today');
@@ -463,15 +566,15 @@ describe('HealthWorkspaceComponent', () => {
       includeSamples: true,
     });
     const explicitTodayLabel = new Intl.DateTimeFormat(undefined, {
-      weekday: 'long',
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
       timeZone: 'UTC',
     }).format(new Date(`${todayDate}T00:00:00.000Z`));
     expect(component.selectedWindow().label).toBe(`Today · ${explicitTodayLabel}`);
     expect(component.detailSubtitle()).toBe(component.selectedWindow().label);
-    expect(component.ranges[0]).toMatchObject({ range: 'today', buttonLabel: 'Today' });
+    expect(component.ranges[0]).toMatchObject({ range: 'today', label: '1 day', buttonLabel: '1d' });
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-range-selector')?.textContent).toContain('1d');
+    expect((fixture.nativeElement as HTMLElement).querySelector('button[aria-label="1 day"]')?.textContent).toContain('1d');
     expect(updateHealthWorkspacePreferences).toHaveBeenCalledWith('user-1', {
       metric: HEALTH_METRIC_IDS.RestingHeartRate,
       range: 'today',
@@ -480,6 +583,35 @@ describe('HealthWorkspaceComponent', () => {
       && request.endDate === todayDate
       && request.includeSamples === true)).toBe(true);
     expect(router.url).not.toContain('?');
+  });
+
+  it('identifies one-day history and jumps back to today without changing saved range', async () => {
+    await createComponent();
+
+    component.selectRange('today');
+    await fixture.whenStable();
+    component.navigateWindow('older');
+    fixture.detectChanges();
+
+    const yesterdayDate = new Date(
+      Date.parse(`${todayDate}T00:00:00.000Z`) - (24 * 60 * 60 * 1000),
+    ).toISOString().slice(0, 10);
+    expect(component.selectedEndDate()).toBe(yesterdayDate);
+    expect(component.selectedWindow().label).toMatch(/^Yesterday · /);
+    const todayButton = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('[aria-label="Jump to today"]');
+    expect(todayButton).not.toBeNull();
+
+    todayButton?.click();
+    fixture.detectChanges();
+
+    expect(component.selectedEndDate()).toBe(todayDate);
+    expect(component.selectedWindow().label).toMatch(/^Today · /);
+    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Jump to today"]')).toBeNull();
+    expect(updateHealthWorkspacePreferences).toHaveBeenLastCalledWith('user-1', {
+      metric: HEALTH_METRIC_IDS.RestingHeartRate,
+      range: 'today',
+    });
   });
 
   it('shows only metrics with stored history and falls back from an unavailable default', async () => {
@@ -501,8 +633,44 @@ describe('HealthWorkspaceComponent', () => {
     expect(host.textContent).not.toContain('Resting heart rate');
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
     expect((host.querySelector('[aria-label="Open Heart rate"]') as HTMLButtonElement).disabled).toBe(false);
-    expect((host.querySelector('[aria-label="Open Sleep"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(host.querySelector('[aria-label="Open Sleep"]')).toBeNull();
     expect((host.querySelector('[aria-label="Open HRV"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps the verified metric catalog filtered while a saved metric preference echoes back', async () => {
+    await createComponent(undefined, undefined, {
+      metricIds: [HEALTH_METRIC_IDS.HeartRate, HEALTH_METRIC_IDS.Steps],
+      hasSleep: false,
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    const initialLabels = [...host.querySelectorAll('.health-metric-option')]
+      .map(option => option.querySelector('.health-metric-option-content > span:last-child')?.textContent?.trim());
+    expect(initialLabels).toEqual(['Heart rate', 'Steps', 'Body weight', 'VO2 max']);
+    expect(component.showSleepMetric()).toBe(false);
+
+    let resolveUnexpectedAvailabilityLoad: (metricIds: HealthMetricId[]) => void;
+    const unexpectedAvailabilityLoad = new Promise<HealthMetricId[]>(resolve => {
+      resolveUnexpectedAvailabilityLoad = resolve;
+    });
+    loadAvailableMetricIds.mockImplementationOnce(() => unexpectedAvailabilityLoad);
+
+    component.selectMetric(HEALTH_METRIC_IDS.Steps);
+    hydrateSavedMetric(HEALTH_METRIC_IDS.Steps);
+    fixture.detectChanges();
+
+    expect(loadAvailableMetricIds).toHaveBeenCalledTimes(1);
+    expect(component.healthMetricAvailabilityStatus()).toBe('ready');
+    expect(component.sleepMetricAvailabilityStatus()).toBe('ready');
+    expect(component.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id))).toEqual([
+      HEALTH_METRIC_IDS.HeartRate,
+      HEALTH_METRIC_IDS.Steps,
+      HEALTH_METRIC_IDS.BodyWeight,
+      HEALTH_METRIC_IDS.Vo2Max,
+    ]);
+    expect(component.showSleepMetric()).toBe(false);
+
+    resolveUnexpectedAvailabilityLoad!([]);
   });
 
   it('keeps the complete catalog visible when availability discovery fails', async () => {
@@ -527,7 +695,7 @@ describe('HealthWorkspaceComponent', () => {
 
     const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option')]
       .map(option => option.querySelector('.health-metric-option-content > span:last-child')?.textContent?.trim());
-    expect(labels).toEqual(['Sleep overview', 'Steps', 'Body weight', 'VO2 max']);
+    expect(labels).toEqual(['Sleep overview', 'Heart rate variability', 'Steps', 'Body weight', 'VO2 max']);
     expect(component.routeState().metric).toBe('sleep');
   });
 
@@ -574,6 +742,32 @@ describe('HealthWorkspaceComponent', () => {
       metric: HEALTH_METRIC_IDS.HeartRate,
       range: '30d',
     });
+  });
+
+  it('keeps loaded highlights mounted when same-user metric and range settings change', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    const priorityGrid = host.querySelector('.health-priority-grid');
+    const sleepSummary = host.querySelector('app-health-sleep-stage-summary');
+    const priorityCalls = (metricId: HealthMetricId) => loadMetricRange.mock.calls
+      .filter(([, request]) => request.metricId === metricId);
+    expect(priorityCalls(HEALTH_METRIC_IDS.HeartRate)).toHaveLength(1);
+    expect(priorityCalls(HEALTH_METRIC_IDS.HeartRateVariability)).toHaveLength(1);
+
+    loadMetricRange.mockImplementation(() => new Promise<HealthWorkspaceRangeLoad>(() => undefined));
+    hydrateSavedMetric(HEALTH_METRIC_IDS.Steps);
+    fixture.detectChanges();
+    await Promise.resolve();
+    hydrateSavedRange('90d');
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(host.querySelector('.health-priority-grid')).toBe(priorityGrid);
+    expect(host.querySelector('app-health-sleep-stage-summary')).toBe(sleepSummary);
+    expect(priorityGrid?.textContent).not.toContain('Loading sources…');
+    expect(priorityCalls(HEALTH_METRIC_IDS.HeartRate)).toHaveLength(1);
+    expect(priorityCalls(HEALTH_METRIC_IDS.HeartRateVariability)).toHaveLength(1);
   });
 
   it('serializes rapid metric and range changes without losing either preference', async () => {
@@ -648,6 +842,43 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('table caption')?.textContent)
       .toContain('Normalized Sleep sessions by source');
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('secret-provider-user');
+  });
+
+  it('keeps a 1d Sleep view on the selected sleep date without blending same-day providers', async () => {
+    const yesterdayDate = new Date(todayStartMs - (24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+    const previousSleep = {
+      ...sleepSession(),
+      id: 'sleep-previous',
+      sleepDate: yesterdayDate,
+      startTimeMs: todayStartMs - (26 * 60 * 60 * 1000),
+      endTimeMs: todayStartMs,
+    };
+    const sameDaySuuntoSleep = {
+      ...sleepSession(),
+      id: 'sleep-suunto',
+      source: {
+        ...sleepSession().source,
+        provider: SLEEP_PROVIDERS.SuuntoApp,
+        sourceSessionKey: 'opaque-suunto-sleep',
+      },
+    };
+    await createComponent(undefined, undefined, {
+      sleepSessions: [previousSleep, sleepSession(), sameDaySuuntoSleep],
+    });
+
+    component.selectMetric('sleep');
+    component.selectRange('today');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.windowedSleepSessions().map(session => session.id)).toEqual(['sleep-one', 'sleep-suunto']);
+    expect(component.sleepTrend().points.filter(point => !point.isPlaceholder)).toHaveLength(2);
+    expect(component.sleepRows()).toHaveLength(2);
+    expect(component.availableProviders()).toEqual([
+      HEALTH_PROVIDERS.GarminAPI,
+      HEALTH_PROVIDERS.SuuntoApp,
+    ]);
   });
 
   it('ignores a stale in-flight metric response after local metric navigation changes', async () => {
@@ -783,6 +1014,30 @@ describe('HealthWorkspaceComponent', () => {
     expect(loadAvailableMetricIds).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps rendered highlights mounted while a sync-driven refresh is pending', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    const priorityGrid = host.querySelector('.health-priority-grid');
+    const sleepSummary = host.querySelector('app-health-sleep-stage-summary');
+    const originalText = priorityGrid?.textContent;
+    loadMetricRange.mockImplementation(() => new Promise<HealthWorkspaceRangeLoad>(() => undefined));
+
+    syncStates.next([{
+      provider: HEALTH_PROVIDERS.GarminAPI,
+      status: HEALTH_SYNC_STATUSES.Ready,
+      lastSyncedAtMs: todayStartMs + 1_000,
+      updatedAtMs: 2,
+    }]);
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(host.querySelector('.health-priority-grid')).toBe(priorityGrid);
+    expect(host.querySelector('app-health-sleep-stage-summary')).toBe(sleepSummary);
+    expect(priorityGrid?.textContent).toBe(originalText);
+    expect(priorityGrid?.textContent).not.toContain('Loading sources…');
+  });
+
   it('shows the newest provider sync timestamp even when an older field is also present', async () => {
     await createComponent();
     const newestTimestamp = todayStartMs + (2 * 60 * 60 * 1000);
@@ -849,16 +1104,39 @@ describe('HealthWorkspaceComponent', () => {
     expect(Object.fromEntries(component.syncStateViews().map(state => [state.provider, {
       statusLabel: state.statusLabel,
       tone: state.tone,
+      statusTooltip: state.statusTooltip,
     }]))).toEqual({
-      [HEALTH_PROVIDERS.COROSAPI]: { statusLabel: 'Stale', tone: 'stale' },
-      [HEALTH_PROVIDERS.GarminAPI]: { statusLabel: 'Current', tone: 'current' },
-      [HEALTH_PROVIDERS.SuuntoApp]: { statusLabel: 'Delayed', tone: 'delayed' },
-      [HEALTH_PROVIDERS.WahooAPI]: { statusLabel: 'Waiting', tone: 'neutral' },
+      [HEALTH_PROVIDERS.COROSAPI]: {
+        statusLabel: 'Stale',
+        tone: 'stale',
+        statusTooltip: 'Stale: no source update has arrived for more than 7 days.',
+      },
+      [HEALTH_PROVIDERS.GarminAPI]: {
+        statusLabel: 'Current',
+        tone: 'current',
+        statusTooltip: 'Current: the latest source update arrived within the last 36 hours.',
+      },
+      [HEALTH_PROVIDERS.SuuntoApp]: {
+        statusLabel: 'Delayed',
+        tone: 'delayed',
+        statusTooltip: 'Delayed: the latest source update is between 36 hours and 7 days old.',
+      },
+      [HEALTH_PROVIDERS.WahooAPI]: {
+        statusLabel: 'Waiting',
+        tone: 'neutral',
+        statusTooltip: 'Waiting: no Health update has arrived yet.',
+      },
     });
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-sync-item')).toHaveLength(4);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="current"]')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="delayed"]')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="stale"]')).toBeTruthy();
+    expect(
+      fixture.debugElement
+        .query(By.css('.health-sync-dot[data-tone="current"]'))
+        .injector.get(MatTooltip)
+        .message,
+    ).toBe('Current: the latest source update arrived within the last 36 hours.');
   });
 
   it('offers the existing provider history import when no Sleep or Health backfill has run', async () => {
@@ -1076,15 +1354,17 @@ describe('HealthWorkspaceComponent', () => {
     expect(loadMetricRange.mock.calls.length).toBeGreaterThanOrEqual(callCountAfterGarminAdvanced + 3);
   });
 
-  it('maps denied and empty reads to clear Connectivity actions', async () => {
+  it('maps denied reads to Connectivity, but keeps empty windows actionable in place', async () => {
     await createComponent(() => Promise.reject({ code: 'permission-denied' }));
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Health data access was denied');
     expect((fixture.nativeElement as HTMLElement).querySelector('[routerlink="/services"]')).toBeTruthy();
 
     TestBed.resetTestingModule();
     await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No Resting heart rate data in this window');
-    expect((fixture.nativeElement as HTMLElement).querySelector('[routerlink="/services"]')).toBeTruthy();
+    const emptyState = (fixture.nativeElement as HTMLElement).querySelector('.health-detail-state');
+    expect(emptyState?.textContent).toContain('No Resting heart rate data in this window');
+    expect(emptyState?.textContent).toContain('Choose another date range or a metric with imported readings.');
+    expect(emptyState?.querySelector('[routerlink="/services"]')).toBeNull();
   });
 
   it('explains sample-only metrics instead of implying an empty 90-day aggregate', async () => {

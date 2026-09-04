@@ -31,6 +31,10 @@
             {
               "key": "X-Frame-Options",
               "value": "DENY"
+            },
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow"
             }
           ]
         },
@@ -56,6 +60,10 @@
             {
               "key": "X-Frame-Options",
               "value": "DENY"
+            },
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow"
             }
           ]
         },
@@ -76,6 +84,78 @@
               "value": "noindex, nofollow"
             }
           ]
+        },
+        {
+          "source": "/onboarding",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/admin",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/admin/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/pricing",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/subscriptions",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/payment/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/releases",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/tools/compare/saved",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/services",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/dashboard",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/health",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/calendar",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/training",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/mytracks",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/routes",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/settings",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/user/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
+          "source": "/ai-insights",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
         {
           "source": "404.html",

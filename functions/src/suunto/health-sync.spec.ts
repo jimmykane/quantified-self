@@ -391,7 +391,7 @@ describe('Suunto Health provider sync', () => {
       .toBe('refreshed-access-token');
   });
 
-  it('replaces provider transport details with an opaque retry error', async () => {
+  it('replaces provider transport details with an opaque retry error and retains its HTTP status', async () => {
     hoisted.requestGet.mockReset().mockRejectedValueOnce(Object.assign(
       new Error('private-provider-response private-access-token'),
       { statusCode: 503 },
@@ -406,9 +406,32 @@ describe('Suunto Health provider sync', () => {
       caught = error;
     }
     expect(caught).toBeInstanceOf(SuuntoHealthRequestError);
-    expect(caught).toEqual(expect.objectContaining({ message: 'Suunto Health request failed.' }));
+    expect(caught).toEqual(expect.objectContaining({
+      message: 'Suunto Health request failed.',
+      providerStatusCode: 503,
+    }));
+    expect(JSON.stringify(caught)).toContain('"providerStatusCode":503');
     expect(JSON.stringify(caught)).not.toContain('private-provider-response');
     expect(JSON.stringify(caught)).not.toContain('private-access-token');
+  });
+
+  it('does not expose an invalid provider status in retry telemetry', async () => {
+    hoisted.requestGet.mockReset().mockRejectedValueOnce(Object.assign(
+      new Error('private-provider-response'),
+      { statusCode: 700 },
+    ));
+    const snapshot = tokenSnapshot();
+    const initialGuards = currentAuthorityGuards(snapshot);
+
+    await expect(processSuuntoHealthQueueItem(
+      queueItem(),
+      snapshot,
+      'staged-user',
+      initialGuards,
+    )).rejects.toEqual(expect.objectContaining({
+      message: 'Suunto Health request failed.',
+      providerStatusCode: undefined,
+    }));
   });
 
   it('checks the deletion guard before every provider request', async () => {

@@ -14,7 +14,7 @@
     min-width: 0;
     max-width: 100%;
     padding: 20px;
-    border: 1px solid var(--mat-sys-outline-variant);
+    border: 1px solid var(--services-surface-border, var(--mat-sys-outline-variant));
     border-radius: 12px;
     background: var(--mat-sys-surface-container-lowest);
 }

@@ -26,12 +26,15 @@
           [model]="model"
           [startTimeMs]="startTimeMs()"
           [endTimeMs]="endTimeMs()"
-          [darkTheme]="darkTheme()">
+          [darkTheme]="darkTheme()"
+          [unitSettings]="unitSettings()">
         </app-health-metric-series-chart>
       </mat-card-content>
 
       <mat-card-footer class="health-chart-footer">
-        <span>{{ model.series.unit }}</span>
+        @if (model.displayUnit; as displayUnit) {
+          <span>{{ displayUnit }}</span>
+        }
         @if (model.series.deviceLabel) {
           <span>Device: {{ model.series.deviceLabel }}</span>
         }

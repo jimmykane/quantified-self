@@ -72,6 +72,8 @@ describe('HistoryImportFormComponent', () => {
             }),
             backfillCorosSleepForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 4,
+                sleepQueued: 4,
+                healthQueued: 4,
                 startDate: '2026-01-30T12:00:00.000Z',
                 endDate: '2026-04-30T12:00:00.000Z',
                 nextAllowedAtMs: 1_778_244_000_000,
@@ -159,7 +161,7 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Import Sleep History');
+        expect(text).toContain('Import Sleep history');
         expect(text).toContain('Imports Suunto sleep');
         expect(text).toContain('once every 7 days');
     });
@@ -176,8 +178,8 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Sleep & Health history');
-        expect(text).toContain('Import Sleep & Health History');
+        expect(text).toContain('Sleep & 24/7 Health history');
+        expect(text).toContain('Import Sleep & 24/7 Health history');
         expect(text).toContain('Imports Suunto sleep and available 24/7 Health metrics');
     });
 
@@ -193,8 +195,8 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Import Sleep History');
-        expect(text).not.toContain('Import Sleep & Health History');
+        expect(text).toContain('Import Sleep history');
+        expect(text).not.toContain('Import Sleep & 24/7 Health history');
         expect(text).not.toContain('available 24/7 Health metrics');
         const sleepButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
         expect(sleepButton.disabled).toBe(false);
@@ -220,7 +222,7 @@ describe('HistoryImportFormComponent', () => {
         const pendingSection = fixture.nativeElement.querySelector('.sleep-backfill-section') as HTMLElement;
         expect(pendingButton.disabled).toBe(true);
         expect(pendingButton.textContent).toContain('Checking Health availability');
-        expect(pendingSection.getAttribute('aria-label')).toBe('Suunto import scope check');
+        expect(pendingSection.getAttribute('aria-label')).toBe('Checking Suunto import scope');
         await component.onSleepBackfill({
             preventDefault: vi.fn(),
             stopPropagation: vi.fn(),
@@ -233,7 +235,7 @@ describe('HistoryImportFormComponent', () => {
 
         const resolvedButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
         expect(resolvedButton.disabled).toBe(false);
-        expect(resolvedButton.textContent).toContain('Import Sleep & Health History');
+        expect(resolvedButton.textContent).toContain('Import Sleep & 24/7 Health history');
     });
 
     it('fails closed on an availability error and recovers through Retry', async () => {
@@ -252,7 +254,7 @@ describe('HistoryImportFormComponent', () => {
         const failedSection = fixture.nativeElement.querySelector('.sleep-backfill-section') as HTMLElement;
         expect(failedButton.disabled).toBe(true);
         expect(failedButton.textContent).toContain('Health availability unavailable');
-        expect(failedButton.textContent).not.toContain('Import Sleep History');
+        expect(failedButton.textContent).not.toContain('Import Sleep history');
         expect(failedSection.getAttribute('aria-label')).toBe('Suunto import scope unavailable');
         expect(fixture.nativeElement.textContent).toContain('Suunto import scope unavailable');
         expect(fixture.nativeElement.textContent).toContain(
@@ -275,7 +277,7 @@ describe('HistoryImportFormComponent', () => {
         expect(component.healthAvailabilityState()).toBe('unavailable');
         const retriedButton = fixture.nativeElement.querySelector('.sleep-backfill-button') as HTMLButtonElement;
         expect(retriedButton.disabled).toBe(false);
-        expect(retriedButton.textContent).toContain('Import Sleep History');
+        expect(retriedButton.textContent).toContain('Import Sleep history');
     });
 
     it('should render Garmin sleep backfill button for connected Pro users', async () => {
@@ -290,7 +292,7 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Import Sleep History');
+        expect(text).toContain('Import Sleep history');
         expect(text).toContain('Imports Garmin sleep');
         expect(text).toContain('Records may appear gradually');
         expect(text).toContain('once every 30 days');
@@ -309,9 +311,9 @@ describe('HistoryImportFormComponent', () => {
 
         const text = fixture.nativeElement.textContent;
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep History'));
+        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep history'));
 
-        expect(text).toContain('Import Sleep History');
+        expect(text).toContain('Import Sleep history');
         expect(text).toContain('Imports Garmin sleep');
         expect(sleepButton?.disabled).toBe(false);
     });
@@ -326,7 +328,7 @@ describe('HistoryImportFormComponent', () => {
         (component as any).processChanges();
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.textContent).not.toContain('Import Sleep History');
+        expect(fixture.nativeElement.textContent).not.toContain('Import Sleep history');
     });
 
     it('should render COROS Sleep and Health backfill for connected Pro users within the provider lookback', async () => {
@@ -340,7 +342,8 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const text = fixture.nativeElement.textContent;
-        expect(text).toContain('Import Sleep & Health History');
+        expect(text).toContain('Sleep & daily Health history');
+        expect(text).toContain('Import Sleep & daily Health history');
         expect(text).toContain('Imports available COROS sleep and daily Health metrics');
         expect(text).toContain('up to three months');
         expect(text).toContain('once every 7 days');
@@ -363,7 +366,7 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep History'));
+        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep history'));
         expect(sleepButton?.disabled).toBe(true);
         expect(fixture.nativeElement.textContent).toContain('Next available');
     });
@@ -414,7 +417,7 @@ describe('HistoryImportFormComponent', () => {
         } as any);
 
         expect(snackBar.open).toHaveBeenCalledWith(
-            'Suunto Sleep & Health history import started for 270 date ranges.',
+            'Suunto Sleep & 24/7 Health history import started for 135 date ranges.',
             undefined,
             { duration: 3000 },
         );
@@ -440,11 +443,14 @@ describe('HistoryImportFormComponent', () => {
             source: 'history_import',
         });
         expect(snackBar.open).toHaveBeenCalledWith(
-            'COROS Sleep & Health history import started for 4 date ranges.',
+            'COROS Sleep & daily Health history import started for 4 date ranges.',
             undefined,
             { duration: 3000 },
         );
         expect(component.pendingSleepBackfillResult()?.queued).toBe(4);
+        expect(component.historyBackfillResultText).toBe(
+            'Sleep & daily Health history import started for 4 date ranges',
+        );
     });
 
     it('should request Garmin sleep backfill from the separate action', async () => {
@@ -491,7 +497,7 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         expect(component.isSleepAndHealthBackfill).toBe(true);
-        expect(fixture.nativeElement.textContent).toContain('Import Sleep & Health History');
+        expect(fixture.nativeElement.textContent).toContain('Import Sleep & available Health history');
         expect(fixture.nativeElement.textContent).toContain('and available Health metrics');
 
         await component.onSleepBackfill({
@@ -500,7 +506,7 @@ describe('HistoryImportFormComponent', () => {
         } as any);
 
         expect(snackBar.open).toHaveBeenCalledWith(
-            'Garmin Sleep & Health history import started for 43 date ranges.',
+            'Garmin Sleep & available Health history import started for 43 date ranges.',
             undefined,
             { duration: 3000 },
         );
@@ -518,7 +524,7 @@ describe('HistoryImportFormComponent', () => {
         fixture.detectChanges();
 
         const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
-        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep History'));
+        const sleepButton = buttons.find(button => button.textContent?.includes('Import Sleep history'));
         expect(sleepButton?.disabled).toBe(true);
         expect(fixture.nativeElement.textContent).toContain('Reconnect Garmin');
     });

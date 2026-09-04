@@ -9,9 +9,22 @@ import {
   resolveEChartsTooltipTriggerOn,
 } from './echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
-import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS, HealthMetricId } from '@shared/health';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import {
+  HEALTH_METRIC_IDS,
+  HEALTH_PROVIDERS,
+  HEALTH_UNITS,
+  HealthMetricId,
+  getHealthMetricDefinition,
+} from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
-import { HealthWorkspaceSeries, HealthWorkspaceSeriesPoint, formatHealthValue } from './health-workspace.helper';
+import {
+  HealthWorkspaceSeries,
+  HealthWorkspaceSeriesPoint,
+  formatHealthAxisValue,
+  formatHealthUnit,
+  formatHealthValue,
+} from './health-workspace.helper';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
@@ -29,6 +42,7 @@ export interface HealthChartSeriesModel {
   categoryLabels: string[];
   displayedPointCount: number;
   omittedPointCount: number;
+  displayUnit: string;
   ariaLabel: string;
 }
 
@@ -43,8 +57,9 @@ export function buildHealthChartModels(
   seriesValues: readonly HealthWorkspaceSeries[],
   startTimeMs: number,
   endTimeMs: number,
+  unitSettings: UserUnitSettingsInterface | null = null,
 ): HealthChartSeriesModel[] {
-  return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs));
+  return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs, unitSettings));
 }
 
 export function buildHealthMetricEChartsOption(
@@ -53,6 +68,8 @@ export function buildHealthMetricEChartsOption(
   endTimeMs: number,
   style: DashboardEChartsStyleTokens,
   isMobileTooltipViewport: boolean,
+  unitSettings: UserUnitSettingsInterface | null = null,
+  compact = false,
 ): ChartOption {
   const isCategorical = model.series.chartKind === 'step';
   const isPoint = model.series.chartKind === 'point';
@@ -69,10 +86,10 @@ export function buildHealthMetricEChartsOption(
       fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
     },
     grid: {
-      left: 6,
-      right: 12,
-      top: 12,
-      bottom: 6,
+      left: compact ? 2 : 6,
+      right: compact ? 2 : 12,
+      top: compact ? 3 : 12,
+      bottom: compact ? 3 : 6,
       outerBoundsMode: 'same',
       outerBoundsContain: 'axisLabel',
     },
@@ -98,7 +115,13 @@ export function buildHealthMetricEChartsOption(
           subtitle: model.series.sourceLabel,
           rows: [{
             label: 'Reading',
-            value: formatHealthValue(point.value, model.series.unit),
+            value: formatHealthValue(
+              model.series.metricId,
+              point.value,
+              model.series.unit,
+              model.series.nativeOnly,
+              unitSettings,
+            ),
             markerColor: resolveHealthValueColor(
               model.series.metricId,
               point.value,
@@ -114,6 +137,7 @@ export function buildHealthMetricEChartsOption(
     },
     xAxis: {
       type: 'time',
+      show: !compact,
       min: startTimeMs,
       max: endTimeMs,
       boundaryGap: false,
@@ -130,6 +154,7 @@ export function buildHealthMetricEChartsOption(
     yAxis: isCategorical
       ? {
         type: 'category',
+        show: !compact,
         data: model.categoryLabels,
         axisTick: { show: false },
         axisLine: { show: false },
@@ -142,6 +167,7 @@ export function buildHealthMetricEChartsOption(
       }
       : {
         type: 'value',
+        show: !compact,
         min: model.numericBounds?.min,
         max: model.numericBounds?.max,
         axisTick: { show: false },
@@ -152,7 +178,13 @@ export function buildHealthMetricEChartsOption(
           color: style.secondaryTextColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: style.axisFontSize,
-          formatter: (value: number) => formatAxisValue(value, model.series.unit),
+          formatter: (value: number) => formatHealthAxisValue(
+            model.series.metricId,
+            value,
+            model.series.unit,
+            model.series.nativeOnly,
+            unitSettings,
+          ),
         },
       },
     visualMap: useStressStateColors
@@ -177,9 +209,11 @@ export function buildHealthMetricEChartsOption(
       data: model.data,
       connectNulls: false,
       step: isCategorical ? 'end' : undefined,
-      showSymbol: isPoint || model.displayedPointCount <= 60,
+      showSymbol: compact
+        ? model.displayedPointCount <= 2
+        : isPoint || model.displayedPointCount <= 60,
       symbol: 'circle',
-      symbolSize: isPoint ? 8 : 5,
+      symbolSize: compact ? 4 : isPoint ? 8 : 5,
       barMaxWidth: 28,
       lineStyle: { color: seriesColor, width: 2.25 },
       itemStyle: {
@@ -318,6 +352,7 @@ function buildSeriesModel(
   series: HealthWorkspaceSeries,
   startTimeMs: number,
   endTimeMs: number,
+  unitSettings: UserUnitSettingsInterface | null,
 ): HealthChartSeriesModel {
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
   const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
@@ -327,9 +362,20 @@ function buildSeriesModel(
   const numericValues = displayedPoints
     .map(point => typeof point.value === 'number' && Number.isFinite(point.value) ? point.value : null)
     .filter((value): value is number => value !== null);
-  const numericBounds = series.chartKind === 'step' ? null : resolveYBounds(numericValues, series.chartKind);
+  const numericBounds = series.chartKind === 'step'
+    ? null
+    : resolveYBounds(
+      numericValues,
+      series.chartKind,
+      getHealthMetricDefinition(series.metricId).canonicalUnit === HEALTH_UNITS.Percent ? 100 : null,
+    );
   const latest = sortedPoints.at(-1);
-  const latestText = latest ? formatHealthValue(latest.value, series.unit) : 'No reading';
+  const latestText = latest
+    ? formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings)
+    : 'No reading';
+  const displayUnit = latest
+    ? formatHealthUnit(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings)
+    : '';
   const readingCountText = `${sortedPoints.length.toLocaleString()} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
 
   return {
@@ -339,15 +385,16 @@ function buildSeriesModel(
     numericBounds,
     yMinLabel: series.chartKind === 'step'
       ? categoryLabels[0] || ''
-      : formatAxisValue(numericBounds?.min ?? 0, series.unit),
+      : formatHealthAxisValue(series.metricId, numericBounds?.min ?? 0, series.unit, series.nativeOnly, unitSettings),
     yMaxLabel: series.chartKind === 'step'
       ? categoryLabels.at(-1) || ''
-      : formatAxisValue(numericBounds?.max ?? 1, series.unit),
+      : formatHealthAxisValue(series.metricId, numericBounds?.max ?? 1, series.unit, series.nativeOnly, unitSettings),
     startLabel: formatAxisDate(startTimeMs),
     endLabel: formatAxisDate(endTimeMs),
     categoryLabels,
     displayedPointCount: displayedPoints.length,
     omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
+    displayUnit,
     ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${readingCountText}. Latest ${latestText}. Values are not combined with other sources.`,
   };
 }
@@ -411,9 +458,10 @@ function downsamplePoints(
 function resolveYBounds(
   values: readonly number[],
   chartKind: HealthWorkspaceSeries['chartKind'],
+  maximum: number | null = null,
 ): { min: number; max: number } {
   if (!values.length) {
-    return { min: 0, max: 1 };
+    return { min: 0, max: maximum ?? 1 };
   }
   let min = Math.min(...values);
   let max = Math.max(...values);
@@ -432,6 +480,9 @@ function resolveYBounds(
     min -= padding;
     max += padding;
   }
+  if (maximum !== null) {
+    max = maximum;
+  }
   return { min, max };
 }
 
@@ -440,14 +491,6 @@ function categoryValueLabel(value: number | string | boolean): string {
     return value ? 'Yes' : 'No';
   }
   return humanize(`${value}`) || 'Unknown';
-}
-
-function formatAxisValue(value: number, unit: string): string {
-  const rounded = Math.abs(value) >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
-  if (unit === 'percent') {
-    return `${rounded}%`;
-  }
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(rounded);
 }
 
 function formatAxisDate(timestampMs: number): string {

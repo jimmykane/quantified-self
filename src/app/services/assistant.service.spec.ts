@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantChatResponse } from '@shared/assistant.types';
+import { Auth } from 'app/firebase/auth';
 import { AppFunctionsService } from './app.functions.service';
 import { AssistantError, AssistantService } from './assistant.service';
 
@@ -44,14 +45,21 @@ const requestId = 'assistant-request-0001';
 
 describe('AssistantService', () => {
   const functionsService = { call: vi.fn() };
+  const auth: {
+    currentUser: { getIdToken: ReturnType<typeof vi.fn> } | null;
+  } = {
+    currentUser: { getIdToken: vi.fn() },
+  };
   let service: AssistantService;
 
   beforeEach(() => {
     functionsService.call.mockReset();
+    auth.currentUser = { getIdToken: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         AssistantService,
         { provide: AppFunctionsService, useValue: functionsService },
+        { provide: Auth, useValue: auth },
       ],
     });
     service = TestBed.inject(AssistantService);
@@ -150,6 +158,31 @@ describe('AssistantService', () => {
       'resetAssistantConversation',
       { locationAccess: 'coordinate_free' },
     );
+  });
+
+  it('refreshes the signed-in user token and retries an unauthenticated Assistant callable once', async () => {
+    functionsService.call
+      .mockRejectedValueOnce({ code: 'functions/unauthenticated' })
+      .mockResolvedValueOnce({
+        data: { conversation: response.conversation, pendingRequestId: null },
+      });
+
+    await expect(service.getConversationState()).resolves.toMatchObject({
+      conversation: response.conversation,
+    });
+    expect(auth.currentUser?.getIdToken).toHaveBeenCalledWith(true);
+    expect(functionsService.call).toHaveBeenNthCalledWith(1, 'getAssistantConversation');
+    expect(functionsService.call).toHaveBeenNthCalledWith(2, 'getAssistantConversation');
+  });
+
+  it('preserves an unauthenticated failure when there is no signed-in user to refresh', async () => {
+    auth.currentUser = null;
+    functionsService.call.mockRejectedValueOnce({ code: 'functions/unauthenticated' });
+
+    await expect(service.getConversationState()).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+    });
+    expect(functionsService.call).toHaveBeenCalledOnce();
   });
 
   it('cleans legacy storage-unit suffixes from saved evidence labels', async () => {

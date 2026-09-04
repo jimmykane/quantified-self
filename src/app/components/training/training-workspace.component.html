@@ -99,18 +99,10 @@
           @for (option of trainingDestinationOptions; track option.id) {
             @if (option.id !== 'overview') {
               <mat-option [value]="option.id">
-                <span class="training-destination-option">
-                  @if (option.sport; as sport) {
-                    <app-activity-type-icon
-                      [activityType]="sport.iconActivityType"
-                      size="18px"
-                      aria-hidden="true">
-                    </app-activity-type-icon>
-                  } @else if (option.materialIcon) {
-                    <mat-icon aria-hidden="true">{{ option.materialIcon }}</mat-icon>
-                  }
-                  <span>{{ option.label }}</span>
-                </span>
+                @if (option.materialIcon) {
+                  <mat-icon aria-hidden="true" [style.color]="option.iconColor">{{ option.materialIcon }}</mat-icon>
+                }
+                <span>{{ option.label }}</span>
               </mat-option>
             }
           }

@@ -60,7 +60,7 @@ export class SuuntoHealthRequestError extends Error {
   public readonly name = 'SuuntoHealthRequestError';
   public readonly code = 'suunto_health_request_failed';
 
-  constructor() {
+  constructor(public readonly providerStatusCode?: number) {
     super('Suunto Health request failed.');
   }
 }
@@ -306,10 +306,12 @@ export async function processSuuntoHealthQueueItem(
     try {
       return await requestBoundedSuuntoHealthPayload(url, accessToken);
     } catch (error) {
-      if (providerStatusCode(error) !== 401) {
+      const statusCode = providerStatusCode(error);
+      if (statusCode !== 401) {
         // Provider errors may contain request URLs, credentials, or response
-        // fragments. Keep durable retry telemetry deliberately opaque.
-        throw new SuuntoHealthRequestError();
+        // fragments. The validated numeric HTTP status is safe and lets us
+        // distinguish provider failures from transport failures in Cloud Logs.
+        throw new SuuntoHealthRequestError(statusCode ?? undefined);
       }
     }
 
@@ -351,8 +353,8 @@ export async function processSuuntoHealthQueueItem(
     onLifecycleGuardsCaptured?.(lifecycleGuards);
     try {
       return await requestBoundedSuuntoHealthPayload(url, accessToken);
-    } catch {
-      throw new SuuntoHealthRequestError();
+    } catch (error) {
+      throw new SuuntoHealthRequestError(providerStatusCode(error) ?? undefined);
     }
   };
 

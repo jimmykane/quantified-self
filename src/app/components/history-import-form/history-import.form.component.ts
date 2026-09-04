@@ -86,6 +86,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public healthAvailabilityState = signal<HealthAvailabilityState>('idle');
   public isSleepAndHealthBackfill = false;
   public checksHealthBackfillAvailability = false;
+  public historyBackfillScopeTitle = 'Sleep history';
+  public historyBackfillActionLabel = 'Import Sleep history';
+  public historyBackfillAriaLabel = 'Sleep history import';
+  public historyBackfillIcon = 'bedtime';
+  public historyBackfillResultText = '';
   /** Max date for any import is today (using dayjs for datepicker compatibility) */
   public today = dayjs().endOf('day');
   /** Expose Math for template calculations */
@@ -395,6 +400,59 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     return this.serviceName === ServiceNames.GarminAPI ? 'Requested' : 'Queued';
   }
 
+  private updateHistoryBackfillPresentation(): void {
+    const healthAvailabilityState = this.healthAvailabilityState();
+    const providerLabel = this.sleepBackfillProviderLabel;
+    if (this.checksHealthBackfillAvailability && healthAvailabilityState === 'loading') {
+      this.historyBackfillScopeTitle = `Checking ${providerLabel} import scope`;
+    } else if (this.checksHealthBackfillAvailability && healthAvailabilityState === 'error') {
+      this.historyBackfillScopeTitle = `${providerLabel} import scope unavailable`;
+    } else if (!this.isSleepAndHealthBackfill) {
+      this.historyBackfillScopeTitle = 'Sleep history';
+    } else {
+      switch (this.serviceName) {
+        case ServiceNames.COROSAPI:
+          this.historyBackfillScopeTitle = 'Sleep & daily Health history';
+          break;
+        case ServiceNames.SuuntoApp:
+          this.historyBackfillScopeTitle = 'Sleep & 24/7 Health history';
+          break;
+        case ServiceNames.GarminAPI:
+          this.historyBackfillScopeTitle = 'Sleep & available Health history';
+          break;
+        default:
+          this.historyBackfillScopeTitle = 'Sleep & Health history';
+      }
+    }
+
+    this.historyBackfillAriaLabel = this.checksHealthBackfillAvailability
+      && (healthAvailabilityState === 'loading' || healthAvailabilityState === 'error')
+      ? this.historyBackfillScopeTitle
+      : `${providerLabel} ${this.historyBackfillScopeTitle} import`;
+    this.historyBackfillIcon = this.isSleepAndHealthBackfill ? 'monitor_heart' : 'bedtime';
+    this.historyBackfillActionLabel = this.isSleepBackfillSubmitting()
+      ? 'Starting import...'
+      : this.checksHealthBackfillAvailability && healthAvailabilityState === 'loading'
+        ? 'Checking Health availability...'
+        : this.checksHealthBackfillAvailability && healthAvailabilityState === 'error'
+          ? 'Health availability unavailable'
+          : `Import ${this.historyBackfillScopeTitle}`;
+
+    const result = this.pendingSleepBackfillResult();
+    if (!result) {
+      this.historyBackfillResultText = '';
+      return;
+    }
+    const sleepQueued = result.sleepQueued ?? result.queued;
+    const healthQueued = result.healthQueued;
+    this.historyBackfillResultText = this.isSleepAndHealthBackfill
+      && typeof healthQueued === 'number' && healthQueued > 0
+      ? healthQueued === sleepQueued
+        ? `${this.historyBackfillScopeTitle} import started for ${sleepQueued} date ranges`
+        : `${this.historyBackfillScopeTitle} import started for ${sleepQueued} Sleep date ranges and ${healthQueued} Health requests`
+      : `Sleep history import started for ${sleepQueued} date ranges`;
+  }
+
   get isMissingGarminSleepBackfillPermissions(): boolean {
     return this.serviceName === ServiceNames.GarminAPI
       && GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS.some(permission => this.missingPermissions.includes(permission));
@@ -433,11 +491,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!provider || !this.canSubmitSleepBackfill) {
       return;
     }
-    const historyName = this.isSleepAndHealthBackfill
-      ? 'Sleep & Health history'
-      : 'sleep history';
+    const historyName = this.historyBackfillScopeTitle;
 
     this.isSleepBackfillSubmitting.set(true);
+    this.updateHistoryBackfillPresentation();
     this.changeDetectorRef.detectChanges();
 
     try {
@@ -456,10 +513,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           ? await this.userService.backfillCorosSleepForCurrentUser()
           : await this.userService.backfillSuuntoSleepForCurrentUser();
       this.pendingSleepBackfillResult.set(result);
+      this.updateHistoryBackfillPresentation();
       const startedHistoryName = typeof result.healthQueued === 'number'
-        ? (result.healthQueued > 0 ? 'Sleep & Health history' : 'sleep history')
+        ? (result.healthQueued > 0 ? this.historyBackfillScopeTitle : 'Sleep history')
         : historyName;
-      this.snackBar.open(`${this.sleepBackfillProviderLabel} ${startedHistoryName} import started for ${result.queued} date ranges.`, undefined, {
+      const sleepQueued = result.sleepQueued ?? result.queued;
+      this.snackBar.open(`${this.sleepBackfillProviderLabel} ${startedHistoryName} import started for ${sleepQueued} date ranges.`, undefined, {
         duration: 3000,
       });
     } catch (e: any) {
@@ -469,6 +528,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       });
     } finally {
       this.isSleepBackfillSubmitting.set(false);
+      this.updateHistoryBackfillPresentation();
       this.changeDetectorRef.detectChanges();
     }
   }
@@ -487,6 +547,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.sleepSyncStateKey = key;
     this.sleepBackfillSyncState.set(null);
     this.pendingSleepBackfillResult.set(null);
+    this.updateHistoryBackfillPresentation();
 
     if (!key || !this.currentUserID || !provider) {
       return;
@@ -557,6 +618,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isSleepAndHealthBackfill = this.serviceName === ServiceNames.COROSAPI
       || (this.checksHealthBackfillAvailability
         && this.healthAvailabilityState() === 'available');
+    this.updateHistoryBackfillPresentation();
   }
 
   private coerceUserID(user: User | null | undefined): string | null {

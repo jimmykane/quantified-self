@@ -1,79 +1,111 @@
-<section class="health-priority-section" aria-labelledby="health-priority-title">
-  <div class="health-section-heading">
-    <div>
-      <p class="health-eyebrow">Last 30 days</p>
-      <h2 id="health-priority-title">Sleep, Heart rate, and HRV</h2>
+@if (renderedCards().length > 0) {
+  <section class="health-priority-section" aria-labelledby="health-priority-title">
+    <div class="health-section-heading">
+      <div>
+        <p class="health-eyebrow">Highlights</p>
+        <h2 id="health-priority-title">Your recent Health</h2>
+      </div>
+      <p>Current context and recent trends, kept separate by source.</p>
     </div>
-    <p>Latest reading per source series. No cross-provider average.</p>
-  </div>
 
-  <mat-card appearance="outlined" class="health-priority-grid" aria-label="Priority Health summaries">
-    @for (card of cards(); track card.id) {
-      <section
-        class="health-priority-card"
-        [attr.aria-labelledby]="'health-priority-card-' + card.id"
-        [class.health-priority-card-selected]="selectedMetric() === card.metric">
-        <header class="health-priority-card-header">
-          <div class="health-priority-title-row">
-            <span class="health-priority-avatar">
-              <mat-icon aria-hidden="true">{{ card.icon }}</mat-icon>
-            </span>
-            <h3 [id]="'health-priority-card-' + card.id">{{ card.label }}</h3>
+    <mat-card
+      appearance="outlined"
+      class="health-priority-grid"
+      [class.health-priority-grid-single]="renderedCards().length === 1"
+      [class.health-priority-grid-double]="renderedCards().length === 2"
+      aria-label="Health highlights">
+      @for (card of renderedCards(); track card.id) {
+        <section
+          class="health-priority-card"
+          [attr.aria-labelledby]="'health-priority-card-' + card.id">
+          <header class="health-priority-card-header">
+            <div class="health-priority-title-row">
+              <span class="health-priority-avatar">
+                <mat-icon aria-hidden="true">{{ card.icon }}</mat-icon>
+              </span>
+              <h3 [id]="'health-priority-card-' + card.id">{{ card.label }}</h3>
+            </div>
+            <button
+              mat-button
+              type="button"
+              class="health-priority-open-button"
+              [attr.aria-label]="'Open ' + card.label"
+              [disabled]="!card.available"
+              (click)="metricSelected.emit(card.metric)">
+              <span>Open</span>
+              <mat-icon aria-hidden="true">arrow_forward</mat-icon>
+            </button>
+          </header>
+
+          <div class="health-priority-content">
+            @if (card.loading) {
+              <span class="health-priority-state">
+                <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
+                Loading sources…
+              </span>
+            } @else if (card.error) {
+              <span class="health-priority-state health-priority-error">
+                <mat-icon aria-hidden="true">error_outline</mat-icon>
+                Source status needs attention
+              </span>
+            } @else if (card.chartModels.length > 0) {
+              <div class="health-priority-chart-list">
+                @for (chart of card.chartModels; track chart.model.series.id) {
+                  <section class="health-priority-chart-source">
+                    <div class="health-priority-reading">
+                      <strong>{{ chart.latestValueText }}</strong>
+                      <span class="health-priority-source-label">{{ chart.model.series.sourceLabel }}</span>
+                    </div>
+                    <small>{{ chart.model.series.semanticLabel }}</small>
+                    <app-health-metric-series-chart
+                      [model]="chart.model"
+                      [startTimeMs]="startTimeMs()"
+                      [endTimeMs]="endTimeMs()"
+                      [darkTheme]="darkTheme()"
+                      [unitSettings]="unitSettings()"
+                      [compact]="true">
+                    </app-health-metric-series-chart>
+                  </section>
+                }
+              </div>
+            } @else if (card.rows.length > 0) {
+              <div class="health-priority-source-list">
+                @for (row of card.rows; track row.id) {
+                  <div class="health-priority-source-row">
+                    <div class="health-priority-value">
+                      <div class="health-priority-reading">
+                        <strong>{{ row.valueText }}</strong>
+                        <span class="health-priority-source-label">{{ row.sourceLabel }}</span>
+                      </div>
+                      <small>{{ row.contextText }}</small>
+                      @if (row.details?.length) {
+                        <dl class="health-priority-details">
+                          @for (detail of row.details; track detail.label) {
+                            <div>
+                              <dt>{{ detail.label }}</dt>
+                              <dd>{{ detail.valueText }}</dd>
+                            </div>
+                          }
+                        </dl>
+                      }
+                      @if (row.sleepPoint) {
+                        <app-health-sleep-stage-summary
+                          [point]="row.sleepPoint"
+                          [sourceLabel]="row.sourceLabel"
+                          [darkTheme]="darkTheme()"
+                          [unitSettings]="unitSettings()">
+                        </app-health-sleep-stage-summary>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            } @else {
+              <span class="health-priority-state">{{ card.emptyText }}</span>
+            }
           </div>
-          <button
-            mat-button
-            type="button"
-            class="health-priority-open-button"
-            [attr.aria-label]="'Open ' + card.label"
-            [attr.aria-pressed]="selectedMetric() === card.metric"
-            [disabled]="!card.available"
-            (click)="metricSelected.emit(card.metric)">
-            <span>Open</span>
-            <mat-icon aria-hidden="true">arrow_forward</mat-icon>
-          </button>
-        </header>
-
-        <div class="health-priority-content">
-          @if (card.loading) {
-            <span class="health-priority-state">
-              <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
-              Loading sources…
-            </span>
-          } @else if (card.error) {
-            <span class="health-priority-state health-priority-error">
-              <mat-icon aria-hidden="true">error_outline</mat-icon>
-              Source status needs attention
-            </span>
-          } @else if (card.rows.length === 0) {
-            <span class="health-priority-state">{{ card.emptyText }}</span>
-          } @else {
-            <span class="health-priority-source-list">
-              @for (row of card.rows; track row.id) {
-                <span class="health-priority-source-row">
-                  <span class="health-source-identity">
-                    @if (row.presentation) {
-                      <app-service-source-icon
-                        [presentation]="row.presentation"
-                        [showText]="false"
-                        [showTooltip]="false"
-                        [iconWidth]="32"
-                        [iconHeight]="18">
-                      </app-service-source-icon>
-                    } @else {
-                      <mat-icon aria-hidden="true">monitor_heart</mat-icon>
-                    }
-                    <span>{{ row.sourceLabel }}</span>
-                  </span>
-                  <span class="health-priority-value">
-                    <strong>{{ row.valueText }}</strong>
-                    <small>{{ row.contextText }}</small>
-                  </span>
-                </span>
-              }
-            </span>
-          }
-        </div>
-      </section>
-    }
-  </mat-card>
-</section>
+        </section>
+      }
+    </mat-card>
+  </section>
+}

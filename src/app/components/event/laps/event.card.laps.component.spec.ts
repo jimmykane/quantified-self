@@ -398,6 +398,77 @@ describe('EventCardLapsComponent', () => {
         ]);
     });
 
+    it('keeps saved metrics checked and explains when the current laps have no data', () => {
+        const activityWithHeartRate = createActivity([{
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataHeartRateMax.type
+                ? new DataHeartRateMax(175)
+                : undefined,
+        } as unknown as LapInterface]);
+        const activityWithoutHeartRate = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]),
+            getID: () => 'activity-2',
+        } as ActivityInterface;
+        component.canCustomize = true;
+        eventDetailsSettings.set(normalizeEventDetailsSettings({
+            lapTableColumnsBySportFamily: { running: [DataHeartRateMax.type] },
+        }));
+        component.selectedActivities = [activityWithHeartRate];
+        fixture.detectChanges();
+        component.ngOnChanges();
+
+        expect(component.lapColumnMenuGroups.find((group) => group.family === 'running')
+            ?.metricAvailability[DataHeartRateMax.type]?.availableTableCount).toBe(1);
+
+        component.selectedActivities = [activityWithoutHeartRate];
+        component.ngOnChanges();
+
+        const runningGroup = component.lapColumnMenuGroups.find((group) => group.family === 'running');
+        expect(runningGroup?.selectedMetricTypes).toEqual([DataHeartRateMax.type]);
+        expect(runningGroup?.selectedUnavailableMetricCount).toBe(1);
+        expect(runningGroup?.metricAvailability[DataHeartRateMax.type]).toEqual({
+            availableTableCount: 0,
+            tableCount: 1,
+            label: 'No data in current laps — hidden from the table',
+        });
+        expect(runningGroup?.metricAvailability[DataSpeedAvg.type]?.label).toBeNull();
+        expect(component.getColumns(activityWithoutHeartRate, LapTypes.Manual))
+            .not.toContain(DataHeartRateMax.type);
+    });
+
+    it('reports partial availability across the current lap tables without clearing saved metrics', () => {
+        const activityWithHeartRate = createActivity([{
+            ...createRenderableLap(LapTypes.Manual),
+            getStat: (type: string) => type === DataHeartRateMax.type
+                ? new DataHeartRateMax(175)
+                : undefined,
+        } as unknown as LapInterface]);
+        const activityWithoutHeartRate = {
+            ...createActivity([createRenderableLap(LapTypes.Manual)]),
+            getID: () => 'activity-2',
+        } as ActivityInterface;
+        component.canCustomize = true;
+        eventDetailsSettings.set(normalizeEventDetailsSettings({
+            lapTableColumnsBySportFamily: { running: [DataHeartRateMax.type] },
+        }));
+        component.selectedActivities = [activityWithHeartRate, activityWithoutHeartRate];
+        fixture.detectChanges();
+        component.ngOnChanges();
+
+        const runningGroup = component.lapColumnMenuGroups.find((group) => group.family === 'running');
+        expect(runningGroup?.selectedMetricTypes).toEqual([DataHeartRateMax.type]);
+        expect(runningGroup?.selectedUnavailableMetricCount).toBe(0);
+        expect(runningGroup?.metricAvailability[DataHeartRateMax.type]).toEqual({
+            availableTableCount: 1,
+            tableCount: 2,
+            label: 'Available in 1 of 2 lap tables',
+        });
+        expect(component.getColumns(activityWithHeartRate, LapTypes.Manual))
+            .toContain(DataHeartRateMax.type);
+        expect(component.getColumns(activityWithoutHeartRate, LapTypes.Manual))
+            .not.toContain(DataHeartRateMax.type);
+    });
+
     it('retains selected metrics when selecting a metric from a filtered column search', async () => {
         const activity = createActivity([createRenderableLap(LapTypes.Manual)]);
         const initialMetricTypes = [DataDuration.type, DataPaceAvg.type];
@@ -721,6 +792,7 @@ describe('EventCardLapsComponent', () => {
         expect(styles).toContain('.lap-column-search-field');
         expect(styles).toContain('box-sizing: border-box;');
         expect(styles).toContain('width: calc(100% - 32px) !important;');
+        expect(styles).toContain('.lap-column-availability-summary');
         expect(styles).toContain(".lap-selected-summary-row .mat-mdc-footer-cell");
         expect(styles).toContain("font-family: 'Barlow Condensed', 'Inter', sans-serif;");
     });
@@ -751,6 +823,11 @@ describe('EventCardLapsComponent', () => {
         expect(template).toContain('Choose columns for {{ group.label.toLowerCase() }} laps');
         expect(template).toContain('Search metrics');
         expect(template).toContain('group.filteredMetricGroups');
+        expect(template).toContain('group.selectedUnavailableMetricCount');
+        expect(template).toContain('group.metricAvailability[metric.type]?.label');
+        expect(template).toContain('unavailable in these laps and hidden from the table');
+        expect(template).toContain('matListItemTitle');
+        expect(template).toContain('matListItemLine');
         expect(template).toContain('No matching metrics.');
         expect(template).toContain('row.isLapAverage');
         expect(template).toContain('lap-average-row');

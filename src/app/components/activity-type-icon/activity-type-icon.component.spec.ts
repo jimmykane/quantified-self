@@ -1,5 +1,6 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it, vi } from 'vitest';
+import { resolveActivityTypeIconColor } from '../../helpers/activity-type-presentation.helper';
 import { ActivityTypeIconComponent } from './activity-type-icon.component';
 
 describe('ActivityTypeIconComponent', () => {
@@ -27,6 +28,11 @@ describe('ActivityTypeIconComponent', () => {
       component.activityType = activityType;
       expect(component.getIcon()).toBe(expectedIcon);
     }
+  });
+
+  it('exposes the matching activity-family color for native Material option icons', () => {
+    expect(resolveActivityTypeIconColor('Cycling')).toBe('#FF7C3B');
+    expect(resolveActivityTypeIconColor('Swimming')).toBe('#40C4FF');
   });
 
   it('uses the Diving icon for snorkeling and mermaiding aliases', () => {

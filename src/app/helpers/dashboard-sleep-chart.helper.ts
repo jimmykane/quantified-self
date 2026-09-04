@@ -189,6 +189,15 @@ function resolveDisplaySleepDate(session: SleepSession, startTimeMs: number, end
   return localDateKeyFromMs(dateTimeMs, resolveSessionTimezoneOffsetSeconds(session)) || fallbackSleepDate;
 }
 
+export function resolveSleepTrendDate(session: SleepSession): string | null {
+  const startTimeMs = Number(session.startTimeMs);
+  const endTimeMs = Number(session.endTimeMs);
+  if (!Number.isFinite(startTimeMs) || !Number.isFinite(endTimeMs) || endTimeMs <= startTimeMs) {
+    return null;
+  }
+  return resolveDisplaySleepDate(session, startTimeMs, endTimeMs);
+}
+
 function toLocalDateKey(timestampMs: number): string | null {
   if (!Number.isFinite(timestampMs)) {
     return null;
@@ -306,7 +315,10 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
   const displayedStageSeconds = deepSeconds + lightSeconds + remSeconds + awakeSeconds;
   const unknownSeconds = explicitUnknownSeconds || Math.max(0, totalSeconds - displayedStageSeconds);
   const label = providerLabel(provider);
-  const resolvedSleepDate = resolveDisplaySleepDate(session, startTimeMs, endTimeMs);
+  const resolvedSleepDate = resolveSleepTrendDate(session);
+  if (!resolvedSleepDate) {
+    return null;
+  }
 
   return {
     id: session.id || `${provider}:${session.source?.sourceSessionKey || startTimeMs}`,

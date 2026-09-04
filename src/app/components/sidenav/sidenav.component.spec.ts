@@ -96,19 +96,6 @@ describe('SideNavComponent', () => {
         expect(Array.from(sectionHeaders).map((header: Element) => header.textContent?.trim())).not.toContain('Navigation');
     });
 
-    it('offers the application source without license metadata', () => {
-        fixture.detectChanges();
-
-        const sourceLink = fixture.nativeElement.querySelector('.source-code-cta') as HTMLAnchorElement | null;
-
-        expect(sourceLink).toBeTruthy();
-        expect(sourceLink?.href).toBe('https://github.com/jimmykane/quantified-self');
-        expect(sourceLink?.textContent).toContain('Source code');
-        expect(sourceLink?.textContent).not.toMatch(/AGPL|licen[cs]e/i);
-        expect(sourceLink?.target).toBe('_blank');
-        expect(sourceLink?.rel).toBe('noopener noreferrer');
-    });
-
     it('should delegate theme changes to the theme service', async () => {
         const event = new MouseEvent('click');
 

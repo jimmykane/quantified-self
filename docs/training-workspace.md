@@ -627,8 +627,11 @@ The route has three destination kinds:
 
 Desktop uses one intrinsic-width Material button-toggle group for **All training** plus at most four sport shortcuts,
 with the complete **All sports** selector and shortcut editor grouped at the opposite edge. The toggle outline must end
-with its final choice rather than stretch across unused row space. Selecting a sport outside the four saved slots
-temporarily places it in the visible toggle group without mutating the saved shortcut set. At intermediate desktop/tablet
+with its final choice rather than stretch across unused row space. The complete selector renders each sport as a direct
+Material option icon plus label, allowing `mat-option` to own the row geometry and reserve its native icon slot; compact
+shortcut icons keep their smaller navigation size. Selecting a
+sport outside the four saved slots temporarily places it in the visible toggle group without mutating the saved shortcut
+set. At intermediate desktop/tablet
 widths the compact shortcut group occupies its own row. At 800 px and below, a horizontally swipeable rail of compact
 Material text buttons exposes **All** plus the same automatic or pinned shortcuts as one-tap destinations. The selected
 button uses a tonal state, and each 40 px visual button retains Material's 48 px touch target. A fixed 48 px Material icon
@@ -1523,7 +1526,8 @@ UI principles:
   nested neutral containers. Their null observations remain visible gaps, and their shared safe tooltip surface keeps
   the detail readable without being cropped by the card.
 - Durability evidence and its trajectory inherit their parent Training card surface. Borders and dividers preserve the
-  hierarchy without stacking gray inset surfaces inside the card.
+  hierarchy without stacking gray inset surfaces inside the card. Training panels use the shared flat card treatment;
+  menus, dialogs, and other temporary surfaces retain the shared overlay elevation.
 - `missing`, `queued`, `processing`, `building`, and `stale` show a preparing/updating state.
 - `failed` shows a retry-oriented unavailable state.
 - A previous valid payload may remain visible while a replacement builds.

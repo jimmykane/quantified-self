@@ -65,7 +65,6 @@
     "backfill-coros-daily-health": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-coros-daily-health.ts",
     "backfill-event-processing-entity": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-event-processing-entity.ts",
     "backfill-route-processing-entity": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-route-processing-entity.ts",
-    "backfill-service-connection-projections": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-service-connection-account-projections.ts",
     "replace-stripe-price": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/replace-stripe-price.ts"
   },
   "engines": {

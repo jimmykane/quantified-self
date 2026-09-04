@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -65,6 +65,7 @@ import {
   HealthWorkspaceMetricSelection,
   HealthWorkspaceRange,
   HealthWorkspaceRouteState,
+  HealthWorkspaceSeries,
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
   buildHealthPriorityRows,
@@ -77,9 +78,15 @@ import {
   normalizeHealthWorkspaceRange,
   providerLabel,
   resolveHealthWorkspaceWindow,
+  isSleepHrvSemanticVariant,
   selectActivityHealthObservations,
+  selectHealthPriorityTrendSeries,
+  sleepSessionHasHrv,
 } from '../../helpers/health-workspace.helper';
-import { buildDashboardSleepTrendContext } from '../../helpers/dashboard-sleep-chart.helper';
+import {
+  buildDashboardSleepTrendContext,
+  resolveSleepTrendDate,
+} from '../../helpers/dashboard-sleep-chart.helper';
 import { healthMetricIcon } from '../../helpers/health-metric-icon.helper';
 import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
 
@@ -97,6 +104,7 @@ interface HealthProviderFilterView extends HealthProviderView {
 
 interface HealthSyncStateView extends HealthProviderView {
   statusLabel: string;
+  statusTooltip: string;
   lastUpdateText: string;
   lastUpdateDateTime: string | null;
   tone: HealthSyncTone;
@@ -116,7 +124,7 @@ interface QueuedHealthWorkspacePreferenceWrite {
 }
 
 const RANGE_LABELS: Record<HealthWorkspaceRange, string> = {
-  today: 'Today',
+  today: '1 day',
   '14d': '14 days',
   '30d': '30 days',
   '90d': '90 days',
@@ -166,9 +174,11 @@ export class HealthWorkspaceComponent {
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
   private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
+  readonly unitSettings = this.userSettingsService.unitSettings;
   private readonly todayDate = localCalendarDate();
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
+  private priorityHealthUserID: string | null = null;
   private metricAvailabilityGeneration = 0;
   private latestSyncStates = new Map<HealthProvider, HealthSyncState>();
   private hasSeenSyncStateSnapshot = false;
@@ -183,7 +193,7 @@ export class HealthWorkspaceComponent {
   readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({
     range,
     label: RANGE_LABELS[range],
-    buttonLabel: range === 'today' ? RANGE_LABELS[range] : range,
+    buttonLabel: range === 'today' ? '1d' : range,
   }));
   readonly healthMetricIcon = healthMetricIcon;
   private readonly completeMetricCatalogGroups: readonly HealthMetricCatalogGroup[] = buildHealthMetricCatalogGroups();
@@ -198,6 +208,11 @@ export class HealthWorkspaceComponent {
   readonly isSavingPreferences = signal(false);
   readonly preferencesSaveFailed = signal(false);
   readonly selectedWindow = computed(() => resolveHealthWorkspaceWindow(this.routeState(), this.todayDate));
+  readonly priorityWindow = resolveHealthWorkspaceWindow({
+    metric: HEALTH_METRIC_IDS.HeartRate,
+    range: '30d',
+    endDate: this.todayDate,
+  }, this.todayDate);
   readonly selectedHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly selectedHealthStatus = signal<HealthLoadStatus>('loading');
   readonly selectedActivityHealthResult = signal<ActivityHealthRangeResult | null>(null);
@@ -226,14 +241,36 @@ export class HealthWorkspaceComponent {
 
   readonly healthMetricFilteringActive = computed(() => this.healthMetricAvailabilityStatus() === 'ready');
   readonly sleepMetricFilteringActive = computed(() => this.sleepMetricAvailabilityStatus() === 'ready');
+  readonly hasLoadedSleepHrv = computed(() => [
+    ...this.selectedSleepSessions(),
+    ...this.prioritySleepSessions(),
+  ].some(sleepSessionHasHrv));
+  readonly sleepHrvAvailabilityStatus = computed<HealthLoadStatus>(() => {
+    if (this.hasLoadedSleepHrv()) {
+      return 'ready';
+    }
+    const statuses = [this.selectedSleepStatus(), this.prioritySleepStatus()];
+    if (statuses.every(status => status === 'ready')) {
+      return 'ready';
+    }
+    if (statuses.some(status => status === 'loading')) {
+      return 'loading';
+    }
+    return statuses.some(status => status === 'denied') ? 'denied' : 'error';
+  });
   readonly availabilityChecksSettled = computed(() =>
     this.healthMetricAvailabilityStatus() !== 'loading'
-    && this.sleepMetricAvailabilityStatus() !== 'loading');
+    && this.sleepMetricAvailabilityStatus() !== 'loading'
+    && this.sleepHrvAvailabilityStatus() !== 'loading');
   readonly metricCatalogGroups = computed<readonly HealthMetricCatalogGroup[]>(() => {
     if (!this.healthMetricFilteringActive()) {
       return this.completeMetricCatalogGroups;
     }
-    return buildHealthMetricCatalogGroups(this.availableHealthMetricIds() || []);
+    const availableMetricIds = new Set(this.availableHealthMetricIds() || []);
+    if (this.sleepHrvAvailabilityStatus() !== 'ready' || this.hasLoadedSleepHrv()) {
+      availableMetricIds.add(HEALTH_METRIC_IDS.HeartRateVariability);
+    }
+    return buildHealthMetricCatalogGroups([...availableMetricIds]);
   });
   readonly showSleepMetric = computed(() =>
     !this.sleepMetricFilteringActive() || this.hasAnySleepSession() === true);
@@ -245,8 +282,10 @@ export class HealthWorkspaceComponent {
   readonly metricAvailabilityNotice = computed(() => {
     const healthStatus = this.healthMetricAvailabilityStatus();
     const sleepStatus = this.sleepMetricAvailabilityStatus();
+    const sleepHrvStatus = this.sleepHrvAvailabilityStatus();
     if (healthStatus !== 'error' && healthStatus !== 'denied'
-      && sleepStatus !== 'error' && sleepStatus !== 'denied') {
+      && sleepStatus !== 'error' && sleepStatus !== 'denied'
+      && sleepHrvStatus !== 'error' && sleepHrvStatus !== 'denied') {
       return null;
     }
     return 'Some metric availability could not be verified. Unverified entries remain visible so valid data is not hidden.';
@@ -268,11 +307,18 @@ export class HealthWorkspaceComponent {
     const selected = this.selectedProviders().filter(provider => available.has(provider));
     return selected.length ? selected : [];
   });
+  readonly windowedSleepSessions = computed(() => {
+    const window = this.selectedWindow();
+    return this.selectedSleepSessions().filter(session => {
+      const sleepDate = resolveSleepTrendDate(session);
+      return sleepDate !== null && sleepDate >= window.startDate && sleepDate <= window.endDate;
+    });
+  });
   readonly filteredSleepSessions = computed(() => {
     const selected = this.effectiveProviderFilters();
     return selected.length
-      ? this.selectedSleepSessions().filter(session => selected.includes(session.source.provider as HealthProvider))
-      : this.selectedSleepSessions();
+      ? this.windowedSleepSessions().filter(session => selected.includes(session.source.provider as HealthProvider))
+      : this.windowedSleepSessions();
   });
   readonly filteredHealthResult = computed(() => {
     const result = this.selectedHealthLoad()?.result;
@@ -299,6 +345,7 @@ export class HealthWorkspaceComponent {
         result,
         this.filteredSleepSessions(),
         this.filteredActivityHealthObservations(),
+        this.unitSettings(),
       )
       : emptyMetricView();
   });
@@ -311,16 +358,23 @@ export class HealthWorkspaceComponent {
   }));
   readonly sleepChartRange = computed<AppDashboardSleepTrendRange>(() =>
     healthRangeToSleepRange(this.routeState().range) || '14d');
-  readonly sleepRows = computed<HealthSleepObservationRow[]>(() => buildSleepObservationRows(this.filteredSleepSessions()));
+  readonly sleepRows = computed<HealthSleepObservationRow[]>(() =>
+    buildSleepObservationRows(this.filteredSleepSessions(), this.unitSettings()));
   readonly availableProviders = computed<HealthProvider[]>(() => {
     const loadedResult = this.selectedHealthLoad()?.result;
+    const selectedMetric = this.routeState().metric;
     const providers = this.selectedIsSleep()
-      ? this.selectedSleepSessions().map(session => session.source.provider as HealthProvider)
+      ? this.windowedSleepSessions().map(session => session.source.provider as HealthProvider)
       : [
         ...(this.selectedHealthLoad()?.providers || []),
         ...(loadedResult?.observations.map(item => item.provider) || []),
         ...(loadedResult?.sampleChunks.map(item => item.provider) || []),
         ...(this.selectedActivityHealthResult()?.observations.map(item => item.provider) || []),
+        ...(selectedMetric === HEALTH_METRIC_IDS.HeartRateVariability
+          ? this.windowedSleepSessions()
+            .filter(sleepSessionHasHrv)
+            .map(session => session.source.provider as HealthProvider)
+          : []),
       ];
     return [...new Set(providers)].sort((left, right) => providerLabel(left).localeCompare(providerLabel(right)));
   });
@@ -416,6 +470,13 @@ export class HealthWorkspaceComponent {
     }
     return null;
   });
+  readonly sleepHrvNotice = computed(() => {
+    if (this.routeState().metric !== HEALTH_METRIC_IDS.HeartRateVariability
+      || !this.metricView().series.some(series => isSleepHrvSemanticVariant(series.semanticVariant))) {
+      return null;
+    }
+    return 'Sleep HRV is read from normalized Sleep sessions and shown as its own labeled series. It is never averaged with standalone HRV.';
+  });
   readonly revisionNotice = computed(() => {
     const count = this.selectedHealthLoad()?.result.pageInfo.sampleRevisionMismatchCount || 0;
     return count > 0
@@ -449,7 +510,8 @@ export class HealthWorkspaceComponent {
         'Sleep',
         healthMetricIcon('sleep'),
         'sleep',
-        buildSleepPriorityRows(this.prioritySleepSessions()),
+        buildSleepPriorityRows(this.prioritySleepSessions(), this.unitSettings()),
+        [],
         this.prioritySleepStatus(),
         'No Sleep sessions in the last 30 days.',
         !sleepAvailabilityIsKnown || available.has('sleep'),
@@ -459,7 +521,12 @@ export class HealthWorkspaceComponent {
         'Heart rate',
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRate),
         HEALTH_METRIC_IDS.HeartRate,
-        buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
+        [],
+        selectHealthPriorityTrendSeries(
+          this.priorityHeartRateLoad()?.result,
+          this.prioritySleepSessions(),
+          this.unitSettings(),
+        ),
         this.priorityHeartRateStatus(),
         'No Heart rate summaries in the last 30 days.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRate),
@@ -469,13 +536,20 @@ export class HealthWorkspaceComponent {
         'HRV',
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRateVariability),
         HEALTH_METRIC_IDS.HeartRateVariability,
-        buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
+        buildHealthPriorityRows(
+          this.priorityHrvLoad()?.result,
+          this.prioritySleepSessions(),
+          this.unitSettings(),
+        ),
+        [],
         this.priorityHrvStatus(),
         'No HRV summaries in the last 30 days.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),
       ),
     ];
   });
+  readonly visiblePriorityCards = computed<HealthPriorityCardView[]>(() => this.priorityCards().filter(card =>
+    card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
     .map(state => {
       const sleepProvider = healthProviderSleepProvider(state.provider);
@@ -521,7 +595,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       let subscription: Subscription | null = null;
       this.hasAnySleepSession.set(null);
       this.sleepMetricAvailabilityStatus.set(uid ? 'loading' : 'ready');
@@ -576,7 +650,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(() => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       this.refreshRevision();
       const generation = ++this.metricAvailabilityGeneration;
       this.availableHealthMetricIds.set(uid ? null : []);
@@ -623,7 +697,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       const window = this.selectedWindow();
       let subscription: Subscription | null = null;
       this.selectedSleepSessions.set([]);
@@ -641,7 +715,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(() => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       const window = this.selectedWindow();
       const metric = this.routeState().metric;
       this.refreshRevision();
@@ -692,7 +766,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       let subscription: Subscription | null = null;
       this.prioritySleepSessions.set([]);
       this.prioritySleepStatus.set('loading');
@@ -711,13 +785,23 @@ export class HealthWorkspaceComponent {
     });
 
     effect(() => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       this.refreshRevision();
       const generation = ++this.priorityLoadGeneration;
-      this.priorityHeartRateLoad.set(null);
-      this.priorityHrvLoad.set(null);
-      this.priorityHeartRateStatus.set('loading');
-      this.priorityHrvStatus.set('loading');
+      const userChanged = uid !== this.priorityHealthUserID;
+      const currentHeartRateLoad = untracked(this.priorityHeartRateLoad);
+      const currentHrvLoad = untracked(this.priorityHrvLoad);
+      this.priorityHealthUserID = uid;
+      if (userChanged) {
+        this.priorityHeartRateLoad.set(null);
+        this.priorityHrvLoad.set(null);
+      }
+      if (!currentHeartRateLoad || userChanged) {
+        this.priorityHeartRateStatus.set('loading');
+      }
+      if (!currentHrvLoad || userChanged) {
+        this.priorityHrvStatus.set('loading');
+      }
       if (!uid) {
         return;
       }
@@ -728,7 +812,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       let subscription: Subscription | null = null;
       this.syncStates.set([]);
       this.syncStatesStatus.set(uid ? 'loading' : 'ready');
@@ -782,6 +866,13 @@ export class HealthWorkspaceComponent {
     this.selectedEndDate.set(
       navigateHealthWorkspaceWindow(this.routeState(), direction, this.todayDate).endDate,
     );
+  }
+
+  jumpToToday(): void {
+    if (!this.selectedWindow().canNavigateNewer) {
+      return;
+    }
+    this.selectedEndDate.set(this.todayDate);
   }
 
   retryPreferenceSave(): void {
@@ -884,7 +975,7 @@ export class HealthWorkspaceComponent {
         startDate,
         endDate: this.todayDate,
         metricId,
-        includeSamples: false,
+        includeSamples: true,
       });
       if (generation !== this.priorityLoadGeneration) {
         return;
@@ -901,9 +992,13 @@ export class HealthWorkspaceComponent {
         return;
       }
       if (metricId === HEALTH_METRIC_IDS.HeartRate) {
-        this.priorityHeartRateStatus.set(loadErrorStatus(error));
+        if (!this.priorityHeartRateLoad()) {
+          this.priorityHeartRateStatus.set(loadErrorStatus(error));
+        }
       } else {
-        this.priorityHrvStatus.set(loadErrorStatus(error));
+        if (!this.priorityHrvLoad()) {
+          this.priorityHrvStatus.set(loadErrorStatus(error));
+        }
       }
     }
   }
@@ -1030,6 +1125,7 @@ function priorityCard(
   icon: string,
   metric: HealthWorkspaceMetricSelection,
   rows: readonly HealthPriorityRow[],
+  chartSeries: readonly HealthWorkspaceSeries[],
   status: HealthLoadStatus,
   emptyText: string,
   available: boolean,
@@ -1039,7 +1135,8 @@ function priorityCard(
     label,
     icon,
     metric,
-    rows: rows.map(row => ({ ...row, presentation: providerView(row.provider).presentation })),
+    rows,
+    chartSeries,
     available,
     loading: status === 'loading',
     error: status === 'error' || status === 'denied',
@@ -1085,21 +1182,27 @@ function syncStateView(
     lastUpdateDateTime: lastUpdateAtMs === null ? null : new Date(lastUpdateAtMs).toISOString(),
     ...healthHistoryImportView(state, historyOptions, nowMs),
   };
+  const withStatus = (statusLabel: string, tone: HealthSyncTone): HealthSyncStateView => ({
+    ...baseView,
+    statusLabel,
+    statusTooltip: healthSyncStatusTooltip(statusLabel, tone),
+    tone,
+  });
   switch (state.status) {
     case HEALTH_SYNC_STATUSES.Ready: {
       const recency = healthSyncRecency(lastUpdateAtMs, nowMs);
-      return { ...baseView, statusLabel: recency.statusLabel, tone: recency.tone };
+      return withStatus(recency.statusLabel, recency.tone);
     }
     case HEALTH_SYNC_STATUSES.PermissionMissing:
-      return { ...baseView, statusLabel: 'Permission needed', tone: 'error' };
+      return withStatus('Permission needed', 'error');
     case HEALTH_SYNC_STATUSES.ReconnectRequired:
-      return { ...baseView, statusLabel: 'Reconnect required', tone: 'error' };
+      return withStatus('Reconnect required', 'error');
     case HEALTH_SYNC_STATUSES.Failed:
-      return { ...baseView, statusLabel: 'Sync failed', tone: 'error' };
+      return withStatus('Sync failed', 'error');
     case HEALTH_SYNC_STATUSES.Unsupported:
-      return { ...baseView, statusLabel: 'Not supported', tone: 'neutral' };
+      return withStatus('Not supported', 'neutral');
     case HEALTH_SYNC_STATUSES.Disconnected:
-      return { ...baseView, statusLabel: 'Disconnected', tone: 'neutral' };
+      return withStatus('Disconnected', 'neutral');
   }
 }
 
@@ -1219,6 +1322,30 @@ function healthSyncRecency(
     return { statusLabel: 'Delayed', tone: 'delayed' };
   }
   return { statusLabel: 'Stale', tone: 'stale' };
+}
+
+function healthSyncStatusTooltip(statusLabel: string, tone: HealthSyncTone): string {
+  switch (tone) {
+    case 'current':
+      return 'Current: the latest source update arrived within the last 36 hours.';
+    case 'delayed':
+      return 'Delayed: the latest source update is between 36 hours and 7 days old.';
+    case 'stale':
+      return 'Stale: no source update has arrived for more than 7 days.';
+    case 'error':
+      return `${statusLabel}: this source needs attention in Connectivity.`;
+    case 'neutral':
+      switch (statusLabel) {
+        case 'Waiting':
+          return 'Waiting: no Health update has arrived yet.';
+        case 'Not supported':
+          return 'Not supported: this provider does not supply Health data.';
+        case 'Disconnected':
+          return 'Disconnected: this provider is not connected.';
+        default:
+          return `${statusLabel}: no recent Health update is available.`;
+      }
+  }
 }
 
 function loadErrorStatus(error: unknown): HealthLoadStatus {

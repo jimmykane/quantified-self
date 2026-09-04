@@ -21,6 +21,10 @@ import {
   resolveDashboardRampRateContextFromPoints,
 } from '../../helpers/dashboard-derived-metrics.helper';
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import {
+  resolveActivityTypeIconColor,
+  resolveActivityTypeMaterialIcon,
+} from '../../helpers/activity-type-presentation.helper';
 import { resolveDashboardChartInfoTooltip } from '../../helpers/dashboard-chart-info.helper';
 import {
   DASHBOARD_FORM_CHART_TYPE,
@@ -190,6 +194,7 @@ interface TrainingDestinationOptionViewModel {
   details: string;
   sport: TrainingSportDefinition | null;
   materialIcon: string | null;
+  iconColor: string | null;
 }
 
 type TrainingDestinationSelectionSource = 'shortcut' | 'desktop_selector' | 'mobile_selector';
@@ -1205,13 +1210,15 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         details: 'Global readiness, load, sleep, intensity, and sport mix',
         sport: null,
         materialIcon: 'monitoring',
+        iconColor: null,
       },
       ...availableSports.map(sport => ({
         id: sport.id,
         label: sport.label,
         details: sport.details,
         sport,
-        materialIcon: null,
+        materialIcon: resolveActivityTypeMaterialIcon(sport.iconActivityType),
+        iconColor: resolveActivityTypeIconColor(sport.iconActivityType),
       })),
       ...(this.hasOtherPowerActivities || this.isOtherPowerDestination ? [{
         id: 'other-power' as const,
@@ -1219,6 +1226,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         details: 'Exact power activity types outside the Training sport registry',
         sport: null,
         materialIcon: 'bolt',
+        iconColor: null,
       }] : []),
     ];
     this.visibleSportShortcutOptions = this.visibleSportShortcuts

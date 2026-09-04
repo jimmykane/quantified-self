@@ -6,11 +6,6 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://quantified-self.io/login</loc>
-    <lastmod>2026-01-07</lastmod>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://quantified-self.io/policies</loc>
     <lastmod>2026-08-26</lastmod>
     <priority>0.5</priority>
@@ -24,11 +19,6 @@
     <loc>https://quantified-self.io/terms</loc>
     <lastmod>2026-08-05</lastmod>
     <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://quantified-self.io/pricing</loc>
-    <lastmod>2026-08-03</lastmod>
-    <priority>0.9</priority>
   </url>
   <url>
     <loc>https://quantified-self.io/help</loc>
@@ -163,11 +153,6 @@
   <url>
     <loc>https://quantified-self.io/guides/centralize-garmin-suunto-coros-workout-data</loc>
     <lastmod>2026-07-21</lastmod>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://quantified-self.io/releases</loc>
-    <lastmod>2026-05-29</lastmod>
     <priority>0.7</priority>
   </url>
 </urlset>
