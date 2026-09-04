@@ -45,6 +45,10 @@ import {
   AppHealthWorkspaceRange,
 } from '../models/app-user.interface';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import {
+  buildDashboardSleepTrendContext,
+  type DashboardSleepTrendPoint,
+} from './dashboard-sleep-chart.helper';
 import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
 
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
@@ -143,6 +147,7 @@ export interface HealthPriorityRow {
   contextText: string;
   observedAtMs: number;
   details?: readonly HealthPriorityDetail[];
+  sleepPoint?: DashboardSleepTrendPoint;
 }
 
 export interface HealthPriorityDetail {
@@ -607,6 +612,7 @@ export function buildSleepPriorityRows(
     }
   }
   return [...latestBySource.entries()].map(([key, { session, provider }], index) => {
+    const sleepPoint = buildDashboardSleepTrendContext([session], { nowMs }).latestPoint || undefined;
     const scoreText = formatSleepMetricValue(
       SLEEP_SPORTS_LIB_METRIC_FIELDS.Score,
       session.score?.value,
@@ -641,6 +647,7 @@ export function buildSleepPriorityRows(
       contextText: formatDashboardRelativeDay(session.endTimeMs, { nowMs }),
       observedAtMs: session.endTimeMs,
       details,
+      sleepPoint,
     };
   }).sort((left, right) => right.observedAtMs - left.observedAtMs
     || compareText(left.sourceLabel, right.sourceLabel));

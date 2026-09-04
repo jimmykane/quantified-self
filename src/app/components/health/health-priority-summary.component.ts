@@ -12,6 +12,7 @@ import {
 } from '../../helpers/health-workspace.helper';
 import { HealthChartSeriesModel, buildHealthChartModels } from '../../helpers/health-metric-chart.helper';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
+import { HealthSleepStageSummaryComponent } from './health-sleep-stage-summary.component';
 
 interface HealthPriorityChartView {
   model: HealthChartSeriesModel;
@@ -44,6 +45,7 @@ export interface HealthPriorityCardView {
     MatIconModule,
     MatProgressSpinnerModule,
     HealthMetricSeriesChartComponent,
+    HealthSleepStageSummaryComponent,
   ],
   templateUrl: './health-priority-summary.component.html',
   styleUrls: ['./health-priority-summary.component.scss'],

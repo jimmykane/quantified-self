@@ -666,7 +666,14 @@ describe('Health workspace helpers', () => {
 
   it('uses local account ordinals for Sleep priority rows and never exposes provider IDs', () => {
     const rows = buildSleepPriorityRows([
-      sleepSession(),
+      sleepSession({
+        stageDurationsSeconds: {
+          deep: 7_200,
+          light: 14_400,
+          rem: 5_400,
+          awake: 1_800,
+        },
+      }),
       sleepSession({
         id: 'sleep-two',
         source: {
@@ -684,6 +691,13 @@ describe('Health workspace helpers', () => {
         { label: 'Score', valueText: '88' },
         { label: 'HRV', valueText: '62 ms' },
       ],
+    });
+    expect(rows[1].sleepPoint).toMatchObject({
+      deepSeconds: 7_200,
+      lightSeconds: 14_400,
+      remSeconds: 5_400,
+      awakeSeconds: 1_800,
+      providerLabel: 'Garmin',
     });
     expect(JSON.stringify(rows)).not.toContain('provider-user');
   });

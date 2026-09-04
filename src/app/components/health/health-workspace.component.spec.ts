@@ -209,7 +209,12 @@ function sleepSession(): SleepSession {
     durationSeconds: 8 * 60 * 60,
     isNap: false,
     stages: [],
-    stageDurationsSeconds: {},
+    stageDurationsSeconds: {
+      deep: 7_200,
+      light: 14_400,
+      rem: 5_400,
+      awake: 1_800,
+    },
     score: { value: 86 },
     vitals: { averageHrvMs: 58, averageHeartRateBpm: 52 },
     createdAtMs: todayStartMs,
@@ -429,6 +434,8 @@ describe('HealthWorkspaceComponent', () => {
     expect(sleepDetails).toContain('Score86');
     expect(sleepDetails).toContain('HRV58 ms');
     expect(sleepDetails).toContain('Avg HR52 bpm');
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('app-health-sleep-stage-summary')).toHaveLength(1);
+    expect(sleepDetails).toContain('Sleep stages');
     const filterProviderIcons = fixture.debugElement.queryAll(By.css(
       '.health-provider-filter app-service-source-icon',
     ));

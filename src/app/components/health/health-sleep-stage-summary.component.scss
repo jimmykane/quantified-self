@@ -1,0 +1,64 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.sleep-stage-summary {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.5rem;
+  min-width: 0;
+}
+
+.sleep-stage-heading {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+}
+
+.sleep-stage-chart {
+  height: 26px;
+  min-width: 0;
+  width: 100%;
+}
+
+.sleep-stage-legend {
+  display: grid;
+  gap: 0.15rem 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.sleep-stage-legend-item {
+  align-items: baseline;
+  color: var(--mat-sys-on-surface-variant);
+  display: grid;
+  font: var(--mat-sys-label-small);
+  gap: 0.25rem;
+  grid-template-columns: 6px minmax(0, auto) 1fr;
+  min-width: 0;
+}
+
+.sleep-stage-legend-item strong {
+  color: var(--mat-sys-on-surface);
+  font-variant-numeric: tabular-nums;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.sleep-stage-swatch {
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+
+.sleep-stage-unavailable {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+  margin: 0.5rem 0 0;
+}
+
+@media (max-width: 420px) {
+  .sleep-stage-legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

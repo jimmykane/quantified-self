@@ -90,6 +90,14 @@
                           }
                         </dl>
                       }
+                      @if (row.sleepPoint) {
+                        <app-health-sleep-stage-summary
+                          [point]="row.sleepPoint"
+                          [sourceLabel]="row.sourceLabel"
+                          [darkTheme]="darkTheme()"
+                          [unitSettings]="unitSettings()">
+                        </app-health-sleep-stage-summary>
+                      }
                     </div>
                   </div>
                 }
