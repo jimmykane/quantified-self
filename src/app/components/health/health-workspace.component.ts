@@ -532,7 +532,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       let subscription: Subscription | null = null;
       this.hasAnySleepSession.set(null);
       this.sleepMetricAvailabilityStatus.set(uid ? 'loading' : 'ready');
@@ -587,7 +587,7 @@ export class HealthWorkspaceComponent {
     });
 
     effect(() => {
-      const uid = this.userService.user()?.uid || null;
+      const uid = this.signedInUserID();
       this.refreshRevision();
       const generation = ++this.metricAvailabilityGeneration;
       this.availableHealthMetricIds.set(uid ? null : []);

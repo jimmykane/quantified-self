@@ -546,6 +546,42 @@ describe('HealthWorkspaceComponent', () => {
     expect((host.querySelector('[aria-label="Open HRV"]') as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('keeps the verified metric catalog filtered while a saved metric preference echoes back', async () => {
+    await createComponent(undefined, undefined, {
+      metricIds: [HEALTH_METRIC_IDS.HeartRate, HEALTH_METRIC_IDS.Steps],
+      hasSleep: false,
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    const initialLabels = [...host.querySelectorAll('.health-metric-option')]
+      .map(option => option.querySelector('.health-metric-option-content > span:last-child')?.textContent?.trim());
+    expect(initialLabels).toEqual(['Heart rate', 'Steps', 'Body weight', 'VO2 max']);
+    expect(component.showSleepMetric()).toBe(false);
+
+    let resolveUnexpectedAvailabilityLoad: (metricIds: HealthMetricId[]) => void;
+    const unexpectedAvailabilityLoad = new Promise<HealthMetricId[]>(resolve => {
+      resolveUnexpectedAvailabilityLoad = resolve;
+    });
+    loadAvailableMetricIds.mockImplementationOnce(() => unexpectedAvailabilityLoad);
+
+    component.selectMetric(HEALTH_METRIC_IDS.Steps);
+    hydrateSavedMetric(HEALTH_METRIC_IDS.Steps);
+    fixture.detectChanges();
+
+    expect(loadAvailableMetricIds).toHaveBeenCalledTimes(1);
+    expect(component.healthMetricAvailabilityStatus()).toBe('ready');
+    expect(component.sleepMetricAvailabilityStatus()).toBe('ready');
+    expect(component.metricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id))).toEqual([
+      HEALTH_METRIC_IDS.HeartRate,
+      HEALTH_METRIC_IDS.Steps,
+      HEALTH_METRIC_IDS.BodyWeight,
+      HEALTH_METRIC_IDS.Vo2Max,
+    ]);
+    expect(component.showSleepMetric()).toBe(false);
+
+    resolveUnexpectedAvailabilityLoad!([]);
+  });
+
   it('keeps the complete catalog visible when availability discovery fails', async () => {
     await createComponent(undefined, undefined, {
       healthError: new Error('offline'),
