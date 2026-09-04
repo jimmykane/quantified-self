@@ -300,6 +300,20 @@ The workspace opens on Resting heart rate for the latest 30 days when that metri
 
 Totals render as bars, scalar or point readings as lines/points, and categorical readings as stepped series. Health metric charts use the shared ECharts host, theme, tooltip, resize, and mobile-interaction stack; Sleep continues to reuse its normalized Sleep chart. Detailed chunks load for Today, 14-day, and 30-day windows; 90-day and 1-year views use stored summaries and explain when a metric is sample-only. Today combines the day's source-attributed summaries with any available intra-day chunks, but it does not imply continuous coverage where a provider supplies intermittent samples or daily summaries only. Coverage, freshness, device attribution, partial results, superseded revisions, conflicts, and safe sync state stay visible. The expandable source-observation table is the accessible textual equivalent of the charts.
 
+### Metric display and unit-preference boundary
+
+Every canonical Health or Sleep value shown to a user—including cards, rows, chart labels, tooltips, legends,
+accessibility text, and exports—must originate from the matching Sports Lib data class. Presentation uses both
+`getDisplayValue()` and `getDisplayUnit()` from the same selected Sports Lib instance; it must not reuse storage or
+catalog units, manually round a canonical value, or hard-code unit text. When a metric has a user-selectable unit,
+the app applies the signed-in user's `settings.unitSettings` through `shared/unit-aware-display.ts` and Sports Lib's
+`DynamicDataLoader` before deriving either display field. The Health/Sleep mapping in
+`shared/sports-lib-health-data.ts` is the only bridge from a canonical Health metric ID to its Sports Lib data class.
+
+Explicitly native-only or non-comparable provider readings are outside that conversion boundary. They retain a clear
+provider-native label and are never represented as canonical values or as values converted to the user's preferred
+units.
+
 Weight and VO2 max are always discoverable in the Health catalog because either may exist only in imported workouts rather than `healthSourceRecords`. Selecting either metric starts the direct Health-record load and the bounded workout-evidence callable together for the same remembered window. Request generations discard both stale results after metric, range, or older/newer navigation. A failed workout query does not hide successfully loaded provider Health measurements; the workspace identifies that partial source explicitly. Workout coverage is shown as not applicable rather than implying daily measurement completeness, raw creator fields are not presented as device attribution, and the latest workout observation still supplies last-observed context.
 
 Future manual measurements use the existing Health schema rather than another store: provider `QuantifiedSelf`, origin `recorded`, recording method `manual`, and the canonical catalog metric/unit. A manual Weight is a real Health observation and suppresses the workout Weight fallback in the active filtered window. Manual VO2 max remains separate from provider Health and workout series through source, origin, recording method, and semantic variant. Manual Sleep remains in `sleepSessions` and is exposed to Health only through typed Sleep references. This compatibility is intentional; this implementation adds no manual-entry form, write callable, migration, or persistence path.

@@ -24,6 +24,16 @@ Always-on rules:
 - Before changing the Training workspace, Training settings, Training-derived metrics, or sports-lib durability integration,
   read `docs/training-workspace.md` completely and update the relevant sections in the same change. Keep this as the
   single detailed Training source of truth instead of creating a competing Training architecture document.
+- For every user-facing rendering of a canonical metric—cards, tables, chart axes/tooltips/legends, accessible text,
+  exports, and generated summaries—use its Sports Lib data class for both the display value and display unit. Never
+  hand-format canonical numeric values, read a unit directly from stored/catalog data for display, or hard-code a unit
+  abbreviation. Apply the signed-in user's `settings.unitSettings` through the shared
+  `shared/unit-aware-display.ts` helpers (which use Sports Lib's `DynamicDataLoader` conversion) before calling
+  `getDisplayValue()` and `getDisplayUnit()`; both must come from the same converted Sports Lib instance. For canonical
+  Health/Sleep metrics, first use their explicit mapping in `shared/sports-lib-health-data.ts`. Only explicitly
+  native-only or non-comparable provider values may use a provider-labelled fallback, and they must never be presented
+  as canonical or user-unit-converted. Add display tests for the default unit settings and a relevant non-default user
+  unit preference whenever adding or changing a metric surface.
 - Before adding or changing an MCP tool or response field, a Sports Lib event metric, an activity/route projection, a
   Training-derived metric kind or payload, or a normalized sleep field, read
   `.agent/skills/mcp-metric-surface/SKILL.md` and `docs/mcp-server.md`. Update the exhaustive strict output-schema
