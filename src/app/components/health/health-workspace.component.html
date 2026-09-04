@@ -340,7 +340,12 @@
       <ul class="health-sync-list" aria-label="Connected Health sources">
         @for (state of syncStateViews(); track state.provider) {
           <li class="health-sync-item">
-            <span class="health-sync-dot" [attr.data-tone]="state.tone" aria-hidden="true"></span>
+            <span
+              class="health-sync-dot"
+              [attr.data-tone]="state.tone"
+              [matTooltip]="state.statusTooltip"
+              aria-hidden="true">
+            </span>
             <strong class="health-sync-provider">{{ state.label }}</strong>
             <span class="health-sync-status">{{ state.statusLabel }}</span>
             <span aria-hidden="true">·</span>

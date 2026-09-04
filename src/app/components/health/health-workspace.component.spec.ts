@@ -1,5 +1,6 @@
 import { Component, Input, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -1052,16 +1053,39 @@ describe('HealthWorkspaceComponent', () => {
     expect(Object.fromEntries(component.syncStateViews().map(state => [state.provider, {
       statusLabel: state.statusLabel,
       tone: state.tone,
+      statusTooltip: state.statusTooltip,
     }]))).toEqual({
-      [HEALTH_PROVIDERS.COROSAPI]: { statusLabel: 'Stale', tone: 'stale' },
-      [HEALTH_PROVIDERS.GarminAPI]: { statusLabel: 'Current', tone: 'current' },
-      [HEALTH_PROVIDERS.SuuntoApp]: { statusLabel: 'Delayed', tone: 'delayed' },
-      [HEALTH_PROVIDERS.WahooAPI]: { statusLabel: 'Waiting', tone: 'neutral' },
+      [HEALTH_PROVIDERS.COROSAPI]: {
+        statusLabel: 'Stale',
+        tone: 'stale',
+        statusTooltip: 'Stale: no source update has arrived for more than 7 days.',
+      },
+      [HEALTH_PROVIDERS.GarminAPI]: {
+        statusLabel: 'Current',
+        tone: 'current',
+        statusTooltip: 'Current: the latest source update arrived within the last 36 hours.',
+      },
+      [HEALTH_PROVIDERS.SuuntoApp]: {
+        statusLabel: 'Delayed',
+        tone: 'delayed',
+        statusTooltip: 'Delayed: the latest source update is between 36 hours and 7 days old.',
+      },
+      [HEALTH_PROVIDERS.WahooAPI]: {
+        statusLabel: 'Waiting',
+        tone: 'neutral',
+        statusTooltip: 'Waiting: no Health update has arrived yet.',
+      },
     });
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-sync-item')).toHaveLength(4);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="current"]')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="delayed"]')).toBeTruthy();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-dot[data-tone="stale"]')).toBeTruthy();
+    expect(
+      fixture.debugElement
+        .query(By.css('.health-sync-dot[data-tone="current"]'))
+        .injector.get(MatTooltip)
+        .message,
+    ).toBe('Current: the latest source update arrived within the last 36 hours.');
   });
 
   it('offers the existing provider history import when no Sleep or Health backfill has run', async () => {

@@ -102,6 +102,7 @@ interface HealthProviderFilterView extends HealthProviderView {
 
 interface HealthSyncStateView extends HealthProviderView {
   statusLabel: string;
+  statusTooltip: string;
   lastUpdateText: string;
   lastUpdateDateTime: string | null;
   tone: HealthSyncTone;
@@ -1142,21 +1143,27 @@ function syncStateView(
     lastUpdateDateTime: lastUpdateAtMs === null ? null : new Date(lastUpdateAtMs).toISOString(),
     ...healthHistoryImportView(state, historyOptions, nowMs),
   };
+  const withStatus = (statusLabel: string, tone: HealthSyncTone): HealthSyncStateView => ({
+    ...baseView,
+    statusLabel,
+    statusTooltip: healthSyncStatusTooltip(statusLabel, tone),
+    tone,
+  });
   switch (state.status) {
     case HEALTH_SYNC_STATUSES.Ready: {
       const recency = healthSyncRecency(lastUpdateAtMs, nowMs);
-      return { ...baseView, statusLabel: recency.statusLabel, tone: recency.tone };
+      return withStatus(recency.statusLabel, recency.tone);
     }
     case HEALTH_SYNC_STATUSES.PermissionMissing:
-      return { ...baseView, statusLabel: 'Permission needed', tone: 'error' };
+      return withStatus('Permission needed', 'error');
     case HEALTH_SYNC_STATUSES.ReconnectRequired:
-      return { ...baseView, statusLabel: 'Reconnect required', tone: 'error' };
+      return withStatus('Reconnect required', 'error');
     case HEALTH_SYNC_STATUSES.Failed:
-      return { ...baseView, statusLabel: 'Sync failed', tone: 'error' };
+      return withStatus('Sync failed', 'error');
     case HEALTH_SYNC_STATUSES.Unsupported:
-      return { ...baseView, statusLabel: 'Not supported', tone: 'neutral' };
+      return withStatus('Not supported', 'neutral');
     case HEALTH_SYNC_STATUSES.Disconnected:
-      return { ...baseView, statusLabel: 'Disconnected', tone: 'neutral' };
+      return withStatus('Disconnected', 'neutral');
   }
 }
 
@@ -1276,6 +1283,30 @@ function healthSyncRecency(
     return { statusLabel: 'Delayed', tone: 'delayed' };
   }
   return { statusLabel: 'Stale', tone: 'stale' };
+}
+
+function healthSyncStatusTooltip(statusLabel: string, tone: HealthSyncTone): string {
+  switch (tone) {
+    case 'current':
+      return 'Current: the latest source update arrived within the last 36 hours.';
+    case 'delayed':
+      return 'Delayed: the latest source update is between 36 hours and 7 days old.';
+    case 'stale':
+      return 'Stale: no source update has arrived for more than 7 days.';
+    case 'error':
+      return `${statusLabel}: this source needs attention in Connectivity.`;
+    case 'neutral':
+      switch (statusLabel) {
+        case 'Waiting':
+          return 'Waiting: no Health update has arrived yet.';
+        case 'Not supported':
+          return 'Not supported: this provider does not supply Health data.';
+        case 'Disconnected':
+          return 'Disconnected: this provider is not connected.';
+        default:
+          return `${statusLabel}: no recent Health update is available.`;
+      }
+  }
 }
 
 function loadErrorStatus(error: unknown): HealthLoadStatus {
