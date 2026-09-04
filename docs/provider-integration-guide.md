@@ -306,17 +306,17 @@ If the provider exposes a binding/status endpoint, check it server-side when the
 
 OAuth token roots and children are backend-owned data, including for an authenticated owner. The browser must derive connection UX from a bounded `users/{uid}/meta/{service}` projection rather than reading token collections. Project only the account fields the existing UI needs (stable account identity where multiple-account or route provenance behavior requires it, connection time, and bounded permission metadata); never project access/refresh tokens, OAuth or credential generations, provider response bodies, or operational authority. The projection is display and selection context only and must never authorize provider work.
 
-Maintain the projection from trusted backend token writes with retryable, idempotent triggers. Reject out-of-order trigger revisions, recheck the account-deletion guard in the projection write transaction, and write an empty account array after the last credential is removed. Rules must allow only the owner to read service metadata and deny browser writes. Before changing credential Rules for an existing provider, backfill every existing token root and release in this order:
+Maintain the projection from trusted backend token writes with retryable, idempotent triggers. Reject out-of-order trigger revisions, recheck the account-deletion guard in the projection write transaction, and write an empty account array after the last credential is removed. Rules must allow only the owner to read service metadata and deny browser writes. Before changing credential Rules for an existing provider, prepare and run a one-off, guarded backfill for every existing token root, then release in this order:
 
 1. Deploy the projection triggers while the old browser reads still work.
-2. Run `npm --prefix functions run backfill-service-connection-projections -- --services=garmin,suunto,coros` and inspect the dry-run summary.
-3. Apply with `--execute --confirm=BACKFILL_CONNECTION_PROJECTIONS`, then repeat the dry run and verify expected root/account coverage.
+2. Run the one-off backfill in dry-run mode and inspect its summary.
+3. Apply it with an explicit confirmation, then repeat the dry run and verify expected root/account coverage.
 4. Deploy the projection-aware frontend with a temporary field-absent-only fallback to legacy owner reads. An explicit empty projection must remain authoritative so disconnect cannot revive stale token state.
 5. In a separate follow-up release, remove that fallback and deploy Rules denying token-root and token-child reads. Keep the triggers deployed so reconnect, refresh, retained-account, and disconnect changes remain synchronized.
 
 Do not combine or reverse steps 4 and 5 in the initial release: an older frontend and the projection-aware frontend's field-absent fallback may continue to use the legacy read temporarily, but denying credential reads before the existing-account projections are verified makes connected accounts appear disconnected. The initial projection release must preserve both compatibility layers; the follow-up release removes both together.
 
-Garmin, Suunto, and COROS completed this rollout in September 2026: the production backfill converged with no pending updates or failures, the frontend fallback was removed, and browser reads and writes against their token roots and descendants are denied. Their backend projection triggers remain the only synchronization path for connection-account metadata.
+Garmin, Suunto, and COROS completed this rollout in September 2026: the production backfill converged with no pending updates or failures, the frontend fallback was removed, and browser reads and writes against their token roots and descendants are denied. The one-off backfill tooling was then retired. Their backend projection triggers remain the only synchronization path for connection-account metadata.
 
 ### Subscription enforcement
 
