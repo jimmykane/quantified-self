@@ -1,5 +1,7 @@
 import { Component, Input, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
@@ -471,6 +473,21 @@ describe('HealthWorkspaceComponent', () => {
       includeSamples: true,
     }));
   }, 10_000);
+
+  it('keeps mobile range controls width-safe and provider filters on one scrollable row', () => {
+    const styles = readFileSync(resolve(
+      process.cwd(),
+      'src/app/components/health/health-workspace.component.scss',
+    ), 'utf8');
+
+    expect(styles).toContain('grid-template-columns: 44px minmax(0, 1fr) 44px');
+    expect(styles).toContain('box-sizing: border-box');
+    expect(styles).toContain('flex: 1 1 0');
+    expect(styles).toContain('padding-inline: 4px');
+    expect(styles).toContain('.health-provider-filters::-webkit-scrollbar');
+    expect(styles).toContain('overscroll-behavior-inline: contain');
+    expect(styles).toContain('@media (max-width: 360px)');
+  });
 
   it('opens highlight metrics without styling the highlight as selected', async () => {
     await createComponent();

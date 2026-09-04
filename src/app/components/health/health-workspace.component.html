@@ -112,7 +112,13 @@
             <p>{{ detailSubtitle() }}</p>
           </div>
           <div class="health-window-navigation" aria-label="Health data window">
-            <button mat-icon-button type="button" matTooltip="Older window" aria-label="Show older Health data" (click)="navigateWindow('older')">
+            <button
+              mat-icon-button
+              type="button"
+              class="health-window-older"
+              matTooltip="Older window"
+              aria-label="Show older Health data"
+              (click)="navigateWindow('older')">
               <mat-icon aria-hidden="true">chevron_left</mat-icon>
             </button>
             <mat-button-toggle-group
@@ -128,6 +134,7 @@
             <button
               mat-icon-button
               type="button"
+              class="health-window-newer"
               matTooltip="Newer window"
               aria-label="Show newer Health data"
               [disabled]="!selectedWindow().canNavigateNewer"
@@ -138,6 +145,7 @@
               <button
                 mat-icon-button
                 type="button"
+                class="health-window-today"
                 matTooltip="Jump to today"
                 aria-label="Jump to today"
                 (click)="jumpToToday()">
