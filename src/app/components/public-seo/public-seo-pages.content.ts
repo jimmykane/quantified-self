@@ -5,6 +5,7 @@ import {
 } from './public-seo-pages.paths';
 import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
+import { SOCIAL_IMAGES, type SocialImageRouteData } from '../../shared/social-image-route-data';
 
 export {
   PUBLIC_FEATURE_PATHS,
@@ -57,7 +58,7 @@ export interface PublicSeoPage {
   howToSteps?: readonly string[];
 }
 
-export interface PublicSeoRouteData {
+export interface PublicSeoRouteData extends SocialImageRouteData {
   title: string;
   preload: boolean;
   animation: string;
@@ -1751,6 +1752,12 @@ function buildJsonLd(page: PublicSeoPage): Record<string, unknown> {
 }
 
 function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
+  const socialImageByPage: Partial<Record<PublicSeoPageKey, SocialImageRouteData>> = {
+    trainingAnalysis: SOCIAL_IMAGES.trainingAnalysis,
+    activityMap: SOCIAL_IMAGES.activityMap,
+    mcpServer: SOCIAL_IMAGES.mcpServer,
+  };
+
   return {
     title: page.title,
     preload: true,
@@ -1758,6 +1765,7 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
     description: page.description,
     publicSeoPage: page,
     jsonLd: buildJsonLd(page),
+    ...socialImageByPage[page.key],
   };
 }
 

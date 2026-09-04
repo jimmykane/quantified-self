@@ -23,7 +23,7 @@ import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
 
 const HOME_SEO_DESCRIPTION = 'Connect Garmin, Suunto, COROS, and Wahoo in one training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.';
-const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
+const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd', 'socialImage', 'socialImageAlt'] as const;
 const PUBLIC_SEO_RESOLVED_KEYS = [...SEO_RESOLVED_KEYS, 'publicSeoPage'] as const;
 
 type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';

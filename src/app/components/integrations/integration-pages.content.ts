@@ -1,5 +1,6 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getProviderDisplayName } from '@shared/provider-presentation';
+import { SOCIAL_IMAGES, type SocialImageRouteData } from '../../shared/social-image-route-data';
 
 export type IntegrationProviderKey = 'garmin' | 'suunto' | 'coros' | 'wahoo';
 
@@ -60,7 +61,7 @@ export interface IntegrationHubCard {
   highlights: readonly string[];
 }
 
-export interface IntegrationRouteData {
+export interface IntegrationRouteData extends SocialImageRouteData {
   title: string;
   preload: boolean;
   animation: string;
@@ -777,6 +778,7 @@ export const INTEGRATIONS_HUB_ROUTE_DATA: IntegrationRouteData = {
   preload: true,
   animation: 'Integrations',
   description: 'Explore Garmin, Suunto, COROS, and Wahoo integrations for automatic activity imports and sync, history imports, route sending, uploads, and a training dashboard.',
+  ...SOCIAL_IMAGES.integrations,
   jsonLd: {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',

@@ -103,6 +103,38 @@ describe('SeoService', () => {
         expect(metaServiceSpy.updateTag).not.toHaveBeenCalledWith({ name: 'keywords', content: 'test, seo' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:title', content: 'Test Page - Quantified Self' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: 'Test Description' });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({
+            property: 'og:image',
+            content: 'https://quantified-self.io/assets/images/og-image-v4.jpg'
+        });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({
+            name: 'twitter:image:alt',
+            content: 'Quantified Self activity map visualization'
+        });
+    });
+
+    it('should apply page-specific social image metadata from route data', () => {
+        mockActivatedRoute.data = of({
+            title: 'Training Analysis',
+            socialImage: 'https://quantified-self.io/assets/images/social/training-analysis-social-v1.jpg',
+            socialImageAlt: 'Quantified Self Training charts for freshness, intensity, efficiency, and cycling power.',
+        });
+        mockRouter.url = '/features/training-analysis';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/features/training-analysis'
+        });
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/features/training-analysis', '/features/training-analysis'));
+
+        const image = 'https://quantified-self.io/assets/images/social/training-analysis-social-v1.jpg';
+        const alt = 'Quantified Self Training charts for freshness, intensity, efficiency, and cycling power.';
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image', content: image });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:image:alt', content: alt });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:image', content: image });
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'twitter:image:alt', content: alt });
     });
 
     it('should inject JSON-LD on home page', () => {
