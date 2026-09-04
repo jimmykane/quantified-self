@@ -128,20 +128,38 @@ describe('assertEnvironmentSafety', () => {
     expect(() => assertEnvironmentSafety(buildEnvironment({
       backendMode: 'hosted',
       billingMode: 'stripe',
+      appCheckEnabled: true,
       useAuthEmulator: false,
       useFunctionsEmulator: false,
       emulatorConfig: undefined,
       firebase: { ...buildEnvironment().firebase, projectId: 'quantified-self-io' },
     }))).not.toThrow();
-    expect(() => assertEnvironmentSafety(buildEnvironment({ backendMode: 'hosted' }))).toThrow(/Hosted mode/);
+    expect(() => assertEnvironmentSafety(buildEnvironment({
+      backendMode: 'hosted',
+      appCheckEnabled: true,
+    }))).toThrow(/Hosted mode/);
   });
 
   it('rejects emulator configuration mixed into hosted mode', () => {
     const hosted = buildEnvironment({
       backendMode: 'hosted',
+      appCheckEnabled: true,
       firebase: { ...buildEnvironment().firebase, projectId: 'quantified-self-io' },
     });
 
     expect(() => assertEnvironmentSafety(hosted)).toThrow(/emulator configuration/);
+  });
+
+  it('requires App Check for hosted profiles', () => {
+    const hosted = buildEnvironment({
+      backendMode: 'hosted',
+      appCheckEnabled: false,
+      useAuthEmulator: false,
+      useFunctionsEmulator: false,
+      emulatorConfig: undefined,
+      firebase: { ...buildEnvironment().firebase, projectId: 'quantified-self-io' },
+    });
+
+    expect(() => assertEnvironmentSafety(hosted)).toThrow(/requires App Check/);
   });
 });

@@ -159,6 +159,9 @@ export function parseEnvAssignments(contents) {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
+    if (assignments.has(name)) {
+      throw new Error(`[local] Duplicate environment assignment: ${name}.`);
+    }
     assignments.set(name, value);
   }
   return assignments;

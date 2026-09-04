@@ -14,6 +14,9 @@ export function assertEnvironmentSafety(candidate: AppEnvironment): void {
     if (candidate.localhost && candidate.observabilityEnabled) {
       throw new Error('[environment] Observability must be disabled for localhost profiles.');
     }
+    if (!candidate.appCheckEnabled) {
+      throw new Error('[environment] Hosted mode requires App Check.');
+    }
     if (candidate.firebase.projectId.startsWith('demo-')) {
       throw new Error('[environment] Hosted mode cannot use a demo Firebase project.');
     }

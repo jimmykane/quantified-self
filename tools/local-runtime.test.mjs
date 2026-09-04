@@ -134,6 +134,19 @@ test('parses dotenv assignments without treating quoted empties as secrets', () 
   );
 });
 
+test('rejects duplicate secret assignments without exposing their values', () => {
+  const duplicateSecret = [
+    'STRIPE_SECRET_KEY=private_value_do_not_print',
+    `STRIPE_SECRET_KEY=${LOCAL_SECRET_SENTINEL}`,
+  ].join('\n');
+
+  assert.throws(
+    () => assertNoLocalSecrets(duplicateSecret, {}),
+    error => error.message.includes('Duplicate environment assignment: STRIPE_SECRET_KEY')
+      && !error.message.includes('private_value_do_not_print'),
+  );
+});
+
 test('refuses configured and inherited secrets without exposing their values', () => {
   const secret = 'STRIPE_SECRET_KEY=sk_do_not_print\nGEMINI_API_KEY=\n';
   assert.throws(
