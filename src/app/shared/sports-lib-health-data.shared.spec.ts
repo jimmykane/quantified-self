@@ -9,12 +9,15 @@ import {
     type HealthMetricId,
     type HealthMetricValue,
 } from '@shared/health';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
     decodeHealthMetricSportsLibData,
     decodeSleepSessionSportsLibData,
     encodeHealthMetricSportsLibData,
     encodeSleepSessionSportsLibData,
     formatCanonicalHealthMetricSportsLibValue,
+    formatCanonicalSleepMetricSportsLibValue,
     sportsLibClassTypeForHealthMetric,
     sportsLibClassTypeForSleepMetric,
     SportsLibDataValidationError,
@@ -115,6 +118,23 @@ describe('Sports Lib Health and sleep storage codec', () => {
             .toEqual({ value: '1.23', unit: 'Km' });
         expect(formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.ActiveDuration, 3_600))
             .toEqual({ value: '01h 00m 00s', unit: '' });
+
+        expect(formatCanonicalHealthMetricSportsLibValue(
+            HEALTH_METRIC_IDS.Distance,
+            10_000,
+            normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }),
+        )).toEqual({ value: '6.22', unit: 'mi' });
+
+        expect(formatCanonicalSleepMetricSportsLibValue(
+            SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration,
+            (8 * 60 * 60) + (19 * 60),
+            undefined,
+            { compactDuration: true },
+        )).toEqual({ value: '08h 19m', unit: '' });
+        expect(formatCanonicalSleepMetricSportsLibValue(
+            SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv,
+            62.4,
+        )).toEqual({ value: '62.4', unit: 'ms' });
     });
 
     it.each(HEALTH_METRIC_IDS_IN_ORDER)('round-trips Health metric %s through its explicit Sports Lib class', metricId => {

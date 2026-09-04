@@ -1,5 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
@@ -23,6 +24,7 @@ class HealthMetricSeriesChartStubComponent {
   @Input() startTimeMs = 0;
   @Input() endTimeMs = 0;
   @Input() darkTheme = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null = null;
 }
 
 function series(deviceLabel: string | null): HealthWorkspaceSeries {

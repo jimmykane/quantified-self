@@ -25,6 +25,7 @@ import {
   HealthChartSeriesModel,
   buildHealthMetricEChartsOption,
 } from '../../helpers/health-metric-chart.helper';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 
@@ -40,6 +41,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input({ required: true }) startTimeMs!: number;
   @Input({ required: true }) endTimeMs!: number;
   @Input() darkTheme = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
@@ -60,7 +62,9 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.viewInitialized && (changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme)) {
+    if (this.viewInitialized && (
+      changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
+    )) {
       void this.refresh();
     }
   }
@@ -93,6 +97,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
         this.endTimeMs,
         style,
         isEChartsMobileTooltipViewport(),
+        this.unitSettings,
       ),
       ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
     );

@@ -3,6 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
@@ -89,6 +91,7 @@ class HealthMetricChartStubComponent {
   @Input() startTimeMs = 0;
   @Input() endTimeMs = 0;
   @Input() darkTheme = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null = null;
 }
 
 const todayDate = localCalendarDate();
@@ -333,7 +336,13 @@ describe('HealthWorkspaceComponent', () => {
             backfillCorosSleepForCurrentUser,
           },
         },
-        { provide: AppUserSettingsQueryService, useValue: { updateHealthWorkspacePreferences } },
+        {
+          provide: AppUserSettingsQueryService,
+          useValue: {
+            unitSettings: signal(getDefaultUserUnitSettings()),
+            updateHealthWorkspacePreferences,
+          },
+        },
         {
           provide: AppHealthService,
           useValue: {

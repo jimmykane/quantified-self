@@ -166,6 +166,7 @@ export class HealthWorkspaceComponent {
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
   private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
+  readonly unitSettings = this.userSettingsService.unitSettings;
   private readonly todayDate = localCalendarDate();
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
@@ -299,6 +300,7 @@ export class HealthWorkspaceComponent {
         result,
         this.filteredSleepSessions(),
         this.filteredActivityHealthObservations(),
+        this.unitSettings(),
       )
       : emptyMetricView();
   });
@@ -311,7 +313,8 @@ export class HealthWorkspaceComponent {
   }));
   readonly sleepChartRange = computed<AppDashboardSleepTrendRange>(() =>
     healthRangeToSleepRange(this.routeState().range) || '14d');
-  readonly sleepRows = computed<HealthSleepObservationRow[]>(() => buildSleepObservationRows(this.filteredSleepSessions()));
+  readonly sleepRows = computed<HealthSleepObservationRow[]>(() =>
+    buildSleepObservationRows(this.filteredSleepSessions(), this.unitSettings()));
   readonly availableProviders = computed<HealthProvider[]>(() => {
     const loadedResult = this.selectedHealthLoad()?.result;
     const providers = this.selectedIsSleep()
@@ -449,7 +452,7 @@ export class HealthWorkspaceComponent {
         'Sleep',
         healthMetricIcon('sleep'),
         'sleep',
-        buildSleepPriorityRows(this.prioritySleepSessions()),
+        buildSleepPriorityRows(this.prioritySleepSessions(), this.unitSettings()),
         this.prioritySleepStatus(),
         'No Sleep sessions in the last 30 days.',
         !sleepAvailabilityIsKnown || available.has('sleep'),
@@ -459,7 +462,11 @@ export class HealthWorkspaceComponent {
         'Heart rate',
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRate),
         HEALTH_METRIC_IDS.HeartRate,
-        buildHealthPriorityRows(this.priorityHeartRateLoad()?.result, this.prioritySleepSessions()),
+        buildHealthPriorityRows(
+          this.priorityHeartRateLoad()?.result,
+          this.prioritySleepSessions(),
+          this.unitSettings(),
+        ),
         this.priorityHeartRateStatus(),
         'No Heart rate summaries in the last 30 days.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRate),
@@ -469,7 +476,11 @@ export class HealthWorkspaceComponent {
         'HRV',
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRateVariability),
         HEALTH_METRIC_IDS.HeartRateVariability,
-        buildHealthPriorityRows(this.priorityHrvLoad()?.result, this.prioritySleepSessions()),
+        buildHealthPriorityRows(
+          this.priorityHrvLoad()?.result,
+          this.prioritySleepSessions(),
+          this.unitSettings(),
+        ),
         this.priorityHrvStatus(),
         'No HRV summaries in the last 30 days.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),

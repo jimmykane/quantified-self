@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
   HEALTH_PROVIDERS,
@@ -7,6 +8,7 @@ import {
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
 import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
 import { HealthWorkspaceSeries } from './health-workspace.helper';
@@ -94,6 +96,31 @@ describe('Health metric chart helpers', () => {
 
     expect(model.ariaLabel).toContain('Latest 52.00 ml/kg/min');
     expect(option.tooltip.formatter({ value: [0, 52] })).toContain('52.00 ml/kg/min');
+  });
+
+  it('uses the selected Sports Lib unit conversion consistently across a chart', () => {
+    const unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    const distanceSeries = series({
+      metricId: HEALTH_METRIC_IDS.Distance,
+      unit: 'meter',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 10_000, qualityCode: null }],
+    });
+    const model = buildHealthChartModels([distanceSeries], 0, DAY_MS, unitSettings)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+      unitSettings,
+    ) as {
+      tooltip: { formatter: (params: { value?: unknown }) => string };
+      yAxis: { axisLabel: { formatter: (value: number) => string } };
+    };
+
+    expect(model.ariaLabel).toContain('Latest 6.22 mi');
+    expect(option.tooltip.formatter({ value: [0, 10_000] })).toContain('6.22 mi');
+    expect(option.yAxis.axisLabel.formatter(10_000)).toBe('6.22');
   });
 
   it('uses an ECharts bar series for totals and starts positive totals at zero', () => {

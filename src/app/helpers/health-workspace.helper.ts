@@ -29,9 +29,14 @@ import {
   type ActivityHealthObservation,
   type ActivityHealthMetricId,
 } from '@shared/activity-health';
-import { SleepSession, normalizeSleepProvider } from '@shared/sleep';
+import {
+  SLEEP_SPORTS_LIB_METRIC_FIELDS,
+  SleepSession,
+  normalizeSleepProvider,
+} from '@shared/sleep';
 import {
   formatCanonicalHealthMetricSportsLibValue,
+  formatCanonicalSleepMetricSportsLibValue,
 } from '@shared/sports-lib-health-data';
 import {
   APP_HEALTH_WORKSPACE_METRICS,
@@ -39,6 +44,7 @@ import {
   AppHealthWorkspaceMetric,
   AppHealthWorkspaceRange,
 } from '../models/app-user.interface';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
@@ -357,6 +363,7 @@ export function buildHealthMetricWorkspaceView(
   result: HealthRangeResult,
   sleepSessions: readonly SleepSession[] = [],
   activityObservations: readonly ActivityHealthObservation[] = [],
+  unitSettings: UserUnitSettingsInterface | null = null,
 ): HealthMetricWorkspaceView {
   const sleepById = new Map(sleepSessions.flatMap(session => session.id ? [[session.id, session] as const] : []));
   const datums: MetricDatum[] = [];
@@ -449,8 +456,8 @@ export function buildHealthMetricWorkspaceView(
       sourceLabel,
       deviceLabel: datum.deviceLabel || 'Not reported',
       valueText: datum.rowKind === 'chunk'
-        ? `${datum.sampleCount.toLocaleString()} samples · latest ${formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly)}`
-        : formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly),
+        ? `${datum.sampleCount.toLocaleString()} samples · latest ${formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings)}`
+        : formatHealthValue(datum.metricId, datum.value, datum.unit, datum.nativeOnly, unitSettings),
       semanticsText: `${humanize(datum.aggregation)} · ${humanize(datum.semanticVariant)} · ${humanize(datum.origin)} · ${humanize(datum.recordingMethod)}${datum.nativeOnly ? ' · native only' : ''}`,
       coverageText: datum.rowKind === 'activity'
         ? 'Not applicable'
@@ -494,11 +501,12 @@ export function selectActivityHealthObservations(
 export function buildHealthPriorityRows(
   result: HealthRangeResult | null | undefined,
   sleepSessions: readonly SleepSession[] = [],
+  unitSettings: UserUnitSettingsInterface | null = null,
 ): HealthPriorityRow[] {
   if (!result) {
     return [];
   }
-  const view = buildHealthMetricWorkspaceView(result, sleepSessions);
+  const view = buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings);
   return view.series.flatMap((series, index) => {
     const latest = series.points.at(-1);
     if (!latest) {
@@ -509,14 +517,17 @@ export function buildHealthPriorityRows(
       provider: series.provider,
       providerLabel: series.providerLabel,
       sourceLabel: series.sourceLabel,
-      valueText: formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly),
+      valueText: formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings),
       contextText: `${formatCalendarDate(latest.calendarDate)} · ${humanize(series.aggregation)} · ${humanize(series.semanticVariant)}${series.nativeOnly ? ' · native only' : ''}`,
       observedAtMs: latest.timestampMs,
     }];
   });
 }
 
-export function buildSleepPriorityRows(sessions: readonly SleepSession[]): HealthPriorityRow[] {
+export function buildSleepPriorityRows(
+  sessions: readonly SleepSession[],
+  unitSettings: UserUnitSettingsInterface | null = null,
+): HealthPriorityRow[] {
   const normalized = sessions.flatMap(session => {
     const provider = normalizeSleepProvider(session.source?.provider);
     return provider ? [{ session, provider }] : [];
@@ -534,18 +545,33 @@ export function buildSleepPriorityRows(sessions: readonly SleepSession[]): Healt
       latestBySource.set(key, item);
     }
   }
-  return [...latestBySource.entries()].map(([key, { session, provider }], index) => ({
-    id: `sleep-priority-${index + 1}`,
-    provider,
-    providerLabel: providerLabel(provider),
-    sourceLabel: accountLabels.get(key) || providerLabel(provider),
-    valueText: formatDuration(session.durationSeconds),
-    contextText: `${formatDate(session.endTimeMs)}${session.score?.value !== null && session.score?.value !== undefined ? ` · score ${Math.round(session.score.value)}` : ''}`,
-    observedAtMs: session.endTimeMs,
-  })).sort((left, right) => compareText(left.sourceLabel, right.sourceLabel));
+  return [...latestBySource.entries()].map(([key, { session, provider }], index) => {
+    const scoreText = formatSleepMetricValue(
+      SLEEP_SPORTS_LIB_METRIC_FIELDS.Score,
+      session.score?.value,
+      unitSettings,
+    );
+    return {
+      id: `sleep-priority-${index + 1}`,
+      provider,
+      providerLabel: providerLabel(provider),
+      sourceLabel: accountLabels.get(key) || providerLabel(provider),
+      valueText: formatSleepMetricValue(
+        SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration,
+        session.durationSeconds,
+        unitSettings,
+        true,
+      ),
+      contextText: `${formatDate(session.endTimeMs)}${scoreText === '—' ? '' : ` · score ${scoreText}`}`,
+      observedAtMs: session.endTimeMs,
+    };
+  }).sort((left, right) => compareText(left.sourceLabel, right.sourceLabel));
 }
 
-export function buildSleepObservationRows(sessions: readonly SleepSession[]): HealthSleepObservationRow[] {
+export function buildSleepObservationRows(
+  sessions: readonly SleepSession[],
+  unitSettings: UserUnitSettingsInterface | null = null,
+): HealthSleepObservationRow[] {
   const normalized = sessions.flatMap(session => {
     const provider = normalizeSleepProvider(session.source?.provider);
     return provider ? [{ session, provider }] : [];
@@ -562,10 +588,19 @@ export function buildSleepObservationRows(sessions: readonly SleepSession[]): He
       dateText: formatDateTime(session.endTimeMs),
       sourceLabel: accountLabels.get(accountIdentity(provider, `${session.source.providerUserId || 'default'}`))
         || providerLabel(provider),
-      durationText: formatDuration(session.durationSeconds),
-      scoreText: finiteMetricText(session.score?.value),
-      hrvText: finiteMetricText(session.vitals?.averageHrvMs, ' ms'),
-      heartRateText: finiteMetricText(session.vitals?.averageHeartRateBpm, ' bpm'),
+      durationText: formatSleepMetricValue(
+        SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration,
+        session.durationSeconds,
+        unitSettings,
+        true,
+      ),
+      scoreText: formatSleepMetricValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.Score, session.score?.value, unitSettings),
+      hrvText: formatSleepMetricValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv, session.vitals?.averageHrvMs, unitSettings),
+      heartRateText: formatSleepMetricValue(
+        SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate,
+        session.vitals?.averageHeartRateBpm,
+        unitSettings,
+      ),
     }));
 }
 
@@ -607,12 +642,11 @@ export function formatHealthValue(
   value: number | string | boolean,
   unit: string,
   nativeOnly = false,
+  unitSettings: UserUnitSettingsInterface | null = null,
 ): string {
   if (!nativeOnly) {
-    const display = formatCanonicalHealthMetricSportsLibValue(metricId, value);
-    if (display) {
-      return [display.value, display.unit].filter(Boolean).join(' ');
-    }
+    const display = formatCanonicalHealthMetricSportsLibValue(metricId, value, unitSettings);
+    return display ? [display.value, display.unit].filter(Boolean).join(' ') : '—';
   }
   return formatNativeHealthValue(value, unit);
 }
@@ -622,9 +656,10 @@ export function formatHealthUnit(
   value: number | string | boolean,
   unit: string,
   nativeOnly = false,
+  unitSettings: UserUnitSettingsInterface | null = null,
 ): string {
   if (!nativeOnly) {
-    return formatCanonicalHealthMetricSportsLibValue(metricId, value)?.unit || '';
+    return formatCanonicalHealthMetricSportsLibValue(metricId, value, unitSettings)?.unit || '';
   }
   return humanize(unit);
 }
@@ -634,12 +669,11 @@ export function formatHealthAxisValue(
   value: number,
   unit: string,
   nativeOnly = false,
+  unitSettings: UserUnitSettingsInterface | null = null,
 ): string {
   if (!nativeOnly) {
-    const display = formatCanonicalHealthMetricSportsLibValue(metricId, value);
-    if (display) {
-      return display.unit === '%' ? `${display.value}%` : display.value;
-    }
+    const display = formatCanonicalHealthMetricSportsLibValue(metricId, value, unitSettings);
+    return display ? (display.unit === '%' ? `${display.value}${display.unit}` : display.value) : '';
   }
   const rounded = Math.abs(value) >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
   return unit === HEALTH_UNITS.Percent ? `${rounded}%` : new Intl.NumberFormat(undefined, {
@@ -671,6 +705,22 @@ function formatNativeHealthValue(value: number | string | boolean, unit: string)
     case HEALTH_UNITS.Count: return rounded.toLocaleString();
     default: return unit ? `${rounded} ${humanize(unit)}` : `${rounded}`;
   }
+}
+
+function formatSleepMetricValue(
+  field: typeof SLEEP_SPORTS_LIB_METRIC_FIELDS[keyof typeof SLEEP_SPORTS_LIB_METRIC_FIELDS],
+  value: unknown,
+  unitSettings: UserUnitSettingsInterface | null,
+  compactDuration = false,
+): string {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return '—';
+  }
+  const display = formatCanonicalSleepMetricSportsLibValue(field, numericValue, unitSettings, {
+    compactDuration,
+  });
+  return display ? [display.value, display.unit].filter(Boolean).join(' ') : '—';
 }
 
 function observationDatum(
@@ -1004,9 +1054,4 @@ function formatDuration(secondsValue: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours}h ${minutes.toString().padStart(2, '0')}m` : `${minutes}m`;
-}
-
-function finiteMetricText(value: unknown, suffix = ''): string {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? `${Math.round(numeric * 10) / 10}${suffix}` : '—';
 }

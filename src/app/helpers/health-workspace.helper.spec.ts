@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
@@ -25,9 +26,11 @@ import {
   type ActivityHealthObservation,
 } from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import {
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
+  buildSleepObservationRows,
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
   formatHealthAxisValue,
@@ -204,6 +207,14 @@ describe('Health workspace helpers', () => {
       .toBe('ml/kg/min');
     expect(formatHealthAxisValue(HEALTH_METRIC_IDS.Vo2Max, 52, HEALTH_UNITS.MillilitersPerKilogramPerMinute))
       .toBe('52.00');
+
+    const miles = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
+    expect(formatHealthValue(HEALTH_METRIC_IDS.Distance, 10_000, HEALTH_UNITS.Meter, false, miles))
+      .toBe('6.22 mi');
+    expect(formatHealthUnit(HEALTH_METRIC_IDS.Distance, 10_000, HEALTH_UNITS.Meter, false, miles))
+      .toBe('mi');
+    expect(formatHealthAxisValue(HEALTH_METRIC_IDS.Distance, 10_000, HEALTH_UNITS.Meter, false, miles))
+      .toBe('6.22');
 
     expect(formatHealthValue(
       HEALTH_METRIC_IDS.BodyEnergy,
@@ -620,5 +631,18 @@ describe('Health workspace helpers', () => {
     ]);
     expect(rows.map(row => row.sourceLabel)).toEqual(['Garmin account 1', 'Garmin account 2']);
     expect(JSON.stringify(rows)).not.toContain('provider-user');
+  });
+
+  it('uses the explicit Sports Lib Sleep classes for Health workspace session rows', () => {
+    const [row] = buildSleepObservationRows([sleepSession({
+      vitals: { averageHrvMs: 62.4, averageHeartRateBpm: 51.6 },
+    })]);
+
+    expect(row).toMatchObject({
+      durationText: '08h 00m',
+      scoreText: '88',
+      hrvText: '62.4 ms',
+      heartRateText: '52 bpm',
+    });
   });
 });

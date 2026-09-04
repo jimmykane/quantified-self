@@ -9,6 +9,7 @@ import {
   resolveEChartsTooltipTriggerOn,
 } from './echarts-tooltip-interaction.helper';
 import { ECHARTS_GLOBAL_FONT_FAMILY } from './echarts-theme.helper';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS, HealthMetricId } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
 import {
@@ -48,8 +49,9 @@ export function buildHealthChartModels(
   seriesValues: readonly HealthWorkspaceSeries[],
   startTimeMs: number,
   endTimeMs: number,
+  unitSettings: UserUnitSettingsInterface | null = null,
 ): HealthChartSeriesModel[] {
-  return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs));
+  return seriesValues.map(series => buildSeriesModel(series, startTimeMs, endTimeMs, unitSettings));
 }
 
 export function buildHealthMetricEChartsOption(
@@ -58,6 +60,7 @@ export function buildHealthMetricEChartsOption(
   endTimeMs: number,
   style: DashboardEChartsStyleTokens,
   isMobileTooltipViewport: boolean,
+  unitSettings: UserUnitSettingsInterface | null = null,
 ): ChartOption {
   const isCategorical = model.series.chartKind === 'step';
   const isPoint = model.series.chartKind === 'point';
@@ -108,6 +111,7 @@ export function buildHealthMetricEChartsOption(
               point.value,
               model.series.unit,
               model.series.nativeOnly,
+              unitSettings,
             ),
             markerColor: resolveHealthValueColor(
               model.series.metricId,
@@ -167,6 +171,7 @@ export function buildHealthMetricEChartsOption(
             value,
             model.series.unit,
             model.series.nativeOnly,
+            unitSettings,
           ),
         },
       },
@@ -333,6 +338,7 @@ function buildSeriesModel(
   series: HealthWorkspaceSeries,
   startTimeMs: number,
   endTimeMs: number,
+  unitSettings: UserUnitSettingsInterface | null,
 ): HealthChartSeriesModel {
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
   const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
@@ -345,7 +351,7 @@ function buildSeriesModel(
   const numericBounds = series.chartKind === 'step' ? null : resolveYBounds(numericValues, series.chartKind);
   const latest = sortedPoints.at(-1);
   const latestText = latest
-    ? formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly)
+    ? formatHealthValue(series.metricId, latest.value, series.unit, series.nativeOnly, unitSettings)
     : 'No reading';
   const readingCountText = `${sortedPoints.length.toLocaleString()} ${sortedPoints.length === 1 ? 'reading' : 'readings'}`;
 
@@ -356,10 +362,10 @@ function buildSeriesModel(
     numericBounds,
     yMinLabel: series.chartKind === 'step'
       ? categoryLabels[0] || ''
-      : formatHealthAxisValue(series.metricId, numericBounds?.min ?? 0, series.unit, series.nativeOnly),
+      : formatHealthAxisValue(series.metricId, numericBounds?.min ?? 0, series.unit, series.nativeOnly, unitSettings),
     yMaxLabel: series.chartKind === 'step'
       ? categoryLabels.at(-1) || ''
-      : formatHealthAxisValue(series.metricId, numericBounds?.max ?? 1, series.unit, series.nativeOnly),
+      : formatHealthAxisValue(series.metricId, numericBounds?.max ?? 1, series.unit, series.nativeOnly, unitSettings),
     startLabel: formatAxisDate(startTimeMs),
     endLabel: formatAxisDate(endTimeMs),
     categoryLabels,

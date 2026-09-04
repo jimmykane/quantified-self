@@ -132,6 +132,15 @@ describe('unit-aware-display', () => {
     })).toBe('1d 02h 15m');
   });
 
+  it('should use Sports Lib compact duration formatting when requested', () => {
+    const unitSettings = getDefaultUserUnitSettings();
+
+    expect(formatUnitAwareDataValue(DataDuration.type, (8 * 60 * 60) + (19 * 60), unitSettings, {
+      compactDuration: true,
+      stripRepeatedUnit: true,
+    })).toBe('08h 19m');
+  });
+
   it('should format ascent and descent values with dot grouping by default', () => {
     const unitSettings = getDefaultUserUnitSettings();
 
