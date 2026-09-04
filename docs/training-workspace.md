@@ -627,7 +627,9 @@ The route has three destination kinds:
 
 Desktop uses one intrinsic-width Material button-toggle group for **All training** plus at most four sport shortcuts,
 with the complete **All sports** selector and shortcut editor grouped at the opposite edge. The toggle outline must end
-with its final choice rather than stretch across unused row space. Selecting a sport outside the four saved slots
+with its final choice rather than stretch across unused row space. The selector reserves a full 24 px Material icon
+slot for every option so detailed sport glyphs remain legible; compact shortcut icons keep their smaller navigation
+size. Selecting a sport outside the four saved slots
 temporarily places it in the visible toggle group without mutating the saved shortcut set. At intermediate desktop/tablet
 widths the compact shortcut group occupies its own row. At 800 px and below, a horizontally swipeable rail of compact
 Material text buttons exposes **All** plus the same automatic or pinned shortcuts as one-tap destinations. The selected

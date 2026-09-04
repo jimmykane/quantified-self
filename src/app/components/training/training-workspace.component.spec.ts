@@ -368,6 +368,23 @@ describe('TrainingWorkspaceComponent', () => {
     expect(template).toContain('matTooltip="All sports"');
   });
 
+  it('reserves a full Material icon slot for desktop all-sports options', () => {
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss'),
+      'utf8',
+    );
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/training/training-workspace.component.html'),
+      'utf8',
+    );
+    const desktopOptionMarkup = template.match(/<span class="training-destination-option">([\s\S]*?)<\/mat-option>/)?.[1];
+
+    expect(desktopOptionMarkup).toContain('size="24px"');
+    expect(styles).toMatch(
+      /\.training-destination-option app-activity-type-icon\s*\{[^}]*flex:\s*0 0 24px;[^}]*width:\s*24px;[^}]*height:\s*24px;/s,
+    );
+  });
+
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
     const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
