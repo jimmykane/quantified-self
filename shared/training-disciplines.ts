@@ -21,6 +21,7 @@ import {
 
 export type TrainingAnalysisProfile =
   | 'endurance'
+  | 'general'
   | 'pool'
   | 'open-water'
   | 'rowing'
@@ -36,6 +37,7 @@ export type TrainingSportCapability =
   | 'durability'
   | 'capacity'
   | 'power-profile'
+  | 'power-systems'
   | 'swim-performance';
 
 export type TrainingSportIntensityPolicy = 'zones' | 'volume-only';
@@ -195,6 +197,7 @@ interface TrainingSportDefinitionShape {
   scopeLabel: string;
   details: string;
   iconActivityType: ActivityType;
+  selectionAvailability: 'always' | 'recorded';
   capabilities: readonly TrainingSportCapability[];
   contexts: readonly TrainingSportContextDefinitionShape[];
 }
@@ -211,7 +214,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
     scopeLabel: 'Running',
     details: 'Road, trail, treadmill, indoor, and virtual running',
     iconActivityType: ActivityTypes.Running,
-    capabilities: ['training-mix', 'best-build', 'durability', 'capacity', 'power-profile'],
+    selectionAvailability: 'always',
+    capabilities: ['training-mix', 'best-build', 'durability', 'capacity', 'power-profile', 'power-systems'],
     contexts: [
       {
         id: 'running',
@@ -251,7 +255,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
     scopeLabel: 'Cycling/MTB',
     details: 'Road, indoor, virtual, e-bike, hand cycle, velomobile, MTB, Enduro, and Downhill',
     iconActivityType: ActivityTypes.Cycling,
-    capabilities: ['training-mix', 'best-build', 'durability', 'capacity', 'power-profile'],
+    selectionAvailability: 'always',
+    capabilities: ['training-mix', 'best-build', 'durability', 'capacity', 'power-profile', 'power-systems'],
     contexts: [
       {
         id: 'cycling',
@@ -316,7 +321,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
     scopeLabel: 'Swimming',
     details: 'Pool and open-water swimming',
     iconActivityType: ActivityTypes.Swimming,
-    capabilities: ['training-mix', 'best-build', 'durability', 'swim-performance'],
+    selectionAvailability: 'always',
+    capabilities: ['training-mix', 'best-build', 'durability', 'swim-performance', 'power-systems'],
     contexts: [
       {
         id: 'pool-swimming',
@@ -346,7 +352,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
     scopeLabel: 'Rowing',
     details: 'Indoor and on-water rowing, kept as separate contexts',
     iconActivityType: ActivityTypes.Rowing,
-    capabilities: ['training-mix', 'best-build'],
+    selectionAvailability: 'always',
+    capabilities: ['training-mix', 'best-build', 'power-systems'],
     contexts: [
       {
         id: 'indoor-rowing',
@@ -376,7 +383,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
     scopeLabel: 'Walking/Hiking',
     details: 'Walking, hiking, Nordic walking, and trekking',
     iconActivityType: ActivityTypes.Hiking,
-    capabilities: ['training-mix', 'best-build'],
+    selectionAvailability: 'always',
+    capabilities: ['training-mix', 'best-build', 'power-systems'],
     contexts: [
       {
         id: 'walking',
@@ -406,7 +414,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
     scopeLabel: 'Nordic Skiing',
     details: 'Cross-country and Nordic skiing, with roller skiing kept separate',
     iconActivityType: ActivityTypes.CrosscountrySkiing,
-    capabilities: ['training-mix', 'best-build'],
+    selectionAvailability: 'always',
+    capabilities: ['training-mix', 'best-build', 'power-systems'],
     contexts: [
       {
         id: 'snow-nordic-skiing',
@@ -436,7 +445,8 @@ export const TRAINING_SPORT_DEFINITIONS = [
     scopeLabel: 'Strength',
     details: 'Strength training, weight training, and kettlebell sessions',
     iconActivityType: ActivityTypes.StrengthTraining,
-    capabilities: ['training-mix', 'best-build'],
+    selectionAvailability: 'always',
+    capabilities: ['training-mix', 'best-build', 'power-systems'],
     contexts: [
       {
         id: 'strength',
@@ -451,12 +461,75 @@ export const TRAINING_SPORT_DEFINITIONS = [
     ],
   },
   {
+    id: 'fitness-gym',
+    label: 'Fitness & Gym',
+    scopeLabel: 'Fitness/Gym',
+    details: 'General training, conditioning, gym equipment, mobility, and fitness classes',
+    iconActivityType: ActivityTypes.Training,
+    selectionAvailability: 'recorded',
+    capabilities: ['training-mix'],
+    contexts: [
+      {
+        id: 'general-fitness',
+        label: 'General fitness',
+        activityTypes: [
+          ActivityTypes.Training,
+          ActivityTypes['Indoor Training'],
+          ActivityTypes.Workout,
+          ActivityTypes.Generic,
+          ActivityTypes['Fitness Equipment'],
+        ],
+        profile: 'general',
+        intensityPolicy: 'volume-only',
+        loadPolicy: 'volume-only',
+        distancePolicy: 'omit',
+        profileMetrics: ['elapsed-time'],
+      },
+      {
+        id: 'conditioning',
+        label: 'Conditioning',
+        activityTypes: [
+          ActivityTypes.HIIT,
+          ActivityTypes['Circuit Training'],
+          ActivityTypes['Cardio Training'],
+          ActivityTypes.Aerobics,
+          ActivityTypes.Crossfit,
+          ActivityTypes.Crosstrainer,
+          ActivityTypes['Elliptical Trainer'],
+          ActivityTypes['Stair Stepper'],
+        ],
+        profile: 'general',
+        intensityPolicy: 'volume-only',
+        loadPolicy: 'volume-only',
+        distancePolicy: 'omit',
+        profileMetrics: ['elapsed-time'],
+      },
+      {
+        id: 'mobility-fitness',
+        label: 'Mobility & movement',
+        activityTypes: [
+          ActivityTypes.Yoga,
+          ActivityTypes.Pilates,
+          ActivityTypes['Flexibility Training'],
+          ActivityTypes.Stretching,
+          ActivityTypes.Gymnastics,
+        ],
+        profile: 'general',
+        intensityPolicy: 'volume-only',
+        loadPolicy: 'volume-only',
+        distancePolicy: 'omit',
+        profileMetrics: ['elapsed-time'],
+      },
+    ],
+  },
+  {
     id: 'paddling',
     label: 'Paddling',
     scopeLabel: 'Paddling',
     details: 'Canoeing, kayaking, paddling, and stand-up paddling',
     iconActivityType: ActivityTypes.Kayaking,
-    capabilities: ['training-mix', 'best-build'],
+    selectionAvailability: 'always',
+    capabilities: ['training-mix', 'best-build', 'power-systems'],
     contexts: [
       {
         id: 'canoeing',
@@ -497,6 +570,27 @@ export const TRAINING_SPORT_DEFINITIONS = [
         loadPolicy: 'recorded',
         distancePolicy: 'recorded',
         profileMetrics: ['distance', 'moving-time', 'elapsed-time', 'stroke-rate', 'stroke-distance'],
+      },
+    ],
+  },
+  {
+    id: 'other-training',
+    label: 'Other training',
+    scopeLabel: 'Other training',
+    details: 'Recorded sports that do not belong to a modeled Training family',
+    iconActivityType: ActivityTypes.Other,
+    selectionAvailability: 'recorded',
+    capabilities: ['training-mix'],
+    contexts: [
+      {
+        id: 'other-training',
+        label: 'Other training',
+        activityTypes: [ActivityTypes.Other],
+        profile: 'general',
+        intensityPolicy: 'volume-only',
+        loadPolicy: 'volume-only',
+        distancePolicy: 'omit',
+        profileMetrics: ['elapsed-time'],
       },
     ],
   },
@@ -580,6 +674,18 @@ const profileMetricDefinitionById = new Map<TrainingProfileMetricId, TrainingPro
   TRAINING_PROFILE_METRIC_DEFINITIONS.map(metric => [metric.id, metric]),
 );
 const contextByActivityType = new Map<ActivityType, ResolvedTrainingSportContext>();
+const knownActivityTypes = new Set<ActivityType>(
+  Object.values(ActivityTypes).filter((value): value is ActivityType => typeof value === 'string'),
+);
+const aggregateActivityTypes = new Set<ActivityType>([
+  ActivityTypes.Aquathlon,
+  ActivityTypes.Duathlon,
+  ActivityTypes.Multisport,
+  ActivityTypes.Swimrun,
+  ActivityTypes.Triathlon,
+  ActivityTypes.Transition,
+  ActivityTypes.Route,
+]);
 
 TRAINING_SPORT_DEFINITIONS.forEach((sport) => {
   sport.contexts.forEach((context) => {
@@ -599,6 +705,11 @@ TRAINING_SPORT_DEFINITIONS.forEach((sport) => {
     });
   });
 });
+
+const otherTrainingFallbackContext = contextByActivityType.get(ActivityTypes.Other);
+if (!otherTrainingFallbackContext) {
+  throw new Error('Training registry is missing the Other training fallback context.');
+}
 
 export function getTrainingSportDefinition(value: TrainingSportId): TrainingSportDefinition | null {
   return sportDefinitionById.get(value) || null;
@@ -634,8 +745,10 @@ export function createTrainingSportRecord<T>(
 
 /**
  * Resolves stored provider aliases through Sports Lib before applying the
- * exact, disjoint Training context registry. Aggregate types such as Triathlon
- * are intentionally not classified; normalized child activities are.
+ * exact, disjoint Training context registry. Known non-aggregate types that do
+ * not have a modeled family resolve to the volume-only Other Training context.
+ * Aggregate types such as Triathlon remain excluded; normalized child
+ * activities are resolved independently.
  */
 export function resolveTrainingSportContextFromActivityType(
   value: unknown,
@@ -644,9 +757,16 @@ export function resolveTrainingSportContextFromActivityType(
     return null;
   }
   const canonicalType = ActivityTypesHelper.resolveActivityType(value);
-  return typeof canonicalType === 'string'
-    ? contextByActivityType.get(canonicalType) || null
-    : null;
+  if (typeof canonicalType !== 'string' || !knownActivityTypes.has(canonicalType)) {
+    return null;
+  }
+  const exactContext = contextByActivityType.get(canonicalType);
+  if (exactContext) {
+    return exactContext;
+  }
+  return aggregateActivityTypes.has(canonicalType)
+    ? null
+    : otherTrainingFallbackContext || null;
 }
 
 export function resolveTrainingDisciplineFromActivityType(value: unknown): TrainingDiscipline | null {

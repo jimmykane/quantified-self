@@ -256,7 +256,7 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('.training-status-grid .training-recovery-estimate-panel')).toBeNull();
     expect(element.querySelector('.training-mix-panel')).toBeNull();
     expect(element.querySelector('.training-capacity-panel')).toBeNull();
-    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength or paddling workouts in the last 28 days.');
+    expect(element.textContent).toContain('No eligible running, cycling, swimming, rowing, walking & hiking, nordic skiing, strength, fitness & gym, paddling or other training workouts in the last 28 days.');
     expect(element.textContent).not.toContain('Preparing imported capacity markers');
     expect(element.querySelector('.training-power-systems-section')).toBeNull();
     expect(derivedMetrics.ensureForDashboard).toHaveBeenCalledTimes(1);
@@ -1455,12 +1455,20 @@ describe('TrainingWorkspaceComponent', () => {
     (component as any).refreshSportSpecificViewModels();
     expect(component.sportShortcuts).toEqual(['running']);
     expect(component.visibleDisciplines).toEqual([
-      'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength', 'paddling',
+      'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength',
+      'fitness-gym', 'paddling', 'other-training',
     ]);
 
     component.openTrainingSportVisibilityDialog();
     expect(dialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      data: { userUID: 'user-1', visibleDisciplines: ['running'], isAutomatic: true },
+      data: {
+        userUID: 'user-1',
+        visibleDisciplines: ['running'],
+        isAutomatic: true,
+        availableDisciplines: [
+          'running', 'cycling', 'swimming', 'rowing', 'walking-hiking', 'nordic-skiing', 'strength', 'paddling',
+        ],
+      },
     }));
     afterClosed.next({ saved: true, visibleDisciplines: ['cycling'] });
 
@@ -1609,6 +1617,46 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.visibleSportShortcuts).toEqual(['strength', 'cycling', 'swimming', 'rowing']);
   });
 
+  it('offers recorded-only Training groups from workout counts rather than specialist evidence', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    const window = (activityCount: number) => ({
+      periodDays: 28,
+      windowStartDayMs: 1,
+      windowEndDayMs: 2,
+      activityCount,
+      durationSeconds: 0,
+      easySeconds: 0,
+      moderateSeconds: 0,
+      hardSeconds: 0,
+      contexts: [],
+    });
+    component.derivedState = {
+      ...createDashboardDerivedMetricsMissingState(),
+      trainingSummaryStatus: 'ready',
+      trainingSummary: {
+        asOfDayMs: 2,
+        currentWindowDays: 28,
+        baselineWindowDays: 84,
+        disciplines: [
+          { discipline: 'fitness-gym', current28d: window(1), baseline28d: window(0) },
+          { discipline: 'other-training', current28d: window(0), baseline28d: window(0) },
+        ],
+      } as any,
+    };
+
+    (component as any).refreshTrainingSportVisibility();
+
+    expect(component.trainingDestinationOptions.map(option => option.id)).toContain('fitness-gym');
+    expect(component.trainingDestinationOptions.map(option => option.id)).not.toContain('other-training');
+  });
+
   it('opens the complete mobile sport picker and applies its destination result', () => {
     const ngZone = { run: vi.fn((callback: () => void) => callback()) };
     const bottomSheetRef = {
@@ -1695,6 +1743,7 @@ describe('TrainingWorkspaceComponent', () => {
         userUID: 'user-1',
         visibleDisciplines: ['cycling'],
         isAutomatic: true,
+        availableDisciplines: ['cycling'],
       },
     }));
   });
@@ -2684,6 +2733,28 @@ describe('TrainingWorkspaceComponent', () => {
     expect(component.derivedMetricsRouteStatus).toBeNull();
 
     component.visibleTrainingCapabilities = new Set(['best-build', 'durability']);
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
+  });
+
+  it('ignores Best Build failures for volume-only sport groups', () => {
+    const component = new TrainingWorkspaceComponent(
+      {} as any,
+      {} as any,
+      {} as any,
+      { appTheme: () => AppThemes.Normal } as any,
+      { open: vi.fn() } as any,
+      { markForCheck: vi.fn() } as any,
+    );
+    component.derivedState = createRouteReadyDerivedState({ trainingBuildComparisonStatus: 'failed' });
+    component.isOverviewDestination = false;
+    component.isSportDestination = true;
+    component.visibleTrainingCapabilities = new Set(['training-mix']);
+
+    (component as any).refreshDerivedMetricsRouteStatus();
+    expect(component.derivedMetricsRouteStatus).toBeNull();
+
+    component.visibleTrainingCapabilities = new Set(['training-mix', 'best-build']);
     (component as any).refreshDerivedMetricsRouteStatus();
     expect(component.derivedMetricsRouteStatus?.type).toBe('warning');
   });

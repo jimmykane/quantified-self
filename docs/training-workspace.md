@@ -6,9 +6,9 @@ metric payload, the sports-lib durability protocol, or the refresh pipeline chan
 
 Current compatibility baseline:
 
-- Quantified Self derived-metric schema: `18`
+- Quantified Self derived-metric schema: `19`
 - `@sports-alliance/sports-lib`: `21.0.3`
-- Training sport families: Running, Cycling, Swimming, Rowing, Walking & Hiking, Nordic Skiing, Strength, and Paddling
+- Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
 - Calendar boundaries: UTC unless a section explicitly says otherwise
@@ -45,7 +45,7 @@ The following rules are architectural constraints:
   activities are classified and counted separately.
 - Changing the Training destination changes presentation only. **All training** owns global state, readiness, load,
   sleep, body-weight, intensity, and the compact cross-sport mix. A sport destination owns that family's detailed mix,
-  Best Build, rolling power types, and capability-matched specialist evidence. Neither destination nor shortcuts change
+  Training Mix plus any capability-matched Best Build, rolling power types, or specialist evidence. Neither destination nor shortcuts change
   derived calculations or discard a sport from the account.
 - Sleep is context. It never changes the Training state and is not presented as a causal explanation of performance.
 - Imported FTP and VO2 max values are settings or source observations. They are not silently relabeled as new estimates.
@@ -58,8 +58,9 @@ The following rules are architectural constraints:
   Training-derived snapshot built from persisted activity power curves and Sports-lib's public dated-capacity fitter.
 - Rolling capacity is isolated by exact canonical activity type. It is separate from TSS, Form, Readiness, and imported
   FTP, and only components that pass Sports-lib's `ready` gates expose a value.
-- Power systems remains available to every authenticated user, but its exact activity types are routed into the matching
-  registered sport destination. Canonical types outside the registry are routed to **Other power activities**. No
+- Power systems remains available to every authenticated user, but its exact activity types are routed into a matching
+  power-systems-capable sport destination. Types in a volume-only family or outside the modeled registry are routed to
+  **Other power activities**. No
   combined all-sports capacity value is created.
 - Complex cards lead with a plain-language conclusion, followed by an explicit, calm evidence-quality statement. A
   `What to look at next` prompt appears only when the available evidence supports that specific follow-up; it is never a
@@ -267,11 +268,11 @@ Normalized child activity documents provide sport-specific stats and activity ty
 
 The join deliberately uses activity-level stats. Parent stats and `endDate` must not leak into a child leg. Provider and
 device provenance may fall back to the parent when the child does not carry it. Functions creates one canonical joined
-activity source per valid parent/child relationship. When Training Explanation is dirty, unsupported activity types
-remain in that source with no curated discipline so it can report them as Other or Unclassified. When
+activity source per valid parent/child relationship. Known non-aggregate activity types that do not join a modeled
+family resolve to the volume-only Other training group; unknown strings remain unclassified. When
 `training_power_systems` is dirty, those sources are also retained so every canonical activity type with a usable power
-curve can be fitted independently. Registry-driven Training Summary and Best Build builders use the eight curated
-families and ignore unregistered sources; Explanation retains unregistered sources only for Other/Unclassified coverage.
+curve can be fitted independently. Registry-driven Training Summary uses all ten groups. Best Build uses only the eight
+benchmark-capable families, while Explanation retains aggregate/unknown sources for Other/Unclassified coverage.
 The join retains references to the selected child and parent data instead of cloning a second activity metric object.
 
 ### Sleep sessions
@@ -363,24 +364,29 @@ rendering derive from it.
 | Walking & Hiking | Walking and Hiking (`vertical-endurance`) | Walking, Nordic Walking; Hiking, Trekking |
 | Nordic Skiing | Snow and Roller skiing (`vertical-endurance`) | Crosscountry Skiing, Nordic Skiing; Roller Skiing |
 | Strength | Strength (`strength`) | Strength Training, Weight Training, Kettlebell |
+| Fitness & Gym | General fitness, Conditioning, Mobility & movement (`general`) | Training, Indoor Training, Workout, Generic, Fitness Equipment; HIIT, Circuit Training, Cardio Training, Aerobics, CrossFit, Crosstrainer, Elliptical Trainer, Stair Stepper; Yoga, Pilates, Flexibility Training, Stretching, Gymnastics |
 | Paddling | Canoeing, Kayaking, Paddling, and Stand-up paddling (`paddling`) | Canoeing; Kayaking; Paddling; Stand Up Paddling |
+| Other training | Other training (`general`) | Every other known, non-aggregate Sports Lib activity type through the explicit fallback policy |
 
 Important behavior:
 
-- Every registered family supports Training Mix and Best Build. Specialist surfaces are capability-gated: durability,
+- Every group supports Training Mix. The original eight modeled families support Best Build; Fitness & Gym and Other
+  training deliberately do not. Specialist surfaces are capability-gated: durability,
   imported capacity, power profiles, and swimming performance are enabled only where declared. Reusable context
   summaries are driven directly by each context's profile and metric declarations.
 - Standard Mountain Biking is an endurance Cycling context. Enduro MTB and Downhill Cycling stay in Cycling but use
-  `mixed-gravity` and `gravity` profiles with `volume-only` load and intensity policies. Strength is also volume-only
-  and omits distance. Other registered contexts use recorded load/intensity and distance when available.
+  `mixed-gravity` and `gravity` profiles with `volume-only` load and intensity policies. Strength, Fitness & Gym, and
+  Other training are also volume-only and omit distance. Other registered contexts use recorded load/intensity and
+  distance when available.
 - A triathlon or multisport aggregate type is not classified. Its normalized registered child legs are classified
   individually.
 - Each child leg counts as a session in its discipline.
 - One multisport parent event can anchor a separate benchmark for every registered family represented by a child leg.
-- Known unsupported sports are reported as `Other` in load explanation when possible. Unknown strings are
-  `Unclassified`.
-- Membership is intentionally conservative. CrossFit, ski touring/backcountry skiing, snowshoeing, surfing, sailing,
-  and other unlisted types remain Other rather than inheriting a nearby Training profile.
+- Known non-aggregate sports outside the modeled families use the `Other training` volume-only fallback. Aggregate
+  parents can still be reported as `Other` in load explanation; unknown strings are `Unclassified`.
+- Modeled membership remains intentionally conservative. Fitness classes get only the declared generic volume profile;
+  ski touring/backcountry skiing, snowshoeing, surfing, sailing, team sports, and other unmodeled types remain Other
+  training rather than inheriting a nearby Training profile.
 - The overall state and explanation remain on **All training**. Sport shortcuts affect navigation only and never filter
   global calculations or remove a registered family from the complete selector.
 
@@ -409,13 +415,13 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `form_now`, `form_plus_7d` | Current/projected freshness values | Parent event TSS |
 | `freshness_forecast` | Zero-future-load scenario chart | Parent event TSS |
 | `intensity_distribution` | Global intensity chart | Parent event power/HR zones |
-| `training_summary` | Overall comparison, eight-family Training Mix, and context/profile summaries | Joined normalized activities |
+| `training_summary` | Overall comparison, ten-group Training Mix, and context/profile summaries | Joined normalized activities |
 | `training_capacity` | Imported FTP and VO2 max observations | Joined activities |
 | `training_power_systems` | Exact-type current CP/W′/Pmax capacity and 12-week sparse history | Persisted activity power curves plus parent event eligibility |
 | `power_curve` | Running/Cycling one-year curves and 90-day retention | Persisted activity power curves |
 | `training_explanation` | What drove this | Parent events plus joined child activities |
 | `training_durability` | Current/usual durability and 12-week trajectory | Persisted activity durability stats |
-| `training_build_comparison` | Eight-family Best Build, context/profile summaries, and sleep context | Activities, settings, parent events, sleep |
+| `training_build_comparison` | Eight modeled-family Best Build, context/profile summaries, and sleep context | Activities, settings, parent events, sleep |
 | `training_readiness` | Readiness 14-day trend | Form snapshot seed plus bounded sleep sessions |
 | `body_weight_trend` | Neutral body-weight context: latest value, 7/28-day medians, and sparse 28-day trend | Persisted positive Sports-lib `Weight` values from form documents |
 | `training_swim_performance` | Pool/open-water pace and contextual SWOLF | Activities plus active swim lengths |
@@ -428,8 +434,8 @@ current-versus-usual 28-day Training context and `training_readiness` for curren
 `get_daily_report` tool reuses that same strict Training Summary projection but combines it with the live Dashboard
 Today-equivalent readiness path and safe latest sleep HRV/heart-rate aggregates. Both project a compact identity-free
 total and the frozen public Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Internal
-schema-16 snapshots contain all eight families and context/profile fields; MCP projection removes those fields and
-folds the five additional families into Other where an explanation payload needs a complete composition total. Form,
+schema-19 snapshots contain all ten groups and context/profile fields; MCP projection removes those fields and folds
+the seven non-public groups into Other where an explanation payload needs a complete composition total. Form,
 CTL/ATL, ACWR, ramp,
 recovery, capacity, durability, power systems, and other specialist snapshots remain independently queryable rather
 than being silently recast as a daily workout recommendation.
@@ -612,9 +618,9 @@ The route has three destination kinds:
 - **All training** (`overview`, the default) renders the global state, readiness and recovery context, What drove this,
   Form/freshness/load, compact current-versus-usual cards for every recorded registered family, the global intensity
   distribution, and body-weight context. It does not duplicate specialist or exact-type power panels.
-- **Registered sport** renders exactly one family's Best Build card, detailed Training Mix, and the specialist surfaces
-  enabled by that sport's registry capabilities. Sleep inside Best Build compares the same date windows but is explicitly
-  labeled as not sport-filtered.
+- **Sport group** renders one detailed Training Mix and only the specialist surfaces enabled by that group's registry
+  capabilities. The eight modeled families can render Best Build; Fitness & Gym and Other training remain volume-only.
+  Sleep inside Best Build compares the same date windows but is explicitly labeled as not sport-filtered.
 - **Other power activities** renders only exact rolling-power types that cannot be resolved into the Training registry.
   The destination is discoverable when such evidence exists and remains renderable as an honest empty state if it was
   the account's saved destination before that evidence disappeared.
@@ -643,7 +649,10 @@ Sport shortcuts have two modes:
 
 Missing new shortcut state falls back to legacy `trainingSettings.visibleDisciplines`; explicit `null` bypasses that
 fallback and restores automatic mode. Shortcuts affect navigation only. Every registry sport remains available in the
-complete selector, Overview totals remain global, and all derived snapshots/calculations are unchanged.
+complete selector except the data-backed Fitness & Gym and Other training groups, which appear when the retained
+summary contains matching workouts or while preserving an already selected/saved shortcut. Their visibility is based
+on workout count, never TSS, zones, power, or durability evidence. Overview totals remain global, and navigation does
+not change derived calculations.
 
 Destination changes update the view optimistically and persist the last choice to the current account. Rapid changes
 coalesce to the latest queued destination. Every queued write carries the expected UID and a workspace generation so an
@@ -694,9 +703,11 @@ The 84-day summary baseline normalizes activity counts, additive metric values, 
 Maximum, mean, and distance-weighted values retain their actual aggregate rather than being scaled. Best Build windows
 use their raw 8-, 10-, or 12-week totals and counts.
 
-The top training time and workout values sum all eight registered families and appear only on Overview.
-Gravity Cycling and Strength contexts contribute reliable time/workout volume, but their profile policy prevents zones
-or TSS from being presented as sport-specific intensity/load evidence. Strength omits distance.
+The top training time and workout values sum all ten Training groups and appear only on Overview. Generic provider
+`Training` workouts and known unmodeled sports therefore no longer disappear from those totals.
+Gravity Cycling, Strength, Fitness & Gym, and Other training contexts contribute reliable time/workout volume, but their
+profile policy prevents zones or TSS from being presented as sport-specific intensity/load evidence. These volume-only
+groups omit distance where the registry does not model a comparable distance.
 
 #### Training state
 
@@ -837,10 +848,11 @@ Sleep values remain visible without deltas when coverage or provider comparabili
 
 ### 2. Best Build vs Now
 
-Registered sport destinations only; exactly one sport card is built and rendered.
+Benchmark-capable sport destinations only; exactly one sport card is built and rendered.
 
-`training_build_comparison` builds one independent card per visible registered family. All eight families support one
-saved benchmark; specialist rows remain capability- and evidence-gated.
+`training_build_comparison` builds one independent card per visible benchmark-capable family. The eight modeled families
+support one saved benchmark; Fitness & Gym and Other training reject benchmark writes and keep only schema-complete
+`not-configured` placeholders. Specialist rows remain capability- and evidence-gated.
 
 #### Benchmark selection
 
@@ -942,7 +954,7 @@ Overview only.
 It intentionally separates parent-event load from child-activity composition:
 
 - Parent events determine total TSS and top contributors. This avoids double-counting multisport legs.
-- Child activities determine the eight registered families plus Other/Unclassified composition and rhythm.
+- Child activities determine the ten Training groups plus aggregate Other and unknown Unclassified composition/rhythm.
 
 The cards show:
 
@@ -1577,12 +1589,13 @@ Do not add provider aliases directly to the Training builder.
 
 ### Adding a new Training discipline
 
-Add one definition to `TRAINING_SPORT_DEFINITIONS` with its presentation metadata, disjoint contexts, exact canonical
-activity types, profile, policies, metrics, and capabilities. The registry-derived family union, visible-discipline and
-benchmark contracts, accumulators, callable validation, automatic/fixed shortcuts, destination grouping, and generic profile tables should
-then extend without another family branch. Add focused tests that prove those consumers picked it up, plus help and this
-document. If a new requirement cannot be expressed as registry data or a reusable capability, add one reusable policy
-primitive rather than branching on the new family throughout the backend and UI.
+Add one definition to `TRAINING_SPORT_DEFINITIONS` with its presentation metadata, selector-availability policy,
+disjoint contexts, exact canonical activity types, profile, policies, metrics, and capabilities. The registry-derived
+family union, accumulators, automatic/fixed shortcuts, destination grouping, and generic profile tables should then
+extend without another family branch. Benchmark callable validation remains capability-gated: a family without
+`best-build` must reject saved benchmarks and emit no suggestions. Add focused tests that prove those consumers picked
+it up, plus help and this document. If a new requirement cannot be expressed as registry data or a reusable capability,
+add one reusable policy primitive rather than branching on the new family throughout the backend and UI.
 
 Imported FTP/VO2 capacity support must remain independently modeled. Do not grant a new discipline the `capacity`
 capability merely because it joins Training; `POWER_CAPACITY_DISCIPLINES` derives automatically from that explicit
@@ -1832,8 +1845,10 @@ When a Training change depends on a new sports-lib version:
 6. Deploy the frontend.
 7. Verify a real account with ready, partial, sparse, and missing-data states.
 
-Existing snapshots rebuild lazily after a schema bump. Schema 16 added the eight-family context/profile summaries;
-schema 17 adds their reusable maximum aggregation and longest-jump metric. The longest-jump rebuild reads the canonical
+Existing snapshots rebuild lazily after a schema bump. Schema 16 added the original eight-family context/profile
+summaries; schema 17 added their reusable maximum aggregation and longest-jump metric. Schema 19 adds the exact
+Fitness & Gym classification and the volume-only Other training fallback. It rebuilds from persisted child activity
+types and needs no original-file reparse or Firestore data migration. The longest-jump rebuild reads the canonical
 Sports-lib `Maximum Jump Distance` already persisted by version `18.1.2`, so this Quantified Self change does not itself
 require reparsing. The registry also accepts Sports-lib's historical `Jump Distance Max` alias. An older activity that
 still lacks either stat remains unavailable until the existing targeted reparse lifecycle processes its retained jump
@@ -1844,7 +1859,8 @@ activities through the targeted sports-lib reparse lifecycle so their persisted 
 result. This is a policy correction within durability protocol v1, not a v2 migration.
 
 Sports-lib 18.1.3 also canonicalizes Snorkeling and Mermaiding and assigns both to the existing Diving group. They do
-not join a curated Training discipline, change durability, or require a derived-schema bump or historical reparse.
+not join a modeled Training family or change durability; schema 19 places them in volume-only Other training without a
+historical source reparse.
 Sports-lib 18.1.4's FIT record-depth mapping supports frontend Event Details dive profiles.
 That continuous source-hydrated stream is not a Training input, does not change durability or derived schemas, and does
 not require a Training rebuild or historical reparse.
@@ -1875,7 +1891,7 @@ Sports Lib `20.1.0` introduced nonnumeric parser-owned FIT `dive_gas`, `tank_sum
 the Event Details **Gas & Tanks** section. Sports Lib `20.1.1` serializes them in optional activity
 `diveSourceRecords` JSON, so new imports and source-backed targeted reparses persist the exact records alongside the
 activity. Older activity documents can still display their records while their retained original is available. The
-records remain nonnumeric source data: they are not Training inputs and do not change durability, Training schema 18,
+records remain nonnumeric source data: they are not Training inputs and do not change durability, Training schema 19,
 or any derived payload. Use a targeted reparse only when a specific retained original should persist its legacy
 records; do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a global historical reparse
 solely for these dive records.

@@ -5,12 +5,13 @@ import { TrainingSportVisibilityDialogComponent } from './training-sport-visibil
 function createComponent(
   isAutomatic = true,
   visibleDisciplines: TrainingVisibleDiscipline[] = ['cycling'],
+  availableDisciplines?: TrainingVisibleDiscipline[],
 ) {
   const dialogRef = { close: vi.fn() };
   const userSettingsService = { updateTrainingWorkspacePreferences: vi.fn().mockResolvedValue(undefined) };
   const changeDetector = { markForCheck: vi.fn() };
   const component = new TrainingSportVisibilityDialogComponent(
-    { userUID: 'user-1', isAutomatic, visibleDisciplines },
+    { userUID: 'user-1', isAutomatic, visibleDisciplines, availableDisciplines },
     dialogRef as any,
     userSettingsService as any,
     changeDetector as any,
@@ -58,6 +59,13 @@ describe('TrainingSportVisibilityDialogComponent', () => {
       'user-1',
       { sportShortcuts: ['rowing'] },
     );
+  });
+
+  it('offers recorded-only families only when the workspace reports matching activities', () => {
+    const { component } = createComponent(false, ['cycling'], ['cycling', 'fitness-gym']);
+
+    expect(component.disciplineOptions.map(option => option.discipline)).toEqual(['cycling', 'fitness-gym']);
+    expect(component.disciplineOptions.map(option => option.discipline)).not.toContain('other-training');
   });
 
   it('restores automatic mode with a null preference', async () => {
