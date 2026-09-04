@@ -34,6 +34,7 @@
 
 .service-data-flow {
     --mat-expansion-container-background-color: var(--mat-sys-surface-container-lowest);
+    --mat-expansion-container-elevation-shadow: none;
 
     margin-bottom: 20px;
     border: 1px solid var(--mat-sys-outline-variant);

@@ -394,6 +394,16 @@ describe('ServicesComponent', () => {
         expect(dataFlowHeader.getAttribute('aria-expanded')).toBe('true');
     });
 
+    it('removes Material elevation from the data-flow panel', () => {
+        const styles = readFileSync(
+            resolve(process.cwd(), 'src/app/components/services/services.component.scss'),
+            'utf8',
+        );
+        const dataFlowRule = styles.match(/\.service-data-flow\s*\{[^}]*\}/)?.[0] ?? '';
+
+        expect(dataFlowRule).toContain('--mat-expansion-container-elevation-shadow: none');
+    });
+
     it('shows a single-service import state before the matrix becomes useful', () => {
         component.processUser({ uid: 'test-user-uid' } as User, true);
         component.setServiceConnectionState('garmin', true);
