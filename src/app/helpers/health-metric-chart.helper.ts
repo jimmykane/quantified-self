@@ -69,6 +69,7 @@ export function buildHealthMetricEChartsOption(
   style: DashboardEChartsStyleTokens,
   isMobileTooltipViewport: boolean,
   unitSettings: UserUnitSettingsInterface | null = null,
+  compact = false,
 ): ChartOption {
   const isCategorical = model.series.chartKind === 'step';
   const isPoint = model.series.chartKind === 'point';
@@ -85,10 +86,10 @@ export function buildHealthMetricEChartsOption(
       fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
     },
     grid: {
-      left: 6,
-      right: 12,
-      top: 12,
-      bottom: 6,
+      left: compact ? 2 : 6,
+      right: compact ? 2 : 12,
+      top: compact ? 3 : 12,
+      bottom: compact ? 3 : 6,
       outerBoundsMode: 'same',
       outerBoundsContain: 'axisLabel',
     },
@@ -136,6 +137,7 @@ export function buildHealthMetricEChartsOption(
     },
     xAxis: {
       type: 'time',
+      show: !compact,
       min: startTimeMs,
       max: endTimeMs,
       boundaryGap: false,
@@ -152,6 +154,7 @@ export function buildHealthMetricEChartsOption(
     yAxis: isCategorical
       ? {
         type: 'category',
+        show: !compact,
         data: model.categoryLabels,
         axisTick: { show: false },
         axisLine: { show: false },
@@ -164,6 +167,7 @@ export function buildHealthMetricEChartsOption(
       }
       : {
         type: 'value',
+        show: !compact,
         min: model.numericBounds?.min,
         max: model.numericBounds?.max,
         axisTick: { show: false },
@@ -205,9 +209,11 @@ export function buildHealthMetricEChartsOption(
       data: model.data,
       connectNulls: false,
       step: isCategorical ? 'end' : undefined,
-      showSymbol: isPoint || model.displayedPointCount <= 60,
+      showSymbol: compact
+        ? model.displayedPointCount <= 2
+        : isPoint || model.displayedPointCount <= 60,
       symbol: 'circle',
-      symbolSize: isPoint ? 8 : 5,
+      symbolSize: compact ? 4 : isPoint ? 8 : 5,
       barMaxWidth: 28,
       lineStyle: { color: seriesColor, width: 2.25 },
       itemStyle: {

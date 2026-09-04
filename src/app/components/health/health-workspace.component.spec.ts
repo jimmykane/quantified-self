@@ -424,6 +424,11 @@ describe('HealthWorkspaceComponent', () => {
     );
     expect(prioritySourceLabels.length).toBeGreaterThan(0);
     expect(prioritySourceLabels.some(label => label.textContent?.trim() === 'Garmin')).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-chart-source')).toHaveLength(2);
+    const sleepDetails = (fixture.nativeElement as HTMLElement).querySelector('.health-priority-card:first-child')?.textContent;
+    expect(sleepDetails).toContain('Score86');
+    expect(sleepDetails).toContain('HRV58 ms');
+    expect(sleepDetails).toContain('Avg HR52 bpm');
     const filterProviderIcons = fixture.debugElement.queryAll(By.css(
       '.health-provider-filter app-service-source-icon',
     ));
@@ -448,6 +453,22 @@ describe('HealthWorkspaceComponent', () => {
       includeSamples: true,
     }));
   }, 10_000);
+
+  it('removes unavailable highlights instead of rendering empty cards', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(
+      metricId,
+      metricId === HEALTH_METRIC_IDS.HeartRateVariability,
+    )));
+
+    expect(component.visiblePriorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate']);
+    const cards = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.health-priority-card'),
+    );
+    expect(cards).toHaveLength(2);
+    expect(cards.map(card => card.querySelector('h3')?.textContent?.trim())).toEqual(['Sleep', 'Heart rate']);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.classList)
+      .toContain('health-priority-grid-double');
+  });
 
   it('restores and persists the account-owned metric and range without adding query parameters', async () => {
     await createComponent(undefined, '90d', {}, HEALTH_METRIC_IDS.Steps);

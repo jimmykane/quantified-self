@@ -42,6 +42,14 @@
   overflow: hidden;
 }
 
+.health-priority-grid-double {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.health-priority-grid-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .health-priority-card {
   align-content: start;
   display: grid;
@@ -140,6 +148,32 @@
   min-width: 0;
 }
 
+.health-priority-chart-list {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.health-priority-chart-source {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
+  padding-block: 0.15rem;
+}
+
+.health-priority-chart-source + .health-priority-chart-source {
+  border-top: var(--health-priority-divider);
+}
+
+.health-priority-chart-source > small {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .health-priority-source-row {
   display: block;
   min-height: 27px;
@@ -187,6 +221,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.health-priority-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.65rem;
+  margin: 0.25rem 0 0;
+}
+
+.health-priority-details > div {
+  align-items: baseline;
+  display: flex;
+  gap: 0.2rem;
+}
+
+.health-priority-details dt {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-label-small);
+}
+
+.health-priority-details dd {
+  font: var(--mat-sys-label-medium);
+  font-variant-numeric: tabular-nums;
+  margin: 0;
 }
 
 @media (max-width: 760px) {

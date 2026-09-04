@@ -19,8 +19,12 @@
   </app-page-header>
 
   <app-health-priority-summary
-    [cards]="priorityCards()"
+    [cards]="visiblePriorityCards()"
     [selectedMetric]="routeState().metric"
+    [startTimeMs]="priorityWindow.startTimeMs"
+    [endTimeMs]="priorityWindow.endTimeMs"
+    [darkTheme]="isDarkTheme()"
+    [unitSettings]="unitSettings()"
     (metricSelected)="selectPriorityMetric($event)">
   </app-health-priority-summary>
 

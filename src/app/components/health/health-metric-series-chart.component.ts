@@ -42,6 +42,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input({ required: true }) endTimeMs!: number;
   @Input() darkTheme = false;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
+  @Input() compact = false;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
@@ -64,6 +65,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   ngOnChanges(changes: SimpleChanges): void {
     if (this.viewInitialized && (
       changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
+      || changes.compact
     )) {
       void this.refresh();
     }
@@ -98,6 +100,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
         style,
         isEChartsMobileTooltipViewport(),
         this.unitSettings,
+        this.compact,
       ),
       ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
     );

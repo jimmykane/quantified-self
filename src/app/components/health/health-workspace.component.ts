@@ -65,6 +65,7 @@ import {
   HealthWorkspaceMetricSelection,
   HealthWorkspaceRange,
   HealthWorkspaceRouteState,
+  HealthWorkspaceSeries,
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
   buildHealthPriorityRows,
@@ -78,6 +79,7 @@ import {
   providerLabel,
   resolveHealthWorkspaceWindow,
   selectActivityHealthObservations,
+  selectHealthPriorityTrendSeries,
 } from '../../helpers/health-workspace.helper';
 import {
   buildDashboardSleepTrendContext,
@@ -202,6 +204,11 @@ export class HealthWorkspaceComponent {
   readonly isSavingPreferences = signal(false);
   readonly preferencesSaveFailed = signal(false);
   readonly selectedWindow = computed(() => resolveHealthWorkspaceWindow(this.routeState(), this.todayDate));
+  readonly priorityWindow = resolveHealthWorkspaceWindow({
+    metric: HEALTH_METRIC_IDS.HeartRate,
+    range: '30d',
+    endDate: this.todayDate,
+  }, this.todayDate);
   readonly selectedHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly selectedHealthStatus = signal<HealthLoadStatus>('loading');
   readonly selectedActivityHealthResult = signal<ActivityHealthRangeResult | null>(null);
@@ -463,6 +470,7 @@ export class HealthWorkspaceComponent {
         healthMetricIcon('sleep'),
         'sleep',
         buildSleepPriorityRows(this.prioritySleepSessions(), this.unitSettings()),
+        [],
         this.prioritySleepStatus(),
         'No Sleep sessions in the last 30 days.',
         !sleepAvailabilityIsKnown || available.has('sleep'),
@@ -472,7 +480,8 @@ export class HealthWorkspaceComponent {
         'Heart rate',
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRate),
         HEALTH_METRIC_IDS.HeartRate,
-        buildHealthPriorityRows(
+        [],
+        selectHealthPriorityTrendSeries(
           this.priorityHeartRateLoad()?.result,
           this.prioritySleepSessions(),
           this.unitSettings(),
@@ -491,12 +500,15 @@ export class HealthWorkspaceComponent {
           this.prioritySleepSessions(),
           this.unitSettings(),
         ),
+        [],
         this.priorityHrvStatus(),
         'No HRV summaries in the last 30 days.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),
       ),
     ];
   });
+  readonly visiblePriorityCards = computed<HealthPriorityCardView[]>(() => this.priorityCards().filter(card =>
+    card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
     .map(state => {
       const sleepProvider = healthProviderSleepProvider(state.provider);
@@ -1058,6 +1070,7 @@ function priorityCard(
   icon: string,
   metric: HealthWorkspaceMetricSelection,
   rows: readonly HealthPriorityRow[],
+  chartSeries: readonly HealthWorkspaceSeries[],
   status: HealthLoadStatus,
   emptyText: string,
   available: boolean,
@@ -1068,6 +1081,7 @@ function priorityCard(
     icon,
     metric,
     rows,
+    chartSeries,
     available,
     loading: status === 'loading',
     error: status === 'error' || status === 'denied',

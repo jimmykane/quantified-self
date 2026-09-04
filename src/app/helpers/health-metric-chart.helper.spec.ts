@@ -98,6 +98,43 @@ describe('Health metric chart helpers', () => {
     expect(option.tooltip.formatter({ value: [0, 52] })).toContain('52.00 ml/kg/min');
   });
 
+  it('keeps compact Health charts focused on the trend without duplicate axes', () => {
+    const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 13,
+      buildDashboardEChartsStyleTokens(false, 320),
+      false,
+      null,
+      true,
+    ) as {
+      grid: { left: number; right: number };
+      xAxis: { show: boolean };
+      yAxis: { show: boolean };
+      series: Array<{ showSymbol: boolean }>;
+    };
+
+    expect(option.grid).toMatchObject({ left: 2, right: 2 });
+    expect(option.xAxis.show).toBe(false);
+    expect(option.yAxis.show).toBe(false);
+    expect(option.series[0].showSymbol).toBe(false);
+
+    const sparseModel = buildHealthChartModels([
+      series({ points: [series().points[0]] }),
+    ], 0, DAY_MS * 13)[0];
+    const sparseOption = buildHealthMetricEChartsOption(
+      sparseModel,
+      0,
+      DAY_MS * 13,
+      buildDashboardEChartsStyleTokens(false, 320),
+      false,
+      null,
+      true,
+    ) as { series: Array<{ showSymbol: boolean; symbolSize: number }> };
+    expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
+  });
+
   it('uses the selected Sports Lib unit conversion consistently across a chart', () => {
     const unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     const distanceSeries = series({

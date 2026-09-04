@@ -42,6 +42,7 @@ import {
   normalizeHealthWorkspaceRange,
   resolveHealthWorkspaceWindow,
   resolveSleepReferenceValue,
+  selectHealthPriorityTrendSeries,
   selectActivityHealthObservations,
 } from './health-workspace.helper';
 
@@ -460,6 +461,12 @@ describe('Health workspace helpers', () => {
 
     expect(rows.map(row => row.sourceLabel)).toEqual(['Suunto', 'Garmin']);
     expect(rows[0]).toMatchObject({ valueText: '70 bpm', observedAtMs: Date.parse('2026-08-01T00:02:00.000Z') });
+
+    const trendSeries = selectHealthPriorityTrendSeries(result);
+    expect(trendSeries.map(series => [series.sourceLabel, series.aggregation])).toEqual([
+      ['Suunto', 'sample'],
+      ['Garmin', 'average'],
+    ]);
   });
 
   it('renders provider-specific Body Energy scores as bars without changing other series', () => {
@@ -669,8 +676,15 @@ describe('Health workspace helpers', () => {
         },
         endTimeMs: Date.parse('2026-08-03T06:00:00.000Z'),
       }),
-    ]);
-    expect(rows.map(row => row.sourceLabel)).toEqual(['Garmin account 1', 'Garmin account 2']);
+    ], null, Date.parse('2026-08-03T12:00:00.000Z'));
+    expect(rows.map(row => row.sourceLabel)).toEqual(['Garmin account 2', 'Garmin account 1']);
+    expect(rows[0]).toMatchObject({
+      contextText: 'Today',
+      details: [
+        { label: 'Score', valueText: '88' },
+        { label: 'HRV', valueText: '62 ms' },
+      ],
+    });
     expect(JSON.stringify(rows)).not.toContain('provider-user');
   });
 

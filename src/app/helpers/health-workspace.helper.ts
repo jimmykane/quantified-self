@@ -45,6 +45,7 @@ import {
   AppHealthWorkspaceRange,
 } from '../models/app-user.interface';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
 
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
@@ -141,6 +142,12 @@ export interface HealthPriorityRow {
   valueText: string;
   contextText: string;
   observedAtMs: number;
+  details?: readonly HealthPriorityDetail[];
+}
+
+export interface HealthPriorityDetail {
+  label: string;
+  valueText: string;
 }
 
 export interface HealthSleepObservationRow {
@@ -535,9 +542,52 @@ export function buildHealthPriorityRows(
     || compareText(left.id, right.id));
 }
 
+function comparePriorityTrendSeries(left: HealthWorkspaceSeries, right: HealthWorkspaceSeries): number {
+  return priorityTrendSeriesRank(right) - priorityTrendSeriesRank(left)
+    || latestSeriesTimestamp(right) - latestSeriesTimestamp(left)
+    || compareText(left.semanticLabel, right.semanticLabel);
+}
+
+function priorityTrendSeriesRank(series: HealthWorkspaceSeries): number {
+  if (series.aggregation === 'sample') {
+    return 3;
+  }
+  if (series.aggregation === 'average') {
+    return 2;
+  }
+  return 1;
+}
+
+function latestSeriesTimestamp(series: HealthWorkspaceSeries): number {
+  return Number(series.points.at(-1)?.timestampMs) || 0;
+}
+
+export function selectHealthPriorityTrendSeries(
+  result: HealthRangeResult | null | undefined,
+  sleepSessions: readonly SleepSession[] = [],
+  unitSettings: UserUnitSettingsInterface | null = null,
+): HealthWorkspaceSeries[] {
+  if (!result) {
+    return [];
+  }
+  const grouped = new Map<string, HealthWorkspaceSeries[]>();
+  for (const series of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings).series) {
+    if (!series.points.length || series.valueType !== HEALTH_VALUE_TYPES.Number) {
+      continue;
+    }
+    const key = accountIdentity(series.provider, series.sourceLabel);
+    grouped.set(key, [...(grouped.get(key) || []), series]);
+  }
+  return [...grouped.values()]
+    .map(seriesValues => [...seriesValues].sort(comparePriorityTrendSeries)[0])
+    .sort((left, right) => latestSeriesTimestamp(right) - latestSeriesTimestamp(left)
+      || compareText(left.sourceLabel, right.sourceLabel));
+}
+
 export function buildSleepPriorityRows(
   sessions: readonly SleepSession[],
   unitSettings: UserUnitSettingsInterface | null = null,
+  nowMs = Date.now(),
 ): HealthPriorityRow[] {
   const normalized = sessions.flatMap(session => {
     const provider = normalizeSleepProvider(session.source?.provider);
@@ -562,6 +612,21 @@ export function buildSleepPriorityRows(
       session.score?.value,
       unitSettings,
     );
+    const hrvText = formatSleepMetricValue(
+      SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv,
+      session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs,
+      unitSettings,
+    );
+    const heartRateText = formatSleepMetricValue(
+      SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate,
+      session.vitals?.averageHeartRateBpm,
+      unitSettings,
+    );
+    const details = [
+      scoreText !== '—' ? { label: 'Score', valueText: scoreText } : null,
+      hrvText !== '—' ? { label: 'HRV', valueText: hrvText } : null,
+      heartRateText !== '—' ? { label: 'Avg HR', valueText: heartRateText } : null,
+    ].filter((detail): detail is HealthPriorityDetail => detail !== null);
     return {
       id: `sleep-priority-${index + 1}`,
       provider,
@@ -573,10 +638,12 @@ export function buildSleepPriorityRows(
         unitSettings,
         true,
       ),
-      contextText: `${formatDate(session.endTimeMs)}${scoreText === '—' ? '' : ` · score ${scoreText}`}`,
+      contextText: formatDashboardRelativeDay(session.endTimeMs, { nowMs }),
       observedAtMs: session.endTimeMs,
+      details,
     };
-  }).sort((left, right) => compareText(left.sourceLabel, right.sourceLabel));
+  }).sort((left, right) => right.observedAtMs - left.observedAtMs
+    || compareText(left.sourceLabel, right.sourceLabel));
 }
 
 export function buildSleepObservationRows(
@@ -1039,11 +1106,6 @@ function formatRelativeDayDate(timestampMs: number): string {
     day: 'numeric',
     timeZone: 'UTC',
   }).format(new Date(timestampMs));
-}
-
-function formatDate(timestampMs: number): string {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    .format(new Date(timestampMs));
 }
 
 function formatCalendarDate(calendarDate: string): string {
