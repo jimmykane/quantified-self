@@ -53,7 +53,6 @@ export interface HealthPriorityCardView {
 })
 export class HealthPrioritySummaryComponent {
   readonly cards = input.required<readonly HealthPriorityCardView[]>();
-  readonly selectedMetric = input.required<HealthWorkspaceMetricSelection>();
   readonly startTimeMs = input.required<number>();
   readonly endTimeMs = input.required<number>();
   readonly darkTheme = input(false);

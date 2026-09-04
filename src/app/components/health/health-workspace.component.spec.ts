@@ -425,6 +425,10 @@ describe('HealthWorkspaceComponent', () => {
     );
     expect(metricOptionIcons).toHaveLength((fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option').length);
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(3);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card-selected')).toBeNull();
+    expect(Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-open-button'),
+    ).every(button => button.getAttribute('aria-pressed') === null)).toBe(true);
     expect(fixture.debugElement.queryAll(By.css(
       '.health-priority-card app-service-source-icon',
     ))).toHaveLength(0);
@@ -464,6 +468,22 @@ describe('HealthWorkspaceComponent', () => {
       includeSamples: true,
     }));
   }, 10_000);
+
+  it('opens highlight metrics without styling the highlight as selected', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    const openHeartRate = host.querySelector<HTMLButtonElement>('[aria-label="Open Heart rate"]');
+
+    openHeartRate?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
+    expect(host.querySelector('.health-priority-card-selected')).toBeNull();
+    expect(openHeartRate?.getAttribute('aria-pressed')).toBeNull();
+    expect(host.querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
+  });
 
   it('removes unavailable highlights instead of rendering empty cards', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(

@@ -62,11 +62,6 @@
   border-left: var(--health-priority-divider);
 }
 
-.health-priority-card-selected {
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
-}
-
 .health-priority-card-header,
 .health-priority-title-row,
 .health-priority-open-button {

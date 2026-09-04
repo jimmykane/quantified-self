@@ -17,8 +17,7 @@
       @for (card of renderedCards(); track card.id) {
         <section
           class="health-priority-card"
-          [attr.aria-labelledby]="'health-priority-card-' + card.id"
-          [class.health-priority-card-selected]="selectedMetric() === card.metric">
+          [attr.aria-labelledby]="'health-priority-card-' + card.id">
           <header class="health-priority-card-header">
             <div class="health-priority-title-row">
               <span class="health-priority-avatar">
@@ -31,7 +30,6 @@
               type="button"
               class="health-priority-open-button"
               [attr.aria-label]="'Open ' + card.label"
-              [attr.aria-pressed]="selectedMetric() === card.metric"
               [disabled]="!card.available"
               (click)="metricSelected.emit(card.metric)">
               <span>Open</span>
