@@ -486,6 +486,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(styles).toContain('padding-inline: 4px');
     expect(styles).toContain('.health-provider-filters::-webkit-scrollbar');
     expect(styles).toContain('overscroll-behavior-inline: contain');
+    expect(styles).toContain('gap: 0.375rem');
     expect(styles).toContain('@media (max-width: 360px)');
   });
 
