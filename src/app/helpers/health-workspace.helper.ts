@@ -729,8 +729,7 @@ export function resolveSleepReferenceValue(
     case 'vitals.maxSpo2Percent': value = session.vitals?.maxSpo2Percent; break;
     case 'vitals.averageRespirationBrpm': value = session.vitals?.averageRespirationBrpm; break;
   }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
+  return finiteSleepMetricNumber(value);
 }
 
 export function providerLabel(provider: HealthProvider): string {
@@ -819,14 +818,22 @@ function formatSleepMetricValue(
   unitSettings: UserUnitSettingsInterface | null,
   compactDuration = false,
 ): string {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) {
+  const numericValue = finiteSleepMetricNumber(value);
+  if (numericValue === null) {
     return '—';
   }
   const display = formatCanonicalSleepMetricSportsLibValue(field, numericValue, unitSettings, {
     compactDuration,
   });
   return display ? [display.value, display.unit].filter(Boolean).join(' ') : '—';
+}
+
+function finiteSleepMetricNumber(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : null;
 }
 
 function observationDatum(

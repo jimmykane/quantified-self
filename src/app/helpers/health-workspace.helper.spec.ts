@@ -664,6 +664,10 @@ describe('Health workspace helpers', () => {
     expect(resolveSleepReferenceValue(session, 'vitals.restingHeartRateBpm')).toBe(51);
     expect(resolveSleepReferenceValue(session, 'vitals.averageHrvMs')).toBe(62);
     expect(resolveSleepReferenceValue(session, 'vitals.maxSpo2Percent')).toBeNull();
+    expect(resolveSleepReferenceValue(
+      sleepSession({ vitals: { averageHrvMs: null } }),
+      'vitals.averageHrvMs',
+    )).toBeNull();
   });
 
   it('projects unreferenced Sleep HRV as a source-separated Health series', () => {
@@ -847,6 +851,24 @@ describe('Health workspace helpers', () => {
       scoreText: '88',
       hrvText: '62.4 ms',
       heartRateText: '52 bpm',
+    });
+  });
+
+  it('preserves explicitly missing Sleep metrics in priority details and observation rows', () => {
+    const session = sleepSession({
+      score: { value: null },
+      vitals: {
+        averageHrvMs: null,
+        overnightHrvMs: null,
+        averageHeartRateBpm: null,
+      },
+    });
+
+    expect(buildSleepPriorityRows([session])[0]?.details).toEqual([]);
+    expect(buildSleepObservationRows([session])[0]).toMatchObject({
+      scoreText: '—',
+      hrvText: '—',
+      heartRateText: '—',
     });
   });
 });
