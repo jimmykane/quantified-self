@@ -274,11 +274,19 @@ async function checkContract(): Promise<void> {
   );
 }
 
-async function captureContract(): Promise<void> {
-  const protocol = argumentValue('--protocol-version') ?? '2025-11-25';
+export function parseCaptureProtocolVersion(
+  args: readonly string[],
+): '2025-11-25' | '2026-07-28' {
+  const index = args.indexOf('--protocol-version');
+  const protocol = index < 0 ? '2025-11-25' : args[index + 1];
   if (protocol !== '2025-11-25' && protocol !== '2026-07-28') {
     throw new Error('capture --protocol-version must be 2025-11-25 or 2026-07-28.');
   }
+  return protocol;
+}
+
+async function captureContract(): Promise<void> {
+  const protocol = parseCaptureProtocolVersion(process.argv);
   const outputArgument = argumentValue('--output');
   if (!outputArgument) {
     throw new Error('capture requires --output <path>.');
@@ -438,9 +446,11 @@ async function main(): Promise<void> {
   }
 }
 
-void main().catch((error: unknown) => {
-  console.error(
-    error instanceof Error ? error.message : 'MCP contract command failed.',
-  );
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  void main().catch((error: unknown) => {
+    console.error(
+      error instanceof Error ? error.message : 'MCP contract command failed.',
+    );
+    process.exitCode = 1;
+  });
+}

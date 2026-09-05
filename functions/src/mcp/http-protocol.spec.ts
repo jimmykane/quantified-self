@@ -220,6 +220,21 @@ describe('MCP Function protocol compatibility', () => {
     expect(await subscription.json()).toMatchObject({ error: { message: 'Subscription limit reached' } });
   });
 
+  it.each([
+    { label: 'invalid message', body: { jsonrpc: '1.0', method: 'tools/list', id: 1 } },
+    { label: 'empty batch', body: [] },
+    { label: 'invalid batch member', body: [null] },
+    { label: 'modern batch member', body: [modernRequest()] },
+  ])('distinguishes $label from protocol-envelope failures', async ({ body }) => {
+    const response = await post(body, { 'mcp-protocol-version': '2025-11-25' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: -32600 } });
+    expect(logError).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('[MCP] Streamable HTTP request rejected', {
+      reason: 'invalid_json_rpc', clientFamily: 'claude',
+    });
+  });
+
   it('keeps Zod input refinements on modern calls and hides tools without their grants', async () => {
     const invalid = await post(modernRequest('tools/call', {
       name: 'query_activities', arguments: { relativePeriod: 'today' },

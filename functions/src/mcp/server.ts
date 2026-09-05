@@ -1655,6 +1655,11 @@ export function classifyMcpTransportRejectionReason(
     return 'unexpected_transport_error';
   }
   const message = error.message;
+  // The SDK entry also reports JSON-RPC shape failures through this callback.
+  // Keep those separate from version/header/envelope failures in Cloud logs.
+  if (/^Rejected inbound request \((?:invalid-json-rpc-body|empty-batch|batch-with-invalid-element|batch-with-modern-element)\):/.test(message)) {
+    return 'invalid_json_rpc';
+  }
   if (message.startsWith('Rejected inbound request (')) {
     return 'invalid_protocol_envelope';
   }

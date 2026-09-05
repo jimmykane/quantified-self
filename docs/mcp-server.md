@@ -32,8 +32,9 @@ accepting SDK v2's default schema-dialect rewrite. Legacy tools retain `executio
 modern codec removes that retired field. Modern responses also use the revision's `resultType` and reserved metadata
 envelope. The output contract suite runs every tool and leakage fixture through in-memory, legacy HTTP, and modern HTTP
 paths. The Function-boundary tests cover authentication, scope denial, size/media/method bounds, and rejection logging.
-Expected transport rejections remain warnings with fixed reasons and sanitized protocol versions; unexpected failures
-remain errors. A rejected modern envelope version is logged when no protocol-version header was supplied, without
+Expected transport rejections remain warnings with fixed reasons and sanitized protocol versions; invalid JSON-RPC
+messages/batches are distinguished from protocol-envelope failures, and unexpected failures remain errors.
+A rejected modern envelope version is logged when no protocol-version header was supplied, without
 logging any other envelope or request data.
 
 The registered legacy candidate digest is unchanged by this upgrade. It adds no tool/schema/scope/instruction refresh or
