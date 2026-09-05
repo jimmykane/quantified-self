@@ -1,5 +1,5 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import { McpServer, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 import { onRequest, Request } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isIP } from 'node:net';
@@ -36,6 +36,8 @@ import {
   PublicMcpToolName,
 } from './tool-output-schemas';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { registerMcpTool } from './register-tool';
+import { createMcpTransportHandler } from './transport';
 
 const defaultDataService = createMcpDataService();
 let oauthService: ReturnType<typeof createMcpOAuthService> | null = null;
@@ -638,10 +640,10 @@ export function createMcpServer(
     instructions: buildMcpServerInstructions(auth),
   });
 
-  server.registerTool('list_activity_types', {
+  registerMcpTool(server, 'list_activity_types', {
     title: 'List activity types',
     description: 'Discover the unique canonical Sports Lib activity types accepted by activity and route filters, with activity-group and indoor hints. Common aliases are normalized by filtered tools, but canonical values are preferred. This static catalog contains no account data.',
-    inputSchema: {},
+    inputSchema: z.object({}),
     outputSchema: outputSchemas.list_activity_types,
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   }, () => runReadOnlyTool(
@@ -650,10 +652,10 @@ export function createMcpServer(
   ));
 
   if (measurementToolsAvailable) {
-    server.registerTool('list_measurement_types', {
+    registerMcpTool(server, 'list_measurement_types', {
       title: 'List body measurement types',
       description: 'List first-class personal measurement capabilities such as body weight, including units, supported trend aggregations, date intervals, range limits, and the optional current Training snapshot.',
-      inputSchema: {},
+      inputSchema: z.object({}),
       outputSchema: outputSchemas.list_measurement_types,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, () => runReadOnlyTool(
@@ -661,10 +663,10 @@ export function createMcpServer(
       () => dataService.listMeasurementTypes(),
     ));
 
-    server.registerTool('query_measurements', {
+    registerMcpTool(server, 'query_measurements', {
       title: 'Query body measurement history',
       description: 'Query recorded body measurements such as weight or body mass over a bounded date range. Returns an identity-free day, week, or month time series and change summary; provider, device, source, event, and activity identity are excluded. Recorded values are not a medical or health assessment.',
-      inputSchema: {
+      inputSchema: z.object({
         measurementType: MCP_MEASUREMENT_TYPE_SCHEMA,
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
@@ -680,7 +682,7 @@ export function createMcpServer(
           .min(1)
           .max(80)
           .describe('Required IANA time zone used for day, week, and month boundaries.'),
-      },
+      }),
       outputSchema: outputSchemas.query_measurements,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -698,16 +700,16 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)) {
-    server.registerTool('list_metrics', {
+    registerMcpTool(server, 'list_metrics', {
       title: 'List available activity and Training metrics',
       description: measurementToolsAvailable
         ? 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities. For body weight or other personal measurements, use list_measurement_types.'
         : 'List numeric event metrics persisted for this account, Training-derived metric kinds, and sleep capabilities.',
-      inputSchema: {
+      inputSchema: z.object({
         search: z.string().max(120).optional(),
         cursor: z.string().max(256).optional(),
         limit: z.number().int().min(1).max(100).default(50),
-      },
+      }),
       outputSchema: outputSchemas.list_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_metrics', () => dataService.listMetrics({
@@ -717,12 +719,12 @@ export function createMcpServer(
       limit: input.limit,
     })));
 
-    server.registerTool('query_metric', {
+    registerMcpTool(server, 'query_metric', {
       title: 'Query an activity or event metric',
       description: measurementToolsAvailable
         ? 'Aggregate one persisted numeric Sports Lib activity or event metric over a bounded date range. For body weight, body mass, weigh-ins, or measurement trends, use query_measurements.'
         : 'Aggregate one persisted numeric Sports Lib activity or event metric over a bounded date range.',
-      inputSchema: {
+      inputSchema: z.object({
         metric: z.string().min(1).max(160),
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
@@ -741,7 +743,7 @@ export function createMcpServer(
         ]).default('daily'),
         timeZone: z.string().min(1).max(80),
         activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
-      },
+      }),
       outputSchema: outputSchemas.query_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('query_metric', () => dataService.queryMetric({
@@ -756,12 +758,12 @@ export function createMcpServer(
       activityTypes: input.activityTypes,
     })));
 
-    server.registerTool('query_metrics', {
+    registerMcpTool(server, 'query_metrics', {
       title: 'Query several activity or event metrics',
       description: measurementToolsAvailable
         ? 'Query up to four activity metrics over one range; use query_measurements for body measurements.'
         : 'Query up to four activity metrics over one range.',
-      inputSchema: {
+      inputSchema: z.object({
         metrics: z.array(z.object({
           metric: z.string().min(1).max(160),
           aggregation: z.enum([
@@ -787,7 +789,7 @@ export function createMcpServer(
         ]).default('daily'),
         timeZone: z.string().min(1).max(80),
         activityTypes: z.array(z.string().min(1).max(120)).max(20).optional(),
-      },
+      }),
       outputSchema: outputSchemas.query_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('query_metrics', () => dataService.queryMetrics({
@@ -801,12 +803,12 @@ export function createMcpServer(
       activityTypes: input.activityTypes,
     })));
 
-    server.registerTool('list_training_metrics', {
+    registerMcpTool(server, 'list_training_metrics', {
       title: 'List Training metrics',
       description: 'List Training metric descriptions and current snapshot status.',
-      inputSchema: {
+      inputSchema: z.object({
         search: z.string().max(120).optional(),
-      },
+      }),
       outputSchema: outputSchemas.list_training_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -817,14 +819,14 @@ export function createMcpServer(
       }),
     ));
 
-    server.registerTool('get_training_metric', {
+    registerMcpTool(server, 'get_training_metric', {
       title: 'Get a Training metric',
       description: measurementToolsAvailable
         ? 'Read one ready Training-derived snapshot without event or activity identifiers and labels. The body_weight_trend kind is a current 28-day Training snapshot; use query_measurements for explicit body-weight history.'
         : 'Read one ready Training-derived snapshot without event or activity identifiers and labels. The body_weight_trend kind is a current 28-day Training snapshot.',
-      inputSchema: {
+      inputSchema: z.object({
         metricKind: z.string().min(1).max(120),
-      },
+      }),
       outputSchema: outputSchemas.get_training_metric,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -834,17 +836,17 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
-    server.registerTool('get_sleep_trend', {
+    registerMcpTool(server, 'get_sleep_trend', {
       title: 'Get sleep and HRV trend',
       description: 'Get sleep duration, score, stages, HRV, heart rate, blood oxygen saturation, and respiration trends in one bounded call, with explicit coverage for every recorded safe aggregate vital. Prefer this for recent sleep changes, poor-sleep questions, or recovery-oriented sleep trends. It cannot diagnose illness and never returns raw sensor samples or provider payloads.',
-      inputSchema: {
+      inputSchema: z.object({
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
         includeNaps: z.boolean().default(false),
         provider: MCP_SLEEP_PROVIDER_SCHEMA.optional(),
         groupBy: z.enum(['day', 'week', 'month']).default('day'),
         timeZone: z.string().min(1).max(80),
-      },
+      }),
       outputSchema: outputSchemas.get_sleep_trend,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('get_sleep_trend', () => dataService.getSleepTrend({
@@ -857,15 +859,15 @@ export function createMcpServer(
       timeZone: input.timeZone,
     })));
 
-    server.registerTool('list_sleep_vitals', {
+    registerMcpTool(server, 'list_sleep_vitals', {
       title: 'Discover available sleep vitals',
       description: 'Discover which redacted aggregate sleep vital types have recorded values in a bounded period, including average or overnight HRV when available. Use this for data-availability questions; use get_sleep_trend for readings and trends. Raw sensor samples and provider payloads are never returned.',
-      inputSchema: {
+      inputSchema: z.object({
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
         includeNaps: z.boolean().default(false),
         provider: MCP_SLEEP_PROVIDER_SCHEMA.optional(),
-      },
+      }),
       outputSchema: outputSchemas.list_sleep_vitals,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_sleep_vitals', () => dataService.listSleepVitals({
@@ -876,17 +878,17 @@ export function createMcpServer(
       provider: input.provider,
     })));
 
-    server.registerTool('list_sleep_sessions', {
+    registerMcpTool(server, 'list_sleep_sessions', {
       title: 'List sleep sessions and nightly vitals',
       description: 'List redacted normalized sleep-session summaries with safe aggregate vitals, including average or overnight HRV when recorded. Raw sensor samples and provider payloads are never returned.',
-      inputSchema: {
+      inputSchema: z.object({
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
         includeNaps: z.boolean().default(false),
         provider: MCP_SLEEP_PROVIDER_SCHEMA.optional(),
         cursor: z.string().max(512).optional(),
         limit: z.number().int().min(1).max(100).default(25),
-      },
+      }),
       outputSchema: outputSchemas.list_sleep_sessions,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_sleep_sessions', () => dataService.listSleepSessions({
@@ -900,17 +902,17 @@ export function createMcpServer(
       limit: input.limit,
     })));
 
-    server.registerTool('query_sleep_summary', {
+    registerMcpTool(server, 'query_sleep_summary', {
       title: 'Summarize sleep and recorded vitals',
       description: 'Aggregate redacted sleep sessions by local day, week, or month. Each bucket includes averages for available safe vitals; prefer get_sleep_trend when the question asks for coverage and a trend together. Raw samples are never returned.',
-      inputSchema: {
+      inputSchema: z.object({
         start: MCP_ISO_DATE_TIME_SCHEMA,
         end: MCP_ISO_DATE_TIME_SCHEMA,
         includeNaps: z.boolean().default(false),
         provider: MCP_SLEEP_PROVIDER_SCHEMA.optional(),
         groupBy: z.enum(['day', 'week', 'month']).default('day'),
         timeZone: z.string().min(1).max(80),
-      },
+      }),
       outputSchema: outputSchemas.query_sleep_summary,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('query_sleep_summary', () => dataService.querySleepSummary({
@@ -928,15 +930,15 @@ export function createMcpServer(
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
-    server.registerTool('get_today_readiness', {
+    registerMcpTool(server, 'get_today_readiness', {
       title: 'Get today readiness',
       description: 'Calculate the same live recovery-aware readiness shown by Dashboard Today from current UTC-day Form/ramp and a bounded 30-day sleep query. Returns the score plus explicit Load, Sleep, HRV, and Overnight HR drivers, including latest safe aggregate values, same-provider baseline medians, evidence counts, ratios, and freshness. Provider identity, raw samples, activities, locations, workout plans, diagnosis, and medical advice are excluded.',
-      inputSchema: {
+      inputSchema: z.object({
         timeZone: z.string()
           .min(1)
           .max(80)
           .describe('Required IANA time zone used only for local-day context; readiness itself uses the documented UTC day boundary.'),
-      },
+      }),
       outputSchema: outputSchemas.get_today_readiness,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -947,15 +949,15 @@ export function createMcpServer(
       }),
     ));
 
-    server.registerTool('get_daily_report', {
+    registerMcpTool(server, 'get_daily_report', {
       title: 'Get daily health and training report',
       description: 'Return one current report for an explicit IANA time zone. It combines the latest completed non-nap sleep with an explicit allowlist of aggregate average/overnight HRV and average/minimum sleep heart rate, the live Dashboard Today readiness and its safe same-provider evidence, and current-versus-usual equivalent 28-day Training totals and sport mix. In the answer, lead with sleep and recorded HRV/heart-rate values, keep readiness to one sentence using at most two relevant available drivers, then summarize Training. Provider identity, raw samples, SpO2, respiration, locations, activity records, body measurements, workout plans, diagnosis, and medical advice are excluded.',
-      inputSchema: {
+      inputSchema: z.object({
         timeZone: z.string()
           .min(1)
           .max(80)
           .describe('Required IANA time zone used for local-day report context; readiness itself retains its documented UTC day boundary.'),
-      },
+      }),
       outputSchema: outputSchemas.get_daily_report,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('get_daily_report', () => dataService.getDailyReport({
@@ -963,15 +965,15 @@ export function createMcpServer(
       timeZone: input.timeZone,
     })));
 
-    server.registerTool('get_daily_briefing', {
+    registerMcpTool(server, 'get_daily_briefing', {
       title: 'Get daily briefing',
       description: 'Return a compact morning readout for an explicit IANA time zone. It includes only the latest completed non-nap sleep, current-versus-usual equivalent 28-day Training totals and Running/Cycling/Swimming mix, and a current UTC-day Training readiness signal. It never returns provider identity, physiology, locations, activity records, body measurements, a workout plan, or medical advice.',
-      inputSchema: {
+      inputSchema: z.object({
         timeZone: z.string()
           .min(1)
           .max(80)
           .describe('Required IANA time zone used for the local-day boundaries in this briefing.'),
-      },
+      }),
       outputSchema: outputSchemas.get_daily_briefing,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('get_daily_briefing', () => dataService.getDailyBriefing({
@@ -981,12 +983,12 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)) {
-    server.registerTool('list_activities', {
+    registerMcpTool(server, 'list_activities', {
       title: 'List activities',
       description: activityLocationAvailable
         ? 'Find, list, or inspect individual workouts newest first. Filter server-side with activityTypes; use list_activity_types for canonical values. For today or yesterday, provide relativePeriod and an IANA timeZone. Otherwise provide start and end together for an explicit range, or omit all date selectors for all history/latest. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, safe summaries, exact start and end coordinates when present, opaque references, and authenticated app links.'
         : 'Find, list, or inspect individual workouts newest first. Filter server-side with activityTypes; use list_activity_types for canonical values. For today or yesterday, provide relativePeriod and an IANA timeZone. Otherwise provide start and end together for an explicit range, or omit all date selectors for all history/latest. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, safe non-location summaries, opaque references, and authenticated app links; location fields are redacted.',
-      inputSchema: {
+      inputSchema: z.object({
         start: MCP_ISO_DATE_TIME_SCHEMA
           .describe('Optional inclusive period start. Provide start and end together; do not combine them with relativePeriod.')
           .optional(),
@@ -1011,7 +1013,7 @@ export function createMcpServer(
           .max(100)
           .default(25)
           .describe('Maximum matching activities to return. Use 1 for a latest or last request, including a server-filtered named activity type.'),
-      },
+      }),
       outputSchema: outputSchemas.list_activities,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activities', () => dataService.listActivities({
@@ -1032,7 +1034,7 @@ export function createMcpServer(
       limit: input.limit,
     })));
 
-    server.registerTool('query_activities', {
+    registerMcpTool(server, 'query_activities', {
       title: 'Query activities',
       description: activityLocationAvailable
         ? 'Query individual workouts newest first with one explicit date mode: start/end, relativePeriod/timeZone, or unbounded history. Filter server-side with activityTypes; use list_activity_types for canonical values. Returns bounded scan counts, safe summaries, exact start and end coordinates when present, opaque references, and authenticated app links.'
@@ -1059,10 +1061,10 @@ export function createMcpServer(
     })));
 
     if (activityLocationAvailable) {
-      server.registerTool('find_activities_near_location', {
+      registerMcpTool(server, 'find_activities_near_location', {
         title: 'Find activities near a location',
         description: 'Find activities whose exact start or end coordinate is within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Dates are optional, and results are returned newest first in bounded scan pages.',
-        inputSchema: {
+        inputSchema: z.object({
           location: MCP_NEARBY_LOCATION_SCHEMA,
           radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
           start: MCP_ISO_DATE_TIME_SCHEMA.optional(),
@@ -1070,7 +1072,7 @@ export function createMcpServer(
           activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
           cursor: MCP_CURSOR_SCHEMA.optional(),
           limit: z.number().int().min(1).max(25).default(10),
-        },
+        }),
         outputSchema: outputSchemas.find_activities_near_location,
         annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool(
@@ -1093,7 +1095,7 @@ export function createMcpServer(
         }),
       ));
 
-      server.registerTool('search_activities_near_location', {
+      registerMcpTool(server, 'search_activities_near_location', {
         title: 'Search activities near a location',
         description: 'Search activities whose exact start or end coordinate is within a radius, using either a complete start/end range or unbounded newest-first history. Place text is resolved with a read-only Mapbox lookup; direct coordinates do not call Mapbox.',
         inputSchema: MCP_NEARBY_ACTIVITY_INPUT_SCHEMA,
@@ -1120,14 +1122,14 @@ export function createMcpServer(
       ));
     }
 
-    server.registerTool('list_activity_laps', {
+    registerMcpTool(server, 'list_activity_laps', {
       title: 'List activity laps',
       description: 'List allowlisted lap timing and performance fields for one activity.',
-      inputSchema: {
+      inputSchema: z.object({
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
-      },
+      }),
       outputSchema: outputSchemas.list_activity_laps,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activity_laps', () => dataService.listActivityLaps({
@@ -1138,16 +1140,16 @@ export function createMcpServer(
       limit: input.limit,
     })));
 
-    server.registerTool('list_activity_jumps', {
+    registerMcpTool(server, 'list_activity_jumps', {
       title: 'List activity jumps',
       description: activityLocationAvailable
         ? 'List MTB jump measurements for one activity, including exact coordinates when present.'
         : 'List MTB jump measurements for one activity with coordinates redacted.',
-      inputSchema: {
+      inputSchema: z.object({
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
-      },
+      }),
       outputSchema: outputSchemas.list_activity_jumps,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_activity_jumps', () => dataService.listActivityJumps({
@@ -1159,14 +1161,14 @@ export function createMcpServer(
       limit: input.limit,
     })));
 
-    server.registerTool('list_activity_swim_lengths', {
+    registerMcpTool(server, 'list_activity_swim_lengths', {
       title: 'List activity swim lengths',
       description: 'List allowlisted pool length, stroke, timing, and performance fields for one activity.',
-      inputSchema: {
+      inputSchema: z.object({
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         cursor: MCP_CURSOR_SCHEMA.optional(),
         limit: z.number().int().min(1).max(100).default(50),
-      },
+      }),
       outputSchema: outputSchemas.list_activity_swim_lengths,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -1180,12 +1182,12 @@ export function createMcpServer(
       }),
     ));
 
-    server.registerTool('list_activity_chart_metrics', {
+    registerMcpTool(server, 'list_activity_chart_metrics', {
       title: 'List activity chart metrics',
       description: 'List the static chart-stream catalog, canonical units, axes, and point limits. This does not read an activity or original source file.',
-      inputSchema: {
+      inputSchema: z.object({
         activityType: z.string().min(1).max(120).optional(),
-      },
+      }),
       outputSchema: outputSchemas.list_activity_chart_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -1193,10 +1195,10 @@ export function createMcpServer(
       async () => dataService.listActivityChartMetrics(input.activityType),
     ));
 
-    server.registerTool('get_activity_chart_data', {
+    registerMcpTool(server, 'get_activity_chart_data', {
       title: 'Get activity chart data',
       description: 'Parse the existing original source on demand and return bounded, whole-activity chart series. Original files, full-resolution recordings, absolute sample timestamps, and unrequested streams are never returned. Breadcrumb coordinates require activity-location access.',
-      inputSchema: {
+      inputSchema: z.object({
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         metrics: z.array(z.string().min(1).max(120)).min(1).max(4),
         xAxis: z.enum(['elapsed_time', 'distance']).default('elapsed_time'),
@@ -1206,7 +1208,7 @@ export function createMcpServer(
         maxLocationPoints: z.number().int().min(2)
           .max(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS)
           .default(MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS),
-      },
+      }),
       outputSchema: outputSchemas.get_activity_chart_data,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -1236,12 +1238,12 @@ export function createMcpServer(
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
     && auth.scopes.includes(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) {
-    server.registerTool('get_activity_overview', {
+    registerMcpTool(server, 'get_activity_overview', {
       title: 'Get activity overview',
       description: 'Inspect coordinate-free activity capabilities before granular reads.',
-      inputSchema: {
+      inputSchema: z.object({
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
-      },
+      }),
       outputSchema: outputSchemas.get_activity_overview,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -1253,15 +1255,15 @@ export function createMcpServer(
       }),
     ));
 
-    server.registerTool('get_activity_metrics', {
+    registerMcpTool(server, 'get_activity_metrics', {
       title: 'Get activity metrics',
       description: `Read up to ${MAX_ACTIVITY_METRICS_PER_REQUEST} explicitly selected canonical numeric Sports Lib metrics for one referenced activity. Requires both metric and activity-detail access.`,
-      inputSchema: {
+      inputSchema: z.object({
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         metrics: z.array(z.string().min(1).max(120))
           .min(1)
           .max(MAX_ACTIVITY_METRICS_PER_REQUEST),
-      },
+      }),
       outputSchema: outputSchemas.get_activity_metrics,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool(
@@ -1274,7 +1276,7 @@ export function createMcpServer(
       }),
     ));
 
-    server.registerTool('rank_activities_by_metric', {
+    registerMcpTool(server, 'rank_activities_by_metric', {
       title: 'Rank activities by metric',
       description: 'Rank one persisted metric over a range or all history. Oversized scans fail. A ranked Maximum Jump metric is authoritative; read jump details only when requested.',
       inputSchema: MCP_ACTIVITY_RANKING_INPUT_SCHEMA,
@@ -1301,12 +1303,12 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.RoutesRead)) {
-    server.registerTool('list_routes', {
+    registerMcpTool(server, 'list_routes', {
       title: 'List saved routes',
       description: routeLocationAvailable
         ? 'List saved routes newest first. Filter server-side with activityTypes or a case-insensitive route-name search; use list_activity_types for canonical values. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, exact bounds, opaque references, and direct authenticated app links.'
         : 'List saved routes newest first. Filter server-side with activityTypes or a case-insensitive route-name search; use list_activity_types for canonical values. Repeat the original filters with nextCursor until a match or scanComplete. Returns bounded scan counts, non-location summaries, opaque references, and direct authenticated app links. Bounds are redacted.',
-      inputSchema: {
+      inputSchema: z.object({
         activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
         search: z.string()
           .max(120)
@@ -1316,7 +1318,7 @@ export function createMcpServer(
           .describe('Continuation cursor. Repeat the original activityTypes and search inputs when using it.')
           .optional(),
         limit: z.number().int().min(1).max(100).default(25),
-      },
+      }),
       outputSchema: outputSchemas.list_routes,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_routes', () => dataService.listRoutes({
@@ -1331,16 +1333,16 @@ export function createMcpServer(
     })));
 
     if (routeLocationAvailable) {
-      server.registerTool('find_routes_near_location', {
+      registerMcpTool(server, 'find_routes_near_location', {
         title: 'Find saved routes near a location',
         description: 'Find saved routes whose persisted preview passes within a radius. Place text is resolved with Mapbox; direct coordinates do not call Mapbox. Results are returned newest first in bounded scan pages.',
-        inputSchema: {
+        inputSchema: z.object({
           location: MCP_NEARBY_LOCATION_SCHEMA,
           radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
           activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
           cursor: MCP_CURSOR_SCHEMA.optional(),
           limit: z.number().int().min(1).max(10).default(10),
-        },
+        }),
         outputSchema: outputSchemas.find_routes_near_location,
         annotations: READ_ONLY_LOCATION_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool(
@@ -1357,16 +1359,16 @@ export function createMcpServer(
         }),
       ));
 
-      server.registerTool('search_routes_near_location', {
+      registerMcpTool(server, 'search_routes_near_location', {
         title: 'Search saved routes near a location',
         description: 'Search saved routes whose persisted preview passes within a radius. Place text is resolved with a read-only Mapbox lookup; direct coordinates do not call Mapbox. Results are returned newest first in bounded scan pages.',
-        inputSchema: {
+        inputSchema: z.object({
           location: MCP_NEARBY_LOCATION_SCHEMA,
           radiusMeters: MCP_NEARBY_RADIUS_SCHEMA,
           activityTypes: MCP_ACTIVITY_TYPES_SCHEMA,
           cursor: MCP_CURSOR_SCHEMA.optional(),
           limit: z.number().int().min(1).max(10).default(10),
-        },
+        }),
         outputSchema: outputSchemas.search_routes_near_location,
         annotations: READ_ONLY_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool(
@@ -1383,12 +1385,12 @@ export function createMcpServer(
         }),
       ));
 
-      server.registerTool('get_route_geometry', {
+      registerMcpTool(server, 'get_route_geometry', {
         title: 'Get saved-route geometry',
         description: 'Get the bounded polyline5 preview geometry, exact bounds, and explicit start and end coordinates for each segment of one saved route.',
-        inputSchema: {
+        inputSchema: z.object({
           routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
-        },
+        }),
         outputSchema: outputSchemas.get_route_geometry,
         annotations: READ_ONLY_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool('get_route_geometry', () => dataService.getRouteGeometry({
@@ -1397,12 +1399,12 @@ export function createMcpServer(
         routeRef: input.routeRef,
       })));
 
-      server.registerTool('list_route_waypoints', {
+      registerMcpTool(server, 'list_route_waypoints', {
         title: 'List saved-route waypoints',
         description: 'List bounded, allowlisted waypoint coordinates parsed from one saved FIT or GPX route source.',
-        inputSchema: {
+        inputSchema: z.object({
           routeRef: MCP_OPAQUE_REFERENCE_SCHEMA,
-        },
+        }),
         outputSchema: outputSchemas.list_route_waypoints,
         annotations: READ_ONLY_TOOL_ANNOTATIONS,
       }, input => runReadOnlyTool('list_route_waypoints', () => dataService.listRouteWaypoints({
@@ -1624,6 +1626,7 @@ export type McpTransportRejectionReason =
   | 'unacceptable_accept_header'
   | 'unsupported_content_type'
   | 'invalid_initialization'
+  | 'invalid_protocol_envelope'
   | 'unexpected_transport_error';
 
 const SAFE_MCP_PROTOCOL_VERSION_PATTERN = /^(?:\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|DRAFT-\d{4}-v\d{1,2})$/;
@@ -1652,6 +1655,9 @@ export function classifyMcpTransportRejectionReason(
     return 'unexpected_transport_error';
   }
   const message = error.message;
+  if (message.startsWith('Rejected inbound request (')) {
+    return 'invalid_protocol_envelope';
+  }
   if (message.includes('Invalid JSON-RPC')) {
     return 'invalid_json_rpc';
   }
@@ -1693,11 +1699,19 @@ function logMcpTransportRejection(
   request: Request,
 ): void {
   const reason = classifyMcpTransportRejectionReason(error);
+  if (reason === 'unexpected_transport_error') {
+    logger.error('[MCP] Streamable HTTP request failed', {
+      errorName: error instanceof Error ? error.name : 'unknown',
+    });
+    return;
+  }
   logger.warn('[MCP] Streamable HTTP request rejected', {
     reason,
     clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
     ...(reason === 'unsupported_protocol_version'
-      ? { protocolVersion: sanitizeMcpProtocolVersionForDiagnostics(request.get('mcp-protocol-version')) }
+      ? { protocolVersion: sanitizeMcpProtocolVersionForDiagnostics(
+        request.get('mcp-protocol-version') ?? request.body?.params?._meta?.[PROTOCOL_VERSION_META_KEY],
+      ) }
       : {}),
   });
 }
@@ -1917,15 +1931,16 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     return;
   }
 
-  const server = createMcpServer(auth, baseUrl);
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
-  transport.onerror = (error) => logMcpTransportRejection(error, request);
+  const transport = createMcpTransportHandler(
+    () => createMcpServer(auth, baseUrl),
+    error => logMcpTransportRejection(error, request),
+  );
   try {
-    await server.connect(transport);
-    await transport.handleRequest(request, response, request.body);
+    await toNodeHandler(transport, {
+      onerror: error => logger.error('[MCP] Streamable HTTP adapter failed', {
+        errorName: error.name,
+      }),
+    })(request, response, request.body);
   } catch (error) {
     logger.error('[MCP] Streamable HTTP request failed', {
       errorName: error instanceof Error ? error.name : 'unknown',
@@ -1942,6 +1957,5 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     }
   } finally {
     await transport.close().catch(() => undefined);
-    await server.close().catch(() => undefined);
   }
 });

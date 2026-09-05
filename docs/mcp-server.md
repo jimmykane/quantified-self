@@ -11,9 +11,36 @@ The server is a Firebase Functions v2 HTTP function behind the production and be
 stateless Streamable HTTP transport with bounded POST/JSON responses; standalone GET/SSE and DELETE sessions are not
 supported. The HTTP, OAuth, projection, and metric-catalog implementation lives under `functions/src/mcp/`.
 
-Functions pins `@modelcontextprotocol/sdk` and overrides its compatible `@hono/node-server` adapter to `2.0.11` so the
-runtime does not retain the older adapter's published path-traversal advisory. Keep the initialize-request adapter test
-and re-check this override whenever the MCP SDK changes.
+Functions pins the `@modelcontextprotocol/server`, `client`, and `node` packages to `2.0.0` and overrides their compatible
+`@hono/node-server` adapter to `2.0.11` so the runtime does not retain the older adapter's published path-traversal
+advisory. Keep the Function-boundary HTTP tests and re-check this override whenever the MCP SDK changes.
+
+### Protocol compatibility
+
+The authenticated endpoint supports the legacy 2024/2025 initialize handshake and the `2026-07-28` per-request protocol
+on the same URL. `transport.ts` uses the SDK's classifier, not a hand-maintained header allowlist. Modern requests carry
+the reserved protocol/client envelope and use `server/discover`; malformed envelopes, header/body mismatches, and
+unsupported revisions are rejected, never silently downgraded. Both paths create fresh servers through the same factory
+after bearer validation and the existing scope prechecks. Client-supplied identity metadata never supplies authorization.
+
+Legacy responses remain stateless JSON. Modern read-only handlers also return JSON and advertise no tool-change
+subscription support; long-lived subscriptions are disabled. The Node adapter receives Firebase's already-parsed body
+explicitly. Neither transport changes OAuth client identity, permissions, grants, token rotation, or account data.
+
+`register-tool.ts` preserves the existing Zod validators and their exact registered draft-07 advertisement instead of
+accepting SDK v2's default schema-dialect rewrite. Legacy tools retain `execution.taskSupport: "forbidden"`; the SDK's
+modern codec removes that retired field. Modern responses also use the revision's `resultType` and reserved metadata
+envelope. The output contract suite runs every tool and leakage fixture through in-memory, legacy HTTP, and modern HTTP
+paths. The Function-boundary tests cover authentication, scope denial, size/media/method bounds, and rejection logging.
+Expected transport rejections remain warnings with fixed reasons and sanitized protocol versions; unexpected failures
+remain errors. A rejected modern envelope version is logged when no protocol-version header was supplied, without
+logging any other envelope or request data.
+
+The registered legacy candidate digest is unchanged by this upgrade. It adds no tool/schema/scope/instruction refresh or
+local plugin-sync requirement of its own; the pre-existing `pending-change.json` release still needs its separately
+verified live refresh and promotion. Do not consume that record just because protocol tests pass. If a later registered
+app rescan switches protocol eras, verify its actual negotiated contract before choosing a promotion workflow; a modern
+diagnostic capture is not evidence that the registered legacy baseline was refreshed.
 
 This is an outbound user-authorized data interface, not a fitness-provider integration. It does not import provider data,
 write activities, mutate Training state, or require a public `/integrations/<provider>` page.
@@ -574,6 +601,18 @@ Functions, fetches the comparison revision, and runs the compiled compatibility 
 accepting the change. A server-only implementation or result fix needs no pending record when the advertised contract
 remains byte-for-byte equivalent after canonicalization.
 Never edit the registered baseline or transition history directly; only the verified promotion command may update them.
+
+For a reproducible modern-protocol review artifact, run:
+
+```bash
+npm --prefix functions run mcp:contract:capture -- --protocol-version 2026-07-28 \
+  --output /tmp/quantified-self-mcp-2026-contract.json
+```
+
+This uses the real HTTP handler in-process, with no network or account-data reads, across the same authorization
+profiles. The snapshot records the negotiated modern version, schemas, metadata, and scope-specific tools. Capture
+defaults to `2025-11-25`; the registered compatibility gate and promotion commands continue to audit that legacy
+contract. The modern snapshot is review-only and cannot be used to bypass a breaking-contract finding.
 
 The repository-managed Lefthook pre-push hook runs `npm run hooks:mcp:pre-push` only when the pushed commits touch MCP
 Functions code, the contract command, or the Functions dependency manifests. The focused command runs the contract gate

@@ -1,5 +1,4 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -26,6 +25,7 @@ import {
 } from './derived-output-schemas';
 import { MCP_OAUTH_SCOPES } from './oauth.service';
 import { createMcpServer } from './server';
+import { createMcpTransportHandler } from './transport';
 import {
   createMcpOutputSchemaRegistry,
   PUBLIC_MCP_TOOL_NAMES,
@@ -1257,13 +1257,14 @@ const successfulToolArguments: Record<
   },
 };
 
-async function connectFixtureServer(
+type FixtureTransport = 'in-memory' | 'legacy-http' | 'modern-http';
+
+async function connectFixtureServerForTransport(
   dataService: InjectedDataService,
   scopes = Object.values(MCP_OAUTH_SCOPES),
+  mode: FixtureTransport = 'in-memory',
 ) {
-  const [clientTransport, serverTransport] =
-    InMemoryTransport.createLinkedPair();
-  const server = createMcpServer({
+  const factory = () => createMcpServer({
     uid: 'user-1',
     clientId: 'https://client.example/client.json',
     connectionId: 'connection-1',
@@ -1272,7 +1273,18 @@ async function connectFixtureServer(
   const client = new Client({
     name: 'output-contract-test-client',
     version: '1.0.0',
-  });
+  }, { versionNegotiation: { mode: mode === 'modern-http' ? { pin: '2026-07-28' } : 'legacy' } });
+  if (mode !== 'in-memory') {
+    const server = createMcpTransportHandler(factory, error => { throw error; });
+    const transport = new StreamableHTTPClientTransport(new URL('https://contract.example/mcp'), {
+      fetch: (url, init) => server.fetch(new Request(url, init)),
+    });
+    await client.connect(transport);
+    expect(client.getNegotiatedProtocolVersion()).toBe(mode === 'modern-http' ? '2026-07-28' : '2025-11-25');
+    return { client, server };
+  }
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = factory();
   await server.connect(serverTransport);
   await client.connect(clientTransport);
   return { client, server };
@@ -1323,10 +1335,14 @@ function collectObjectSchemas(
   return schemas;
 }
 
-describe('MCP public output contracts', () => {
+describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MCP public output contracts (%s)', mode => {
+  const connectFixtureServer = (
+    dataService: InjectedDataService,
+    scopes = Object.values(MCP_OAUTH_SCOPES),
+  ) => connectFixtureServerForTransport(dataService, scopes, mode);
   const connections: Array<{
     client: Client;
-    server: ReturnType<typeof createMcpServer>;
+    server: { close(): Promise<void> };
   }> = [];
 
   afterEach(async () => {

@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
@@ -33,11 +33,11 @@ function createTestServer(options: {
       description: `Description ${name}`,
       inputSchema: usesMetricHistoryResponse
         ? z.object({}).passthrough()
-        : { query: z.string().optional() },
+        : z.object({ query: z.string().optional() }),
       outputSchema: usesMetricHistoryResponse
         ? z.object({}).passthrough()
-        : { source: z.literal(name) },
-    }, async (input) => options.errorTool === name
+        : z.object({ source: z.literal(name) }),
+    }, async (input: Record<string, unknown>): Promise<CallToolResult> => options.errorTool === name
       ? {
         isError: true,
         content: [{
@@ -60,7 +60,7 @@ function createTestServer(options: {
   }
   server.registerTool('get_route_geometry', {
     description: 'Must never be available internally.',
-    inputSchema: {},
+    inputSchema: z.object({}),
   }, async () => ({ content: [{ type: 'text', text: 'unexpected' }] }));
   return server;
 }
@@ -145,8 +145,8 @@ describe('Assistant MCP session', () => {
           MCP_OAUTH_SCOPES.RoutesRead,
         ],
       });
-      expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.ActivityLocationRead);
-      expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
+      expect(capturedAuth).not.toMatchObject({ scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.ActivityLocationRead]) });
+      expect(capturedAuth).not.toMatchObject({ scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.RouteLocationRead]) });
       expect(capturedPublicBaseUrl).toBe('https://beta.quantified-self.io');
       await expect(session.callTool('get_daily_report', {})).resolves.toEqual({
         structuredContent: { source: 'get_daily_report' },
@@ -175,8 +175,8 @@ describe('Assistant MCP session', () => {
       expect(session.tools.map(tool => tool.name)).toContain(
         'search_activities_near_location',
       );
-      expect(capturedAuth?.scopes).toContain(MCP_OAUTH_SCOPES.ActivityLocationRead);
-      expect(capturedAuth?.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
+      expect(capturedAuth).toMatchObject({ scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.ActivityLocationRead]) });
+      expect(capturedAuth).not.toMatchObject({ scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.RouteLocationRead]) });
       expect(session.tools.map(tool => tool.name)).not.toContain('get_route_geometry');
     } finally {
       await session.close();
@@ -231,7 +231,7 @@ describe('Assistant MCP session', () => {
       const server = new McpServer({ name: 'partial', version: '1.0.0' });
       server.registerTool('list_activity_types', {
         description: 'Only one tool.',
-        inputSchema: {},
+        inputSchema: z.object({}),
       }, async () => ({ content: [{ type: 'text', text: '{}' }] }));
       return server;
     };

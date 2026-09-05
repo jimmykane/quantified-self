@@ -275,6 +275,10 @@ async function checkContract(): Promise<void> {
 }
 
 async function captureContract(): Promise<void> {
+  const protocol = argumentValue('--protocol-version') ?? '2025-11-25';
+  if (protocol !== '2025-11-25' && protocol !== '2026-07-28') {
+    throw new Error('capture --protocol-version must be 2025-11-25 or 2026-07-28.');
+  }
   const outputArgument = argumentValue('--output');
   if (!outputArgument) {
     throw new Error('capture requires --output <path>.');
@@ -291,7 +295,7 @@ async function captureContract(): Promise<void> {
     );
   }
   const registered = await readRegisteredContract();
-  const contract = await captureMcpContract(registered.contract.origin);
+  const contract = await captureMcpContract(registered.contract.origin, protocol);
   const candidateSha256 = digestMcpContract(contract);
   await writeJsonFile(outputPath, {
     candidateSha256,

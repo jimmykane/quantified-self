@@ -1,5 +1,5 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { createMcpTransportHandler } from './transport';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -387,10 +387,11 @@ async function captureProfile(
   profileId: string,
   scopes: McpOAuthScope[],
   origin: string,
+  protocol: '2025-11-25' | '2026-07-28',
 ): Promise<CapturedProfile> {
   const [clientTransport, serverTransport] =
     InMemoryTransport.createLinkedPair();
-  const server = createMcpServer({
+  const factory = () => createMcpServer({
     uid: 'mcp-contract-user',
     clientId: 'https://contract-client.example/client.json',
     connectionId: `mcp-contract-${profileId}`,
@@ -399,20 +400,27 @@ async function captureProfile(
   const client = new Client({
     name: 'quantified-self-contract-capture',
     version: '1.0.0',
+  }, {
+    versionNegotiation: { mode: protocol === '2026-07-28' ? { pin: protocol } : 'legacy' },
   });
-  let protocolVersion: string | null = null;
-  const versionedClientTransport = Object.assign(clientTransport, {
-    setProtocolVersion(value: string): void {
-      protocolVersion = value;
-    },
-  });
+  const httpHandler = protocol === '2026-07-28'
+    ? createMcpTransportHandler(factory, error => { throw error; })
+    : null;
+  const server = httpHandler ? null : factory();
 
   try {
-    await server.connect(serverTransport);
-    await client.connect(versionedClientTransport);
+    if (httpHandler) {
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
+        fetch: (url, init) => httpHandler.fetch(new Request(url, init)),
+      }));
+    } else {
+      await server!.connect(serverTransport);
+      await client.connect(clientTransport);
+    }
+    const protocolVersion = client.getNegotiatedProtocolVersion();
     const identity = client.getServerVersion();
     const capabilities = client.getServerCapabilities();
-    if (!identity || !capabilities || !protocolVersion) {
+    if (!identity || !capabilities || protocolVersion !== protocol) {
       throw new Error(`MCP profile ${profileId} did not initialize.`);
     }
 
@@ -420,7 +428,9 @@ async function captureProfile(
     const seenCursors = new Set<string>();
     let cursor: string | undefined;
     do {
-      const result = await client.listTools(cursor ? { cursor } : undefined);
+      // v2 listTools() auto-aggregates; capture each wire page explicitly so
+      // duplicate tools and repeated cursors still fail this audit.
+      const result = await client.request({ method: 'tools/list', params: cursor ? { cursor } : {} });
       for (const tool of result.tools) {
         if (tools.has(tool.name)) {
           throw new Error(
@@ -454,12 +464,14 @@ async function captureProfile(
     };
   } finally {
     await client.close().catch(() => undefined);
-    await server.close().catch(() => undefined);
+    await server?.close().catch(() => undefined);
+    await httpHandler?.close().catch(() => undefined);
   }
 }
 
 export async function captureMcpContract(
   origin = MCP_CONTRACT_ORIGIN,
+  protocol: '2025-11-25' | '2026-07-28' = '2025-11-25',
 ): Promise<McpContractSnapshot> {
   const profiles: Record<string, {
     scopes: string[];
@@ -481,6 +493,7 @@ export async function captureMcpContract(
       definition.id,
       definition.scopes,
       origin,
+      protocol,
     );
     if (serverIdentity && !jsonEqual(serverIdentity, captured.identity)) {
       throw new Error(
