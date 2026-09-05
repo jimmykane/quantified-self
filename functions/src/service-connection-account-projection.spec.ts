@@ -18,6 +18,7 @@ import {
   projectionRevisionKeyFromMs,
   readServiceConnectionAccountProjection,
   refreshServiceConnectionAccountProjection,
+  serviceConnectionAccountProjectionTestInternals,
 } from './service-connection-account-projection';
 
 function snapshot(id: string, data: Record<string, unknown>) {
@@ -32,6 +33,18 @@ describe('service connection account projection', () => {
       deletionInProgress: false,
       shouldSkip: false,
     });
+  });
+
+  it('allocates additional memory only to the Suunto token projection trigger', () => {
+    expect(serviceConnectionAccountProjectionTestInternals.projectionMemoryForService(
+      ServiceNames.SuuntoApp,
+    )).toBe('512MiB');
+    expect(serviceConnectionAccountProjectionTestInternals.projectionMemoryForService(
+      ServiceNames.GarminAPI,
+    )).toBe('256MiB');
+    expect(serviceConnectionAccountProjectionTestInternals.projectionMemoryForService(
+      ServiceNames.COROSAPI,
+    )).toBe('256MiB');
   });
 
   it('projects only browser-safe Garmin account fields', () => {
