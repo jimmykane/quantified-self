@@ -7,18 +7,17 @@ const hoisted = vi.hoisted(() => {
     const select = vi.fn();
     const orderBy = vi.fn();
     const where = vi.fn();
+    const documentId = vi.fn(() => '__name__');
     const chain = { where, orderBy, select, limit, get };
     const healthCollection = { where };
     const userRef = { collection: vi.fn(() => healthCollection) };
     const usersCollection = { doc: vi.fn(() => userRef) };
-    const firestore = Object.assign(
-        vi.fn(() => ({ collection: vi.fn(() => usersCollection) })),
-        { FieldPath: { documentId: vi.fn(() => '__name__') } },
-    );
-    return { get, limit, select, orderBy, where, chain, healthCollection, userRef, usersCollection, firestore };
+    const firestore = vi.fn(() => ({ collection: vi.fn(() => usersCollection) }));
+    return { get, limit, select, orderBy, where, documentId, chain, healthCollection, userRef, usersCollection, firestore };
 });
 
 vi.mock('firebase-admin', () => ({ firestore: hoisted.firestore }));
+vi.mock('firebase-admin/firestore', () => ({ FieldPath: { documentId: hoisted.documentId } }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 vi.mock('../shared/cloud-tasks', () => ({ enqueueDerivedMetricsTask: vi.fn() }));
 
@@ -52,6 +51,7 @@ describe('derived Health source queries', () => {
         expect(hoisted.where).toHaveBeenNthCalledWith(3, 'calendarDate', '<=', '2026-02-28');
         expect(hoisted.orderBy).toHaveBeenNthCalledWith(1, 'calendarDate', 'asc');
         expect(hoisted.orderBy).toHaveBeenNthCalledWith(2, '__name__', 'asc');
+        expect(hoisted.documentId).toHaveBeenCalledTimes(1);
         expect(hoisted.limit).toHaveBeenCalledWith(2_049);
         expect(docs).toEqual([{ id: 'weight' }]);
     });

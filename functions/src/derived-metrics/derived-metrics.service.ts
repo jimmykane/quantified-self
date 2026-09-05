@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
     ActivityTypes,
@@ -5512,7 +5513,7 @@ export async function fetchDerivedMetricsHealthDocs(
         .where('calendarDate', '<=', endDate);
     const snapshot = await query
         .orderBy('calendarDate', 'asc')
-        .orderBy(admin.firestore.FieldPath.documentId(), 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
         .select(
             'kind',
             'source.provider',
@@ -5544,7 +5545,7 @@ export async function hasAnyDerivedMetricsHealthRecord(
         .where('calendarDate', '>=', startDate)
         .where('calendarDate', '<=', endDate)
         .orderBy('calendarDate', 'asc')
-        .orderBy(admin.firestore.FieldPath.documentId(), 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
         .select('kind')
         .limit(1)
         .get();
