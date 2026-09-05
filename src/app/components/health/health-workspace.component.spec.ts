@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MatTooltip } from '@angular/material/tooltip';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -33,16 +34,21 @@ import {
 } from '@shared/activity-health';
 import { SLEEP_PROVIDERS, SleepProvider, SleepSession, SleepSyncState } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppEventService } from '../../services/app.event.service';
 import { AppHealthService, HealthWorkspaceRangeLoad } from '../../services/app.health.service';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHealthWorkspaceMetric, AppHealthWorkspaceRange } from '../../models/app-user.interface';
-import { HealthWorkspaceSeries, localCalendarDate } from '../../helpers/health-workspace.helper';
+import {
+  HealthWorkspaceSeries,
+  type ManualHealthObservationEdit,
+  localCalendarDate,
+} from '../../helpers/health-workspace.helper';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
 import { HealthWorkspaceComponent } from './health-workspace.component';
@@ -145,6 +151,41 @@ function sourceRecord(metricId: HealthMetricId, provider: HealthProvider, value:
   };
 }
 
+function manualSourceRecord(
+  metricId: typeof HEALTH_METRIC_IDS.BodyWeight | typeof HEALTH_METRIC_IDS.Vo2Max,
+  value: number,
+  suffix: string,
+): HealthSourceRecord {
+  const record = sourceRecord(metricId, HEALTH_PROVIDERS.QuantifiedSelf, value, suffix);
+  const metric = record.metrics[0];
+  if (metric.kind !== 'value') throw new Error('Expected a scalar test metric.');
+  return {
+    ...record,
+    kind: HEALTH_SOURCE_RECORD_KINDS.PointMeasurement,
+    timezoneOffsetSeconds: 7_200,
+    source: {
+      ...record.source,
+      sourceRecordType: 'manual_measurement',
+      revision: { ...record.source.revision, order: 4 },
+    },
+    metrics: [{
+      ...metric,
+      aggregation: 'measurement',
+      semanticVariant: metricId === HEALTH_METRIC_IDS.BodyWeight
+        ? 'point'
+        : 'manual_running_lab_test',
+      origin: HEALTH_VALUE_ORIGINS.Recorded,
+      recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+      native: {
+        ...metric.native,
+        qualifiers: metricId === HEALTH_METRIC_IDS.Vo2Max
+          ? { context: 'running', method: 'lab_test' }
+          : undefined,
+      },
+    }],
+  };
+}
+
 function rangeLoad(metricId: HealthMetricId, empty = false): HealthWorkspaceRangeLoad {
   const records = empty ? [] : [
     sourceRecord(metricId, HEALTH_PROVIDERS.GarminAPI, metricId === HEALTH_METRIC_IDS.HeartRateVariability ? 55 : 52, 'garmin'),
@@ -236,6 +277,8 @@ describe('HealthWorkspaceComponent', () => {
   let loadMetricRange: ReturnType<typeof vi.fn>;
   let loadAvailableMetricIds: ReturnType<typeof vi.fn>;
   let loadActivityHealthRange: ReturnType<typeof vi.fn>;
+  let saveManualMeasurement: ReturnType<typeof vi.fn>;
+  let deleteManualMeasurement: ReturnType<typeof vi.fn>;
   let updateHealthWorkspacePreferences: ReturnType<typeof vi.fn>;
   let hydrateSavedRange: (range: AppHealthWorkspaceRange) => void;
   let hydrateSavedMetric: (metric: AppHealthWorkspaceMetric) => void;
@@ -276,6 +319,11 @@ describe('HealthWorkspaceComponent', () => {
         availability.metricIds || Object.keys(HEALTH_METRIC_CATALOG) as HealthMetricId[],
       );
     loadActivityHealthRange = vi.fn().mockResolvedValue(activityRangeResult());
+    saveManualMeasurement = vi.fn().mockResolvedValue({
+      sourceRecordId: 'manual-record',
+      revisionOrder: todayStartMs,
+    });
+    deleteManualMeasurement = vi.fn().mockResolvedValue({ deleted: true });
     updateHealthWorkspacePreferences = vi.fn().mockResolvedValue(undefined);
     const savedHealthWorkspace = {
       ...(savedRange ? { range: savedRange } : {}),
@@ -364,8 +412,14 @@ describe('HealthWorkspaceComponent', () => {
             loadMetricRange,
             loadActivityHealthRange,
             loadAvailableMetricIds,
+            saveManualMeasurement,
+            deleteManualMeasurement,
             watchSyncStates: () => syncStates.asObservable(),
           },
+        },
+        {
+          provide: BrowserCompatibilityService,
+          useValue: { createRandomUUID: () => '123e4567-e89b-42d3-a456-426614174000' },
         },
         {
           provide: HealthActivityQueryService,
@@ -942,14 +996,13 @@ describe('HealthWorkspaceComponent', () => {
       endTimeMs: component.selectedWindow().endTimeMs,
     });
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.textContent).toContain('Workout Weight is profile context');
-    expect(host.textContent).toContain('Workout profile context');
-    expect(host.textContent).toContain('Not applicable');
+    expect(host.textContent).toContain('Latest workout profile context: 72.0 kg from Garmin');
+    expect(host.textContent).toContain('It is not plotted as a weigh-in');
     expect(host.textContent).not.toContain('opaque-workout-account');
-    expect(host.querySelectorAll('.health-chart-panel')).toHaveLength(1);
+    expect(host.querySelectorAll('.health-chart-panel')).toHaveLength(0);
   });
 
-  it('restores every Weight source after switching from one provider back to all sources', async () => {
+  it('keeps workout Weight as fallback context while provider filters change', async () => {
     const garminWeight = sourceRecord(
       HEALTH_METRIC_IDS.BodyWeight,
       HEALTH_PROVIDERS.GarminAPI,
@@ -990,22 +1043,20 @@ describe('HealthWorkspaceComponent', () => {
 
     expect(component.metricView().series.map(series => series.provider)).toEqual([
       HEALTH_PROVIDERS.GarminAPI,
-      HEALTH_PROVIDERS.SuuntoApp,
     ]);
 
     component.toggleProvider(HEALTH_PROVIDERS.SuuntoApp);
     fixture.detectChanges();
-    expect(component.metricView().series.map(series => series.provider)).toEqual([
-      HEALTH_PROVIDERS.SuuntoApp,
-    ]);
+    expect(component.metricView().series).toEqual([]);
+    expect(component.workoutWeightFallback()).toMatchObject({ sourceLabel: 'Suunto' });
 
     component.showAllProviders();
     fixture.detectChanges();
     expect(component.metricView().series.map(series => series.provider)).toEqual([
       HEALTH_PROVIDERS.GarminAPI,
-      HEALTH_PROVIDERS.SuuntoApp,
     ]);
-    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-chart-panel')).toHaveLength(2);
+    expect(component.workoutWeightFallback()).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-chart-panel')).toHaveLength(1);
   });
 
   it('keeps a later workout-metric response when an earlier request resolves late', async () => {
@@ -1074,6 +1125,194 @@ describe('HealthWorkspaceComponent', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
     expect(text).toContain('Workout-backed observations could not be loaded');
     expect(text).not.toContain('private provider failure');
+  });
+
+  it('creates manual Weight with an idempotency key and refreshes the selected range', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    await fixture.whenStable();
+    const callsBeforeMutation = loadMetricRange.mock.calls.length;
+
+    await (component as unknown as {
+      createManualMeasurement: (
+        metricId: typeof HEALTH_METRIC_IDS.BodyWeight,
+        value: { canonicalValue: number; observedAtMs: number; timezoneOffsetSeconds: number },
+      ) => Promise<void>;
+    }).createManualMeasurement(HEALTH_METRIC_IDS.BodyWeight, {
+      canonicalValue: 72.4,
+      observedAtMs: todayStartMs + 10_000,
+      timezoneOffsetSeconds: 7_200,
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(saveManualMeasurement).toHaveBeenCalledWith({
+      mode: 'create',
+      clientMutationId: expect.stringMatching(/^[0-9a-f-]{36}$/i),
+      metricId: HEALTH_METRIC_IDS.BodyWeight,
+      canonicalValue: 72.4,
+      observedAtMs: todayStartMs + 10_000,
+      timezoneOffsetSeconds: 7_200,
+    });
+    expect(loadMetricRange.mock.calls.length).toBeGreaterThan(callsBeforeMutation);
+    expect(component.manualMutationBusy()).toBe(false);
+  });
+
+  it('reuses the same idempotency key when the user retries an ambiguous create failure', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    const retryAction = new Subject<void>();
+    const snackBar = TestBed.inject(MatSnackBar);
+    vi.spyOn(snackBar, 'open').mockReturnValue({
+      onAction: () => retryAction.asObservable(),
+    } as never);
+    saveManualMeasurement
+      .mockRejectedValueOnce(new Error('ambiguous response'))
+      .mockResolvedValueOnce({ sourceRecordId: 'opaque', revisionOrder: 1 });
+    const mutationId = '123e4567-e89b-42d3-a456-426614174000';
+    const value = {
+      canonicalValue: 72.4,
+      observedAtMs: todayStartMs + 10_000,
+      timezoneOffsetSeconds: 7_200,
+    };
+
+    await (component as unknown as {
+      createManualMeasurement: (
+        metricId: typeof HEALTH_METRIC_IDS.BodyWeight,
+        measurement: typeof value,
+        clientMutationId: string,
+      ) => Promise<void>;
+    }).createManualMeasurement(HEALTH_METRIC_IDS.BodyWeight, value, mutationId);
+    retryAction.next();
+
+    await vi.waitFor(() => expect(saveManualMeasurement).toHaveBeenCalledTimes(2));
+    expect(saveManualMeasurement.mock.calls.map(([request]) => request.clientMutationId))
+      .toEqual([mutationId, mutationId]);
+  });
+
+  it('does not submit a manual measurement when the browser cannot create a secure UUID', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    vi.spyOn(TestBed.inject(BrowserCompatibilityService), 'createRandomUUID').mockReturnValue(null);
+    const snackBar = TestBed.inject(MatSnackBar);
+    const notice = vi.spyOn(snackBar, 'open');
+
+    await (component as unknown as {
+      createManualMeasurement: (
+        metricId: typeof HEALTH_METRIC_IDS.BodyWeight,
+        measurement: {
+          canonicalValue: number;
+          observedAtMs: number;
+          timezoneOffsetSeconds: number;
+        },
+      ) => Promise<void>;
+    }).createManualMeasurement(HEALTH_METRIC_IDS.BodyWeight, {
+      canonicalValue: 72.4,
+      observedAtMs: todayStartMs + 10_000,
+      timezoneOffsetSeconds: 7_200,
+    });
+
+    expect(saveManualMeasurement).not.toHaveBeenCalled();
+    expect(notice).toHaveBeenCalledWith(
+      'This browser cannot create a secure measurement ID.',
+      'Dismiss',
+      { duration: 5000 },
+    );
+    expect(component.manualMutationBusy()).toBe(false);
+  });
+
+  it('offers manual creation and exposes edit/delete actions only for manual observations', async () => {
+    const manualRecord = manualSourceRecord(HEALTH_METRIC_IDS.BodyWeight, 72.4, 'manual');
+    await createComponent(metricId => {
+      const records = metricId === HEALTH_METRIC_IDS.BodyWeight ? [manualRecord] : [];
+      const result = projectLoadedHealthRange(records, [], {
+        startDate: new Date(todayStartMs - (29 * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10),
+        endDate: todayDate,
+        metricIds: [metricId],
+        includeSamples: false,
+      }, { sourceRecordsComplete: true, samplesComplete: true });
+      return Promise.resolve({
+        result,
+        limitReached: null,
+        sourceRecordCount: records.length,
+        sampleChunkCount: 0,
+        samplePointCount: 0,
+        serializedBytes: 500,
+        hasMatchingSourceRecords: records.length > 0,
+        hasSampleBackedMetric: false,
+        providers: records.map(record => record.source.provider),
+        sampleBackedProviders: [],
+      });
+    });
+
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.health-add-measurement')?.textContent).toContain('Add weight');
+    expect(host.querySelector('[aria-label="Edit manual measurement"]')).toBeTruthy();
+    expect(host.querySelector('[aria-label="Delete manual measurement"]')).toBeTruthy();
+    expect(component.metricRows()[0]?.manualMeasurement).toMatchObject({
+      expectedRevisionOrder: 4,
+      metricId: HEALTH_METRIC_IDS.BodyWeight,
+      canonicalValue: 72.4,
+      timezoneOffsetSeconds: 7_200,
+    });
+  });
+
+  it('updates and deletes only the selected manual record revision', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    component.selectMetric(HEALTH_METRIC_IDS.Vo2Max);
+    await fixture.whenStable();
+    const measurement: ManualHealthObservationEdit = {
+      sourceRecordId: 'manual-record',
+      expectedRevisionOrder: 42,
+      metricId: HEALTH_METRIC_IDS.Vo2Max,
+      canonicalValue: 51,
+      observedAtMs: todayStartMs,
+      timezoneOffsetSeconds: 7_200,
+      vo2Context: 'running',
+      vo2Method: 'lab_test',
+    };
+
+    await (component as unknown as {
+      updateManualMeasurement: (
+        current: ManualHealthObservationEdit,
+        value: {
+          canonicalValue: number;
+          observedAtMs: number;
+          timezoneOffsetSeconds: number;
+          vo2Context: 'cycling';
+          vo2Method: 'field_test';
+        },
+      ) => Promise<void>;
+    }).updateManualMeasurement(measurement, {
+      canonicalValue: 53,
+      observedAtMs: todayStartMs + 20_000,
+      timezoneOffsetSeconds: 7_200,
+      vo2Context: 'cycling',
+      vo2Method: 'field_test',
+    });
+    await (component as unknown as {
+      removeManualMeasurement: (current: ManualHealthObservationEdit) => Promise<void>;
+    }).removeManualMeasurement(measurement);
+
+    expect(saveManualMeasurement).toHaveBeenCalledWith({
+      mode: 'update',
+      sourceRecordId: 'manual-record',
+      expectedRevisionOrder: 42,
+      metricId: HEALTH_METRIC_IDS.Vo2Max,
+      canonicalValue: 53,
+      observedAtMs: todayStartMs + 20_000,
+      timezoneOffsetSeconds: 7_200,
+      vo2Context: 'cycling',
+      vo2Method: 'field_test',
+    });
+    expect(deleteManualMeasurement).toHaveBeenCalledWith({
+      sourceRecordId: 'manual-record',
+      expectedRevisionOrder: 42,
+    });
+    expect(component.manualMutationBusy()).toBe(false);
   });
 
   it('refreshes selected and priority data when sync-state timestamps advance', async () => {

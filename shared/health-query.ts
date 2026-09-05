@@ -606,6 +606,7 @@ function projectHealthRangeInternal(
       const observation: HealthObservation = {
         id: `${sourceRecord.id}:${index}`,
         sourceRecordId: sourceRecord.id,
+        sourceRevisionOrder: sourceRecord.source.revision.order,
         provider: sourceRecord.source.provider,
         accountKey: sourceRecord.source.accountKey,
         calendarDate: sourceRecord.calendarDate,

@@ -47,6 +47,7 @@
             <th scope="col">Coverage</th>
             <th scope="col">Freshness</th>
             <th scope="col">Status</th>
+            <th scope="col"><span class="health-source-table-actions-label">Actions</span></th>
           </tr>
         </thead>
         <tbody>
@@ -60,6 +61,28 @@
               <td>{{ row.coverageText }}</td>
               <td>{{ row.freshnessText }}</td>
               <td>{{ row.conflict ? 'Conflict' : '—' }}</td>
+              <td>
+                @if (row.manualMeasurement) {
+                  <div class="health-source-table-actions">
+                    <button
+                      mat-icon-button
+                      type="button"
+                      matTooltip="Edit manual measurement"
+                      aria-label="Edit manual measurement"
+                      (click)="editManualMeasurement.emit(row.manualMeasurement)">
+                      <mat-icon aria-hidden="true">edit</mat-icon>
+                    </button>
+                    <button
+                      mat-icon-button
+                      type="button"
+                      matTooltip="Delete manual measurement"
+                      aria-label="Delete manual measurement"
+                      (click)="deleteManualMeasurement.emit(row.manualMeasurement)">
+                      <mat-icon aria-hidden="true">delete</mat-icon>
+                    </button>
+                  </div>
+                }
+              </td>
             </tr>
           }
         </tbody>

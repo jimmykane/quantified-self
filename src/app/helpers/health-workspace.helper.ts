@@ -30,6 +30,15 @@ import {
   type ActivityHealthMetricId,
 } from '@shared/activity-health';
 import {
+  MANUAL_HEALTH_AGGREGATION,
+  MANUAL_HEALTH_SOURCE_RECORD_TYPE,
+  MANUAL_VO2_CONTEXTS,
+  MANUAL_VO2_METHODS,
+  type ManualHealthMetricId,
+  type ManualVo2Context,
+  type ManualVo2Method,
+} from '@shared/manual-health';
+import {
   SLEEP_SPORTS_LIB_METRIC_FIELDS,
   SleepSession,
   normalizeSleepProvider,
@@ -126,6 +135,24 @@ export interface HealthObservationTableRow {
   coverageText: string;
   freshnessText: string;
   conflict: boolean;
+  manualMeasurement: ManualHealthObservationEdit | null;
+}
+
+export interface ManualHealthObservationEdit {
+  sourceRecordId: string;
+  expectedRevisionOrder: number;
+  metricId: ManualHealthMetricId;
+  canonicalValue: number;
+  observedAtMs: number;
+  timezoneOffsetSeconds: number;
+  vo2Context?: ManualVo2Context;
+  vo2Method?: ManualVo2Method;
+}
+
+export interface WorkoutWeightContextFallback {
+  sourceLabel: string;
+  valueText: string;
+  observedText: string;
 }
 
 export interface HealthMetricWorkspaceView {
@@ -189,6 +216,7 @@ interface MetricDatum {
   sampleCount: number;
   coverageStatus: HealthCoverageStatus;
   expectedUpdateIntervalMs: number | null;
+  manualMeasurement: ManualHealthObservationEdit | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -500,6 +528,7 @@ export function buildHealthMetricWorkspaceView(
         ? `Last observed ${formatCalendarDate(datum.calendarDate)}`
         : freshnessStatusByRowId.get(datum.rowId) || 'Unknown',
       conflict: !!datum.observationId && conflictingObservationIds.has(datum.observationId),
+      manualMeasurement: datum.manualMeasurement,
     };
     });
 
@@ -517,28 +546,45 @@ export function buildHealthMetricWorkspaceView(
 
 export function selectActivityHealthObservations(
   metricId: ActivityHealthMetricId,
-  result: HealthRangeResult,
+  _result: HealthRangeResult,
   observations: readonly ActivityHealthObservation[],
   selectedProviders: readonly HealthProvider[] = [],
 ): ActivityHealthObservation[] {
   const allowed = selectedProviders.length ? new Set(selectedProviders) : null;
   const filtered = observations.filter(observation => !allowed || allowed.has(observation.provider));
-  if (metricId !== HEALTH_METRIC_IDS.BodyWeight) {
-    return filtered;
-  }
+  // Workout Weight is profile context, not a weigh-in. It is presented only as
+  // a fallback note and never enters the Health chart or observation table.
+  return metricId === HEALTH_METRIC_IDS.BodyWeight ? [] : filtered;
+}
 
-  const measuredWeightProviders = new Set([
-    ...result.observations
-      .filter(observation => observation.entry.metricId === HEALTH_METRIC_IDS.BodyWeight)
-      .map(observation => observation.provider),
-    ...result.sampleChunks
-      .filter(chunk => chunk.metricId === HEALTH_METRIC_IDS.BodyWeight)
-      .map(chunk => chunk.provider),
-  ]);
-  if (measuredWeightProviders.has(HEALTH_PROVIDERS.QuantifiedSelf)) {
-    return [];
-  }
-  return filtered.filter(observation => !measuredWeightProviders.has(observation.provider));
+export function selectWorkoutWeightContextFallback(
+  result: HealthRangeResult,
+  observations: readonly ActivityHealthObservation[],
+  selectedProviders: readonly HealthProvider[] = [],
+  unitSettings: UserUnitSettingsInterface | null = null,
+): WorkoutWeightContextFallback | null {
+  const hasActualWeight = result.observations.some(observation =>
+    observation.entry.metricId === HEALTH_METRIC_IDS.BodyWeight)
+    || result.sampleChunks.some(chunk => chunk.metricId === HEALTH_METRIC_IDS.BodyWeight);
+  if (hasActualWeight) return null;
+  const allowed = selectedProviders.length ? new Set(selectedProviders) : null;
+  const latest = observations
+    .filter(observation => observation.metricId === HEALTH_METRIC_IDS.BodyWeight
+      && observation.sourceKind === ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutProfileContext
+      && (!allowed || allowed.has(observation.provider)))
+    .sort((left, right) => right.observedAtMs - left.observedAtMs)[0];
+  if (!latest) return null;
+  return {
+    sourceLabel: providerLabel(latest.provider),
+    valueText: formatHealthValue(
+      HEALTH_METRIC_IDS.BodyWeight,
+      latest.value,
+      latest.unit,
+      false,
+      unitSettings,
+    ),
+    observedText: formatCalendarDate(localCalendarDate(latest.observedAtMs)),
+  };
 }
 
 export function sleepSessionHasHrv(session: SleepSession | null | undefined): boolean {
@@ -747,7 +793,7 @@ export function providerLabel(provider: HealthProvider): string {
     case HEALTH_PROVIDERS.SuuntoApp: return 'Suunto';
     case HEALTH_PROVIDERS.COROSAPI: return 'COROS';
     case HEALTH_PROVIDERS.WahooAPI: return 'Wahoo';
-    case HEALTH_PROVIDERS.QuantifiedSelf: return 'Quantified Self';
+    case HEALTH_PROVIDERS.QuantifiedSelf: return 'Manual';
   }
 }
 
@@ -897,6 +943,7 @@ function observationDatum(
     sampleCount: 1,
     coverageStatus: observation.coverage.status,
     expectedUpdateIntervalMs: positiveNumberOrNull(observation.coverage.expectedUpdateIntervalMs),
+    manualMeasurement: manualObservationEdit(observation, value, nativeOnly),
   };
 }
 
@@ -928,6 +975,7 @@ function activityObservationDatum(observation: ActivityHealthObservation): Metri
     sampleCount: 1,
     coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
     expectedUpdateIntervalMs: null,
+    manualMeasurement: null,
   };
 }
 
@@ -965,6 +1013,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       sampleCount: values.length,
       coverageStatus: chunk.coverage.status,
       expectedUpdateIntervalMs: positiveNumberOrNull(chunk.coverage.expectedUpdateIntervalMs),
+      manualMeasurement: null,
     } satisfies MetricDatum];
   });
 }
@@ -1026,9 +1075,51 @@ function sleepHrvDatums(
         sampleCount: 1,
         coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
         expectedUpdateIntervalMs: SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS,
+        manualMeasurement: null,
       } satisfies MetricDatum];
     });
   });
+}
+
+function manualObservationEdit(
+  observation: HealthObservation,
+  value: number | string | boolean,
+  nativeOnly: boolean,
+): ManualHealthObservationEdit | null {
+  const entry = observation.entry;
+  if (observation.provider !== HEALTH_PROVIDERS.QuantifiedSelf
+    || observation.sourceRecordType !== MANUAL_HEALTH_SOURCE_RECORD_TYPE
+    || entry.kind !== 'value'
+    || entry.aggregation !== MANUAL_HEALTH_AGGREGATION
+    || entry.origin !== HEALTH_VALUE_ORIGINS.Recorded
+    || entry.recordingMethod !== HEALTH_RECORDING_METHODS.Manual
+    || (entry.metricId !== HEALTH_METRIC_IDS.BodyWeight && entry.metricId !== HEALTH_METRIC_IDS.Vo2Max)
+    || nativeOnly
+    || typeof value !== 'number'
+    || !Number.isFinite(value)) {
+    return null;
+  }
+  const base: ManualHealthObservationEdit = {
+    sourceRecordId: observation.sourceRecordId,
+    expectedRevisionOrder: observation.sourceRevisionOrder,
+    metricId: entry.metricId,
+    canonicalValue: value,
+    observedAtMs: observation.endTimeMs,
+    timezoneOffsetSeconds: observation.timezoneOffsetSeconds || 0,
+  };
+  if (entry.metricId === HEALTH_METRIC_IDS.BodyWeight) return base;
+  const qualifiers = entry.native.qualifiers;
+  const context = qualifiers?.['context'];
+  const method = qualifiers?.['method'];
+  if (!MANUAL_VO2_CONTEXTS.includes(context as ManualVo2Context)
+    || !MANUAL_VO2_METHODS.includes(method as ManualVo2Method)) {
+    return null;
+  }
+  return {
+    ...base,
+    vo2Context: context as ManualVo2Context,
+    vo2Method: method as ManualVo2Method,
+  };
 }
 
 function sleepHrvValues(session: SleepSession | null | undefined): Array<{

@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { DERIVED_METRIC_KINDS, DERIVED_METRIC_SCHEMA_VERSION } from '../../../shared/derived-metrics';
+import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import {
     abandonDerivedMetricsProcessingAfterWriteBlock,
     areOnlyProjectionSensitiveMetricKinds,
@@ -11,6 +12,8 @@ import {
     fetchDerivedFormSnapshotSeed,
     fetchDerivedMetricsActivityDocs,
     fetchDerivedMetricsEventDocs,
+    fetchDerivedMetricsHealthDocs,
+    hasAnyDerivedMetricsHealthRecord,
     fetchRecoveryLookbackEventDocs,
     fetchTrainingBuildBenchmarkSettings,
     fetchTrainingBuildSleepDocs,
@@ -141,6 +144,41 @@ export const processDerivedMetricsTask = onTaskDispatched({
         const trainingReadinessSleepDocs = sourceRequirements.needsTrainingReadinessSleepDocs
             ? await fetchTrainingReadinessSleepDocs(uid, buildAtMs)
             : [];
+        // Health calendarDate follows the source-local offset. Widen the UTC
+        // source windows by one calendar day and let each builder enforce its
+        // exact timestamp bounds.
+        const healthEndDate = new Date(
+            buildAtMs + (24 * 60 * 60 * 1000),
+        ).toISOString().slice(0, 10);
+        const bodyWeightHealthStartDate = new Date(
+            buildAtMs - (56 * 24 * 60 * 60 * 1000),
+        ).toISOString().slice(0, 10);
+        const [bodyWeightHealthDocs, hasAnyBodyWeightHealthRecord, vo2HealthDocs] = await Promise.all([
+            sourceRequirements.needsBodyWeightHealthDocs
+                ? fetchDerivedMetricsHealthDocs(
+                    uid,
+                    HEALTH_METRIC_IDS.BodyWeight,
+                    bodyWeightHealthStartDate,
+                    healthEndDate,
+                )
+                : Promise.resolve([]),
+            sourceRequirements.needsBodyWeightHealthDocs
+                ? hasAnyDerivedMetricsHealthRecord(
+                    uid,
+                    HEALTH_METRIC_IDS.BodyWeight,
+                    '2000-01-01',
+                    healthEndDate,
+                )
+                : Promise.resolve(false),
+            sourceRequirements.needsVo2HealthDocs
+                ? fetchDerivedMetricsHealthDocs(
+                    uid,
+                    HEALTH_METRIC_IDS.Vo2Max,
+                    '2000-01-01',
+                    healthEndDate,
+                )
+                : Promise.resolve([]),
+        ]);
 
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot ready write', { generation, dirtyMetricKinds })) {
             await abandonAfterWriteBlock('task before snapshot ready write');
@@ -154,6 +192,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             ...(sourceRequirements.needsTrainingBuildBenchmarkSettings ? { trainingBuildBenchmarkSettings } : {}),
             ...(sourceRequirements.needsTrainingBuildSleepDocs ? { trainingBuildSleepDocs } : {}),
             ...(sourceRequirements.needsTrainingReadinessSleepDocs ? { trainingReadinessSleepDocs } : {}),
+            ...(sourceRequirements.needsBodyWeightHealthDocs ? { bodyWeightHealthDocs } : {}),
+            ...(sourceRequirements.needsBodyWeightHealthDocs ? { hasAnyBodyWeightHealthRecord } : {}),
+            ...(sourceRequirements.needsVo2HealthDocs ? { vo2HealthDocs } : {}),
         }, {
             buildAtMs,
             builtFromEventMutationVersion: startResult.eventMutationVersion,
@@ -179,6 +220,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             trainingBuildBenchmarkSettingsFetched: sourceRequirements.needsTrainingBuildBenchmarkSettings,
             trainingBuildSleepDocsScanned: trainingBuildSleepDocs.length,
             trainingReadinessSleepDocsScanned: trainingReadinessSleepDocs.length,
+            bodyWeightHealthDocsScanned: bodyWeightHealthDocs.length,
+            hasAnyBodyWeightHealthRecord,
+            vo2HealthDocsScanned: vo2HealthDocs.length,
             usedProjectionFormSnapshotSeed: !!projectionFormSnapshotSeed,
             projectionFormSnapshotDailyLoadDays: projectionFormSnapshotSeed?.dailyLoads?.length || 0,
             recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),

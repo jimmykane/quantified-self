@@ -1,11 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { AppThemes, ServiceNames } from '@sports-alliance/sports-lib';
@@ -34,13 +36,15 @@ import {
   SleepSyncState,
 } from '@shared/sleep';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
+import type { ManualHealthMetricId } from '@shared/manual-health';
 import { combineLatest, of, Subscription } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import {
   AppHealthService,
   HealthWorkspaceRangeLoad,
 } from '../../services/app.health.service';
+import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -55,11 +59,17 @@ import {
 } from './health-priority-summary.component';
 import { HealthSourceObservationTableComponent } from './health-source-observation-table.component';
 import {
+  ManualHealthMeasurementDialogComponent,
+  type ManualHealthMeasurementDialogResult,
+} from './manual-health-measurement-dialog.component';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import {
   HEALTH_WORKSPACE_DEFAULT_RANGE,
   HEALTH_WORKSPACE_RANGES,
   HealthMetricCatalogGroup,
   HealthMetricWorkspaceView,
   HealthObservationTableRow,
+  ManualHealthObservationEdit,
   HealthPriorityRow,
   HealthSleepObservationRow,
   HealthWorkspaceMetricSelection,
@@ -80,6 +90,7 @@ import {
   resolveHealthWorkspaceWindow,
   isSleepHrvSemanticVariant,
   selectActivityHealthObservations,
+  selectWorkoutWeightContextFallback,
   selectHealthPriorityTrendSeries,
   sleepSessionHasHrv,
 } from '../../helpers/health-workspace.helper';
@@ -149,6 +160,7 @@ const HEALTH_SYNC_DELAYED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
     RouterLink,
     MatButtonModule,
     MatButtonToggleModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatMenuModule,
@@ -173,6 +185,9 @@ export class HealthWorkspaceComponent {
   private readonly activityHealthService = inject(HealthActivityQueryService);
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly browserCompatibilityService = inject(BrowserCompatibilityService);
   private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
   readonly unitSettings = this.userSettingsService.unitSettings;
   private readonly todayDate = localCalendarDate();
@@ -233,6 +248,7 @@ export class HealthWorkspaceComponent {
   readonly historyImportErrors = signal<Partial<Record<HealthProvider, string>>>({});
   readonly selectedProviders = signal<HealthProvider[]>([]);
   readonly refreshRevision = signal(0);
+  readonly manualMutationBusy = signal(false);
   readonly availableHealthMetricIds = signal<readonly HealthMetricId[] | null>(null);
   readonly healthMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
   readonly hasAnySleepSession = signal<boolean | null>(null);
@@ -267,6 +283,10 @@ export class HealthWorkspaceComponent {
       return this.completeMetricCatalogGroups;
     }
     const availableMetricIds = new Set(this.availableHealthMetricIds() || []);
+    // Weight and VO2 max remain discoverable even without imported history so
+    // the owner can create the first manual observation.
+    availableMetricIds.add(HEALTH_METRIC_IDS.BodyWeight);
+    availableMetricIds.add(HEALTH_METRIC_IDS.Vo2Max);
     if (this.sleepHrvAvailabilityStatus() !== 'ready' || this.hasLoadedSleepHrv()) {
       availableMetricIds.add(HEALTH_METRIC_IDS.HeartRateVariability);
     }
@@ -348,6 +368,25 @@ export class HealthWorkspaceComponent {
         this.unitSettings(),
       )
       : emptyMetricView();
+  });
+  readonly selectedManualMetric = computed<ManualHealthMetricId | null>(() => {
+    const metric = this.routeState().metric;
+    return metric === HEALTH_METRIC_IDS.BodyWeight || metric === HEALTH_METRIC_IDS.Vo2Max
+      ? metric
+      : null;
+  });
+  readonly workoutWeightFallback = computed(() => {
+    const result = this.filteredHealthResult();
+    const activityResult = this.selectedActivityHealthResult();
+    if (this.routeState().metric !== HEALTH_METRIC_IDS.BodyWeight || !result || !activityResult) {
+      return null;
+    }
+    return selectWorkoutWeightContextFallback(
+      result,
+      activityResult.observations,
+      this.effectiveProviderFilters(),
+      this.unitSettings(),
+    );
   });
   readonly sleepTrend = computed(() => buildDashboardSleepTrendContext(this.filteredSleepSessions(), {
     sleepWindow: {
@@ -898,6 +937,55 @@ export class HealthWorkspaceComponent {
     this.selectedProviders.set(next.length === 0 || next.length === available.length ? [] : next);
   }
 
+  openManualMeasurement(): void {
+    const metricId = this.selectedManualMetric();
+    if (!metricId || this.manualMutationBusy()) return;
+    const dialogRef = this.dialog.open(ManualHealthMeasurementDialogComponent, {
+      width: 'min(520px, calc(100vw - 24px))',
+      maxWidth: '100vw',
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
+      data: { metricId, unitSettings: this.unitSettings() },
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) void this.createManualMeasurement(metricId, result);
+    });
+  }
+
+  editManualMeasurement(measurement: ManualHealthObservationEdit): void {
+    if (this.manualMutationBusy()) return;
+    const dialogRef = this.dialog.open(ManualHealthMeasurementDialogComponent, {
+      width: 'min(520px, calc(100vw - 24px))',
+      maxWidth: '100vw',
+      autoFocus: 'first-tabbable',
+      restoreFocus: true,
+      data: {
+        metricId: measurement.metricId,
+        unitSettings: this.unitSettings(),
+        existing: measurement,
+      },
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) void this.updateManualMeasurement(measurement, result);
+    });
+  }
+
+  deleteManualMeasurement(measurement: ManualHealthObservationEdit): void {
+    if (this.manualMutationBusy()) return;
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: 'min(440px, calc(100vw - 24px))',
+      data: {
+        title: 'Delete manual measurement?',
+        message: 'This removes this measurement from Health and Training. This action cannot be undone.',
+        confirmLabel: 'Delete',
+        confirmColor: 'warn',
+      },
+    });
+    dialogRef.afterClosed().subscribe(confirmed => {
+      if (confirmed) void this.removeManualMeasurement(measurement);
+    });
+  }
+
   async startHistoryImport(provider: HealthProvider): Promise<void> {
     const sleepProvider = healthProviderSleepProvider(provider);
     const sourceView = this.syncStateViews().find(state => state.provider === provider);
@@ -1000,6 +1088,112 @@ export class HealthWorkspaceComponent {
           this.priorityHrvStatus.set(loadErrorStatus(error));
         }
       }
+    }
+  }
+
+  private async createManualMeasurement(
+    metricId: ManualHealthMetricId,
+    value: ManualHealthMeasurementDialogResult,
+    clientMutationId?: string,
+    requestedForUserID = this.signedInUserID(),
+  ): Promise<void> {
+    if (!requestedForUserID || requestedForUserID !== this.signedInUserID()) return;
+    const resolvedMutationId = clientMutationId ?? this.browserCompatibilityService.createRandomUUID();
+    if (!resolvedMutationId) {
+      this.snackBar.open('This browser cannot create a secure measurement ID.', 'Dismiss', { duration: 5000 });
+      return;
+    }
+    this.manualMutationBusy.set(true);
+    try {
+      await this.healthService.saveManualMeasurement({
+        mode: 'create',
+        clientMutationId: resolvedMutationId,
+        metricId,
+        ...value,
+      });
+      if (requestedForUserID !== this.signedInUserID()) return;
+      this.selectedProviders.set([]);
+      this.markManualMetricAvailable(metricId);
+      this.snackBar.open('Measurement added', undefined, { duration: 2500 });
+    } catch {
+      if (requestedForUserID !== this.signedInUserID()) return;
+      const retryNotice = this.snackBar.open(
+        'Measurement could not be added.',
+        'Retry',
+        { duration: 7000 },
+      );
+      retryNotice.onAction().pipe(take(1)).subscribe(() => {
+        if (requestedForUserID === this.signedInUserID() && !this.manualMutationBusy()) {
+          void this.createManualMeasurement(metricId, value, resolvedMutationId, requestedForUserID);
+        }
+      });
+    } finally {
+      this.manualMutationBusy.set(false);
+    }
+  }
+
+  private async updateManualMeasurement(
+    measurement: ManualHealthObservationEdit,
+    value: ManualHealthMeasurementDialogResult,
+  ): Promise<void> {
+    this.manualMutationBusy.set(true);
+    try {
+      await this.healthService.saveManualMeasurement({
+        mode: 'update',
+        sourceRecordId: measurement.sourceRecordId,
+        expectedRevisionOrder: measurement.expectedRevisionOrder,
+        metricId: measurement.metricId,
+        ...value,
+      });
+      this.refreshRevision.update(current => current + 1);
+      this.snackBar.open('Measurement updated', undefined, { duration: 2500 });
+    } catch {
+      this.snackBar.open('Measurement changed or could not be updated. Refresh and try again.', 'Dismiss', {
+        duration: 5000,
+      });
+    } finally {
+      this.manualMutationBusy.set(false);
+    }
+  }
+
+  private async removeManualMeasurement(measurement: ManualHealthObservationEdit): Promise<void> {
+    this.manualMutationBusy.set(true);
+    try {
+      await this.healthService.deleteManualMeasurement({
+        sourceRecordId: measurement.sourceRecordId,
+        expectedRevisionOrder: measurement.expectedRevisionOrder,
+      });
+      this.refreshRevision.update(current => current + 1);
+      void this.refreshAvailableHealthMetrics();
+      this.snackBar.open('Measurement deleted', undefined, { duration: 2500 });
+    } catch {
+      this.snackBar.open('Measurement changed or could not be deleted. Refresh and try again.', 'Dismiss', {
+        duration: 5000,
+      });
+    } finally {
+      this.manualMutationBusy.set(false);
+    }
+  }
+
+  private markManualMetricAvailable(metricId: ManualHealthMetricId): void {
+    this.availableHealthMetricIds.update(metricIds => metricIds
+      ? [...new Set([...metricIds, metricId])]
+      : metricIds);
+    this.refreshRevision.update(current => current + 1);
+  }
+
+  private async refreshAvailableHealthMetrics(): Promise<void> {
+    const uid = this.signedInUserID();
+    if (!uid) return;
+    const generation = ++this.metricAvailabilityGeneration;
+    try {
+      const metricIds = await this.healthService.loadAvailableMetricIds(uid);
+      if (generation === this.metricAvailabilityGeneration) {
+        this.availableHealthMetricIds.set(metricIds);
+      }
+    } catch {
+      // Preserve the current catalog after a successful deletion; the range
+      // reload is authoritative for the selected metric.
     }
   }
 

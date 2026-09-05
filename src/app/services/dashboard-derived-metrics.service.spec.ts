@@ -400,8 +400,8 @@ describe('DashboardDerivedMetricsService', () => {
       asOfDayMs,
       excludesMergedEvents: true,
       disciplines: [
-        { discipline: 'running', ftpSetting: null, importedVo2Max: null },
-        { discipline: 'cycling', ftpSetting: null, importedVo2Max: null },
+        { discipline: 'running', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null },
+        { discipline: 'cycling', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null },
       ],
     };
     hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
@@ -809,6 +809,10 @@ describe('DashboardDerivedMetricsService', () => {
     const uid = 'user-1';
     const now = new Date();
     const asOfDayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const points = Array.from({ length: 28 }, (_, index) => ({
+      dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
+      weightKg: index === 27 ? 70.2 : null,
+    }));
     const payload = {
       dayBoundary: 'UTC',
       asOfDayMs,
@@ -825,10 +829,15 @@ describe('DashboardDerivedMetricsService', () => {
       change28dPercent: -1.68,
       recordedDayCount7d: 4,
       recordedDayCount28d: 8,
-      points: Array.from({ length: 28 }, (_, index) => ({
-        dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
-        weightKg: index === 27 ? 70.2 : null,
-      })),
+      points,
+      series: [{
+        sourceKind: 'health-measurement', provider: 'QuantifiedSelf', sourceKey: 'opaque',
+        latestWeightKg: 70.2, latestWeightDayMs: asOfDayMs,
+        median7dKg: 70.3, median28dKg: 70.7,
+        change7dKg: -0.4, change7dPercent: -0.57,
+        change28dKg: -1.2, change28dPercent: -1.68,
+        recordedDayCount7d: 4, recordedDayCount28d: 8, points,
+      }],
     };
     hoisted.docMock.mockImplementation((_firestore, ...segments: string[]) => ({ path: segments.join('/') }));
     hoisted.docDataMock

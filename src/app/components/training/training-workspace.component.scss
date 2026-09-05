@@ -354,6 +354,9 @@ dd { margin: 5px 0 0; font-size: var(--training-card-stat-font-size); font-weigh
 .training-body-weight-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .training-body-weight-panel > header p, .training-body-weight-panel > header > span { margin: 4px 0 0; color: var(--mat-sys-on-surface-variant); font-size: var(--training-inter-caption-font-size); line-height: 1.35; }
 .training-body-weight-panel > header > span { margin-top: 0; white-space: nowrap; text-align: right; }
+.training-body-weight-series { min-width: 0; padding: 14px 0; border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
+.training-body-weight-series h4 { margin: 0 0 8px; color: var(--mat-sys-on-surface); font-size: var(--training-inter-caption-font-size); font-weight: 650; }
+.training-body-weight-series + .training-body-weight-series { margin-top: 4px; }
 .training-body-weight-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-body-weight-summary > div { min-width: 0; padding: 12px 10px; border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant)); }
 .training-body-weight-summary > div:first-child { padding-left: 0; }

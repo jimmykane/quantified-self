@@ -34,6 +34,12 @@ import {
 } from '@shared/health-firestore-query';
 import { projectHealthRange, projectLoadedHealthRange } from '@shared/health-query';
 import { AppFunctionsService } from './app.functions.service';
+import type {
+    DeleteManualHealthMeasurementRequest,
+    DeleteManualHealthMeasurementResponse,
+    SaveManualHealthMeasurementRequest,
+    SaveManualHealthMeasurementResponse,
+} from '@shared/manual-health';
 
 export const HEALTH_WORKSPACE_LOAD_LIMITS = Object.freeze({
     sourceRecords: 2_048,
@@ -110,6 +116,26 @@ export class AppHealthService {
             'queryHealthRange',
             queryValue,
         );
+        return response.data;
+    }
+
+    async saveManualMeasurement(
+        request: SaveManualHealthMeasurementRequest,
+    ): Promise<SaveManualHealthMeasurementResponse> {
+        const response = await this.functions.call<
+            SaveManualHealthMeasurementRequest,
+            SaveManualHealthMeasurementResponse
+        >('saveManualHealthMeasurement', request);
+        return response.data;
+    }
+
+    async deleteManualMeasurement(
+        request: DeleteManualHealthMeasurementRequest,
+    ): Promise<DeleteManualHealthMeasurementResponse> {
+        const response = await this.functions.call<
+            DeleteManualHealthMeasurementRequest,
+            DeleteManualHealthMeasurementResponse
+        >('deleteManualHealthMeasurement', request);
         return response.data;
     }
 

@@ -49,11 +49,13 @@ import {
   DERIVED_METRICS_ENTRY_TYPES,
   DerivedFormMetricPayload,
   DerivedFormNowMetricPayload,
+  DerivedBodyWeightTrendMetricPayload,
   DerivedMetricKind,
   DerivedRampRateMetricPayload,
   DerivedTrainingReadinessMetricPayload,
   DerivedTrainingBuildComparisonMetricPayload,
   DerivedTrainingBuildWindow,
+  DerivedTrainingCapacityMetricPayload,
   DerivedTrainingDurabilityMetricPayload,
   DerivedTrainingExplanationMetricPayload,
   DerivedTrainingExplanationSportLoad,
@@ -61,6 +63,12 @@ import {
   DerivedTrainingSummaryMetricPayload,
   isDerivedMetricKind,
 } from '../../../shared/derived-metrics';
+import {
+  HEALTH_METRIC_IDS,
+  HEALTH_SOURCE_RECORD_KINDS,
+  HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+  type HealthSourceRecord,
+} from '../../../shared/health';
 import {
   buildEventStatAggregation,
   isValidIanaTimeZone,
@@ -82,6 +90,7 @@ import {
   SleepStage,
 } from '../../../shared/sleep';
 import {
+  decodeHealthMetricSportsLibData,
   decodeSleepSessionSportsLibData,
   SportsLibDataValidationError,
 } from '../../../shared/sports-lib-health-data';
@@ -176,6 +185,8 @@ const MAX_EVENT_QUERY_STATS_BYTES = 4 * 1024 * 1024;
 const MAX_EVENT_QUERY_STAT_ENTRIES = 20_000;
 const METRIC_DISCOVERY_EVENT_LIMIT = 500;
 const MAX_MEASUREMENT_RESPONSE_BYTES = 128 * 1024;
+const HEALTH_MEASUREMENT_QUERY_PAGE_SIZE = 25;
+const MAX_HEALTH_MEASUREMENT_QUERY_BYTES = 4 * 1024 * 1024;
 const MAX_SLEEP_QUERY_DOCUMENTS = 1000;
 const MAX_SLEEP_PAGE_SIZE = 100;
 const DAILY_BRIEFING_SLEEP_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
@@ -432,6 +443,14 @@ export interface McpDataServiceDependencies {
     limit: number,
     cursor?: unknown,
   ) => Promise<RawDocument[]>;
+  fetchHealthSourceRecordDocuments: (
+    uid: string,
+    metricId: string,
+    startDate: string,
+    endDate: string,
+    limit: number,
+    cursor?: unknown,
+  ) => Promise<RawDocument[]>;
   fetchDerivedSnapshot: (
     uid: string,
     metricKind: DerivedMetricKind,
@@ -633,6 +652,35 @@ const defaultDependencies: McpDataServiceDependencies = {
           statType => new FieldPath('stats', statType),
         ),
       );
+    if (cursor) {
+      query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
+    }
+    const snapshot = await query.get();
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+      cursor: doc,
+    }));
+  },
+  fetchHealthSourceRecordDocuments: async (
+    uid,
+    metricId,
+    startDate,
+    endDate,
+    limit,
+    cursor,
+  ) => {
+    let query = admin.firestore()
+      .collection('users')
+      .doc(uid)
+      .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
+      .where('metricIds', 'array-contains', metricId)
+      .where('calendarDate', '>=', startDate)
+      .where('calendarDate', '<=', endDate)
+      .orderBy('calendarDate', 'asc')
+      .orderBy(FieldPath.documentId(), 'asc')
+      .limit(limit)
+      .select('kind', 'endTimeMs', 'metrics');
     if (cursor) {
       query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
     }
@@ -2711,6 +2759,83 @@ async function fetchBoundedEventDocuments(
   return documents;
 }
 
+function utcCalendarDateWithOffset(timeMs: number, offsetDays: number): string {
+  return new Date(timeMs + (offsetDays * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+}
+
+async function fetchBoundedHealthMeasurementDocuments(
+  dependencies: McpDataServiceDependencies,
+  input: Pick<QueryMeasurementsInput, 'uid' | 'startTimeMs' | 'endTimeMs'>,
+): Promise<RawDocument[]> {
+  const documents: RawDocument[] = [];
+  let cursor: unknown;
+  let metricBytes = 0;
+  // Health calendar dates use the source-local offset. Widen the indexed date
+  // bounds by one day, then apply the exact instant range below.
+  const startDate = utcCalendarDateWithOffset(input.startTimeMs, -1);
+  const endDate = utcCalendarDateWithOffset(input.endTimeMs, 1);
+
+  while (documents.length <= MAX_EVENT_QUERY_DOCUMENTS) {
+    const pageLimit = Math.min(
+      HEALTH_MEASUREMENT_QUERY_PAGE_SIZE,
+      MAX_EVENT_QUERY_DOCUMENTS + 1 - documents.length,
+    );
+    const page = await dependencies.fetchHealthSourceRecordDocuments(
+      input.uid,
+      HEALTH_METRIC_IDS.BodyWeight,
+      startDate,
+      endDate,
+      pageLimit,
+      cursor,
+    );
+    if (page.length > pageLimit) {
+      throw new McpDataError(
+        'query_too_large',
+        `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} measurements. Narrow the date range.`,
+      );
+    }
+    for (const document of page) {
+      let serializedMetrics: string;
+      try {
+        serializedMetrics = JSON.stringify(document.data.metrics ?? null) || 'null';
+      } catch {
+        throw new McpDataError(
+          'query_too_large',
+          'The query contains Health measurements that cannot be processed safely.',
+        );
+      }
+      metricBytes += Buffer.byteLength(serializedMetrics, 'utf8');
+      if (metricBytes > MAX_HEALTH_MEASUREMENT_QUERY_BYTES) {
+        throw new McpDataError(
+          'query_too_large',
+          'The query contains too much Health measurement data. Narrow the date range.',
+        );
+      }
+      documents.push({ id: document.id, data: document.data });
+      if (documents.length > MAX_EVENT_QUERY_DOCUMENTS) {
+        throw new McpDataError(
+          'query_too_large',
+          `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} measurements. Narrow the date range.`,
+        );
+      }
+    }
+    if (page.length < pageLimit) {
+      return documents;
+    }
+    cursor = page[page.length - 1]?.cursor;
+    if (!cursor) {
+      throw new McpDataError(
+        'query_too_large',
+        'The Health measurement query could not continue safely.',
+      );
+    }
+  }
+  throw new McpDataError(
+    'query_too_large',
+    `The query matches more than ${MAX_EVENT_QUERY_DOCUMENTS} measurements. Narrow the date range.`,
+  );
+}
+
 export interface ListMetricsInput {
   uid: string;
   search?: string;
@@ -3199,6 +3324,54 @@ function projectTrainingDurabilityForMcp(payload: unknown): unknown {
   };
 }
 
+function projectTrainingCapacityForMcp(payload: unknown): unknown {
+  const source = payload as Partial<DerivedTrainingCapacityMetricPayload>;
+  if (!Array.isArray(source.disciplines)) {
+    return null;
+  }
+  const disciplines = source.disciplines.filter(discipline => (
+    discipline?.discipline === 'running' || discipline?.discipline === 'cycling'
+  ));
+  if (
+    disciplines.length !== source.disciplines.length
+    || new Set(disciplines.map(discipline => discipline.discipline)).size !== disciplines.length
+  ) {
+    return null;
+  }
+  return {
+    dayBoundary: source.dayBoundary,
+    asOfDayMs: source.asOfDayMs,
+    excludesMergedEvents: source.excludesMergedEvents,
+    disciplines: disciplines.map(discipline => ({
+      discipline: discipline.discipline,
+      ftpSetting: discipline.ftpSetting,
+      importedVo2Max: discipline.importedVo2Max,
+    })),
+  };
+}
+
+function projectBodyWeightTrendForMcp(payload: unknown): unknown {
+  const source = payload as Partial<DerivedBodyWeightTrendMetricPayload>;
+  return {
+    dayBoundary: source.dayBoundary,
+    asOfDayMs: source.asOfDayMs,
+    trendDays: source.trendDays,
+    comparisonWindowDays: source.comparisonWindowDays,
+    minimumComparableDayCount: source.minimumComparableDayCount,
+    latestWeightKg: source.latestWeightKg,
+    latestWeightDayMs: source.latestWeightDayMs,
+    median7dKg: source.median7dKg,
+    median28dKg: source.median28dKg,
+    change7dKg: source.change7dKg,
+    change7dPercent: source.change7dPercent,
+    change28dKg: source.change28dKg,
+    change28dPercent: source.change28dPercent,
+    recordedDayCount7d: source.recordedDayCount7d,
+    recordedDayCount28d: source.recordedDayCount28d,
+    points: source.points,
+  };
+}
+
 export function projectDerivedMetricPayloadForMcp(
   metricKind: DerivedMetricKind,
   payload: unknown,
@@ -3213,6 +3386,10 @@ export function projectDerivedMetricPayloadForMcp(
         return projectTrainingBuildComparisonForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingDurability:
         return projectTrainingDurabilityForMcp(payload);
+      case DERIVED_METRIC_KINDS.TrainingCapacity:
+        return projectTrainingCapacityForMcp(payload);
+      case DERIVED_METRIC_KINDS.BodyWeightTrend:
+        return projectBodyWeightTrendForMcp(payload);
       default:
         return payload;
     }
@@ -3229,6 +3406,8 @@ const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
   DERIVED_METRIC_KINDS.TrainingDurability,
+  DERIVED_METRIC_KINDS.TrainingCapacity,
+  DERIVED_METRIC_KINDS.BodyWeightTrend,
 ]);
 
 function redactDerivedPayload(
@@ -5801,39 +5980,38 @@ export function createMcpDataService(
         );
       }
 
-      const documents = await fetchBoundedEventDocuments(
-        dependencies,
-        input,
-        [definition.canonicalMetricType],
-      );
+      const documents = await fetchBoundedHealthMeasurementDocuments(dependencies, input);
       const measurements = documents.flatMap((document) => {
-        if (isBenchmarkEventForTrainingMetrics(document.data)) {
-          return [];
-        }
-        const recordedAtMs = asTimestampMs(document.data.startDate);
-        const stats = document.data.stats;
+        const record = document.data as Partial<HealthSourceRecord>;
+        const recordedAtMs = asTimestampMs(record.endTimeMs);
         if (
-          recordedAtMs === null
-          || !stats
-          || typeof stats !== 'object'
-          || Array.isArray(stats)
+          record.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
+          || recordedAtMs === null
+          || recordedAtMs < input.startTimeMs
+          || recordedAtMs > input.endTimeMs
+          || !Array.isArray(record.metrics)
         ) {
           return [];
         }
-        const value = projectSportsLibNumericMetricValue(
-          definition.canonicalMetricType,
-          (stats as Record<string, unknown>)[definition.canonicalMetricType],
-        );
-        if (
-          value === null
-          || !isMcpMeasurementValueAllowed(definition, value)
-        ) {
-          return [];
-        }
-        return [{
-          recordedAtMs,
-          value,
-        }];
+        return record.metrics.flatMap((storedMetric) => {
+          let metric;
+          try {
+            metric = decodeHealthMetricSportsLibData(storedMetric);
+          } catch (error) {
+            if (error instanceof SportsLibDataValidationError) return [];
+            throw error;
+          }
+          const value = metric.kind === 'value'
+            && metric.metricId === HEALTH_METRIC_IDS.BodyWeight
+            && metric.aggregation === 'measurement'
+            && metric.normalizationStatus === 'canonical'
+            && typeof metric.canonical?.value === 'number'
+            ? metric.canonical.value
+            : null;
+          return value !== null && isMcpMeasurementValueAllowed(definition, value)
+            ? [{ recordedAtMs, value }]
+            : [];
+        });
       });
       const points = buildMeasurementPoints(
         measurements,

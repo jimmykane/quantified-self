@@ -416,14 +416,14 @@ settings, sleep, swim lengths, or activity documents for unrelated metrics.
 | `freshness_forecast` | Zero-future-load scenario chart | Parent event TSS |
 | `intensity_distribution` | Global intensity chart | Parent event power/HR zones |
 | `training_summary` | Overall comparison, ten-group Training Mix, and context/profile summaries | Joined normalized activities |
-| `training_capacity` | Imported FTP and VO2 max observations | Joined activities |
+| `training_capacity` | Imported FTP/VO2 observations plus separately labelled manual VO2 references | Joined activities and qualifying manual Health VO2 point measurements |
 | `training_power_systems` | Exact-type current CP/W′/Pmax capacity and 12-week sparse history | Persisted activity power curves plus parent event eligibility |
 | `power_curve` | Running/Cycling one-year curves and 90-day retention | Persisted activity power curves |
 | `training_explanation` | What drove this | Parent events plus joined child activities |
 | `training_durability` | Current/usual durability and 12-week trajectory | Persisted activity durability stats |
 | `training_build_comparison` | Eight modeled-family Best Build, context/profile summaries, and sleep context | Activities, settings, parent events, sleep |
 | `training_readiness` | Readiness 14-day trend | Form snapshot seed plus bounded sleep sessions |
-| `body_weight_trend` | Neutral body-weight context: latest value, 7/28-day medians, and sparse 28-day trend | Persisted positive Sports-lib `Weight` values from form documents |
+| `body_weight_trend` | Source-separated neutral body-weight context: latest value, 7/28-day medians, and sparse 28-day trend | Canonical Health Weight point measurements; workout profile Weight only when no Health Weight exists |
 | `training_swim_performance` | Pool/open-water pace and contextual SWOLF | Activities plus active swim lengths |
 
 The workspace also requests registered Easy/Hard and efficiency metrics because it currently uses the complete derived
@@ -434,7 +434,7 @@ current-versus-usual 28-day Training context and `training_readiness` for curren
 `get_daily_report` tool reuses that same strict Training Summary projection but combines it with the live Dashboard
 Today-equivalent readiness path and safe latest sleep HRV/heart-rate aggregates. Both project a compact identity-free
 total and the frozen public Running/Cycling/Swimming breakdown, not the rest of the Training workspace. Internal
-schema-19 snapshots contain all ten groups and context/profile fields; MCP projection removes those fields and folds
+schema-20 snapshots contain all ten groups and context/profile fields; MCP projection removes those fields and folds
 the seven non-public groups into Other where an explanation payload needs a complete composition total. Form,
 CTL/ATL, ACWR, ramp,
 recovery, capacity, durability, power systems, and other specialist snapshots remain independently queryable rather
@@ -447,8 +447,9 @@ kinds are excluded from the default Dashboard subscription and freshness scope. 
 Dashboard therefore does not create a hidden Training dependency or freshness probe for those kinds.
 
 `body_weight_trend` is also Training-only. It is calendar-sensitive because its current 7- and 28-day UTC windows
-advance at midnight, but it is not projection-sensitive: it reads only persisted Weight values and does not reuse the
-Form projection seed.
+advance at midnight, but it is not projection-sensitive and does not reuse the Form projection seed. It prefers actual
+canonical Health Weight point measurements across the account. Only when none exist does it use imported workout
+profile Weight as fallback context.
 
 ### Shared Dashboard and Training insight reuse
 
@@ -497,13 +498,15 @@ Training state and Readiness are fixed inside the optional Today summary:
   exposes only an explicit identity-free driver projection with safe aggregate HRV/heart-rate values and evidence
   states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
   compact Training Summary; the frozen daily briefing remains unchanged.
-- **Body-weight trend** reads only positive persisted Sports-lib `Weight` values, in canonical kilograms. Multiple values
-  on the same UTC day reduce to a daily median; the snapshot retains the latest 28 UTC days with missing days as null
-  points, the latest recorded value, and current 7- and 28-day medians. Its change values compare each current window
-  to the immediately preceding equal-length window and are withheld unless each side has at least three recorded days.
-  The frontend formats values with the user's weight-unit setting and displays the trend with ECharts without bridging
-  chart gaps. This is neutral context,
-  not a health assessment, training prescription, or input to Readiness, Form, or the TSS-only Training state.
+- **Body-weight trend** first reads positive canonical `body_weight` point measurements from Health. Provider and manual
+  measurements are independent sources; each provider/account series reduces multiple values on one UTC day to a median.
+  If any real Health Weight exists in the retained source window, workout profile Weight is excluded globally. Otherwise,
+  workout Weight is retained as source-separated fallback context and labelled as not a weigh-in. Each series stores its
+  latest 28 UTC days with missing days as null points, its latest value, and current 7- and 28-day medians. Change values
+  compare immediately adjacent equal-length windows and require at least three recorded days on each side. The frontend
+  uses Sports Lib and the user's weight-unit setting, renders one ECharts series per source without bridging gaps, and
+  never exposes source-account keys. This remains neutral context, not a health assessment, training prescription, or
+  input to Readiness, Form, or the TSS-only Training state.
 
 Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
 useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
@@ -517,6 +520,8 @@ merely because the manager dialog was opened.
 - Sleep writes enqueue `training_build_comparison` and `training_readiness` and do not increment the event mutation
   version. Readiness itself has no activity dependency and can reuse the Form seed; the pre-existing build comparison
   still owns the wider activity/settings scan needed for build-range recovery context.
+- Health source-record creates, updates, and deletes enqueue only `body_weight_trend` and `training_capacity`. They do
+  not increment the event mutation version; irrelevant Health metrics produce no Training work.
 - The benchmark callable marks only `training_build_comparison` dirty.
 - Destination and shortcut changes write only `appSettings.trainingWorkspace` through the normal owner-authorized
   Firestore settings path. They do not dirty or rebuild derived metrics because they are presentation state.
@@ -1182,13 +1187,17 @@ For each power discipline:
 
 - FTP setting: the latest stable imported FTP observation, with provider/device provenance and prior value when
   comparable.
-- Imported VO2 max: the latest stable source-matched observation.
+- Imported VO2 max: the latest stable source-matched workout observation.
+- Manual VO2 max reference: the latest Quantified Self manual observation explicitly marked for that discipline and as
+  a lab or field test. General and other-estimate observations remain Health-only.
 
 An FTP value that exactly matches the session-derived `95% of 20-minute power` heuristic is not treated as an imported
 long-lived setting. `training_capacity` does not fit CP or W′ and does not read the aggregate `power_curve` snapshot.
 
-VO2 max is never directly compared with FTP or rolling power-system capacity because it answers a different question and
-may originate from a device estimate or laboratory observation.
+VO2 max is never directly compared with FTP or rolling power-system capacity because it answers a different question.
+A manual lab/field reference and the imported workout estimate remain separate values. Training may display their signed
+difference only when the nearest same-discipline workout estimate is within 14 days of the manual observation; otherwise
+it shows the reference without a numerical comparison. Neither value is averaged, substituted, or labelled as the other.
 
 #### Swimming pace and SWOLF
 
@@ -1243,9 +1252,11 @@ Overview only.
 Body-weight context is the final Training section, after Settings vs Recent Evidence. Keeping it separate and last makes
 the recorded measurements available without presenting them as a performance marker or a primary training signal.
 
-The card shows the latest recorded value, current 7- and 28-day medians, eligible equal-window changes, and the sparse
-28-day trend described in the shared Dashboard and Training insight reuse section. It remains neutral context and does
-not affect Readiness, Form, TSS, the Training state, or any workout recommendation.
+The card shows one source-labelled section per provider/account, with latest value, current 7- and 28-day medians,
+eligible equal-window changes, and the sparse 28-day trend described in the shared Dashboard and Training insight reuse
+section. Actual Health Weight (including manual Weight) is preferred globally. Workout profile Weight appears only when
+there is no actual Health Weight and is explicitly labelled as fallback context rather than a weigh-in. It remains
+neutral context and does not affect Readiness, Form, TSS, the Training state, or any workout recommendation.
 
 ## Durability Deep Dive
 
@@ -1863,7 +1874,7 @@ activities through the targeted sports-lib reparse lifecycle so their persisted 
 result. This is a policy correction within durability protocol v1, not a v2 migration.
 
 Sports-lib 18.1.3 also canonicalizes Snorkeling and Mermaiding and assigns both to the existing Diving group. They do
-not join a modeled Training family or change durability; schema 19 places them in volume-only Other training without a
+not join a modeled Training family or change durability; schema 20 places them in volume-only Other training without a
 historical source reparse.
 Sports-lib 18.1.4's FIT record-depth mapping supports frontend Event Details dive profiles.
 That continuous source-hydrated stream is not a Training input, does not change durability or derived schemas, and does
@@ -1895,7 +1906,7 @@ Sports Lib `20.1.0` introduced nonnumeric parser-owned FIT `dive_gas`, `tank_sum
 the Event Details **Gas & Tanks** section. Sports Lib `20.1.1` serializes them in optional activity
 `diveSourceRecords` JSON, so new imports and source-backed targeted reparses persist the exact records alongside the
 activity. Older activity documents can still display their records while their retained original is available. The
-records remain nonnumeric source data: they are not Training inputs and do not change durability, Training schema 19,
+records remain nonnumeric source data: they are not Training inputs and do not change durability, Training schema 20,
 or any derived payload. Use a targeted reparse only when a specific retained original should persist its legacy
 records; do not rebuild Training snapshots, enable the global reparse scanner, or enqueue a global historical reparse
 solely for these dive records.

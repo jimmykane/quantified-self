@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
     ActivityTypes,
@@ -65,6 +66,7 @@ import {
     PROJECTION_SENSITIVE_DERIVED_METRIC_KINDS,
     type DerivedAcwrMetricPayload,
     type DerivedBodyWeightTrendMetricPayload,
+    type DerivedBodyWeightTrendSeries,
     type DerivedFormDailyLoadEntry,
     type DerivedEasyPercentMetricPayload,
     type DerivedEfficiencyDelta4wMetricPayload,
@@ -89,6 +91,7 @@ import {
     type DerivedTrainingCapacityImportedMetric,
     type DerivedTrainingCapacityImportedMetricKind,
     type DerivedTrainingCapacityMetricPayload,
+    type DerivedTrainingCapacityReferenceVo2Max,
     type DerivedTrainingPowerSystemsActivityType,
     type DerivedTrainingPowerSystemsComponent,
     type DerivedTrainingPowerSystemsHistoryPoint,
@@ -159,9 +162,28 @@ import {
     type SleepSession,
 } from '../../../shared/sleep';
 import {
+    decodeHealthMetricSportsLibData,
     decodeSleepSessionSportsLibData,
     SportsLibDataValidationError,
 } from '../../../shared/sports-lib-health-data';
+import {
+    HEALTH_METRIC_IDS,
+    HEALTH_PROVIDERS,
+    HEALTH_RECORDING_METHODS,
+    HEALTH_SOURCE_RECORD_KINDS,
+    HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+    HEALTH_VALUE_ORIGINS,
+    type HealthMetricId,
+    type HealthProvider,
+    type HealthSourceRecord,
+} from '../../../shared/health';
+import {
+    MANUAL_HEALTH_AGGREGATION,
+    MANUAL_HEALTH_SOURCE_RECORD_TYPE,
+    MANUAL_VO2_CONTEXTS,
+    MANUAL_VO2_METHODS,
+    manualVo2SemanticVariant,
+} from '../../../shared/manual-health';
 import {
     createTrainingSportRecord,
     getTrainingProfileMetricDefinition,
@@ -243,6 +265,8 @@ const TRAINING_READINESS_HISTORY_DAYS = 14 as const;
 const BODY_WEIGHT_TREND_DAYS = 28 as const;
 const BODY_WEIGHT_COMPARISON_WINDOW_DAYS = 7 as const;
 const BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT = 3 as const;
+const DERIVED_HEALTH_SOURCE_DOCUMENT_LIMIT = 2_048;
+const TRAINING_CAPACITY_VO2_COMPARISON_MAX_GAP_MS = 14 * DAY_MS;
 const TRAINING_RECOVERY_MAX_TIMEZONE_OFFSET_SECONDS = 18 * 60 * 60;
 const TRAINING_CAPACITY_SESSION_FTP_FACTOR = 0.95;
 const POWER_CURVE_MAX_STORED_POINTS = 128;
@@ -292,7 +316,9 @@ type DerivedMetricBuildSourceDependency = 'formDocs'
     | 'trainingActivityDocs'
     | 'trainingBuildBenchmarkSettings'
     | 'trainingBuildSleepDocs'
-    | 'trainingReadinessSleepDocs';
+    | 'trainingReadinessSleepDocs'
+    | 'bodyWeightHealthDocs'
+    | 'vo2HealthDocs';
 
 export interface DerivedTrainingActivitySource {
     activityId: string;
@@ -348,6 +374,9 @@ interface DerivedMetricBuildExecutionContext {
     trainingBuildSleepDocs: readonly FirestoreQueryDocumentSnapshot[];
     trainingReadinessSleepDocs: readonly FirestoreQueryDocumentSnapshot[];
     trainingActivities: readonly DerivedTrainingActivitySource[];
+    bodyWeightHealthDocs: readonly FirestoreQueryDocumentSnapshot[];
+    hasAnyBodyWeightHealthRecord: boolean;
+    vo2HealthDocs: readonly FirestoreQueryDocumentSnapshot[];
     getDailyLoadContext: () => ReturnType<typeof buildDailyLoadContext>;
     getDerivedLoadPoints: () => DerivedLoadPoint[];
     getKpiDerivedLoadPoints: () => DerivedLoadPoint[];
@@ -373,6 +402,9 @@ interface DerivedMetricBuildSourceDocs {
     trainingBuildBenchmarkSettings?: unknown;
     trainingBuildSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
     trainingReadinessSleepDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    bodyWeightHealthDocs?: readonly FirestoreQueryDocumentSnapshot[];
+    hasAnyBodyWeightHealthRecord?: boolean;
+    vo2HealthDocs?: readonly FirestoreQueryDocumentSnapshot[];
 }
 
 interface DerivedMetricBuildDefinition {
@@ -1667,9 +1699,104 @@ function isTrainingCapacitySessionDerivedFtp(
     return Math.round(twentyMinutePoint.power * TRAINING_CAPACITY_SESSION_FTP_FACTOR) === Math.round(ftp);
 }
 
+function buildManualTrainingCapacityVo2References(
+    docs: readonly FirestoreQueryDocumentSnapshot[],
+    imported: Readonly<Record<DerivedPowerCurveScope, readonly TrainingCapacityObservation[]>>,
+    nowMs: number,
+): Record<DerivedPowerCurveScope, DerivedTrainingCapacityReferenceVo2Max | null> {
+    const candidates: Record<DerivedPowerCurveScope, Array<{
+        value: number;
+        observedAtMs: number;
+        method: 'lab-test' | 'field-test';
+    }>> = { running: [], cycling: [] };
+    docs.forEach((doc) => {
+        const record = (doc.data() || {}) as Partial<HealthSourceRecord>;
+        if (record.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
+            || record.source?.provider !== HEALTH_PROVIDERS.QuantifiedSelf
+            || record.source.sourceRecordType !== MANUAL_HEALTH_SOURCE_RECORD_TYPE
+            || !Array.isArray(record.metrics)) {
+            return;
+        }
+        const observedAtMs = toMillis(record.endTimeMs);
+        if (observedAtMs === null || observedAtMs > nowMs) return;
+        record.metrics.forEach((storedEntry) => {
+            let entry;
+            try {
+                entry = decodeHealthMetricSportsLibData(storedEntry);
+            } catch (error) {
+                if (error instanceof SportsLibDataValidationError) return;
+                throw error;
+            }
+            if (entry.kind !== 'value'
+                || entry.metricId !== HEALTH_METRIC_IDS.Vo2Max
+                || entry.aggregation !== MANUAL_HEALTH_AGGREGATION
+                || entry.origin !== HEALTH_VALUE_ORIGINS.Recorded
+                || entry.recordingMethod !== HEALTH_RECORDING_METHODS.Manual
+                || typeof entry.canonical?.value !== 'number'
+                || !Number.isFinite(entry.canonical.value)
+                || entry.canonical.value <= 0) {
+                return;
+            }
+            const context = entry.native.qualifiers?.['context'];
+            const method = entry.native.qualifiers?.['method'];
+            if ((context !== 'running' && context !== 'cycling')
+                || !MANUAL_VO2_CONTEXTS.includes(context)
+                || (method !== 'lab_test' && method !== 'field_test')
+                || !MANUAL_VO2_METHODS.includes(method)
+                || entry.semanticVariant !== manualVo2SemanticVariant(context, method)) {
+                return;
+            }
+            candidates[context].push({
+                value: toRoundedNumber(entry.canonical.value, 1),
+                observedAtMs,
+                method: method === 'lab_test' ? 'lab-test' : 'field-test',
+            });
+        });
+    });
+
+    return (['running', 'cycling'] as const).reduce((result, discipline) => {
+        const sortedCandidates = candidates[discipline]
+            .sort((left, right) => left.observedAtMs - right.observedAtMs);
+        const latest = sortedCandidates[sortedCandidates.length - 1];
+        if (!latest) {
+            result[discipline] = null;
+            return result;
+        }
+        const comparison = imported[discipline]
+            .filter(item => Math.abs(item.timeMs - latest.observedAtMs) <= TRAINING_CAPACITY_VO2_COMPARISON_MAX_GAP_MS)
+            .sort((left, right) => {
+                const leftGap = Math.abs(left.timeMs - latest.observedAtMs);
+                const rightGap = Math.abs(right.timeMs - latest.observedAtMs);
+                return leftGap - rightGap || right.timeMs - left.timeMs;
+            })[0];
+        result[discipline] = {
+            kind: 'vo2-max',
+            value: latest.value,
+            context: discipline,
+            method: latest.method,
+            observedAtMs: latest.observedAtMs,
+            provenance: 'manual-health-measurement',
+            comparison: comparison ? {
+                value: toRoundedNumber(comparison.value, 1),
+                observedAtMs: comparison.timeMs,
+                delta: toRoundedNumber(latest.value - comparison.value, 1),
+                gapDays: toRoundedNumber(
+                    Math.abs(latest.observedAtMs - comparison.timeMs) / DAY_MS,
+                    2,
+                ),
+            } : null,
+        };
+        return result;
+    }, { running: null, cycling: null } as Record<
+        DerivedPowerCurveScope,
+        DerivedTrainingCapacityReferenceVo2Max | null
+    >);
+}
+
 export function buildTrainingCapacityMetricPayload(
     activities: readonly DerivedTrainingActivitySource[],
     nowMs = Date.now(),
+    manualVo2HealthDocs: readonly FirestoreQueryDocumentSnapshot[] = [],
 ): DerivedMetricBuildResult<DerivedTrainingCapacityMetricPayload> {
     const observations: Record<DerivedPowerCurveScope, {
         ftpSetting: TrainingCapacityObservation[];
@@ -1699,14 +1826,23 @@ export function buildTrainingCapacityMetricPayload(
         sourceEventCount += 1;
     });
 
+    const references = buildManualTrainingCapacityVo2References(
+        manualVo2HealthDocs,
+        {
+            running: observations.running.importedVo2Max,
+            cycling: observations.cycling.importedVo2Max,
+        },
+        nowMs,
+    );
     const disciplines = (['running', 'cycling'] as const).map((discipline) => ({
         discipline,
         ftpSetting: buildTrainingCapacityImportedMetric('ftp-setting', observations[discipline].ftpSetting),
         importedVo2Max: buildTrainingCapacityImportedMetric('vo2-max', observations[discipline].importedVo2Max),
+        referenceVo2Max: references[discipline],
     }));
 
     return {
-        sourceEventCount,
+        sourceEventCount: sourceEventCount + Object.values(references).filter(Boolean).length,
         payload: {
             dayBoundary: 'UTC',
             asOfDayMs: resolveUtcDayStartMs(nowMs),
@@ -3768,6 +3904,13 @@ interface BodyWeightWindowSummary {
     recordedDayCount: number;
 }
 
+interface BodyWeightSourceObservations {
+    sourceKind: DerivedBodyWeightTrendSeries['sourceKind'];
+    provider: HealthProvider | null;
+    sourceKey: string;
+    values: Array<{ timeMs: number; value: number }>;
+}
+
 function buildBodyWeightWindowSummary(
     dailyWeights: ReadonlyMap<number, number>,
     endDayMs: number,
@@ -3809,83 +3952,111 @@ function resolveBodyWeightChange(
 export function buildBodyWeightTrendMetricPayload(
     docs: readonly FirestoreQueryDocumentSnapshot[],
     nowMs = Date.now(),
+    healthDocs: readonly FirestoreQueryDocumentSnapshot[] = [],
+    hasAnyBodyWeightHealthRecord = healthDocs.length > 0,
 ): DerivedMetricBuildResult<DerivedBodyWeightTrendMetricPayload> {
     const asOfDayMs = resolveUtcDayStartMs(nowMs);
-    const rawWeightsByDay = new Map<number, number[]>();
-    let sourceEventCount = 0;
+    const observationsBySource = new Map<string, BodyWeightSourceObservations>();
+    let sourceObservationCount = 0;
 
-    docs.forEach((doc) => {
-        const eventData = (doc.data() || {}) as Record<string, unknown>;
-        const weightKg = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataWeight.type));
-        const recordedAtMs = toMillis(eventData.startDate) ?? toMillis(eventData.endDate);
-        if (weightKg === null || recordedAtMs === null) {
+    healthDocs.forEach((doc) => {
+        const record = (doc.data() || {}) as Partial<HealthSourceRecord>;
+        if (record.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
+            || !record.source
+            || typeof record.source.accountKey !== 'string'
+            || !Array.isArray(record.metrics)) {
             return;
         }
-        const dayMs = resolveUtcDayStartMs(recordedAtMs);
-        if (dayMs > asOfDayMs) {
-            return;
-        }
-        const existing = rawWeightsByDay.get(dayMs) || [];
-        existing.push(weightKg);
-        rawWeightsByDay.set(dayMs, existing);
-        sourceEventCount += 1;
+        const recordedAtMs = toMillis(record.endTimeMs);
+        if (recordedAtMs === null || recordedAtMs > nowMs) return;
+        record.metrics.forEach((storedEntry) => {
+            let entry;
+            try {
+                entry = decodeHealthMetricSportsLibData(storedEntry);
+            } catch (error) {
+                if (error instanceof SportsLibDataValidationError) return;
+                throw error;
+            }
+            const weightKg = entry.kind === 'value'
+                && entry.metricId === HEALTH_METRIC_IDS.BodyWeight
+                && entry.aggregation === MANUAL_HEALTH_AGGREGATION
+                && typeof entry.canonical?.value === 'number'
+                ? toFinitePositiveNumber(entry.canonical.value)
+                : null;
+            if (weightKg === null) return;
+            const identity = `${record.source!.provider}:${record.source!.accountKey}`;
+            const source = observationsBySource.get(identity) || {
+                sourceKind: 'health-measurement' as const,
+                provider: record.source!.provider,
+                sourceKey: record.source!.accountKey,
+                values: [],
+            };
+            source.values.push({ timeMs: recordedAtMs, value: weightKg });
+            observationsBySource.set(identity, source);
+            sourceObservationCount += 1;
+        });
     });
 
-    const dailyWeights = new Map<number, number>();
-    rawWeightsByDay.forEach((weights, dayMs) => {
-        const medianKg = resolveMedian(weights);
-        if (medianKg !== null) {
-            dailyWeights.set(dayMs, toRoundedNumber(medianKg, 3));
-        }
-    });
-
-    const current7d = buildBodyWeightWindowSummary(
-        dailyWeights,
-        asOfDayMs,
-        BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
-    );
-    const previous7d = buildBodyWeightWindowSummary(
-        dailyWeights,
-        asOfDayMs - (BODY_WEIGHT_COMPARISON_WINDOW_DAYS * DAY_MS),
-        BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
-    );
-    const current28d = buildBodyWeightWindowSummary(dailyWeights, asOfDayMs, BODY_WEIGHT_TREND_DAYS);
-    const previous28d = buildBodyWeightWindowSummary(
-        dailyWeights,
-        asOfDayMs - (BODY_WEIGHT_TREND_DAYS * DAY_MS),
-        BODY_WEIGHT_TREND_DAYS,
-    );
-    const change7d = resolveBodyWeightChange(current7d, previous7d);
-    const change28d = resolveBodyWeightChange(current28d, previous28d);
-    let latestWeightDayMs: number | null = null;
-    let latestWeightKg: number | null = null;
-    for (let dayMs = asOfDayMs; dayMs >= 0; dayMs -= DAY_MS) {
-        const weightKg = dailyWeights.get(dayMs);
-        if (weightKg !== undefined) {
-            latestWeightDayMs = dayMs;
-            latestWeightKg = weightKg;
-            break;
-        }
-    }
-    const firstTrendDayMs = asOfDayMs - ((BODY_WEIGHT_TREND_DAYS - 1) * DAY_MS);
-    const points: DerivedBodyWeightTrendMetricPayload['points'] = [];
-    for (let dayMs = firstTrendDayMs; dayMs <= asOfDayMs; dayMs += DAY_MS) {
-        points.push({
-            dayMs,
-            weightKg: dailyWeights.get(dayMs) ?? null,
+    // Workout profile Weight is a fallback only. If any true Health measurement
+    // exists, no workout-derived value enters the Training trend.
+    if (!hasAnyBodyWeightHealthRecord && sourceObservationCount === 0) {
+        docs.forEach((doc) => {
+            const eventData = (doc.data() || {}) as Record<string, unknown>;
+            const weightKg = toFinitePositiveNumber(resolveRawStatNumericValue(eventData, DataWeight.type));
+            const recordedAtMs = toMillis(eventData.startDate) ?? toMillis(eventData.endDate);
+            if (weightKg === null || recordedAtMs === null || recordedAtMs > nowMs) return;
+            const sourceKey = resolveTrainingSourceKey(eventData) || 'workout profile';
+            const identity = `workout:${sourceKey}`;
+            const source = observationsBySource.get(identity) || {
+                sourceKind: 'workout-profile-context' as const,
+                provider: null,
+                sourceKey,
+                values: [],
+            };
+            source.values.push({ timeMs: recordedAtMs, value: weightKg });
+            observationsBySource.set(identity, source);
+            sourceObservationCount += 1;
         });
     }
 
-    return {
-        sourceEventCount,
-        payload: {
-            dayBoundary: 'UTC',
-            asOfDayMs,
-            trendDays: BODY_WEIGHT_TREND_DAYS,
-            comparisonWindowDays: BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
-            minimumComparableDayCount: BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT,
-            latestWeightKg,
-            latestWeightDayMs,
+    const buildSeries = (source: BodyWeightSourceObservations): DerivedBodyWeightTrendSeries => {
+        const rawWeightsByDay = new Map<number, number[]>();
+        source.values.forEach(({ timeMs, value }) => {
+            const dayMs = resolveUtcDayStartMs(timeMs);
+            if (dayMs > asOfDayMs) return;
+            rawWeightsByDay.set(dayMs, [...(rawWeightsByDay.get(dayMs) || []), value]);
+        });
+        const dailyWeights = new Map<number, number>();
+        rawWeightsByDay.forEach((weights, dayMs) => {
+            const medianKg = resolveMedian(weights);
+            if (medianKg !== null) dailyWeights.set(dayMs, toRoundedNumber(medianKg, 3));
+        });
+        const current7d = buildBodyWeightWindowSummary(dailyWeights, asOfDayMs, BODY_WEIGHT_COMPARISON_WINDOW_DAYS);
+        const previous7d = buildBodyWeightWindowSummary(
+            dailyWeights,
+            asOfDayMs - (BODY_WEIGHT_COMPARISON_WINDOW_DAYS * DAY_MS),
+            BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
+        );
+        const current28d = buildBodyWeightWindowSummary(dailyWeights, asOfDayMs, BODY_WEIGHT_TREND_DAYS);
+        const previous28d = buildBodyWeightWindowSummary(
+            dailyWeights,
+            asOfDayMs - (BODY_WEIGHT_TREND_DAYS * DAY_MS),
+            BODY_WEIGHT_TREND_DAYS,
+        );
+        const change7d = resolveBodyWeightChange(current7d, previous7d);
+        const change28d = resolveBodyWeightChange(current28d, previous28d);
+        const latestDay = [...dailyWeights.keys()].filter(dayMs => dayMs <= asOfDayMs).sort((a, b) => b - a)[0];
+        const firstTrendDayMs = asOfDayMs - ((BODY_WEIGHT_TREND_DAYS - 1) * DAY_MS);
+        const points = Array.from({ length: BODY_WEIGHT_TREND_DAYS }, (_, index) => {
+            const dayMs = firstTrendDayMs + index * DAY_MS;
+            return { dayMs, weightKg: dailyWeights.get(dayMs) ?? null };
+        });
+        return {
+            sourceKind: source.sourceKind,
+            provider: source.provider,
+            sourceKey: source.sourceKey,
+            latestWeightKg: latestDay === undefined ? null : dailyWeights.get(latestDay) ?? null,
+            latestWeightDayMs: latestDay ?? null,
             median7dKg: current7d.medianKg === null ? null : toRoundedNumber(current7d.medianKg, 3),
             median28dKg: current28d.medianKg === null ? null : toRoundedNumber(current28d.medianKg, 3),
             change7dKg: change7d.changeKg,
@@ -3895,6 +4066,39 @@ export function buildBodyWeightTrendMetricPayload(
             recordedDayCount7d: current7d.recordedDayCount,
             recordedDayCount28d: current28d.recordedDayCount,
             points,
+        };
+    };
+    const series = [...observationsBySource.values()]
+        .map(buildSeries)
+        .sort((left, right) => `${left.provider || ''}:${left.sourceKey}`.localeCompare(
+            `${right.provider || ''}:${right.sourceKey}`,
+        ));
+    const legacy = series.length === 1 ? series[0] : null;
+    const emptyPoints = Array.from({ length: BODY_WEIGHT_TREND_DAYS }, (_, index) => ({
+        dayMs: asOfDayMs - ((BODY_WEIGHT_TREND_DAYS - 1 - index) * DAY_MS),
+        weightKg: null,
+    }));
+
+    return {
+        sourceEventCount: sourceObservationCount,
+        payload: {
+            dayBoundary: 'UTC',
+            asOfDayMs,
+            trendDays: BODY_WEIGHT_TREND_DAYS,
+            comparisonWindowDays: BODY_WEIGHT_COMPARISON_WINDOW_DAYS,
+            minimumComparableDayCount: BODY_WEIGHT_MIN_COMPARABLE_DAY_COUNT,
+            latestWeightKg: legacy?.latestWeightKg ?? null,
+            latestWeightDayMs: legacy?.latestWeightDayMs ?? null,
+            median7dKg: legacy?.median7dKg ?? null,
+            median28dKg: legacy?.median28dKg ?? null,
+            change7dKg: legacy?.change7dKg ?? null,
+            change7dPercent: legacy?.change7dPercent ?? null,
+            change28dKg: legacy?.change28dKg ?? null,
+            change28dPercent: legacy?.change28dPercent ?? null,
+            recordedDayCount7d: legacy?.recordedDayCount7d ?? 0,
+            recordedDayCount28d: legacy?.recordedDayCount28d ?? 0,
+            points: legacy?.points ?? emptyPoints,
+            series,
         },
     };
 }
@@ -4806,7 +5010,7 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         build: (context) => context.getTrainingSummaryBuildResult(),
     },
     [DERIVED_METRIC_KINDS.TrainingCapacity]: {
-        sourceDependencies: ['formDocs', 'trainingActivityDocs'],
+        sourceDependencies: ['formDocs', 'trainingActivityDocs', 'vo2HealthDocs'],
         build: (context) => context.getTrainingCapacityBuildResult(),
     },
     [DERIVED_METRIC_KINDS.TrainingPowerSystems]: {
@@ -4834,7 +5038,7 @@ const DERIVED_METRIC_BUILD_REGISTRY: Record<DerivedMetricKind, DerivedMetricBuil
         build: (context) => context.getTrainingReadinessBuildResult(),
     },
     [DERIVED_METRIC_KINDS.BodyWeightTrend]: {
-        sourceDependencies: ['formDocs'],
+        sourceDependencies: ['formDocs', 'bodyWeightHealthDocs'],
         build: (context) => context.getBodyWeightTrendBuildResult(),
     },
     [DERIVED_METRIC_KINDS.TrainingSwimPerformance]: {
@@ -4855,6 +5059,9 @@ function createDerivedMetricBuildExecutionContext(
     const recoveryNowDocs = sourceDocs.recoveryNowDocs || [];
     const trainingBuildSleepDocs = sourceDocs.trainingBuildSleepDocs || [];
     const trainingReadinessSleepDocs = sourceDocs.trainingReadinessSleepDocs || [];
+    const bodyWeightHealthDocs = sourceDocs.bodyWeightHealthDocs || [];
+    const hasAnyBodyWeightHealthRecord = sourceDocs.hasAnyBodyWeightHealthRecord ?? bodyWeightHealthDocs.length > 0;
+    const vo2HealthDocs = sourceDocs.vo2HealthDocs || [];
     const trainingActivities = sourceDocs.trainingActivities
         ?? joinTrainingActivitySources(sourceDocs.trainingActivityDocs || [], formDocs);
     const trainingBuildBenchmarkSettings = sourceDocs.trainingBuildBenchmarkSettings || {};
@@ -4945,7 +5152,11 @@ function createDerivedMetricBuildExecutionContext(
         if (trainingCapacityBuildResultCache) {
             return trainingCapacityBuildResultCache;
         }
-        trainingCapacityBuildResultCache = buildTrainingCapacityMetricPayload(trainingActivities, nowMs);
+        trainingCapacityBuildResultCache = buildTrainingCapacityMetricPayload(
+            trainingActivities,
+            nowMs,
+            vo2HealthDocs,
+        );
         return trainingCapacityBuildResultCache;
     };
 
@@ -5008,7 +5219,12 @@ function createDerivedMetricBuildExecutionContext(
         if (bodyWeightTrendBuildResultCache) {
             return bodyWeightTrendBuildResultCache;
         }
-        bodyWeightTrendBuildResultCache = buildBodyWeightTrendMetricPayload(formDocs, nowMs);
+        bodyWeightTrendBuildResultCache = buildBodyWeightTrendMetricPayload(
+            formDocs,
+            nowMs,
+            bodyWeightHealthDocs,
+            hasAnyBodyWeightHealthRecord,
+        );
         return bodyWeightTrendBuildResultCache;
     };
 
@@ -5027,6 +5243,9 @@ function createDerivedMetricBuildExecutionContext(
         trainingBuildSleepDocs,
         trainingReadinessSleepDocs,
         trainingActivities,
+        bodyWeightHealthDocs,
+        hasAnyBodyWeightHealthRecord,
+        vo2HealthDocs,
         getDailyLoadContext,
         getDerivedLoadPoints,
         getKpiDerivedLoadPoints,
@@ -5055,6 +5274,8 @@ export function resolveDerivedMetricSourceRequirements(
     needsTrainingBuildBenchmarkSettings: boolean;
     needsTrainingBuildSleepDocs: boolean;
     needsTrainingReadinessSleepDocs: boolean;
+    needsBodyWeightHealthDocs: boolean;
+    needsVo2HealthDocs: boolean;
 } {
     let needsFormDocs = false;
     let needsRecoveryNowDocs = false;
@@ -5063,6 +5284,8 @@ export function resolveDerivedMetricSourceRequirements(
     let needsTrainingBuildBenchmarkSettings = false;
     let needsTrainingBuildSleepDocs = false;
     let needsTrainingReadinessSleepDocs = false;
+    let needsBodyWeightHealthDocs = false;
+    let needsVo2HealthDocs = false;
 
     metricKinds.forEach((metricKind) => {
         const definition = DERIVED_METRIC_BUILD_REGISTRY[metricKind];
@@ -5090,6 +5313,12 @@ export function resolveDerivedMetricSourceRequirements(
         if (definition.sourceDependencies.includes('trainingReadinessSleepDocs')) {
             needsTrainingReadinessSleepDocs = true;
         }
+        if (definition.sourceDependencies.includes('bodyWeightHealthDocs')) {
+            needsBodyWeightHealthDocs = true;
+        }
+        if (definition.sourceDependencies.includes('vo2HealthDocs')) {
+            needsVo2HealthDocs = true;
+        }
     });
 
     return {
@@ -5100,6 +5329,8 @@ export function resolveDerivedMetricSourceRequirements(
         needsTrainingBuildBenchmarkSettings,
         needsTrainingBuildSleepDocs,
         needsTrainingReadinessSleepDocs,
+        needsBodyWeightHealthDocs,
+        needsVo2HealthDocs,
     };
 }
 
@@ -5265,6 +5496,60 @@ export async function fetchDerivedMetricsActivityDocs(
         .select(...fields)
         .get();
     return snapshot.docs;
+}
+
+export async function fetchDerivedMetricsHealthDocs(
+    uid: string,
+    metricId: HealthMetricId,
+    startDate: string,
+    endDate: string,
+): Promise<FirestoreQueryDocumentSnapshot[]> {
+    const query = admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
+        .where('metricIds', 'array-contains', metricId)
+        .where('calendarDate', '>=', startDate)
+        .where('calendarDate', '<=', endDate);
+    const snapshot = await query
+        .orderBy('calendarDate', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
+        .select(
+            'kind',
+            'source.provider',
+            'source.accountKey',
+            'calendarDate',
+            'endTimeMs',
+            'metrics',
+            'metricIds',
+        )
+        .limit(DERIVED_HEALTH_SOURCE_DOCUMENT_LIMIT + 1)
+        .get();
+    if (snapshot.docs.length > DERIVED_HEALTH_SOURCE_DOCUMENT_LIMIT) {
+        throw new Error('Derived Health source query exceeded its bounded document limit.');
+    }
+    return snapshot.docs;
+}
+
+export async function hasAnyDerivedMetricsHealthRecord(
+    uid: string,
+    metricId: HealthMetricId,
+    startDate: string,
+    endDate: string,
+): Promise<boolean> {
+    const snapshot = await admin.firestore()
+        .collection('users')
+        .doc(uid)
+        .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
+        .where('metricIds', 'array-contains', metricId)
+        .where('calendarDate', '>=', startDate)
+        .where('calendarDate', '<=', endDate)
+        .orderBy('calendarDate', 'asc')
+        .orderBy(FieldPath.documentId(), 'asc')
+        .select('kind')
+        .limit(1)
+        .get();
+    return !snapshot.empty;
 }
 
 export async function fetchTrainingBuildBenchmarkSettings(uid: string): Promise<unknown> {
@@ -6060,6 +6345,8 @@ export async function writeDerivedMetricSnapshotsReady(
     const trainingActivitySourceDocCount = sourceDocs.trainingActivityDocs?.length || 0;
     const trainingBuildSleepSourceDocCount = sourceDocs.trainingBuildSleepDocs?.length || 0;
     const trainingReadinessSleepSourceDocCount = sourceDocs.trainingReadinessSleepDocs?.length || 0;
+    const bodyWeightHealthSourceDocCount = sourceDocs.bodyWeightHealthDocs?.length || 0;
+    const vo2HealthSourceDocCount = sourceDocs.vo2HealthDocs?.length || 0;
     const buildContext = createDerivedMetricBuildExecutionContext(sourceDocs, nowMs, {
         dailyLoadContextOverride,
     });
@@ -6088,6 +6375,12 @@ export async function writeDerivedMetricSnapshotsReady(
         }
         if (sourceDependencies.includes('trainingReadinessSleepDocs')) {
             sourceDocCount += trainingReadinessSleepSourceDocCount;
+        }
+        if (sourceDependencies.includes('bodyWeightHealthDocs')) {
+            sourceDocCount += bodyWeightHealthSourceDocCount;
+        }
+        if (sourceDependencies.includes('vo2HealthDocs')) {
+            sourceDocCount += vo2HealthSourceDocCount;
         }
         return sourceDocCount;
     };
