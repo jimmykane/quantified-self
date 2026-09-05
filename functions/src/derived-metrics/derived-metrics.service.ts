@@ -5504,13 +5504,18 @@ export async function fetchDerivedMetricsHealthDocs(
     startDate: string,
     endDate: string,
 ): Promise<FirestoreQueryDocumentSnapshot[]> {
-    const query = admin.firestore()
+    let query = admin.firestore()
         .collection('users')
         .doc(uid)
         .collection(HEALTH_SOURCE_RECORDS_COLLECTION_ID)
         .where('metricIds', 'array-contains', metricId)
         .where('calendarDate', '>=', startDate)
         .where('calendarDate', '<=', endDate);
+    if (metricId === HEALTH_METRIC_IDS.Vo2Max) {
+        // Training uses only manual VO2 references. Keep provider VO2 and unrelated
+        // manual measurements outside the read budget, not just the later projection.
+        query = query.where('source.sourceRecordType', '==', MANUAL_HEALTH_SOURCE_RECORD_TYPE);
+    }
     const snapshot = await query
         .orderBy('calendarDate', 'asc')
         .orderBy(FieldPath.documentId(), 'asc')
@@ -5518,6 +5523,7 @@ export async function fetchDerivedMetricsHealthDocs(
             'kind',
             'source.provider',
             'source.accountKey',
+            'source.sourceRecordType',
             'calendarDate',
             'endTimeMs',
             'metrics',

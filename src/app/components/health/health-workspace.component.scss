@@ -156,6 +156,26 @@
   white-space: nowrap;
 }
 
+.health-add-measurement-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.health-add-measurement-content mat-icon,
+.health-add-measurement-content mat-spinner {
+  flex: 0 0 18px;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.health-add-measurement-content mat-icon {
+  font-size: 18px;
+  line-height: 18px;
+}
+
 .health-window-navigation {
   flex: 0 0 auto;
   gap: 0;

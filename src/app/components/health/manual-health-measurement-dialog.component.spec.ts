@@ -1,8 +1,10 @@
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HEALTH_METRIC_IDS } from '@shared/health';
+import { DataWeight, DistanceUnits, PaceUnits, SpeedUnits } from '@sports-alliance/sports-lib';
+import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import {
   ManualHealthMeasurementDialogComponent,
@@ -12,6 +14,7 @@ import {
 describe('ManualHealthMeasurementDialogComponent', () => {
   let dialogRef: { close: ReturnType<typeof vi.fn> };
   let storage: Storage;
+  let fixture: ComponentFixture<ManualHealthMeasurementDialogComponent>;
 
   beforeEach(() => {
     dialogRef = { close: vi.fn() };
@@ -34,7 +37,8 @@ describe('ManualHealthMeasurementDialogComponent', () => {
         { provide: APP_STORAGE, useValue: storage },
       ],
     }).compileComponents();
-    return TestBed.createComponent(ManualHealthMeasurementDialogComponent).componentInstance;
+    fixture = TestBed.createComponent(ManualHealthMeasurementDialogComponent);
+    return fixture.componentInstance;
   }
 
   it('submits a canonical Weight measurement with the observed local offset', async () => {
@@ -53,6 +57,30 @@ describe('ManualHealthMeasurementDialogComponent', () => {
       timezoneOffsetSeconds: expect.any(Number),
     }));
     expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('vo2Context');
+  });
+
+  it.each([
+    { label: 'default', unitSettings: null },
+    { label: 'imperial', unitSettings: {
+        ...getDefaultUserUnitSettings(),
+        distanceUnits: DistanceUnits.Miles,
+        speedUnits: [SpeedUnits.MilesPerHour],
+        paceUnits: [PaceUnits.MinutesPerMile],
+    } },
+  ])('keeps Weight input and submission in Sports Lib kilograms with $label settings', async ({ unitSettings }) => {
+    const component = await create({
+      metricId: HEALTH_METRIC_IDS.BodyWeight,
+      unitSettings,
+      existing: { canonicalValue: 80, observedAtMs: Date.UTC(2026, 0, 1, 10), timezoneOffsetSeconds: 0 },
+    });
+    fixture.detectChanges();
+    const weight = new DataWeight(80);
+    expect(component.valueUnit).toBe(weight.getDisplayUnit());
+    expect(component.form.controls.canonicalValue.value).toBe(weight.getValue());
+    expect(fixture.nativeElement.querySelector('[matTextSuffix]').textContent.trim()).toBe(weight.getDisplayUnit());
+    expect(Number(fixture.nativeElement.querySelector('input[type="number"]').value)).toBe(80);
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ canonicalValue: 80 }));
   });
 
   it('preserves an existing measurement timezone while editing VO2 context and method', async () => {

@@ -119,10 +119,17 @@
                 class="health-add-measurement"
                 [disabled]="manualMutationBusy()"
                 (click)="openManualMeasurement()">
-                <mat-icon aria-hidden="true">add</mat-icon>
-                <span>Add {{ selectedManualMetric() === 'body_weight' ? 'weight' : 'VO₂ max' }}</span>
+                <span class="health-add-measurement-content">
+                  @if (manualMutationBusy()) {
+                    <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
+                  } @else {
+                    <mat-icon aria-hidden="true">add</mat-icon>
+                  }
+                  <span>Add {{ selectedManualMetric() === 'body_weight' ? 'weight' : 'VO₂ max' }}</span>
+                </span>
               </button>
             }
+            <span class="cdk-visually-hidden" role="status">{{ manualMutationBusy() ? 'Updating measurements…' : '' }}</span>
           <div class="health-window-navigation" aria-label="Health data window">
             <button
               mat-icon-button

@@ -95,7 +95,9 @@ async function handleDerivedMetricsSourceWrite(
     }
     const targetedIngressOptions = sleepIngressOptions || (source === 'health'
         ? {
-            taskScope: 'health',
+            // A deterministic task may coalesce only identical invalidation sets.
+            // Otherwise a Weight write can suppress a same-bucket VO2 write (or vice versa).
+            taskScope: `health-${healthMetricKinds.join('-')}`,
             metricKinds: healthMetricKinds,
             incrementEventMutationVersion: false,
         } as const

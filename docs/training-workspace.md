@@ -527,6 +527,8 @@ merely because the manager dialog was opened.
   Firestore settings path. They do not dirty or rebuild derived metrics because they are presentation state.
 
 Ingress is debounced by UID and a short time bucket. Deterministic task names coalesce bursts of event/activity writes.
+Health task scopes also include their ordered affected-kind set. Weight-only, VO2-only, and combined changes cannot
+suppress each other's invalidation payloads in the same bucket; repeats of the same set still coalesce.
 The ingress worker marks the relevant kinds dirty and queues one derived worker generation.
 
 Admin queue observability treats these as two separate Cloud Tasks queues: derived ingress shows invalidations waiting to
@@ -1190,6 +1192,11 @@ For each power discipline:
 - Imported VO2 max: the latest stable source-matched workout observation.
 - Manual VO2 max reference: the latest Quantified Self manual observation explicitly marked for that discipline and as
   a lab or field test. General and other-estimate observations remain Health-only.
+
+The all-history Health reference query filters both `metricIds` and `source.sourceRecordType=manual_measurement`
+before its 2,048-document bound, using the source-type/metric/calendar-date composite index. Provider VO2 history and
+unrelated manual Weight cannot consume that budget. Its field mask retains `source.sourceRecordType` for the builder's
+manual-source check. Deploy this index and wait until it is ready before deploying the updated Training worker.
 
 An FTP value that exactly matches the session-derived `95% of 20-minute power` heuristic is not treated as an imported
 long-lived setting. `training_capacity` does not fit CP or W′ and does not read the aggregate `power_curve` snapshot.

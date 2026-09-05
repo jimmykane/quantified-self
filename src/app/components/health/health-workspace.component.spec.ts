@@ -1127,13 +1127,15 @@ describe('HealthWorkspaceComponent', () => {
     expect(text).not.toContain('private provider failure');
   });
 
-  it('creates manual Weight with an idempotency key and refreshes the selected range', async () => {
+  it('shows save progress, creates manual Weight with an idempotency key, and refreshes the range', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
     component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
     await fixture.whenStable();
     const callsBeforeMutation = loadMetricRange.mock.calls.length;
+    let finishSave!: (value: { sourceRecordId: string; revisionOrder: number }) => void;
+    saveManualMeasurement.mockReturnValueOnce(new Promise(resolve => { finishSave = resolve; }));
 
-    await (component as unknown as {
+    const pendingSave = (component as unknown as {
       createManualMeasurement: (
         metricId: typeof HEALTH_METRIC_IDS.BodyWeight,
         value: { canonicalValue: number; observedAtMs: number; timezoneOffsetSeconds: number },
@@ -1143,6 +1145,16 @@ describe('HealthWorkspaceComponent', () => {
       observedAtMs: todayStartMs + 10_000,
       timezoneOffsetSeconds: 7_200,
     });
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const addButton = host.querySelector<HTMLButtonElement>('.health-add-measurement')!;
+    expect(addButton.disabled).toBe(true);
+    expect(addButton.querySelector('mat-spinner')).not.toBeNull();
+    expect(addButton.textContent).toContain('Add weight');
+    expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent).toContain('Updating measurements');
+
+    finishSave({ sourceRecordId: 'opaque', revisionOrder: 1 });
+    await pendingSave;
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -1156,6 +1168,9 @@ describe('HealthWorkspaceComponent', () => {
     });
     expect(loadMetricRange.mock.calls.length).toBeGreaterThan(callsBeforeMutation);
     expect(component.manualMutationBusy()).toBe(false);
+    expect(addButton.disabled).toBe(false);
+    expect(addButton.querySelector('mat-spinner')).toBeNull();
+    expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent?.trim()).toBe('');
   });
 
   it('reuses the same idempotency key when the user retries an ambiguous create failure', async () => {
