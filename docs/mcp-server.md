@@ -37,6 +37,14 @@ messages/batches are distinguished from protocol-envelope failures, and unexpect
 A rejected modern envelope version is logged when no protocol-version header was supplied, without
 logging any other envelope or request data.
 
+Completed HTTP 200 protocol requests emit `[MCP] Streamable HTTP request served` at INFO with only `clientFamily`,
+sanitized `protocolVersion`, and `protocolVersionSource`. The source is `sdk` for modern requests and successful legacy
+initialization, `request_header` for validated stateless legacy follow-up headers, or `legacy_default` when such a
+follow-up omits the header. Initialization logs the version the SDK selected, not an unsupported requested version.
+This is transport/protocol evidence, not a claim that a tool returned a successful business result: handled tool errors
+can also travel over HTTP 200. Rejected HTTP requests and failed initialization do not emit this INFO event. No request
+or response payloads, tool arguments, credentials, user/connection IDs, or raw client identity metadata are logged.
+
 The registered legacy candidate digest is unchanged by this upgrade. It adds no tool/schema/scope/instruction refresh or
 local plugin-sync requirement of its own; the pre-existing `pending-change.json` release still needs its separately
 verified live refresh and promotion. Do not consume that record just because protocol tests pass. If a later registered

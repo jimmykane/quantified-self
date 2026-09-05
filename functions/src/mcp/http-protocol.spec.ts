@@ -4,22 +4,24 @@ import type { Request } from 'firebase-functions/v2/https';
 import {
   CLIENT_CAPABILITIES_META_KEY,
   CLIENT_INFO_META_KEY,
+  DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
   PROTOCOL_VERSION_META_KEY,
 } from '@modelcontextprotocol/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCP_OAUTH_SCOPES, McpOAuthError } from './oauth.service';
 import { mcpApi } from './server';
 
-const { authenticateBearer, warn, logError } = vi.hoisted(() => ({
+const { authenticateBearer, warn, logError, info } = vi.hoisted(() => ({
   authenticateBearer: vi.fn(),
   warn: vi.fn(),
   logError: vi.fn(),
+  info: vi.fn(),
 }));
 vi.mock('./oauth.service', async importOriginal => ({
   ...await importOriginal<typeof import('./oauth.service')>(),
   createMcpOAuthService: () => ({ authenticateBearer }),
 }));
-vi.mock('firebase-functions/logger', () => ({ warn, error: logError }));
+vi.mock('firebase-functions/logger', () => ({ warn, error: logError, info }));
 
 const VERSION = '2026-07-28';
 function modernRequest(method = 'server/discover', args: Record<string, unknown> = {}) {
@@ -80,20 +82,24 @@ describe('MCP Function protocol compatibility', () => {
       connectionId: 'protocol-connection', scopes: Object.values(MCP_OAUTH_SCOPES),
     });
   });
-  function post(body: unknown, headers: Record<string, string> = {}) {
+  function post(body: unknown, headers: Record<string, string | null> = {}) {
     const record = body as { method?: string; params?: { name?: string } };
+    const requestHeaders = new Headers({
+      authorization: 'Bearer fixture-token',
+      'user-agent': 'Claude-User',
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      'mcp-protocol-version': VERSION,
+      'mcp-method': record.method ?? '',
+      ...(record.params?.name ? { 'mcp-name': record.params.name } : {}),
+    });
+    for (const [name, value] of Object.entries(headers)) {
+      if (value === null) requestHeaders.delete(name);
+      else requestHeaders.set(name, value);
+    }
     return fetch(url, {
       method: 'POST',
-      headers: {
-        authorization: 'Bearer fixture-token',
-        'user-agent': 'Claude-User',
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        'mcp-protocol-version': VERSION,
-        'mcp-method': record.method ?? '',
-        ...(record.params?.name ? { 'mcp-name': record.params.name } : {}),
-        ...headers,
-      },
+      headers: requestHeaders,
       body: JSON.stringify(body),
     });
   }
@@ -120,6 +126,11 @@ describe('MCP Function protocol compatibility', () => {
     expect(authenticateBearer).toHaveBeenCalledTimes(3);
     expect(warn).not.toHaveBeenCalled();
     expect(logError).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledTimes(3);
+    expect(info).toHaveBeenCalledWith('[MCP] Streamable HTTP request served', {
+      clientFamily: 'claude', protocolVersion: VERSION, protocolVersionSource: 'sdk',
+    });
+    expect(JSON.stringify(info.mock.calls)).not.toMatch(/fixture-token|protocol-user|protocol-connection|protocol-test/);
   });
 
   it.each(['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'])('keeps %s legacy initialize and JSON calls working', async version => {
@@ -136,6 +147,57 @@ describe('MCP Function protocol compatibility', () => {
     expect(call.status).toBe(200);
     expect(await call.json()).toHaveProperty('result.structuredContent');
     expect(warn).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledTimes(2);
+    expect(info).toHaveBeenNthCalledWith(1, '[MCP] Streamable HTTP request served', {
+      clientFamily: 'claude', protocolVersion: version, protocolVersionSource: 'sdk',
+    });
+    expect(info).toHaveBeenNthCalledWith(2, '[MCP] Streamable HTTP request served', {
+      clientFamily: 'claude', protocolVersion: version, protocolVersionSource: 'request_header',
+    });
+  });
+
+  it('logs the actual legacy initialize result when the requested version is unsupported', async () => {
+    const response = await post({
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2099-01-01', clientInfo: { name: 'legacy', version: '1' }, capabilities: {} },
+    }, { 'mcp-protocol-version': null });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ result: { protocolVersion: '2025-11-25' } });
+    expect(info).toHaveBeenCalledExactlyOnceWith('[MCP] Streamable HTTP request served', {
+      clientFamily: 'claude', protocolVersion: '2025-11-25', protocolVersionSource: 'sdk',
+    });
+  });
+
+  it('logs modern envelope negotiation without copying client-controlled metadata', async () => {
+    const body = modernRequest('server/discover', { privatePayload: 'private-payload-canary' });
+    body.params._meta[CLIENT_INFO_META_KEY].name = 'private-client-canary';
+    const response = await post(body, {
+      'mcp-protocol-version': null, 'user-agent': 'private-agent-canary',
+    });
+    expect(response.status).toBe(200);
+    expect(info).toHaveBeenCalledExactlyOnceWith('[MCP] Streamable HTTP request served', {
+      clientFamily: 'other', protocolVersion: VERSION, protocolVersionSource: 'sdk',
+    });
+    expect(JSON.stringify(info.mock.calls)).not.toContain('canary');
+  });
+
+  it('labels the legacy default explicitly when a stateless call omits the version header', async () => {
+    const response = await post({
+      jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_activity_types', arguments: {} },
+    }, { 'mcp-protocol-version': null });
+    expect(response.status).toBe(200);
+    expect(info).toHaveBeenCalledExactlyOnceWith('[MCP] Streamable HTTP request served', {
+      clientFamily: 'claude', protocolVersion: DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
+      protocolVersionSource: 'legacy_default',
+    });
+  });
+
+  it('does not claim a successful protocol negotiation for an invalid initialize', async () => {
+    const response = await post({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }, {
+      'mcp-protocol-version': '2025-11-25',
+    });
+    expect(await response.json()).toHaveProperty('error');
+    expect(info).not.toHaveBeenCalled();
   });
 
   it.each(['server/discover', 'tools/list', 'tools/call'])('authenticates modern %s before transport work', async method => {
@@ -143,6 +205,7 @@ describe('MCP Function protocol compatibility', () => {
     expect(response.status).toBe(401);
     expect(response.headers.get('www-authenticate')).toContain('resource_metadata=');
     expect(authenticateBearer).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
   });
 
   it('preserves revoked-token, rate-limit, and scope rejection responses', async () => {
@@ -158,6 +221,7 @@ describe('MCP Function protocol compatibility', () => {
     }));
     expect(denied.status).toBe(403);
     expect(denied.headers.get('www-authenticate')).toContain('activity-location:read');
+    expect(info).not.toHaveBeenCalled();
   });
 
   it('rejects unknown revisions without downgrading and logs only the sanitized version', async () => {
@@ -170,6 +234,7 @@ describe('MCP Function protocol compatibility', () => {
       reason: 'unsupported_protocol_version', clientFamily: 'claude', protocolVersion: '2099-01-01',
     });
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/fixture-token|protocol-user|protocol-connection/);
+    expect(info).not.toHaveBeenCalled();
   });
 
   it('rejects missing envelopes and mismatched protocol or method headers', async () => {
@@ -187,6 +252,7 @@ describe('MCP Function protocol compatibility', () => {
       reason: 'invalid_protocol_envelope', clientFamily: 'claude',
     });
     expect(logError).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
   });
 
   it('logs safe rejected envelope versions when the optional protocol header is absent', async () => {

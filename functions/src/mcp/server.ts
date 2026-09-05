@@ -1,5 +1,5 @@
 import { toNodeHandler } from '@modelcontextprotocol/node';
-import { McpServer, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
+import { DEFAULT_NEGOTIATED_PROTOCOL_VERSION, McpServer, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 import { onRequest, Request } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isIP } from 'node:net';
@@ -1936,8 +1936,13 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
     return;
   }
 
+  let readProtocolVersion = (): string | undefined => undefined;
   const transport = createMcpTransportHandler(
-    () => createMcpServer(auth, baseUrl),
+    () => {
+      const server = createMcpServer(auth, baseUrl);
+      readProtocolVersion = () => server.server.getNegotiatedProtocolVersion();
+      return server;
+    },
     error => logMcpTransportRejection(error, request),
   );
   try {
@@ -1946,6 +1951,26 @@ export const mcpApi = onRequest(MCP_API_RUNTIME_OPTIONS, async (request, respons
         errorName: error.name,
       }),
     })(request, response, request.body);
+    const sdkVersion = readProtocolVersion();
+    if (
+      response.statusCode === 200
+      && response.writableEnded
+      // A failed initialize can return a JSON-RPC error on HTTP 200. It did
+      // not negotiate anything, so do not report the requested version.
+      && (request.body?.method !== 'initialize' || sdkVersion !== undefined)
+    ) {
+      const headerVersion = request.get('mcp-protocol-version');
+      logger.info('[MCP] Streamable HTTP request served', {
+        clientFamily: classifyMcpDiagnosticClientFamily(request.get('user-agent')),
+        protocolVersion: sanitizeMcpProtocolVersionForDiagnostics(
+          sdkVersion ?? headerVersion ?? DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
+        ),
+        // Stateless legacy follow-up requests have no initialized SDK session.
+        protocolVersionSource: sdkVersion !== undefined
+          ? 'sdk'
+          : headerVersion !== undefined ? 'request_header' : 'legacy_default',
+      });
+    }
   } catch (error) {
     logger.error('[MCP] Streamable HTTP request failed', {
       errorName: error instanceof Error ? error.name : 'unknown',
