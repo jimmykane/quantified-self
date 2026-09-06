@@ -34,6 +34,7 @@ import {
   MANUAL_HEALTH_SOURCE_RECORD_TYPE,
   MANUAL_VO2_CONTEXTS,
   MANUAL_VO2_METHODS,
+  manualHealthEntryMetric,
   type ManualHealthMetricId,
   type ManualVo2Context,
   type ManualVo2Method,
@@ -1093,7 +1094,7 @@ function manualObservationEdit(
     || entry.aggregation !== MANUAL_HEALTH_AGGREGATION
     || entry.origin !== HEALTH_VALUE_ORIGINS.Recorded
     || entry.recordingMethod !== HEALTH_RECORDING_METHODS.Manual
-    || (entry.metricId !== HEALTH_METRIC_IDS.BodyWeight && entry.metricId !== HEALTH_METRIC_IDS.Vo2Max)
+    || !manualHealthEntryMetric(entry.metricId)
     || nativeOnly
     || typeof value !== 'number'
     || !Number.isFinite(value)) {
@@ -1102,12 +1103,14 @@ function manualObservationEdit(
   const base: ManualHealthObservationEdit = {
     sourceRecordId: observation.sourceRecordId,
     expectedRevisionOrder: observation.sourceRevisionOrder,
-    metricId: entry.metricId,
+    // BP rows all address one record. The editor re-reads the complete paired
+    // values under this revision fence before opening, never this single value.
+    metricId: manualHealthEntryMetric(entry.metricId)!,
     canonicalValue: value,
     observedAtMs: observation.endTimeMs,
     timezoneOffsetSeconds: observation.timezoneOffsetSeconds || 0,
   };
-  if (entry.metricId === HEALTH_METRIC_IDS.BodyWeight) return base;
+  if (entry.metricId !== HEALTH_METRIC_IDS.Vo2Max) return base;
   const qualifiers = entry.native.qualifiers;
   const context = qualifiers?.['context'];
   const method = qualifiers?.['method'];

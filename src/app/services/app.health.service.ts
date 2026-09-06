@@ -6,6 +6,7 @@ import {
     documentId,
     getCountFromServer,
     getDocs,
+    getDocsFromServer,
     limit,
     orderBy,
     query,
@@ -17,6 +18,9 @@ import { Observable, combineLatest, of } from 'rxjs';
 import { map, shareReplay } from 'rxjs/operators';
 import {
     HEALTH_SYNC_STATE_COLLECTION_ID,
+    HEALTH_METRIC_IDS,
+    HEALTH_PROVIDERS,
+    HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_METRIC_CATALOG,
     HEALTH_SOURCE_RECORDS_COLLECTION_ID,
     HealthRangeQuery,
@@ -38,9 +42,12 @@ import type {
     DeleteManualHealthMeasurementRequest,
     DeleteManualHealthMeasurementResponse,
     ManualHealthAccountAssertion,
+    ManualHealthMeasurementFields,
     SaveManualHealthMeasurementRequest,
     SaveManualHealthMeasurementResponse,
 } from '@shared/manual-health';
+import { MANUAL_HEALTH_SOURCE_RECORD_TYPE, MANUAL_HEALTH_VALUE_MAXIMUMS } from '@shared/manual-health';
+import { decodeHealthSourceRecordSportsLibData } from '@shared/sports-lib-health-data';
 
 export const HEALTH_WORKSPACE_LOAD_LIMITS = Object.freeze({
     sourceRecords: 2_048,
@@ -140,6 +147,55 @@ export class AppHealthService {
             DeleteManualHealthMeasurementResponse
         >('deleteManualHealthMeasurement', { ...request, expectedUserID });
         return response.data;
+    }
+
+    /** The range projection contains one selected metric; edits need the complete paired reading. */
+    async loadManualBloodPressure(
+        userID: string,
+        sourceRecordId: string,
+        expectedRevisionOrder: number,
+    ): Promise<ManualHealthMeasurementFields> {
+        if (!userID || userID.includes('/') || !/^[a-f0-9]{64}$/.test(sourceRecordId)) {
+            throw new Error('Invalid measurement identity.');
+        }
+        const snapshot = await getDocsFromServer(query(
+            collection(this.firestore, 'users', userID, HEALTH_SOURCE_RECORDS_COLLECTION_ID),
+            where(documentId(), '==', sourceRecordId), limit(1),
+        ));
+        const raw = snapshot.docs[0]?.data() as HealthSourceRecord | undefined;
+        if (!raw || raw.userID !== userID || raw.id !== sourceRecordId
+            || raw.source?.revision?.order !== expectedRevisionOrder
+            || raw.source?.provider !== HEALTH_PROVIDERS.QuantifiedSelf
+            || raw.source?.sourceRecordType !== MANUAL_HEALTH_SOURCE_RECORD_TYPE
+            || raw.kind !== HEALTH_SOURCE_RECORD_KINDS.PointMeasurement
+            || !Array.isArray(raw.sampleChunkIds) || raw.sampleChunkIds.length !== 0) {
+            throw new Error('Measurement changed or is no longer available.');
+        }
+        const record = decodeHealthSourceRecordSportsLibData(raw);
+        const ids = [HEALTH_METRIC_IDS.BloodPressureSystolic, HEALTH_METRIC_IDS.BloodPressureDiastolic, HEALTH_METRIC_IDS.PulseRate] as const;
+        if (record.metrics.length < 2 || record.metrics.length > 3
+            || new Set(record.metrics.map(metric => metric.metricId)).size !== record.metrics.length
+            || record.metrics.some(metric => !(ids as readonly string[]).includes(metric.metricId)
+                || metric.origin !== 'recorded' || metric.recordingMethod !== 'manual' || metric.aggregation !== 'measurement')) {
+            throw new Error('Invalid paired measurement.');
+        }
+        const valueFor = (id: typeof ids[number]): number => {
+            const metric = record.metrics.find(entry => entry.metricId === id);
+            const value = metric?.kind === 'value' ? metric.canonical?.value : undefined;
+            if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > MANUAL_HEALTH_VALUE_MAXIMUMS[id]) {
+                throw new Error('Invalid paired measurement value.');
+            }
+            return value;
+        };
+        return {
+            metricId: HEALTH_METRIC_IDS.BloodPressureSystolic,
+            canonicalValue: valueFor(HEALTH_METRIC_IDS.BloodPressureSystolic),
+            diastolicValue: valueFor(HEALTH_METRIC_IDS.BloodPressureDiastolic),
+            ...(record.metrics.some(metric => metric.metricId === HEALTH_METRIC_IDS.PulseRate)
+                ? { pulseValue: valueFor(HEALTH_METRIC_IDS.PulseRate) } : {}),
+            observedAtMs: record.startTimeMs,
+            timezoneOffsetSeconds: record.timezoneOffsetSeconds ?? 0,
+        };
     }
 
     watchSyncStates(userID: string | null | undefined): Observable<HealthSyncState[]> {

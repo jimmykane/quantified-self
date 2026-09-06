@@ -37,7 +37,7 @@ import {
   SleepSyncState,
 } from '@shared/sleep';
 import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
-import type { ManualHealthMetricId } from '@shared/manual-health';
+import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manual-health';
 import { combineLatest, of, Subscription } from 'rxjs';
 import { catchError, map, take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
@@ -62,6 +62,7 @@ import { HealthSourceObservationTableComponent } from './health-source-observati
 import {
   ManualHealthMeasurementDialogComponent,
   type ManualHealthMeasurementDialogResult,
+  type ManualHealthMeasurementDialogValue,
 } from './manual-health-measurement-dialog.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import {
@@ -194,7 +195,9 @@ export class HealthWorkspaceComponent {
   private readonly browserCompatibilityService = inject(BrowserCompatibilityService);
   private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
   readonly unitSettings = this.userSettingsService.unitSettings;
-  private readonly todayDate = localCalendarDate();
+  // Re-evaluate on interaction: a workspace left open overnight must be able
+  // to reveal a newly saved measurement in the new day's window.
+  private get todayDate(): string { return localCalendarDate(); }
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
   private priorityHealthUserID: string | null = null;
@@ -287,10 +290,6 @@ export class HealthWorkspaceComponent {
       return this.completeMetricCatalogGroups;
     }
     const availableMetricIds = new Set(this.availableHealthMetricIds() || []);
-    // Weight and VO2 max remain discoverable even without imported history so
-    // the owner can create the first manual observation.
-    availableMetricIds.add(HEALTH_METRIC_IDS.BodyWeight);
-    availableMetricIds.add(HEALTH_METRIC_IDS.Vo2Max);
     if (this.sleepHrvAvailabilityStatus() !== 'ready' || this.hasLoadedSleepHrv()) {
       availableMetricIds.add(HEALTH_METRIC_IDS.HeartRateVariability);
     }
@@ -374,10 +373,7 @@ export class HealthWorkspaceComponent {
       : emptyMetricView();
   });
   readonly selectedManualMetric = computed<ManualHealthMetricId | null>(() => {
-    const metric = this.routeState().metric;
-    return metric === HEALTH_METRIC_IDS.BodyWeight || metric === HEALTH_METRIC_IDS.Vo2Max
-      ? metric
-      : null;
+    return manualHealthEntryMetric(this.routeState().metric);
   });
   readonly workoutWeightFallback = computed(() => {
     const result = this.filteredHealthResult();
@@ -952,9 +948,9 @@ export class HealthWorkspaceComponent {
   }
 
   openManualMeasurement(): void {
-    const metricId = this.selectedManualMetric();
+    const metricId = this.selectedManualMetric() ?? HEALTH_METRIC_IDS.BodyWeight;
     const requestedForUserID = this.signedInUserID();
-    if (!metricId || !requestedForUserID || this.manualMutationBusy()) return;
+    if (!requestedForUserID || this.manualMutationBusy() || this.manualDialogRef) return;
     const dialogRef = this.dialog.open(ManualHealthMeasurementDialogComponent, {
       width: 'min(520px, calc(100vw - 24px))',
       maxWidth: '100vw',
@@ -962,14 +958,34 @@ export class HealthWorkspaceComponent {
       restoreFocus: true,
       data: { metricId, unitSettings: this.unitSettings() },
     });
-    this.handleManualDialogResult(dialogRef, result => {
-      void this.createManualMeasurement(metricId, result, undefined, requestedForUserID);
+    this.handleManualDialogResult<ManualHealthMeasurementDialogResult>(dialogRef, result => {
+      const { metricId: chosenMetric, ...value } = result;
+      void this.createManualMeasurement(chosenMetric, value, undefined, requestedForUserID);
     });
   }
 
-  editManualMeasurement(measurement: ManualHealthObservationEdit): void {
+  async editManualMeasurement(measurement: ManualHealthObservationEdit): Promise<void> {
     const requestedForUserID = this.signedInUserID();
-    if (!requestedForUserID || this.manualMutationBusy()) return;
+    if (!requestedForUserID || this.manualMutationBusy() || this.manualDialogRef) return;
+    const generation = this.manualAccountGeneration;
+    let existing: ManualHealthMeasurementDialogValue = measurement;
+    if (measurement.metricId === HEALTH_METRIC_IDS.BloodPressureSystolic) {
+      this.manualMutationBusy.set(true);
+      try {
+        existing = await this.healthService.loadManualBloodPressure(
+          requestedForUserID, measurement.sourceRecordId, measurement.expectedRevisionOrder,
+        );
+        if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
+      } catch {
+        if (this.isCurrentManualAccount(requestedForUserID, generation)) {
+          this.snackBar.open('Measurement changed or could not be loaded. Refresh and try again.', 'Dismiss', { duration: 5000 });
+          this.refreshRevision.update(current => current + 1);
+        }
+        return;
+      } finally {
+        if (this.isCurrentManualAccount(requestedForUserID, generation)) this.manualMutationBusy.set(false);
+      }
+    }
     const dialogRef = this.dialog.open(ManualHealthMeasurementDialogComponent, {
       width: 'min(520px, calc(100vw - 24px))',
       maxWidth: '100vw',
@@ -978,22 +994,26 @@ export class HealthWorkspaceComponent {
       data: {
         metricId: measurement.metricId,
         unitSettings: this.unitSettings(),
-        existing: measurement,
+        existing,
       },
     });
-    this.handleManualDialogResult(dialogRef, result => {
-      void this.updateManualMeasurement(measurement, result, requestedForUserID);
+    this.handleManualDialogResult<ManualHealthMeasurementDialogResult>(dialogRef, result => {
+      const { metricId, ...value } = result;
+      if (metricId !== measurement.metricId) return;
+      void this.updateManualMeasurement(measurement, value, requestedForUserID);
     });
   }
 
   deleteManualMeasurement(measurement: ManualHealthObservationEdit): void {
     const requestedForUserID = this.signedInUserID();
-    if (!requestedForUserID || this.manualMutationBusy()) return;
+    if (!requestedForUserID || this.manualMutationBusy() || this.manualDialogRef) return;
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: 'min(440px, calc(100vw - 24px))',
       data: {
         title: 'Delete manual measurement?',
-        message: 'This removes this measurement from Health and Training. This action cannot be undone.',
+        message: measurement.metricId === HEALTH_METRIC_IDS.BloodPressureSystolic
+          ? 'This deletes both blood-pressure readings and any pulse saved with them. This action cannot be undone.'
+          : 'This removes this measurement and any references to it. This action cannot be undone.',
         confirmLabel: 'Delete',
         confirmColor: 'warn',
       },
@@ -1124,7 +1144,7 @@ export class HealthWorkspaceComponent {
 
   private async createManualMeasurement(
     metricId: ManualHealthMetricId,
-    value: ManualHealthMeasurementDialogResult,
+    value: ManualHealthMeasurementDialogValue,
     clientMutationId?: string,
     requestedForUserID = this.signedInUserID(),
   ): Promise<void> {
@@ -1144,8 +1164,7 @@ export class HealthWorkspaceComponent {
         ...value,
       }, requestedForUserID);
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
-      this.selectedProviders.set([]);
-      this.markManualMetricAvailable(metricId);
+      this.revealManualMeasurement(metricId, value);
       this.snackBar.open('Measurement added', undefined, { duration: 2500 });
     } catch {
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
@@ -1166,7 +1185,7 @@ export class HealthWorkspaceComponent {
 
   private async updateManualMeasurement(
     measurement: ManualHealthObservationEdit,
-    value: ManualHealthMeasurementDialogResult,
+    value: ManualHealthMeasurementDialogValue,
     requestedForUserID = this.signedInUserID(),
   ): Promise<void> {
     if (!this.isCurrentManualAccount(requestedForUserID) || this.manualMutationBusy()) return;
@@ -1181,7 +1200,7 @@ export class HealthWorkspaceComponent {
         ...value,
       }, requestedForUserID);
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
-      this.refreshRevision.update(current => current + 1);
+      this.revealManualMeasurement(measurement.metricId, value);
       this.snackBar.open('Measurement updated', undefined, { duration: 2500 });
     } catch {
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
@@ -1219,10 +1238,20 @@ export class HealthWorkspaceComponent {
     }
   }
 
-  private markManualMetricAvailable(metricId: ManualHealthMetricId): void {
+  private revealManualMeasurement(metricId: ManualHealthMetricId, value: ManualHealthMeasurementDialogValue): void {
+    const metricIdsAdded: HealthMetricId[] = metricId === HEALTH_METRIC_IDS.BloodPressureSystolic
+      ? [metricId, HEALTH_METRIC_IDS.BloodPressureDiastolic, ...(value.pulseValue !== undefined ? [HEALTH_METRIC_IDS.PulseRate] : [])]
+      : [metricId];
     this.availableHealthMetricIds.update(metricIds => metricIds
-      ? [...new Set([...metricIds, metricId])]
+      ? [...new Set([...metricIds, ...metricIdsAdded])]
       : metricIds);
+    const date = new Date(value.observedAtMs + value.timezoneOffsetSeconds * 1_000).toISOString().slice(0, 10);
+    const window = this.selectedWindow();
+    // The saved instant is server-validated, but its original offset can put
+    // its indexed calendar date ahead of the viewer's current local date.
+    if (date < window.startDate || date > window.endDate) this.selectedEndDate.set(date);
+    this.selectedProviders.set([]);
+    this.selectAndSaveMetric(metricId);
     this.refreshRevision.update(current => current + 1);
   }
 
@@ -1233,7 +1262,9 @@ export class HealthWorkspaceComponent {
     try {
       const metricIds = await this.healthService.loadAvailableMetricIds(uid);
       if (generation === this.metricAvailabilityGeneration) {
-        this.availableHealthMetricIds.set(metricIds);
+        // Keep the existing workout-only entry points after deletion as well as
+        // initial discovery; manual entry no longer provides a catalog exception.
+        this.availableHealthMetricIds.set([...new Set([...metricIds, ...ACTIVITY_HEALTH_METRIC_IDS])]);
       }
     } catch {
       // Preserve the current catalog after a successful deletion; the range

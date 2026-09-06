@@ -78,7 +78,11 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
-    expect(healthSection?.content).toContain('**Add your own Weight or VO₂ max.**');
+    expect(healthSection?.content).toContain('**Add measurement** at the top of Health');
+    expect(healthSection?.content).toContain('Weight, VO₂ max, Blood pressure, Body fat, Muscle mass, Body water, Bone mass, or Blood oxygen (SpO₂)');
+    expect(healthSection?.content).toContain('body fat and body water are percentages');
+    expect(healthSection?.content).toContain('not muscle percentages or bone-density scores');
+    expect(healthSection?.content).toContain('both readings and any pulse saved with them');
     expect(healthSection?.content).toContain('edit or delete your own manual rows');
     expect(healthSection?.content).toContain('**Weight from workouts is fallback profile context, not a weigh-in.**');
     expect(healthSection?.content).toContain('no real provider or manual Health Weight measurement');

@@ -10,6 +10,7 @@ import {
     HEALTH_QUALITY_STATUSES,
     HEALTH_RECORDING_METHODS,
     HEALTH_SOURCE_RECORD_KINDS,
+    HEALTH_SOURCE_RECORDS_COLLECTION_ID,
     HEALTH_SCHEMA_VERSION,
     HEALTH_UNITS,
     HEALTH_VALUE_ORIGINS,
@@ -24,6 +25,7 @@ import {
     documentId,
     getCountFromServer,
     getDocs,
+    getDocsFromServer,
     limit,
     orderBy,
     query,
@@ -42,6 +44,7 @@ vi.mock('app/firebase/firestore', () => {
         documentId: vi.fn(() => '__name__'),
         getCountFromServer: vi.fn(),
         getDocs: vi.fn(),
+        getDocsFromServer: vi.fn(),
         limit: vi.fn((value: number) => ({ type: 'limit', value })),
         orderBy: vi.fn((field: string, direction: string) => ({ type: 'orderBy', field, direction })),
         query: vi.fn((collectionRef: unknown, ...constraints: unknown[]) => ({ collectionRef, constraints })),
@@ -240,6 +243,39 @@ describe('AppHealthService', () => {
         expect(startAfter).toHaveBeenCalledWith('2025-12-31', 'previous-record');
         expect(limit).toHaveBeenCalledWith(11);
         expect(limit).toHaveBeenCalledWith(9);
+    });
+
+    it('reads all paired values from one owner-scoped server document under the displayed revision', async () => {
+        const record = healthSourceRecord();
+        record.id = 'a'.repeat(64);
+        record.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+        record.source.provider = HEALTH_PROVIDERS.QuantifiedSelf;
+        record.source.sourceRecordType = 'manual_measurement';
+        record.metrics = [HEALTH_METRIC_IDS.BloodPressureSystolic, HEALTH_METRIC_IDS.BloodPressureDiastolic, HEALTH_METRIC_IDS.PulseRate].map((metricId, i) => ({
+            ...record.metrics[0], metricId, aggregation: 'measurement', origin: 'recorded', recordingMethod: 'manual',
+            canonical: { value: [120, 80, 65][i], unit: HEALTH_METRIC_CATALOG[metricId].canonicalUnit },
+        }));
+        record.metricIds = record.metrics.map(metric => metric.metricId);
+        vi.mocked(getDocsFromServer).mockResolvedValue({ docs: [{ data: () => record }] } as never);
+        await expect(service.loadManualBloodPressure('user-1', record.id, 1)).resolves.toMatchObject({
+            metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 120, diastolicValue: 80, pulseValue: 65,
+        });
+        expect(getDocsFromServer).toHaveBeenCalledWith({
+            collectionRef: { path: ['users', 'user-1', HEALTH_SOURCE_RECORDS_COLLECTION_ID] },
+            constraints: [{ type: 'where', field: '__name__', operator: '==', value: record.id }, { type: 'limit', value: 1 }],
+        });
+        await expect(service.loadManualBloodPressure('user-1', record.id, 2)).rejects.toThrow('changed');
+        await expect(service.loadManualBloodPressure('other-owner', record.id, 1)).rejects.toThrow('changed');
+        record.metrics = record.metrics.slice(0, 1);
+        await expect(service.loadManualBloodPressure('user-1', record.id, 1)).rejects.toThrow('paired');
+    });
+
+    it('rejects missing or malformed grouped edit identities without a broad query', async () => {
+        await expect(service.loadManualBloodPressure('', 'a'.repeat(64), 1)).rejects.toThrow();
+        await expect(service.loadManualBloodPressure('user-1', '../other', 1)).rejects.toThrow();
+        expect(getDocsFromServer).not.toHaveBeenCalled();
+        vi.mocked(getDocsFromServer).mockResolvedValue({ docs: [] } as never);
+        await expect(service.loadManualBloodPressure('user-1', 'a'.repeat(64), 1)).rejects.toThrow('no longer available');
     });
 
     it('uses the metric index when no provider is requested', async () => {

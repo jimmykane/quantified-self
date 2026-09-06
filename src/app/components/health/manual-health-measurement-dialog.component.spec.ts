@@ -3,7 +3,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HEALTH_METRIC_IDS } from '@shared/health';
-import { DataWeight, DistanceUnits, PaceUnits, SpeedUnits } from '@sports-alliance/sports-lib';
+import { DataWeight, DataBodyFat, DataBloodPressureSystolic, DataBloodPressureDiastolic, DataPulseRate,
+  DataMuscleMass, DataBodyWater, DataBoneMass, DataBloodOxygenSaturation, DistanceUnits, PaceUnits, SpeedUnits } from '@sports-alliance/sports-lib';
+import { MANUAL_HEALTH_METRIC_IDS } from '@shared/manual-health';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import {
@@ -75,7 +77,7 @@ describe('ManualHealthMeasurementDialogComponent', () => {
     });
     fixture.detectChanges();
     const weight = new DataWeight(80);
-    expect(component.valueUnit).toBe(weight.getDisplayUnit());
+    expect(component.valueUnit()).toBe(weight.getDisplayUnit());
     expect(component.form.controls.canonicalValue.value).toBe(weight.getValue());
     expect(fixture.nativeElement.querySelector('[matTextSuffix]').textContent.trim()).toBe(weight.getDisplayUnit());
     expect(Number(fixture.nativeElement.querySelector('input[type="number"]').value)).toBe(80);
@@ -101,6 +103,7 @@ describe('ManualHealthMeasurementDialogComponent', () => {
     component.submit();
 
     expect(dialogRef.close).toHaveBeenCalledWith({
+      metricId: HEALTH_METRIC_IDS.Vo2Max,
       canonicalValue: 56.2,
       observedAtMs,
       timezoneOffsetSeconds: 7_200,
@@ -123,5 +126,166 @@ describe('ManualHealthMeasurementDialogComponent', () => {
 
     expect(dialogRef.close).not.toHaveBeenCalled();
     expect(component.submitError()).toContain('not in the future');
+  });
+
+  it('offers all entry types and resets readings when switching to paired blood pressure', async () => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BodyWeight, unitSettings: null });
+    component.form.patchValue({ canonicalValue: 72 });
+    component.selectMetric(HEALTH_METRIC_IDS.BloodPressureSystolic);
+    fixture.detectChanges();
+    expect(component.metricOptions.map(option => option.label)).toEqual([
+      'Weight', 'VO₂ max', 'Blood pressure', 'Body fat', 'Muscle mass', 'Body water', 'Bone mass', 'Blood oxygen (SpO₂)',
+    ]);
+    expect(component.metricOptions.map(option => option.id).sort()).toEqual([...MANUAL_HEALTH_METRIC_IDS].sort());
+    expect(component.form.controls.canonicalValue.value).toBeNull();
+    component.form.patchValue({ canonicalValue: 120 });
+    component.submit();
+    expect(dialogRef.close).not.toHaveBeenCalled();
+    component.form.patchValue({ diastolicValue: 80, pulseValue: 65 });
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({
+      metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 120, diastolicValue: 80, pulseValue: 65,
+    }));
+    expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('vo2Method');
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it('allows body fat without VO2 metadata or blood-pressure fields and does not persist its value locally', async () => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BodyFat, unitSettings: null });
+    component.form.patchValue({ canonicalValue: 20.5 });
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 20.5 }));
+    expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('diastolicValue');
+    expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('vo2Context');
+    expect(storage.setItem).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { metricId: HEALTH_METRIC_IDS.MuscleMass, value: 52.4, dataClass: DataMuscleMass },
+    { metricId: HEALTH_METRIC_IDS.BodyWater, value: 57.8, dataClass: DataBodyWater },
+    { metricId: HEALTH_METRIC_IDS.BoneMass, value: 3.1, dataClass: DataBoneMass },
+    { metricId: HEALTH_METRIC_IDS.BloodOxygenSaturation, value: 98, dataClass: DataBloodOxygenSaturation },
+  ].flatMap(measurement => [null, { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles }]
+    .map(unitSettings => ({ ...measurement, unitSettings }))))(
+    'adds and edits $metricId with Sports Lib units and settings $unitSettings', async ({ metricId, value, dataClass, unitSettings }) => {
+      const component = await create({ metricId, unitSettings });
+      fixture.detectChanges();
+      expect(component.measurementLabel()).toBeTruthy();
+      expect(component.contextText()).not.toContain('body fat');
+      expect(component.valueUnit()).toBe(new dataClass(value).getDisplayUnit());
+      expect(fixture.nativeElement.querySelector('[matTextSuffix]').textContent.trim()).toBe(new dataClass(value).getDisplayUnit());
+      component.form.patchValue({ canonicalValue: value });
+      component.submit();
+      const result = dialogRef.close.mock.calls[0][0];
+      expect(result).toMatchObject({ metricId, canonicalValue: value });
+      expect(result).not.toHaveProperty('diastolicValue');
+      expect(result).not.toHaveProperty('pulseValue');
+      expect(result).not.toHaveProperty('vo2Context');
+      expect(storage.setItem).not.toHaveBeenCalled();
+
+      fixture.destroy();
+      TestBed.resetTestingModule();
+      dialogRef.close.mockClear();
+      const editing = await create({ metricId, unitSettings, existing: result });
+      editing.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+      expect(editing.selectedMetric()).toBe(metricId);
+      expect(editing.form.controls.canonicalValue.value).toBe(value);
+      editing.form.patchValue({ canonicalValue: value + 0.1 });
+      editing.submit();
+      expect(dialogRef.close).toHaveBeenCalledWith({ ...result, canonicalValue: value + 0.1 });
+    },
+  );
+
+  it.each([
+    HEALTH_METRIC_IDS.MuscleMass, HEALTH_METRIC_IDS.BodyWater, HEALTH_METRIC_IDS.BoneMass, HEALTH_METRIC_IDS.BloodOxygenSaturation,
+  ])('enforces bounds and discards paired fields when switching to %s', async metricId => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, unitSettings: null });
+    component.form.patchValue({ canonicalValue: 120, diastolicValue: 80, pulseValue: 65 });
+    component.selectMetric(metricId);
+    expect(component.form.controls.canonicalValue.value).toBeNull();
+    expect(component.form.controls.diastolicValue.value).toBeNull();
+    expect(component.form.controls.pulseValue.value).toBeNull();
+    for (const canonicalValue of [null, 0, -1, NaN, component.maximumValue() + 0.1]) {
+      component.form.patchValue({ canonicalValue });
+      component.submit();
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    }
+    component.form.patchValue({ canonicalValue: component.maximumValue() });
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ metricId, canonicalValue: component.maximumValue() }));
+    expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('pulseValue');
+  });
+
+  it('locks measurement type on edit and permits removing an optional pulse', async () => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, unitSettings: null,
+      existing: { canonicalValue: 120, diastolicValue: 80, pulseValue: 65,
+        observedAtMs: Date.UTC(2026, 0, 1), timezoneOffsetSeconds: 0 } });
+    component.selectMetric(HEALTH_METRIC_IDS.BodyFat);
+    expect(component.selectedMetric()).toBe(HEALTH_METRIC_IDS.BloodPressureSystolic);
+    component.form.patchValue({ pulseValue: null });
+    component.submit();
+    expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('pulseValue');
+  });
+
+  it.each([null, { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles }])(
+    'uses Sports Lib units for body fat and all paired fields with settings %j', async unitSettings => {
+      const component = await create({ metricId: HEALTH_METRIC_IDS.BodyFat, unitSettings });
+      fixture.detectChanges();
+      expect(component.valueUnit()).toBe(new DataBodyFat(20).getDisplayUnit());
+      component.selectMetric(HEALTH_METRIC_IDS.BloodPressureSystolic);
+      fixture.detectChanges();
+      expect([...fixture.nativeElement.querySelectorAll('[matTextSuffix]')].map((node: HTMLElement) => node.textContent.trim()))
+        .toEqual([new DataBloodPressureSystolic(120).getDisplayUnit(), new DataBloodPressureDiastolic(80).getDisplayUnit(), new DataPulseRate(65).getDisplayUnit()]);
+      const action = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
+      expect(action.getAttribute('form')).toBe('manual-health-measurement-form');
+    },
+  );
+
+  it.each(['1999-12-31', '2026-02-31'])('rejects invalid or pre-2000 calendar input %s', async observedDate => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BodyFat, unitSettings: null });
+    component.form.patchValue({ canonicalValue: 20, observedDate, observedTime: '08:00' });
+    component.submit();
+    expect(dialogRef.close).not.toHaveBeenCalled();
+    expect(component.submitError()).toContain('valid date');
+  });
+
+  it.each([
+    { time: '02:30', valid: true },
+    { time: '03:30', valid: false },
+    { time: '04:30', valid: true },
+  ])('does not silently normalize the local DST transition time $time', async ({ time, valid }) => {
+    vi.stubEnv('TZ', 'Europe/Helsinki');
+    try {
+      const component = await create({ metricId: HEALTH_METRIC_IDS.BodyFat, unitSettings: null });
+      component.form.patchValue({ canonicalValue: 20, observedDate: '2026-03-29', observedTime: time });
+
+      component.submit();
+
+      if (valid) {
+        expect(dialogRef.close).toHaveBeenCalledOnce();
+        const result = dialogRef.close.mock.calls[0][0];
+        expect(new Date(result.observedAtMs + result.timezoneOffsetSeconds * 1000).toISOString().slice(0, 16))
+          .toBe(`2026-03-29T${time}`);
+      } else {
+        expect(dialogRef.close).not.toHaveBeenCalled();
+        expect(component.submitError()).toContain('valid date');
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('preserves an existing fixed-offset time even when it falls in the viewer timezone DST gap', async () => {
+    vi.stubEnv('TZ', 'Europe/Helsinki');
+    try {
+      const existing = {
+        canonicalValue: 20, observedAtMs: Date.UTC(2026, 2, 29, 3, 30, 37), timezoneOffsetSeconds: 0,
+      };
+      const component = await create({ metricId: HEALTH_METRIC_IDS.BodyFat, unitSettings: null, existing });
+      component.submit();
+      expect(dialogRef.close).toHaveBeenCalledWith({ metricId: HEALTH_METRIC_IDS.BodyFat, ...existing });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

@@ -13,6 +13,9 @@ import {
 import {
   MANUAL_VO2_CONTEXTS,
   MANUAL_VO2_METHODS,
+  MANUAL_HEALTH_VALUE_MAXIMUMS,
+  manualHealthEntryMetric,
+  type ManualHealthMeasurementFields,
   type ManualHealthMetricId,
   type ManualVo2Context,
   type ManualVo2Method,
@@ -24,13 +27,7 @@ import { APP_STORAGE } from '../../services/storage/app.storage.token';
 const VO2_CONTEXT_STORAGE_KEY = 'health.manual.vo2-context';
 const VO2_METHOD_STORAGE_KEY = 'health.manual.vo2-method';
 
-export interface ManualHealthMeasurementDialogValue {
-  canonicalValue: number;
-  observedAtMs: number;
-  timezoneOffsetSeconds: number;
-  vo2Context?: ManualVo2Context;
-  vo2Method?: ManualVo2Method;
-}
+export type ManualHealthMeasurementDialogValue = Omit<ManualHealthMeasurementFields, 'metricId'>;
 
 export interface ManualHealthMeasurementDialogData {
   metricId: ManualHealthMetricId;
@@ -38,7 +35,7 @@ export interface ManualHealthMeasurementDialogData {
   existing?: ManualHealthMeasurementDialogValue;
 }
 
-export type ManualHealthMeasurementDialogResult = ManualHealthMeasurementDialogValue;
+export type ManualHealthMeasurementDialogResult = ManualHealthMeasurementFields;
 
 @Component({
   selector: 'app-manual-health-measurement-dialog',
@@ -65,16 +62,32 @@ export class ManualHealthMeasurementDialogComponent {
   private readonly storage = inject(APP_STORAGE);
   readonly data = inject<ManualHealthMeasurementDialogData>(MAT_DIALOG_DATA);
   readonly submitError = signal<string | null>(null);
-  readonly isWeight = this.data.metricId === HEALTH_METRIC_IDS.BodyWeight;
-  readonly title = `${this.data.existing ? 'Edit' : 'Add'} ${this.isWeight ? 'weight' : 'VO₂ max'}`;
-  readonly valueLabel = this.isWeight ? 'Weight' : 'VO₂ max';
-  readonly valueUnit = formatCanonicalHealthMetricSportsLibValue(
-    this.data.metricId,
-    this.data.existing?.canonicalValue ?? 1,
-    this.data.unitSettings,
-  )?.unit || '';
-  readonly maximumValue = this.isWeight ? 1_000 : 150;
-  readonly valueStep = this.isWeight ? 0.1 : 0.1;
+  readonly metricOptions = [
+    { id: HEALTH_METRIC_IDS.BodyWeight, label: 'Weight', description: 'Record a measured weight. Workout profile values are not weigh-ins.' },
+    { id: HEALTH_METRIC_IDS.Vo2Max, label: 'VO₂ max', description: 'Record a VO₂ max result with its context and method.' },
+    { id: HEALTH_METRIC_IDS.BloodPressureSystolic, label: 'Blood pressure', description: 'Enter both readings from the same measurement. Add pulse only if measured at the same time.' },
+    { id: HEALTH_METRIC_IDS.BodyFat, label: 'Body fat', description: 'Record a measured body fat percentage.' },
+    { id: HEALTH_METRIC_IDS.MuscleMass, label: 'Muscle mass', description: 'Record the muscle mass from your body-composition result, not a muscle percentage.' },
+    { id: HEALTH_METRIC_IDS.BodyWater, label: 'Body water', description: 'Record the body water percentage from your body-composition result.' },
+    { id: HEALTH_METRIC_IDS.BoneMass, label: 'Bone mass', description: 'Record the bone mass from your body-composition result, not a bone-density score.' },
+    { id: HEALTH_METRIC_IDS.BloodOxygenSaturation, label: 'Blood oxygen (SpO₂)', description: 'Record a blood oxygen saturation reading and the time it was measured.' },
+  ] as const;
+  readonly selectedMetric = signal(this.data.metricId);
+  private readonly selectedOption = computed(() => this.metricOptions.find(option => option.id === this.selectedMetric())!);
+  readonly isVo2 = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.Vo2Max);
+  readonly isBloodPressure = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.BloodPressureSystolic);
+  readonly measurementLabel = computed(() => this.selectedOption().label);
+  readonly title = this.data.existing ? 'Edit measurement' : 'Add measurement';
+  readonly valueLabel = computed(() => this.isBloodPressure() ? 'Systolic' : this.measurementLabel());
+  readonly valueUnit = computed(() => formatCanonicalHealthMetricSportsLibValue(
+    this.selectedMetric(), 1, this.data.unitSettings,
+  )?.unit || '');
+  readonly diastolicUnit = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.BloodPressureDiastolic, 1, this.data.unitSettings)?.unit || '';
+  readonly pulseUnit = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.PulseRate, 1, this.data.unitSettings)?.unit || '';
+  readonly maximumValue = computed(() => MANUAL_HEALTH_VALUE_MAXIMUMS[this.selectedMetric()]);
+  readonly pressureMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.BloodPressureDiastolic];
+  readonly pulseMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.PulseRate];
+  readonly contextText = computed(() => this.selectedOption().description);
   readonly vo2Contexts = MANUAL_VO2_CONTEXTS;
   readonly vo2Methods = MANUAL_VO2_METHODS;
   readonly todayDate = latestEditableCalendarDate(this.data.existing);
@@ -83,8 +96,12 @@ export class ManualHealthMeasurementDialogComponent {
   readonly form = this.formBuilder.nonNullable.group({
     canonicalValue: [
       this.data.existing?.canonicalValue ?? null as number | null,
-      [Validators.required, Validators.min(Number.EPSILON), Validators.max(this.maximumValue)],
+      [Validators.required, Validators.min(Number.EPSILON), Validators.max(this.maximumValue())],
     ],
+    diastolicValue: [this.data.existing?.diastolicValue ?? null as number | null,
+      this.isBloodPressure() ? [Validators.required, Validators.min(Number.EPSILON), Validators.max(this.pressureMaximum)] : []],
+    pulseValue: [this.data.existing?.pulseValue ?? null as number | null,
+      [Validators.min(Number.EPSILON), Validators.max(this.pulseMaximum)]],
     observedDate: [
       this.initialObservedDate,
       [Validators.required, Validators.pattern(/^\d{4}-\d{2}-\d{2}$/)],
@@ -100,6 +117,21 @@ export class ManualHealthMeasurementDialogComponent {
 
   close(): void {
     this.dialogRef.close();
+  }
+
+  selectMetric(metricId: ManualHealthMetricId): void {
+    if (this.data.existing || !this.metricOptions.some(option => option.id === metricId)) return;
+    this.selectedMetric.set(metricId);
+    this.submitError.set(null);
+    this.form.controls.canonicalValue.setValidators([
+      Validators.required, Validators.min(Number.EPSILON), Validators.max(this.maximumValue()),
+    ]);
+    this.form.controls.diastolicValue.setValidators(this.isBloodPressure()
+      ? [Validators.required, Validators.min(Number.EPSILON), Validators.max(this.pressureMaximum)] : []);
+    // Never carry a value entered for one metric into a different measurement type.
+    this.form.controls.canonicalValue.reset(null);
+    this.form.controls.diastolicValue.reset(null);
+    this.form.controls.pulseValue.reset(null);
   }
 
   submit(): void {
@@ -119,21 +151,34 @@ export class ManualHealthMeasurementDialogComponent {
       : this.data.existing
         ? Date.parse(`${value.observedDate}T${value.observedTime}:00.000Z`) - (timezoneOffsetSeconds * 1000)
       : observedDate.getTime();
-    if (!Number.isSafeInteger(observedAtMs) || observedAtMs > Date.now() + (5 * 60 * 1000)) {
-      this.submitError.set('Choose a valid date and time that is not in the future.');
+    const calendarTimestamp = Date.parse(`${value.observedDate}T${value.observedTime}:00.000Z`);
+    if (!Number.isSafeInteger(observedAtMs) || observedAtMs < Date.UTC(2000, 0, 1)
+      || !Number.isFinite(calendarTimestamp)
+      || new Date(calendarTimestamp).toISOString().slice(0, 16) !== `${value.observedDate}T${value.observedTime}`
+      // A local Date can silently advance a nonexistent DST wall time. Require
+      // the resolved instant/offset to match the entered minute, while retaining
+      // existing measurements' seconds and original fixed offset on edit.
+      || Math.floor((observedAtMs + timezoneOffsetSeconds * 1000) / 60_000) * 60_000 !== calendarTimestamp
+      || observedAtMs > Date.now() + (5 * 60 * 1000)) {
+      this.submitError.set('Choose a valid date and time from 2000 onward, not in the future.');
       return;
     }
     const canonicalValue = Number(value.canonicalValue);
-    if (!Number.isFinite(canonicalValue) || canonicalValue <= 0 || canonicalValue > this.maximumValue) {
-      this.submitError.set(`Enter a ${this.valueLabel.toLowerCase()} within the supported range.`);
+    if (!Number.isFinite(canonicalValue) || canonicalValue <= 0 || canonicalValue > this.maximumValue()) {
+      this.submitError.set(`Enter a ${this.valueLabel().toLowerCase()} within the supported range.`);
       return;
     }
     const result: ManualHealthMeasurementDialogResult = {
+      metricId: this.selectedMetric(),
       canonicalValue,
       observedAtMs,
       timezoneOffsetSeconds,
     };
-    if (!this.isWeight) {
+    if (this.isBloodPressure()) {
+      result.diastolicValue = Number(value.diastolicValue);
+      if (value.pulseValue !== null) result.pulseValue = Number(value.pulseValue);
+    }
+    if (this.isVo2()) {
       const vo2Context = value.vo2Context as ManualVo2Context;
       const vo2Method = value.vo2Method as ManualVo2Method;
       result.vo2Context = vo2Context;
@@ -225,5 +270,5 @@ function localTimeInputValue(value: Date): string {
 }
 
 export function isManualEntryMetric(metricId: HealthMetricId | 'sleep'): metricId is ManualHealthMetricId {
-  return metricId === HEALTH_METRIC_IDS.BodyWeight || metricId === HEALTH_METRIC_IDS.Vo2Max;
+  return manualHealthEntryMetric(metricId) === metricId;
 }
