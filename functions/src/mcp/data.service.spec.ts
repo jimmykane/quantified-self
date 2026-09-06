@@ -49,6 +49,18 @@ import {
 } from '../../../shared/readiness';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
+  HEALTH_COVERAGE_STATUSES,
+  HEALTH_METRIC_IDS,
+  HEALTH_NORMALIZATION_STATUSES,
+  HEALTH_QUALITY_STATUSES,
+  HEALTH_RECORDING_METHODS,
+  HEALTH_SOURCE_RECORD_KINDS,
+  HEALTH_UNITS,
+  HEALTH_VALUE_ORIGINS,
+  HEALTH_VALUE_TYPES,
+} from '../../../shared/health';
+import { encodeHealthMetricSportsLibData } from '../../../shared/sports-lib-health-data';
+import {
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
 import { normalizePersistedEventMetricSemantics } from '../../../shared/sports-lib-metric-semantics';
@@ -199,6 +211,36 @@ function routeDocument(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function healthWeightDocument(
+  id: string,
+  recordedAtMs: number,
+  weightKg: number,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id,
+    data: {
+      kind: HEALTH_SOURCE_RECORD_KINDS.PointMeasurement,
+      endTimeMs: recordedAtMs,
+      metrics: [encodeHealthMetricSportsLibData({
+        kind: 'value',
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        valueType: HEALTH_VALUE_TYPES.Number,
+        aggregation: 'measurement',
+        semanticVariant: 'point',
+        origin: HEALTH_VALUE_ORIGINS.Recorded,
+        recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+        quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        coverage: { status: HEALTH_COVERAGE_STATUSES.Complete },
+        normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+        native: { metric: DataWeight.type, value: weightKg, unit: HEALTH_UNITS.Kilogram },
+        canonical: { value: weightKg, unit: HEALTH_UNITS.Kilogram },
+      })],
+      ...overrides,
+    },
+  };
+}
+
 describe('MCP data service', () => {
   let dependencies: McpDataServiceDependencies;
 
@@ -207,6 +249,7 @@ describe('MCP data service', () => {
       now: vi.fn().mockReturnValue(Date.parse('2026-07-27T12:00:00.000Z')),
       fetchMetricDiscoveryDocuments: vi.fn().mockResolvedValue([]),
       fetchEventDocuments: vi.fn().mockResolvedValue([]),
+      fetchHealthSourceRecordDocuments: vi.fn().mockResolvedValue([]),
       fetchDerivedSnapshot: vi.fn().mockResolvedValue(null),
       fetchDerivedSnapshotMetadataDocuments: vi.fn().mockResolvedValue([]),
       fetchSleepDocuments: vi.fn().mockResolvedValue([]),
@@ -3832,40 +3875,16 @@ describe('MCP data service', () => {
   });
 
   it('returns identity-free daily median body-weight measurements in an IANA timezone', async () => {
-    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
-      {
-        id: 'weight-1',
-        data: {
-          startDate: Date.parse('2024-03-31T00:30:00.000Z'),
-          stats: { [DataWeight.type]: 70 },
-          name: 'Private morning weigh-in',
-          sourceKey: 'private-source-key',
-          creator: { name: 'Private scale' },
-        },
-      },
-      {
-        id: 'weight-2',
-        data: {
-          startDate: Date.parse('2024-03-31T01:30:00.000Z'),
-          stats: { [DataWeight.type]: 72 },
-          previousSourceKey: 'private-previous-source',
-        },
-      },
-      {
-        id: 'benchmark-1',
-        data: {
-          startDate: Date.parse('2024-03-31T02:30:00.000Z'),
-          isMerge: true,
-          stats: { [DataWeight.type]: 200 },
-        },
-      },
-      {
-        id: 'weight-3',
-        data: {
-          startDate: Date.parse('2024-04-01T04:00:00.000Z'),
-          stats: { [DataWeight.type]: 73 },
-        },
-      },
+    vi.mocked(dependencies.fetchHealthSourceRecordDocuments).mockResolvedValue([
+      healthWeightDocument('weight-1', Date.parse('2024-03-31T00:30:00.000Z'), 70, {
+        source: { accountKey: 'private-source-key' },
+        device: { displayName: 'Private scale' },
+      }),
+      healthWeightDocument('weight-2', Date.parse('2024-03-31T01:30:00.000Z'), 72),
+      healthWeightDocument('not-a-point', Date.parse('2024-03-31T02:30:00.000Z'), 200, {
+        kind: HEALTH_SOURCE_RECORD_KINDS.ProfileSnapshot,
+      }),
+      healthWeightDocument('weight-3', Date.parse('2024-04-01T04:00:00.000Z'), 73),
     ]);
 
     const result = await createMcpDataService(dependencies).queryMeasurements({
@@ -3905,36 +3924,23 @@ describe('MCP data service', () => {
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('weight-1');
-    expect(serialized).not.toContain('Private morning weigh-in');
     expect(serialized).not.toContain('private-source-key');
-    expect(serialized).not.toContain('private-previous-source');
     expect(serialized).not.toContain('Private scale');
-    expect(dependencies.fetchEventDocuments).toHaveBeenCalledWith(
+    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchHealthSourceRecordDocuments).toHaveBeenCalledWith(
       'user-1',
-      Date.parse('2024-03-30T00:00:00.000Z'),
-      Date.parse('2024-04-02T00:00:00.000Z'),
-      [DataWeight.type],
+      HEALTH_METRIC_IDS.BodyWeight,
+      '2024-03-29',
+      '2024-04-03',
       25,
       undefined,
     );
   });
 
   it('keeps even-count medians finite when all persisted values are finite', async () => {
-    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
-      {
-        id: 'weight-extreme-1',
-        data: {
-          startDate: Date.parse('2026-07-26T08:00:00.000Z'),
-          stats: { [DataWeight.type]: Number.MAX_VALUE },
-        },
-      },
-      {
-        id: 'weight-extreme-2',
-        data: {
-          startDate: Date.parse('2026-07-26T20:00:00.000Z'),
-          stats: { [DataWeight.type]: Number.MAX_VALUE },
-        },
-      },
+    vi.mocked(dependencies.fetchHealthSourceRecordDocuments).mockResolvedValue([
+      healthWeightDocument('weight-extreme-1', Date.parse('2026-07-26T08:00:00.000Z'), Number.MAX_VALUE),
+      healthWeightDocument('weight-extreme-2', Date.parse('2026-07-26T20:00:00.000Z'), Number.MAX_VALUE),
     ]);
 
     const result = await createMcpDataService(dependencies).queryMeasurements({
@@ -3956,28 +3962,10 @@ describe('MCP data service', () => {
   });
 
   it('supports natural body-weight aliases and latest-within-bucket aggregation', async () => {
-    vi.mocked(dependencies.fetchEventDocuments).mockResolvedValue([
-      {
-        id: 'weight-newer',
-        data: {
-          startDate: Date.parse('2026-07-26T20:00:00.000Z'),
-          stats: { [DataWeight.type]: 70.5 },
-        },
-      },
-      {
-        id: 'weight-older',
-        data: {
-          startDate: Date.parse('2026-07-26T08:00:00.000Z'),
-          stats: { [DataWeight.type]: 71 },
-        },
-      },
-      {
-        id: 'weight-invalid',
-        data: {
-          startDate: Date.parse('2026-07-26T09:00:00.000Z'),
-          stats: { [DataWeight.type]: 0 },
-        },
-      },
+    vi.mocked(dependencies.fetchHealthSourceRecordDocuments).mockResolvedValue([
+      healthWeightDocument('weight-newer', Date.parse('2026-07-26T20:00:00.000Z'), 70.5),
+      healthWeightDocument('weight-older', Date.parse('2026-07-26T08:00:00.000Z'), 71),
+      healthWeightDocument('weight-invalid', Date.parse('2026-07-26T09:00:00.000Z'), 0),
     ]);
 
     const result = await createMcpDataService(dependencies).queryMeasurements({
@@ -4010,7 +3998,7 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_metric',
     });
-    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchHealthSourceRecordDocuments).not.toHaveBeenCalled();
   });
 
   it('keeps measurement ranges bounded and represents missing history explicitly', async () => {
@@ -4027,7 +4015,7 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
     });
-    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchHealthSourceRecordDocuments).not.toHaveBeenCalled();
 
     await expect(service.queryMeasurements({
       uid: 'user-1',
@@ -4040,7 +4028,7 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'invalid_timezone',
     });
-    expect(dependencies.fetchEventDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchHealthSourceRecordDocuments).not.toHaveBeenCalled();
 
     const empty = await service.queryMeasurements({
       uid: 'user-1',
@@ -4846,6 +4834,22 @@ describe('MCP data service', () => {
           eventId: 'private-weight-entry',
           label: 'Morning measurement',
         }],
+        series: [{
+          sourceKind: 'health-measurement',
+          provider: 'QuantifiedSelf',
+          sourceKey: 'private-health-account-key',
+          latestWeightKg: 71.2,
+          latestWeightDayMs: Date.parse('2026-07-26T00:00:00.000Z'),
+          median7dKg: 71.4,
+          median28dKg: 71.8,
+          change7dKg: -0.3,
+          change7dPercent: -0.42,
+          change28dKg: -0.6,
+          change28dPercent: -0.84,
+          recordedDayCount7d: 4,
+          recordedDayCount28d: 11,
+          points: [],
+        }],
       },
     });
 
@@ -4883,6 +4887,8 @@ describe('MCP data service', () => {
     });
     expect(JSON.stringify(result.payload)).not.toContain('private-weight-entry');
     expect(JSON.stringify(result.payload)).not.toContain('Morning measurement');
+    expect(JSON.stringify(result.payload)).not.toContain('private-health-account-key');
+    expect(JSON.stringify(result.payload)).not.toContain('series');
   });
 
   it('removes imported device provenance from Training capacity while preserving metrics', async () => {
@@ -4911,6 +4917,15 @@ describe('MCP data service', () => {
             changePct: 5.77,
           },
           importedVo2Max: null,
+          referenceVo2Max: {
+            kind: 'vo2-max',
+            value: 57,
+            context: 'cycling',
+            method: 'lab-test',
+            observedAtMs: 220,
+            provenance: 'manual-health-measurement',
+            comparison: null,
+          },
         }],
       },
     });
@@ -4944,6 +4959,8 @@ describe('MCP data service', () => {
     expect(serialized).not.toContain('sourceKey');
     expect(serialized).not.toContain('edge 840');
     expect(serialized).not.toContain('edge 830');
+    expect(serialized).not.toContain('referenceVo2Max');
+    expect(serialized).not.toContain('manual-health-measurement');
   });
 
   it('preserves current Training power-system diagnostics while removing the source fingerprint', async () => {

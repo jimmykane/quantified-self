@@ -51,6 +51,8 @@ export interface HealthLifecycleDocumentFieldGuard {
 export interface HealthWriterDependencies {
     db?: admin.firestore.Firestore;
     generateId?: HealthIdGenerator;
+    /** Skip replacement when a durable deletion/idempotency marker exists. */
+    requiredMissingDocumentRef?: admin.firestore.DocumentReference;
     /** Skip the replacement if this lifecycle authority document is absent. */
     requiredExistingDocumentRef?: admin.firestore.DocumentReference;
     /** Require the same in-memory OAuth credential revision at commit time. */
@@ -265,6 +267,21 @@ function storedHealthRevisionWatermark(sourceRecord: HealthSourceRecord): number
     return watermark;
 }
 
+export function buildHealthSourceRecordId(
+    userID: string,
+    source: Pick<HealthSourceRecordInput, 'provider' | 'providerAccountId' | 'sourceRecordType' | 'sourceRecordKey'>,
+    generateId: HealthIdGenerator = generateIDFromParts,
+): Promise<string> {
+    return generateOpaqueId(generateId, [
+        'health-source-record-v1',
+        userID,
+        source.provider,
+        source.providerAccountId,
+        source.sourceRecordType,
+        source.sourceRecordKey,
+    ]);
+}
+
 export async function buildHealthSourceRecordWrite(
     userID: string,
     value: unknown,
@@ -287,14 +304,7 @@ export async function buildHealthSourceRecordWrite(
         input.sourceRecordType,
         input.sourceRecordKey,
     ]);
-    const id = await generateOpaqueId(generateId, [
-        'health-source-record-v1',
-        userID,
-        input.provider,
-        input.providerAccountId,
-        input.sourceRecordType,
-        input.sourceRecordKey,
-    ]);
+    const id = await buildHealthSourceRecordId(userID, input, generateId);
     const digest = await generateOpaqueId(generateId, [
         'health-source-record-content-v1',
         JSON.stringify(digestPayload(input)),
@@ -537,7 +547,9 @@ export async function replaceHealthSourceRecord(
                 };
             }
         }
-        if (!(await allHealthLifecycleFieldsMatch(transaction, dependencies))) {
+        const deletionMarkerExists = dependencies.requiredMissingDocumentRef
+            && (await transaction.get(dependencies.requiredMissingDocumentRef)).exists;
+        if (deletionMarkerExists || !(await allHealthLifecycleFieldsMatch(transaction, dependencies))) {
             return {
                 sourceRecordId: built.sourceRecord.id,
                 status: 'skipped_lifecycle_guard' as const,

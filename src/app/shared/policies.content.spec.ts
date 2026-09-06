@@ -125,6 +125,8 @@ describe('MCP client access policy', () => {
     expect(content).toContain('Body-measurement permission');
     expect(content).toContain('Activity locations depend on activity details');
     expect(content).toContain('bounded body-measurement history');
+    expect(content).toContain('provider or manual canonical Health Weight point measurements');
+    expect(content).toContain('Workout profile Weight is excluded because it is not a weigh-in');
     expect(content).toContain('identity-free day, week, or month values');
     expect(content).toContain('range of at most 366 days');
     expect(content).toContain('exact source measurement timestamps');
@@ -223,13 +225,16 @@ describe('Garmin Health policy', () => {
 });
 
 describe('workout context Health policy', () => {
-  it('documents the on-demand, separated, identity-free workout projection', () => {
+  it('documents manual Health storage and the on-demand, identity-free workout projection', () => {
     const content = CONNECTED_SERVICES_POLICY_SECTION.content.join(' ');
 
+    expect(content).toContain('Manual Health measurements');
+    expect(content).toContain('add, edit, and delete Weight and VO₂ max measurements');
+    expect(content).toContain('Account deletion removes them');
     expect(content).toContain('Workout context in Health');
     expect(content).toContain('profile context rather than a weigh-in');
-    expect(content).toContain('hidden for a source when that source has a real Health Weight measurement');
-    expect(content).toContain('a manual Weight measurement hides workout fallback across the view');
+    expect(content).toContain('active provider-filtered view has no provider or manual Health Weight');
+    expect(content).toContain('never plotted as a weigh-in');
     expect(content).toContain('separate by provider, local account label, and discipline');
     expect(content).toContain('do not copy workout values into Health storage');
     expect(content).toContain('excludes workout identifiers, names, locations, provider account IDs, and raw creator details');

@@ -1040,7 +1040,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       })
       .filter(view => this.visibleDisciplines.includes(view.summary.discipline))
       .filter(view => view.summary.current28d.activityCount > 0 || view.summary.baseline28d.activityCount > 0);
-    this.capacityDisciplines = buildTrainingCapacityViewModels(this.derivedState.trainingCapacity)
+    this.capacityDisciplines = buildTrainingCapacityViewModels(this.derivedState.trainingCapacity, this.unitSettings)
       .filter(view => isTrainingVisibleDiscipline(view.discipline) && this.visibleDisciplines.includes(view.discipline));
     this.trainingDurabilityScopes = buildTrainingDurabilityScopeViewModels(
       this.derivedState.trainingDurability,

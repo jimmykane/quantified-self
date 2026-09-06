@@ -78,10 +78,13 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
+    expect(healthSection?.content).toContain('**Add your own Weight or VO₂ max.**');
+    expect(healthSection?.content).toContain('edit or delete your own manual rows');
     expect(healthSection?.content).toContain('**Weight from workouts is fallback profile context, not a weigh-in.**');
-    expect(healthSection?.content).toContain('future manual measurement');
+    expect(healthSection?.content).toContain('no real provider or manual Health Weight measurement');
+    expect(healthSection?.content).toContain('never plotted as a weigh-in');
     expect(healthSection?.content).toContain('**Workout VO₂ max is separate evidence.**');
-    expect(healthSection?.content).toContain('never merges them with provider Health User Metrics');
+    expect(healthSection?.content).toContain('never merges them with provider Health or manual VO₂ max');
     expect(healthSection?.content).toContain('not copied into Health storage');
     expect(healthSection?.content).toContain('omits workout IDs, names, locations, account IDs, and raw creator details');
     expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
@@ -469,6 +472,8 @@ describe('help.content', () => {
     expect(trainingSection?.content).toContain('does not infer Critical Swim Speed');
     expect(trainingSection?.content).toContain('zero-session result');
     expect(trainingSection?.content).toContain('Imported VO₂ max');
+    expect(trainingSection?.content).toContain('manual Running or Cycling lab/field VO₂ max');
+    expect(trainingSection?.content).toContain('nearest imported estimate is within 14 days');
     expect(trainingSection?.content).toContain("95% of that activity's 20-minute best");
     expect(trainingSection?.content).toContain('There is no pooled all-sports value');
     expect(trainingSection?.content).toContain('partial, insufficient, poor-fit, unstable, and invalid evidence');
@@ -1204,6 +1209,8 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('Removing a parent permission');
     expect(dataAndPrivacySection?.content).toContain('bounded ranges up to 366 days');
     expect(dataAndPrivacySection?.content).toContain('identity-free day, week, or month values');
+    expect(dataAndPrivacySection?.content).toContain('provider or manual canonical Health Weight point measurements');
+    expect(dataAndPrivacySection?.content).toContain('not workout profile fallback');
     expect(dataAndPrivacySection?.content).toContain('not a medical or health assessment');
     expect(dataAndPrivacySection?.content).toContain('exact source measurement timestamps');
     expect(dataAndPrivacySection?.content).toContain('provider/device metadata');

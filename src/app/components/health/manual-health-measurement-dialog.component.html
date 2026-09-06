@@ -1,0 +1,74 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+
+<mat-dialog-content>
+  <form class="manual-health-form" [formGroup]="form" (ngSubmit)="submit()">
+    <p class="manual-health-context">
+      {{ isWeight
+        ? 'Record a measured weight. Workout profile values remain fallback context and are not weigh-ins.'
+        : 'Record a VO₂ max result with the context and method that produced it.' }}
+    </p>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>{{ valueLabel }}</mat-label>
+      <input
+        matInput
+        type="number"
+        inputmode="decimal"
+        formControlName="canonicalValue"
+        [step]="valueStep"
+        min="0"
+        [max]="maximumValue"
+        required>
+      <span matTextSuffix>{{ valueUnit }}</span>
+      @if (form.controls.canonicalValue.invalid && form.controls.canonicalValue.touched) {
+        <mat-error>Enter a valid {{ valueLabel.toLowerCase() }}.</mat-error>
+      }
+    </mat-form-field>
+
+    <div class="manual-health-time-fields">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Date</mat-label>
+        <input matInput type="date" formControlName="observedDate" min="2000-01-01" [max]="todayDate" required>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Time</mat-label>
+        <input matInput type="time" formControlName="observedTime" required>
+      </mat-form-field>
+    </div>
+
+    @if (!isWeight) {
+      <div class="manual-health-vo2-fields">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Context</mat-label>
+          <mat-select formControlName="vo2Context" required>
+            @for (context of vo2Contexts; track context) {
+              <mat-option [value]="context">{{ contextLabel(context) }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Method</mat-label>
+          <mat-select formControlName="vo2Method" required>
+            @for (method of vo2Methods; track method) {
+              <mat-option [value]="method">{{ methodLabel(method) }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+    }
+
+    @if (submitError()) {
+      <p class="manual-health-error" role="alert">
+        <mat-icon aria-hidden="true">error</mat-icon>
+        <span>{{ submitError() }}</span>
+      </p>
+    }
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Cancel</button>
+  <button mat-flat-button type="button" [disabled]="form.invalid" (click)="submit()">
+    {{ actionLabel() }}
+  </button>
+</mat-dialog-actions>

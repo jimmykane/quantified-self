@@ -43,6 +43,7 @@ vi.mock('../../../shared/functions-manifest', () => ({
 import {
     onDashboardDerivedMetricsActivityWrite,
     onDashboardDerivedMetricsEventWrite,
+    onDashboardDerivedMetricsHealthWrite,
     onDashboardDerivedMetricsSleepWrite,
 } from './derived-metrics.trigger';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
@@ -111,6 +112,75 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
             }),
             expect.any(Function),
         );
+    });
+
+    it('configures the Health trigger on owner-scoped source records', () => {
+        expect(hoisted.onDocumentWritten).toHaveBeenCalledWith(
+            expect.objectContaining({
+                document: 'users/{uid}/healthSourceRecords/{sourceRecordId}',
+                memory: '512MiB',
+                retry: true,
+            }),
+            expect.any(Function),
+        );
+    });
+
+    it('targets only derived metrics affected by a Health record mutation', async () => {
+        await (onDashboardDerivedMetricsHealthWrite as any)({
+            params: { uid: 'user-1', sourceRecordId: 'health-1' },
+            data: {
+                before: { exists: false, data: () => undefined },
+                after: { exists: true, data: () => ({ metricIds: ['body_weight', 'unrelated'] }) },
+            },
+        });
+
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith(
+            'user-1',
+            undefined,
+            undefined,
+            {
+                taskScope: `health-${DERIVED_METRIC_KINDS.BodyWeightTrend}`,
+                metricKinds: [DERIVED_METRIC_KINDS.BodyWeightTrend],
+                incrementEventMutationVersion: false,
+            },
+        );
+    });
+
+    it('coalesces only identical Health invalidation sets in the same bucket', async () => {
+        const pendingTasks = new Map<string, readonly string[]>();
+        hoisted.enqueueDerivedMetricsIngressTask.mockImplementation(async (uid, _delay, time, options) => {
+            const key = `${uid}-${time}-${options.taskScope}`;
+            if (pendingTasks.has(key)) return false;
+            pendingTasks.set(key, options.metricKinds);
+            return true;
+        });
+        for (const [before, after] of [
+            [[], ['body_weight']],
+            [[], ['vo2_max']],
+            [[], ['body_weight']],
+            [['body_weight'], ['vo2_max']],
+            [['vo2_max'], []],
+            [[], ['heart_rate']],
+        ]) {
+            await (onDashboardDerivedMetricsHealthWrite as any)({
+                time: '2026-04-29T10:00:15.000Z',
+                params: { uid: 'user-1', sourceRecordId: 'health-1' },
+                data: {
+                    before: { exists: before.length > 0, data: () => ({ metricIds: before }) },
+                    after: { exists: after.length > 0, data: () => ({ metricIds: after }) },
+                },
+            });
+        }
+
+        expect([...pendingTasks.values()]).toEqual([
+            [DERIVED_METRIC_KINDS.BodyWeightTrend],
+            [DERIVED_METRIC_KINDS.TrainingCapacity],
+            [DERIVED_METRIC_KINDS.BodyWeightTrend, DERIVED_METRIC_KINDS.TrainingCapacity],
+        ]);
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledTimes(5);
+        expect(hoisted.enqueueDerivedMetricsIngressTask.mock.calls.every(
+            call => call[3].incrementEventMutationVersion === false,
+        )).toBe(true);
     });
 
     it('enqueues sleep creates and deletes as a separate targeted ingress scope', async () => {
