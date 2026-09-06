@@ -742,7 +742,8 @@ latest aggregations, day/week/month intervals, 366-day range limit, and the opti
 `body_weight_trend` Training snapshot, including that snapshot's separate `metrics:read` requirement and UTC day
 boundary.
 
-`query_measurements` executes an owner-scoped, metric-first Health query in bounded pages, filters the widened calendar
+`query_measurements` executes an owner-scoped, metric-first Health query in bounded pages. Its internal field mask
+retains `calendarDate` for the ordered snapshot cursor; that field is not added to the public response. It filters the widened calendar
 envelope to the exact requested timestamps, accepts only canonical point measurements with `aggregation=measurement`,
 resolves each value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
 records in an explicit IANA timezone. Workout profile Weight is deliberately excluded because it is not a weigh-in. It

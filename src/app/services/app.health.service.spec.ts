@@ -198,15 +198,18 @@ describe('AppHealthService', () => {
             timezoneOffsetSeconds: 7_200,
         };
 
-        await expect(service.saveManualMeasurement(createRequest)).resolves.toEqual({
+        await expect(service.saveManualMeasurement(createRequest, 'owner')).resolves.toEqual({
             sourceRecordId: 'a'.repeat(64), revisionOrder: 1,
         });
         await expect(service.deleteManualMeasurement({
             sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 1,
-        })).resolves.toEqual({ deleted: true });
-        expect(functions.call).toHaveBeenNthCalledWith(1, 'saveManualHealthMeasurement', createRequest);
+        }, 'owner')).resolves.toEqual({ deleted: true });
+        expect(functions.call).toHaveBeenNthCalledWith(1, 'saveManualHealthMeasurement', {
+            ...createRequest, expectedUserID: 'owner',
+        });
         expect(functions.call).toHaveBeenNthCalledWith(2, 'deleteManualHealthMeasurement', {
             sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 1,
+            expectedUserID: 'owner',
         });
     });
 

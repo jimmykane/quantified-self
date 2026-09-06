@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -186,6 +187,9 @@ export class HealthWorkspaceComponent {
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
+  private manualDialogRef: MatDialogRef<unknown> | null = null;
+  private manualAccountGeneration = 0;
   private readonly snackBar = inject(MatSnackBar);
   private readonly browserCompatibilityService = inject(BrowserCompatibilityService);
   private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
@@ -603,6 +607,16 @@ export class HealthWorkspaceComponent {
     .sort((left, right) => left.label.localeCompare(right.label)));
 
   constructor() {
+    effect(onCleanup => {
+      this.signedInUserID();
+      onCleanup(() => {
+        // Auth changes and component teardown invalidate dialogs and pending UI work.
+        this.manualAccountGeneration += 1;
+        this.manualDialogRef?.close();
+        this.manualDialogRef = null;
+        this.manualMutationBusy.set(false);
+      });
+    });
     effect(() => {
       const user = this.userService.user();
       const uid = `${user?.uid || ''}`.trim() || null;
@@ -939,7 +953,8 @@ export class HealthWorkspaceComponent {
 
   openManualMeasurement(): void {
     const metricId = this.selectedManualMetric();
-    if (!metricId || this.manualMutationBusy()) return;
+    const requestedForUserID = this.signedInUserID();
+    if (!metricId || !requestedForUserID || this.manualMutationBusy()) return;
     const dialogRef = this.dialog.open(ManualHealthMeasurementDialogComponent, {
       width: 'min(520px, calc(100vw - 24px))',
       maxWidth: '100vw',
@@ -947,13 +962,14 @@ export class HealthWorkspaceComponent {
       restoreFocus: true,
       data: { metricId, unitSettings: this.unitSettings() },
     });
-    dialogRef.afterClosed().subscribe(result => {
-      if (result) void this.createManualMeasurement(metricId, result);
+    this.handleManualDialogResult(dialogRef, result => {
+      void this.createManualMeasurement(metricId, result, undefined, requestedForUserID);
     });
   }
 
   editManualMeasurement(measurement: ManualHealthObservationEdit): void {
-    if (this.manualMutationBusy()) return;
+    const requestedForUserID = this.signedInUserID();
+    if (!requestedForUserID || this.manualMutationBusy()) return;
     const dialogRef = this.dialog.open(ManualHealthMeasurementDialogComponent, {
       width: 'min(520px, calc(100vw - 24px))',
       maxWidth: '100vw',
@@ -965,13 +981,14 @@ export class HealthWorkspaceComponent {
         existing: measurement,
       },
     });
-    dialogRef.afterClosed().subscribe(result => {
-      if (result) void this.updateManualMeasurement(measurement, result);
+    this.handleManualDialogResult(dialogRef, result => {
+      void this.updateManualMeasurement(measurement, result, requestedForUserID);
     });
   }
 
   deleteManualMeasurement(measurement: ManualHealthObservationEdit): void {
-    if (this.manualMutationBusy()) return;
+    const requestedForUserID = this.signedInUserID();
+    if (!requestedForUserID || this.manualMutationBusy()) return;
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: 'min(440px, calc(100vw - 24px))',
       data: {
@@ -981,9 +998,23 @@ export class HealthWorkspaceComponent {
         confirmColor: 'warn',
       },
     });
-    dialogRef.afterClosed().subscribe(confirmed => {
-      if (confirmed) void this.removeManualMeasurement(measurement);
+    this.handleManualDialogResult(dialogRef, () => {
+      void this.removeManualMeasurement(measurement, requestedForUserID);
     });
+  }
+
+  private handleManualDialogResult<T>(dialogRef: MatDialogRef<unknown, T>, onResult: (value: T) => void): void {
+    const generation = this.manualAccountGeneration;
+    this.manualDialogRef = dialogRef;
+    dialogRef.afterClosed().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(result => {
+      if (this.manualDialogRef === dialogRef) this.manualDialogRef = null;
+      if (result && generation === this.manualAccountGeneration) onResult(result);
+    });
+  }
+
+  private isCurrentManualAccount(uid: string | null, generation = this.manualAccountGeneration): boolean {
+    return !!uid && uid === this.signedInUserID()
+      && generation === this.manualAccountGeneration && !this.destroyRef.destroyed;
   }
 
   async startHistoryImport(provider: HealthProvider): Promise<void> {
@@ -1097,7 +1128,8 @@ export class HealthWorkspaceComponent {
     clientMutationId?: string,
     requestedForUserID = this.signedInUserID(),
   ): Promise<void> {
-    if (!requestedForUserID || requestedForUserID !== this.signedInUserID()) return;
+    if (!this.isCurrentManualAccount(requestedForUserID) || this.manualMutationBusy()) return;
+    const generation = this.manualAccountGeneration;
     const resolvedMutationId = clientMutationId ?? this.browserCompatibilityService.createRandomUUID();
     if (!resolvedMutationId) {
       this.snackBar.open('This browser cannot create a secure measurement ID.', 'Dismiss', { duration: 5000 });
@@ -1110,32 +1142,35 @@ export class HealthWorkspaceComponent {
         clientMutationId: resolvedMutationId,
         metricId,
         ...value,
-      });
-      if (requestedForUserID !== this.signedInUserID()) return;
+      }, requestedForUserID);
+      if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       this.selectedProviders.set([]);
       this.markManualMetricAvailable(metricId);
       this.snackBar.open('Measurement added', undefined, { duration: 2500 });
     } catch {
-      if (requestedForUserID !== this.signedInUserID()) return;
+      if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       const retryNotice = this.snackBar.open(
         'Measurement could not be added.',
         'Retry',
         { duration: 7000 },
       );
-      retryNotice.onAction().pipe(take(1)).subscribe(() => {
-        if (requestedForUserID === this.signedInUserID() && !this.manualMutationBusy()) {
+      retryNotice.onAction().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+        if (this.isCurrentManualAccount(requestedForUserID, generation) && !this.manualMutationBusy()) {
           void this.createManualMeasurement(metricId, value, resolvedMutationId, requestedForUserID);
         }
       });
     } finally {
-      this.manualMutationBusy.set(false);
+      if (this.isCurrentManualAccount(requestedForUserID, generation)) this.manualMutationBusy.set(false);
     }
   }
 
   private async updateManualMeasurement(
     measurement: ManualHealthObservationEdit,
     value: ManualHealthMeasurementDialogResult,
+    requestedForUserID = this.signedInUserID(),
   ): Promise<void> {
+    if (!this.isCurrentManualAccount(requestedForUserID) || this.manualMutationBusy()) return;
+    const generation = this.manualAccountGeneration;
     this.manualMutationBusy.set(true);
     try {
       await this.healthService.saveManualMeasurement({
@@ -1144,34 +1179,43 @@ export class HealthWorkspaceComponent {
         expectedRevisionOrder: measurement.expectedRevisionOrder,
         metricId: measurement.metricId,
         ...value,
-      });
+      }, requestedForUserID);
+      if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       this.refreshRevision.update(current => current + 1);
       this.snackBar.open('Measurement updated', undefined, { duration: 2500 });
     } catch {
+      if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       this.snackBar.open('Measurement changed or could not be updated. Refresh and try again.', 'Dismiss', {
         duration: 5000,
       });
     } finally {
-      this.manualMutationBusy.set(false);
+      if (this.isCurrentManualAccount(requestedForUserID, generation)) this.manualMutationBusy.set(false);
     }
   }
 
-  private async removeManualMeasurement(measurement: ManualHealthObservationEdit): Promise<void> {
+  private async removeManualMeasurement(
+    measurement: ManualHealthObservationEdit,
+    requestedForUserID = this.signedInUserID(),
+  ): Promise<void> {
+    if (!this.isCurrentManualAccount(requestedForUserID) || this.manualMutationBusy()) return;
+    const generation = this.manualAccountGeneration;
     this.manualMutationBusy.set(true);
     try {
       await this.healthService.deleteManualMeasurement({
         sourceRecordId: measurement.sourceRecordId,
         expectedRevisionOrder: measurement.expectedRevisionOrder,
-      });
+      }, requestedForUserID);
+      if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       this.refreshRevision.update(current => current + 1);
       void this.refreshAvailableHealthMetrics();
       this.snackBar.open('Measurement deleted', undefined, { duration: 2500 });
     } catch {
+      if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       this.snackBar.open('Measurement changed or could not be deleted. Refresh and try again.', 'Dismiss', {
         duration: 5000,
       });
     } finally {
-      this.manualMutationBusy.set(false);
+      if (this.isCurrentManualAccount(requestedForUserID, generation)) this.manualMutationBusy.set(false);
     }
   }
 

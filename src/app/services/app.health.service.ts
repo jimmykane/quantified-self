@@ -37,6 +37,7 @@ import { AppFunctionsService } from './app.functions.service';
 import type {
     DeleteManualHealthMeasurementRequest,
     DeleteManualHealthMeasurementResponse,
+    ManualHealthAccountAssertion,
     SaveManualHealthMeasurementRequest,
     SaveManualHealthMeasurementResponse,
 } from '@shared/manual-health';
@@ -121,21 +122,23 @@ export class AppHealthService {
 
     async saveManualMeasurement(
         request: SaveManualHealthMeasurementRequest,
+        expectedUserID: string,
     ): Promise<SaveManualHealthMeasurementResponse> {
         const response = await this.functions.call<
-            SaveManualHealthMeasurementRequest,
+            SaveManualHealthMeasurementRequest & ManualHealthAccountAssertion,
             SaveManualHealthMeasurementResponse
-        >('saveManualHealthMeasurement', request);
+        >('saveManualHealthMeasurement', { ...request, expectedUserID });
         return response.data;
     }
 
     async deleteManualMeasurement(
         request: DeleteManualHealthMeasurementRequest,
+        expectedUserID: string,
     ): Promise<DeleteManualHealthMeasurementResponse> {
         const response = await this.functions.call<
-            DeleteManualHealthMeasurementRequest,
+            DeleteManualHealthMeasurementRequest & ManualHealthAccountAssertion,
             DeleteManualHealthMeasurementResponse
-        >('deleteManualHealthMeasurement', request);
+        >('deleteManualHealthMeasurement', { ...request, expectedUserID });
         return response.data;
     }
 

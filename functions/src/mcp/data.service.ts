@@ -680,7 +680,9 @@ const defaultDependencies: McpDataServiceDependencies = {
       .orderBy('calendarDate', 'asc')
       .orderBy(FieldPath.documentId(), 'asc')
       .limit(limit)
-      .select('kind', 'endTimeMs', 'metrics');
+      // Snapshot cursors require every explicit orderBy field, even though the
+      // calendar date is internal pagination state and never part of MCP output.
+      .select('calendarDate', 'kind', 'endTimeMs', 'metrics');
     if (cursor) {
       query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);
     }

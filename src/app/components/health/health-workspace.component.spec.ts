@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MatTooltip } from '@angular/material/tooltip';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { AppThemes } from '@sports-alliance/sports-lib';
@@ -1127,6 +1128,49 @@ describe('HealthWorkspaceComponent', () => {
     expect(text).not.toContain('private provider failure');
   });
 
+  it.each(['create', 'update', 'delete'])('invalidates an open %s dialog when the account changes', async action => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    const closed = new Subject<unknown>();
+    const close = vi.fn();
+    vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => closed.asObservable(), close,
+    } as never);
+    const measurement: ManualHealthObservationEdit = {
+      sourceRecordId: 'manual-record', expectedRevisionOrder: 1,
+      metricId: HEALTH_METRIC_IDS.BodyWeight, canonicalValue: 72,
+      observedAtMs: todayStartMs, timezoneOffsetSeconds: 0,
+    };
+    if (action === 'create') component.openManualMeasurement();
+    else if (action === 'update') component.editManualMeasurement(measurement);
+    else component.deleteManualMeasurement(measurement);
+
+    setCurrentUserID('user-2');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    // Even a late dialog result must not submit under the new account.
+    closed.next(action === 'delete' ? true : measurement);
+    await fixture.whenStable();
+    expect(saveManualMeasurement).not.toHaveBeenCalled();
+    expect(deleteManualMeasurement).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
+  });
+
+  it('discards a manual dialog result after leaving the workspace', async () => {
+    await createComponent();
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    const closed = new Subject<unknown>();
+    const close = vi.fn();
+    vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => closed.asObservable(), close,
+    } as never);
+    component.openManualMeasurement();
+    fixture.destroy();
+    closed.next({ canonicalValue: 72, observedAtMs: todayStartMs, timezoneOffsetSeconds: 0 });
+    expect(saveManualMeasurement).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
+  });
+
   it('shows save progress, creates manual Weight with an idempotency key, and refreshes the range', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
     component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
@@ -1165,12 +1209,42 @@ describe('HealthWorkspaceComponent', () => {
       canonicalValue: 72.4,
       observedAtMs: todayStartMs + 10_000,
       timezoneOffsetSeconds: 7_200,
-    });
+    }, 'user-1');
     expect(loadMetricRange.mock.calls.length).toBeGreaterThan(callsBeforeMutation);
     expect(component.manualMutationBusy()).toBe(false);
     expect(addButton.disabled).toBe(false);
     expect(addButton.querySelector('mat-spinner')).toBeNull();
     expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent?.trim()).toBe('');
+  });
+
+  it.each(['success', 'failure'])('ignores a stale create %s without clearing the new account mutation', async outcome => {
+    await createComponent();
+    const value = { canonicalValue: 72, observedAtMs: todayStartMs, timezoneOffsetSeconds: 0 };
+    const mutations = component as unknown as {
+      createManualMeasurement(metricId: typeof HEALTH_METRIC_IDS.BodyWeight, measurement: typeof value): Promise<void>;
+    };
+    let finishOld!: () => void;
+    let finishNew!: () => void;
+    saveManualMeasurement.mockReturnValueOnce(new Promise((resolve, reject) => {
+      finishOld = () => outcome === 'success' ? resolve({ sourceRecordId: 'old', revisionOrder: 1 })
+        : reject(new Error('delayed failure'));
+    })).mockReturnValueOnce(new Promise(resolve => {
+      finishNew = () => resolve({ sourceRecordId: 'new', revisionOrder: 1 });
+    }));
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    const oldRequest = mutations.createManualMeasurement(HEALTH_METRIC_IDS.BodyWeight, value);
+    setCurrentUserID('user-2');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const newRequest = mutations.createManualMeasurement(HEALTH_METRIC_IDS.BodyWeight, value);
+    finishOld();
+    await oldRequest;
+    expect(component.manualMutationBusy()).toBe(true);
+    expect(notice).not.toHaveBeenCalled();
+    finishNew();
+    await newRequest;
+    expect(component.manualMutationBusy()).toBe(false);
+    expect(saveManualMeasurement.mock.calls.map(([, uid]) => uid)).toEqual(['user-1', 'user-2']);
   });
 
   it('reuses the same idempotency key when the user retries an ambiguous create failure', async () => {
@@ -1322,11 +1396,11 @@ describe('HealthWorkspaceComponent', () => {
       timezoneOffsetSeconds: 7_200,
       vo2Context: 'cycling',
       vo2Method: 'field_test',
-    });
+    }, 'user-1');
     expect(deleteManualMeasurement).toHaveBeenCalledWith({
       sourceRecordId: 'manual-record',
       expectedRevisionOrder: 42,
-    });
+    }, 'user-1');
     expect(component.manualMutationBusy()).toBe(false);
   });
 

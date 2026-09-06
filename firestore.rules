@@ -308,6 +308,12 @@ service cloud.firestore {
           allow write: if false;
         }
 
+        // Terminal manual-mutation outcomes contain no measurement data. Only the
+        // server may inspect or change them; recursive account cleanup removes them.
+        match /manualHealthMeasurementDeletions/{document=**} {
+          allow read, write: if false;
+        }
+
         // Unified health source records are private owner-readable, server-written data.
         // List reads must carry the public page limit plus one look-ahead document.
         match /healthSourceRecords/{sourceRecordID} {

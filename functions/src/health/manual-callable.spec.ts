@@ -63,23 +63,35 @@ describe('manual Health callables', () => {
 
     it('derives ownership only from the authenticated context', async () => {
         const data = { mode: 'create' };
-        await saveCall({ auth: { uid: 'owner' }, app: {}, data });
+        await saveCall({ auth: { uid: 'owner' }, app: {}, data: { ...data, expectedUserID: 'owner' } });
         expect(hoisted.save).toHaveBeenCalledWith('owner', data);
+    });
+
+    it.each([saveCall, deleteCall])('rejects a changed or missing originating account before storage', async call => {
+        await expect(call({ auth: { uid: 'new-owner' }, app: {}, data: { expectedUserID: 'owner' } }))
+            .rejects.toMatchObject({ code: 'failed-precondition' });
+        for (const data of [{}, { expectedUserID: null }, { expectedUserID: '' }]) {
+            await expect(call({ auth: { uid: 'owner' }, app: {}, data }))
+                .rejects.toMatchObject({ code: 'invalid-argument' });
+        }
+        expect(hoisted.save).not.toHaveBeenCalled();
+        expect(hoisted.remove).not.toHaveBeenCalled();
+        expect(hoisted.loggerError).not.toHaveBeenCalled();
     });
 
     it('maps validation and revision errors without logging request data', async () => {
         hoisted.save.mockRejectedValueOnce(new ManualHealthValidationError('bad value'));
-        await expect(saveCall({ auth: { uid: 'owner' }, app: {}, data: {} }))
+        await expect(saveCall({ auth: { uid: 'owner' }, app: {}, data: { expectedUserID: 'owner' } }))
             .rejects.toMatchObject({ code: 'invalid-argument', message: 'bad value' });
         hoisted.remove.mockRejectedValueOnce(new ManualHealthRevisionConflictError());
-        await expect(deleteCall({ auth: { uid: 'owner' }, app: {}, data: {} }))
+        await expect(deleteCall({ auth: { uid: 'owner' }, app: {}, data: { expectedUserID: 'owner' } }))
             .rejects.toMatchObject({ code: 'aborted' });
         expect(hoisted.loggerError).not.toHaveBeenCalled();
     });
 
     it('hides unexpected backend details', async () => {
         hoisted.save.mockRejectedValueOnce(new Error('private path'));
-        await expect(saveCall({ auth: { uid: 'owner' }, app: {}, data: {} }))
+        await expect(saveCall({ auth: { uid: 'owner' }, app: {}, data: { expectedUserID: 'owner' } }))
             .rejects.toMatchObject({ code: 'internal' });
         expect(hoisted.loggerError).toHaveBeenCalledWith(
             '[ManualHealth] Owner-scoped mutation failed.',

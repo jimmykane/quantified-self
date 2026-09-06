@@ -23,6 +23,7 @@ import {
     ManualHealthRevisionConflictError,
     ManualHealthValidationError,
     ManualHealthWriteBlockedError,
+    MANUAL_HEALTH_DELETIONS_COLLECTION_ID,
     saveManualHealthMeasurement,
     validateDeleteManualHealthMeasurementRequest,
     validateSaveManualHealthMeasurementRequest,
@@ -288,6 +289,72 @@ describe('manual Health measurement mutations', () => {
         expect(fake.transaction.set).not.toHaveBeenCalled();
     });
 
+    it.each(['exact', 'uppercase', 'changed-value', 'changed-metric'])('does not resurrect a deleted measurement on a %s create retry', async variant => {
+        const fake = fakeDatabase();
+        const dependencies = { db: fake.db as never, now: () => OBSERVED_AT_MS + 10_000 };
+        const request = createWeightRequest();
+        const created = await saveManualHealthMeasurement(UID, request, dependencies);
+        await deleteManualHealthMeasurement(UID, {
+            sourceRecordId: created.sourceRecordId,
+            expectedRevisionOrder: 1,
+        }, dependencies);
+        const replay = variant === 'uppercase' ? { ...request, clientMutationId: MUTATION_ID.toUpperCase() }
+            : variant === 'changed-value' ? { ...request, canonicalValue: 71 }
+                : variant === 'changed-metric' ? {
+                    ...request, metricId: HEALTH_METRIC_IDS.Vo2Max, canonicalValue: 50,
+                    vo2Context: 'running', vo2Method: 'lab_test',
+                } : request;
+
+        await expect(saveManualHealthMeasurement(UID, replay, dependencies))
+            .rejects.toBeInstanceOf(ManualHealthMeasurementNotFoundError);
+        expect(fake.stored.has(sourceRecordPath(created.sourceRecordId))).toBe(false);
+        expect([...fake.stored.entries()]).toEqual([[
+            `users/${UID}/${MANUAL_HEALTH_DELETIONS_COLLECTION_ID}/${created.sourceRecordId}`,
+            { deleted: true },
+        ]]);
+        // Another owner may independently use the same UUID; it is not a global marker.
+        await expect(saveManualHealthMeasurement('other-owner', request, dependencies)).resolves.toBeDefined();
+        // A new intentional measurement remains possible for the original owner.
+        await expect(saveManualHealthMeasurement(UID, {
+            ...request, clientMutationId: '223e4567-e89b-42d3-a456-426614174000',
+        }, dependencies)).resolves.toBeDefined();
+    });
+
+    it('does not create deletion markers for missing records or stale revisions', async () => {
+        const fake = fakeDatabase();
+        const dependencies = { db: fake.db as never, now: () => OBSERVED_AT_MS + 1_000 };
+        await expect(deleteManualHealthMeasurement(UID, {
+            sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 1,
+        }, dependencies)).resolves.toEqual({ deleted: false });
+        expect(fake.stored.size).toBe(0);
+        const created = await saveManualHealthMeasurement(UID, createWeightRequest(), dependencies);
+        await expect(deleteManualHealthMeasurement(UID, {
+            sourceRecordId: created.sourceRecordId, expectedRevisionOrder: 2,
+        }, dependencies)).rejects.toBeInstanceOf(ManualHealthRevisionConflictError);
+        expect(fake.stored.size).toBe(1);
+    });
+
+    it('keeps deletion terminal after an edit and rejects malformed marker contents', async () => {
+        const fake = fakeDatabase();
+        const dependencies = { db: fake.db as never, now: () => OBSERVED_AT_MS + 10_000 };
+        const request = createWeightRequest();
+        const created = await saveManualHealthMeasurement(UID, request, dependencies);
+        const updated = await saveManualHealthMeasurement(UID, {
+            mode: 'update', sourceRecordId: created.sourceRecordId, expectedRevisionOrder: 1,
+            metricId: request.metricId, canonicalValue: 71,
+            observedAtMs: request.observedAtMs, timezoneOffsetSeconds: request.timezoneOffsetSeconds,
+        }, dependencies);
+        await deleteManualHealthMeasurement(UID, {
+            sourceRecordId: updated.sourceRecordId, expectedRevisionOrder: updated.revisionOrder,
+        }, dependencies);
+        const markerPath = `users/${UID}/${MANUAL_HEALTH_DELETIONS_COLLECTION_ID}/${created.sourceRecordId}`;
+        fake.stored.set(markerPath, { deleted: false });
+        await expect(saveManualHealthMeasurement(UID, request, dependencies))
+            .rejects.toBeInstanceOf(ManualHealthMeasurementNotFoundError);
+        expect(fake.stored.has(sourceRecordPath(created.sourceRecordId))).toBe(false);
+        expect(fake.transaction.get).toHaveBeenCalledWith(expect.objectContaining({ path: markerPath }));
+    });
+
     it('rechecks account deletion inside update and delete transactions', async () => {
         const fake = fakeDatabase();
         const created = await saveManualHealthMeasurement(UID, createWeightRequest(), {
@@ -317,6 +384,7 @@ describe('manual Health measurement mutations', () => {
             .rejects.toBeInstanceOf(ManualHealthWriteBlockedError);
 
         expect(fake.stored.has(sourceRecordPath(created.sourceRecordId))).toBe(true);
+        expect(fake.stored.size).toBe(1); // No marker was written after account deletion began.
     });
 
     it('validates deletes without accepting caller ownership fields', () => {

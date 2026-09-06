@@ -1496,6 +1496,26 @@ describe('Firestore Security Rules', () => {
         });
 
         describe('Unified Health Source Records and Sync State', () => {
+            it('denies all browser access to manual measurement deletion markers and descendants', async () => {
+                const path = `users/${userId}/manualHealthMeasurementDeletions/opaque-record`;
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(path).set({ deleted: true });
+                });
+                for (const context of [
+                    testEnv.authenticatedContext(userId),
+                    testEnv.authenticatedContext(otherId),
+                    testEnv.unauthenticatedContext(),
+                ]) {
+                    const ref = context.firestore().doc(path);
+                    await assertFails(ref.get());
+                    await assertFails(ref.parent.get());
+                    await assertFails(ref.set({ deleted: false }));
+                    await assertFails(ref.delete());
+                    await assertFails(ref.collection('children').doc('forbidden').get());
+                    await assertFails(ref.collection('children').doc('forbidden').set({ value: true }));
+                }
+            });
+
             it('allows owners to get their own health documents', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
 

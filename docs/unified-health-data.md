@@ -331,6 +331,18 @@ Manual Weight and VO2 max use the existing Health schema rather than another sto
 
 A provider or manual Health Weight is a true measurement. Workout Weight remains contextual fallback and is shown only when the active provider-filtered view contains no true Health Weight; it is never plotted or exposed as a weigh-in. Manual VO2 max remains separate from provider Health and workout series through provider/account, origin, recording method, and semantic variant. The user records a `general`, `running`, or `cycling` context plus `lab_test`, `field_test`, or `other_estimate` method. Only Running/Cycling lab or field observations become separately labelled Training references; general and other-estimate values remain Health-only. The nearest imported workout VO2 value within 14 days may be shown as a neutral comparison, never merged into or used to reinterpret the reference. Manual Sleep is not implemented; Sleep remains in `sleepSessions` and appears in Health only through typed references. No migration, backfill, or Firestore schema change is required. The Training manual-reference query requires the new `healthSourceRecords` composite on `source.sourceRecordType`, `metricIds`, and `calendarDate`; deploy it and wait for readiness before the Functions update.
 
+Manual dialogs bind to the account present when they open and close on account changes or workspace teardown.
+Save/delete callable payloads carry an `expectedUserID` assertion that must equal the authenticated UID; it never selects
+an owner. This also rejects requests whose authentication changes during App Check or SDK waits/retries. Stale dialog
+results, mutation completions, and retry actions cannot update the replacement account's UI.
+
+Deleting a manual measurement atomically removes its leaf source record and writes `{ deleted: true }` at
+`users/{uid}/manualHealthMeasurementDeletions/{opaqueSourceRecordId}`. This server-only terminal marker contains no
+measurement value, observed timestamp, or raw mutation UUID. Creates check marker absence inside their write transaction,
+so even a delayed or changed-content retry cannot resurrect a deleted measurement. Markers have no TTL because create
+UUIDs have no retry expiry; they are removed by the existing recursive user-account cleanup. Health/Sleep schemas and
+queries remain unchanged, and the real source-record deletion continues to invalidate the Training view.
+
 While a manual mutation is pending, the workspace disables the add action and replaces its icon with a same-sized
 Material spinner, with a live accessible status. Weight input, its suffix, and persistence are kilograms in the pinned
 Sports Lib version: its unit settings do not include a pounds/weight preference. Imperial speed, pace, or distance

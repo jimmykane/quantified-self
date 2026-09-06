@@ -38,12 +38,14 @@ import {
 } from '../shared/user-deletion-guard';
 import {
     assertHealthSourceRecordWriteSize,
+    buildHealthSourceRecordId,
     HealthSourceRecordRevisionConflictError,
     replaceHealthSourceRecord,
     type HealthWriterDependencies,
 } from './writer';
 
 const MANUAL_HEALTH_ACCOUNT_ID = 'quantified-self-manual';
+export const MANUAL_HEALTH_DELETIONS_COLLECTION_ID = 'manualHealthMeasurementDeletions';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OPAQUE_ID_PATTERN = /^[a-f0-9]{64}$/;
 const EARLIEST_MANUAL_MEASUREMENT_MS = Date.UTC(2000, 0, 1);
@@ -373,13 +375,20 @@ export async function saveManualHealthMeasurement(
     if (request.mode === 'update') {
         return updateManualMeasurement(uid, request, nowMs, dependencies);
     }
+    const db = dependencies.db || admin.firestore();
+    const source = {
+        provider: HEALTH_PROVIDERS.QuantifiedSelf,
+        providerAccountId: MANUAL_HEALTH_ACCOUNT_ID,
+        sourceRecordType: MANUAL_HEALTH_SOURCE_RECORD_TYPE,
+        sourceRecordKey: request.clientMutationId,
+    };
+    const sourceRecordId = await buildHealthSourceRecordId(uid, source, dependencies.generateId);
+    const deletionMarkerRef = db.collection('users').doc(uid)
+        .collection(MANUAL_HEALTH_DELETIONS_COLLECTION_ID).doc(sourceRecordId);
     let result;
     try {
         result = await replaceHealthSourceRecord(uid, {
-            provider: HEALTH_PROVIDERS.QuantifiedSelf,
-            providerAccountId: MANUAL_HEALTH_ACCOUNT_ID,
-            sourceRecordType: MANUAL_HEALTH_SOURCE_RECORD_TYPE,
-            sourceRecordKey: request.clientMutationId,
+            ...source,
             revision: { order: 1, token: request.clientMutationId },
             // Keep idempotent retries byte-equivalent without trusting a client receipt timestamp.
             receivedAtMs: request.observedAtMs,
@@ -391,7 +400,7 @@ export async function saveManualHealthMeasurement(
             metrics: [buildManualMetric(request)],
             coverage: { status: HEALTH_COVERAGE_STATUSES.Complete },
             sampleSeries: [],
-        }, nowMs, dependencies);
+        }, nowMs, { ...dependencies, db, requiredMissingDocumentRef: deletionMarkerRef });
     } catch (error) {
         // A reused mutation UUID with different content is a client-visible conflict,
         // not an opaque writer failure. Exact retries still resolve as unchanged.
@@ -400,7 +409,10 @@ export async function saveManualHealthMeasurement(
         }
         throw error;
     }
-    if (result.status === 'skipped_deleted_user' || result.status === 'skipped_lifecycle_guard') {
+    if (result.status === 'skipped_lifecycle_guard') {
+        throw new ManualHealthMeasurementNotFoundError();
+    }
+    if (result.status === 'skipped_deleted_user') {
         throw new ManualHealthWriteBlockedError();
     }
     return { sourceRecordId: result.sourceRecordId, revisionOrder: 1 };
@@ -433,6 +445,10 @@ export async function deleteManualHealthMeasurement(
         if (existing.source.revision.order !== request.expectedRevisionOrder) {
             throw new ManualHealthRevisionConflictError();
         }
+        // Persist only the terminal outcome, atomically with deletion. The opaque
+        // marker has no measurement data or TTL and follows recursive user cleanup.
+        transaction.set(db.collection('users').doc(uid)
+            .collection(MANUAL_HEALTH_DELETIONS_COLLECTION_ID).doc(request.sourceRecordId), { deleted: true });
         // Manual source records are permanent leaf documents and are accepted here only
         // when their validated sampleChunkIds array is empty.
         transaction.delete(ref);

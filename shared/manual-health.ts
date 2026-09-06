@@ -42,6 +42,11 @@ export type SaveManualHealthMeasurementRequest =
   | CreateManualHealthMeasurementRequest
   | UpdateManualHealthMeasurementRequest;
 
+/** An account-switch fence, never an owner selector. The server still owns auth. */
+export interface ManualHealthAccountAssertion {
+  expectedUserID: string;
+}
+
 export interface SaveManualHealthMeasurementResponse {
   sourceRecordId: string;
   revisionOrder: number;
