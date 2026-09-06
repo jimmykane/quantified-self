@@ -280,6 +280,7 @@ describe('HealthWorkspaceComponent', () => {
   let loadActivityHealthRange: ReturnType<typeof vi.fn>;
   let saveManualMeasurement: ReturnType<typeof vi.fn>;
   let deleteManualMeasurement: ReturnType<typeof vi.fn>;
+  let loadManualBloodPressure: ReturnType<typeof vi.fn>;
   let updateHealthWorkspacePreferences: ReturnType<typeof vi.fn>;
   let hydrateSavedRange: (range: AppHealthWorkspaceRange) => void;
   let hydrateSavedMetric: (metric: AppHealthWorkspaceMetric) => void;
@@ -325,6 +326,7 @@ describe('HealthWorkspaceComponent', () => {
       revisionOrder: todayStartMs,
     });
     deleteManualMeasurement = vi.fn().mockResolvedValue({ deleted: true });
+    loadManualBloodPressure = vi.fn();
     updateHealthWorkspacePreferences = vi.fn().mockResolvedValue(undefined);
     const savedHealthWorkspace = {
       ...(savedRange ? { range: savedRange } : {}),
@@ -415,6 +417,7 @@ describe('HealthWorkspaceComponent', () => {
             loadAvailableMetricIds,
             saveManualMeasurement,
             deleteManualMeasurement,
+            loadManualBloodPressure,
             watchSyncStates: () => syncStates.asObservable(),
           },
         },
@@ -1171,6 +1174,65 @@ describe('HealthWorkspaceComponent', () => {
     expect(close).toHaveBeenCalled();
   });
 
+  it('opens the general picker from an unsupported metric and reveals a saved body-fat observation in its date window', async () => {
+    await createComponent(undefined, '14d', { metricIds: [HEALTH_METRIC_IDS.HeartRate], hasSleep: false });
+    const closed = new Subject<unknown>();
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => closed.asObservable(), close: vi.fn(),
+    } as never);
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('app-page-header .health-add-measurement');
+    expect(button?.textContent).toContain('Add measurement');
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-page-header .qs-page-header--compact')).toBeNull();
+    button!.click();
+    expect(open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ metricId: HEALTH_METRIC_IDS.BodyWeight }) }));
+    loadAvailableMetricIds.mockResolvedValue([HEALTH_METRIC_IDS.BodyFat]);
+    closed.next({ metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 20,
+      observedAtMs: Date.UTC(2025, 0, 15, 9), timezoneOffsetSeconds: 0 });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(saveManualMeasurement).toHaveBeenCalledWith(expect.objectContaining({ metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 20 }), 'user-1');
+    expect(component.selectedMetric()).toBe(HEALTH_METRIC_IDS.BodyFat);
+    expect(component.selectedRange()).toBe('14d');
+    expect(component.selectedEndDate()).toBe('2025-01-15');
+    expect(component.selectedProviders()).toEqual([]);
+  });
+
+  it('preselects blood pressure from a diastolic view and loads the complete pair before editing', async () => {
+    await createComponent();
+    component.selectMetric(HEALTH_METRIC_IDS.BloodPressureDiastolic);
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => of(undefined), close: vi.fn(),
+    } as never);
+    component.openManualMeasurement();
+    expect(open).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ metricId: HEALTH_METRIC_IDS.BloodPressureSystolic }) }));
+    const measurement: ManualHealthObservationEdit = { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic,
+      canonicalValue: 80, observedAtMs: todayStartMs, timezoneOffsetSeconds: 0,
+      sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 3 };
+    loadManualBloodPressure.mockResolvedValue({ ...measurement, canonicalValue: 120, diastolicValue: 80, pulseValue: 65 });
+    await component.editManualMeasurement(measurement);
+    expect(loadManualBloodPressure).toHaveBeenCalledWith('user-1', measurement.sourceRecordId, 3);
+    expect(open).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ existing: expect.objectContaining({ canonicalValue: 120, diastolicValue: 80, pulseValue: 65 }) }) }));
+  });
+
+  it('discards a paired edit load when its owner changes', async () => {
+    await createComponent();
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open');
+    let resolveLoad: (value: unknown) => void;
+    loadManualBloodPressure.mockReturnValue(new Promise(resolve => { resolveLoad = resolve; }));
+    const measurement: ManualHealthObservationEdit = { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic,
+      canonicalValue: 80, observedAtMs: todayStartMs, timezoneOffsetSeconds: 0,
+      sourceRecordId: 'a'.repeat(64), expectedRevisionOrder: 3 };
+    const pending = component.editManualMeasurement(measurement);
+    setCurrentUserID('user-2');
+    fixture.detectChanges();
+    resolveLoad!({ ...measurement, canonicalValue: 120, diastolicValue: 80 });
+    await pending;
+    expect(open).not.toHaveBeenCalled();
+    expect(saveManualMeasurement).not.toHaveBeenCalled();
+    expect(component.manualMutationBusy()).toBe(false);
+  });
+
   it('shows save progress, creates manual Weight with an idempotency key, and refreshes the range', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
     component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
@@ -1194,7 +1256,7 @@ describe('HealthWorkspaceComponent', () => {
     const addButton = host.querySelector<HTMLButtonElement>('.health-add-measurement')!;
     expect(addButton.disabled).toBe(true);
     expect(addButton.querySelector('mat-spinner')).not.toBeNull();
-    expect(addButton.textContent).toContain('Add weight');
+    expect(addButton.textContent).toContain('Add measurement');
     expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent).toContain('Updating measurements');
 
     finishSave({ sourceRecordId: 'opaque', revisionOrder: 1 });
@@ -1338,7 +1400,7 @@ describe('HealthWorkspaceComponent', () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('.health-add-measurement')?.textContent).toContain('Add weight');
+    expect(host.querySelector('.health-add-measurement')?.textContent).toContain('Add measurement');
     expect(host.querySelector('[aria-label="Edit manual measurement"]')).toBeTruthy();
     expect(host.querySelector('[aria-label="Delete manual measurement"]')).toBeTruthy();
     expect(component.metricRows()[0]?.manualMeasurement).toMatchObject({

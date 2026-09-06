@@ -141,6 +141,59 @@ describe('manual Health measurement mutations', () => {
         }, OBSERVED_AT_MS + 1_000)).toThrow(ManualHealthValidationError);
     });
 
+    it.each([
+        { metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 0 },
+        { metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 101 },
+        { metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 20, pulseValue: 65 },
+        { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 120 },
+        { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 120, diastolicValue: '80' },
+        { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 120, diastolicValue: 80, pulseValue: null },
+        { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 401, diastolicValue: 80 },
+        { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 120, diastolicValue: 0 },
+        { metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, canonicalValue: 120, diastolicValue: 80, pulseValue: 401 },
+        { metricId: HEALTH_METRIC_IDS.PulseRate, canonicalValue: 65 },
+    ])('rejects invalid or unpaired manual input: %j', fields => {
+        expect(() => validateSaveManualHealthMeasurementRequest({ ...createWeightRequest(), ...fields }, OBSERVED_AT_MS))
+            .toThrow(ManualHealthValidationError);
+    });
+
+    it('stores body fat using its canonical Sports Lib class and manual provenance', async () => {
+        const fake = fakeDatabase();
+        const result = await saveManualHealthMeasurement(UID, {
+            ...createWeightRequest(), metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 22.5,
+        }, { db: fake.db as never, now: () => OBSERVED_AT_MS });
+        expect(fake.stored.get(sourceRecordPath(result.sourceRecordId))).toMatchObject({
+            metricIds: [HEALTH_METRIC_IDS.BodyFat],
+            metrics: [{ sportsLibData: { metrics: { value: { 'Body Fat': 22.5 } } }, recordingMethod: 'manual' }],
+        });
+    });
+
+    it('atomically creates, revises and deletes paired blood pressure including optional pulse', async () => {
+        const fake = fakeDatabase();
+        const dependencies = { db: fake.db as never, now: () => OBSERVED_AT_MS };
+        const request = { ...createWeightRequest(), metricId: HEALTH_METRIC_IDS.BloodPressureSystolic,
+            canonicalValue: 120, diastolicValue: 80, pulseValue: 65 };
+        const first = await saveManualHealthMeasurement(UID, request, dependencies);
+        expect(await saveManualHealthMeasurement(UID, request, dependencies)).toEqual(first);
+        const record = () => fake.stored.get(sourceRecordPath(first.sourceRecordId)) as HealthSourceRecord;
+        expect(record().metricIds).toEqual(['blood_pressure_diastolic', 'blood_pressure_systolic', 'pulse_rate']);
+        expect(record().metrics.map(metric => metric.kind === 'value' && metric.native.value).sort()).toEqual([120, 65, 80]);
+        expect(record().metrics.every(metric => metric.recordingMethod === 'manual' && !('canonical' in metric))).toBe(true);
+        // Removing pulse is an intentional grouped edit, including index membership.
+        const update = { mode: 'update', sourceRecordId: first.sourceRecordId, expectedRevisionOrder: 1,
+            metricId: request.metricId, canonicalValue: 118, diastolicValue: 78,
+            observedAtMs: OBSERVED_AT_MS, timezoneOffsetSeconds: 10_800 };
+        await saveManualHealthMeasurement(UID, update, dependencies);
+        expect(record().metricIds).toEqual(['blood_pressure_diastolic', 'blood_pressure_systolic']);
+        expect(record().metrics).toHaveLength(2);
+        await expect(saveManualHealthMeasurement(UID, update, dependencies)).rejects.toBeInstanceOf(ManualHealthRevisionConflictError);
+        await expect(saveManualHealthMeasurement(UID, { ...update, expectedRevisionOrder: 2,
+            metricId: HEALTH_METRIC_IDS.BodyFat, diastolicValue: undefined }, dependencies)).rejects.toBeInstanceOf(ManualHealthValidationError);
+        await deleteManualHealthMeasurement(UID, { sourceRecordId: first.sourceRecordId, expectedRevisionOrder: 2 }, dependencies);
+        expect(record()).toBeUndefined();
+        await expect(saveManualHealthMeasurement(UID, request, dependencies)).rejects.toBeInstanceOf(ManualHealthMeasurementNotFoundError);
+    });
+
     it('creates an idempotent opaque manual record without retaining the client mutation ID', async () => {
         const fake = fakeDatabase();
         const dependencies = {

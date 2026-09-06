@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { DataVO2Max, DataWeight } from '@sports-alliance/sports-lib';
+import { DataVO2Max, DataWeight, DataBodyFat, DataBloodPressureSystolic, DataBloodPressureDiastolic, DataPulseRate } from '@sports-alliance/sports-lib';
 import {
     HEALTH_COVERAGE_STATUSES,
     HEALTH_METRIC_IDS,
@@ -21,10 +21,13 @@ import {
     MANUAL_HEALTH_SOURCE_RECORD_TYPE,
     MANUAL_VO2_CONTEXTS,
     MANUAL_VO2_METHODS,
-    MANUAL_WEIGHT_SEMANTIC_VARIANT,
+    MANUAL_POINT_SEMANTIC_VARIANT,
+    MANUAL_HEALTH_VALUE_MAXIMUMS,
+    manualHealthEntryMetric,
     type DeleteManualHealthMeasurementRequest,
     type DeleteManualHealthMeasurementResponse,
     type ManualHealthMeasurementFields,
+    type ManualHealthMetricId,
     type SaveManualHealthMeasurementRequest,
     type SaveManualHealthMeasurementResponse,
     isManualHealthMetricId,
@@ -51,6 +54,24 @@ const OPAQUE_ID_PATTERN = /^[a-f0-9]{64}$/;
 const EARLIEST_MANUAL_MEASUREMENT_MS = Date.UTC(2000, 0, 1);
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 const MAX_TIMEZONE_OFFSET_SECONDS = 24 * 60 * 60;
+
+const MANUAL_DATA_CLASSES = {
+    [HEALTH_METRIC_IDS.BodyWeight]: DataWeight,
+    [HEALTH_METRIC_IDS.Vo2Max]: DataVO2Max,
+    [HEALTH_METRIC_IDS.BodyFat]: DataBodyFat,
+    [HEALTH_METRIC_IDS.BloodPressureSystolic]: DataBloodPressureSystolic,
+    [HEALTH_METRIC_IDS.BloodPressureDiastolic]: DataBloodPressureDiastolic,
+    [HEALTH_METRIC_IDS.PulseRate]: DataPulseRate,
+} as const;
+
+function validatedValue(value: unknown, metricId: keyof typeof MANUAL_DATA_CLASSES): number {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0
+        || value > MANUAL_HEALTH_VALUE_MAXIMUMS[metricId]
+        || !new MANUAL_DATA_CLASSES[metricId](value).isValueTypeValid(value)) {
+        throw new ManualHealthValidationError('Measurement value is outside the supported range.');
+    }
+    return value;
+}
 
 export class ManualHealthValidationError extends Error {
     public readonly name = 'ManualHealthValidationError';
@@ -124,17 +145,7 @@ function validateMeasurementFields(
     if (!isManualHealthMetricId(raw.metricId)) {
         throw new ManualHealthValidationError('metricId is not supported for manual entry.');
     }
-    if (typeof raw.canonicalValue !== 'number' || !Number.isFinite(raw.canonicalValue)) {
-        throw new ManualHealthValidationError('canonicalValue must be a finite number.');
-    }
-    const canonicalValue = raw.canonicalValue;
-    const data = raw.metricId === HEALTH_METRIC_IDS.BodyWeight
-        ? new DataWeight(canonicalValue)
-        : new DataVO2Max(canonicalValue);
-    const maximum = raw.metricId === HEALTH_METRIC_IDS.BodyWeight ? 1_000 : 150;
-    if (canonicalValue <= 0 || canonicalValue > maximum || !data.isValueTypeValid(canonicalValue)) {
-        throw new ManualHealthValidationError('canonicalValue is outside the supported range.');
-    }
+    const canonicalValue = validatedValue(raw.canonicalValue, raw.metricId);
     const observedAtMs = safeInteger(raw.observedAtMs, 'observedAtMs');
     if (observedAtMs < EARLIEST_MANUAL_MEASUREMENT_MS || observedAtMs > nowMs + MAX_FUTURE_SKEW_MS) {
         throw new ManualHealthValidationError('observedAtMs is outside the supported range.');
@@ -143,15 +154,25 @@ function validateMeasurementFields(
     if (Math.abs(timezoneOffsetSeconds) >= MAX_TIMEZONE_OFFSET_SECONDS) {
         throw new ManualHealthValidationError('timezoneOffsetSeconds is outside the supported range.');
     }
-    if (raw.metricId === HEALTH_METRIC_IDS.BodyWeight) {
+    if (raw.metricId !== HEALTH_METRIC_IDS.BloodPressureSystolic
+        && (Object.prototype.hasOwnProperty.call(raw, 'diastolicValue') || Object.prototype.hasOwnProperty.call(raw, 'pulseValue'))) {
+        throw new ManualHealthValidationError('Only blood pressure can include paired readings.');
+    }
+    if (raw.metricId !== HEALTH_METRIC_IDS.Vo2Max) {
         if (raw.vo2Context !== undefined || raw.vo2Method !== undefined) {
-            throw new ManualHealthValidationError('Weight measurements cannot include VO2 metadata.');
+            throw new ManualHealthValidationError('Only VO2 measurements can include VO2 metadata.');
         }
         return {
             metricId: raw.metricId,
             canonicalValue,
             observedAtMs,
             timezoneOffsetSeconds,
+            ...(raw.metricId === HEALTH_METRIC_IDS.BloodPressureSystolic ? {
+                diastolicValue: validatedValue(raw.diastolicValue, HEALTH_METRIC_IDS.BloodPressureDiastolic),
+                ...(Object.prototype.hasOwnProperty.call(raw, 'pulseValue') ? {
+                    pulseValue: validatedValue(raw.pulseValue, HEALTH_METRIC_IDS.PulseRate),
+                } : {}),
+            } : {}),
         };
     }
     return {
@@ -173,7 +194,7 @@ export function validateSaveManualHealthMeasurementRequest(
         assertExactKeys(
             raw,
             ['mode', 'clientMutationId', 'metricId', 'canonicalValue', 'observedAtMs', 'timezoneOffsetSeconds'],
-            ['vo2Context', 'vo2Method'],
+            ['vo2Context', 'vo2Method', 'diastolicValue', 'pulseValue'],
         );
         if (typeof raw.clientMutationId !== 'string' || !UUID_PATTERN.test(raw.clientMutationId)) {
             throw new ManualHealthValidationError('clientMutationId must be a UUID.');
@@ -188,7 +209,7 @@ export function validateSaveManualHealthMeasurementRequest(
         assertExactKeys(
             raw,
             ['mode', 'sourceRecordId', 'expectedRevisionOrder', 'metricId', 'canonicalValue', 'observedAtMs', 'timezoneOffsetSeconds'],
-            ['vo2Context', 'vo2Method'],
+            ['vo2Context', 'vo2Method', 'diastolicValue', 'pulseValue'],
         );
         if (typeof raw.sourceRecordId !== 'string' || !OPAQUE_ID_PATTERN.test(raw.sourceRecordId)) {
             throw new ManualHealthValidationError('sourceRecordId must be an opaque Health record ID.');
@@ -221,23 +242,26 @@ function calendarDateAtOffset(observedAtMs: number, timezoneOffsetSeconds: numbe
     return new Date(observedAtMs + timezoneOffsetSeconds * 1000).toISOString().slice(0, 10);
 }
 
-function buildManualMetric(fields: ManualHealthMeasurementFields): HealthMetricValue {
-    const isWeight = fields.metricId === HEALTH_METRIC_IDS.BodyWeight;
-    const unit = isWeight
-        ? HEALTH_UNITS.Kilogram
-        : HEALTH_UNITS.MillilitersPerKilogramPerMinute;
-    const nativeMetric = isWeight ? DataWeight.type : DataVO2Max.type;
-    const qualifiers = isWeight
-        ? undefined
-        : { context: fields.vo2Context!, method: fields.vo2Method! };
+function buildManualMetric(
+    fields: ManualHealthMeasurementFields,
+    metricId: keyof typeof MANUAL_DATA_CLASSES = fields.metricId,
+    value = fields.canonicalValue,
+): HealthMetricValue {
+    const isVo2 = metricId === HEALTH_METRIC_IDS.Vo2Max;
+    const unit = metricId === HEALTH_METRIC_IDS.BodyWeight ? HEALTH_UNITS.Kilogram
+        : isVo2 ? HEALTH_UNITS.MillilitersPerKilogramPerMinute
+        : metricId === HEALTH_METRIC_IDS.BodyFat ? HEALTH_UNITS.Percent
+        : metricId === HEALTH_METRIC_IDS.PulseRate ? HEALTH_UNITS.BeatsPerMinute
+        : HEALTH_UNITS.MillimetersMercury;
+    const nativeMetric = MANUAL_DATA_CLASSES[metricId].type;
+    const qualifiers = isVo2 ? { context: fields.vo2Context!, method: fields.vo2Method! } : undefined;
     return {
         kind: 'value',
-        metricId: fields.metricId,
+        metricId,
         valueType: HEALTH_VALUE_TYPES.Number,
         aggregation: MANUAL_HEALTH_AGGREGATION,
-        semanticVariant: isWeight
-            ? MANUAL_WEIGHT_SEMANTIC_VARIANT
-            : manualVo2SemanticVariant(fields.vo2Context!, fields.vo2Method!),
+        semanticVariant: isVo2 ? manualVo2SemanticVariant(fields.vo2Context!, fields.vo2Method!)
+            : MANUAL_POINT_SEMANTIC_VARIANT,
         origin: HEALTH_VALUE_ORIGINS.Recorded,
         recordingMethod: HEALTH_RECORDING_METHODS.Manual,
         quality: { status: HEALTH_QUALITY_STATUSES.Valid },
@@ -245,16 +269,25 @@ function buildManualMetric(fields: ManualHealthMeasurementFields): HealthMetricV
         normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
         native: {
             metric: nativeMetric,
-            value: fields.canonicalValue,
+            value,
             unit,
             qualifiers,
         },
-        canonical: { value: fields.canonicalValue, unit },
+        canonical: { value, unit },
     };
 }
 
-function encodeManualMetricForFirestore(fields: ManualHealthMeasurementFields): HealthMetricValue {
-    const encoded = encodeHealthMetricSportsLibData(buildManualMetric(fields));
+function buildManualMetrics(fields: ManualHealthMeasurementFields): HealthMetricValue[] {
+    const metrics = [buildManualMetric(fields)];
+    if (fields.metricId === HEALTH_METRIC_IDS.BloodPressureSystolic) {
+        metrics.push(buildManualMetric(fields, HEALTH_METRIC_IDS.BloodPressureDiastolic, fields.diastolicValue!));
+        if (fields.pulseValue !== undefined) metrics.push(buildManualMetric(fields, HEALTH_METRIC_IDS.PulseRate, fields.pulseValue));
+    }
+    return metrics;
+}
+
+function encodeManualMetricForFirestore(metric: HealthMetricValue): HealthMetricValue {
+    const encoded = encodeHealthMetricSportsLibData(metric);
     if (encoded.kind !== 'value') {
         throw new ManualHealthValidationError('Manual Health metric could not be encoded.');
     }
@@ -270,7 +303,6 @@ function isEditableManualRecord(
 ): value is HealthSourceRecord {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
     const record = value as HealthSourceRecord;
-    const metric = record.metrics?.[0];
     return record.schemaVersion === HEALTH_SCHEMA_VERSION
         && record.id === sourceRecordId
         && record.userID === uid
@@ -286,15 +318,28 @@ function isEditableManualRecord(
         && Array.isArray(record.sampleChunkIds)
         && record.sampleChunkIds.length === 0
         && Array.isArray(record.metricIds)
-        && record.metricIds.length === 1
         && Array.isArray(record.metrics)
-        && record.metrics.length === 1
-        && metric?.kind === 'value'
-        && isManualHealthMetricId(metric.metricId)
-        && record.metricIds[0] === metric.metricId
-        && metric.aggregation === MANUAL_HEALTH_AGGREGATION
-        && metric.origin === HEALTH_VALUE_ORIGINS.Recorded
-        && metric.recordingMethod === HEALTH_RECORDING_METHODS.Manual;
+        && manualRecordEntryMetric(record) !== null
+        && record.metricIds.length === record.metrics.length
+        && record.metrics.every(metric => record.metricIds.includes(metric.metricId)
+            && metric.kind === 'value'
+            && metric.aggregation === MANUAL_HEALTH_AGGREGATION
+            && metric.origin === HEALTH_VALUE_ORIGINS.Recorded
+            && metric.recordingMethod === HEALTH_RECORDING_METHODS.Manual);
+}
+
+function manualRecordEntryMetric(record: HealthSourceRecord): ManualHealthMetricId | null {
+    const ids = record.metrics.map(metric => metric.metricId);
+    if (new Set(ids).size !== ids.length) return null;
+    if (ids.length === 1 && isManualHealthMetricId(ids[0])
+        && ids[0] !== HEALTH_METRIC_IDS.BloodPressureSystolic) return ids[0];
+    if ((ids.length === 2 || ids.length === 3)
+        && ids.includes(HEALTH_METRIC_IDS.BloodPressureSystolic)
+        && ids.includes(HEALTH_METRIC_IDS.BloodPressureDiastolic)
+        && ids.every(id => manualHealthEntryMetric(id) === HEALTH_METRIC_IDS.BloodPressureSystolic)) {
+        return HEALTH_METRIC_IDS.BloodPressureSystolic;
+    }
+    return null;
 }
 
 async function updateManualMeasurement(
@@ -323,7 +368,7 @@ async function updateManualMeasurement(
         if (existing.source.revision.order !== request.expectedRevisionOrder) {
             throw new ManualHealthRevisionConflictError();
         }
-        if (existing.metricIds[0] !== request.metricId) {
+        if (manualRecordEntryMetric(existing) !== request.metricId) {
             throw new ManualHealthValidationError('A manual measurement cannot change metric type.');
         }
         const nextRevisionOrder = request.expectedRevisionOrder + 1;
@@ -345,7 +390,8 @@ async function updateManualMeasurement(
             startTimeMs: request.observedAtMs,
             endTimeMs: request.observedAtMs,
             timezoneOffsetSeconds: request.timezoneOffsetSeconds,
-            metrics: [encodeManualMetricForFirestore(request)],
+            metricIds: buildManualMetrics(request).map(metric => metric.metricId).sort(),
+            metrics: buildManualMetrics(request).map(encodeManualMetricForFirestore),
             coverage: { status: HEALTH_COVERAGE_STATUSES.Complete },
             source: {
                 ...existing.source,
@@ -397,7 +443,7 @@ export async function saveManualHealthMeasurement(
             startTimeMs: request.observedAtMs,
             endTimeMs: request.observedAtMs,
             timezoneOffsetSeconds: request.timezoneOffsetSeconds,
-            metrics: [buildManualMetric(request)],
+            metrics: buildManualMetrics(request),
             coverage: { status: HEALTH_COVERAGE_STATUSES.Complete },
             sampleSeries: [],
         }, nowMs, { ...dependencies, db, requiredMissingDocumentRef: deletionMarkerRef });

@@ -27,6 +27,7 @@ import {
 } from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import {
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
@@ -713,6 +714,31 @@ describe('Health workspace helpers', () => {
     ]));
     expect(view.series.filter(series => series.semanticVariant.startsWith('workout_imported_')))
       .toHaveLength(2);
+  });
+
+  it.each([
+    [HEALTH_METRIC_IDS.BodyFat, 22.5],
+    [HEALTH_METRIC_IDS.BloodPressureSystolic, 120],
+    [HEALTH_METRIC_IDS.BloodPressureDiastolic, 80],
+    [HEALTH_METRIC_IDS.PulseRate, 65],
+  ] as const)('renders manual %s with canonical units and routes paired edit actions to the whole record', (metricId, value) => {
+    const record = sourceRecord({ id: 'a'.repeat(64), provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account', metrics: [valueEntry({ metricId, aggregation: 'measurement', semanticVariant: 'point',
+        origin: 'recorded', recordingMethod: 'manual', native: { metric: metricId, value },
+        canonical: { value, unit: HEALTH_METRIC_CATALOG[metricId].canonicalUnit } })] });
+    record.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    record.source.sourceRecordType = 'manual_measurement';
+    const result = projectLoadedHealthRange([record], [], { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [metricId] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [], [], unitSettings);
+      const display = formatCanonicalHealthMetricSportsLibValue(metricId, value, unitSettings)!;
+      expect(view.rows[0].valueText).toBe(`${display.value} ${display.unit}`);
+      expect(view.rows[0].sourceLabel).toBe('Manual');
+      expect(view.rows[0].manualMeasurement).toMatchObject({ sourceRecordId: record.id,
+        metricId: metricId === HEALTH_METRIC_IDS.BodyFat ? metricId : HEALTH_METRIC_IDS.BloodPressureSystolic });
+      expect(view.series).toHaveLength(1);
+    }
   });
 
   it('resolves Sleep references against the normalized Sleep model', () => {

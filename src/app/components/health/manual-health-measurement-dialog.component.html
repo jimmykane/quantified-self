@@ -1,29 +1,53 @@
 <h2 mat-dialog-title>{{ title }}</h2>
 
 <mat-dialog-content>
-  <form class="manual-health-form" [formGroup]="form" (ngSubmit)="submit()">
-    <p class="manual-health-context">
-      {{ isWeight
-        ? 'Record a measured weight. Workout profile values remain fallback context and are not weigh-ins.'
-        : 'Record a VO₂ max result with the context and method that produced it.' }}
-    </p>
-
+  <form id="manual-health-measurement-form" class="manual-health-form" [formGroup]="form" (ngSubmit)="submit()">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>{{ valueLabel }}</mat-label>
+      <mat-label>Measurement</mat-label>
+      <mat-select [value]="selectedMetric()" [disabled]="!!data.existing" (selectionChange)="selectMetric($event.value)">
+        @for (option of metricOptions; track option.id) {
+          <mat-option [value]="option.id">{{ option.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <p class="manual-health-context">{{ contextText() }}</p>
+
+    <div class="manual-health-readings" [class.manual-health-paired]="isBloodPressure()">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>{{ valueLabel() }}</mat-label>
       <input
         matInput
         type="number"
         inputmode="decimal"
         formControlName="canonicalValue"
-        [step]="valueStep"
+        step="any"
         min="0"
-        [max]="maximumValue"
+        [max]="maximumValue()"
         required>
-      <span matTextSuffix>{{ valueUnit }}</span>
+      <span matTextSuffix>{{ valueUnit() }}</span>
       @if (form.controls.canonicalValue.invalid && form.controls.canonicalValue.touched) {
-        <mat-error>Enter a valid {{ valueLabel.toLowerCase() }}.</mat-error>
+        <mat-error>Enter a valid {{ valueLabel().toLowerCase() }}.</mat-error>
       }
     </mat-form-field>
+    @if (isBloodPressure()) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Diastolic</mat-label>
+        <input matInput type="number" inputmode="decimal" formControlName="diastolicValue" min="0" [max]="pressureMaximum" step="any" required>
+        <span matTextSuffix>{{ diastolicUnit }}</span>
+        @if (form.controls.diastolicValue.invalid && form.controls.diastolicValue.touched) {
+          <mat-error>Enter a valid diastolic reading.</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Pulse (optional)</mat-label>
+        <input matInput type="number" inputmode="decimal" formControlName="pulseValue" min="0" [max]="pulseMaximum" step="any">
+        <span matTextSuffix>{{ pulseUnit }}</span>
+        @if (form.controls.pulseValue.invalid && form.controls.pulseValue.touched) {
+          <mat-error>Enter a valid pulse or leave it empty.</mat-error>
+        }
+      </mat-form-field>
+    }
+    </div>
 
     <div class="manual-health-time-fields">
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -36,7 +60,7 @@
       </mat-form-field>
     </div>
 
-    @if (!isWeight) {
+    @if (isVo2()) {
       <div class="manual-health-vo2-fields">
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Context</mat-label>
@@ -68,7 +92,7 @@
 
 <mat-dialog-actions align="end">
   <button mat-button type="button" (click)="close()">Cancel</button>
-  <button mat-flat-button type="button" [disabled]="form.invalid" (click)="submit()">
+  <button mat-flat-button type="submit" form="manual-health-measurement-form" [disabled]="form.invalid">
     {{ actionLabel() }}
   </button>
 </mat-dialog-actions>

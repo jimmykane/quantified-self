@@ -16,6 +16,7 @@
 
 .health-header-actions {
   gap: 0.25rem;
+  flex-wrap: wrap;
 }
 
 .health-explorer {
@@ -440,7 +441,7 @@
     gap: 0.75rem;
   }
 
-  .health-header-actions span {
+  .health-header-actions a span {
     display: none;
   }
 
