@@ -155,6 +155,10 @@ export class ManualHealthMeasurementDialogComponent {
     if (!Number.isSafeInteger(observedAtMs) || observedAtMs < Date.UTC(2000, 0, 1)
       || !Number.isFinite(calendarTimestamp)
       || new Date(calendarTimestamp).toISOString().slice(0, 16) !== `${value.observedDate}T${value.observedTime}`
+      // A local Date can silently advance a nonexistent DST wall time. Require
+      // the resolved instant/offset to match the entered minute, while retaining
+      // existing measurements' seconds and original fixed offset on edit.
+      || Math.floor((observedAtMs + timezoneOffsetSeconds * 1000) / 60_000) * 60_000 !== calendarTimestamp
       || observedAtMs > Date.now() + (5 * 60 * 1000)) {
       this.submitError.set('Choose a valid date and time from 2000 onward, not in the future.');
       return;

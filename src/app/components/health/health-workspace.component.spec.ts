@@ -1279,6 +1279,63 @@ describe('HealthWorkspaceComponent', () => {
     expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent?.trim()).toBe('');
   });
 
+  it('reveals a saved measurement after midnight without changing the remembered range', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date(2026, 8, 6, 23, 59));
+      await createComponent(undefined, '14d');
+      expect(component.selectedWindow().endDate).toBe('2026-09-06');
+      vi.setSystemTime(new Date(2026, 8, 7, 0, 1));
+      const observed = new Date();
+      const closed = new Subject<unknown>();
+      vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
+        afterClosed: () => closed.asObservable(), close: vi.fn(),
+      } as never);
+      component.openManualMeasurement();
+      closed.next({
+        metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 20,
+        observedAtMs: observed.getTime(), timezoneOffsetSeconds: -observed.getTimezoneOffset() * 60,
+      });
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(saveManualMeasurement).toHaveBeenCalledOnce();
+      expect(component.selectedWindow()).toMatchObject({ endDate: '2026-09-07', range: '14d' });
+      expect(component.selectedMetric()).toBe(HEALTH_METRIC_IDS.BodyFat);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reveals an edited measurement whose original timezone is already on the next calendar day', async () => {
+    vi.stubEnv('TZ', 'UTC');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.UTC(2026, 8, 6, 20));
+      await createComponent(undefined, '14d');
+      const measurement: ManualHealthObservationEdit = {
+        sourceRecordId: 'manual-record', expectedRevisionOrder: 1,
+        metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 20,
+        observedAtMs: Date.now(), timezoneOffsetSeconds: 9 * 3600,
+      };
+      const closed = new Subject<unknown>();
+      vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
+        afterClosed: () => closed.asObservable(), close: vi.fn(),
+      } as never);
+      await component.editManualMeasurement(measurement);
+      closed.next({
+        metricId: measurement.metricId, canonicalValue: 21,
+        observedAtMs: measurement.observedAtMs, timezoneOffsetSeconds: measurement.timezoneOffsetSeconds,
+      });
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(saveManualMeasurement).toHaveBeenCalledOnce();
+      expect(component.selectedWindow()).toMatchObject({ endDate: '2026-09-07', range: '14d' });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each(['success', 'failure'])('ignores a stale create %s without clearing the new account mutation', async outcome => {
     await createComponent();
     const value = { canonicalValue: 72, observedAtMs: todayStartMs, timezoneOffsetSeconds: 0 };

@@ -195,7 +195,9 @@ export class HealthWorkspaceComponent {
   private readonly browserCompatibilityService = inject(BrowserCompatibilityService);
   private readonly signedInUserID = computed(() => this.userService.user()?.uid || null);
   readonly unitSettings = this.userSettingsService.unitSettings;
-  private readonly todayDate = localCalendarDate();
+  // Re-evaluate on interaction: a workspace left open overnight must be able
+  // to reveal a newly saved measurement in the new day's window.
+  private get todayDate(): string { return localCalendarDate(); }
   private selectedLoadGeneration = 0;
   private priorityLoadGeneration = 0;
   private priorityHealthUserID: string | null = null;
@@ -1245,7 +1247,9 @@ export class HealthWorkspaceComponent {
       : metricIds);
     const date = new Date(value.observedAtMs + value.timezoneOffsetSeconds * 1_000).toISOString().slice(0, 10);
     const window = this.selectedWindow();
-    if (date < window.startDate || date > window.endDate) this.selectedEndDate.set(date > this.todayDate ? this.todayDate : date);
+    // The saved instant is server-validated, but its original offset can put
+    // its indexed calendar date ahead of the viewer's current local date.
+    if (date < window.startDate || date > window.endDate) this.selectedEndDate.set(date);
     this.selectedProviders.set([]);
     this.selectAndSaveMetric(metricId);
     this.refreshRevision.update(current => current + 1);

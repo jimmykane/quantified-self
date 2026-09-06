@@ -187,4 +187,44 @@ describe('ManualHealthMeasurementDialogComponent', () => {
     expect(dialogRef.close).not.toHaveBeenCalled();
     expect(component.submitError()).toContain('valid date');
   });
+
+  it.each([
+    { time: '02:30', valid: true },
+    { time: '03:30', valid: false },
+    { time: '04:30', valid: true },
+  ])('does not silently normalize the local DST transition time $time', async ({ time, valid }) => {
+    vi.stubEnv('TZ', 'Europe/Helsinki');
+    try {
+      const component = await create({ metricId: HEALTH_METRIC_IDS.BodyFat, unitSettings: null });
+      component.form.patchValue({ canonicalValue: 20, observedDate: '2026-03-29', observedTime: time });
+
+      component.submit();
+
+      if (valid) {
+        expect(dialogRef.close).toHaveBeenCalledOnce();
+        const result = dialogRef.close.mock.calls[0][0];
+        expect(new Date(result.observedAtMs + result.timezoneOffsetSeconds * 1000).toISOString().slice(0, 16))
+          .toBe(`2026-03-29T${time}`);
+      } else {
+        expect(dialogRef.close).not.toHaveBeenCalled();
+        expect(component.submitError()).toContain('valid date');
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('preserves an existing fixed-offset time even when it falls in the viewer timezone DST gap', async () => {
+    vi.stubEnv('TZ', 'Europe/Helsinki');
+    try {
+      const existing = {
+        canonicalValue: 20, observedAtMs: Date.UTC(2026, 2, 29, 3, 30, 37), timezoneOffsetSeconds: 0,
+      };
+      const component = await create({ metricId: HEALTH_METRIC_IDS.BodyFat, unitSettings: null, existing });
+      component.submit();
+      expect(dialogRef.close).toHaveBeenCalledWith({ metricId: HEALTH_METRIC_IDS.BodyFat, ...existing });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });
