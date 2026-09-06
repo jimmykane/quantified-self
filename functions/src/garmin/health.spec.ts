@@ -501,6 +501,88 @@ describe('Garmin Health API summary mapping', () => {
     expect(replacement.input.revision.token).toBe(first.input.revision.token);
   });
 
+  describe('bounded stress-validation diagnostics', () => {
+    const interval = {
+      summaryId: 'diagnostic-summary', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 60,
+    };
+    const secret = 'https://example.invalid/callback?token=do-not-log';
+
+    it.each([
+      [-2, 'out_of_range', 'number', -2, 'included'],
+      [101, 'out_of_range', 'number', 101, 'included'],
+      [43.5, 'not_integer', 'number', 43.5, 'included'],
+      [-1_000_000, 'out_of_range', 'number', -1_000_000, 'included'],
+      [1_000_001, 'out_of_range', 'number', null, 'outside_diagnostic_range'],
+      [Number.NaN, 'non_finite', 'number', null, 'non_finite'],
+      [Number.POSITIVE_INFINITY, 'non_finite', 'number', null, 'non_finite'],
+      ['43', 'invalid_type', 'string', null, 'non_numeric'],
+      [secret.repeat(1000), 'invalid_type', 'string', null, 'non_numeric'],
+      [{ accessToken: secret }, 'invalid_type', 'object', null, 'non_numeric'],
+      [[secret], 'invalid_type', 'array', null, 'non_numeric'],
+      [false, 'invalid_type', 'boolean', null, 'non_numeric'],
+    ])('keeps Daily rejection unchanged and sanitizes case %#', (value, reason, valueType, numericValue, valueDisposition) => {
+      let caught: unknown;
+      try {
+        map('dailies', [
+          { ...interval, steps: 10 },
+          { ...interval, averageStressLevel: value, accessToken: secret },
+        ]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(GarminHealthValidationError);
+      expect((caught as GarminHealthValidationError).message)
+        .toBe('averageStressLevel is outside the supported numeric range.');
+      expect((caught as GarminHealthValidationError).diagnostic).toEqual({
+        summaryType: 'dailies', summaryIndex: 1, field: 'averageStressLevel', reason,
+        valueType, numericValue, valueDisposition, sampleOffsetSeconds: null,
+      });
+      expect(JSON.stringify(caught)).not.toContain(secret);
+      expect(JSON.stringify(caught).length).toBeLessThan(600);
+    });
+
+    it.each([0, -0.5, -4.5])('identifies the first unsupported Stress point (%s)', value => {
+      let caught: unknown;
+      try {
+        map('stressDetails', [
+          { ...interval, timeOffsetStressLevelValues: { 0: 20 } },
+          { ...interval, timeOffsetStressLevelValues: { 60: -0.25, 30: value, 0: 20 }, callbackURL: secret },
+        ]);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(GarminHealthValidationError);
+      expect((caught as GarminHealthValidationError).message)
+        .toBe('stressDetails[1].timeOffsetStressLevelValues contains an unsupported stress code.');
+      expect((caught as GarminHealthValidationError).diagnostic).toEqual({
+        summaryType: 'stressDetails', summaryIndex: 1, field: 'timeOffsetStressLevelValues',
+        reason: 'unsupported_stress_code', valueType: 'number', numericValue: value,
+        valueDisposition: 'included', sampleOffsetSeconds: 30,
+      });
+      expect(JSON.stringify(caught)).not.toContain(secret);
+    });
+
+    it.each([undefined, null, -1, 0, 1, 100])('preserves accepted Daily values (%s)', value => {
+      expect(map('dailies', [{ ...interval, steps: 10, averageStressLevel: value }])).toHaveLength(1);
+    });
+
+    it.each([-5, -4, -3, -2, -1, 1, 100])('preserves accepted Stress values (%s)', value => {
+      expect(map('stressDetails', [{ ...interval, timeOffsetStressLevelValues: { 0: value } }])).toHaveLength(1);
+    });
+
+    it('does not attach stress diagnostics to unrelated validation failures', () => {
+      try {
+        map('dailies', [{ ...interval, steps: -1, averageStressLevel: -2 }]);
+      } catch (error) {
+        expect(error).toBeInstanceOf(GarminHealthValidationError);
+        expect((error as GarminHealthValidationError).diagnostic).toBeUndefined();
+        return;
+      }
+      expect.fail('Expected Daily steps validation to fail first.');
+    });
+  });
+
   it('rounds documented fractional-second timestamps to model millisecond precision', () => {
     const [result] = map('healthSnapshot', [{
       summaryId: 'snapshot-1', calendarDate: '2025-10-09',

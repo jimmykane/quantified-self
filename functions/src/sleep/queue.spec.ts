@@ -1898,7 +1898,19 @@ describe('sleep queue', () => {
         );
     });
 
-    it('records a lifecycle-guarded Health failure before DLQing an invalid Garmin response', async () => {
+    it.each([
+        undefined,
+        {
+            summaryType: 'dailies', summaryIndex: 2, field: 'averageStressLevel',
+            reason: 'out_of_range', valueType: 'number', numericValue: -2,
+            valueDisposition: 'included', sampleOffsetSeconds: null,
+        },
+        {
+            summaryType: 'stressDetails', summaryIndex: 6, field: 'timeOffsetStressLevelValues',
+            reason: 'unsupported_stress_code', valueType: 'number', numericValue: 0,
+            valueDisposition: 'included', sampleOffsetSeconds: 180,
+        },
+    ] as const)('logs only safe diagnostics and records a lifecycle-guarded Health failure before DLQ (%#)', async diagnostic => {
         const tokenRef = { parent: { parent: { id: 'test-user-uid' } } };
         hoisted.tokenRootGet.mockResolvedValue({
             docs: [{
@@ -1919,7 +1931,9 @@ describe('sleep queue', () => {
         hoisted.processGarminHealthQueueItem.mockImplementationOnce(
             async (...args: unknown[]) => {
                 (args[4] as (guards: unknown) => void)(refreshedGuards);
-                throw new GarminHealthValidationError('Invalid Garmin Health response.');
+                throw Object.assign(new GarminHealthValidationError('Invalid Garmin Health response.', diagnostic), {
+                    response: { accessToken: 'must-not-appear-in-logs' },
+                });
             },
         );
         const update = vi.fn().mockResolvedValue(undefined);
@@ -1939,6 +1953,18 @@ describe('sleep queue', () => {
         });
 
         expect(result).toBe(QueueResult.MovedToDLQ);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[HealthSync][Garmin] Queue item garmin-health-invalid-response contains an invalid provider response; moving to DLQ',
+            {
+                queueItemId: 'garmin-health-invalid-response',
+                code: 'garmin_health_invalid_response',
+                validation: diagnostic ?? null,
+            },
+        );
+        const loggedWarnings = JSON.stringify(hoisted.loggerWarn.mock.calls);
+        expect(loggedWarnings).not.toContain('must-not-appear-in-logs');
+        expect(loggedWarnings).not.toContain('refreshed-garmin-access-token');
+        expect(loggedWarnings).not.toContain('https://apis.garmin.com');
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
             'test-user-uid',
             'GarminAPI',

@@ -2928,7 +2928,11 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
         if (isGarminHealthQueueItem(queueItem)
             && error instanceof GarminHealthValidationError) {
-            logger.warn(`[HealthSync][Garmin] Queue item ${queueItem.id} contains an invalid provider response; moving to DLQ`);
+            logger.warn(`[HealthSync][Garmin] Queue item ${queueItem.id} contains an invalid provider response; moving to DLQ`, {
+                queueItemId: queueItem.id,
+                code: error.code,
+                validation: error.diagnostic ?? null,
+            });
             if (garminHealthLifecycleGuards && resolvedFirebaseUserID) {
                 const stateGuards = garminHealthStateGuardsForCurrentQueueRevision(
                     queueItem,

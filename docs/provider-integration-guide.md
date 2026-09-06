@@ -33,6 +33,8 @@ Treat this table as a high-level orientation, not a partner API specification. T
 
 Garmin Sleep and Health history recovery must account for a moving provider minimum, not merely round it to the next second. Both allow up to 30 seconds of retry headroom without erasing a short valid window. Sleep retains its three-attempt window limit. The independent Health worker stops after three consecutive minimum-start failures in the same family per invocation and uses the existing durable queue retry/exhaustion path; cutoff-only adjustments must not reset that retry budget. Log safe cutoff/progress metadata without provider response bodies or credentials, and distinguish submitted/skipped request windows from ingested records. See [Garmin history recovery](garmin-integration.md#availability-and-history). Activity history is a separate path.
 
+Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. These diagnostics do not relax validation or recover failed callbacks. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:
