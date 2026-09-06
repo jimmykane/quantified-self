@@ -31,6 +31,8 @@ The current providers are intentionally not identical:
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
+Garmin Sleep history recovery must account for a moving provider minimum, not merely round it to the next second. Keep the three-attempt limit, allow up to 30 seconds of retry headroom without erasing a short valid window, and log retries only when another attempt remains. See [Garmin history recovery](garmin-integration.md#availability-and-history); the independent Health cursor and activity history paths are unchanged.
+
 ## 2. Choose the right architecture
 
 Most activity providers should use the shared asynchronous ingestion pattern:

@@ -52,6 +52,8 @@ import type { GarminHealthWriteLifecycleGuards } from '../garmin/health-lifecycl
 
 const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/sleeps';
 const GARMIN_BACKFILL_SECOND_MS = 1000;
+const GARMIN_SLEEP_BACKFILL_RETRY_HEADROOM_MS = 30_000;
+const GARMIN_SLEEP_BACKFILL_MAX_ATTEMPTS = 3;
 
 interface SleepBackfillWindow {
     startMs: number;
@@ -528,7 +530,7 @@ async function requestGarminSleepBackfillRangeWithRecoveries(
     context: GarminSleepBackfillRequestContext,
 ): Promise<GarminSleepBackfillRequestResult> {
     let requestStartMs = startMs;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < GARMIN_SLEEP_BACKFILL_MAX_ATTEMPTS; attempt += 1) {
         try {
             return await requestGarminSleepBackfillRangeIfUserActive(userID, token, requestStartMs, endMs);
         } catch (error) {
@@ -551,16 +553,22 @@ async function requestGarminSleepBackfillRangeWithRecoveries(
                 return 'aborted';
             }
 
-            const safeMinStartMs = minStartMs <= requestStartMs
-                ? requestStartMs + GARMIN_BACKFILL_SECOND_MS
-                : minStartMs;
-            const providerMinStartMs = await rememberGarminProviderMinBackfillStartMs(userID, context, safeMinStartMs);
-            if (!Number.isFinite(providerMinStartMs) || providerMinStartMs >= endMs) {
+            const earliestRetryStartMs = ceilToGarminBackfillSecondMs(Math.max(minStartMs, requestStartMs + GARMIN_BACKFILL_SECOND_MS));
+            // Garmin's cutoff can advance during provider I/O and state writes.
+            // Leave headroom, but retain a valid whole-second window when it is short.
+            const requestEndMs = floorToGarminBackfillSecond(endMs);
+            const latestRetryStartMs = requestEndMs - GARMIN_BACKFILL_SECOND_MS;
+            const retryHeadroomMs = Math.min(GARMIN_SLEEP_BACKFILL_RETRY_HEADROOM_MS, Math.max(0, latestRetryStartMs - earliestRetryStartMs));
+            const providerMinStartMs = await rememberGarminProviderMinBackfillStartMs(userID, context, earliestRetryStartMs + retryHeadroomMs);
+            if (!Number.isFinite(providerMinStartMs) || providerMinStartMs >= requestEndMs) {
                 logger.warn(`[SleepBackfill] Skipping Garmin sleep backfill window before min start time: ${errorText}`);
                 return 'skipped';
             }
 
             requestStartMs = providerMinStartMs;
+            if (attempt === GARMIN_SLEEP_BACKFILL_MAX_ATTEMPTS - 1) {
+                break;
+            }
             logger.warn(`[SleepBackfill] Retrying Garmin sleep backfill window from provider min start time ${new Date(requestStartMs).toISOString()}: ${errorText}`);
         }
     }
