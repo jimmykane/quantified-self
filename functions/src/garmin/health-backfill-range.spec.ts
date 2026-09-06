@@ -45,7 +45,7 @@ describe('Garmin Health backfill ranges', () => {
 
     expect(cursor).toEqual({
       summaryIndex: 2,
-      nextStartMs: 95 * DAY_MS + 1_000,
+      nextStartMs: 95 * DAY_MS + 31_000,
       windowsCompleted: 5,
     });
   });
@@ -67,6 +67,24 @@ describe('Garmin Health backfill ranges', () => {
       windowsCompleted: 0,
     }, 0, 10 * DAY_MS, 0);
 
-    expect(cursor.nextStartMs).toBe(1_000);
+    expect(cursor.nextStartMs).toBe(31_000);
+  });
+
+  it('adds latency headroom beyond a moving minimum', () => {
+    const cursor = clipGarminHealthBackfillCursorToMinimum({
+      summaryIndex: 0, nextStartMs: 0, windowsCompleted: 0,
+    }, 0, DAY_MS, 10_250);
+
+    expect(cursor.nextStartMs).toBe(41_000);
+    expect(cursor.windowsCompleted).toBe(0);
+  });
+
+  it.each([8_250, 10_000])('caps headroom at the inclusive range end for minimum %i', (minimumStartMs) => {
+    const cursor = clipGarminHealthBackfillCursorToMinimum({
+      summaryIndex: 0, nextStartMs: 0, windowsCompleted: 0,
+    }, 0, 10_000, minimumStartMs);
+
+    expect(cursor).toEqual({ summaryIndex: 0, nextStartMs: 10_000, windowsCompleted: 0 });
+    expect(getGarminHealthBackfillWindow(cursor, 10_000)).toMatchObject({ startMs: 10_000, endMs: 10_000 });
   });
 });

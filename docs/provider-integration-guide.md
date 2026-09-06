@@ -31,7 +31,7 @@ The current providers are intentionally not identical:
 
 Treat this table as a high-level orientation, not a partner API specification. The public Help content and each `/integrations/<provider>` page define the user-facing supported scope.
 
-Garmin Sleep history recovery must account for a moving provider minimum, not merely round it to the next second. Keep the three-attempt limit, allow up to 30 seconds of retry headroom without erasing a short valid window, and log retries only when another attempt remains. See [Garmin history recovery](garmin-integration.md#availability-and-history); the independent Health cursor and activity history paths are unchanged.
+Garmin Sleep and Health history recovery must account for a moving provider minimum, not merely round it to the next second. Both allow up to 30 seconds of retry headroom without erasing a short valid window. Sleep retains its three-attempt window limit. The independent Health worker stops after three consecutive minimum-start failures in the same family per invocation and uses the existing durable queue retry/exhaustion path; cutoff-only adjustments must not reset that retry budget. Log safe cutoff/progress metadata without provider response bodies or credentials, and distinguish submitted/skipped request windows from ingested records. See [Garmin history recovery](garmin-integration.md#availability-and-history). Activity history is a separate path.
 
 ## 2. Choose the right architecture
 
