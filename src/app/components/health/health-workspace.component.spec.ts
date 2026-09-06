@@ -40,6 +40,7 @@ import { AppChartsModule } from '../../modules/app-charts.module';
 import { AppEventService } from '../../services/app.event.service';
 import { AppHealthService, HealthWorkspaceRangeLoad } from '../../services/app.health.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
+import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
@@ -443,6 +444,15 @@ describe('HealthWorkspaceComponent', () => {
           },
         },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Light) } },
+        // Highlight charts use the series component directly. Keep workspace
+        // orchestration tests independent of real canvas/timing; chart behavior
+        // has its own component suites.
+        { provide: EChartsLoaderService, useValue: {
+          init: vi.fn().mockResolvedValue({ isDisposed: () => false, dispatchAction: vi.fn() }),
+          setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
+          subscribeToViewportResize: vi.fn().mockReturnValue(() => undefined),
+          attachMobileSeriesTapFeedback: vi.fn().mockReturnValue(() => undefined),
+        } },
       ],
     })
       .overrideComponent(HealthWorkspaceComponent, {
@@ -1174,7 +1184,9 @@ describe('HealthWorkspaceComponent', () => {
     expect(close).toHaveBeenCalled();
   });
 
-  it('opens the general picker from an unsupported metric and reveals a saved body-fat observation in its date window', async () => {
+  it.each([
+    HEALTH_METRIC_IDS.BodyFat, HEALTH_METRIC_IDS.MuscleMass, HEALTH_METRIC_IDS.BodyWater, HEALTH_METRIC_IDS.BoneMass, HEALTH_METRIC_IDS.BloodOxygenSaturation,
+  ])('opens the general picker from an unsupported metric and reveals a saved %s observation in its date window', async metricId => {
     await createComponent(undefined, '14d', { metricIds: [HEALTH_METRIC_IDS.HeartRate], hasSleep: false });
     const closed = new Subject<unknown>();
     const open = vi.spyOn(fixture.debugElement.injector.get(MatDialog), 'open').mockReturnValue({
@@ -1185,14 +1197,14 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('app-page-header .qs-page-header--compact')).toBeNull();
     button!.click();
     expect(open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ metricId: HEALTH_METRIC_IDS.BodyWeight }) }));
-    loadAvailableMetricIds.mockResolvedValue([HEALTH_METRIC_IDS.BodyFat]);
-    closed.next({ metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 20,
+    loadAvailableMetricIds.mockResolvedValue([metricId]);
+    closed.next({ metricId, canonicalValue: 20,
       observedAtMs: Date.UTC(2025, 0, 15, 9), timezoneOffsetSeconds: 0 });
     await fixture.whenStable();
     fixture.detectChanges();
     await fixture.whenStable();
-    expect(saveManualMeasurement).toHaveBeenCalledWith(expect.objectContaining({ metricId: HEALTH_METRIC_IDS.BodyFat, canonicalValue: 20 }), 'user-1');
-    expect(component.selectedMetric()).toBe(HEALTH_METRIC_IDS.BodyFat);
+    expect(saveManualMeasurement).toHaveBeenCalledWith(expect.objectContaining({ metricId, canonicalValue: 20 }), 'user-1');
+    expect(component.selectedMetric()).toBe(metricId);
     expect(component.selectedRange()).toBe('14d');
     expect(component.selectedEndDate()).toBe('2025-01-15');
     expect(component.selectedProviders()).toEqual([]);

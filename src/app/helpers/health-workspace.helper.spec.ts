@@ -718,6 +718,10 @@ describe('Health workspace helpers', () => {
 
   it.each([
     [HEALTH_METRIC_IDS.BodyFat, 22.5],
+    [HEALTH_METRIC_IDS.MuscleMass, 52.4],
+    [HEALTH_METRIC_IDS.BodyWater, 57.8],
+    [HEALTH_METRIC_IDS.BoneMass, 3.1],
+    [HEALTH_METRIC_IDS.BloodOxygenSaturation, 98],
     [HEALTH_METRIC_IDS.BloodPressureSystolic, 120],
     [HEALTH_METRIC_IDS.BloodPressureDiastolic, 80],
     [HEALTH_METRIC_IDS.PulseRate, 65],
@@ -736,7 +740,8 @@ describe('Health workspace helpers', () => {
       expect(view.rows[0].valueText).toBe(`${display.value} ${display.unit}`);
       expect(view.rows[0].sourceLabel).toBe('Manual');
       expect(view.rows[0].manualMeasurement).toMatchObject({ sourceRecordId: record.id,
-        metricId: metricId === HEALTH_METRIC_IDS.BodyFat ? metricId : HEALTH_METRIC_IDS.BloodPressureSystolic });
+        metricId: ([HEALTH_METRIC_IDS.BloodPressureDiastolic, HEALTH_METRIC_IDS.PulseRate] as readonly HealthMetricId[]).includes(metricId)
+          ? HEALTH_METRIC_IDS.BloodPressureSystolic : metricId });
       expect(view.series).toHaveLength(1);
     }
   });

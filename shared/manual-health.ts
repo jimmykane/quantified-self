@@ -5,6 +5,10 @@ export const MANUAL_HEALTH_METRIC_IDS = [
   HEALTH_METRIC_IDS.Vo2Max,
   HEALTH_METRIC_IDS.BodyFat,
   HEALTH_METRIC_IDS.BloodPressureSystolic,
+  HEALTH_METRIC_IDS.MuscleMass,
+  HEALTH_METRIC_IDS.BodyWater,
+  HEALTH_METRIC_IDS.BoneMass,
+  HEALTH_METRIC_IDS.BloodOxygenSaturation,
 ] as const;
 
 export type ManualHealthMetricId = typeof MANUAL_HEALTH_METRIC_IDS[number];
@@ -48,6 +52,10 @@ export const MANUAL_HEALTH_VALUE_MAXIMUMS = {
   [HEALTH_METRIC_IDS.BloodPressureSystolic]: 400,
   [HEALTH_METRIC_IDS.BloodPressureDiastolic]: 400,
   [HEALTH_METRIC_IDS.PulseRate]: 400,
+  [HEALTH_METRIC_IDS.MuscleMass]: 1_000,
+  [HEALTH_METRIC_IDS.BodyWater]: 100,
+  [HEALTH_METRIC_IDS.BoneMass]: 1_000,
+  [HEALTH_METRIC_IDS.BloodOxygenSaturation]: 100,
 } as const;
 
 export interface CreateManualHealthMeasurementRequest extends ManualHealthMeasurementFields {

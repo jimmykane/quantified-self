@@ -229,7 +229,7 @@ describe('workout context Health policy', () => {
     const content = CONNECTED_SERVICES_POLICY_SECTION.content.join(' ');
 
     expect(content).toContain('Manual Health measurements');
-    expect(content).toContain('add, edit, and delete Weight, VO₂ max, body fat, and blood pressure measurements');
+    expect(content).toContain('add, edit, and delete Weight, VO₂ max, body fat, blood pressure, muscle mass, body water percentage, bone mass, and blood oxygen (SpO₂) measurements');
     expect(content).toContain('systolic and diastolic together with any pulse');
     expect(content).toContain('Account deletion removes them');
     expect(content).toContain('Workout context in Health');

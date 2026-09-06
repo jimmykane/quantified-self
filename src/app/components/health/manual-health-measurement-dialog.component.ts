@@ -63,16 +63,20 @@ export class ManualHealthMeasurementDialogComponent {
   readonly data = inject<ManualHealthMeasurementDialogData>(MAT_DIALOG_DATA);
   readonly submitError = signal<string | null>(null);
   readonly metricOptions = [
-    { id: HEALTH_METRIC_IDS.BodyWeight, label: 'Weight' },
-    { id: HEALTH_METRIC_IDS.Vo2Max, label: 'VO₂ max' },
-    { id: HEALTH_METRIC_IDS.BloodPressureSystolic, label: 'Blood pressure' },
-    { id: HEALTH_METRIC_IDS.BodyFat, label: 'Body fat' },
+    { id: HEALTH_METRIC_IDS.BodyWeight, label: 'Weight', description: 'Record a measured weight. Workout profile values are not weigh-ins.' },
+    { id: HEALTH_METRIC_IDS.Vo2Max, label: 'VO₂ max', description: 'Record a VO₂ max result with its context and method.' },
+    { id: HEALTH_METRIC_IDS.BloodPressureSystolic, label: 'Blood pressure', description: 'Enter both readings from the same measurement. Add pulse only if measured at the same time.' },
+    { id: HEALTH_METRIC_IDS.BodyFat, label: 'Body fat', description: 'Record a measured body fat percentage.' },
+    { id: HEALTH_METRIC_IDS.MuscleMass, label: 'Muscle mass', description: 'Record the muscle mass from your body-composition result, not a muscle percentage.' },
+    { id: HEALTH_METRIC_IDS.BodyWater, label: 'Body water', description: 'Record the body water percentage from your body-composition result.' },
+    { id: HEALTH_METRIC_IDS.BoneMass, label: 'Bone mass', description: 'Record the bone mass from your body-composition result, not a bone-density score.' },
+    { id: HEALTH_METRIC_IDS.BloodOxygenSaturation, label: 'Blood oxygen (SpO₂)', description: 'Record a blood oxygen saturation reading and the time it was measured.' },
   ] as const;
   readonly selectedMetric = signal(this.data.metricId);
-  readonly isWeight = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.BodyWeight);
+  private readonly selectedOption = computed(() => this.metricOptions.find(option => option.id === this.selectedMetric())!);
   readonly isVo2 = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.Vo2Max);
   readonly isBloodPressure = computed(() => this.selectedMetric() === HEALTH_METRIC_IDS.BloodPressureSystolic);
-  readonly measurementLabel = computed(() => this.metricOptions.find(option => option.id === this.selectedMetric())!.label);
+  readonly measurementLabel = computed(() => this.selectedOption().label);
   readonly title = this.data.existing ? 'Edit measurement' : 'Add measurement';
   readonly valueLabel = computed(() => this.isBloodPressure() ? 'Systolic' : this.measurementLabel());
   readonly valueUnit = computed(() => formatCanonicalHealthMetricSportsLibValue(
@@ -83,11 +87,7 @@ export class ManualHealthMeasurementDialogComponent {
   readonly maximumValue = computed(() => MANUAL_HEALTH_VALUE_MAXIMUMS[this.selectedMetric()]);
   readonly pressureMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.BloodPressureDiastolic];
   readonly pulseMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.PulseRate];
-  readonly contextText = computed(() => this.isWeight()
-    ? 'Record a measured weight. Workout profile values are not weigh-ins.'
-    : this.isVo2() ? 'Record a VO₂ max result with its context and method.'
-    : this.isBloodPressure() ? 'Enter both readings from the same measurement. Add pulse only if measured at the same time.'
-    : 'Record a measured body fat percentage.');
+  readonly contextText = computed(() => this.selectedOption().description);
   readonly vo2Contexts = MANUAL_VO2_CONTEXTS;
   readonly vo2Methods = MANUAL_VO2_METHODS;
   readonly todayDate = latestEditableCalendarDate(this.data.existing);

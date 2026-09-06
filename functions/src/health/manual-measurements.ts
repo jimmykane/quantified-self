@@ -1,7 +1,11 @@
 import * as admin from 'firebase-admin';
-import { DataVO2Max, DataWeight, DataBodyFat, DataBloodPressureSystolic, DataBloodPressureDiastolic, DataPulseRate } from '@sports-alliance/sports-lib';
+import {
+    DataVO2Max, DataWeight, DataBodyFat, DataBloodPressureSystolic, DataBloodPressureDiastolic, DataPulseRate,
+    DataMuscleMass, DataBodyWater, DataBoneMass, DataBloodOxygenSaturation,
+} from '@sports-alliance/sports-lib';
 import {
     HEALTH_COVERAGE_STATUSES,
+    HEALTH_METRIC_CATALOG,
     HEALTH_METRIC_IDS,
     HEALTH_NORMALIZATION_STATUSES,
     HEALTH_PROVIDERS,
@@ -10,7 +14,6 @@ import {
     HEALTH_SCHEMA_VERSION,
     HEALTH_SOURCE_RECORD_KINDS,
     HEALTH_SOURCE_RECORDS_COLLECTION_ID,
-    HEALTH_UNITS,
     HEALTH_VALUE_ORIGINS,
     HEALTH_VALUE_TYPES,
     type HealthMetricValue,
@@ -62,6 +65,10 @@ const MANUAL_DATA_CLASSES = {
     [HEALTH_METRIC_IDS.BloodPressureSystolic]: DataBloodPressureSystolic,
     [HEALTH_METRIC_IDS.BloodPressureDiastolic]: DataBloodPressureDiastolic,
     [HEALTH_METRIC_IDS.PulseRate]: DataPulseRate,
+    [HEALTH_METRIC_IDS.MuscleMass]: DataMuscleMass,
+    [HEALTH_METRIC_IDS.BodyWater]: DataBodyWater,
+    [HEALTH_METRIC_IDS.BoneMass]: DataBoneMass,
+    [HEALTH_METRIC_IDS.BloodOxygenSaturation]: DataBloodOxygenSaturation,
 } as const;
 
 function validatedValue(value: unknown, metricId: keyof typeof MANUAL_DATA_CLASSES): number {
@@ -248,11 +255,8 @@ function buildManualMetric(
     value = fields.canonicalValue,
 ): HealthMetricValue {
     const isVo2 = metricId === HEALTH_METRIC_IDS.Vo2Max;
-    const unit = metricId === HEALTH_METRIC_IDS.BodyWeight ? HEALTH_UNITS.Kilogram
-        : isVo2 ? HEALTH_UNITS.MillilitersPerKilogramPerMinute
-        : metricId === HEALTH_METRIC_IDS.BodyFat ? HEALTH_UNITS.Percent
-        : metricId === HEALTH_METRIC_IDS.PulseRate ? HEALTH_UNITS.BeatsPerMinute
-        : HEALTH_UNITS.MillimetersMercury;
+    // Storage units follow the canonical catalog; UI units still come from Sports Lib.
+    const unit = HEALTH_METRIC_CATALOG[metricId].canonicalUnit;
     const nativeMetric = MANUAL_DATA_CLASSES[metricId].type;
     const qualifiers = isVo2 ? { context: fields.vo2Context!, method: fields.vo2Method! } : undefined;
     return {

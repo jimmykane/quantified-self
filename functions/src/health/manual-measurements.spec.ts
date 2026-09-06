@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DataMuscleMass, DataBodyWater, DataBoneMass, DataBloodOxygenSaturation } from '@sports-alliance/sports-lib';
+import { MANUAL_HEALTH_VALUE_MAXIMUMS } from '../../../shared/manual-health';
+import { decodeHealthSourceRecordSportsLibData } from '../../../shared/sports-lib-health-data';
 import {
     HEALTH_METRIC_IDS,
     HEALTH_PROVIDERS,
     HEALTH_RECORDING_METHODS,
     HEALTH_SOURCE_RECORDS_COLLECTION_ID,
+    HEALTH_UNITS,
     type HealthSourceRecord,
 } from '../../../shared/health';
 
@@ -71,6 +75,12 @@ function fakeDatabase() {
 const UID = 'owner';
 const OBSERVED_AT_MS = Date.UTC(2026, 5, 1, 8, 30);
 const MUTATION_ID = '123e4567-e89b-42d3-a456-426614174000';
+const ADDITIONAL_SCALAR_MEASUREMENTS = [
+    { metricId: HEALTH_METRIC_IDS.MuscleMass, value: 52.4, dataClass: DataMuscleMass, unit: HEALTH_UNITS.Kilogram },
+    { metricId: HEALTH_METRIC_IDS.BodyWater, value: 57.8, dataClass: DataBodyWater, unit: HEALTH_UNITS.Percent },
+    { metricId: HEALTH_METRIC_IDS.BoneMass, value: 3.1, dataClass: DataBoneMass, unit: HEALTH_UNITS.Kilogram },
+    { metricId: HEALTH_METRIC_IDS.BloodOxygenSaturation, value: 98, dataClass: DataBloodOxygenSaturation, unit: HEALTH_UNITS.Percent },
+] as const;
 
 function createWeightRequest() {
     return {
@@ -166,6 +176,48 @@ describe('manual Health measurement mutations', () => {
             metricIds: [HEALTH_METRIC_IDS.BodyFat],
             metrics: [{ sportsLibData: { metrics: { value: { 'Body Fat': 22.5 } } }, recordingMethod: 'manual' }],
         });
+    });
+
+    it.each(ADDITIONAL_SCALAR_MEASUREMENTS)('creates, edits and deletes canonical manual $metricId', async ({ metricId, value, dataClass, unit }) => {
+        const fake = fakeDatabase();
+        const dependencies = { db: fake.db as never, now: () => OBSERVED_AT_MS };
+        const request = { ...createWeightRequest(), metricId, canonicalValue: value };
+        const created = await saveManualHealthMeasurement(UID, request, dependencies);
+        expect(await saveManualHealthMeasurement(UID, request, dependencies)).toEqual(created);
+        const record = () => fake.stored.get(sourceRecordPath(created.sourceRecordId)) as HealthSourceRecord;
+        expect(record()).toMatchObject({
+            metricIds: [metricId], sampleChunkIds: [],
+            source: { provider: HEALTH_PROVIDERS.QuantifiedSelf, sourceRecordType: 'manual_measurement' },
+            metrics: [{ metricId, origin: 'recorded', recordingMethod: 'manual', aggregation: 'measurement', semanticVariant: 'point',
+                native: { unit }, sportsLibData: { metrics: { value: { [dataClass.type]: value } } } }],
+        });
+        expect(record().metrics[0]).not.toHaveProperty('canonical');
+        expect(decodeHealthSourceRecordSportsLibData(record()).metrics[0]).toMatchObject({ canonical: { value, unit } });
+        const { clientMutationId, ...fields } = request;
+        expect(JSON.stringify(record())).not.toContain(clientMutationId);
+        const update = { ...fields, mode: 'update', sourceRecordId: created.sourceRecordId, expectedRevisionOrder: 1,
+            canonicalValue: value + 0.1 };
+        await saveManualHealthMeasurement(UID, update, dependencies);
+        expect(record().metrics[0]).toMatchObject({ sportsLibData: { metrics: { value: { [dataClass.type]: value + 0.1 } } } });
+        await expect(saveManualHealthMeasurement(UID, update, dependencies)).rejects.toBeInstanceOf(ManualHealthRevisionConflictError);
+        await deleteManualHealthMeasurement(UID, { sourceRecordId: created.sourceRecordId, expectedRevisionOrder: 2 }, dependencies);
+        expect(record()).toBeUndefined();
+        await expect(saveManualHealthMeasurement(UID, request, dependencies)).rejects.toBeInstanceOf(ManualHealthMeasurementNotFoundError);
+    });
+
+    it.each(ADDITIONAL_SCALAR_MEASUREMENTS)('validates $metricId bounds and rejects unrelated measurement metadata', ({ metricId, value }) => {
+        const request = { ...createWeightRequest(), metricId, canonicalValue: value };
+        const maximum = MANUAL_HEALTH_VALUE_MAXIMUMS[metricId];
+        for (const canonicalValue of [undefined, null, '5', 0, -1, NaN, Infinity, maximum + 0.1]) {
+            expect(() => validateSaveManualHealthMeasurementRequest({ ...request, canonicalValue }, OBSERVED_AT_MS))
+                .toThrow(ManualHealthValidationError);
+        }
+        expect(validateSaveManualHealthMeasurementRequest({ ...request, canonicalValue: maximum }, OBSERVED_AT_MS))
+            .toMatchObject({ metricId, canonicalValue: maximum });
+        for (const extra of [{ diastolicValue: 80 }, { pulseValue: 65 }, { vo2Context: 'general' }, { vo2Method: 'lab_test' }]) {
+            expect(() => validateSaveManualHealthMeasurementRequest({ ...request, ...extra }, OBSERVED_AT_MS))
+                .toThrow(ManualHealthValidationError);
+        }
     });
 
     it('atomically creates, revises and deletes paired blood pressure including optional pulse', async () => {
