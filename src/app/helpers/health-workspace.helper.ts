@@ -210,6 +210,7 @@ export interface HealthHrvPersonalRangePointStatus {
   timestampMs: number;
   tone: HealthHrvPersonalRangeTone;
   label: string;
+  normalRange: { min: number; max: number } | null;
 }
 
 export interface HealthHrvPersonalRangeStatus {
@@ -798,6 +799,9 @@ export function buildHealthHrvPersonalRangeStatus(
         timestampMs,
         tone: pointStatus.tone,
         label: healthHrvPersonalRangeLabel(pointStatus.reason),
+        normalRange: pointStatus.normalRange
+          ? { min: Math.max(0, pointStatus.normalRange.min), max: pointStatus.normalRange.max }
+          : null,
       };
     })
     .filter((pointStatus): pointStatus is HealthHrvPersonalRangePointStatus => pointStatus !== null);

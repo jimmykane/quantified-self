@@ -54,10 +54,16 @@ export interface HealthChartSeriesModel {
 }
 
 export interface HealthChartStatusOverlay {
-  normalRange: { min: number; max: number } | null;
   normalRangeColor: string;
   statusColor: string;
-  pointStatuses?: readonly { timestampMs: number; color: string; label: string }[];
+  pointStatuses?: readonly HealthChartPointStatus[];
+}
+
+interface HealthChartPointStatus {
+  timestampMs: number;
+  color: string;
+  label: string;
+  normalRange: { min: number; max: number } | null;
 }
 
 export function healthHrvPersonalRangeToneColor(tone: HealthHrvPersonalRangeTone): string {
@@ -76,13 +82,13 @@ export function buildHealthHrvChartStatusOverlay(
     return null;
   }
   return {
-    normalRange: status.normalRange,
     normalRangeColor: AppDataColors.Altitude,
     statusColor: healthHrvPersonalRangeToneColor(status.tone),
     pointStatuses: status.pointStatuses.map(pointStatus => ({
       timestampMs: pointStatus.timestampMs,
       color: healthHrvPersonalRangeToneColor(pointStatus.tone),
       label: pointStatus.label,
+      normalRange: pointStatus.normalRange,
     })),
   };
 }
@@ -127,18 +133,23 @@ export function buildHealthMetricEChartsOption(
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
   const hrvPointStatuses = model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability
     ? new Map(statusOverlay?.pointStatuses?.map(point => [point.timestampMs, point]) || [])
-    : new Map<number, { timestampMs: number; color: string; label: string }>();
+    : new Map<number, HealthChartPointStatus>();
   const useHrvPointColors = hrvPointStatuses.size > 0;
   const useBodyEnergyColors = isProviderBodyEnergySeries(model.series);
   const chartData = useStressStateColors
     ? stressStateChartData(model.data, model.categoryLabels)
     : model.data;
-  const numericBounds = statusOverlay?.normalRange && model.numericBounds
-    ? {
-      min: Math.min(model.numericBounds.min, statusOverlay.normalRange.min),
-      max: Math.max(model.numericBounds.max, statusOverlay.normalRange.max),
-    }
-    : model.numericBounds;
+  // Use the same point-in-time ranges as the point colors, aligned with the
+  // displayed data so missing history and chart gaps stay unshaded.
+  const rangeData: Array<[number, number | null, number | null]> = chartData.map(([timestampMs, value]) => {
+    const range = typeof value === 'number' && timestampMs >= startTimeMs && timestampMs <= endTimeMs
+      ? hrvPointStatuses.get(timestampMs)?.normalRange : null;
+    return range ? [timestampMs, range.min, range.max] : [timestampMs, null, null];
+  });
+  const numericBounds = rangeData.reduce((bounds, [, min, max]) =>
+    bounds && min !== null && max !== null
+      ? { min: Math.min(bounds.min, min), max: Math.max(bounds.max, max) }
+      : bounds, model.numericBounds);
   const latestNumericPoint = [...model.displayedPoints].reverse().find(point =>
     typeof point.value === 'number' && Number.isFinite(point.value));
   const showTimeOnXAxis = endTimeMs - startTimeMs < DAY_MS;
@@ -194,7 +205,12 @@ export function buildHealthMetricEChartsOption(
               style.trendLineColor,
               useBodyEnergyColors,
             ),
-          }],
+          }, ...(pointStatus?.normalRange ? [{
+            label: 'Range on this date',
+            value: `${formatHealthValue(model.series.metricId, pointStatus.normalRange.min,
+              model.series.unit, model.series.nativeOnly, unitSettings)}–${formatHealthValue(
+              model.series.metricId, pointStatus.normalRange.max, model.series.unit, model.series.nativeOnly, unitSettings)}`,
+          }] : [])],
           notes: [
             ...(pointStatus ? [`Personal range: ${pointStatus.label}`] : []),
             ...(point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : []),
@@ -330,16 +346,6 @@ export function buildHealthMetricEChartsOption(
           : seriesColor,
         },
       emphasis: { scale: 1.25 },
-      markArea: statusOverlay?.normalRange
-        ? {
-          silent: true,
-          itemStyle: { color: statusOverlay.normalRangeColor, opacity: 0.1 },
-          data: [[
-            { yAxis: statusOverlay.normalRange.min },
-            { yAxis: statusOverlay.normalRange.max },
-          ]],
-        }
-        : undefined,
       markPoint: latestNumericPoint && statusOverlay
         ? {
           silent: true,
@@ -354,10 +360,41 @@ export function buildHealthMetricEChartsOption(
         : undefined,
     }, ...(useHrvPointColors
       ? buildPointStatusLineSeries(model.data, hrvPointStatuses, seriesColor)
-      : [])],
+      : []), ...buildPersonalRangeBandSeries(rangeData, statusOverlay?.normalRangeColor)],
   };
 
   return option as ChartOption;
+}
+
+function buildPersonalRangeBandSeries(
+  data: readonly [number, number | null, number | null][],
+  color: string | undefined,
+): object[] {
+  if (!color || !data.some(([, min, max]) => min !== null && max !== null)) return [];
+  // Native ECharts stacked-area band: invisible lower boundary + range width.
+  // https://echarts.apache.org/examples/en/editor.html?c=confidence-band
+  const common = {
+    type: 'line',
+    stack: 'hrv-personal-range',
+    stackStrategy: 'all',
+    symbol: 'none',
+    connectNulls: false,
+    lineStyle: { opacity: 0 },
+    silent: true,
+    tooltip: { show: false },
+    emphasis: { disabled: true },
+    z: 0,
+  };
+  return [{
+    ...common,
+    id: 'hrv-personal-range-lower',
+    data: data.map(([timestamp, min]) => [timestamp, min]),
+  }, {
+    ...common,
+    id: 'hrv-personal-range-band',
+    data: data.map(([timestamp, min, max]) => [timestamp, min !== null && max !== null ? max - min : null]),
+    areaStyle: { color, opacity: 0.1 },
+  }];
 }
 
 function resolveHealthMetricColor(metricId: HealthMetricId, fallback: string): string {

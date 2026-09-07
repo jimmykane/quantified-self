@@ -112,6 +112,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('source-specific 14-day trend');
     expect(healthSection?.content).toContain('at least three observations');
     expect(healthSection?.content).toContain('60-day personal range');
+    expect(healthSection?.content).toContain('Range on this date');
+    expect(healthSection?.content).toContain('Dates without enough baseline history stay unshaded');
     expect(healthSection?.content).toContain('Until 14 nights exist');
     expect(healthSection?.content).toContain('seven-day average with at least three recent nights');
     expect(healthSection?.content).toContain('within, outside, or far outside');

@@ -112,6 +112,7 @@ describe('HealthMetricChartComponent', () => {
           timestampMs: 0,
           tone: 'positive',
           label: 'Within personal range',
+          normalRange: { min: 30, max: 45 },
         }],
       },
     });
@@ -120,8 +121,7 @@ describe('HealthMetricChartComponent', () => {
     const chart = fixture.debugElement.query(By.directive(HealthMetricSeriesChartStubComponent))
       .componentInstance as HealthMetricSeriesChartStubComponent;
     expect(chart.statusOverlay).toMatchObject({
-      normalRange: { min: 35, max: 48 },
-      pointStatuses: [{ timestampMs: 0, label: 'Within personal range' }],
+      pointStatuses: [{ timestampMs: 0, label: 'Within personal range', normalRange: { min: 30, max: 45 } }],
     });
     expect(chart.statusDescription).toContain('Within personal range');
   });

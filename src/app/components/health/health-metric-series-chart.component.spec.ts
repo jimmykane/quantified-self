@@ -129,27 +129,31 @@ describe('HealthMetricSeriesChartComponent', () => {
   });
 
   it('renders an accessible personal-range overlay when the highlight provides one', async () => {
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability, unit: 'millisecond',
+    })], 0, DAY_MS)[0]);
     fixture.componentRef.setInput('statusOverlay', {
-      normalRange: { min: 45, max: 55 },
       normalRangeColor: '#00aa00',
       statusColor: '#ffaa00',
+      pointStatuses: [0, DAY_MS].map(timestampMs => ({ timestampMs, color: '#ffaa00',
+        label: 'Outside personal range', normalRange: { min: 45, max: 55 } })),
     });
     fixture.componentRef.setInput('statusDescription', 'Outside personal range. 7-day average 58 ms.');
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => {
       expect(eChartsLoader.setOption.mock.calls.some(call =>
-        !!(call[1] as { series?: Array<{ markArea?: unknown }> })?.series?.[0]?.markArea)).toBe(true);
+        (call[1] as { series?: Array<{ id?: string }> })?.series?.some(item => item.id === 'hrv-personal-range-band'))).toBe(true);
     });
 
     const chart = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[role="img"]');
     expect(chart?.getAttribute('aria-label')).toContain('Outside personal range. 7-day average 58 ms.');
     const option = eChartsLoader.setOption.mock.calls
-      .map(call => call[1] as { series: Array<{ markArea: unknown; markPoint: unknown }> })
-      .find(candidate => !!candidate.series[0].markArea) as {
-      series: Array<{ markArea: unknown; markPoint: unknown }>;
+      .map(call => call[1] as { series: Array<{ id?: string; markPoint: unknown }> })
+      .find(candidate => candidate.series.some(item => item.id === 'hrv-personal-range-band')) as {
+      series: Array<{ id?: string; markPoint: unknown }>;
     };
-    expect(option.series[0].markArea).toBeTruthy();
+    expect(option.series.some(item => item.id === 'hrv-personal-range-band')).toBe(true);
     expect(option.series[0].markPoint).toBeTruthy();
   });
 
@@ -157,7 +161,13 @@ describe('HealthMetricSeriesChartComponent', () => {
     const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'Travel', startDate: '1970-01-01', endDate: '1970-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
     const context = { notes: [note], select: vi.fn(), reportRange: vi.fn() };
     fixture.componentRef.setInput('compact', true);
-    fixture.componentRef.setInput('statusOverlay', { normalRange: { min: 45, max: 55 }, normalRangeColor: '#00aa00', statusColor: '#ffaa00' });
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability, unit: 'millisecond',
+    })], 0, DAY_MS)[0]);
+    fixture.componentRef.setInput('statusOverlay', { normalRangeColor: '#00aa00', statusColor: '#ffaa00',
+      pointStatuses: [0, DAY_MS].map(timestampMs => ({ timestampMs, color: '#ffaa00',
+        label: 'Outside personal range', normalRange: { min: 45, max: 55 } })),
+    });
     fixture.detectChanges(); await fixture.whenStable();
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(2));
     type Axis = { type: string; min: number; max: number; show: boolean };
@@ -168,8 +178,9 @@ describe('HealthMetricSeriesChartComponent', () => {
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(3));
     const annotated = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
     expect(annotated.series).toHaveLength(before.series.length + 1);
-    expect(annotated.series[0]).toEqual(before.series[0]);
-    expect(annotated.series[0].markArea).toBeTruthy();
+    expect(annotated.series[0]).toMatchObject({ ...before.series[0], itemStyle: { color: expect.any(Function) } });
+    expect(annotated.series.find(item => item.id === 'hrv-personal-range-band'))
+      .toEqual(before.series.find(item => item.id === 'hrv-personal-range-band'));
     expect(annotated.xAxis).toMatchObject({ type: 'time', min: 0, max: DAY_MS, show: false });
     expect(annotated.yAxis).toMatchObject({ min: before.yAxis.min, max: before.yAxis.max, show: false });
     expect(context.reportRange).toHaveBeenCalledWith(expect.anything(), { startDate: '1970-01-01', endDate: '1970-01-02' });
@@ -185,7 +196,9 @@ describe('HealthMetricSeriesChartComponent', () => {
     fixture.detectChanges(); await fixture.whenStable();
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(4));
     const hidden = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
-    expect(hidden.series).toEqual(before.series);
+    expect(hidden.series).toHaveLength(before.series.length);
+    expect(hidden.series[0]).toMatchObject({ ...before.series[0], itemStyle: { color: expect.any(Function) } });
+    expect(hidden.series.slice(1)).toEqual(before.series.slice(1));
     chart.on.mock.calls[0][1](marker);
     expect(context.select).toHaveBeenCalledOnce();
     fixture.destroy();

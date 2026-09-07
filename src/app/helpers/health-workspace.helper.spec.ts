@@ -703,10 +703,30 @@ describe('Health workspace helpers', () => {
     );
 
     expect(status?.pointStatuses).toEqual([
-      { timestampMs: normalTimestamp, tone: 'positive', label: 'Within personal range' },
-      { timestampMs: latestTimestamp, tone: 'negative', label: 'Far outside personal range' },
+      { timestampMs: normalTimestamp, tone: 'positive', label: 'Within personal range', normalRange: expect.any(Object) },
+      { timestampMs: latestTimestamp, tone: 'negative', label: 'Far outside personal range', normalRange: expect.any(Object) },
     ]);
+    expect(status?.pointStatuses[0].normalRange).not.toEqual(status?.pointStatuses[1].normalRange);
     expect(status?.tone).toBe('caution');
+  });
+
+  it.each(HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS)('retains historical ranges without future leakage for %s', semanticVariant => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const sourceSeries = { ...hrvSeries(Array.from({ length: 90 }, (_, daysAgo) => ({
+      daysAgo, value: daysAgo >= 30 ? 40 + daysAgo % 3 : 70 + daysAgo % 3,
+    }))), semanticVariant };
+    const status = buildHealthHrvPersonalRangeStatus(sourceSeries, endTimeMs)!;
+    expect(status.pointStatuses.slice(0, 13).every(point => point.normalRange === null)).toBe(true);
+    const first = status.pointStatuses[13];
+    const last = status.pointStatuses.at(-1)!;
+    expect(first.normalRange!.max).toBeLessThan(last.normalRange!.max);
+    const prefix = buildHealthHrvPersonalRangeStatus({
+      ...sourceSeries, points: sourceSeries.points.filter(point => point.timestampMs <= first.timestampMs),
+    }, first.timestampMs)!;
+    expect(prefix.pointStatuses.at(-1)).toEqual(first);
+    const stale = buildHealthHrvPersonalRangeStatus(sourceSeries, endTimeMs + 30 * 86400000)!;
+    expect(stale.normalRange).toBeNull();
+    expect(stale.pointStatuses).toEqual(status.pointStatuses);
   });
 
   it('counts one nightly HRV baseline value per calendar day', () => {
