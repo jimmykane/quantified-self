@@ -27,6 +27,7 @@ import {
 } from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import {
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
@@ -45,6 +46,7 @@ import {
   resolveSleepReferenceValue,
   selectHealthPriorityTrendSeries,
   selectActivityHealthObservations,
+  selectWorkoutWeightContextFallback,
   sleepSessionHasHrv,
 } from './health-workspace.helper';
 
@@ -519,7 +521,7 @@ describe('Health workspace helpers', () => {
     expect(filtered.conflicts).toEqual([]);
   });
 
-  it('suppresses workout Weight only for sources with a real Weight measurement', () => {
+  it('keeps workout Weight out of measurement series and exposes it only as fallback context', () => {
     const directWeight = sourceRecord({
       id: 'health-weight',
       provider: HEALTH_PROVIDERS.GarminAPI,
@@ -546,41 +548,28 @@ describe('Health workspace helpers', () => {
       HEALTH_METRIC_IDS.BodyWeight,
       result,
       [garminWorkout, workout],
-    )).toEqual([workout]);
+    )).toEqual([]);
 
     const allSourcesView = buildHealthMetricWorkspaceView(
       result,
       [],
       selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [garminWorkout, workout]),
     );
-    expect(allSourcesView.series.map(series => series.provider)).toEqual([
-      HEALTH_PROVIDERS.COROSAPI,
-      HEALTH_PROVIDERS.GarminAPI,
-    ]);
+    expect(allSourcesView.series.map(series => series.provider)).toEqual([HEALTH_PROVIDERS.GarminAPI]);
+    expect(selectWorkoutWeightContextFallback(result, [garminWorkout, workout])).toBeNull();
 
     const corosOnly = filterHealthRangeResultByProviders(result, [HEALTH_PROVIDERS.COROSAPI]);
-    const fallback = selectActivityHealthObservations(
-      HEALTH_METRIC_IDS.BodyWeight,
+    const fallback = selectWorkoutWeightContextFallback(
       corosOnly,
       [workout],
       [HEALTH_PROVIDERS.COROSAPI],
     );
-    expect(fallback).toEqual([workout]);
-    const view = buildHealthMetricWorkspaceView(corosOnly, [], fallback);
-    expect(view.series).toHaveLength(1);
-    expect(view.series[0]).toMatchObject({
-      provider: HEALTH_PROVIDERS.COROSAPI,
-      semanticVariant: 'workout_profile_context',
-      coverageText: '1 workout date · coverage not applicable',
-      deviceLabel: null,
+    expect(fallback).toMatchObject({
+      sourceLabel: 'COROS',
+      valueText: '72.0 kg',
+      observedText: 'Aug 2, 2026',
     });
-    expect(view.rows[0].semanticsText).toContain('Workout profile context');
-    expect(view.rows[0]).toMatchObject({
-      deviceLabel: 'Not reported',
-      coverageText: 'Not applicable',
-      freshnessText: 'Last observed Aug 2, 2026',
-    });
-    expect(JSON.stringify(view)).not.toContain('opaque-workout-account');
+    expect(JSON.stringify(fallback)).not.toContain('opaque-workout-account');
   });
 
   it('treats future manual Weight as a real measurement that suppresses workout fallback', () => {
@@ -597,6 +586,7 @@ describe('Health workspace helpers', () => {
         canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
       })],
     });
+    manualWeight.source.sourceRecordType = 'manual_measurement';
     const result = projectLoadedHealthRange([manualWeight], [], {
       startDate: '2026-08-01',
       endDate: '2026-08-03',
@@ -608,6 +598,55 @@ describe('Health workspace helpers', () => {
       result,
       [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
     )).toEqual([]);
+    expect(selectWorkoutWeightContextFallback(
+      result,
+      [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
+    )).toBeNull();
+  });
+
+  it('exposes optimistic edit metadata only for canonical Quantified Self manual observations', () => {
+    const manualWeight = sourceRecord({
+      id: 'a'.repeat(64),
+      provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        aggregation: 'measurement',
+        semanticVariant: 'point',
+        origin: HEALTH_VALUE_ORIGINS.Recorded,
+        recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+        native: { metric: 'Weight', value: 70, unit: 'kg' },
+        canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
+      })],
+    });
+    manualWeight.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    manualWeight.source.sourceRecordType = 'manual_measurement';
+    manualWeight.timezoneOffsetSeconds = 10_800;
+    manualWeight.source.revision.order = 4;
+    const result = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(buildHealthMetricWorkspaceView(result).rows[0]).toMatchObject({
+      sourceLabel: 'Manual',
+      manualMeasurement: {
+        sourceRecordId: 'a'.repeat(64),
+        expectedRevisionOrder: 4,
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        canonicalValue: 70,
+        timezoneOffsetSeconds: 10_800,
+      },
+    });
+
+    manualWeight.source.sourceRecordType = 'daily';
+    const nonManualResult = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    expect(buildHealthMetricWorkspaceView(nonManualResult).rows[0]?.manualMeasurement).toBeNull();
   });
 
   it('keeps workout VO2 separate from provider Health and manual series by discipline and origin', () => {
@@ -635,6 +674,7 @@ describe('Health workspace helpers', () => {
         canonical: { value: 50, unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute },
       })],
     });
+    manualVo2.source.sourceRecordType = 'manual_measurement';
     const result = projectLoadedHealthRange([providerVo2, manualVo2], [], {
       startDate: '2026-08-01',
       endDate: '2026-08-03',
@@ -674,6 +714,36 @@ describe('Health workspace helpers', () => {
     ]));
     expect(view.series.filter(series => series.semanticVariant.startsWith('workout_imported_')))
       .toHaveLength(2);
+  });
+
+  it.each([
+    [HEALTH_METRIC_IDS.BodyFat, 22.5],
+    [HEALTH_METRIC_IDS.MuscleMass, 52.4],
+    [HEALTH_METRIC_IDS.BodyWater, 57.8],
+    [HEALTH_METRIC_IDS.BoneMass, 3.1],
+    [HEALTH_METRIC_IDS.BloodOxygenSaturation, 98],
+    [HEALTH_METRIC_IDS.BloodPressureSystolic, 120],
+    [HEALTH_METRIC_IDS.BloodPressureDiastolic, 80],
+    [HEALTH_METRIC_IDS.PulseRate, 65],
+  ] as const)('renders manual %s with canonical units and routes paired edit actions to the whole record', (metricId, value) => {
+    const record = sourceRecord({ id: 'a'.repeat(64), provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account', metrics: [valueEntry({ metricId, aggregation: 'measurement', semanticVariant: 'point',
+        origin: 'recorded', recordingMethod: 'manual', native: { metric: metricId, value },
+        canonical: { value, unit: HEALTH_METRIC_CATALOG[metricId].canonicalUnit } })] });
+    record.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    record.source.sourceRecordType = 'manual_measurement';
+    const result = projectLoadedHealthRange([record], [], { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [metricId] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [], [], unitSettings);
+      const display = formatCanonicalHealthMetricSportsLibValue(metricId, value, unitSettings)!;
+      expect(view.rows[0].valueText).toBe(`${display.value} ${display.unit}`);
+      expect(view.rows[0].sourceLabel).toBe('Manual');
+      expect(view.rows[0].manualMeasurement).toMatchObject({ sourceRecordId: record.id,
+        metricId: ([HEALTH_METRIC_IDS.BloodPressureDiastolic, HEALTH_METRIC_IDS.PulseRate] as readonly HealthMetricId[]).includes(metricId)
+          ? HEALTH_METRIC_IDS.BloodPressureSystolic : metricId });
+      expect(view.series).toHaveLength(1);
+    }
   });
 
   it('resolves Sleep references against the normalized Sleep model', () => {

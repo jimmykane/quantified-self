@@ -1,0 +1,62 @@
+:host {
+  display: block;
+}
+
+.manual-health-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  // Keep the first outlined field's floating label inside the dialog scroll area.
+  padding-block-start: 6px;
+}
+
+.manual-health-readings {
+  display: grid;
+  gap: 12px;
+}
+
+.manual-health-paired {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+mat-form-field {
+  min-width: 0;
+  width: 100%;
+}
+
+.manual-health-context {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  line-height: 1.45;
+}
+
+.manual-health-time-fields,
+.manual-health-vo2-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manual-health-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--mat-sys-error);
+}
+
+.manual-health-error mat-icon {
+  flex: 0 0 24px;
+}
+
+@media (max-width: 599px) {
+  .manual-health-form {
+    min-width: 0;
+  }
+
+  .manual-health-paired,
+  .manual-health-time-fields,
+  .manual-health-vo2-fields {
+    grid-template-columns: 1fr;
+  }
+}

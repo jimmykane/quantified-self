@@ -16,6 +16,7 @@
 
 .health-header-actions {
   gap: 0.25rem;
+  flex-wrap: wrap;
 }
 
 .health-explorer {
@@ -141,6 +142,39 @@
   gap: 0.75rem;
   justify-content: space-between;
   margin-bottom: 0.5rem;
+}
+
+.health-detail-controls {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+}
+
+.health-add-measurement {
+  --mat-button-filled-container-height: 36px;
+
+  white-space: nowrap;
+}
+
+.health-add-measurement-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.health-add-measurement-content mat-icon,
+.health-add-measurement-content mat-spinner {
+  flex: 0 0 18px;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.health-add-measurement-content mat-icon {
+  font-size: 18px;
+  line-height: 18px;
 }
 
 .health-window-navigation {
@@ -407,7 +441,7 @@
     gap: 0.75rem;
   }
 
-  .health-header-actions span {
+  .health-header-actions a span {
     display: none;
   }
 
@@ -426,6 +460,15 @@
   .health-detail-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .health-detail-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .health-add-measurement {
+    align-self: flex-start;
   }
 
   .health-section-heading > p {

@@ -14,5 +14,6 @@ describe('unified health account lifecycle', () => {
         expect(extensionEnvironment).not.toContain('healthSourceRecords');
         expect(extensionEnvironment).not.toContain('healthSampleChunks');
         expect(extensionEnvironment).not.toContain('healthSyncState');
+        expect(extensionEnvironment).not.toContain('manualHealthMeasurementDeletions');
     });
 });

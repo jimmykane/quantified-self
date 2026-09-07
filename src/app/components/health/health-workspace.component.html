@@ -1,12 +1,24 @@
 <main class="health-workspace qs-workspace-page" aria-labelledby="health-title">
   <app-page-header
-    variant="compact"
+    variant="route"
     title="Health"
     titleId="health-title"
     leadingIcon="cardiology"
     eyebrow="Cross-service health history"
     subtitle="Compare each source on its own terms. Health never blends providers or chooses a preferred source.">
     <div pageHeaderActions class="health-header-actions">
+      <button mat-flat-button type="button" class="health-add-measurement"
+        [disabled]="manualMutationBusy()" (click)="openManualMeasurement()">
+        <span class="health-add-measurement-content">
+          @if (manualMutationBusy()) {
+            <mat-spinner diameter="18" aria-hidden="true"></mat-spinner>
+          } @else {
+            <mat-icon aria-hidden="true">add</mat-icon>
+          }
+          <span>Add measurement</span>
+        </span>
+      </button>
+      <span class="cdk-visually-hidden" role="status">{{ manualMutationBusy() ? 'Updating measurements…' : '' }}</span>
       <a mat-button routerLink="/services" aria-label="Manage Health connections in Connectivity">
         <mat-icon aria-hidden="true">hub</mat-icon>
         <span>Connectivity</span>
@@ -33,7 +45,7 @@
         <p class="health-eyebrow">Metric explorer</p>
         <h2 id="health-explorer-title">Your Health metrics</h2>
       </div>
-      <p>Choose a metric found in your imported history.</p>
+      <p>Explore your history, or add a measurement above.</p>
     </div>
 
     @if (metricAvailabilityNotice()) {
@@ -111,6 +123,7 @@
             <h2 id="health-detail-title">{{ detailTitle() }}</h2>
             <p>{{ detailSubtitle() }}</p>
           </div>
+          <div class="health-detail-controls">
           <div class="health-window-navigation" aria-label="Health data window">
             <button
               mat-icon-button
@@ -152,6 +165,7 @@
                 <mat-icon aria-hidden="true">today</mat-icon>
               </button>
             }
+          </div>
           </div>
         </header>
 
@@ -235,6 +249,16 @@
             <span>{{ workoutMetricNotice() }}</span>
           </div>
         }
+        @if (workoutWeightFallback()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">fitness_center</mat-icon>
+            <span>
+              No measured weight is available in this view. Latest workout profile context:
+              {{ workoutWeightFallback()!.valueText }} from {{ workoutWeightFallback()!.sourceLabel }}
+              on {{ workoutWeightFallback()!.observedText }}. It is not plotted as a weigh-in.
+            </span>
+          </div>
+        }
         @if (sleepHrvNotice()) {
           <div class="health-notice" role="note">
             <mat-icon aria-hidden="true">bedtime</mat-icon>
@@ -294,7 +318,13 @@
             <mat-icon aria-hidden="true">monitor_heart</mat-icon>
             <div>
               <strong>No {{ detailTitle() }} data in this window</strong>
-              <span>Choose another date range or a metric with imported readings.</span>
+              <span>
+                @if (selectedManualMetric()) {
+                  Add a measurement, choose another date range, or select another metric.
+                } @else {
+                  Choose another date range or a metric with imported readings.
+                }
+              </span>
             </div>
           </div>
         } @else if (selectedIsSleep()) {
@@ -326,7 +356,9 @@
             [detailTitle]="detailTitle()"
             [sleepRows]="sleepRows()"
             [metricRows]="metricRows()"
-            [truncationText]="tableTruncationText()">
+            [truncationText]="tableTruncationText()"
+            (editManualMeasurement)="editManualMeasurement($event)"
+            (deleteManualMeasurement)="deleteManualMeasurement($event)">
           </app-health-source-observation-table>
         }
       </article>

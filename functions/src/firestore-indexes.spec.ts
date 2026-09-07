@@ -33,6 +33,20 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('indexes manual Health references by source type, metric, and date before the Training read cap', () => {
+        expect(loadFirestoreIndexes().indexes).toContainEqual({
+            collectionGroup: 'healthSourceRecords',
+            queryScope: 'COLLECTION',
+            fields: [
+                { fieldPath: 'source.sourceRecordType', order: 'ASCENDING' },
+                { fieldPath: 'metricIds', arrayConfig: 'CONTAINS' },
+                { fieldPath: 'calendarDate', order: 'ASCENDING' },
+                { fieldPath: '__name__', order: 'ASCENDING' },
+            ],
+            density: 'SPARSE_ALL',
+        });
+    });
+
     it('keeps canonical marketing consent queryable across user legal agreement documents', () => {
         const config = loadFirestoreIndexes();
 
