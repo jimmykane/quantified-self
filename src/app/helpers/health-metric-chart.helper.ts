@@ -20,6 +20,8 @@ import {
 import { AppDataColors } from '../services/color/app.data.colors';
 import { AppColors } from '../services/color/app.colors';
 import {
+  HealthHrvPersonalRangeStatus,
+  HealthHrvPersonalRangeTone,
   HealthWorkspaceSeries,
   HealthWorkspaceSeriesPoint,
   formatHealthAxisValue,
@@ -56,6 +58,39 @@ export interface HealthChartStatusOverlay {
   normalRangeColor: string;
   statusColor: string;
   pointStatuses?: readonly { timestampMs: number; color: string; label: string }[];
+}
+
+export function healthHrvPersonalRangeToneColor(tone: HealthHrvPersonalRangeTone): string {
+  switch (tone) {
+    case 'positive': return AppDataColors.Altitude;
+    case 'caution': return AppDataColors['Body Energy Moderate'];
+    case 'negative': return AppDataColors['Heart Rate_0'];
+    case 'neutral': return AppColors.MediumGray;
+  }
+}
+
+export function buildHealthHrvChartStatusOverlay(
+  status: HealthHrvPersonalRangeStatus | null | undefined,
+): HealthChartStatusOverlay | null {
+  if (!status) {
+    return null;
+  }
+  return {
+    normalRange: status.normalRange,
+    normalRangeColor: AppDataColors.Altitude,
+    statusColor: healthHrvPersonalRangeToneColor(status.tone),
+    pointStatuses: status.pointStatuses.map(pointStatus => ({
+      timestampMs: pointStatus.timestampMs,
+      color: healthHrvPersonalRangeToneColor(pointStatus.tone),
+      label: pointStatus.label,
+    })),
+  };
+}
+
+export function healthHrvChartStatusDescription(
+  status: HealthHrvPersonalRangeStatus | null | undefined,
+): string | null {
+  return status ? `${status.label}. ${status.detailText}.` : null;
 }
 
 const MAX_DISPLAY_POINTS = 600;

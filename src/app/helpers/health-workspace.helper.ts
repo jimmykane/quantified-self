@@ -503,7 +503,7 @@ export function buildHealthMetricWorkspaceView(
 
   const projectionNowMs = resolveProjectionNowMs(result);
   const freshnessStatusByRowId = new Map<string, string>();
-  const series = [...grouped.values()].map((items, index): HealthWorkspaceSeries => {
+  const series = [...grouped.entries()].map(([seriesIdentity, items]): HealthWorkspaceSeries => {
     const first = items[0];
     const sourceLabel = accountLabels.get(accountIdentity(first.provider, first.accountKey)) || providerLabel(first.provider);
     const deviceLabels = [...new Set(items.map(item => item.deviceLabel).filter((item): item is string => !!item))];
@@ -520,7 +520,7 @@ export function buildHealthMetricWorkspaceView(
       }))
       .sort((left, right) => left.timestampMs - right.timestampMs);
     return {
-      id: `health-series-${index + 1}`,
+      id: opaqueHealthSeriesId(seriesIdentity),
       metricId: first.metricId,
       provider: first.provider,
       providerLabel: providerLabel(first.provider),
@@ -1415,6 +1415,21 @@ function metricDatumSeriesIdentity(datum: MetricDatum): string {
     datum.normalizationStatus,
     datum.valueType,
   ]);
+}
+
+/**
+ * Keeps the source-series identity stable across adjacent range loads without
+ * exposing the underlying account key to the rendered workspace model.
+ */
+function opaqueHealthSeriesId(identity: string): string {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < identity.length; index += 1) {
+    const code = identity.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ (code + index), 0x85ebca6b);
+  }
+  return `health-series-${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 function exactSeriesCoverageText(

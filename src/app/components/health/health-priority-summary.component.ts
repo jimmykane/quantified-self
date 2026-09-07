@@ -7,7 +7,6 @@ import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   HealthPriorityRow,
   HealthHrvPersonalRangeStatus,
-  HealthHrvPersonalRangeTone,
   HealthWorkspaceMetricSelection,
   HealthWorkspaceSeries,
   formatHealthValue,
@@ -17,11 +16,12 @@ import {
   HealthChartSeriesModel,
   HealthChartStatusOverlay,
   buildHealthChartModels,
+  buildHealthHrvChartStatusOverlay,
+  healthHrvChartStatusDescription,
+  healthHrvPersonalRangeToneColor,
 } from '../../helpers/health-metric-chart.helper';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
 import { HealthSleepStageSummaryComponent } from './health-sleep-stage-summary.component';
-import { AppColors } from '../../services/color/app.colors';
-import { AppDataColors } from '../../services/color/app.data.colors';
 
 interface HealthPriorityChartView {
   model: HealthChartSeriesModel;
@@ -95,7 +95,9 @@ export class HealthPrioritySummaryComponent {
       ).map(model => {
         const latestPoint = model.series.points.at(-1);
         const personalRangeStatus = card.chartStatuses?.[model.series.id] || null;
-        const statusColor = personalRangeStatus ? personalRangeToneColor(personalRangeStatus.tone) : null;
+        const statusColor = personalRangeStatus
+          ? healthHrvPersonalRangeToneColor(personalRangeStatus.tone)
+          : null;
         return {
           model,
           latestValueText: latestPoint
@@ -112,34 +114,12 @@ export class HealthPrioritySummaryComponent {
             : model.series.semanticLabel,
           personalRangeStatus,
           statusColor,
-          statusOverlay: personalRangeStatus && statusColor
-            ? {
-              normalRange: personalRangeStatus.normalRange,
-              normalRangeColor: AppDataColors.Altitude,
-              statusColor,
-              pointStatuses: personalRangeStatus.pointStatuses.map(pointStatus => ({
-                timestampMs: pointStatus.timestampMs,
-                color: personalRangeToneColor(pointStatus.tone),
-                label: pointStatus.label,
-              })),
-            }
-            : null,
-          statusDescription: personalRangeStatus
-            ? `${personalRangeStatus.label}. ${personalRangeStatus.detailText}.`
-            : null,
+          statusOverlay: buildHealthHrvChartStatusOverlay(personalRangeStatus),
+          statusDescription: healthHrvChartStatusDescription(personalRangeStatus),
           startTimeMs,
           endTimeMs,
         };
       }),
     };
   }));
-}
-
-function personalRangeToneColor(tone: HealthHrvPersonalRangeTone): string {
-  switch (tone) {
-    case 'positive': return AppDataColors.Altitude;
-    case 'caution': return AppDataColors['Body Energy Moderate'];
-    case 'negative': return AppDataColors['Heart Rate_0'];
-    case 'neutral': return AppColors.MediumGray;
-  }
 }

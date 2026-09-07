@@ -103,6 +103,7 @@ class HealthMetricChartStubComponent {
   @Input() endTimeMs = 0;
   @Input() darkTheme = false;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
+  @Input() chartStatuses: Readonly<Record<string, unknown>> = {};
 }
 
 const todayDate = localCalendarDate();
@@ -689,6 +690,34 @@ describe('HealthWorkspaceComponent', () => {
     });
     expect(hrvChartOption?.series?.length).toBeGreaterThan(1);
     expect(hrvChartOption?.series?.slice(1).every(series => series.lineStyle?.color !== 'transparent')).toBe(true);
+  });
+
+  it('applies the same historical personal-range colors to the selected HRV chart', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(
+      metricId,
+      metricId === HEALTH_METRIC_IDS.HeartRateVariability,
+    )), undefined, {
+      metricIds: [HEALTH_METRIC_IDS.HeartRate],
+      sleepSessions: hrvBaselineSleepSessions(),
+    }, HEALTH_METRIC_IDS.HeartRateVariability);
+
+    const chart = fixture.debugElement.query(By.directive(HealthMetricChartStubComponent))
+      .componentInstance as HealthMetricChartStubComponent;
+    const sleepHrvSeries = component.metricView().series.find(series =>
+      series.semanticVariant === 'sleep_session_average_hrv');
+    expect(sleepHrvSeries).toBeDefined();
+    expect(chart.chartStatuses[sleepHrvSeries!.id]).toMatchObject({
+      label: 'Within personal range',
+      normalRange: expect.any(Object),
+    });
+    expect(chart.chartStatuses[sleepHrvSeries!.id].pointStatuses).toHaveLength(
+      sleepHrvSeries!.points.length,
+    );
+    expect(loadMetricRange).toHaveBeenCalledWith('user-1', {
+      ...component.selectedHrvContextWindow(),
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      includeSamples: false,
+    });
   });
 
   it('restores and persists the account-owned metric and range without adding query parameters', async () => {

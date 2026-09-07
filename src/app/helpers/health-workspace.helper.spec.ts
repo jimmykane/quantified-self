@@ -407,6 +407,45 @@ describe('Health workspace helpers', () => {
     expect(view.series[0].coverageText).toContain('/4 days');
   });
 
+  it('keeps series IDs stable across range projections without exposing account keys', () => {
+    const augustRecord = sourceRecord({
+      id: 'august-record',
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+      accountKey: 'secret-stable-account',
+      calendarDate: '2026-08-01',
+    });
+    const septemberRecord = sourceRecord({
+      id: 'september-record',
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+      accountKey: 'secret-stable-account',
+      calendarDate: '2026-09-01',
+    });
+    const august = buildHealthMetricWorkspaceView(projectLoadedHealthRange(
+      [augustRecord],
+      [],
+      {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        metricIds: [HEALTH_METRIC_IDS.RestingHeartRate],
+      },
+      { sourceRecordsComplete: true, samplesComplete: true },
+    ));
+    const september = buildHealthMetricWorkspaceView(projectLoadedHealthRange(
+      [septemberRecord],
+      [],
+      {
+        startDate: '2026-09-01',
+        endDate: '2026-09-30',
+        metricIds: [HEALTH_METRIC_IDS.RestingHeartRate],
+      },
+      { sourceRecordsComplete: true, samplesComplete: true },
+    ));
+
+    expect(august.series[0].id).toBe(september.series[0].id);
+    expect(august.series[0].id).not.toContain('secret-stable-account');
+    expect(JSON.stringify(august.series)).not.toContain('secret-stable-account');
+  });
+
   it('keeps coverage and freshness scoped to unit and normalization-separated series', () => {
     const result = projectLoadedHealthRange([
       sourceRecord({

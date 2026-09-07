@@ -25,6 +25,7 @@ import {
   HEALTH_SYNC_STATUSES,
   HealthMetricId,
   HealthProvider,
+  type HealthRangeResult,
   HealthSyncState,
   getHealthMetricDefinition,
 } from '@shared/health';
@@ -159,6 +160,7 @@ const HEALTH_SYNC_DELAYED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 // The earliest date in the 14-day trend needs its own complete 60-day baseline.
 const PRIORITY_HRV_HISTORY_DAYS = 60 + 14 - 1;
+const SELECTED_HRV_CONTEXT_DAYS = 60;
 
 @Component({
   selector: 'app-health-workspace',
@@ -204,6 +206,7 @@ export class HealthWorkspaceComponent {
   // to reveal a newly saved measurement in the new day's window.
   private get todayDate(): string { return localCalendarDate(); }
   private selectedLoadGeneration = 0;
+  private selectedHrvContextLoadGeneration = 0;
   private priorityLoadGeneration = 0;
   private priorityHealthUserID: string | null = null;
   private metricAvailabilityGeneration = 0;
@@ -252,6 +255,7 @@ export class HealthWorkspaceComponent {
     Date.parse(`${this.priorityHrvWindow.endDate}T00:00:00.000Z`) - ((PRIORITY_HRV_HISTORY_DAYS - 1) * DAY_MS),
   ).toISOString().slice(0, 10);
   readonly selectedHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
+  readonly selectedHrvContextHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly selectedHealthStatus = signal<HealthLoadStatus>('loading');
   readonly selectedActivityHealthResult = signal<ActivityHealthRangeResult | null>(null);
   readonly selectedActivityHealthStatus = signal<HealthLoadStatus>('ready');
@@ -423,6 +427,65 @@ export class HealthWorkspaceComponent {
         this.unitSettings(),
       )
       : emptyMetricView();
+  });
+  readonly selectedHrvContextWindow = computed(() => {
+    const visibleStartDayMs = Date.parse(`${this.selectedWindow().startDate}T00:00:00.000Z`);
+    return {
+      startDate: new Date(visibleStartDayMs - (SELECTED_HRV_CONTEXT_DAYS * DAY_MS)).toISOString().slice(0, 10),
+      endDate: new Date(visibleStartDayMs - DAY_MS).toISOString().slice(0, 10),
+    };
+  });
+  readonly selectedHrvChartStatuses = computed(() => {
+    if (this.routeState().metric !== HEALTH_METRIC_IDS.HeartRateVariability) {
+      return {};
+    }
+    const visibleSeries = this.metricView().series;
+    const visibleResult = this.filteredHealthResult();
+    if (!visibleResult || visibleSeries.length === 0) {
+      return {};
+    }
+    const selectedProviders = this.effectiveProviderFilters();
+    const historyResult = this.selectedHrvContextHealthLoad()?.result;
+    const filteredHistoryResult = historyResult
+      ? filterHealthRangeResultByProviders(historyResult, selectedProviders)
+      : null;
+    const historySleepSessions = selectedProviders.length
+      ? this.selectedSleepSessions().filter(session =>
+        selectedProviders.includes(session.source.provider as HealthProvider))
+      : this.selectedSleepSessions();
+    const fullSeries = [
+      ...buildHealthMetricWorkspaceView(
+        visibleResult,
+        historySleepSessions,
+        [],
+        this.unitSettings(),
+      ).series,
+      ...buildHealthMetricWorkspaceView(
+        filteredHistoryResult || sleepOnlyHrvContextResult(
+          visibleResult,
+          this.selectedHrvContextWindow(),
+        ),
+        historySleepSessions,
+        [],
+        this.unitSettings(),
+      ).series,
+    ];
+    const fullSeriesById = new Map<string, HealthWorkspaceSeries>();
+    for (const series of fullSeries) {
+      const current = fullSeriesById.get(series.id);
+      fullSeriesById.set(series.id, current
+        ? { ...current, points: mergeHealthSeriesPoints(current.points, series.points) }
+        : series);
+    }
+    return Object.fromEntries(visibleSeries.flatMap(series => {
+      const status = buildHealthHrvPersonalRangeStatus(
+        fullSeriesById.get(series.id) || series,
+        this.selectedWindow().endTimeMs,
+        this.unitSettings(),
+        series.points.map(point => point.timestampMs),
+      );
+      return status ? [[series.id, status]] : [];
+    }));
   });
   readonly selectedManualMetric = computed<ManualHealthMetricId | null>(() => {
     return manualHealthEntryMetric(this.routeState().metric);
@@ -800,11 +863,19 @@ export class HealthWorkspaceComponent {
     effect(onCleanup => {
       const uid = this.signedInUserID();
       const window = this.selectedWindow();
+      const metric = this.routeState().metric;
       let subscription: Subscription | null = null;
       this.selectedSleepSessions.set([]);
       this.selectedSleepStatus.set('loading');
       if (uid) {
-        subscription = this.sleepService.watchForDashboard(uid, window.startTimeMs, window.endTimeMs).subscribe({
+        const historyStartTimeMs = metric === HEALTH_METRIC_IDS.HeartRateVariability
+          ? resolveHealthWorkspaceWindow({
+            metric,
+            range: 'today',
+            endDate: this.selectedHrvContextWindow().startDate,
+          }, this.todayDate).startTimeMs
+          : window.startTimeMs;
+        subscription = this.sleepService.watchForDashboard(uid, historyStartTimeMs, window.endTimeMs).subscribe({
           next: sessions => {
             this.selectedSleepSessions.set(sessions);
             this.selectedSleepStatus.set('ready');
@@ -813,6 +884,30 @@ export class HealthWorkspaceComponent {
         });
       }
       onCleanup(() => subscription?.unsubscribe());
+    });
+
+    effect(() => {
+      const uid = this.signedInUserID();
+      const metric = this.routeState().metric;
+      const contextWindow = this.selectedHrvContextWindow();
+      this.refreshRevision();
+      const generation = ++this.selectedHrvContextLoadGeneration;
+      this.selectedHrvContextHealthLoad.set(null);
+      if (!uid || metric !== HEALTH_METRIC_IDS.HeartRateVariability) {
+        return;
+      }
+      void this.healthService.loadMetricRange(uid, {
+        ...contextWindow,
+        metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+        includeSamples: false,
+      }).then(load => {
+        if (generation === this.selectedHrvContextLoadGeneration) {
+          this.selectedHrvContextHealthLoad.set(load);
+        }
+      }).catch(() => {
+        // The visible range remains usable; it will show a building-baseline
+        // state when older context cannot be loaded.
+      });
     });
 
     effect(() => {
@@ -1406,6 +1501,38 @@ function emptyMetricView(): HealthMetricWorkspaceView {
     hasNativeOnlySeries: false,
     conflictCount: 0,
     providers: [],
+  };
+}
+
+function mergeHealthSeriesPoints(
+  left: readonly HealthWorkspaceSeries['points'][number][],
+  right: readonly HealthWorkspaceSeries['points'][number][],
+): HealthWorkspaceSeries['points'] {
+  const points = new Map<string, HealthWorkspaceSeries['points'][number]>();
+  for (const point of [...left, ...right]) {
+    points.set(`${point.timestampMs}:${point.calendarDate}`, point);
+  }
+  return [...points.values()].sort((a, b) => a.timestampMs - b.timestampMs);
+}
+
+function sleepOnlyHrvContextResult(
+  visibleResult: HealthRangeResult,
+  contextWindow: { startDate: string; endDate: string },
+): HealthRangeResult {
+  return {
+    ...visibleResult,
+    query: {
+      ...visibleResult.query,
+      ...contextWindow,
+      includeSamples: false,
+    },
+    observations: [],
+    sampleChunks: [],
+    dailySummaries: [],
+    discovery: [],
+    coverage: [],
+    freshness: [],
+    conflicts: [],
   };
 }
 

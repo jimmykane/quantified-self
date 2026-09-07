@@ -1,5 +1,6 @@
 <div class="health-chart-grid" aria-label="Source-separated metric charts">
-  @for (model of models(); track model.series.id) {
+  @for (chart of renderedModels(); track chart.model.series.id) {
+    @let model = chart.model;
     <mat-card
       appearance="outlined"
       class="health-chart-panel"
@@ -27,7 +28,9 @@
           [startTimeMs]="startTimeMs()"
           [endTimeMs]="endTimeMs()"
           [darkTheme]="darkTheme()"
-          [unitSettings]="unitSettings()">
+          [unitSettings]="unitSettings()"
+          [statusOverlay]="chart.statusOverlay"
+          [statusDescription]="chart.statusDescription">
         </app-health-metric-series-chart>
       </mat-card-content>
 
