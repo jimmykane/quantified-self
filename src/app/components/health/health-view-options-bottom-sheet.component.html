@@ -1,0 +1,45 @@
+<section class="health-view-options-sheet" aria-label="Health view options">
+  <app-bottom-sheet-header title="View options" icon="tune">
+    <button mat-icon-button type="button" aria-label="Close view options" (click)="cancel()">
+      <mat-icon aria-hidden="true">close</mat-icon>
+    </button>
+  </app-bottom-sheet-header>
+  <div class="bottom-sheet-content health-view-options-content">
+    <p class="health-view-options-hint">Applies to this metric. Highlights stay unchanged.</p>
+    <fieldset class="health-view-options-range">
+      <legend>Date range</legend>
+      <mat-button-toggle-group [value]="range()" hideSingleSelectionIndicator aria-label="Health date range"
+        (change)="selectRange($event.value)">
+        @for (option of data.ranges; track option.range) {
+          <mat-button-toggle [value]="option.range" [aria-label]="option.label">{{ option.buttonLabel }}</mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+    </fieldset>
+    <section class="health-view-options-sources" aria-labelledby="health-view-options-sources-title">
+      <h3 id="health-view-options-sources-title">Sources</h3>
+      @if (data.sourcesLoading) {
+        <p class="health-view-options-hint">Sources are loading. You can still change the date range.</p>
+      } @else if (data.providers.length === 0) {
+        <p class="health-view-options-hint">No sources in this window. Try another date range.</p>
+      } @else if (data.providers.length === 1) {
+        <p class="health-view-options-single-source">{{ data.providers[0].label }}</p>
+      } @else {
+        <mat-checkbox [checked]="allSelected()" [indeterminate]="partlySelected()" (change)="selectAll($event.checked)">
+          All sources
+        </mat-checkbox>
+        @for (option of providerOptions(); track option.provider) {
+          <mat-checkbox [checked]="option.selected" (change)="selectProvider(option.provider, $event.checked)">
+            {{ option.label }}
+          </mat-checkbox>
+        }
+        @if (!canApply()) {
+          <p class="health-view-options-hint" role="status">Choose at least one source.</p>
+        }
+      }
+    </section>
+  </div>
+  <div class="health-view-options-actions">
+    <button mat-button type="button" (click)="cancel()">Cancel</button>
+    <button mat-flat-button type="button" [disabled]="!canApply()" (click)="apply()">Apply</button>
+  </div>
+</section>

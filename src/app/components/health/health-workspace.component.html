@@ -365,6 +365,18 @@
             (deleteManualMeasurement)="deleteManualMeasurement($event)">
           </app-health-source-observation-table>
         }
+        <div class="health-mobile-view-options">
+          <button mat-button type="button" class="health-view-options-button"
+            [attr.aria-label]="viewOptionsAriaLabel()" aria-haspopup="dialog"
+            [attr.aria-expanded]="viewOptionsOpen()" (click)="openViewOptions()">
+            <span class="health-view-options-button-content">
+              <mat-icon aria-hidden="true">tune</mat-icon>
+              <span>View options</span>
+              <span class="health-view-options-summary">{{ viewOptionsRangeLabel() }} · {{ viewOptionsSourceLabel() }}</span>
+              <mat-icon aria-hidden="true">expand_less</mat-icon>
+            </span>
+          </button>
+        </div>
       </article>
     </div>
   </section>

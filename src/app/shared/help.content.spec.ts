@@ -87,6 +87,8 @@ describe('help.content', () => {
     const healthSection = HELP_SECTIONS.find(section => section.id === 'health');
 
     expect(healthSection?.title).toBe('Health');
+    expect(healthSection?.content).toContain('**View options** at the bottom of the metric explorer');
+    expect(healthSection?.content).toContain('only the selected metric, not Highlights');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');

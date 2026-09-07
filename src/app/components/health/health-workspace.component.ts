@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, injec
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -56,6 +57,11 @@ import {
   HealthPrioritySummaryComponent,
 } from './health-priority-summary.component';
 import { HealthSourceObservationTableComponent } from './health-source-observation-table.component';
+import {
+  HealthViewOptionsBottomSheetComponent,
+  type HealthViewOptionsData,
+  type HealthViewOptionsResult,
+} from './health-view-options-bottom-sheet.component';
 import {
   ManualHealthMeasurementDialogComponent,
   type ManualHealthMeasurementDialogResult,
@@ -188,6 +194,9 @@ export class HealthWorkspaceComponent {
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
   private readonly dialog = inject(MatDialog);
+  private readonly bottomSheet = inject(MatBottomSheet);
+  private viewOptionsRef: MatBottomSheetRef<HealthViewOptionsBottomSheetComponent, HealthViewOptionsResult> | null = null;
+  readonly viewOptionsOpen = signal(false);
   private readonly destroyRef = inject(DestroyRef);
   private manualDialogRef: MatDialogRef<unknown> | null = null;
   private manualAccountGeneration = 0;
@@ -528,6 +537,18 @@ export class HealthWorkspaceComponent {
     }));
   });
   readonly allProvidersSelected = computed(() => this.effectiveProviderFilters().length === 0);
+  readonly viewOptionsSourceLabel = computed(() => {
+    if (this.isLoading()) return 'Sources loading…';
+    const options = this.providerFilterOptions();
+    if (!options.length) return 'No sources';
+    if (options.length === 1) return options[0].label;
+    const selected = options.filter(option => option.selected);
+    if (selected.length === options.length) return 'All sources';
+    return selected.length === 1 ? selected[0].label : `${selected.length} sources`;
+  });
+  readonly viewOptionsRangeLabel = computed(() => this.selectedRange() === 'today' ? '1d' : this.selectedRange());
+  readonly viewOptionsAriaLabel = computed(() =>
+    `View options: ${RANGE_LABELS[this.selectedRange()]}, ${this.viewOptionsSourceLabel()}`);
   readonly selectedStatus = computed(() => {
     if (this.selectedIsSleep()) {
       return this.selectedSleepStatus();
@@ -697,6 +718,16 @@ export class HealthWorkspaceComponent {
     .sort((left, right) => left.label.localeCompare(right.label)));
 
   constructor() {
+    effect(onCleanup => {
+      this.signedInUserID();
+      this.routeState();
+      onCleanup(() => {
+        const ref = this.viewOptionsRef;
+        this.viewOptionsRef = null;
+        this.viewOptionsOpen.set(false);
+        ref?.dismiss();
+      });
+    });
     effect(onCleanup => {
       this.signedInUserID();
       onCleanup(() => {
@@ -1050,6 +1081,52 @@ export class HealthWorkspaceComponent {
       ? current.filter(item => item !== provider)
       : [...current, provider];
     this.selectedProviders.set(next.length === 0 || next.length === available.length ? [] : next);
+  }
+
+  openViewOptions(): void {
+    const uid = this.signedInUserID();
+    if (!uid || this.viewOptionsRef) return;
+    const requested = this.routeState();
+    const sourcesLoading = this.isLoading();
+    const data: HealthViewOptionsData = {
+      range: requested.range,
+      ranges: this.ranges,
+      providers: sourcesLoading ? [] : this.providerFilterOptions(),
+      sourcesLoading,
+    };
+    this.haptics.selection();
+    const ref = this.bottomSheet.open<HealthViewOptionsBottomSheetComponent, HealthViewOptionsData, HealthViewOptionsResult>(
+      HealthViewOptionsBottomSheetComponent,
+      { data, ariaLabel: 'Health view options', autoFocus: 'first-tabbable', restoreFocus: true },
+    );
+    this.viewOptionsRef = ref;
+    this.viewOptionsOpen.set(true);
+    ref.afterDismissed().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(result => {
+      if (this.viewOptionsRef !== ref) return;
+      this.viewOptionsRef = null;
+      this.viewOptionsOpen.set(false);
+      const current = this.routeState();
+      if (!result || uid !== this.signedInUserID() || current.metric !== requested.metric
+        || current.range !== requested.range || current.endDate !== requested.endDate
+        || !this.ranges.some(option => option.range === result.range)) return;
+      const available = this.availableProviders();
+      const selected = result.providers === null ? this.selectedProviders()
+        : [...new Set(result.providers)].filter(provider => available.includes(provider));
+      const nextProviders = result.providers === null ? selected
+        : selected.length === available.length ? [] : selected;
+      const previous = this.selectedProviders();
+      const sourcesChanged = nextProviders.length !== previous.length || nextProviders.some(provider => !previous.includes(provider));
+      const rangeChanged = result.range !== current.range;
+      if (!sourcesChanged && !rangeChanged) return;
+      this.haptics.selection();
+      // Apply the draft together: only the range is persisted, through the existing settings queue.
+      this.selectedProviders.set(nextProviders);
+      if (rangeChanged) {
+        this.rangePreferenceTouched = true;
+        this.selectedRange.set(result.range);
+        this.queueWorkspacePreferenceWrite();
+      }
+    });
   }
 
   openManualMeasurement(): void {
