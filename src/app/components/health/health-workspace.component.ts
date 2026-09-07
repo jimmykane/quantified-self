@@ -5,7 +5,6 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -30,17 +29,10 @@ import {
   getHealthMetricDefinition,
 } from '@shared/health';
 import { ProviderPresentation, buildProviderPresentation } from '@shared/provider-presentation';
-import {
-  SLEEP_PROVIDERS,
-  SLEEP_SYNC_STATUSES,
-  SleepProvider,
-  SleepSession,
-  SleepSyncState,
-} from '@shared/sleep';
-import { SleepBackfillQueueResponse } from '@shared/sleep-backfill';
+import { SleepSession } from '@shared/sleep';
 import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manual-health';
-import { combineLatest, of, Subscription } from 'rxjs';
-import { catchError, map, take } from 'rxjs/operators';
+import { Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import {
   AppHealthService,
@@ -124,10 +116,6 @@ interface HealthSyncStateView extends HealthProviderView {
   lastUpdateText: string;
   lastUpdateDateTime: string | null;
   tone: HealthSyncTone;
-  historyImportActionLabel: string | null;
-  historyImportStatusText: string | null;
-  historyImportBusy: boolean;
-  historyImportError: string | null;
 }
 
 type HealthSyncTone = 'current' | 'delayed' | 'stale' | 'error' | 'neutral';
@@ -172,7 +160,6 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
     MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
-    MatMenuModule,
     MatProgressSpinnerModule,
     MatSelectModule,
     MatTooltipModule,
@@ -218,7 +205,6 @@ export class HealthWorkspaceComponent {
   private preferenceWriteGeneration = 0;
   private preferenceWriteInFlight = false;
   private queuedPreferenceWrite: QueuedHealthWorkspacePreferenceWrite | null = null;
-  private historyImportRequestGeneration = 0;
 
   readonly ranges = HEALTH_WORKSPACE_RANGES.map(range => ({
     range,
@@ -269,10 +255,6 @@ export class HealthWorkspaceComponent {
   readonly priorityHrvStatus = signal<HealthLoadStatus>('loading');
   readonly syncStates = signal<HealthSyncState[]>([]);
   readonly syncStatesStatus = signal<HealthLoadStatus>('loading');
-  readonly sleepSyncStates = signal<Partial<Record<SleepProvider, SleepSyncState | null>>>({});
-  readonly sleepSyncStateResolved = signal<Partial<Record<SleepProvider, boolean>>>({});
-  readonly historyImportProvider = signal<HealthProvider | null>(null);
-  readonly historyImportErrors = signal<Partial<Record<HealthProvider, string>>>({});
   readonly selectedProviders = signal<HealthProvider[]>([]);
   readonly refreshRevision = signal(0);
   readonly manualMutationBusy = signal(false);
@@ -705,16 +687,7 @@ export class HealthWorkspaceComponent {
       ? card.chartSeries.length > 0
       : card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
-    .map(state => {
-      const sleepProvider = healthProviderSleepProvider(state.provider);
-      return syncStateView(state, {
-        sleepSyncState: sleepProvider ? this.sleepSyncStates()[sleepProvider] || null : null,
-        sleepSyncStateResolved: sleepProvider ? this.sleepSyncStateResolved()[sleepProvider] === true : false,
-        hasProAccess: this.userService.hasProAccessSignal(),
-        busy: this.historyImportProvider() === state.provider,
-        error: this.historyImportErrors()[state.provider] || null,
-      });
-    })
+    .map(state => syncStateView(state))
     .sort((left, right) => left.label.localeCompare(right.label)));
 
   constructor() {
@@ -776,41 +749,6 @@ export class HealthWorkspaceComponent {
         });
       }
       onCleanup(() => subscription?.unsubscribe());
-    });
-
-    effect(onCleanup => {
-      const uid = this.signedInUserID();
-      let subscription: Subscription | null = null;
-      this.sleepSyncStates.set({});
-      this.sleepSyncStateResolved.set({});
-      this.historyImportRequestGeneration += 1;
-      this.historyImportProvider.set(null);
-      this.historyImportErrors.set({});
-      if (uid) {
-        const providers = [
-          SLEEP_PROVIDERS.GarminAPI,
-          SLEEP_PROVIDERS.SuuntoApp,
-          SLEEP_PROVIDERS.COROSAPI,
-        ] as const;
-        subscription = combineLatest(providers.map(provider => this.sleepService
-          .watchSyncState(uid, provider)
-          .pipe(
-            map(state => ({ state, resolved: true })),
-            catchError(() => of({ state: null, resolved: false })),
-          )))
-          .subscribe(results => {
-            this.sleepSyncStates.set(Object.fromEntries(
-              providers.map((provider, index) => [provider, results[index].state]),
-            ));
-            this.sleepSyncStateResolved.set(Object.fromEntries(
-              providers.map((provider, index) => [provider, results[index].resolved]),
-            ));
-          });
-      }
-      onCleanup(() => {
-        subscription?.unsubscribe();
-        this.historyImportRequestGeneration += 1;
-      });
     });
 
     effect(() => {
@@ -1188,72 +1126,6 @@ export class HealthWorkspaceComponent {
       && generation === this.manualAccountGeneration && !this.destroyRef.destroyed;
   }
 
-  async startHistoryImport(provider: HealthProvider): Promise<void> {
-    const sleepProvider = healthProviderSleepProvider(provider);
-    const sourceView = this.syncStateViews().find(state => state.provider === provider);
-    const requestedForUserID = `${this.signedInUserID() || ''}`.trim();
-    if (
-      !sleepProvider
-      || !requestedForUserID
-      || !sourceView?.historyImportActionLabel
-      || this.historyImportProvider()
-      || !this.userService.hasProAccessSignal()
-    ) {
-      return;
-    }
-
-    const requestGeneration = ++this.historyImportRequestGeneration;
-    this.historyImportProvider.set(provider);
-    this.historyImportErrors.update(errors => ({ ...errors, [provider]: undefined }));
-    try {
-      const result = await this.requestHistoryImport(sleepProvider);
-      if (
-        this.historyImportRequestGeneration !== requestGeneration
-        || this.signedInUserID() !== requestedForUserID
-      ) {
-        return;
-      }
-      const queuedAtMs = Date.now();
-      this.sleepSyncStates.update(states => ({
-        ...states,
-        [sleepProvider]: {
-          ...(states[sleepProvider] || {
-            provider: sleepProvider,
-            status: SLEEP_SYNC_STATUSES.Ready,
-            updatedAtMs: queuedAtMs,
-          }),
-          status: SLEEP_SYNC_STATUSES.Ready,
-          lastBackfillQueuedAtMs: queuedAtMs,
-          lastBackfillStartMs: new Date(result.startDate).getTime(),
-          lastBackfillEndMs: new Date(result.endDate).getTime(),
-          lastBackfillQueueItems: result.queued,
-          nextBackfillAllowedAtMs: result.nextAllowedAtMs,
-          healthBackfillStatus: sleepProvider === SLEEP_PROVIDERS.GarminAPI
-            && Number(result.healthQueued) > 0
-            ? 'queued'
-            : null,
-          lastError: null,
-          updatedAtMs: queuedAtMs,
-        },
-      }));
-    } catch {
-      if (
-        this.historyImportRequestGeneration !== requestGeneration
-        || this.signedInUserID() !== requestedForUserID
-      ) {
-        return;
-      }
-      this.historyImportErrors.update(errors => ({
-        ...errors,
-        [provider]: 'History import could not be started.',
-      }));
-    } finally {
-      if (this.historyImportRequestGeneration === requestGeneration) {
-        this.historyImportProvider.set(null);
-      }
-    }
-  }
-
   private async loadPriorityMetric(
     uid: string,
     metricId: HealthMetricId,
@@ -1424,17 +1296,6 @@ export class HealthWorkspaceComponent {
     }
   }
 
-  private requestHistoryImport(provider: SleepProvider): Promise<SleepBackfillQueueResponse> {
-    switch (provider) {
-      case SLEEP_PROVIDERS.GarminAPI:
-        return this.userService.backfillGarminHealthForCurrentUser();
-      case SLEEP_PROVIDERS.SuuntoApp:
-        return this.userService.backfillSuuntoSleepForCurrentUser();
-      case SLEEP_PROVIDERS.COROSAPI:
-        return this.userService.backfillCorosSleepForCurrentUser();
-    }
-  }
-
   private selectAndSaveMetric(metric: HealthWorkspaceMetricSelection): void {
     const normalizedMetric = normalizeHealthWorkspaceMetric(metric);
     if (normalizedMetric === this.selectedMetric() && !this.preferencesSaveFailed()) {
@@ -1601,17 +1462,8 @@ function priorityCard(
   };
 }
 
-interface HealthHistoryImportViewOptions {
-  sleepSyncState: SleepSyncState | null;
-  sleepSyncStateResolved: boolean;
-  hasProAccess: boolean;
-  busy: boolean;
-  error: string | null;
-}
-
 function syncStateView(
   state: HealthSyncState,
-  historyOptions: HealthHistoryImportViewOptions,
   nowMs = Date.now(),
 ): HealthSyncStateView {
   const provider = providerView(state.provider);
@@ -1637,7 +1489,6 @@ function syncStateView(
     ...provider,
     lastUpdateText,
     lastUpdateDateTime: lastUpdateAtMs === null ? null : new Date(lastUpdateAtMs).toISOString(),
-    ...healthHistoryImportView(state, historyOptions, nowMs),
   };
   const withStatus = (statusLabel: string, tone: HealthSyncTone): HealthSyncStateView => ({
     ...baseView,
@@ -1660,107 +1511,6 @@ function syncStateView(
       return withStatus('Not supported', 'neutral');
     case HEALTH_SYNC_STATUSES.Disconnected:
       return withStatus('Disconnected', 'neutral');
-  }
-}
-
-function healthHistoryImportView(
-  state: HealthSyncState,
-  options: HealthHistoryImportViewOptions,
-  nowMs: number,
-): Pick<HealthSyncStateView,
-  'historyImportActionLabel' | 'historyImportStatusText' | 'historyImportBusy' | 'historyImportError'> {
-  const emptyView = {
-    historyImportActionLabel: null,
-    historyImportStatusText: null,
-    historyImportBusy: false,
-    historyImportError: null,
-  };
-  if (
-    !healthProviderSleepProvider(state.provider)
-    || state.status !== HEALTH_SYNC_STATUSES.Ready
-    || !options.sleepSyncStateResolved
-    || !options.hasProAccess
-  ) {
-    return emptyView;
-  }
-  if (options.busy) {
-    return {
-      ...emptyView,
-      historyImportActionLabel: 'Starting…',
-      historyImportStatusText: 'Starting history import',
-      historyImportBusy: true,
-    };
-  }
-
-  const syncState = options.sleepSyncState;
-  const healthStatus = syncState?.healthBackfillStatus || null;
-  if (syncState?.status === SLEEP_SYNC_STATUSES.PermissionMissing) {
-    return {
-      ...emptyView,
-      historyImportStatusText: 'History permission needed',
-      historyImportError: options.error,
-    };
-  }
-  if (healthStatus === 'queued' || healthStatus === 'running') {
-    return {
-      ...emptyView,
-      historyImportStatusText: healthStatus === 'queued' ? 'History queued' : 'History importing',
-    };
-  }
-
-  const hasBackfillAttempt = positiveTimestamp(syncState?.lastBackfillStartMs)
-    || positiveTimestamp(syncState?.lastBackfillEndMs)
-    || (syncState?.lastBackfillQueueItems !== null && syncState?.lastBackfillQueueItems !== undefined)
-    || healthStatus !== null;
-  const providerBackfillFailed = syncState?.status === SLEEP_SYNC_STATUSES.Failed
-    && syncState.lastBackfillQueuedAtMs === null
-    && hasBackfillAttempt;
-  const retryableFailure = healthStatus === 'failed'
-    || providerBackfillFailed
-    || options.error !== null;
-  if (syncState?.status === SLEEP_SYNC_STATUSES.Failed && !retryableFailure) {
-    return emptyView;
-  }
-  const hasBackfillHistory = positiveTimestamp(syncState?.lastBackfillQueuedAtMs)
-    || positiveTimestamp(syncState?.lastBackfillStartMs)
-    || positiveTimestamp(syncState?.lastBackfillEndMs)
-    || healthStatus === 'complete'
-    || healthStatus === 'skipped';
-  if (hasBackfillHistory && !retryableFailure) {
-    return emptyView;
-  }
-
-  const nextAllowedAtMs = Number(syncState?.nextBackfillAllowedAtMs);
-  if (Number.isFinite(nextAllowedAtMs) && nextAllowedAtMs > nowMs) {
-    return {
-      ...emptyView,
-      historyImportStatusText: `History available ${new Intl.DateTimeFormat(undefined, {
-        month: 'short',
-        day: 'numeric',
-      }).format(new Date(nextAllowedAtMs))}`,
-      historyImportError: options.error,
-    };
-  }
-  return {
-    ...emptyView,
-    historyImportActionLabel: retryableFailure ? 'Retry import' : 'Import history',
-    historyImportError: options.error,
-  };
-}
-
-function positiveTimestamp(value: unknown): boolean {
-  const timestamp = Number(value);
-  return Number.isFinite(timestamp) && timestamp > 0;
-}
-
-function healthProviderSleepProvider(provider: HealthProvider): SleepProvider | null {
-  switch (provider) {
-    case HEALTH_PROVIDERS.GarminAPI: return SLEEP_PROVIDERS.GarminAPI;
-    case HEALTH_PROVIDERS.SuuntoApp: return SLEEP_PROVIDERS.SuuntoApp;
-    case HEALTH_PROVIDERS.COROSAPI: return SLEEP_PROVIDERS.COROSAPI;
-    case HEALTH_PROVIDERS.WahooAPI:
-    case HEALTH_PROVIDERS.QuantifiedSelf:
-      return null;
   }
 }
 

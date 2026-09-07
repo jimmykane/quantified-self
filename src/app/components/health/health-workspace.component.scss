@@ -409,21 +409,8 @@
 }
 
 .health-sync-status,
-.health-sync-update,
-.health-sync-import-status,
-.health-sync-import-error {
+.health-sync-update {
   font: var(--mat-sys-label-medium);
-}
-
-.health-sync-import-error {
-  color: var(--mat-sys-error);
-}
-
-.health-sync-actions mat-icon,
-.health-sync-actions mat-spinner {
-  flex: none;
-  height: 16px;
-  width: 16px;
 }
 
 @media (max-width: 980px) {
@@ -578,10 +565,6 @@
     text-align: right;
   }
 
-  .health-sync-import-status,
-  .health-sync-import-error {
-    margin-left: 1rem;
-  }
 }
 
 @media (max-width: 480px) {

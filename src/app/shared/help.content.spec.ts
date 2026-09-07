@@ -118,9 +118,9 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
-    expect(healthSection?.content).toContain('no previous Sleep or Health history request');
-    expect(healthSection?.content).toContain('**Import history**');
-    expect(healthSection?.content).toContain('prior-import state cannot be verified');
+    expect(healthSection?.content).toContain('source footer shows each provider\'s recency');
+    expect(healthSection?.content).toContain('Connectivity** for connection and import management');
+    expect(healthSection?.content).not.toContain('**Import history**');
     expect(healthSection?.content).toContain('Connectivity');
     expect(healthSection?.content).toContain('**Health (Beta)**');
     expect(healthSection?.content).toContain('available to all signed-in users');
