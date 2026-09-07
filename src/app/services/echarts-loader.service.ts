@@ -106,6 +106,7 @@ export class EChartsLoaderService {
           components.TitleComponent,
           components.AxisPointerComponent,
           components.MarkLineComponent,
+          components.MarkAreaComponent,
           components.VisualMapComponent,
           components.ToolboxComponent,
           components.DataZoomComponent,

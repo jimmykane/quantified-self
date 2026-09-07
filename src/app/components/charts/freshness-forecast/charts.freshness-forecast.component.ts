@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -53,6 +54,7 @@ type AxisTooltipParam = {
 })
 export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() isLoading = false;
   @Input() forecast?: DashboardFreshnessForecastContext | null;
   @Input() status?: DashboardDerivedMetricStatus | null;
@@ -92,7 +94,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.forecast || changes.status || changes.showMobileAxisPointerHandle) {
+    if (changes.darkTheme || changes.isLoading || changes.forecast || changes.status || changes.showMobileAxisPointerHandle || changes.timelineNotes) {
       void this.refreshChart();
     }
   }
@@ -113,6 +115,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     }
 
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes, { offsetSeconds: ms => -new Date(ms).getTimezoneOffset() * 60 });
     this.chartHost.setOption(this.buildOption(points), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }

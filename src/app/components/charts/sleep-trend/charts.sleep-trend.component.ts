@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -118,6 +119,7 @@ const STACK_BAR_EMPHASIS = { focus: 'none' as const };
 export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() isLoading = false;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
   @Input()
@@ -186,7 +188,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.sleepTrend || changes.unitSettings) {
+    if (changes.darkTheme || changes.isLoading || changes.sleepTrend || changes.unitSettings || changes.timelineNotes) {
       void this.refreshChart();
     }
   }
@@ -210,6 +212,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
     this.clearSleepBarHighlight();
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes, { categoryDates: points.map(point => point.sleepDate) });
     this.chartHost.setOption(this.buildOption(points), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.bindSleepBarHighlight(chart);
     this.chartHost.scheduleResize();

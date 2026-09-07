@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -52,6 +53,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   @Input() trajectory: TrainingDurabilityTrajectoryViewModel | null = null;
   @Input() status: DashboardDerivedMetricStatus = 'missing';
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   public chartDiv: ElementRef<HTMLDivElement> | null = null;
 
   @ViewChild('chartDiv')
@@ -92,7 +94,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes.trajectory || changes.status || changes.darkTheme) {
+    if (changes.trajectory || changes.status || changes.darkTheme || changes.timelineNotes) {
       void this.refresh();
     }
   }
@@ -119,6 +121,7 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
       return;
     }
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes, { bucketDays: 7 });
     this.chartHost.setOption(this.buildOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }

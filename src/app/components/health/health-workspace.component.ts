@@ -1,3 +1,4 @@
+import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
@@ -165,6 +166,7 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
     MatTooltipModule,
     AppChartsModule,
     PageHeaderComponent,
+    TimelineNotesWorkspaceComponent,
     ServiceSourceIconComponent,
     HealthMetricChartComponent,
     HealthPrioritySummaryComponent,

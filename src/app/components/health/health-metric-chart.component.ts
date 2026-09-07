@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -26,6 +27,7 @@ export class HealthMetricChartComponent {
   readonly startTimeMs = input.required<number>();
   readonly endTimeMs = input.required<number>();
   readonly darkTheme = input(false);
+  readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
   readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
   readonly chartStatuses = input<Readonly<Record<string, HealthHrvPersonalRangeStatus>>>({});
   readonly models = computed(() => buildHealthChartModels(

@@ -189,6 +189,7 @@ export {
 } from './assistant/callable';
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { queryHealthRange } from './health/callable';
+export { saveTimelineNoteCallable as saveTimelineNote, deleteTimelineNoteCallable as deleteTimelineNote } from './timeline-notes/callable';
 export { queryActivityHealthRange } from './health/activity-callable';
 export {
   saveManualHealthMeasurementCallable as saveManualHealthMeasurement,

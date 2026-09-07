@@ -1,0 +1,13 @@
+:host { display: block; }
+.note-toolbar, .note-pagination, .note-pending, .note-action { display: flex; align-items: center; gap: 8px; }
+.note-toolbar, .note-pagination { justify-content: space-between; flex-wrap: wrap; }
+.note-action mat-icon { flex: 0 0 18px; width: 18px; height: 18px; font-size: 18px; }
+.note-form { display: grid; gap: 12px; padding-block-start: 8px; }
+.note-dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.note-list { list-style: none; padding: 0; margin: 8px 0; }
+.note-list li + li { border-top: 1px solid var(--mat-sys-outline-variant); }
+.note-row { width: 100%; height: auto; min-height: 48px; justify-content: flex-start; text-align: start; }
+.note-row-content { display: flex; flex-direction: column; align-items: flex-start; padding-block: 6px; white-space: normal; overflow-wrap: anywhere; }
+.note-row-content span, .note-hint { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.note-error { color: var(--mat-sys-error); }
+.note-pending { min-height: 24px; }

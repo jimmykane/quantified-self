@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -80,6 +81,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   ];
 
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() useAnimations = false;
   @Input() isLoading = false;
   @Input() formStatus?: DashboardDerivedMetricStatus | null;
@@ -168,7 +170,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       return;
     }
 
-    if (changes.darkTheme || changes.useAnimations || changes.isLoading || changes.formStatus || changes.showMobileAxisPointerHandle) {
+    if (changes.darkTheme || changes.useAnimations || changes.isLoading || changes.formStatus || changes.showMobileAxisPointerHandle || changes.timelineNotes) {
       void this.refreshChart();
     }
   }
@@ -193,6 +195,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
 
     this.chartHost.hideTooltip();
     const refreshContext = this.buildChartOption();
+    this.chartHost.setTimelineNotes(this.timelineNotes);
     this.chartHost.setOption(refreshContext.option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }

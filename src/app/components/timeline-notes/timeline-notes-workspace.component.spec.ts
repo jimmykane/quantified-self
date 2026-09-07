@@ -1,0 +1,49 @@
+import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { Subject } from 'rxjs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TimelineNotesWorkspaceComponent } from './timeline-notes-workspace.component';
+import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
+
+describe('Timeline notes workspace ownership', () => {
+  const note = { id: 'a'.repeat(64), category: 'other' as const, title: 'Private', startDate: '2026-01-02', endDate: '2026-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+  const service = { uid: signal<string | null>('owner'), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), invalidate: vi.fn(), isOwner: (uid: string) => service.uid() === uid };
+  const dialogs = { open: vi.fn() };
+  let component: TimelineNotesWorkspaceComponent;
+  const flush = async () => { TestBed.flushEffects(); await Promise.resolve(); await Promise.resolve(); };
+  beforeEach(() => {
+    vi.clearAllMocks(); service.uid.set('owner'); service.showOnCharts.set(true); service.loadRange.mockResolvedValue({ notes: [note], incomplete: null });
+    service.invalidate.mockImplementation(() => service.changes$.next());
+    TestBed.configureTestingModule({ providers: [{ provide: AppTimelineNotesService, useValue: service }, { provide: MatDialog, useValue: dialogs }] });
+    component = TestBed.runInInjectionContext(() => new TimelineNotesWorkspaceComponent());
+  });
+  it('coalesces chart ranges into one request and exposes keyboard-accessible management', async () => {
+    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    component.context().reportRange({}, { startDate: '2025-12-01', endDate: '2026-01-04' });
+    await flush();
+    expect(service.loadRange).toHaveBeenCalledTimes(1);
+    expect(service.loadRange).toHaveBeenCalledWith('owner', { startDate: '2025-12-01', endDate: '2026-01-10' });
+    expect(component.context().notes).toEqual([note]);
+    component.context().select([note]); expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: [note] } }));
+  });
+  it('ignores stale ranges and clears private state on account switch', async () => {
+    let resolve!: (value: unknown) => void;
+    service.loadRange.mockReturnValueOnce(new Promise(value => { resolve = value; }));
+    const oldContext = component.context();
+    const key = {}; component.context().reportRange(key, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    service.uid.set(null); await flush(); resolve({ notes: [note], incomplete: null }); await flush();
+    expect(component.context().notes).toEqual([]); expect(component.loading()).toBe(false);
+    component.open(); expect(dialogs.open).not.toHaveBeenCalled();
+    service.uid.set('another-owner'); await flush(); oldContext.select([note]);
+    expect(dialogs.open).not.toHaveBeenCalled();
+  });
+  it('does not fetch hidden notes and recovers independently from metric charts', async () => {
+    service.showOnCharts.set(false); component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    expect(service.loadRange).not.toHaveBeenCalled();
+    service.loadRange.mockRejectedValueOnce(new Error('offline')); service.showOnCharts.set(true); await flush();
+    expect(component.error()).toBe(true); expect(component.context().notes).toEqual([]);
+    service.loadRange.mockResolvedValueOnce({ notes: [note], incomplete: 'records' }); component.refresh(); await flush();
+    expect(component.incomplete()).toBe('records'); expect(component.error()).toBe(false);
+  });
+});

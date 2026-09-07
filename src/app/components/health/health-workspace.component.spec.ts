@@ -54,6 +54,7 @@ import {
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
 import { HealthWorkspaceComponent } from './health-workspace.component';
+import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { HealthActivityQueryService } from './health-activity-query.service';
 
 @Component({
@@ -62,6 +63,7 @@ import { HealthActivityQueryService } from './health-activity-query.service';
   template: '<div class="sleep-chart-stub" role="img" aria-label="Sleep trend"></div>',
 })
 class SleepTrendStubComponent {
+  @Input() timelineNotes = null;
   @Input() darkTheme = false;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() isLoading = false;
@@ -99,6 +101,7 @@ class ServiceSourceIconStubComponent {
   `,
 })
 class HealthMetricChartStubComponent {
+  @Input() timelineNotes = null;
   @Input() series: readonly HealthWorkspaceSeries[] = [];
   @Input() startTimeMs = 0;
   @Input() endTimeMs = 0;
@@ -108,6 +111,9 @@ class HealthMetricChartStubComponent {
 }
 
 const todayDate = localCalendarDate();
+
+@Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
+class TimelineNotesWorkspaceStubComponent { context = () => null; }
 const todayStartMs = Date.parse(`${todayDate}T00:00:00.000Z`);
 
 function metricEntry(metricId: HealthMetricId, value: number) {
@@ -448,8 +454,8 @@ describe('HealthWorkspaceComponent', () => {
       ],
     })
       .overrideComponent(HealthWorkspaceComponent, {
-        remove: { imports: [AppChartsModule, ServiceSourceIconComponent, HealthMetricChartComponent] },
-        add: { imports: [SleepTrendStubComponent, ServiceSourceIconStubComponent, HealthMetricChartStubComponent] },
+        remove: { imports: [AppChartsModule, ServiceSourceIconComponent, HealthMetricChartComponent, TimelineNotesWorkspaceComponent] },
+        add: { imports: [SleepTrendStubComponent, ServiceSourceIconStubComponent, HealthMetricChartStubComponent, TimelineNotesWorkspaceStubComponent] },
       })
       .overrideComponent(ServiceSourceIconComponent, {
         set: { template: '<span class="source-icon-stub" aria-hidden="true"></span>' },

@@ -1,0 +1,56 @@
+<h2 mat-dialog-title>{{ title() }}</h2>
+<mat-dialog-content>
+  @if (error()) {
+    <p class="note-error" role="alert">{{ error() }}</p>
+    @if (conflict()) {
+      @if (existing()) { <button mat-button type="button" [disabled]="busy()" (click)="reloadNote()">Reload note</button> }
+      @else { <button mat-button type="button" [disabled]="busy()" (click)="showList()">Browse notes</button> }
+    }
+    @else if (view() === 'list') { <button mat-button type="button" [disabled]="busy()" (click)="loadPage(requestedPage())">Retry</button> }
+  }
+  @if (view() === 'list') {
+    <div class="note-toolbar">
+      <button mat-flat-button type="button" [disabled]="busy()" (click)="edit(null)"><span class="note-action"><mat-icon>add</mat-icon><span>Add note</span></span></button>
+      <mat-checkbox [checked]="service.showOnCharts()" [disabled]="busy()" (change)="toggleVisibility($event.checked, $event.source)">Show on charts</mat-checkbox>
+    </div>
+    <p class="note-hint">Private context across Health, Sleep, and Training. Notes do not change your measurements or scores.</p>
+    <ul class="note-list" aria-label="Timeline notes">
+      @for (row of rows(); track row.note.id) {
+        <li><button mat-button type="button" class="note-row" [disabled]="busy()" (click)="edit(row.note)">
+          <span class="note-row-content"><strong>{{ row.note.title }}</strong><span>{{ row.category }} · {{ row.dates }}</span></span>
+        </button></li>
+      } @empty { @if (!busy() && !error()) { <li>No notes yet. Add context such as a vacation or a period of sickness.</li> } }
+    </ul>
+    <div class="note-pagination">
+      <button mat-button type="button" [disabled]="busy() || pageNumber() === 0" (click)="loadPage(pageNumber() - 1)">Newer notes</button>
+      <button mat-button type="button" [disabled]="busy() || !nextCursor()" (click)="loadPage(pageNumber() + 1)">Older notes</button>
+    </div>
+  } @else {
+    <form id="timeline-note-form" [formGroup]="form" (ngSubmit)="save()" class="note-form">
+      <mat-form-field appearance="outline"><mat-label>Category</mat-label><mat-select formControlName="category" (selectionChange)="categoryChanged($event.value)">
+        @for (option of options; track option.id) { <mat-option [value]="option.id">{{ option.label }}</mat-option> }
+      </mat-select></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Title</mat-label><input matInput formControlName="title" [maxlength]="limits.title" required></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>When</mat-label><mat-select [disabled]="busy()" [value]="mode()" (selectionChange)="mode.set($event.value)">
+        <mat-option value="single">Single day</mat-option><mat-option value="range">Date range</mat-option><mat-option value="ongoing">Ongoing</mat-option>
+      </mat-select></mat-form-field>
+      <div class="note-dates">
+        <mat-form-field appearance="outline"><mat-label>{{ mode() === 'single' ? 'Date' : 'Start date' }}</mat-label><input matInput type="date" formControlName="startDate" required></mat-form-field>
+        @if (mode() === 'range') { <mat-form-field appearance="outline"><mat-label>End date (inclusive)</mat-label><input matInput type="date" formControlName="endDate" required></mat-form-field> }
+      </div>
+      <mat-form-field appearance="outline"><mat-label>Details (optional)</mat-label><textarea matInput formControlName="details" rows="3" [maxlength]="limits.details"></textarea></mat-form-field>
+      <p class="note-hint">Calendar dates stay the same when you travel. Details are private and shown as plain text.</p>
+    </form>
+  }
+  @if (busy()) { <div class="note-pending" role="status"><mat-spinner diameter="18" aria-hidden="true"></mat-spinner><span>Updating notes…</span></div> }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  @if (view() === 'edit') {
+    @if (existing()) {
+      <button mat-button type="button" [disabled]="busy()" (click)="remove()">Delete</button>
+      @if (existing()?.endDate === null) { <button mat-button type="button" [disabled]="busy()" (click)="endToday()">End today</button> }
+    }
+    <button mat-button type="button" [disabled]="busy()" (click)="showList()">Cancel</button>
+    <button mat-flat-button type="submit" form="timeline-note-form" [disabled]="busy() || form.invalid || conflict()">Save</button>
+  } @else { <button mat-button mat-dialog-close [disabled]="busy()">Close</button> }
+</mat-dialog-actions>

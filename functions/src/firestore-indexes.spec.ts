@@ -33,6 +33,13 @@ function loadFirestoreIndexes(): FirestoreIndexesConfig {
 }
 
 describe('firestore indexes', () => {
+    it('indexes private note overlap without indexing free text', () => {
+        const config = loadFirestoreIndexes();
+        expect(config.indexes).toContainEqual({ collectionGroup: 'timelineNotes', queryScope: 'COLLECTION', density: 'SPARSE_ALL', fields: [
+            { fieldPath: 'endDate', order: 'ASCENDING' }, { fieldPath: 'startDate', order: 'ASCENDING' }, { fieldPath: '__name__', order: 'ASCENDING' },
+        ] });
+        for (const fieldPath of ['title', 'details']) expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'timelineNotes', fieldPath, indexes: [] });
+    });
     it('indexes manual Health references by source type, metric, and date before the Training read cap', () => {
         expect(loadFirestoreIndexes().indexes).toContainEqual({
             collectionGroup: 'healthSourceRecords',

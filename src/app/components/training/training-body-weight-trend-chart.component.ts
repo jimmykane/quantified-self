@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -48,6 +49,7 @@ export class TrainingBodyWeightTrendChartComponent implements AfterViewInit, OnC
   @Input() points: readonly TrainingBodyWeightTrendPointViewModel[] = [];
   @Input() ariaLabel = 'Body-weight trend over 28 days.';
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -68,7 +70,7 @@ export class TrainingBodyWeightTrendChartComponent implements AfterViewInit, OnC
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.viewInitialized && (changes.points || changes.darkTheme || changes.unitSettings)) {
+    if (this.viewInitialized && (changes.points || changes.darkTheme || changes.unitSettings || changes.timelineNotes)) {
       void this.refresh();
     }
   }
@@ -90,6 +92,7 @@ export class TrainingBodyWeightTrendChartComponent implements AfterViewInit, OnC
       return;
     }
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes);
     this.chartHost.setOption(this.buildOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }

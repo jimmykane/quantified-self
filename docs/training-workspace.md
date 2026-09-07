@@ -4,6 +4,13 @@ This document is the implementation guide for the authenticated `/training` work
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
 metric payload, the sports-lib durability protocol, or the refresh pipeline changes.
 
+Private [Timeline notes](timeline-notes.md) are available from the compact secondary header action to every signed-in
+account, independently of Training plan checks. The workspace supplies a shared note context to readiness, load/Form,
+freshness forecast, body-weight, power-system history, swimming trends and weekly durability charts. Notes preserve each
+chart's existing calendar convention; weekly tooltips retain actual dates. They never change Training inputs, formulas,
+readiness, forecasts, persisted snapshots or sport filters. The manager owns editing and account-scoped settings; charts
+never fetch private notes. Dashboard, public previews and non-calendar charts are not opted in.
+
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `19`

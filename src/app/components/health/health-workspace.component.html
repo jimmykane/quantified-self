@@ -7,6 +7,7 @@
     eyebrow="Cross-service health history"
     subtitle="Compare each source on its own terms. Health never blends providers or chooses a preferred source.">
     <div pageHeaderActions class="health-header-actions">
+      <app-timeline-notes-workspace #timelineNotes />
       <button mat-flat-button type="button" class="health-add-measurement"
         [disabled]="manualMutationBusy()" (click)="openManualMeasurement()">
         <span class="health-add-measurement-content">
@@ -328,6 +329,7 @@
         } @else if (selectedIsSleep()) {
           <section class="health-sleep-chart qs-glass-card-panel" aria-label="Normalized Sleep trend">
             <app-sleep-trend-chart
+              [timelineNotes]="timelineNotes.context()"
               [darkTheme]="isDarkTheme()"
               [unitSettings]="unitSettings()"
               [isLoading]="false"
@@ -341,6 +343,7 @@
           </section>
         } @else {
           <app-health-metric-chart
+            [timelineNotes]="timelineNotes.context()"
             [series]="metricView().series"
             [startTimeMs]="selectedWindow().startTimeMs"
             [endTimeMs]="selectedWindow().endTimeMs"

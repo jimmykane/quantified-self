@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -25,6 +26,7 @@ import {
   HealthChartStatusOverlay,
   HealthChartSeriesModel,
   buildHealthMetricEChartsOption,
+  nearestTimezoneOffsetSeconds,
 } from '../../helpers/health-metric-chart.helper';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
@@ -42,6 +44,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input({ required: true }) startTimeMs!: number;
   @Input({ required: true }) endTimeMs!: number;
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() compact = false;
   @Input() statusOverlay: HealthChartStatusOverlay | null = null;
@@ -68,7 +71,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   ngOnChanges(changes: SimpleChanges): void {
     if (this.viewInitialized && (
       changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
-      || changes.compact || changes.statusOverlay
+      || changes.compact || changes.statusOverlay || changes.timelineNotes
     )) {
       void this.refresh();
     }
@@ -95,6 +98,9 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
       this.chartDiv.nativeElement.clientWidth || 0,
     );
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes, {
+      offsetSeconds: timestamp => nearestTimezoneOffsetSeconds(this.model.displayedPoints, timestamp) ?? 0,
+    });
     this.chartHost.setOption(
       buildHealthMetricEChartsOption(
         this.model,

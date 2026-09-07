@@ -203,6 +203,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     dashboardActionPrompts?: AppDashboardActionPrompts;
     trainingWorkspace?: TrainingWorkspacePreferences;
     healthWorkspace?: AppHealthWorkspaceSettingsInterface;
+    timelineNotes?: { showOnCharts?: boolean };
 }
 
 export interface TrainingWorkspacePreferences {

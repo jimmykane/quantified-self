@@ -717,7 +717,7 @@ function formatTooltipDate(timestampMs: number, timezoneOffsetSeconds?: number |
   return `${dateTime} ${formatFixedTimezoneOffset(normalizedOffsetSeconds)}`;
 }
 
-function nearestTimezoneOffsetSeconds(
+export function nearestTimezoneOffsetSeconds(
   points: readonly HealthWorkspaceSeriesPoint[],
   timestampMs: number,
 ): number | null {
