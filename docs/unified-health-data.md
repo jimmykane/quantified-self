@@ -416,6 +416,14 @@ Issues #611–#613 should implement each provider independently against this fou
 
 The Health foundation receives production COROS, Suunto, and Garmin records, and `/health` now provides the source-separated product surface. COROS, Suunto, and Garmin backfills keep their existing provider history controls rather than adding a foundation-wide migration.
 
+Operators can separately prepare a bounded existing-user catch-up using
+[`backfill-existing-health`](health-backfill-operations.md). It queues Health-only work for
+Garmin/Suunto and combined daily Health/Sleep work for COROS, with dry-run discovery, existing
+plan/connection guards, opaque submission receipts, and conservative resume semantics. It does
+not scan Health measurements to infer missing history, change provider mapping, or enable
+automatic backfill on connection. The receipts remain under the user's existing sync-state
+subtree and are removed by recursive account deletion. Production execution requires explicit approval.
+
 A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health reads, then deploy the Health callables and application through the normal release workflow. The workout-evidence extension adds two read indexes and `queryActivityHealthRange`, but changes no Firestore schema, Rules, provider ingestion, or backfill behavior. Deploy the indexes before the callable and frontend.
 
 The Sports Lib 20.3 transition uses a separate user-scoped admin migration; it does not refetch provider history,
