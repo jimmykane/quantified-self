@@ -46,6 +46,12 @@ export interface HealthChartSeriesModel {
   ariaLabel: string;
 }
 
+export interface HealthChartStatusOverlay {
+  normalRange: { min: number; max: number } | null;
+  normalRangeColor: string;
+  statusColor: string;
+}
+
 const MAX_DISPLAY_POINTS = 600;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -70,6 +76,7 @@ export function buildHealthMetricEChartsOption(
   isMobileTooltipViewport: boolean,
   unitSettings: UserUnitSettingsInterface | null = null,
   compact = false,
+  statusOverlay: HealthChartStatusOverlay | null = null,
 ): ChartOption {
   const isCategorical = model.series.chartKind === 'step';
   const isPoint = model.series.chartKind === 'point';
@@ -78,6 +85,14 @@ export function buildHealthMetricEChartsOption(
   const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
   const useBodyEnergyColors = isProviderBodyEnergySeries(model.series);
+  const numericBounds = statusOverlay?.normalRange && model.numericBounds
+    ? {
+      min: Math.min(model.numericBounds.min, statusOverlay.normalRange.min),
+      max: Math.max(model.numericBounds.max, statusOverlay.normalRange.max),
+    }
+    : model.numericBounds;
+  const latestNumericPoint = [...model.displayedPoints].reverse().find(point =>
+    typeof point.value === 'number' && Number.isFinite(point.value));
   const option = {
     animation: false,
     backgroundColor: 'transparent',
@@ -168,8 +183,8 @@ export function buildHealthMetricEChartsOption(
       : {
         type: 'value',
         show: !compact,
-        min: model.numericBounds?.min,
-        max: model.numericBounds?.max,
+        min: numericBounds?.min,
+        max: numericBounds?.max,
         axisTick: { show: false },
         axisLine: { show: false },
         splitNumber: 3,
@@ -228,6 +243,28 @@ export function buildHealthMetricEChartsOption(
           : seriesColor,
       },
       emphasis: { scale: 1.25 },
+      markArea: statusOverlay?.normalRange
+        ? {
+          silent: true,
+          itemStyle: { color: statusOverlay.normalRangeColor, opacity: 0.1 },
+          data: [[
+            { yAxis: statusOverlay.normalRange.min },
+            { yAxis: statusOverlay.normalRange.max },
+          ]],
+        }
+        : undefined,
+      markPoint: latestNumericPoint && statusOverlay
+        ? {
+          silent: true,
+          symbol: 'circle',
+          symbolSize: compact ? 7 : 9,
+          label: { show: false },
+          itemStyle: {
+            color: statusOverlay.statusColor,
+          },
+          data: [{ coord: [latestNumericPoint.timestampMs, latestNumericPoint.value] }],
+        }
+        : undefined,
     }],
   };
 

@@ -94,7 +94,11 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
     expect(healthSection?.content).toContain('source-specific 14-day trend');
     expect(healthSection?.content).toContain('at least three observations');
-    expect(healthSection?.content).toContain('preceding seven-day median');
+    expect(healthSection?.content).toContain('60-day personal range');
+    expect(healthSection?.content).toContain('Until 14 nights exist');
+    expect(healthSection?.content).toContain('seven-day average with at least three recent nights');
+    expect(healthSection?.content).toContain('within, outside, or far outside');
+    expect(healthSection?.content).toContain('color is never the only signal');
     expect(healthSection?.content).toContain('average or overnight HRV');
     expect(healthSection?.content).toContain('even if no standalone Health HRV record exists');
     expect(healthSection?.content).toContain('read average and overnight HRV directly at display time');

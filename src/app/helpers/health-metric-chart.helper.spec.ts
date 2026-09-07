@@ -135,6 +135,50 @@ describe('Health metric chart helpers', () => {
     expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
   });
 
+  it('adds a personal-range band and status-colored latest point without recoloring the trend', () => {
+    const hrvSeries = series({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      unit: 'millisecond',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 40, qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 46, qualityCode: null },
+      ],
+    });
+    const model = buildHealthChartModels([hrvSeries], 0, DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 320),
+      false,
+      null,
+      true,
+      {
+        normalRange: { min: 30, max: 44 },
+        normalRangeColor: AppDataColors.Altitude,
+        statusColor: AppDataColors.Stress,
+      },
+    ) as {
+      yAxis: { min: number; max: number };
+      series: Array<{
+        lineStyle: { color: string };
+        markArea: { itemStyle: { color: string; opacity: number }; data: unknown };
+        markPoint: { itemStyle: { color: string }; data: Array<{ coord: [number, number] }> };
+      }>;
+    };
+
+    expect(option.yAxis.min).toBeLessThanOrEqual(30);
+    expect(option.yAxis.max).toBeGreaterThanOrEqual(46);
+    expect(option.series[0].lineStyle.color).toBe(AppDataColors['Recovery Time']);
+    expect(option.series[0].markArea).toMatchObject({
+      itemStyle: { color: AppDataColors.Altitude, opacity: 0.1 },
+    });
+    expect(option.series[0].markPoint).toMatchObject({
+      itemStyle: { color: AppDataColors.Stress },
+      data: [{ coord: [DAY_MS, 46] }],
+    });
+  });
+
   it('uses the selected Sports Lib unit conversion consistently across a chart', () => {
     const unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     const distanceSeries = series({

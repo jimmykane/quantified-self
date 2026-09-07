@@ -57,8 +57,15 @@
                       <span class="health-priority-source-label">{{ chart.model.series.sourceLabel }}</span>
                     </div>
                     <small>{{ chart.contextText }}</small>
-                    @if (chart.comparisonText) {
-                      <small class="health-priority-comparison">{{ chart.comparisonText }}</small>
+                    @if (chart.personalRangeStatus) {
+                      <div class="health-priority-range-status">
+                        <span
+                          class="health-priority-range-status-dot"
+                          [style.background-color]="chart.statusColor"
+                          aria-hidden="true"></span>
+                        <span>{{ chart.personalRangeStatus.label }}</span>
+                      </div>
+                      <small class="health-priority-range-detail">{{ chart.personalRangeStatus.detailText }}</small>
                     }
                     <app-health-metric-series-chart
                       [model]="chart.model"
@@ -66,7 +73,9 @@
                       [endTimeMs]="chart.endTimeMs"
                       [darkTheme]="darkTheme()"
                       [unitSettings]="unitSettings()"
-                      [compact]="true">
+                      [compact]="true"
+                      [statusOverlay]="chart.statusOverlay"
+                      [statusDescription]="chart.statusDescription">
                     </app-health-metric-series-chart>
                   </section>
                 }

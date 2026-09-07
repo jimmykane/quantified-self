@@ -169,9 +169,23 @@
   white-space: nowrap;
 }
 
-.health-priority-chart-source > .health-priority-comparison {
-  color: var(--mat-sys-on-surface);
-  font-weight: 500;
+.health-priority-range-status {
+  align-items: center;
+  display: flex;
+  font: var(--mat-sys-label-medium);
+  gap: 0.35rem;
+  margin-top: 0.1rem;
+}
+
+.health-priority-range-status-dot {
+  border-radius: 50%;
+  flex: 0 0 0.5rem;
+  height: 0.5rem;
+  width: 0.5rem;
+}
+
+.health-priority-chart-source > .health-priority-range-detail {
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .health-priority-source-row {

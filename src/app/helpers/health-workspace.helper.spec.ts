@@ -31,8 +31,8 @@ import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-he
 import {
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
+  buildHealthHrvPersonalRangeStatus,
   buildHealthPriorityRows,
-  buildHealthPriorityTrendComparison,
   buildSleepObservationRows,
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
@@ -49,6 +49,7 @@ import {
   selectActivityHealthObservations,
   selectWorkoutWeightContextFallback,
   sleepSessionHasHrv,
+  type HealthWorkspaceSeries,
 } from './health-workspace.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -182,6 +183,41 @@ function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
     createdAtMs: startTimeMs,
     updatedAtMs: startTimeMs,
     ...overrides,
+  };
+}
+
+function hrvSeries(values: ReadonlyArray<{ daysAgo: number; value: number }>): HealthWorkspaceSeries {
+  const endDayMs = Date.parse('2026-08-01T00:00:00.000Z');
+  return {
+    id: 'suunto-sleep-hrv',
+    metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+    provider: HEALTH_PROVIDERS.SuuntoApp,
+    providerLabel: 'Suunto',
+    sourceLabel: 'Suunto',
+    accountLabel: null,
+    semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+    aggregation: 'average',
+    semanticVariant: 'sleep_session_average_hrv',
+    origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+    recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+    unit: HEALTH_UNITS.Millisecond,
+    normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+    nativeOnly: false,
+    valueType: HEALTH_VALUE_TYPES.Number,
+    chartKind: 'line',
+    points: values.map(({ daysAgo, value }) => {
+      const timestampMs = endDayMs - (daysAgo * DAY_MS);
+      return {
+        timestampMs,
+        calendarDate: new Date(timestampMs).toISOString().slice(0, 10),
+        value,
+        qualityCode: null,
+      };
+    }).sort((left, right) => left.timestampMs - right.timestampMs),
+    deviceLabel: 'Suunto test watch',
+    coverageText: 'Unknown',
+    freshnessText: 'Fresh',
+    hasConflict: false,
   };
 }
 
@@ -516,11 +552,62 @@ describe('Health workspace helpers', () => {
 
     expect(trendSeries).toHaveLength(1);
     expect(trendSeries[0].points.map(point => point.value)).toEqual([40, 42, 44]);
-    expect(buildHealthPriorityTrendComparison(trendSeries[0])).toBe('3 ms above prior 7-day median');
     expect(selectHealthPriorityTrendSeries(result, [], null, {
       ...window,
       startTimeMs: Date.parse('2026-07-29T00:00:00.000Z'),
     })).toEqual([]);
+  });
+
+  it('grades the source-specific 7-day HRV average against a 60-day personal range', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const building = buildHealthHrvPersonalRangeStatus(hrvSeries(
+      Array.from({ length: 13 }, (_, daysAgo) => ({ daysAgo, value: 50 })),
+    ), endTimeMs);
+    expect(building).toMatchObject({
+      tone: 'neutral',
+      label: 'Building personal range',
+      detailText: '13/14 nights',
+      observationDayCount: 13,
+      currentAverage: null,
+      normalRange: null,
+    });
+
+    const withinRange = buildHealthHrvPersonalRangeStatus(hrvSeries(
+      Array.from({ length: 20 }, (_, daysAgo) => ({ daysAgo, value: daysAgo % 2 === 0 ? 49 : 51 })),
+    ), endTimeMs);
+    expect(withinRange.tone).toBe('positive');
+    expect(withinRange.label).toBe('Within personal range');
+    expect(withinRange.detailText).toMatch(/^7-day average .* ms · Range .* ms–.* ms$/);
+
+    const caution = buildHealthHrvPersonalRangeStatus(hrvSeries([
+      ...Array.from({ length: 15 }, (_, index) => ({ daysAgo: index + 5, value: 50 })),
+      ...Array.from({ length: 5 }, (_, daysAgo) => ({ daysAgo, value: 100 })),
+    ]), endTimeMs);
+    expect(caution.tone).toBe('caution');
+    expect(caution.label).toBe('Outside personal range');
+
+    const negative = buildHealthHrvPersonalRangeStatus(hrvSeries([
+      ...Array.from({ length: 17 }, (_, index) => ({ daysAgo: index + 7, value: 50 })),
+      { daysAgo: 0, value: 100 },
+      { daysAgo: 2, value: 100 },
+      { daysAgo: 4, value: 100 },
+    ]), endTimeMs);
+    expect(negative.tone).toBe('negative');
+    expect(negative.label).toBe('Far outside personal range');
+  });
+
+  it('counts one nightly HRV baseline value per calendar day', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const sameDaySamples = hrvSeries(Array.from({ length: 14 }, (_, index) => ({
+      daysAgo: 0,
+      value: 40 + index,
+    })));
+
+    expect(buildHealthHrvPersonalRangeStatus(sameDaySamples, endTimeMs)).toMatchObject({
+      tone: 'neutral',
+      observationDayCount: 1,
+      detailText: '1/14 nights',
+    });
   });
 
   it('renders provider-specific Body Energy scores as bars without changing other series', () => {

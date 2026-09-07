@@ -119,4 +119,29 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(option.tooltip.formatter({ value: [0, 10_000] })).toContain('6.22 mi');
     expect(option.yAxis.axisLabel.formatter(10_000)).toBe('6.22');
   });
+
+  it('renders an accessible personal-range overlay when the highlight provides one', async () => {
+    fixture.componentRef.setInput('statusOverlay', {
+      normalRange: { min: 45, max: 55 },
+      normalRangeColor: '#00aa00',
+      statusColor: '#ffaa00',
+    });
+    fixture.componentRef.setInput('statusDescription', 'Outside personal range. 7-day average 58 ms.');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(eChartsLoader.setOption.mock.calls.some(call =>
+        !!(call[1] as { series?: Array<{ markArea?: unknown }> })?.series?.[0]?.markArea)).toBe(true);
+    });
+
+    const chart = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[role="img"]');
+    expect(chart?.getAttribute('aria-label')).toContain('Outside personal range. 7-day average 58 ms.');
+    const option = eChartsLoader.setOption.mock.calls
+      .map(call => call[1] as { series: Array<{ markArea: unknown; markPoint: unknown }> })
+      .find(candidate => !!candidate.series[0].markArea) as {
+      series: Array<{ markArea: unknown; markPoint: unknown }>;
+    };
+    expect(option.series[0].markArea).toBeTruthy();
+    expect(option.series[0].markPoint).toBeTruthy();
+  });
 });

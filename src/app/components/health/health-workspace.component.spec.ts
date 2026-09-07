@@ -289,6 +289,19 @@ function hrvSleepSessions(): SleepSession[] {
   });
 }
 
+function hrvBaselineSleepSessions(): SleepSession[] {
+  return Array.from({ length: 20 }, (_, daysAgo) => {
+    const endTimeMs = todayStartMs - (daysAgo * 24 * 60 * 60 * 1000);
+    return sleepSession({
+      id: `baseline-sleep-${daysAgo}`,
+      sleepDate: localCalendarDate(endTimeMs),
+      startTimeMs: endTimeMs - (8 * 60 * 60 * 1000),
+      endTimeMs,
+      vitals: { averageHrvMs: 50 + (daysAgo % 3), averageHeartRateBpm: 52 },
+    });
+  });
+}
+
 describe('HealthWorkspaceComponent', () => {
   let fixture: ComponentFixture<HealthWorkspaceComponent>;
   let component: HealthWorkspaceComponent;
@@ -637,12 +650,30 @@ describe('HealthWorkspaceComponent', () => {
     const hostText = (fixture.nativeElement as HTMLElement).textContent;
     expect(hostText).toContain('Sleep HRV is read from normalized Sleep sessions');
     expect(hostText).toContain('Sleep HRV · 14-day trend');
-    expect(hostText).toContain('7 ms above prior 7-day median');
+    expect(hostText).toContain('Building personal range');
+    expect(hostText).toContain('3/14 nights');
     expect(loadMetricRange).toHaveBeenCalledWith('user-1', expect.objectContaining({
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,
-      startDate: component.priorityHrvWindow.startDate,
+      startDate: component.priorityHrvHistoryStartDate,
       includeSamples: true,
     }));
+  });
+
+  it('shows a source-specific HRV personal range after enough recorded nights', async () => {
+    await createComponent(metricId => Promise.resolve(rangeLoad(
+      metricId,
+      metricId === HEALTH_METRIC_IDS.HeartRateVariability,
+    )), undefined, {
+      metricIds: [HEALTH_METRIC_IDS.HeartRate],
+      sleepSessions: hrvBaselineSleepSessions(),
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    const hrvCard = host.querySelector<HTMLElement>('[aria-labelledby="health-priority-card-heart_rate_variability"]');
+    expect(hrvCard?.textContent).toContain('Within personal range');
+    expect(hrvCard?.textContent).toContain('7-day average');
+    expect(hrvCard?.textContent).toContain('Range');
+    expect(hrvCard?.querySelector<HTMLElement>('.health-priority-range-status-dot')?.style.backgroundColor).not.toBe('');
   });
 
   it('restores and persists the account-owned metric and range without adding query parameters', async () => {

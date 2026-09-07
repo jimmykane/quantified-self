@@ -6,21 +6,30 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   HealthPriorityRow,
+  HealthHrvPersonalRangeStatus,
   HealthWorkspaceMetricSelection,
   HealthWorkspaceSeries,
-  buildHealthPriorityTrendComparison,
   formatHealthValue,
   isSleepHrvSemanticVariant,
 } from '../../helpers/health-workspace.helper';
-import { HealthChartSeriesModel, buildHealthChartModels } from '../../helpers/health-metric-chart.helper';
+import {
+  HealthChartSeriesModel,
+  HealthChartStatusOverlay,
+  buildHealthChartModels,
+} from '../../helpers/health-metric-chart.helper';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
 import { HealthSleepStageSummaryComponent } from './health-sleep-stage-summary.component';
+import { AppColors } from '../../services/color/app.colors';
+import { AppDataColors } from '../../services/color/app.data.colors';
 
 interface HealthPriorityChartView {
   model: HealthChartSeriesModel;
   latestValueText: string;
   contextText: string;
-  comparisonText: string | null;
+  personalRangeStatus: HealthHrvPersonalRangeStatus | null;
+  statusColor: string | null;
+  statusOverlay: HealthChartStatusOverlay | null;
+  statusDescription: string | null;
   startTimeMs: number;
   endTimeMs: number;
 }
@@ -42,6 +51,7 @@ export interface HealthPriorityCardView {
   metric: HealthWorkspaceMetricSelection;
   rows: readonly HealthPriorityRow[];
   chartSeries: readonly HealthWorkspaceSeries[];
+  chartStatuses?: Readonly<Record<string, HealthHrvPersonalRangeStatus>>;
   chartWindow?: HealthPriorityChartWindow;
   available: boolean;
   loading: boolean;
@@ -83,6 +93,8 @@ export class HealthPrioritySummaryComponent {
         this.unitSettings(),
       ).map(model => {
         const latestPoint = model.series.points.at(-1);
+        const personalRangeStatus = card.chartStatuses?.[model.series.id] || null;
+        const statusColor = personalRangeStatus ? personalRangeStatusColor(personalRangeStatus) : null;
         return {
           model,
           latestValueText: latestPoint
@@ -97,8 +109,17 @@ export class HealthPrioritySummaryComponent {
           contextText: card.chartWindow
             ? `${isSleepHrvSemanticVariant(model.series.semanticVariant) ? 'Sleep HRV' : card.label} · ${card.chartWindow.label}`
             : model.series.semanticLabel,
-          comparisonText: card.id === 'heart_rate_variability'
-            ? buildHealthPriorityTrendComparison(model.series, this.unitSettings())
+          personalRangeStatus,
+          statusColor,
+          statusOverlay: personalRangeStatus && statusColor
+            ? {
+              normalRange: personalRangeStatus.normalRange,
+              normalRangeColor: AppDataColors.Altitude,
+              statusColor,
+            }
+            : null,
+          statusDescription: personalRangeStatus
+            ? `${personalRangeStatus.label}. ${personalRangeStatus.detailText}.`
             : null,
           startTimeMs,
           endTimeMs,
@@ -106,4 +127,13 @@ export class HealthPrioritySummaryComponent {
       }),
     };
   }));
+}
+
+function personalRangeStatusColor(status: HealthHrvPersonalRangeStatus): string {
+  switch (status.tone) {
+    case 'positive': return AppDataColors.Altitude;
+    case 'caution': return AppDataColors['Body Energy Moderate'];
+    case 'negative': return AppDataColors['Heart Rate_0'];
+    case 'neutral': return AppColors.MediumGray;
+  }
 }

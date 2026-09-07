@@ -74,6 +74,7 @@ import {
   HealthObservationTableRow,
   ManualHealthObservationEdit,
   HealthPriorityRow,
+  buildHealthHrvPersonalRangeStatus,
   HealthSleepObservationRow,
   HealthWorkspaceMetricSelection,
   HealthWorkspaceRange,
@@ -154,6 +155,8 @@ const HEALTH_SYNC_REFRESH_FIELDS = [
 
 const HEALTH_SYNC_CURRENT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const HEALTH_SYNC_DELAYED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PRIORITY_HRV_HISTORY_DAYS = 60;
 
 @Component({
   selector: 'app-health-workspace',
@@ -235,7 +238,7 @@ export class HealthWorkspaceComponent {
     range: '30d',
     endDate: this.todayDate,
   }, this.todayDate);
-  readonly priorityHrvWindow: HealthPriorityChartWindow & { startDate: string } = {
+  readonly priorityHrvWindow: HealthPriorityChartWindow & { startDate: string; endDate: string } = {
     ...resolveHealthWorkspaceWindow({
       metric: HEALTH_METRIC_IDS.HeartRateVariability,
       range: '14d',
@@ -243,6 +246,9 @@ export class HealthWorkspaceComponent {
     }, this.todayDate),
     label: '14-day trend',
   };
+  readonly priorityHrvHistoryStartDate = new Date(
+    Date.parse(`${this.priorityHrvWindow.endDate}T00:00:00.000Z`) - ((PRIORITY_HRV_HISTORY_DAYS - 1) * DAY_MS),
+  ).toISOString().slice(0, 10);
   readonly selectedHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly selectedHealthStatus = signal<HealthLoadStatus>('loading');
   readonly selectedActivityHealthResult = signal<ActivityHealthRangeResult | null>(null);
@@ -268,6 +274,39 @@ export class HealthWorkspaceComponent {
   readonly healthMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
   readonly hasAnySleepSession = signal<boolean | null>(null);
   readonly sleepMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
+  readonly priorityRecentSleepSessions = computed(() => this.prioritySleepSessions().filter(session =>
+    session.endTimeMs >= this.priorityWindow.startTimeMs
+    && session.endTimeMs <= this.priorityWindow.endTimeMs));
+  readonly priorityHrvTrendSeries = computed(() => selectHealthPriorityTrendSeries(
+    this.priorityHrvLoad()?.result,
+    this.prioritySleepSessions(),
+    this.unitSettings(),
+    {
+      startTimeMs: this.priorityHrvWindow.startTimeMs,
+      endTimeMs: this.priorityHrvWindow.endTimeMs,
+      minimumPointCount: 3,
+    },
+  ));
+  readonly priorityHrvChartStatuses = computed(() => {
+    const result = this.priorityHrvLoad()?.result;
+    if (!result) {
+      return {};
+    }
+    const fullSeriesById = new Map(buildHealthMetricWorkspaceView(
+      result,
+      this.prioritySleepSessions(),
+      [],
+      this.unitSettings(),
+    ).series.map(series => [series.id, series]));
+    return Object.fromEntries(this.priorityHrvTrendSeries().map(series => [
+      series.id,
+      buildHealthHrvPersonalRangeStatus(
+        fullSeriesById.get(series.id) || series,
+        this.priorityHrvWindow.endTimeMs,
+        this.unitSettings(),
+      ),
+    ]));
+  });
   readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
   readonly healthMetricFilteringActive = computed(() => this.healthMetricAvailabilityStatus() === 'ready');
@@ -557,7 +596,7 @@ export class HealthWorkspaceComponent {
         'Sleep',
         healthMetricIcon('sleep'),
         'sleep',
-        buildSleepPriorityRows(this.prioritySleepSessions(), this.unitSettings()),
+        buildSleepPriorityRows(this.priorityRecentSleepSessions(), this.unitSettings()),
         [],
         this.prioritySleepStatus(),
         'No Sleep sessions in the last 30 days.',
@@ -571,7 +610,7 @@ export class HealthWorkspaceComponent {
         [],
         selectHealthPriorityTrendSeries(
           this.priorityHeartRateLoad()?.result,
-          this.prioritySleepSessions(),
+          this.priorityRecentSleepSessions(),
           this.unitSettings(),
         ),
         this.priorityHeartRateStatus(),
@@ -584,20 +623,12 @@ export class HealthWorkspaceComponent {
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRateVariability),
         HEALTH_METRIC_IDS.HeartRateVariability,
         [],
-        selectHealthPriorityTrendSeries(
-          this.priorityHrvLoad()?.result,
-          this.prioritySleepSessions(),
-          this.unitSettings(),
-          {
-            startTimeMs: this.priorityHrvWindow.startTimeMs,
-            endTimeMs: this.priorityHrvWindow.endTimeMs,
-            minimumPointCount: 3,
-          },
-        ),
+        this.priorityHrvTrendSeries(),
         this.priorityHrvStatus(),
         'No HRV trend in the last 14 days.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),
         this.priorityHrvWindow,
+        this.priorityHrvChartStatuses(),
       ),
     ];
   });
@@ -837,7 +868,7 @@ export class HealthWorkspaceComponent {
       this.prioritySleepStatus.set('loading');
       if (uid) {
         const endMs = (Date.parse(`${this.todayDate}T00:00:00.000Z`) + (24 * 60 * 60 * 1000)) - 1;
-        const startMs = endMs - (30 * 24 * 60 * 60 * 1000) + 1;
+        const startMs = endMs - (PRIORITY_HRV_HISTORY_DAYS * DAY_MS) + 1;
         subscription = this.sleepService.watchForDashboard(uid, startMs, endMs).subscribe({
           next: sessions => {
             this.prioritySleepSessions.set(sessions);
@@ -874,7 +905,7 @@ export class HealthWorkspaceComponent {
       void this.loadPriorityMetric(
         uid,
         HEALTH_METRIC_IDS.HeartRateVariability,
-        this.priorityHrvWindow.startDate,
+        this.priorityHrvHistoryStartDate,
         generation,
       );
     });
@@ -1418,6 +1449,7 @@ function priorityCard(
   emptyText: string,
   available: boolean,
   chartWindow?: HealthPriorityChartWindow,
+  chartStatuses?: HealthPriorityCardView['chartStatuses'],
 ): HealthPriorityCardView {
   return {
     id,
@@ -1427,6 +1459,7 @@ function priorityCard(
     rows,
     chartSeries,
     chartWindow,
+    chartStatuses,
     available,
     loading: status === 'loading',
     error: status === 'error' || status === 'denied',

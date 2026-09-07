@@ -60,6 +60,10 @@ import {
   type DashboardSleepTrendPoint,
 } from './dashboard-sleep-chart.helper';
 import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
+import {
+  calculatePersonalMetricRange,
+  type PersonalMetricRangeTone,
+} from './personal-metric-range.helper';
 
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
@@ -184,6 +188,18 @@ export interface HealthPriorityTrendSelectionOptions {
   minimumPointCount?: number;
 }
 
+export type HealthHrvPersonalRangeTone = PersonalMetricRangeTone;
+
+export interface HealthHrvPersonalRangeStatus {
+  tone: HealthHrvPersonalRangeTone;
+  label: string;
+  detailText: string;
+  observationDayCount: number;
+  requiredObservationDayCount: number;
+  currentAverage: number | null;
+  normalRange: { min: number; max: number } | null;
+}
+
 export interface HealthPriorityDetail {
   label: string;
   valueText: string;
@@ -228,6 +244,10 @@ interface MetricDatum {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS = 36 * 60 * 60 * 1000;
+const HRV_PERSONAL_RANGE_DAYS = 60;
+const HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS = 14;
+const HRV_CURRENT_AVERAGE_DAYS = 7;
+const HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS = 3;
 const SLEEP_HRV_SEMANTIC_VARIANTS = new Set([
   'sleep_session_average_hrv',
   'sleep_overnight_hrv',
@@ -680,39 +700,91 @@ export function selectHealthPriorityTrendSeries(
       || compareText(left.sourceLabel, right.sourceLabel));
 }
 
-export function buildHealthPriorityTrendComparison(
+/**
+ * Builds a source-specific HRV status inspired by Suunto's personal-range UI.
+ * The provider's proprietary range calculation is not public, so Health uses a
+ * deterministic 60-day mean and population standard deviation. One standard
+ * deviation is the personal range; one-to-two is cautionary and beyond two is
+ * far outside. Daily medians prevent dense intraday samples from outweighing
+ * daily measurements.
+ */
+export function buildHealthHrvPersonalRangeStatus(
   series: HealthWorkspaceSeries,
+  endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null = null,
-): string | null {
-  const latest = series.points.at(-1);
-  if (!latest || typeof latest.value !== 'number' || !Number.isFinite(latest.value)) {
-    return null;
+): HealthHrvPersonalRangeStatus {
+  const status = calculatePersonalMetricRange(series.points.flatMap(point =>
+    typeof point.value === 'number' && Number.isFinite(point.value)
+      ? [{ timestampMs: point.timestampMs, calendarDate: point.calendarDate, value: point.value }]
+      : []), endTimeMs, {
+    baselineWindowDays: HRV_PERSONAL_RANGE_DAYS,
+    baselineMinimumObservationDays: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+    currentWindowDays: HRV_CURRENT_AVERAGE_DAYS,
+    currentMinimumObservationDays: HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS,
+  });
+  const observationPeriod = isSleepHrvSemanticVariant(series.semanticVariant)
+    || /(^|_)overnight($|_)/.test(series.semanticVariant)
+    ? 'nights'
+    : 'days with readings';
+  if (status.reason === 'building_baseline') {
+    return {
+      tone: 'neutral',
+      label: 'Building personal range',
+      detailText: `${status.observationDayCount}/${status.requiredObservationDayCount} ${observationPeriod}`,
+      observationDayCount: status.observationDayCount,
+      requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+      currentAverage: null,
+      normalRange: null,
+    };
   }
-  const baselineValues = series.points
-    .filter(point => point.timestampMs < latest.timestampMs
-      && point.timestampMs >= latest.timestampMs - (7 * DAY_MS)
-      && typeof point.value === 'number'
-      && Number.isFinite(point.value))
-    .map(point => point.value as number)
-    .sort((left, right) => left - right);
-  if (baselineValues.length === 0) {
-    return null;
+  if (status.reason === 'insufficient_current') {
+    return {
+      tone: 'neutral',
+      label: 'Not enough recent HRV',
+      detailText: `${status.currentObservationDayCount}/${status.requiredCurrentObservationDayCount} ${observationPeriod} for a 7-day average`,
+      observationDayCount: status.observationDayCount,
+      requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+      currentAverage: null,
+      normalRange: null,
+    };
   }
-  const middle = Math.floor(baselineValues.length / 2);
-  const median = baselineValues.length % 2 === 0
-    ? (baselineValues[middle - 1] + baselineValues[middle]) / 2
-    : baselineValues[middle];
-  const difference = latest.value - median;
-  if (difference === 0) {
-    return 'Matches prior 7-day median';
-  }
-  return `${formatHealthValue(
-    series.metricId,
-    Math.abs(difference),
-    series.unit,
-    series.nativeOnly,
-    unitSettings,
-  )} ${difference > 0 ? 'above' : 'below'} prior 7-day median`;
+  const currentAverage = status.currentAverage;
+  const normalRange = {
+    min: Math.max(0, status.normalRange.min),
+    max: status.normalRange.max,
+  };
+  const label = status.tone === 'positive'
+    ? 'Within personal range'
+    : status.tone === 'caution'
+      ? 'Outside personal range'
+      : 'Far outside personal range';
+  return {
+    tone: status.tone,
+    label,
+    detailText: `7-day average ${formatHealthValue(
+      series.metricId,
+      currentAverage,
+      series.unit,
+      series.nativeOnly,
+      unitSettings,
+    )} · Range ${formatHealthValue(
+      series.metricId,
+      normalRange.min,
+      series.unit,
+      series.nativeOnly,
+      unitSettings,
+    )}–${formatHealthValue(
+      series.metricId,
+      normalRange.max,
+      series.unit,
+      series.nativeOnly,
+      unitSettings,
+    )}`,
+    observationDayCount: status.observationDayCount,
+    requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+    currentAverage,
+    normalRange,
+  };
 }
 
 export function buildSleepPriorityRows(

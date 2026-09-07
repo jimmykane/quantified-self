@@ -3,5 +3,5 @@
   class="health-metric-series-chart"
   [class.health-metric-series-chart-compact]="compact"
   role="img"
-  [attr.aria-label]="model.ariaLabel">
+  [attr.aria-label]="statusDescription ? model.ariaLabel + ' ' + statusDescription : model.ariaLabel">
 </div>
