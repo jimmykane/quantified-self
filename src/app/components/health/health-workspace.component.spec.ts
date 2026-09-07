@@ -585,7 +585,7 @@ describe('HealthWorkspaceComponent', () => {
     }));
   }, 10_000);
 
-  it('keeps mobile range controls width-safe and provider filters on one scrollable row', () => {
+  it('keeps mobile arrows beside the ranges and wraps sources without a nested scroll area', () => {
     const styles = readFileSync(resolve(
       process.cwd(),
       'src/app/components/health/health-workspace.component.scss',
@@ -595,10 +595,19 @@ describe('HealthWorkspaceComponent', () => {
     expect(styles).toContain('box-sizing: border-box');
     expect(styles).toContain('flex: 1 1 0');
     expect(styles).toContain('padding-inline: 4px');
-    expect(styles).toContain('.health-provider-filters::-webkit-scrollbar');
-    expect(styles).toContain('overscroll-behavior-inline: contain');
-    expect(styles).toContain('gap: 0.375rem');
-    expect(styles).toContain('@media (max-width: 360px)');
+    for (const selector of ['health-window-older', 'health-window-newer', 'health-range-selector']) {
+      expect(styles).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*grid-row: 1;`));
+    }
+    expect(styles).not.toContain('@media (max-width: 360px)');
+    expect(styles).not.toContain('grid-row: 2');
+    const filterRules = [...styles.matchAll(/\.health-provider-filters\s*\{([^}]*)\}/g)]
+      .map(match => match[1]).join('\n');
+    expect(filterRules).toContain('flex-wrap: wrap');
+    expect(filterRules).not.toMatch(/overflow|scrollbar/);
+    expect(styles).toContain('--mat-button-outlined-container-height: 44px');
+    expect(filterRules).toContain('row-gap: 0.5rem');
+    expect(filterRules).toContain('column-gap: 0.375rem');
+    expect(styles).toMatch(/\.health-provider-filter-content\s*\{[^}]*display: flex;/);
   });
 
   it('opens highlight metrics without styling the highlight as selected', async () => {
@@ -801,6 +810,10 @@ describe('HealthWorkspaceComponent', () => {
     const todayButton = (fixture.nativeElement as HTMLElement)
       .querySelector<HTMLButtonElement>('[aria-label="Jump to today"]');
     expect(todayButton).not.toBeNull();
+    expect(todayButton?.closest('.health-detail-heading')).not.toBeNull();
+    expect(todayButton?.closest('.health-window-navigation')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-window-navigation')?.children)
+      .toHaveLength(3);
 
     todayButton?.click();
     fixture.detectChanges();

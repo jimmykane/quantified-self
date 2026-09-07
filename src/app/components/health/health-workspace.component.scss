@@ -151,6 +151,17 @@
   gap: 0.4rem;
 }
 
+.health-detail-heading {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.health-window-today {
+  flex: 0 0 auto;
+}
+
 .health-add-measurement {
   --mat-button-filled-container-height: 36px;
 
@@ -247,11 +258,10 @@
 
 .health-provider-filter-content {
   align-items: center;
-  display: inline-flex;
+  display: flex;
   gap: 0.5rem;
   white-space: nowrap;
 }
-
 .health-provider-filter-content > mat-icon {
   font-size: 18px;
   height: 18px;
@@ -493,15 +503,12 @@
 
   .health-window-older {
     grid-column: 1;
+    grid-row: 1;
   }
 
   .health-window-newer {
     grid-column: 3;
-  }
-
-  .health-window-today {
-    grid-column: 3;
-    grid-row: 2;
+    grid-row: 1;
   }
 
   .health-range-save-status {
@@ -514,6 +521,7 @@
 
     display: flex;
     grid-column: 2;
+    grid-row: 1;
     min-width: 0;
     width: 100%;
   }
@@ -537,20 +545,15 @@
   }
 
   .health-provider-filters {
-    flex-wrap: nowrap;
-    gap: 0.375rem;
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: none;
-  }
-
-  .health-provider-filters::-webkit-scrollbar {
-    display: none;
+    // Wrapping keeps every source visible without a nested scroll area. Leave
+    // room between rows for Material's 48px touch targets around 44px buttons.
+    column-gap: 0.375rem;
+    row-gap: 0.5rem;
   }
 
   .health-provider-filter {
+    --mat-button-outlined-container-height: 44px;
+
     flex: 0 0 auto;
     padding-inline: 0.5rem;
   }
@@ -586,23 +589,5 @@
     align-items: flex-start;
     flex-direction: column;
     min-height: 170px;
-  }
-}
-
-@media (max-width: 360px) {
-  .health-range-selector {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-
-  .health-window-older,
-  .health-window-newer,
-  .health-window-today {
-    grid-row: 2;
-  }
-
-  .health-window-today {
-    grid-column: 2;
-    justify-self: center;
   }
 }

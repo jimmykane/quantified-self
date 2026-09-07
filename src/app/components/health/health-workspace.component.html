@@ -115,9 +115,22 @@
 
       <article class="health-detail" aria-labelledby="health-detail-title">
         <header class="health-detail-header">
-          <div>
-            <h2 id="health-detail-title">{{ detailTitle() }}</h2>
-            <p>{{ detailSubtitle() }}</p>
+          <div class="health-detail-heading">
+            <div>
+              <h2 id="health-detail-title">{{ detailTitle() }}</h2>
+              <p>{{ detailSubtitle() }}</p>
+            </div>
+            @if (selectedWindow().canNavigateNewer) {
+              <button
+                mat-icon-button
+                type="button"
+                class="health-window-today"
+                matTooltip="Jump to today"
+                aria-label="Jump to today"
+                (click)="jumpToToday()">
+                <mat-icon aria-hidden="true">today</mat-icon>
+              </button>
+            }
           </div>
           <div class="health-detail-controls">
           <div class="health-window-navigation" aria-label="Health data window">
@@ -150,17 +163,6 @@
               (click)="navigateWindow('newer')">
               <mat-icon aria-hidden="true">chevron_right</mat-icon>
             </button>
-            @if (selectedWindow().canNavigateNewer) {
-              <button
-                mat-icon-button
-                type="button"
-                class="health-window-today"
-                matTooltip="Jump to today"
-                aria-label="Jump to today"
-                (click)="jumpToToday()">
-                <mat-icon aria-hidden="true">today</mat-icon>
-              </button>
-            }
           </div>
           </div>
         </header>
