@@ -84,11 +84,22 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       endDate: range.endDate > projected.range.endDate ? range.endDate : projected.range.endDate } : projected.range;
     const area: unknown[] = [];
     const markers: unknown[] = [];
-    groupTimelineNotes(notes, projected.range, nowMs).forEach((group, i) => {
+    const positions = new Map<number, { end: number; notes: TimelineNote[]; hasPeriod: boolean }>();
+    groupTimelineNotes(notes, projected.range, nowMs).forEach(group => {
       const start = projected.x(group.startDate, false);
       const end = projected.x(group.endDate, true);
       if (start === null || end === null || start > end) return;
-      const name = `timeline-note-${axisIndex}-${i}`;
+      // Different calendar days can share a weekly bucket or clipped endpoint. Keep one selectable marker.
+      const existing = positions.get(start);
+      const hasPeriod = group.startDate !== group.endDate;
+      if (existing) {
+        existing.notes.push(...group.notes);
+        existing.end = Math.max(existing.end, end);
+        existing.hasPeriod ||= hasPeriod;
+      } else positions.set(start, { end, notes: [...group.notes], hasPeriod });
+    });
+    positions.forEach((group, start) => {
+      const name = `timeline-note-${axisIndex}-${markers.length}`;
       groups.set(name, group.notes);
       const text = group.notes.map(note => `${TIMELINE_NOTE_LABELS[note.category]}: ${note.title} · ${timelineNoteDates(note)}`).join('\n');
       const tooltip = { show: true, trigger: 'item', formatter: () => escapeDashboardEChartsTooltipHtml(text).replace(/\n/g, '<br>') };
@@ -96,7 +107,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       markers.push({ name, xAxis: start, symbol: ['circle', 'none'], symbolSize: 8,
         lineStyle: { opacity: 0.2, color, type: 'dotted' }, itemStyle: { color },
         label: { show: true, position: 'insideStartTop', rotate: 0, opacity: 1, formatter: group.notes.length > 1 ? `${group.notes.length} notes` : 'Note', color, fontSize: 11 }, tooltip });
-      if (group.startDate !== group.endDate) area.push([{ name, xAxis: start, itemStyle: { color, opacity: 0.055 }, tooltip }, { xAxis: end }]);
+      if (group.hasPeriod) area.push([{ name, xAxis: start, itemStyle: { color, opacity: 0.055 }, tooltip }, { xAxis: group.end }]);
     });
     if (markers.length) overlays.push({ id: `timeline-note-overlay-${axisIndex}`, name: '', type: 'line', data: [],
       xAxisIndex: axisIndex, yAxisIndex: matchingSeries[0].yAxisIndex ?? 0, animation: false,

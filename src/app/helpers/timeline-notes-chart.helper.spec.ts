@@ -38,6 +38,32 @@ describe('timeline chart overlays', () => {
     const result = addTimelineNotesToChart(option, [note], { offsetSeconds: () => 10_800 });
     expect(result.option.series[1].markLine.data[0].xAxis).toBe(date('2026-09-02') - 10_800_000);
   });
+  it('groups distinct days that occupy the same weekly marker, retaining every actual date', () => {
+    const first = { ...note, startDate: '2026-09-01', endDate: '2026-09-01' };
+    const second = { ...note, id: 'b'.repeat(64), startDate: '2026-09-04', endDate: '2026-09-04' };
+    const result = addTimelineNotesToChart({ xAxis: { type: 'category', data: [date('2026-08-31'), date('2026-09-07')] },
+      series: [{ data: [1, 2] }] }, [first, second], { bucketDays: 7 });
+    const markers = result.option.series[1].markLine.data;
+    expect(markers).toHaveLength(1);
+    expect(result.groups.get(markers[0].name)).toEqual([first, second]);
+    expect(markers[0].tooltip.formatter()).toContain('2026-09-01');
+    expect(markers[0].tooltip.formatter()).toContain('2026-09-04');
+    expect(result.option.series[1].markArea.data).toEqual([]);
+  });
+  it('groups notes clipped to the final weekly time point without changing other markers or period bands', () => {
+    const first = { ...note, startDate: '2026-09-08', endDate: '2026-09-08' };
+    const second = { ...note, id: 'b'.repeat(64), startDate: '2026-09-11', endDate: '2026-09-11' };
+    const period = { ...note, id: 'c'.repeat(64) };
+    const source = { xAxis: { type: 'time', min: date('2026-08-31'), max: date('2026-09-07') },
+      series: [{ data: [[date('2026-08-31'), 1], [date('2026-09-07'), 2]] }] };
+    const result = addTimelineNotesToChart(source, [first, second, period], { bucketDays: 7 });
+    const overlay = result.option.series[1];
+    expect(overlay.markLine.data).toHaveLength(2);
+    expect(result.groups.get(overlay.markLine.data[1].name)).toEqual([first, second]);
+    expect(overlay.markLine.data[1].xAxis).toBe(date('2026-09-07'));
+    expect(overlay.markArea.data).toHaveLength(1);
+    expect(result.option.series[0]).toBe(source.series[0]);
+  });
   it('does nothing for empty, unannotated and non-date charts', () => {
     expect(addTimelineNotesToChart(option, []).option).toBe(option);
     expect(addTimelineNotesToChart({ series: [] }, [note]).range).toBeNull();

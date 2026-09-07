@@ -39,6 +39,7 @@ The service deduplicates overlapping covered requests, fences stale account/rang
 and returning to the workspace. Notes failing to load never block metric rendering. Provider/sport filters do not filter
 notes. The global preference is `settings.appSettings.timelineNotes.showOnCharts`, default true. The Material manager
 supports create/edit, confirmed delete, End today, retries and explicit conflict reload while preserving unsaved drafts.
+Failed history-page requests retry that same page; failed visibility saves restore the persisted checkbox state.
 
 ## Chart boundary
 
@@ -47,6 +48,8 @@ they do not alter measurement series, axis bounds, legends, metric tooltips, gap
 Overlaps group into neutral markers instead of blending category colors; each note retains its category and actual dates
 in the escaped tooltip and manager. Single markers open the editor; grouped markers open the matching list. The header
 manager provides the keyboard-accessible alternative to click/tap, without requiring hover.
+Distinct dates projected onto the same weekly bucket or clipped endpoint share one selectable marker, preserving access
+to every note and its actual dates. Grouping single-day notes does not create a period band between them.
 
 Opt-in surfaces: Health detailed metrics (recorded timezone), normalized Sleep (sleepDate), Training readiness,
 load/Form, freshness forecast (existing viewer-calendar convention), body weight, power-system history, weekly swimming

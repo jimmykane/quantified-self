@@ -6,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
-import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatCheckboxModule, type MatCheckbox } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
@@ -44,6 +44,7 @@ export class TimelineNotesDialogComponent {
   readonly limits = TIMELINE_NOTE_LIMITS;
   readonly nextCursor = signal<QueryDocumentSnapshot | null>(null);
   readonly pageNumber = signal(0);
+  readonly requestedPage = signal(0);
   private cursors: Array<QueryDocumentSnapshot | null> = [null];
   private mutationId: string | null = null;
   private zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -65,6 +66,7 @@ export class TimelineNotesDialogComponent {
   async loadPage(index: number): Promise<void> {
     if (this.busy()) return;
     const version = ++this.loadVersion;
+    this.requestedPage.set(index);
     this.busy.set(true); this.error.set(null);
     try {
       const page = await this.service.list(this.data.uid, this.cursors[index]);
@@ -140,12 +142,16 @@ export class TimelineNotesDialogComponent {
     } catch { this.error.set('Could not reload the note. Your unsaved text is still here.'); }
     finally { this.busy.set(false); }
   }
-  async toggleVisibility(value: boolean): Promise<void> {
+  async toggleVisibility(value: boolean, checkbox: MatCheckbox): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true); this.error.set(null);
     try { await this.service.setShowOnCharts(this.data.uid, value); }
     catch { this.error.set('Could not save chart visibility. Please try again.'); }
-    finally { this.busy.set(false); }
+    finally {
+      // Material changes its own checked state before emitting. Restore the persisted value on failure.
+      checkbox.checked = this.service.showOnCharts();
+      this.busy.set(false);
+    }
   }
   private showMutationError(error: unknown): void {
     const code = (error as { code?: string })?.code;

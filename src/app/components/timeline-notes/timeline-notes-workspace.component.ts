@@ -25,9 +25,7 @@ import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component'
       <button mat-button type="button" (click)="open()" matTooltip="Some notes are not shown because this view reached its note or data limit. Browse all notes here.">Some notes not shown</button>
     }
   `,
-  styles: [`:host { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
-    .status { font-size: 12px; color: var(--mat-sys-on-surface-variant); }
-    @media (max-width: 599px) { button span { display: none; } }`],
+  styleUrls: ['./timeline-notes-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TimelineNotesWorkspaceComponent {
@@ -53,6 +51,7 @@ export class TimelineNotesWorkspaceComponent {
     const owner = this.service.uid();
     return {
       notes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.notes() : [],
+      // ECharts callbacks run outside Angular; entering here lets Material own dialog/focus lifecycle.
       select: notes => this.zone.run(() => { if (owner && this.service.isOwner(owner)) this.open(notes); }),
       reportRange: this.reportRange,
     };

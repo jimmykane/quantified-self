@@ -6,12 +6,12 @@
       @if (existing()) { <button mat-button type="button" [disabled]="busy()" (click)="reloadNote()">Reload note</button> }
       @else { <button mat-button type="button" [disabled]="busy()" (click)="showList()">Browse notes</button> }
     }
-    @else if (view() === 'list') { <button mat-button type="button" [disabled]="busy()" (click)="loadPage(pageNumber())">Retry</button> }
+    @else if (view() === 'list') { <button mat-button type="button" [disabled]="busy()" (click)="loadPage(requestedPage())">Retry</button> }
   }
   @if (view() === 'list') {
     <div class="note-toolbar">
       <button mat-flat-button type="button" [disabled]="busy()" (click)="edit(null)"><span class="note-action"><mat-icon>add</mat-icon><span>Add note</span></span></button>
-      <mat-checkbox [checked]="service.showOnCharts()" [disabled]="busy()" (change)="toggleVisibility($event.checked)">Show on charts</mat-checkbox>
+      <mat-checkbox [checked]="service.showOnCharts()" [disabled]="busy()" (change)="toggleVisibility($event.checked, $event.source)">Show on charts</mat-checkbox>
     </div>
     <p class="note-hint">Private context across Health, Sleep, and Training. Notes do not change your measurements or scores.</p>
     <ul class="note-list" aria-label="Timeline notes">

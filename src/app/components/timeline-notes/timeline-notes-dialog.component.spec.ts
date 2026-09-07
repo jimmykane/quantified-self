@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { signal } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { MatCheckbox } from '@angular/material/checkbox';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component';
@@ -9,7 +11,7 @@ import { BrowserCompatibilityService } from '../../services/browser.compatibilit
 
 describe('Timeline notes editor', () => {
   const note = { id: 'a'.repeat(64), category: 'sickness' as const, title: 'Sickness', startDate: '2026-01-01', endDate: null, timeZone: 'Europe/Helsinki', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
-  const service = { uid: signal('owner'), showOnCharts: signal(true), list: vi.fn(), save: vi.fn(), remove: vi.fn(), get: vi.fn(), isOwner: () => true };
+  const service = { uid: signal('owner'), showOnCharts: signal(true), setShowOnCharts: vi.fn(), list: vi.fn(), save: vi.fn(), remove: vi.fn(), get: vi.fn(), isOwner: () => true };
   let component: TimelineNotesDialogComponent;
   beforeEach(() => {
     vi.clearAllMocks(); service.list.mockResolvedValue({ notes: [note], cursor: null }); service.save.mockResolvedValue(note);
@@ -44,5 +46,28 @@ describe('Timeline notes editor', () => {
   });
   it('uses a confirmed revision-checked delete', async () => {
     await component.remove(); expect(service.remove).toHaveBeenCalledWith('owner', { noteId: note.id, expectedRevision: 1 });
+  });
+  it('restores the Material checkbox when saving chart visibility fails', async () => {
+    service.setShowOnCharts.mockRejectedValueOnce(new Error('offline'));
+    const fixture = TestBed.createComponent(TimelineNotesDialogComponent);
+    await fixture.componentInstance.showList(); fixture.detectChanges();
+    const checkbox = fixture.debugElement.query(By.directive(MatCheckbox));
+    checkbox.nativeElement.querySelector('input').click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(service.setShowOnCharts).toHaveBeenCalledWith('owner', false);
+    expect(checkbox.componentInstance.checked).toBe(true);
+    expect(fixture.componentInstance.error()).toContain('Could not save chart visibility');
+  });
+  it('retries the failed history page rather than silently returning to the previous page', async () => {
+    const cursor = {};
+    service.list.mockResolvedValueOnce({ notes: [note], cursor });
+    const fixture = TestBed.createComponent(TimelineNotesDialogComponent);
+    await fixture.componentInstance.showList(); fixture.detectChanges();
+    service.list.mockRejectedValueOnce(new Error('offline'));
+    await fixture.componentInstance.loadPage(1); fixture.detectChanges();
+    const retry = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+      .find(button => button.textContent?.trim() === 'Retry')!;
+    retry.click(); await fixture.whenStable();
+    expect(service.list).toHaveBeenLastCalledWith('owner', cursor);
   });
 });
