@@ -28,6 +28,7 @@
   </app-page-header>
 
   <app-health-priority-summary
+    [timelineNotes]="timelineNotes.context()"
     [cards]="visiblePriorityCards()"
     [startTimeMs]="priorityWindow.startTimeMs"
     [endTimeMs]="priorityWindow.endTimeMs"

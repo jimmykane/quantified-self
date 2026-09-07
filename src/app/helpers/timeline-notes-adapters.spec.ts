@@ -52,9 +52,9 @@ describe('explicit Timeline note chart adapters', () => {
   });
   it('opts in only the requested workspaces, leaving dashboard/public chart inputs at their private-data-free defaults', () => {
     const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
-    expect(source('src/app/components/health/health-workspace.component.html').match(/\[timelineNotes\]/g)).toHaveLength(2);
+    expect(source('src/app/components/health/health-workspace.component.html').match(/\[timelineNotes\]/g)).toHaveLength(3);
     expect(source('src/app/components/training/training-workspace.component.html').match(/\[timelineNotes\]/g)).toHaveLength(7);
-    expect(source('src/app/components/health/health-priority-summary.component.html')).not.toContain('[timelineNotes]');
+    expect(source('src/app/components/health/health-priority-summary.component.html')).toContain('[timelineNotes]="timelineNotes()"');
     const cleanup = source('extensions/delete-user-data.env');
     expect(cleanup).toContain('FIRESTORE_DELETE_MODE=recursive'); expect(cleanup).toContain('FIRESTORE_PATHS=users/{UID}');
   });

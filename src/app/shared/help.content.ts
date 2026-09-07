@@ -61,6 +61,8 @@ Choose a single day, an inclusive date range, or an ongoing period. You can plan
 
 The manager lists all notes, including future plans, newest start date first. You can edit, delete with confirmation, or browse older pages. **Show on charts** is remembered across Health, Sleep, and Training. Tap a chart marker to open its note, or a grouped marker to see the overlapping notes. The manager is also the keyboard-accessible way to browse them. Weekly charts show which notes overlap a week while retaining their actual dates.
 
+In Health, notes appear on the Highlights trend charts as well as the detailed metric and Sleep charts. They follow each chart's date window, even when the explorer is showing older history.
+
 Notes never change your measurements, readiness, or forecasts. Ongoing shading stops today. Source and sport filters do not hide notes. If a view reaches its note limit or cannot load notes, it says so while keeping your metric charts available. Notes stay private: they are not sent to connected providers, public shares, MCP clients, or the Assistant. Disconnecting a provider keeps them; deleting your account removes them.
 `;
 

@@ -35,6 +35,8 @@ at most 512 records / 2 MiB, across 64-record pages; it reports explicit incompl
 pages all notes, including future notes, newest start date first. No query parameters or navigation destination exist.
 
 `TimelineNotesWorkspaceComponent` coalesces chart range registrations into a union and supplies explicit chart inputs.
+Health Highlights register their own fixed trend windows alongside the metric explorer's selected window, so navigating
+the explorer into older history does not drop recent Highlight notes. All use the same bounded, account-scoped load.
 The service deduplicates overlapping covered requests, fences stale account/range results, and invalidates on mutations
 and returning to the workspace. Notes failing to load never block metric rendering. Provider/sport filters do not filter
 notes. The global preference is `settings.appSettings.timelineNotes.showOnCharts`, default true. The Material manager
@@ -51,10 +53,10 @@ manager provides the keyboard-accessible alternative to click/tap, without requi
 Distinct dates projected onto the same weekly bucket or clipped endpoint share one selectable marker, preserving access
 to every note and its actual dates. Grouping single-day notes does not create a period band between them.
 
-Opt-in surfaces: Health detailed metrics (recorded timezone), normalized Sleep (sleepDate), Training readiness,
+Opt-in surfaces: Health Highlights and detailed metrics (recorded timezone), normalized Sleep (sleepDate), Training readiness,
 load/Form, freshness forecast (existing viewer-calendar convention), body weight, power-system history, weekly swimming
 and weekly durability. Weekly overlays identify overlapping buckets but retain actual note dates in tooltips. All shared
-inputs default null. Dashboard, priority mini-charts, workout details, calendar entries, public previews and non-calendar
+inputs default null. Dashboard, workout details, calendar entries, public previews and non-calendar
 charts are unchanged.
 
 ## Verification and release

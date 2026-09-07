@@ -22,6 +22,7 @@ import {
 } from '../../helpers/health-metric-chart.helper';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
 import { HealthSleepStageSummaryComponent } from './health-sleep-stage-summary.component';
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 
 interface HealthPriorityChartView {
   model: HealthChartSeriesModel;
@@ -81,6 +82,7 @@ export class HealthPrioritySummaryComponent {
   readonly endTimeMs = input.required<number>();
   readonly darkTheme = input(false);
   readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
+  readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
   readonly metricSelected = output<HealthWorkspaceMetricSelection>();
   readonly renderedCards = computed<readonly RenderedHealthPriorityCardView[]>(() => this.cards().map(card => {
     const startTimeMs = card.chartWindow?.startTimeMs ?? this.startTimeMs();

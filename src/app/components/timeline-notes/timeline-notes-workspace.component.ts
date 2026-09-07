@@ -7,6 +7,7 @@ import { MatDialog } from '@angular/material/dialog';
 import type { TimelineNote, TimelineNoteRange, TimelineNotesLoad } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 
@@ -32,6 +33,7 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 export class TimelineNotesWorkspaceComponent {
   readonly service = inject(AppTimelineNotesService);
   private readonly dialogs = inject(MatDialog);
+  private readonly haptics = inject(AppHapticsService);
   private readonly zone = inject(NgZone);
   private readonly destroy = inject(DestroyRef);
   private readonly notes = signal<readonly TimelineNote[]>([]);
@@ -53,7 +55,12 @@ export class TimelineNotesWorkspaceComponent {
     return {
       notes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.notes() : [],
       // ECharts callbacks run outside Angular; entering here lets Material own dialog/focus lifecycle.
-      select: notes => this.zone.run(() => { if (owner && this.service.isOwner(owner)) this.open(notes); }),
+      select: notes => this.zone.run(() => {
+        if (!notes.length || !owner || !this.service.isOwner(owner)) return;
+        // Note markers are not metric-series clicks; this accepted action owns their feedback.
+        this.haptics.selection();
+        this.open(notes);
+      }),
       reportRange: this.reportRange,
     };
   });

@@ -4,10 +4,11 @@ This document is the source of truth for the cross-provider health foundation in
 
 Issue #614 adds the authenticated **Health** workspace on top of this foundation. Normalized Sleep remains separate and is resolved through typed references. Weight profile context and activity-level VO2 max already embedded in imported workouts can be read on demand for Health without copying them into Health storage or changing the activity contract. Canonical Health Weight can also supply source-separated Training context and the identity-free body-measurement MCP projection; qualifying manual VO2 max can provide a separately labelled Training reference without changing the public MCP wire schema.
 
-Private [Timeline notes](timeline-notes.md) add calendar context to Health's detailed metric and normalized Sleep charts.
+Private [Timeline notes](timeline-notes.md) add calendar context to Health's Highlights, detailed metric and normalized Sleep charts.
 They use an independent user-owned collection and shared Material manager, not Health records or Sleep sessions.
-Notes are not filtered by provider and never change measurements, aggregation, or source semantics. Priority mini-charts
-remain unannotated. The chart visibility preference lives in account settings, not query parameters.
+Notes are not filtered by provider and never change measurements, aggregation, or source semantics. Highlights register
+their own trend windows alongside the selected explorer range. The shared chart visibility preference lives in account
+settings, not query parameters. The Sleep stage breakdown is not a calendar chart and remains unchanged.
 
 ## Goals
 

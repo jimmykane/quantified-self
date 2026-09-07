@@ -45,6 +45,34 @@ describe('Timeline notes workspace ownership', () => {
     expect(component.context().notes).toEqual([note]);
     component.context().select([note]); expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: [note] } }));
   });
+  it('keeps fixed Highlights windows loaded alongside an older explorer and releases them on removal', async () => {
+    const heartRate = {}, hrv = {}, explorer = {};
+    const report = component.context().reportRange;
+    report(heartRate, { startDate: '2025-12-12', endDate: '2026-01-10' });
+    report(hrv, { startDate: '2025-12-28', endDate: '2026-01-10' });
+    report(explorer, { startDate: '2025-11-01', endDate: '2025-11-30' });
+    await flush();
+    expect(service.loadRange).toHaveBeenCalledExactlyOnceWith('owner', { startDate: '2025-11-01', endDate: '2026-01-10' });
+    expect(component.context().notes).toEqual([note]);
+    report(heartRate, null); report(hrv, null);
+    await flush();
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2025-11-01', endDate: '2025-11-30' });
+  });
+  it('provides one feedback for an accepted note marker, not empty or stale-account selections', async () => {
+    await flush();
+    const context = component.context();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    context.select([]);
+    expect(dialogs.open).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    context.select([note]);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(dialogs.open).toHaveBeenCalledOnce();
+    service.uid.set('another-owner'); await flush();
+    context.select([note]);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(dialogs.open).toHaveBeenCalledOnce();
+  });
   it('ignores stale ranges and clears private state on account switch', async () => {
     let resolve!: (value: unknown) => void;
     service.loadRange.mockReturnValueOnce(new Promise(value => { resolve = value; }));

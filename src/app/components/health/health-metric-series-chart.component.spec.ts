@@ -8,6 +8,7 @@ import {
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import type { TimelineNote } from '@shared/timeline-notes';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildHealthChartModels } from '../../helpers/health-metric-chart.helper';
 import { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
@@ -50,6 +51,7 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 
 describe('HealthMetricSeriesChartComponent', () => {
   let fixture: ComponentFixture<HealthMetricSeriesChartComponent>;
+  let chart: { isDisposed: ReturnType<typeof vi.fn>; dispatchAction: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> };
   let eChartsLoader: {
     init: ReturnType<typeof vi.fn>;
     setOption: ReturnType<typeof vi.fn>;
@@ -60,9 +62,11 @@ describe('HealthMetricSeriesChartComponent', () => {
   };
 
   beforeEach(async () => {
-    const chart = {
+    chart = {
       isDisposed: vi.fn().mockReturnValue(false),
       dispatchAction: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
     };
     eChartsLoader = {
       init: vi.fn().mockResolvedValue(chart),
@@ -147,5 +151,45 @@ describe('HealthMetricSeriesChartComponent', () => {
     };
     expect(option.series[0].markArea).toBeTruthy();
     expect(option.series[0].markPoint).toBeTruthy();
+  });
+
+  it('adds selectable notes to compact Highlights without changing values or the personal range', async () => {
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'Travel', startDate: '1970-01-01', endDate: '1970-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    const context = { notes: [note], select: vi.fn(), reportRange: vi.fn() };
+    fixture.componentRef.setInput('compact', true);
+    fixture.componentRef.setInput('statusOverlay', { normalRange: { min: 45, max: 55 }, normalRangeColor: '#00aa00', statusColor: '#ffaa00' });
+    fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(2));
+    type Axis = { type: string; min: number; max: number; show: boolean };
+    type Option = { xAxis: Axis; yAxis: Axis; series: Array<{ id?: string; data: unknown[]; markArea?: unknown; markLine?: { data: Array<{ name: string }> } }> };
+    const before = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
+    fixture.componentRef.setInput('timelineNotes', context);
+    fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(3));
+    const annotated = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
+    expect(annotated.series).toHaveLength(before.series.length + 1);
+    expect(annotated.series[0]).toEqual(before.series[0]);
+    expect(annotated.series[0].markArea).toBeTruthy();
+    expect(annotated.xAxis).toMatchObject({ type: 'time', min: 0, max: DAY_MS, show: false });
+    expect(annotated.yAxis).toMatchObject({ min: before.yAxis.min, max: before.yAxis.max, show: false });
+    expect(context.reportRange).toHaveBeenCalledWith(expect.anything(), { startDate: '1970-01-01', endDate: '1970-01-02' });
+    const overlay = annotated.series.at(-1)!;
+    expect(overlay.id).toBe('timeline-note-overlay-0');
+    expect(overlay.data).toEqual([]);
+    const marker = { componentType: 'markLine', name: overlay.markLine!.data[0].name };
+    expect(chart.on).toHaveBeenCalledOnce();
+    chart.on.mock.calls[0][1](marker);
+    expect(context.select).toHaveBeenCalledExactlyOnceWith([note]);
+
+    fixture.componentRef.setInput('timelineNotes', { ...context, notes: [] });
+    fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(4));
+    const hidden = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
+    expect(hidden.series).toEqual(before.series);
+    chart.on.mock.calls[0][1](marker);
+    expect(context.select).toHaveBeenCalledOnce();
+    fixture.destroy();
+    expect(chart.off).toHaveBeenCalledWith('click', chart.on.mock.calls[0][1]);
+    expect(context.reportRange).toHaveBeenLastCalledWith(expect.anything(), null);
   });
 });

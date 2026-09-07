@@ -68,6 +68,7 @@
                       <small class="health-priority-range-detail">{{ chart.personalRangeStatus.detailText }}</small>
                     }
                     <app-health-metric-series-chart
+                      [timelineNotes]="timelineNotes()"
                       [model]="chart.model"
                       [startTimeMs]="chart.startTimeMs"
                       [endTimeMs]="chart.endTimeMs"
