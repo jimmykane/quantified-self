@@ -57,7 +57,7 @@ const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
 
 - **Health (Beta)** is the authenticated workspace for source-attributed Sleep, heart rate, HRV, movement, energy, wellness, body, and fitness measurements imported from supported connected services. Its in-app entry points are temporarily staged to selected accounts; the plan and connection requirements for importing provider history do not change.
 - Eligible beta accounts can open it from the main navigation or use **Open Health** beside **Open Training** on Dashboard. Health is a fixed workspace, not a configurable dashboard tile.
-- The first cards always show **Sleep**, **Heart rate**, then **HRV** for the latest 30 days. Each connected source gets its own row. Health never creates a cross-provider headline average or saves a preferred source.
+- Highlights show available **Sleep** and **Heart rate** context with every connected source kept separate. **HRV** appears as a source-specific 14-day trend only when that series has at least three observations; a lone sleep-derived HRV value already shown inside Sleep is not repeated as an empty card. The latest HRV is compared with that same series' preceding seven-day median. Health never creates a cross-provider headline average or saves a preferred source.
 
 ## Explore a metric
 

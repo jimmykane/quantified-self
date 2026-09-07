@@ -32,6 +32,7 @@ import {
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
   buildHealthPriorityRows,
+  buildHealthPriorityTrendComparison,
   buildSleepObservationRows,
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
@@ -471,6 +472,55 @@ describe('Health workspace helpers', () => {
       ['Suunto', 'sample'],
       ['Garmin', 'average'],
     ]);
+  });
+
+  it('requires enough source-separated HRV observations in the selected trend window', () => {
+    const hrvMetric = (value: number): HealthMetricValue => valueEntry({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      semanticVariant: 'sleep_session_average_hrv',
+      native: { metric: 'averageHrv', value, unit: 'ms' },
+      canonical: { value, unit: HEALTH_UNITS.Millisecond },
+    });
+    const result = projectLoadedHealthRange([
+      sourceRecord({
+        id: 'outside-window',
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        accountKey: 'suunto-one',
+        calendarDate: '2026-07-15',
+        metrics: [hrvMetric(35)],
+      }),
+      ...[
+        ['2026-07-27', 40],
+        ['2026-07-29', 42],
+        ['2026-08-01', 44],
+      ].map(([calendarDate, value], index) => sourceRecord({
+        id: `inside-window-${index}`,
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        accountKey: 'suunto-one',
+        calendarDate: `${calendarDate}`,
+        metrics: [hrvMetric(Number(value))],
+      })),
+    ], [], {
+      startDate: '2026-07-01',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+      includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const window = {
+      startTimeMs: Date.parse('2026-07-19T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-08-01T23:59:59.999Z'),
+      minimumPointCount: 3,
+    };
+
+    const trendSeries = selectHealthPriorityTrendSeries(result, [], null, window);
+
+    expect(trendSeries).toHaveLength(1);
+    expect(trendSeries[0].points.map(point => point.value)).toEqual([40, 42, 44]);
+    expect(buildHealthPriorityTrendComparison(trendSeries[0])).toBe('3 ms above prior 7-day median');
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      ...window,
+      startTimeMs: Date.parse('2026-07-29T00:00:00.000Z'),
+    })).toEqual([]);
   });
 
   it('renders provider-specific Body Energy scores as bars without changing other series', () => {

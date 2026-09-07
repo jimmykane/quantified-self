@@ -55,6 +55,7 @@ import { ServiceSourceIconComponent } from '../event-summary/service-source-icon
 import { HealthMetricChartComponent } from './health-metric-chart.component';
 import { HealthActivityQueryService } from './health-activity-query.service';
 import {
+  HealthPriorityChartWindow,
   HealthPriorityCardView,
   HealthPrioritySummaryComponent,
 } from './health-priority-summary.component';
@@ -80,7 +81,6 @@ import {
   HealthWorkspaceSeries,
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
-  buildHealthPriorityRows,
   buildSleepObservationRows,
   buildSleepPriorityRows,
   filterHealthRangeResultByProviders,
@@ -235,6 +235,14 @@ export class HealthWorkspaceComponent {
     range: '30d',
     endDate: this.todayDate,
   }, this.todayDate);
+  readonly priorityHrvWindow: HealthPriorityChartWindow & { startDate: string } = {
+    ...resolveHealthWorkspaceWindow({
+      metric: HEALTH_METRIC_IDS.HeartRateVariability,
+      range: '14d',
+      endDate: this.todayDate,
+    }, this.todayDate),
+    label: '14-day trend',
+  };
   readonly selectedHealthLoad = signal<HealthWorkspaceRangeLoad | null>(null);
   readonly selectedHealthStatus = signal<HealthLoadStatus>('loading');
   readonly selectedActivityHealthResult = signal<ActivityHealthRangeResult | null>(null);
@@ -575,20 +583,28 @@ export class HealthWorkspaceComponent {
         'HRV',
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRateVariability),
         HEALTH_METRIC_IDS.HeartRateVariability,
-        buildHealthPriorityRows(
+        [],
+        selectHealthPriorityTrendSeries(
           this.priorityHrvLoad()?.result,
           this.prioritySleepSessions(),
           this.unitSettings(),
+          {
+            startTimeMs: this.priorityHrvWindow.startTimeMs,
+            endTimeMs: this.priorityHrvWindow.endTimeMs,
+            minimumPointCount: 3,
+          },
         ),
-        [],
         this.priorityHrvStatus(),
-        'No HRV summaries in the last 30 days.',
+        'No HRV trend in the last 14 days.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRateVariability),
+        this.priorityHrvWindow,
       ),
     ];
   });
   readonly visiblePriorityCards = computed<HealthPriorityCardView[]>(() => this.priorityCards().filter(card =>
-    card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
+    card.id === 'heart_rate_variability'
+      ? card.chartSeries.length > 0
+      : card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
     .map(state => {
       const sleepProvider = healthProviderSleepProvider(state.provider);
@@ -854,10 +870,13 @@ export class HealthWorkspaceComponent {
       if (!uid) {
         return;
       }
-      const endMs = Date.parse(`${this.todayDate}T00:00:00.000Z`);
-      const startDate = new Date(endMs - (29 * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
-      void this.loadPriorityMetric(uid, HEALTH_METRIC_IDS.HeartRate, startDate, generation);
-      void this.loadPriorityMetric(uid, HEALTH_METRIC_IDS.HeartRateVariability, startDate, generation);
+      void this.loadPriorityMetric(uid, HEALTH_METRIC_IDS.HeartRate, this.priorityWindow.startDate, generation);
+      void this.loadPriorityMetric(
+        uid,
+        HEALTH_METRIC_IDS.HeartRateVariability,
+        this.priorityHrvWindow.startDate,
+        generation,
+      );
     });
 
     effect(onCleanup => {
@@ -1398,6 +1417,7 @@ function priorityCard(
   status: HealthLoadStatus,
   emptyText: string,
   available: boolean,
+  chartWindow?: HealthPriorityChartWindow,
 ): HealthPriorityCardView {
   return {
     id,
@@ -1406,6 +1426,7 @@ function priorityCard(
     metric,
     rows,
     chartSeries,
+    chartWindow,
     available,
     loading: status === 'loading',
     error: status === 'error' || status === 'denied',

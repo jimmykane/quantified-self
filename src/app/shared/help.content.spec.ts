@@ -92,6 +92,9 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('not copied into Health storage');
     expect(healthSection?.content).toContain('omits workout IDs, names, locations, account IDs, and raw creator details');
     expect(healthSection?.content).toContain('Sleep appears when a normalized Sleep session exists');
+    expect(healthSection?.content).toContain('source-specific 14-day trend');
+    expect(healthSection?.content).toContain('at least three observations');
+    expect(healthSection?.content).toContain('preceding seven-day median');
     expect(healthSection?.content).toContain('average or overnight HRV');
     expect(healthSection?.content).toContain('even if no standalone Health HRV record exists');
     expect(healthSection?.content).toContain('read average and overnight HRV directly at display time');

@@ -56,11 +56,14 @@
                       <strong>{{ chart.latestValueText }}</strong>
                       <span class="health-priority-source-label">{{ chart.model.series.sourceLabel }}</span>
                     </div>
-                    <small>{{ chart.model.series.semanticLabel }}</small>
+                    <small>{{ chart.contextText }}</small>
+                    @if (chart.comparisonText) {
+                      <small class="health-priority-comparison">{{ chart.comparisonText }}</small>
+                    }
                     <app-health-metric-series-chart
                       [model]="chart.model"
-                      [startTimeMs]="startTimeMs()"
-                      [endTimeMs]="endTimeMs()"
+                      [startTimeMs]="chart.startTimeMs"
+                      [endTimeMs]="chart.endTimeMs"
                       [darkTheme]="darkTheme()"
                       [unitSettings]="unitSettings()"
                       [compact]="true">
