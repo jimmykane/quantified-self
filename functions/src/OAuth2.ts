@@ -291,11 +291,16 @@ async function completeOAuthFlowPreparationIfCurrent(
     }
 
     const snapshot = await transaction.get(tokenRootRef);
+    const snapshotData = snapshot.data() as Record<string, unknown> | undefined;
+    const expiresAt = snapshotData?.[OAUTH_FLOW_EXPIRES_AT_FIELD];
     if (
       !snapshot.exists
-      || snapshot.data()?.[OAUTH_FLOW_GENERATION_FIELD] !== generation
+      || snapshotData?.[OAUTH_FLOW_GENERATION_FIELD] !== generation
+      || typeof expiresAt !== 'number'
+      || !Number.isFinite(expiresAt)
+      || expiresAt <= Date.now()
       || getActiveServiceDisconnectOperationGeneration(
-        snapshot.data() as Record<string, unknown> | undefined,
+        snapshotData,
       )
     ) {
       throw new OAuthFlowContextMismatchError(serviceName);

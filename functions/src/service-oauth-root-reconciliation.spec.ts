@@ -215,12 +215,108 @@ describe('service OAuth root reconciliation', () => {
     expect(harness.transaction.delete).not.toHaveBeenCalled();
   });
 
-  it('preserves token-bearing roots even when their OAuth context is expired', async () => {
+  it.each([1, 30, 365])('scrubs secrets from a %d-day-expired OAuth flow while preserving its token lifecycle', async (ageDays) => {
+    const nowMs = 400 * 24 * 60 * 60 * 1_000;
     const harness = buildRootHarness({
       initialData: {
         state: 'state',
+        codeVerifier: 'verifier',
         oauthFlowGeneration: 'flow-1',
+        oauthFlowCreatedAt: 100,
+        oauthFlowExpiresAt: nowMs - (ageDays * 24 * 60 * 60 * 1_000),
+        activeOAuthCredentialGeneration: 'credential-1',
+      },
+      tokenPresent: true,
+    });
+
+    await expect(serviceOAuthRootReconciliationTestInternals.reconcileServiceOAuthRootSnapshot(
+      harness.db as never,
+      harness.rootSnapshot as never,
+      nowMs,
+      false,
+    )).resolves.toBe('cleaned_fields');
+
+    expect(harness.transaction.update).toHaveBeenCalledWith(harness.rootRef, {
+      state: hoisted.fieldDelete,
+      codeVerifier: hoisted.fieldDelete,
+    });
+    expect(harness.transaction.delete).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['retryable', {
+      disconnectState: 'disconnect_pending',
+      disconnectGeneration: 'disconnect-1',
+      disconnectNextAttemptAt: { toMillis: () => 2_000 },
+    }],
+    ['manual-review', {
+      disconnectManualReviewRequired: true,
+      disconnectReason: 'manual_review_required',
+    }],
+  ])('scrubs expired OAuth secrets while preserving %s pending-disconnect state', async (_label, pendingData) => {
+    const harness = buildRootHarness({
+      initialData: {
+        state: 'state',
+        codeVerifier: 'verifier',
+        oauthFlowGeneration: 'flow-1',
+        oauthFlowCreatedAt: 100,
         oauthFlowExpiresAt: 500,
+        ...pendingData,
+      },
+    });
+
+    await expect(serviceOAuthRootReconciliationTestInternals.reconcileServiceOAuthRootSnapshot(
+      harness.db as never,
+      harness.rootSnapshot as never,
+      1_000,
+      false,
+    )).resolves.toBe('cleaned_fields');
+
+    expect(harness.transaction.update).toHaveBeenCalledWith(harness.rootRef, {
+      state: hoisted.fieldDelete,
+      codeVerifier: hoisted.fieldDelete,
+    });
+    expect(harness.transaction.delete).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['active', 2_000],
+    ['expired', 500],
+  ])('scrubs expired OAuth secrets while preserving an %s explicit-disconnect fence and token', async (_label, leaseExpiresAt) => {
+    const harness = buildRootHarness({
+      initialData: {
+        state: 'state',
+        codeVerifier: 'verifier',
+        oauthFlowGeneration: 'flow-1',
+        oauthFlowCreatedAt: 100,
+        oauthFlowExpiresAt: 500,
+        disconnectOperationGeneration: 'disconnect-1',
+        disconnectOperationLeaseExpiresAt: leaseExpiresAt,
+      },
+      tokenPresent: true,
+    });
+
+    await expect(serviceOAuthRootReconciliationTestInternals.reconcileServiceOAuthRootSnapshot(
+      harness.db as never,
+      harness.rootSnapshot as never,
+      1_000,
+      false,
+    )).resolves.toBe('cleaned_fields');
+
+    expect(harness.transaction.update).toHaveBeenCalledWith(harness.rootRef, {
+      state: hoisted.fieldDelete,
+      codeVerifier: hoisted.fieldDelete,
+    });
+    expect(harness.transaction.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not repeatedly write after token-owned expired OAuth secrets were scrubbed', async () => {
+    const harness = buildRootHarness({
+      initialData: {
+        oauthFlowGeneration: 'flow-1',
+        oauthFlowCreatedAt: 100,
+        oauthFlowExpiresAt: 500,
+        activeOAuthCredentialGeneration: 'credential-1',
       },
       tokenPresent: true,
     });
@@ -232,8 +328,8 @@ describe('service OAuth root reconciliation', () => {
       false,
     )).resolves.toBe('token_present');
 
-    expect(harness.transaction.delete).not.toHaveBeenCalled();
     expect(harness.transaction.update).not.toHaveBeenCalled();
+    expect(harness.transaction.delete).not.toHaveBeenCalled();
   });
 
   it('does not clean when a newer OAuth generation wins before the transaction', async () => {

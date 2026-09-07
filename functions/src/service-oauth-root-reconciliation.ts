@@ -68,6 +68,7 @@ interface ServiceOAuthRootLifecycleSnapshot {
 interface ServiceOAuthRootCleanupDecision {
   outcome: ServiceOAuthRootReconciliationOutcome;
   expiredOAuthFlow: boolean;
+  expiredOAuthSecrets: boolean;
   expiredDisconnectFence: boolean;
   lifecycle: ServiceOAuthRootLifecycleSnapshot;
 }
@@ -117,6 +118,13 @@ function hasOAuthFlowContext(data: Record<string, unknown>): boolean {
     || nonEmptyString(data[OAUTH_FLOW_GENERATION_FIELD])
     || timestampMillis(data[OAUTH_FLOW_CREATED_AT_FIELD]) !== null
     || timestampMillis(data[OAUTH_FLOW_EXPIRES_AT_FIELD]) !== null
+  );
+}
+
+function hasOAuthFlowSecrets(data: Record<string, unknown>): boolean {
+  return !!(
+    nonEmptyString(data.state)
+    || nonEmptyString(data.codeVerifier)
   );
 }
 
@@ -170,6 +178,7 @@ export function classifyServiceOAuthRootForReconciliation(
   const expiredOAuthFlow = hasOAuthContext
     && lifecycle.oauthFlowExpiresAt !== null
     && lifecycle.oauthFlowExpiresAt <= nowMs;
+  const expiredOAuthSecrets = expiredOAuthFlow && hasOAuthFlowSecrets(data);
   const activeDisconnectFence = hasDisconnectFence
     && lifecycle.disconnectOperationLeaseExpiresAt !== null
     && lifecycle.disconnectOperationLeaseExpiresAt > nowMs;
@@ -178,21 +187,22 @@ export function classifyServiceOAuthRootForReconciliation(
     && lifecycle.disconnectOperationLeaseExpiresAt <= nowMs;
 
   if (hasPendingDisconnectLifecycle(data)) {
-    return { outcome: 'pending_disconnect', expiredOAuthFlow, expiredDisconnectFence, lifecycle };
+    return { outcome: 'pending_disconnect', expiredOAuthFlow, expiredOAuthSecrets, expiredDisconnectFence, lifecycle };
   }
   if (activeDisconnectFence) {
-    return { outcome: 'active_disconnect_fence', expiredOAuthFlow, expiredDisconnectFence, lifecycle };
+    return { outcome: 'active_disconnect_fence', expiredOAuthFlow, expiredOAuthSecrets, expiredDisconnectFence, lifecycle };
   }
   if (activeOAuthFlow) {
-    return { outcome: 'active_oauth_flow', expiredOAuthFlow, expiredDisconnectFence, lifecycle };
+    return { outcome: 'active_oauth_flow', expiredOAuthFlow, expiredOAuthSecrets, expiredDisconnectFence, lifecycle };
   }
   if (expiredOAuthFlow || expiredDisconnectFence) {
-    return { outcome: 'would_clean', expiredOAuthFlow, expiredDisconnectFence, lifecycle };
+    return { outcome: 'would_clean', expiredOAuthFlow, expiredOAuthSecrets, expiredDisconnectFence, lifecycle };
   }
   if (hasDisconnectFence && lifecycle.disconnectOperationLeaseExpiresAt === null) {
     return {
       outcome: 'legacy_unbounded_disconnect_fence',
       expiredOAuthFlow,
+      expiredOAuthSecrets,
       expiredDisconnectFence,
       lifecycle,
     };
@@ -201,11 +211,12 @@ export function classifyServiceOAuthRootForReconciliation(
     return {
       outcome: 'legacy_unbounded_oauth_context',
       expiredOAuthFlow,
+      expiredOAuthSecrets,
       expiredDisconnectFence,
       lifecycle,
     };
   }
-  return { outcome: 'no_action', expiredOAuthFlow, expiredDisconnectFence, lifecycle };
+  return { outcome: 'no_action', expiredOAuthFlow, expiredOAuthSecrets, expiredDisconnectFence, lifecycle };
 }
 
 async function reconcileServiceOAuthRootSnapshot(
@@ -220,7 +231,11 @@ async function reconcileServiceOAuthRootSnapshot(
     initialDecision.outcome === 'legacy_unbounded_oauth_context'
     || initialDecision.outcome === 'legacy_unbounded_disconnect_fence'
   );
-  if (initialDecision.outcome !== 'would_clean' && !isLegacyDryRunCandidate) {
+  if (
+    initialDecision.outcome !== 'would_clean'
+    && !initialDecision.expiredOAuthSecrets
+    && !isLegacyDryRunCandidate
+  ) {
     return initialDecision.outcome;
   }
 
@@ -230,6 +245,7 @@ async function reconcileServiceOAuthRootSnapshot(
       rootSnapshot.ref.collection('tokens').limit(1).get(),
     ]);
     if (deletionGuard.shouldSkip) return 'missing_or_deleting_user';
+    if (initialDecision.expiredOAuthSecrets) return 'would_clean';
     if (!tokenSnapshot.empty) return 'token_present';
     return initialDecision.outcome;
   }
@@ -248,29 +264,37 @@ async function reconcileServiceOAuthRootSnapshot(
       transaction.get(rootSnapshot.ref.collection('tokens').limit(1)),
     ]);
     if (!currentRootSnapshot.exists) return 'no_action';
-    if (!tokenSnapshot.empty) return 'token_present';
 
     const currentData = currentRootSnapshot.data() as Record<string, unknown>;
     const currentDecision = classifyServiceOAuthRootForReconciliation(currentData, nowMs);
     if (!lifecyclesEqual(initialDecision.lifecycle, currentDecision.lifecycle)) {
       return 'lifecycle_changed';
     }
-    if (currentDecision.outcome !== 'would_clean') return currentDecision.outcome;
+
+    const hasToken = !tokenSnapshot.empty;
+    const shouldFullyCleanLifecycle = currentDecision.outcome === 'would_clean' && !hasToken;
+    if (!currentDecision.expiredOAuthSecrets && !shouldFullyCleanLifecycle) {
+      if (hasToken) return 'token_present';
+      return currentDecision.outcome;
+    }
 
     const cleanupUpdate: Record<string, FieldValue> = {};
     const markDeleted = (fieldName: string) => {
       cleanupUpdate[fieldName] = FieldValue.delete();
     };
 
-    if (currentDecision.expiredOAuthFlow) {
+    if (currentDecision.expiredOAuthSecrets) {
       markDeleted('state');
       markDeleted('codeVerifier');
+    }
+
+    if (shouldFullyCleanLifecycle && currentDecision.expiredOAuthFlow) {
       markDeleted(OAUTH_FLOW_GENERATION_FIELD);
       markDeleted(OAUTH_FLOW_CREATED_AT_FIELD);
       markDeleted(OAUTH_FLOW_EXPIRES_AT_FIELD);
     }
 
-    if (currentDecision.expiredDisconnectFence) {
+    if (shouldFullyCleanLifecycle && currentDecision.expiredDisconnectFence) {
       markDeleted(SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD);
       markDeleted(SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD);
       // Explicit disconnect uses the OAuth generation as a lifecycle fence,
@@ -281,10 +305,11 @@ async function reconcileServiceOAuthRootSnapshot(
       }
     }
 
-    // Keep an empty root and its active credential-generation sentinel after
-    // clearing transient lifecycle fields. At least one legacy maintenance
-    // writer can create a generation-less token child without reading the
-    // root; the non-null sentinel keeps that delayed child fail-closed.
+    // Secret scrubbing never deletes a root or credential/disconnect guards.
+    // Full cleanup still keeps an empty root and its active credential-
+    // generation sentinel: a legacy maintenance writer can create a
+    // generation-less token child without reading the root, and the non-null
+    // sentinel keeps that delayed child fail-closed.
     transaction.update(rootSnapshot.ref, cleanupUpdate);
     return 'cleaned_fields';
   });

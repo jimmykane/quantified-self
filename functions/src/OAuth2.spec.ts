@@ -1447,6 +1447,49 @@ describe('OAuth2', () => {
             });
         });
 
+        it('does not publish delayed OAuth preparation after the flow expires', async () => {
+            const { SuuntoAuthAdapter } = await import('./suunto/auth/adapter');
+            const originalGetAuthorizationData = SuuntoAuthAdapter.prototype.getAuthorizationData;
+            let markPreparationStarted!: () => void;
+            let releasePreparation!: () => void;
+            const preparationStarted = new Promise<void>((resolve) => {
+                markPreparationStarted = resolve;
+            });
+            const preparationGate = new Promise<void>((resolve) => {
+                releasePreparation = resolve;
+            });
+            vi.spyOn(SuuntoAuthAdapter.prototype, 'getAuthorizationData')
+                .mockImplementationOnce(async function (redirect, state) {
+                    markPreparationStarted();
+                    await preparationGate;
+                    return originalGetAuthorizationData.call(this, redirect, state);
+                });
+            const flowStartedAt = 10_000;
+            const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(flowStartedAt);
+
+            try {
+                const authorizationPromise = getServiceOAuth2CodeRedirectAndSaveStateToUser(
+                    userID,
+                    ServiceNames.SuuntoApp,
+                    redirectUri,
+                );
+                await preparationStarted;
+                dateNowSpy.mockReturnValue(flowStartedAt + OAUTH_FLOW_TTL_MS + 1);
+                releasePreparation();
+
+                await expect(authorizationPromise).rejects.toMatchObject({
+                    name: 'OAuthFlowContextMismatchError',
+                });
+                expect(mockTransactionDocumentData).not.toHaveProperty('state');
+                expect(mockTransactionDocumentData).not.toHaveProperty('codeVerifier');
+                expect(mockTransactionDocumentData).not.toHaveProperty('oauthFlowGeneration');
+                expect(mockTransactionDocumentData).not.toHaveProperty('oauthFlowCreatedAt');
+                expect(mockTransactionDocumentData).not.toHaveProperty('oauthFlowExpiresAt');
+            } finally {
+                dateNowSpy.mockRestore();
+            }
+        });
+
         it('should generate state and save to Firestore for COROSAPI', async () => {
             const result = await getServiceOAuth2CodeRedirectAndSaveStateToUser(
                 userID,
