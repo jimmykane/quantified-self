@@ -8,7 +8,7 @@
   }
   @if (kind() === 'sleep') {
     <app-sleep-trend-chart class="sleep-trend" [sleepTrend]="sleepTrend" sleepRange="14d"
-      sleepWindowLabel="18–31 Aug · Sample data" [darkTheme]="darkTheme()">
+      sleepWindowLabel="18–31 Aug · Sample data" [darkTheme]="darkTheme()" [unitSettings]="unitSettings()">
     </app-sleep-trend-chart>
     <app-health-sleep-stage-summary
       [point]="sleepPoint" sourceLabel="Suunto · Sample night"

@@ -327,6 +327,7 @@
           <section class="health-sleep-chart qs-glass-card-panel" aria-label="Normalized Sleep trend">
             <app-sleep-trend-chart
               [darkTheme]="isDarkTheme()"
+              [unitSettings]="unitSettings()"
               [isLoading]="false"
               [sleepTrend]="sleepTrend()"
               [sleepRange]="sleepChartRange()"

@@ -63,6 +63,7 @@ import { HealthActivityQueryService } from './health-activity-query.service';
 })
 class SleepTrendStubComponent {
   @Input() darkTheme = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() isLoading = false;
   @Input() sleepTrend: unknown;
   @Input() sleepRange: unknown;
