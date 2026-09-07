@@ -8,6 +8,7 @@ import {
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
+import { AppColors } from '../services/color/app.colors';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
 import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
@@ -24,8 +25,17 @@ interface HealthMetricColorOption {
 
 interface StressStateColorOption {
   visualMap: {
-    pieces: Array<{ value: string; color: string }>;
+    type: string;
+    dimension: number;
+    pieces: Array<{ value: number; color: string }>;
+    outOfRange: { color: string };
   };
+  yAxis: { axisLabel: { color: (value: string) => string } };
+  series: Array<{
+    data: Array<[number, string | null, number | null]>;
+    lineStyle: { color?: string; width: number };
+    itemStyle?: unknown;
+  }>;
   tooltip: {
     formatter: (params: { value?: unknown }) => string;
   };
@@ -351,28 +361,55 @@ describe('Health metric chart helpers', () => {
       valueType: HEALTH_VALUE_TYPES.Category,
       unit: 'category',
       points: [
-        { timestampMs: 0, calendarDate: '1970-01-01', value: 'relaxing', qualityCode: null },
-        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 'active', qualityCode: null },
-        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 'stressful', qualityCode: null },
-        { timestampMs: DAY_MS * 3, calendarDate: '1970-01-04', value: 'provider-specific', qualityCode: null },
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 'passive', qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 'stressful', qualityCode: null },
+        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 'relaxing', qualityCode: null },
+        { timestampMs: DAY_MS * 3, calendarDate: '1970-01-04', value: 'active', qualityCode: null },
+        { timestampMs: DAY_MS * 4, calendarDate: '1970-01-05', value: 'provider-specific', qualityCode: null },
       ],
-    })], 0, DAY_MS * 3)[0];
+    })], 0, DAY_MS * 4)[0];
     const style = buildDashboardEChartsStyleTokens(false, 640);
     const option = buildHealthMetricEChartsOption(
       model,
       0,
-      DAY_MS * 3,
+      DAY_MS * 4,
       style,
       false,
     ) as StressStateColorOption;
 
-    expect(option.visualMap.pieces).toEqual([
-      { value: 'relaxing', color: AppDataColors.Altitude },
-      { value: 'active', color: AppDataColors.Stress },
-      { value: 'stressful', color: AppDataColors['Heart Rate_0'] },
-      { value: 'provider specific', color: style.trendLineColor },
+    expect(model.categoryLabels).toEqual([
+      'relaxing',
+      'active',
+      'passive',
+      'stressful',
+      'provider specific',
     ]);
-    expect(option.tooltip.formatter({ value: [DAY_MS * 3, 'provider-specific'] }))
+    expect(option.visualMap).toMatchObject({
+      type: 'piecewise',
+      dimension: 2,
+      outOfRange: { color: style.secondaryTextColor },
+    });
+    expect(option.visualMap.pieces).toEqual([
+      { value: 0, color: AppDataColors.Altitude },
+      { value: 1, color: AppDataColors.Distance },
+      { value: 2, color: AppColors.MediumGray },
+      { value: 3, color: AppDataColors['Heart Rate_0'] },
+      { value: 4, color: style.trendLineColor },
+    ]);
+    expect(option.series[0].data).toEqual([
+      [0, 'passive', 2],
+      [DAY_MS, 'stressful', 3],
+      [DAY_MS * 2, 'relaxing', 0],
+      [DAY_MS * 3, 'active', 1],
+      [DAY_MS * 4, 'provider specific', 4],
+    ]);
+    expect(option.series[0].lineStyle).toEqual({ width: 1.5 });
+    expect(option.series[0].itemStyle).toBeUndefined();
+    expect(option.yAxis.axisLabel.color('relaxing')).toBe(AppDataColors.Altitude);
+    expect(option.yAxis.axisLabel.color('active')).toBe(AppDataColors.Distance);
+    expect(option.yAxis.axisLabel.color('passive')).toBe(AppColors.MediumGray);
+    expect(option.yAxis.axisLabel.color('stressful')).toBe(AppDataColors['Heart Rate_0']);
+    expect(option.tooltip.formatter({ value: [DAY_MS * 4, 'provider-specific', 4] }))
       .toContain(`background:${style.trendLineColor}`);
   });
 

@@ -18,6 +18,7 @@ import {
   getHealthMetricDefinition,
 } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
+import { AppColors } from '../services/color/app.colors';
 import {
   HealthWorkspaceSeries,
   HealthWorkspaceSeriesPoint,
@@ -28,7 +29,11 @@ import {
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
-export type HealthChartDatum = [timestampMs: number, value: number | string | null];
+export type HealthChartDatum = [
+  timestampMs: number,
+  value: number | string | null,
+  visualValue?: number | null,
+];
 
 export interface HealthChartSeriesModel {
   series: HealthWorkspaceSeries;
@@ -85,6 +90,9 @@ export function buildHealthMetricEChartsOption(
   const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
   const useBodyEnergyColors = isProviderBodyEnergySeries(model.series);
+  const chartData = useStressStateColors
+    ? stressStateChartData(model.data, model.categoryLabels)
+    : model.data;
   const numericBounds = statusOverlay?.normalRange && model.numericBounds
     ? {
       min: Math.min(model.numericBounds.min, statusOverlay.normalRange.min),
@@ -175,7 +183,14 @@ export function buildHealthMetricEChartsOption(
         axisLine: { show: false },
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
-          color: style.secondaryTextColor,
+          color: useStressStateColors
+            ? (value: string) => resolveHealthValueColor(
+              model.series.metricId,
+              value,
+              seriesColor,
+              style.secondaryTextColor,
+            )
+            : style.secondaryTextColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: style.axisFontSize,
         },
@@ -204,11 +219,12 @@ export function buildHealthMetricEChartsOption(
       },
     visualMap: useStressStateColors
       ? {
+        type: 'piecewise',
         show: false,
         seriesIndex: 0,
-        dimension: 1,
-        pieces: model.categoryLabels.map(value => ({
-          value,
+        dimension: 2,
+        pieces: model.categoryLabels.map((value, index) => ({
+          value: index,
           color: resolveHealthValueColor(
             model.series.metricId,
             value,
@@ -216,12 +232,13 @@ export function buildHealthMetricEChartsOption(
             style.trendLineColor,
           ),
         })),
+        outOfRange: { color: style.secondaryTextColor },
       }
       : undefined,
     series: [{
       name: model.series.sourceLabel,
       type: isBar ? 'bar' : isPoint ? 'scatter' : 'line',
-      data: model.data,
+      data: chartData,
       connectNulls: false,
       step: isCategorical ? 'end' : undefined,
       showSymbol: compact
@@ -230,9 +247,14 @@ export function buildHealthMetricEChartsOption(
       symbol: 'circle',
       symbolSize: compact ? 4 : isPoint ? 8 : 5,
       barMaxWidth: 28,
-      lineStyle: { color: seriesColor, width: 1.5 },
-      itemStyle: {
-        color: useStressStateColors || useBodyEnergyColors
+      lineStyle: {
+        ...(!useStressStateColors ? { color: seriesColor } : {}),
+        width: 1.5,
+      },
+      itemStyle: useStressStateColors
+        ? undefined
+        : {
+          color: useBodyEnergyColors
           ? (params: { value?: unknown }) => resolveHealthValueColor(
             model.series.metricId,
             chartValue(params.value),
@@ -241,7 +263,7 @@ export function buildHealthMetricEChartsOption(
             useBodyEnergyColors,
           )
           : seriesColor,
-      },
+        },
       emphasis: { scale: 1.25 },
       markArea: statusOverlay?.normalRange
         ? {
@@ -341,14 +363,19 @@ function resolveHealthValueColor(
   }
   switch (value.trim().toLowerCase()) {
     case 'relaxing':
+    case 'recovering':
     case 'calm':
     case 'low':
       return AppDataColors.Altitude;
     case 'active':
+      return AppDataColors.Distance;
     case 'passive':
+    case 'inactive':
+      return AppColors.MediumGray;
     case 'medium':
       return AppDataColors.Stress;
     case 'stressful':
+    case 'stressed':
     case 'high':
       return AppDataColors['Heart Rate_0'];
     default:
@@ -385,6 +412,18 @@ function chartValue(value: unknown): unknown {
   return Array.isArray(value) ? value[1] : value;
 }
 
+function stressStateChartData(
+  data: readonly HealthChartDatum[],
+  categoryLabels: readonly string[],
+): HealthChartDatum[] {
+  const categoryIndexes = new Map(categoryLabels.map((value, index) => [value, index]));
+  return data.map(([timestampMs, value]) => [
+    timestampMs,
+    value,
+    typeof value === 'string' ? categoryIndexes.get(value) ?? null : null,
+  ]);
+}
+
 function buildSeriesModel(
   series: HealthWorkspaceSeries,
   startTimeMs: number,
@@ -394,7 +433,10 @@ function buildSeriesModel(
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
   const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
   const categoryLabels = series.chartKind === 'step'
-    ? [...new Set(displayedPoints.map(point => categoryValueLabel(point.value)))]
+    ? orderedCategoryLabels(
+      [...new Set(displayedPoints.map(point => categoryValueLabel(point.value)))],
+      series.metricId,
+    )
     : [];
   const numericValues = displayedPoints
     .map(point => typeof point.value === 'number' && Number.isFinite(point.value) ? point.value : null)
@@ -434,6 +476,18 @@ function buildSeriesModel(
     displayUnit,
     ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${readingCountText}. Latest ${latestText}. Values are not combined with other sources.`,
   };
+}
+
+function orderedCategoryLabels(labels: readonly string[], metricId: HealthMetricId): string[] {
+  if (metricId !== HEALTH_METRIC_IDS.StressState) {
+    return [...labels];
+  }
+  const providerOrder = ['relaxing', 'active', 'passive', 'stressful'];
+  const present = new Set(labels);
+  return [
+    ...providerOrder.filter(label => present.has(label)),
+    ...labels.filter(label => !providerOrder.includes(label)),
+  ];
 }
 
 function buildChartData(
