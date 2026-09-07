@@ -50,6 +50,10 @@ export class SuuntoHealthValidationError extends Error {
   }
 }
 
+// Only response cardinality failures can be recovered by narrowing a pull.
+// Keep the validation name/code so existing sanitized telemetry stays stable.
+export class SuuntoHealthResponseLimitError extends SuuntoHealthValidationError {}
+
 export interface SuuntoHealthResult {
   input: HealthSourceRecordInput;
   observedAtMs: number;
@@ -177,7 +181,7 @@ function payloadArray(value: unknown, field: string, maximum: number): unknown[]
     throw new SuuntoHealthValidationError(`${field} response must be an array.`);
   }
   if (value.length > maximum) {
-    throw new SuuntoHealthValidationError(`${field} response exceeds the bounded item count.`);
+    throw new SuuntoHealthResponseLimitError(`${field} response exceeds the bounded item count.`);
   }
   return value;
 }

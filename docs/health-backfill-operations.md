@@ -147,6 +147,8 @@ existing Sleep/Health queue. Stop issuing new batches if failures or queue lag g
 
 ## Verification
 
+Suunto `response_item_limit` is a mapper cardinality failure, not a provider HTTP 500. The worker adaptively narrows oversized windows while preserving complete local days and all existing parser limits. If the error persists at its minimum window or a pull/result budget is exhausted, pause admission and investigate; repeated retries are not proof of recovery. A locally prepared worker fix does not change production until separately approved and deployed. Existing pending jobs can retry on the new worker; a job already in the DLQ needs separately authorized targeted recovery, not a receipt reset or blind re-import.
+
 Targeted suites cover parsing, ranges, opaque identities, dry-run non-mutation,
 metadata projections, eligibility, paging and caps, crash recovery, queue expiry,
 empty/success/skipped/failed semantics, lifecycle/deletion races, and transactional
