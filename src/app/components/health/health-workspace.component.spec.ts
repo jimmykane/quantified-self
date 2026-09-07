@@ -570,8 +570,9 @@ describe('HealthWorkspaceComponent', () => {
       .map(match => match[1]).join('\n');
     expect(filterRules).toContain('flex-wrap: wrap');
     expect(filterRules).not.toMatch(/overflow|scrollbar/);
-    expect(styles).toContain('--mat-button-outlined-container-height: 44px');
-    expect(filterRules).toContain('row-gap: 0.5rem');
+    expect(styles).toContain('--mat-button-outlined-container-height: 32px');
+    expect(styles).toContain('--mat-button-outlined-touch-target-size: 48px');
+    expect(filterRules).toContain('row-gap: 1rem');
     expect(filterRules).toContain('column-gap: 0.375rem');
     expect(styles).toMatch(/\.health-provider-filter-content\s*\{[^}]*display: flex;/);
   });

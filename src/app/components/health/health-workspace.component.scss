@@ -532,17 +532,26 @@
   }
 
   .health-provider-filters {
-    // Wrapping keeps every source visible without a nested scroll area. Leave
-    // room between rows for Material's 48px touch targets around 44px buttons.
+    // Keep compact pills while reserving non-overlapping 48px Material touch
+    // targets, including when sources wrap onto another row.
     column-gap: 0.375rem;
-    row-gap: 0.5rem;
+    padding-block: 0.5rem;
+    row-gap: 1rem;
   }
 
   .health-provider-filter {
-    --mat-button-outlined-container-height: 44px;
+    --mat-button-outlined-container-height: 32px;
+    --mat-button-outlined-label-text-size: var(--mat-sys-label-medium-size);
+    --mat-button-outlined-label-text-weight: var(--mat-sys-label-medium-weight);
+    --mat-button-outlined-touch-target-display: block;
+    --mat-button-outlined-touch-target-size: 48px;
 
     flex: 0 0 auto;
     padding-inline: 0.5rem;
+  }
+
+  .health-provider-filter-content {
+    gap: 0.25rem;
   }
 
   .health-sleep-chart {
