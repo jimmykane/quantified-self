@@ -66,6 +66,8 @@ Month includes adjacent grid dates; Year excludes hidden outside-month cells. It
 limits, stale-response fences, refreshes, and `showOnCharts` preference (labelled **Show on charts and calendar**).
 `calendar-timeline-notes.helper.ts` maps inclusive note periods onto those fixed dates, resolving ongoing end dates once
 per note in its captured zone. No activity or metric document, totals, or duration-circle semantics change.
+Calendar refreshes its current-day clock on window focus and tab visibility, so returning after midnight updates ongoing
+note cutoffs alongside the notes reload without extending them into future dates.
 
 An `event_note` indicator and accessible count mark note days, even without activities. Selecting a day opens its
 existing Material sheet, with a plain-text notes list above activities. Selecting a note dismisses the sheet and opens

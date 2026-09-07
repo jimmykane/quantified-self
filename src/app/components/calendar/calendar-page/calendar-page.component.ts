@@ -214,6 +214,12 @@ export class CalendarPageComponent {
     this.today.set(new Date());
   }
 
+  @HostListener('document:visibilitychange')
+  refreshVisibleToday(): void {
+    // Mobile tab/app resumes need not emit window focus. Keep ongoing note cutoffs current too.
+    if (document.visibilityState === 'visible') this.refreshToday();
+  }
+
   selectView(value: unknown): void {
     const view = normalizeActivityCalendarView(value, this.routeState().view);
     if (view === this.routeState().view) {

@@ -394,6 +394,35 @@ describe('CalendarPageComponent', () => {
       vi.useRealTimers();
     }
   });
+
+  it('extends ongoing notes to today when a background tab becomes visible after midnight', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    try {
+      vi.setSystemTime(new Date('2026-08-04T12:00:00Z'));
+      visibility.mockReturnValue('visible');
+      notesService.loadRange.mockResolvedValue({ notes: [{ ...note, endDate: null }], incomplete: null });
+      const fixture = TestBed.createComponent(CalendarPageComponent);
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().has('2026-08-04')).toBe(true));
+      expect(fixture.componentInstance.notesByDate().has('2026-08-05')).toBe(false);
+
+      vi.setSystemTime(new Date('2026-08-05T12:00:00Z'));
+      visibility.mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(fixture.componentInstance.notesByDate().has('2026-08-05')).toBe(false);
+
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+      await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().has('2026-08-05')).toBe(true));
+      expect(fixture.componentInstance.notesByDate().has('2026-08-06')).toBe(false);
+    } finally {
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });
 
 function createEvent(

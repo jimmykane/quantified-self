@@ -45,6 +45,7 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 - Note days add an `event_note` indicator and accessible note count, separate from activity circles. Their day sheet lists
   note titles, categories, and actual dates above activities; selecting a note opens the shared editor. Inclusive periods,
   future bounded dates, and ongoing periods through today in their captured zone are supported without changing totals.
+  Window focus and returning to a visible tab refresh the current-day clock, including ongoing note cutoffs after midnight.
   Calendar owns the bounded notes load for its visible labels (including adjacent Month dates); the grid never fetches.
   Open sheets receive owner-fenced reactive notes, and stale selections cannot open another account's note.
   A notes failure leaves activity rendering intact, and an activities failure still permits viewing notes.
