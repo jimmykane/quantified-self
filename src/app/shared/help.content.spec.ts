@@ -83,6 +83,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('body fat and body water are percentages');
     expect(healthSection?.content).toContain('not muscle percentages or bone-density scores');
     expect(healthSection?.content).toContain('both readings and any pulse saved with them');
+    expect(healthSection?.content).toContain('zero and negative readings cannot be saved');
+    expect(healthSection?.content).toContain('Leave optional pulse empty if it was not measured');
     expect(healthSection?.content).toContain('edit or delete your own manual rows');
     expect(healthSection?.content).toContain('**Weight from workouts is fallback profile context, not a weigh-in.**');
     expect(healthSection?.content).toContain('no real provider or manual Health Weight measurement');

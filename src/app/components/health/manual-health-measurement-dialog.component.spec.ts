@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HEALTH_METRIC_IDS } from '@shared/health';
 import { DataWeight, DataBodyFat, DataBloodPressureSystolic, DataBloodPressureDiastolic, DataPulseRate,
   DataMuscleMass, DataBodyWater, DataBoneMass, DataBloodOxygenSaturation, DistanceUnits, PaceUnits, SpeedUnits } from '@sports-alliance/sports-lib';
-import { MANUAL_HEALTH_METRIC_IDS } from '@shared/manual-health';
+import { MANUAL_HEALTH_METRIC_IDS, MANUAL_HEALTH_VALUE_MAXIMUMS } from '@shared/manual-health';
+import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import {
@@ -60,6 +61,104 @@ describe('ManualHealthMeasurementDialogComponent', () => {
     }));
     expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('vo2Context');
   });
+
+  it.each(MANUAL_HEALTH_METRIC_IDS)('disables saving invalid %s values in the rendered form', async metricId => {
+    const component = await create({ metricId, unitSettings: null });
+    fixture.detectChanges();
+    if (component.isBloodPressure()) component.form.controls.diastolicValue.setValue(80);
+    for (const canonicalValue of [null, 0, -1, NaN, Infinity, -Infinity, MANUAL_HEALTH_VALUE_MAXIMUMS[metricId] + 0.1]) {
+      component.form.controls.canonicalValue.setValue(canonicalValue);
+      fixture.detectChanges();
+      expect(component.form.controls.canonicalValue.invalid).toBe(true);
+      expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(true);
+      component.submit();
+      expect(dialogRef.close).not.toHaveBeenCalled();
+    }
+    component.form.controls.canonicalValue.setValue(25.5);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(false);
+  });
+
+  it('rejects non-finite paired readings but permits an omitted pulse', async () => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BloodPressureSystolic, unitSettings: null });
+    fixture.detectChanges();
+    component.form.patchValue({ canonicalValue: 120, diastolicValue: 80 });
+    for (const field of ['diastolicValue', 'pulseValue'] as const) {
+      for (const value of [0, -1, NaN, Infinity, 401]) {
+        component.form.controls[field].setValue(value);
+        component.submit();
+        expect(component.form.controls[field].invalid).toBe(true);
+        expect(dialogRef.close).not.toHaveBeenCalled();
+      }
+      component.form.controls[field].setValue(field === 'diastolicValue' ? 80 : null);
+    }
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ canonicalValue: 120, diastolicValue: 80 }));
+    expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('pulseValue');
+  });
+
+  it('explains invalid typed weight and clears the error when corrected without rounding decimals', async () => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BodyWeight, unitSettings: null });
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('[formControlName="canonicalValue"]') as HTMLInputElement;
+    input.value = '0';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new Event('blur'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-error').textContent).toBe(component.valueRangeHint());
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('inputmode')).toBe('decimal');
+    expect(input.step).toBe('any');
+    input.value = '72.45';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-error')).toBeNull();
+    component.submit();
+    expect(dialogRef.close).toHaveBeenCalledWith(expect.objectContaining({ canonicalValue: 72.45 }));
+  });
+
+  it('replaces the active limits when switching measurement types', async () => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BodyWeight, unitSettings: null });
+    fixture.detectChanges();
+    component.form.controls.canonicalValue.setValue(101);
+    expect(component.form.valid).toBe(true);
+    component.selectMetric(HEALTH_METRIC_IDS.BodyFat);
+    fixture.detectChanges();
+    expect(component.form.controls.canonicalValue.value).toBeNull();
+    component.form.controls.canonicalValue.setValue(101);
+    expect(component.form.controls.canonicalValue.hasError('max')).toBe(true);
+    component.form.controls.canonicalValue.setValue(100);
+    expect(component.form.valid).toBe(true);
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    fixture.detectChanges();
+    component.form.controls.canonicalValue.setValue(101);
+    expect(component.form.valid).toBe(true);
+  });
+
+  it.each(['observedDate', 'observedTime'] as const)('explains a missing %s inline', async field => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BodyWeight, unitSettings: null });
+    fixture.detectChanges();
+    component.form.controls.canonicalValue.setValue(72);
+    component.form.controls[field].setValue('');
+    component.form.controls[field].markAsTouched();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('mat-error').textContent).toContain('Enter the measurement');
+    expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(true);
+  });
+
+  it.each([null, { ...getDefaultUserUnitSettings(), distanceUnits: DistanceUnits.Miles }])(
+    'formats every range hint with Sports Lib and unit settings %j', async unitSettings => {
+      const component = await create({ metricId: HEALTH_METRIC_IDS.BodyWeight, unitSettings });
+      for (const metricId of MANUAL_HEALTH_METRIC_IDS) {
+        component.selectMetric(metricId);
+        fixture.detectChanges();
+        const upper = formatCanonicalHealthMetricSportsLibValue(metricId, MANUAL_HEALTH_VALUE_MAXIMUMS[metricId], unitSettings)!;
+        const lower = formatCanonicalHealthMetricSportsLibValue(metricId, 0, unitSettings)!;
+        expect(component.valueRangeHint()).toBe(`Enter a number above ${lower.value} and up to ${upper.value} ${upper.unit}.`);
+        expect(fixture.nativeElement.querySelector('mat-hint').textContent).toBe(component.valueRangeHint());
+      }
+    },
+  );
 
   it.each([
     { label: 'default', unitSettings: null },

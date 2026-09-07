@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, Validators, type ValidatorFn } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -26,6 +26,16 @@ import { APP_STORAGE } from '../../services/storage/app.storage.token';
 
 const VO2_CONTEXT_STORAGE_KEY = 'health.manual.vo2-context';
 const VO2_METHOD_STORAGE_KEY = 'health.manual.vo2-method';
+
+// Angular's min/max validators deliberately ignore NaN. All measurement fields,
+// including the optional pulse, must instead match the server's finite, positive contract.
+const positiveFiniteMeasurement: ValidatorFn = control => {
+  const value: unknown = control.value;
+  // NumberValueAccessor maps a genuinely empty input to null, not an empty string.
+  if (value === null) return null;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? null : { positiveFiniteMeasurement: true };
+};
 
 export type ManualHealthMeasurementDialogValue = Omit<ManualHealthMeasurementFields, 'metricId'>;
 
@@ -87,6 +97,9 @@ export class ManualHealthMeasurementDialogComponent {
   readonly maximumValue = computed(() => MANUAL_HEALTH_VALUE_MAXIMUMS[this.selectedMetric()]);
   readonly pressureMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.BloodPressureDiastolic];
   readonly pulseMaximum = MANUAL_HEALTH_VALUE_MAXIMUMS[HEALTH_METRIC_IDS.PulseRate];
+  readonly valueRangeHint = computed(() => measurementRangeHint(this.selectedMetric(), this.data.unitSettings));
+  readonly diastolicRangeHint = measurementRangeHint(HEALTH_METRIC_IDS.BloodPressureDiastolic, this.data.unitSettings);
+  readonly pulseRangeHint = measurementRangeHint(HEALTH_METRIC_IDS.PulseRate, this.data.unitSettings);
   readonly contextText = computed(() => this.selectedOption().description);
   readonly vo2Contexts = MANUAL_VO2_CONTEXTS;
   readonly vo2Methods = MANUAL_VO2_METHODS;
@@ -96,12 +109,12 @@ export class ManualHealthMeasurementDialogComponent {
   readonly form = this.formBuilder.nonNullable.group({
     canonicalValue: [
       this.data.existing?.canonicalValue ?? null as number | null,
-      [Validators.required, Validators.min(Number.EPSILON), Validators.max(this.maximumValue())],
+      [Validators.required, positiveFiniteMeasurement, Validators.max(this.maximumValue())],
     ],
     diastolicValue: [this.data.existing?.diastolicValue ?? null as number | null,
-      this.isBloodPressure() ? [Validators.required, Validators.min(Number.EPSILON), Validators.max(this.pressureMaximum)] : []],
+      this.isBloodPressure() ? [Validators.required, positiveFiniteMeasurement, Validators.max(this.pressureMaximum)] : []],
     pulseValue: [this.data.existing?.pulseValue ?? null as number | null,
-      [Validators.min(Number.EPSILON), Validators.max(this.pulseMaximum)]],
+      [positiveFiniteMeasurement, Validators.max(this.pulseMaximum)]],
     observedDate: [
       this.initialObservedDate,
       [Validators.required, Validators.pattern(/^\d{4}-\d{2}-\d{2}$/)],
@@ -124,10 +137,10 @@ export class ManualHealthMeasurementDialogComponent {
     this.selectedMetric.set(metricId);
     this.submitError.set(null);
     this.form.controls.canonicalValue.setValidators([
-      Validators.required, Validators.min(Number.EPSILON), Validators.max(this.maximumValue()),
+      Validators.required, positiveFiniteMeasurement, Validators.max(this.maximumValue()),
     ]);
     this.form.controls.diastolicValue.setValidators(this.isBloodPressure()
-      ? [Validators.required, Validators.min(Number.EPSILON), Validators.max(this.pressureMaximum)] : []);
+      ? [Validators.required, positiveFiniteMeasurement, Validators.max(this.pressureMaximum)] : []);
     // Never carry a value entered for one metric into a different measurement type.
     this.form.controls.canonicalValue.reset(null);
     this.form.controls.diastolicValue.reset(null);
@@ -235,6 +248,16 @@ function readRememberedChoice<T extends string>(
   } catch {
     return null;
   }
+}
+
+function measurementRangeHint(
+  metricId: keyof typeof MANUAL_HEALTH_VALUE_MAXIMUMS,
+  unitSettings: UserUnitSettingsInterface | null,
+): string {
+  const lower = formatCanonicalHealthMetricSportsLibValue(metricId, 0, unitSettings);
+  const upper = formatCanonicalHealthMetricSportsLibValue(metricId, MANUAL_HEALTH_VALUE_MAXIMUMS[metricId], unitSettings);
+  if (!lower || !upper) return 'Enter a positive number within the supported range.';
+  return `Enter a number above ${lower.value} and up to ${[upper.value, upper.unit].filter(Boolean).join(' ')}.`;
 }
 
 function measurementDateValue(value: ManualHealthMeasurementDialogValue | undefined): string {
