@@ -88,6 +88,9 @@ export function buildHealthMetricEChartsOption(
   const isBar = model.series.chartKind === 'bar';
   const pointsByTimestamp = new Map(model.displayedPoints.map(point => [point.timestampMs, point]));
   const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
+  const trendColor = model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability && statusOverlay
+    ? statusOverlay.statusColor
+    : seriesColor;
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
   const useBodyEnergyColors = isProviderBodyEnergySeries(model.series);
   const chartData = useStressStateColors
@@ -148,7 +151,7 @@ export function buildHealthMetricEChartsOption(
             markerColor: resolveHealthValueColor(
               model.series.metricId,
               point.value,
-              seriesColor,
+              trendColor,
               style.trendLineColor,
               useBodyEnergyColors,
             ),
@@ -248,7 +251,7 @@ export function buildHealthMetricEChartsOption(
       symbolSize: compact ? 4 : isPoint ? 8 : 5,
       barMaxWidth: 28,
       lineStyle: {
-        ...(!useStressStateColors ? { color: seriesColor } : {}),
+        ...(!useStressStateColors ? { color: trendColor } : {}),
         width: 1.5,
       },
       itemStyle: useStressStateColors
@@ -258,11 +261,11 @@ export function buildHealthMetricEChartsOption(
           ? (params: { value?: unknown }) => resolveHealthValueColor(
             model.series.metricId,
             chartValue(params.value),
-            seriesColor,
+            trendColor,
             style.trendLineColor,
             useBodyEnergyColors,
           )
-          : seriesColor,
+          : trendColor,
         },
       emphasis: { scale: 1.25 },
       markArea: statusOverlay?.normalRange

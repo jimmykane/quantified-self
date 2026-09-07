@@ -145,7 +145,7 @@ describe('Health metric chart helpers', () => {
     expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
   });
 
-  it('adds a personal-range band and status-colored latest point without recoloring the trend', () => {
+  it('uses the current personal-range status color for the HRV trend and latest point', () => {
     const hrvSeries = series({
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,
       unit: 'millisecond',
@@ -172,14 +172,17 @@ describe('Health metric chart helpers', () => {
       yAxis: { min: number; max: number };
       series: Array<{
         lineStyle: { color: string };
+        itemStyle: { color: string };
         markArea: { itemStyle: { color: string; opacity: number }; data: unknown };
         markPoint: { itemStyle: { color: string }; data: Array<{ coord: [number, number] }> };
       }>;
+      tooltip: { formatter: (params: { value?: unknown }) => string };
     };
 
     expect(option.yAxis.min).toBeLessThanOrEqual(30);
     expect(option.yAxis.max).toBeGreaterThanOrEqual(46);
-    expect(option.series[0].lineStyle.color).toBe(AppDataColors['Recovery Time']);
+    expect(option.series[0].lineStyle.color).toBe(AppDataColors.Stress);
+    expect(option.series[0].itemStyle.color).toBe(AppDataColors.Stress);
     expect(option.series[0].markArea).toMatchObject({
       itemStyle: { color: AppDataColors.Altitude, opacity: 0.1 },
     });
@@ -187,6 +190,8 @@ describe('Health metric chart helpers', () => {
       itemStyle: { color: AppDataColors.Stress },
       data: [{ coord: [DAY_MS, 46] }],
     });
+    expect(option.tooltip.formatter({ value: [DAY_MS, 46] }))
+      .toContain(`background:${AppDataColors.Stress}`);
   });
 
   it('uses the selected Sports Lib unit conversion consistently across a chart', () => {
