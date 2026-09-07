@@ -219,6 +219,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
+- [Private Timeline notes](docs/timeline-notes.md)
 - [Existing-user Health backfill operations](docs/health-backfill-operations.md)
 - [Garmin Health integration](docs/garmin-integration.md)
 - [Provider integration implementation guide](docs/provider-integration-guide.md)

@@ -1,3 +1,4 @@
+import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import {
@@ -24,6 +25,7 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
 @NgModule({
   imports: [
     CommonModule,
+    TimelineNotesWorkspaceComponent,
     SharedModule,
     MaterialModule,
     AppChartsModule,

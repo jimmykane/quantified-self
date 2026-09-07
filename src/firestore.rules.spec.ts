@@ -32,6 +32,50 @@ describe('Firestore Security Rules', () => {
         await testEnv.clearFirestore();
     });
 
+    describe('Timeline notes', () => {
+        it('supports inclusive overlapping ranges, earlier starts, ongoing and future history pages', async () => {
+            const path = 'users/owner/timelineNotes';
+            await testEnv.withSecurityRulesDisabled(async context => {
+                for (const [id, startDate, endDate] of [
+                    ['earlier', '2026-01-01', '2026-09-02'], ['single', '2026-09-02', '2026-09-02'],
+                    ['ongoing', '2026-01-01', null], ['future', '2027-01-01', '2027-01-02'],
+                    ['old', '2026-01-01', '2026-09-01'],
+                ]) await context.firestore().doc(`${path}/${id}`).set({ startDate, endDate });
+            });
+            const collection = testEnv.authenticatedContext('owner').firestore().collection(path);
+            const closed = await assertSucceeds(collection.where('endDate', '>=', '2026-09-02')
+                .where('startDate', '<=', '2026-09-03').orderBy('endDate').orderBy('startDate').limit(65).get());
+            expect(closed.docs.map(doc => doc.id)).toEqual(['earlier', 'single']);
+            const ongoing = await assertSucceeds(collection.where('endDate', '==', null)
+                .where('startDate', '<=', '2026-09-03').orderBy('endDate').orderBy('startDate').limit(65).get());
+            expect(ongoing.docs.map(doc => doc.id)).toEqual(['ongoing']);
+            const history = await assertSucceeds(collection.orderBy('startDate', 'desc').limit(2).get());
+            expect(history.docs[0].id).toBe('future');
+            const next = await assertSucceeds(collection.orderBy('startDate', 'desc').startAfter(history.docs[1]).limit(2).get());
+            expect(next.docs).toHaveLength(2);
+        });
+        it('allows only bounded owner reads and rejects browser writes, receipts and descendants', async () => {
+            await testEnv.withSecurityRulesDisabled(async context => {
+                await context.firestore().doc('users/owner/timelineNotes/note').set({ startDate: '2026-09-01', endDate: null });
+            });
+            const owner = testEnv.authenticatedContext('owner').firestore();
+            const other = testEnv.authenticatedContext('other').firestore();
+            const guest = testEnv.unauthenticatedContext().firestore();
+            const path = 'users/owner/timelineNotes';
+            await assertSucceeds(owner.doc(`${path}/note`).get());
+            await assertSucceeds(owner.collection(path).limit(65).get());
+            await assertFails(owner.collection(path).get());
+            await assertFails(owner.collection(path).limit(66).get());
+            await assertFails(other.collection(path).limit(64).get());
+            await assertFails(guest.doc(`${path}/note`).get());
+            await assertFails(owner.doc(`${path}/note`).set({ title: 'client' }));
+            await assertFails(owner.doc(`${path}/note`).delete());
+            await assertFails(owner.doc(`${path}/note/children/x`).set({}));
+            await assertFails(owner.doc('users/owner/timelineNoteDeletions/note').get());
+            await assertFails(owner.doc('users/owner/timelineNoteDeletions/note').set({ deleted: true }));
+        });
+    });
+
     describe('Customers Collection', () => {
         const userId = 'user_123';
         const otherId = 'user_456';

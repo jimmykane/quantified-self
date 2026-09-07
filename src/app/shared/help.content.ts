@@ -53,6 +53,17 @@ const SUPPORT_MAILTO = `mailto:${environment.supportEmail}`;
 const PRIVACY_MAILTO = 'mailto:privacy@quantified-self.io';
 const GITHUB_ISSUES_URL = 'https://github.com/jimmykane/quantified-self/issues';
 
+const TIMELINE_NOTES_HELP_CONTENT = `## Timeline notes
+
+Use **Timeline notes** in the Health or Training header to add private context such as sickness, injury, vacation, travel, or stress. Notes are available to every signed-in account; no subscription or connected device is needed. **Add measurement** stays separate.
+
+Choose a single day, an inclusive date range, or an ongoing period. You can plan future days and ranges; ongoing notes must already have started. **End today** closes an ongoing note using its original time zone. Dates stay fixed when you travel.
+
+The manager lists all notes, including future plans, newest start date first. You can edit, delete with confirmation, or browse older pages. **Show on charts** is remembered across Health, Sleep, and Training. Tap a chart marker to open its note, or a grouped marker to see the overlapping notes. The manager is also the keyboard-accessible way to browse them. Weekly charts show which notes overlap a week while retaining their actual dates.
+
+Notes never change your measurements, readiness, or forecasts. Ongoing shading stops today. Source and sport filters do not hide notes. If a view reaches its note limit or cannot load notes, it says so while keeping your metric charts available. Notes stay private: they are not sent to connected providers, public shares, MCP clients, or the Assistant. Disconnecting a provider keeps them; deleting your account removes them.
+`;
+
 const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
 
 See the [Health feature overview](/features/health) for sleep, HRV, and measurement previews using sample data.
@@ -489,7 +500,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     icon: 'cardiology',
     title: 'Health',
     summary: 'Compare Sleep and the complete Health metric catalog across providers without blending sources.',
-    content: HEALTH_WORKSPACE_HELP_CONTENT,
+    content: `${HEALTH_WORKSPACE_HELP_CONTENT}\n\n${TIMELINE_NOTES_HELP_CONTENT}`,
     links: [
       { label: 'Connectivity', icon: 'hub', kind: 'route', target: '/services' },
       { label: 'Privacy Policy', icon: 'lock_outline', kind: 'route', target: '/privacy' },
@@ -500,7 +511,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     icon: 'monitoring',
     title: 'Training Analysis',
     summary: 'Understand current training status, readiness, historical benchmarks, sport detail, durability, and performance evidence.',
-    content: TRAINING_ANALYSIS_HELP_CONTENT,
+    content: `${TRAINING_ANALYSIS_HELP_CONTENT}\n\n${TIMELINE_NOTES_HELP_CONTENT}`,
     links: [
       { label: 'Open Training', icon: 'monitoring', kind: 'route', target: '/training' },
       { label: 'Training Analysis Overview', icon: 'travel_explore', kind: 'route', target: '/features/training-analysis' },

@@ -1,6 +1,16 @@
 {
   "indexes": [
     {
+      "collectionGroup": "timelineNotes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "endDate", "order": "ASCENDING" },
+        { "fieldPath": "startDate", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "activitySyncQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1559,6 +1569,8 @@
     }
   ],
   "fieldOverrides": [
+    { "collectionGroup": "timelineNotes", "fieldPath": "title", "indexes": [] },
+    { "collectionGroup": "timelineNotes", "fieldPath": "details", "indexes": [] },
     {
       "collectionGroup": "legal",
       "fieldPath": "acceptedMarketingPolicy",

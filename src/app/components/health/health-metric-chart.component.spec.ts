@@ -24,6 +24,7 @@ import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.c
   template: '<div class="chart-stub"></div>',
 })
 class HealthMetricSeriesChartStubComponent {
+  @Input() timelineNotes = null;
   @Input() model!: HealthChartSeriesModel;
   @Input() startTimeMs = 0;
   @Input() endTimeMs = 0;

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
+import { searchHelpSections } from '../helpers/help-search.helper';
+import { CONNECTED_SERVICES_POLICY_SECTION } from './policies.content';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 import {
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
@@ -12,6 +14,16 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains private notes in both workspaces and makes their context searchable', () => {
+    for (const id of ['health', 'training-analysis']) {
+      const content = HELP_SECTIONS.find(section => section.id === id)?.content;
+      expect(content).toContain('## Timeline notes');
+      expect(content).toContain('ongoing notes must already have started');
+      expect(content).toContain('Notes never change your measurements, readiness, or forecasts');
+    }
+    expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
+    expect(CONNECTED_SERVICES_POLICY_SECTION.content.join(' ')).toContain('content-free deletion receipt');
+  });
   it('documents the supported activity catalog without overpromising source data', () => {
     const supportedActivitiesSection = HELP_SECTIONS.find(section => section.id === 'supported-activities');
 

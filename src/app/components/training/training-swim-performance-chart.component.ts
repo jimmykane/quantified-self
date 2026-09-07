@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -54,6 +55,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
   @Input() performance: DashboardTrainingSwimPerformanceContext | null = null;
   @Input() status: DashboardDerivedMetricStatus = 'missing';
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -78,7 +80,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes.performance || changes.status || changes.darkTheme || changes.unitSettings) {
+    if (changes.performance || changes.status || changes.darkTheme || changes.unitSettings || changes.timelineNotes) {
       void this.refresh();
     }
   }
@@ -98,6 +100,7 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
       return;
     }
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes, { bucketDays: 7 });
     this.chartHost.setOption(this.buildOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
