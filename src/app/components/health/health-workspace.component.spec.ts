@@ -33,7 +33,7 @@ import {
   ACTIVITY_HEALTH_SOURCE_KINDS,
   type ActivityHealthRangeResult,
 } from '@shared/activity-health';
-import { SLEEP_PROVIDERS, SleepProvider, SleepSession, SleepSyncState } from '@shared/sleep';
+import { SLEEP_PROVIDERS, SleepSession } from '@shared/sleep';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { AppChartsModule } from '../../modules/app-charts.module';
@@ -318,20 +318,7 @@ describe('HealthWorkspaceComponent', () => {
   let hydrateSavedRange: (range: AppHealthWorkspaceRange) => void;
   let hydrateSavedMetric: (metric: AppHealthWorkspaceMetric) => void;
   let syncStates: BehaviorSubject<HealthSyncState[]>;
-  let sleepSyncStates: Record<SleepProvider, BehaviorSubject<SleepSyncState | null>>;
-  let backfillGarminHealthForCurrentUser: ReturnType<typeof vi.fn>;
-  let backfillSuuntoSleepForCurrentUser: ReturnType<typeof vi.fn>;
-  let backfillCorosSleepForCurrentUser: ReturnType<typeof vi.fn>;
-  let hasProAccess: ReturnType<typeof signal<boolean>>;
   let setCurrentUserID: (uid: string) => void;
-  let backfillResponse: {
-    queued: number;
-    sleepQueued: number;
-    healthQueued: number;
-    startDate: string;
-    endDate: string;
-    nextAllowedAtMs: number;
-  };
 
   async function createComponent(
     loadImplementation?: (metricId: HealthMetricId) => Promise<HealthWorkspaceRangeLoad>,
@@ -342,7 +329,6 @@ describe('HealthWorkspaceComponent', () => {
       hasSleep?: boolean;
       sleepSessions?: readonly SleepSession[];
       sleepError?: unknown;
-      sleepSyncErrors?: readonly SleepProvider[];
     } = {},
     savedMetric?: AppHealthWorkspaceMetric,
   ): Promise<void> {
@@ -400,24 +386,6 @@ describe('HealthWorkspaceComponent', () => {
       lastSyncedAtMs: todayStartMs,
       updatedAtMs: 1,
     }]);
-    sleepSyncStates = {
-      [SLEEP_PROVIDERS.GarminAPI]: new BehaviorSubject<SleepSyncState | null>(null),
-      [SLEEP_PROVIDERS.SuuntoApp]: new BehaviorSubject<SleepSyncState | null>(null),
-      [SLEEP_PROVIDERS.COROSAPI]: new BehaviorSubject<SleepSyncState | null>(null),
-    };
-    backfillResponse = {
-      queued: 2,
-      sleepQueued: 1,
-      healthQueued: 1,
-      startDate: new Date(todayStartMs - (30 * 24 * 60 * 60 * 1000)).toISOString(),
-      endDate: new Date(todayStartMs).toISOString(),
-      nextAllowedAtMs: todayStartMs + (7 * 24 * 60 * 60 * 1000),
-    };
-    backfillGarminHealthForCurrentUser = vi.fn().mockResolvedValue(backfillResponse);
-    backfillSuuntoSleepForCurrentUser = vi.fn().mockResolvedValue(backfillResponse);
-    backfillCorosSleepForCurrentUser = vi.fn().mockResolvedValue(backfillResponse);
-    hasProAccess = signal(true);
-
     const defaultSleepSessions = (availability.hasSleep ?? true) ? [sleepSession()] : [];
 
     await TestBed.configureTestingModule({
@@ -429,10 +397,6 @@ describe('HealthWorkspaceComponent', () => {
           provide: AppUserService,
           useValue: {
             user,
-            hasProAccessSignal: hasProAccess,
-            backfillGarminHealthForCurrentUser,
-            backfillSuuntoSleepForCurrentUser,
-            backfillCorosSleepForCurrentUser,
           },
         },
         {
@@ -469,10 +433,6 @@ describe('HealthWorkspaceComponent', () => {
             watchHasAnySleepSession: () => availability.sleepError
               ? throwError(() => availability.sleepError)
               : of(availability.hasSleep ?? true),
-            watchSyncState: (_uid: string, provider: SleepProvider) =>
-              availability.sleepSyncErrors?.includes(provider)
-                ? throwError(() => new Error('sync state unavailable'))
-                : sleepSyncStates[provider].asObservable(),
           },
         },
         { provide: AppThemeService, useValue: { appTheme: signal(AppThemes.Light) } },
@@ -585,7 +545,7 @@ describe('HealthWorkspaceComponent', () => {
     }));
   }, 10_000);
 
-  it('keeps mobile range controls width-safe and provider filters on one scrollable row', () => {
+  it('keeps mobile arrows beside the ranges and wraps sources without a nested scroll area', () => {
     const styles = readFileSync(resolve(
       process.cwd(),
       'src/app/components/health/health-workspace.component.scss',
@@ -595,10 +555,19 @@ describe('HealthWorkspaceComponent', () => {
     expect(styles).toContain('box-sizing: border-box');
     expect(styles).toContain('flex: 1 1 0');
     expect(styles).toContain('padding-inline: 4px');
-    expect(styles).toContain('.health-provider-filters::-webkit-scrollbar');
-    expect(styles).toContain('overscroll-behavior-inline: contain');
-    expect(styles).toContain('gap: 0.375rem');
-    expect(styles).toContain('@media (max-width: 360px)');
+    for (const selector of ['health-window-older', 'health-window-newer', 'health-range-selector']) {
+      expect(styles).toMatch(new RegExp(`\\.${selector}\\s*\\{[^}]*grid-row: 1;`));
+    }
+    expect(styles).not.toContain('@media (max-width: 360px)');
+    expect(styles).not.toContain('grid-row: 2');
+    const filterRules = [...styles.matchAll(/\.health-provider-filters\s*\{([^}]*)\}/g)]
+      .map(match => match[1]).join('\n');
+    expect(filterRules).toContain('flex-wrap: wrap');
+    expect(filterRules).not.toMatch(/overflow|scrollbar/);
+    expect(styles).toContain('--mat-button-outlined-container-height: 44px');
+    expect(filterRules).toContain('row-gap: 0.5rem');
+    expect(filterRules).toContain('column-gap: 0.375rem');
+    expect(styles).toMatch(/\.health-provider-filter-content\s*\{[^}]*display: flex;/);
   });
 
   it('opens highlight metrics without styling the highlight as selected', async () => {
@@ -801,6 +770,10 @@ describe('HealthWorkspaceComponent', () => {
     const todayButton = (fixture.nativeElement as HTMLElement)
       .querySelector<HTMLButtonElement>('[aria-label="Jump to today"]');
     expect(todayButton).not.toBeNull();
+    expect(todayButton?.closest('.health-detail-heading')).not.toBeNull();
+    expect(todayButton?.closest('.health-window-navigation')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-window-navigation')?.children)
+      .toHaveLength(3);
 
     todayButton?.click();
     fixture.detectChanges();
@@ -1356,10 +1329,24 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.manualMutationBusy()).toBe(false);
   });
 
+  it('keeps the measurement action in a block-level centered row, not a baseline-aligned inline row', () => {
+    const styles = readFileSync(resolve(
+      process.cwd(), 'src/app/components/health/health-workspace.component.scss',
+    ), 'utf8');
+    const contentRule = styles.match(/\.health-add-measurement-content\s*\{([^}]+)\}/)?.[1];
+    expect(contentRule).toMatch(/display:\s*flex\s*;/);
+    expect(contentRule).toMatch(/align-items:\s*center\s*;/);
+    expect(contentRule).toMatch(/justify-content:\s*center\s*;/);
+  });
+
   it('shows save progress, creates manual Weight with an idempotency key, and refreshes the range', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
     component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
     await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    const addButton = host.querySelector<HTMLButtonElement>('.health-add-measurement')!;
+    const contentRow = addButton.querySelector('.health-add-measurement-content')!;
+    expect(contentRow.querySelector('mat-icon')?.parentElement).toBe(contentRow);
     const callsBeforeMutation = loadMetricRange.mock.calls.length;
     let finishSave!: (value: { sourceRecordId: string; revisionOrder: number }) => void;
     saveManualMeasurement.mockReturnValueOnce(new Promise(resolve => { finishSave = resolve; }));
@@ -1375,10 +1362,10 @@ describe('HealthWorkspaceComponent', () => {
       timezoneOffsetSeconds: 7_200,
     });
     fixture.detectChanges();
-    const host = fixture.nativeElement as HTMLElement;
-    const addButton = host.querySelector<HTMLButtonElement>('.health-add-measurement')!;
     expect(addButton.disabled).toBe(true);
-    expect(addButton.querySelector('mat-spinner')).not.toBeNull();
+    expect(addButton.querySelector('.health-add-measurement-content')).toBe(contentRow);
+    expect(addButton.querySelector('mat-spinner')?.parentElement).toBe(contentRow);
+    expect(addButton.querySelector('mat-spinner')?.getAttribute('diameter')).toBe('18');
     expect(addButton.textContent).toContain('Add measurement');
     expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent).toContain('Updating measurements');
 
@@ -1399,6 +1386,8 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.manualMutationBusy()).toBe(false);
     expect(addButton.disabled).toBe(false);
     expect(addButton.querySelector('mat-spinner')).toBeNull();
+    expect(addButton.querySelector('.health-add-measurement-content')).toBe(contentRow);
+    expect(contentRow.querySelector('mat-icon')?.parentElement).toBe(contentRow);
     expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent?.trim()).toBe('');
   });
 
@@ -1789,179 +1778,16 @@ describe('HealthWorkspaceComponent', () => {
     ).toBe('Current: the latest source update arrived within the last 36 hours.');
   });
 
-  it('offers the existing provider history import when no Sleep or Health backfill has run', async () => {
+  it('keeps the source footer focused on recency and Connectivity', async () => {
     await createComponent();
 
-    const host = fixture.nativeElement as HTMLElement;
-    const actionsButton = host.querySelector('.health-sync-actions') as HTMLButtonElement;
-    expect(actionsButton.getAttribute('aria-label')).toBe('More actions for Garmin');
-    expect(actionsButton.textContent).not.toContain('Import history');
-
-    await component.startHistoryImport(HEALTH_PROVIDERS.GarminAPI);
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(backfillGarminHealthForCurrentUser).toHaveBeenCalledTimes(1);
-    expect(host.querySelector('.health-sync-actions')).toBeNull();
-    expect(host.textContent).toContain('History queued');
-  });
-
-  it('does not offer history import after a previous request or without plan access', async () => {
-    await createComponent();
-    sleepSyncStates[SLEEP_PROVIDERS.GarminAPI].next({
-      provider: SLEEP_PROVIDERS.GarminAPI,
-      status: 'ready',
-      lastBackfillQueuedAtMs: todayStartMs,
-      lastBackfillStartMs: todayStartMs - 1_000,
-      lastBackfillEndMs: todayStartMs,
-      updatedAtMs: todayStartMs,
-    });
-    fixture.detectChanges();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-actions')).toBeNull();
-
-    sleepSyncStates[SLEEP_PROVIDERS.GarminAPI].next(null);
-    hasProAccess.set(false);
-    fixture.detectChanges();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-actions')).toBeNull();
-  });
-
-  it('offers a retry after a failed history import and keeps provider errors inline', async () => {
-    await createComponent();
-    sleepSyncStates[SLEEP_PROVIDERS.GarminAPI].next({
-      provider: SLEEP_PROVIDERS.GarminAPI,
-      status: 'failed',
-      healthBackfillStatus: 'failed',
-      lastBackfillQueuedAtMs: null,
-      nextBackfillAllowedAtMs: null,
-      updatedAtMs: todayStartMs,
-    });
-    fixture.detectChanges();
-
-    const host = fixture.nativeElement as HTMLElement;
-    const actionsButton = host.querySelector('.health-sync-actions') as HTMLButtonElement;
-    expect(actionsButton.getAttribute('aria-label')).toBe('More actions for Garmin');
-
-    backfillGarminHealthForCurrentUser.mockRejectedValueOnce(new Error('provider details'));
-    await component.startHistoryImport(HEALTH_PROVIDERS.GarminAPI);
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(host.textContent).toContain('History import could not be started.');
-    expect(host.textContent).not.toContain('provider details');
-    expect((host.querySelector('.health-sync-actions') as HTMLButtonElement).getAttribute('aria-label'))
-      .toBe('More actions for Garmin');
-  });
-
-  it('does not mistake an unrelated live-sync failure for a failed history import', async () => {
-    await createComponent();
-    sleepSyncStates[SLEEP_PROVIDERS.GarminAPI].next({
-      provider: SLEEP_PROVIDERS.GarminAPI,
-      status: 'failed',
-      lastError: 'Live sync failed.',
-      updatedAtMs: todayStartMs,
-    });
-    fixture.detectChanges();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-import')).toBeNull();
-
-    await component.startHistoryImport(HEALTH_PROVIDERS.GarminAPI);
-    expect(backfillGarminHealthForCurrentUser).not.toHaveBeenCalled();
-  });
-
-  it('does not mistake a later live-sync failure for a failed backfill', async () => {
-    await createComponent();
-    sleepSyncStates[SLEEP_PROVIDERS.GarminAPI].next({
-      provider: SLEEP_PROVIDERS.GarminAPI,
-      status: 'failed',
-      lastBackfillQueuedAtMs: todayStartMs,
-      lastBackfillStartMs: todayStartMs - 1_000,
-      lastBackfillEndMs: todayStartMs,
-      lastBackfillQueueItems: 2,
-      nextBackfillAllowedAtMs: todayStartMs,
-      lastError: 'A later live sync failed.',
-      updatedAtMs: todayStartMs,
-    });
-    fixture.detectChanges();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-import')).toBeNull();
-  });
-
-  it('suppresses history import when sync-state absence could not be verified', async () => {
-    await createComponent(undefined, undefined, {
-      sleepSyncErrors: [SLEEP_PROVIDERS.GarminAPI],
-    });
-
-    expect(component.sleepSyncStateResolved()[SLEEP_PROVIDERS.GarminAPI]).toBe(false);
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-import')).toBeNull();
-  });
-
-  it('directs permission-blocked history imports to Connectivity instead of retrying', async () => {
-    await createComponent();
-    sleepSyncStates[SLEEP_PROVIDERS.GarminAPI].next({
-      provider: SLEEP_PROVIDERS.GarminAPI,
-      status: 'permission_missing',
-      lastError: 'Missing required Garmin permissions.',
-      updatedAtMs: todayStartMs,
-    });
-    fixture.detectChanges();
-
-    const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('.health-sync-import')).toBeNull();
-    expect(host.textContent).toContain('History permission needed');
-    expect(host.querySelector('.health-sync-footer [routerlink="/services"]')).toBeTruthy();
-  });
-
-  it('does not let an old account request clear a newer account request', async () => {
-    await createComponent();
-    let resolveFirst: (value: typeof backfillResponse) => void;
-    let resolveSecond: (value: typeof backfillResponse) => void;
-    const firstResponse = new Promise<typeof backfillResponse>(resolve => {
-      resolveFirst = resolve;
-    });
-    const secondResponse = new Promise<typeof backfillResponse>(resolve => {
-      resolveSecond = resolve;
-    });
-    backfillGarminHealthForCurrentUser
-      .mockReturnValueOnce(firstResponse)
-      .mockReturnValueOnce(secondResponse);
-
-    const firstRequest = component.startHistoryImport(HEALTH_PROVIDERS.GarminAPI);
-    expect(component.historyImportProvider()).toBe(HEALTH_PROVIDERS.GarminAPI);
-
-    setCurrentUserID('user-2');
-    fixture.detectChanges();
-    const secondRequest = component.startHistoryImport(HEALTH_PROVIDERS.GarminAPI);
-    expect(component.historyImportProvider()).toBe(HEALTH_PROVIDERS.GarminAPI);
-
-    resolveFirst!(backfillResponse);
-    await firstRequest;
-    expect(component.historyImportProvider()).toBe(HEALTH_PROVIDERS.GarminAPI);
-
-    resolveSecond!(backfillResponse);
-    await secondRequest;
-    expect(component.historyImportProvider()).toBeNull();
-  });
-
-  it('keeps an import active across same-account profile refreshes', async () => {
-    await createComponent();
-    let resolveRequest: (value: typeof backfillResponse) => void;
-    const response = new Promise<typeof backfillResponse>(resolve => {
-      resolveRequest = resolve;
-    });
-    backfillGarminHealthForCurrentUser.mockReturnValueOnce(response);
-
-    const request = component.startHistoryImport(HEALTH_PROVIDERS.GarminAPI);
-    setCurrentUserID('user-1');
-    fixture.detectChanges();
-
-    expect(component.historyImportProvider()).toBe(HEALTH_PROVIDERS.GarminAPI);
-
-    resolveRequest!(backfillResponse);
-    await request;
-    expect(component.historyImportProvider()).toBeNull();
-    expect(component.sleepSyncStates()[SLEEP_PROVIDERS.GarminAPI]?.healthBackfillStatus).toBe('queued');
+    const footer = (fixture.nativeElement as HTMLElement).querySelector('.health-sync-footer') as HTMLElement;
+    expect(footer.querySelector('[aria-label^="More actions for"]')).toBeNull();
+    expect(footer.querySelector('mat-menu')).toBeNull();
+    expect(footer.textContent).not.toContain('Import history');
+    expect(footer.textContent).not.toContain('History queued');
+    expect(footer.querySelector('[routerlink="/services"]')).toBeTruthy();
+    expect('startHistoryImport' in component).toBe(false);
   });
 
   it('refreshes when one provider advances below another provider timestamp', async () => {

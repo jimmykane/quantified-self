@@ -33,6 +33,22 @@ This always-on rule applies to frontend UI changes.
 - Prefer the global dialog container conventions.
 - For `mat-menu`, use Angular Material's public menu class API deliberately: classes on `<mat-menu>` are applied to the menu panel, while `overlayPanelClass` targets the CDK overlay pane. App-styled menus should include the shared `qs-menu-panel` class on `<mat-menu>` so they inherit the same surface, radius, scrolling, and sizing as the rest of the app.
 
+## Async Button Content Alignment
+
+- When a Material button wraps an icon/spinner and text in an app-owned content row, use `display: flex`,
+  `align-items: center`, and `justify-content: center` on that row. Preserve the same row and equal icon/spinner boxes
+  across idle and pending states. Leave normal direct-icon Material buttons alone.
+- Do not assume an `inline-flex` row is centered just because it has `align-items: center`. Inside Material's label,
+  the row still participates in baseline layout; the surrounding line box reserves descender space and can lift the
+  entire row above the button center. Inner alignment centers children, not the row within its parent.
+- Fix the app-owned row's formatting context, not Material's internal label classes. Do not compensate with
+  transforms, negative margins, or arbitrary line-height/padding adjustments.
+- Verify both levels: icon/spinner versus text, then the entire content row versus the button. Use browser bounding
+  boxes and a visual check at desktop and mobile widths; equal child centers alone do not prove button alignment.
+  Cover idle and disabled/pending rendering with a mocked operation, never a production mutation solely to show a
+  spinner. JSDOM tests can guard the markup/CSS contract but cannot establish pixel alignment; report any unverified
+  browser state explicitly.
+
 ## Checklist
 - Standard Material component used where available
 - Async UI actions show an explicit loading state on or next to the triggering control, with layout kept stable while the action is pending

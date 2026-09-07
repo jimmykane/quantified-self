@@ -185,8 +185,9 @@ already-loaded Form history, and the existing sleep-triggered Best Build compari
 
 Training is available to signed-in users from the sidenav. Its route header uses the shared `app-page-header` route
 primitive, with a Feedback action that opens the configured support email with a Training-specific subject, plus direct
-**Calendar** and **Dashboard** route actions. Dashboard offers **Open Training** and **Calendar** route actions, but does
-not add curated Training snapshots as default Dashboard dependencies or configurable tiles.
+**Calendar** and **Dashboard** route actions. The Dashboard header does not duplicate the Training or Health navigation
+links; its calendar icon opens the mini calendar. Dashboard does not add curated Training snapshots as default
+Dashboard dependencies or configurable tiles.
 
 The lightweight status/comparison cards and exact-value load grid are shared presentation primitives. The authenticated
 Training workspace supplies their live, normalized view models; the public homepage supplies a static example view model

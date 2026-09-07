@@ -115,9 +115,22 @@
 
       <article class="health-detail" aria-labelledby="health-detail-title">
         <header class="health-detail-header">
-          <div>
-            <h2 id="health-detail-title">{{ detailTitle() }}</h2>
-            <p>{{ detailSubtitle() }}</p>
+          <div class="health-detail-heading">
+            <div>
+              <h2 id="health-detail-title">{{ detailTitle() }}</h2>
+              <p>{{ detailSubtitle() }}</p>
+            </div>
+            @if (selectedWindow().canNavigateNewer) {
+              <button
+                mat-icon-button
+                type="button"
+                class="health-window-today"
+                matTooltip="Jump to today"
+                aria-label="Jump to today"
+                (click)="jumpToToday()">
+                <mat-icon aria-hidden="true">today</mat-icon>
+              </button>
+            }
           </div>
           <div class="health-detail-controls">
           <div class="health-window-navigation" aria-label="Health data window">
@@ -150,17 +163,6 @@
               (click)="navigateWindow('newer')">
               <mat-icon aria-hidden="true">chevron_right</mat-icon>
             </button>
-            @if (selectedWindow().canNavigateNewer) {
-              <button
-                mat-icon-button
-                type="button"
-                class="health-window-today"
-                matTooltip="Jump to today"
-                aria-label="Jump to today"
-                (click)="jumpToToday()">
-                <mat-icon aria-hidden="true">today</mat-icon>
-              </button>
-            }
           </div>
           </div>
         </header>
@@ -396,40 +398,6 @@
               <time class="health-sync-update" [attr.datetime]="state.lastUpdateDateTime">{{ state.lastUpdateText }}</time>
             } @else {
               <span class="health-sync-update">{{ state.lastUpdateText }}</span>
-            }
-            @if (state.historyImportStatusText) {
-              <span aria-hidden="true">·</span>
-              <span class="health-sync-import-status" role="status">{{ state.historyImportStatusText }}</span>
-            }
-            @if (state.historyImportError) {
-              <span class="health-sync-import-error" role="alert">{{ state.historyImportError }}</span>
-            }
-            @if (state.historyImportActionLabel) {
-              <button
-                mat-icon-button
-                type="button"
-                class="health-sync-actions"
-                [disabled]="state.historyImportBusy"
-                [matMenuTriggerFor]="historyImportMenu"
-                [attr.aria-label]="'More actions for ' + state.label"
-                matTooltip="More actions">
-                @if (state.historyImportBusy) {
-                  <mat-spinner diameter="14" aria-hidden="true"></mat-spinner>
-                } @else {
-                  <mat-icon aria-hidden="true">more_horiz</mat-icon>
-                }
-              </button>
-              <mat-menu #historyImportMenu="matMenu" class="qs-menu-panel">
-                <button
-                  mat-menu-item
-                  type="button"
-                  [disabled]="state.historyImportBusy"
-                  [attr.aria-label]="state.historyImportActionLabel + ' for ' + state.label"
-                  (click)="startHistoryImport(state.provider)">
-                  <mat-icon aria-hidden="true">history</mat-icon>
-                  <span>{{ state.historyImportActionLabel }}</span>
-                </button>
-              </mat-menu>
             }
           </li>
         }
