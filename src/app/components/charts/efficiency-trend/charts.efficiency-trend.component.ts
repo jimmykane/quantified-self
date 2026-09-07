@@ -190,7 +190,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       : { show: false };
 
     const values = points.map(point => point.value);
-    const valueAxis = buildDashboardValueAxisConfig(values);
+    const valueAxis = buildDashboardValueAxisConfig(values, { rangeMode: 'data' });
     const labelMode = this.resolveXAxisLabelMode(points);
 
     return {
@@ -205,7 +205,8 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         right: 6,
         top: 8,
         bottom: 22,
-        containLabel: false,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
       },
       tooltip: {
         show: true,
@@ -254,7 +255,10 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         axisLine: { show: false },
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
-          show: false,
+          show: true,
+          color: style.secondaryTextColor,
+          fontSize: style.axisFontSize,
+          hideOverlap: true,
         },
       },
       series: [

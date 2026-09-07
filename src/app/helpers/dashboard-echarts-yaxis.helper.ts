@@ -8,7 +8,12 @@ export interface DashboardValueAxisConfig {
   interval: number;
 }
 
-export function buildDashboardValueAxisConfig(values: number[]): DashboardValueAxisConfig {
+export interface DashboardValueAxisOptions {
+  /** Preserve the existing baseline policy unless a trend explicitly opts into a fitted range. */
+  rangeMode?: 'default' | 'data';
+}
+
+export function buildDashboardValueAxisConfig(values: number[], options: DashboardValueAxisOptions = {}): DashboardValueAxisConfig {
   const finiteValues = values.filter((value) => Number.isFinite(value));
   if (!finiteValues.length) {
     return { min: 0, max: 1, interval: 1 };
@@ -16,9 +21,10 @@ export function buildDashboardValueAxisConfig(values: number[]): DashboardValueA
 
   const valueMin = Math.min(...finiteValues);
   const valueMax = Math.max(...finiteValues);
+  const fitData = options.rangeMode === 'data';
 
   if (valueMin === valueMax) {
-    const delta = Math.max(Math.abs(valueMax) * 0.1, 1);
+    const delta = Math.max(Math.abs(valueMax) * 0.1, fitData ? 0.01 : 1);
     const singleMin = valueMin >= 0 ? Math.max(0, valueMin - delta) : valueMin - delta;
     const singleMax = valueMax + delta;
     return buildNiceAxisRange(singleMin, singleMax);
@@ -26,7 +32,8 @@ export function buildDashboardValueAxisConfig(values: number[]): DashboardValueA
 
   const span = valueMax - valueMin;
   const padding = span * DASHBOARD_AXIS_PADDING_RATIO;
-  const paddedMin = valueMin >= 0 ? 0 : valueMin - padding;
+  const lowerBound = valueMin >= 0 && !fitData ? 0 : valueMin - padding;
+  const paddedMin = valueMin >= 0 ? Math.max(0, lowerBound) : lowerBound;
   const paddedMax = valueMax + padding;
 
   return buildNiceAxisRange(paddedMin, paddedMax);
@@ -76,5 +83,6 @@ function sanitizeSnappedAxisNumber(value: number): number {
     return 0;
   }
 
-  return Number(value.toFixed(6));
+  // Preserve sub-micro intervals when fitting narrowly varying ratios.
+  return Number(value.toPrecision(15));
 }
