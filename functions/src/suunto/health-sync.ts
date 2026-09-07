@@ -417,7 +417,9 @@ export async function processSuuntoHealthQueueItem(
     try {
       await processBoundedWindow(window);
     } catch (error) {
-      if (!(error instanceof SuuntoHealthResponseLimitError)
+      const responseLimitExceeded = error instanceof SuuntoHealthResponseLimitError
+        || (error instanceof SuuntoHealthRequestError && error.responseByteLimitExceeded === true);
+      if (!responseLimitExceeded
         || window.targetEndMs - window.targetStartMs <= DAY_MS) throw error;
       // Re-fetch, never truncate. Padding is reapplied to each child so a
       // split cannot replace a complete provider-local day with half a day.

@@ -316,14 +316,20 @@ describe('Suunto Health provider sync', () => {
   });
 
   it.each([
-    ['activity', 0], ['recovery', 0], ['activity', 2], ['recovery', -5],
-  ] as const)('refetches dense %s ranges at offset %s without losing full-day samples', async (feed, offset) => {
+    ['activity', 0, 'samples'], ['recovery', 0, 'samples'],
+    ['activity', 2, 'samples'], ['recovery', -5, 'samples'],
+    ['activity', 0, 'bytes'], ['recovery', 0, 'bytes'],
+    ['activity', 2, 'bytes'], ['recovery', -5, 'bytes'],
+  ] as const)('refetches dense %s ranges at offset %s limited by %s without losing full-day samples', async (feed, offset, limit) => {
     const dayMs = 86_400_000;
     hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
       const request = new URL(url);
       if (!request.pathname.endsWith(`/${feed}`)) return [];
       const from = Number(request.searchParams.get('from'));
       const to = Number(request.searchParams.get('to'));
+      if (limit === 'bytes' && to - from + 1 > 6 * dayMs) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
       return Array.from({ length: Math.floor((to - from + 1) / 60_000) }, (_, index) => ({
         timestamp: new Date(from + index * 60_000 + offset * 3_600_000).toISOString()
           .replace('Z', `${offset < 0 ? '-' : '+'}${String(Math.abs(offset)).padStart(2, '0')}:00`),
@@ -344,15 +350,21 @@ describe('Suunto Health provider sync', () => {
       new URL(options.url).pathname.endsWith(`/${feed}`));
     expect(feedCalls).toHaveLength(3); // rejected parent, then two bounded children
     expect(hoisted.requestGet).toHaveBeenCalledTimes(feed === 'activity' ? 7 : 9);
+    for (const [options] of hoisted.requestGet.mock.calls) {
+      expect(options.maxResponseBytes).toBe(4 * 1024 * 1024);
+    }
   });
 
-  it('narrows daily-statistic sample-count failures and retains both sides', async () => {
+  it.each(['samples', 'bytes'])('narrows daily-statistic %s failures and retains both sides', async limit => {
     const dayMs = 86_400_000;
     hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
       const request = new URL(url);
       if (!request.pathname.endsWith('/daily-activity-statistics')) return [];
       const start = Date.parse(request.searchParams.get('startdate')!);
       const end = Date.parse(request.searchParams.get('enddate')!);
+      if (limit === 'bytes' && end - start > 6 * dayMs) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
       const samples = end - start > 6 * dayMs ? Array(65).fill(null)
         : Array.from({ length: 9 }, (_, i) => ({
           TimeISO8601: new Date(START_MS + (i - 1) * dayMs).toISOString(), Value: i,
@@ -368,13 +380,18 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.requestGet).toHaveBeenCalledTimes(8);
   });
 
-  it('fails closed at the minimum target instead of truncating an oversized response', async () => {
-    hoisted.requestGet.mockReset().mockResolvedValue(Array(10_001).fill(null));
+  it.each(['samples', 'bytes'])('fails closed at the minimum target instead of truncating an oversized %s response', async limit => {
+    hoisted.requestGet.mockReset();
+    if (limit === 'bytes') {
+      hoisted.requestGet.mockRejectedValue(new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1));
+    } else {
+      hoisted.requestGet.mockResolvedValue(Array(10_001).fill(null));
+    }
     const snapshot = tokenSnapshot();
     await expect(processSuuntoHealthQueueItem(
       { ...queueItem(), rangeEndMs: START_MS + 4 * 86_400_000 }, snapshot, 'staged-user',
       currentAuthorityGuards(snapshot),
-    )).rejects.toBeInstanceOf(SuuntoHealthResponseLimitError);
+    )).rejects.toBeInstanceOf(limit === 'bytes' ? SuuntoHealthRequestError : SuuntoHealthResponseLimitError);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(3); // 4d -> 2d -> 1d
   });
 
@@ -388,10 +405,14 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['deletion', 'reconnect'])('rechecks %s before an adaptive child request', async change => {
+  it.each([
+    ['deletion', 'samples'], ['reconnect', 'samples'],
+    ['deletion', 'bytes'], ['reconnect', 'bytes'],
+  ])('rechecks %s before an adaptive child request after a %s limit', async (change, limit) => {
     hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
       if (change === 'deletion') hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
       else hoisted.connectionStateGeneration = 'connection-generation-2';
+      if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
       return Array(10_001).fill(null);
     });
     const snapshot = tokenSnapshot();
@@ -403,11 +424,12 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
   });
 
-  it('bounds adaptive pull time before making further requests', async () => {
+  it.each(['samples', 'bytes'])('bounds adaptive pull time after %s limits before making further requests', async limit => {
     const now = Date.now();
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
     hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
       clock.mockReturnValue(now + 4 * 60_000);
+      if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
       return Array(10_001).fill(null);
     });
     try {
@@ -422,11 +444,14 @@ describe('Suunto Health provider sync', () => {
     }
   });
 
-  it('limits the total adaptive HTTP attempts without returning partial success', async () => {
+  it.each(['samples', 'bytes'])('limits the total adaptive HTTP attempts after %s limits without returning partial success', async limit => {
     hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
       const request = new URL(url);
       if (!request.pathname.endsWith('/recovery')) return [];
       const span = Number(request.searchParams.get('to')) + 1 - Number(request.searchParams.get('from'));
+      if (limit === 'bytes' && span > 4 * 86_400_000) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
       return span > 4 * 86_400_000 ? Array(10_001).fill(null) : [];
     });
     const snapshot = tokenSnapshot();
