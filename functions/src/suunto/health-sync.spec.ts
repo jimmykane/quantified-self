@@ -72,6 +72,7 @@ vi.mock('./health-webhook-binding-lifecycle', async importOriginal => ({
 }));
 
 import {
+  getSuuntoHealthRequestTelemetry,
   processSuuntoHealthQueueItem,
   sanitizeSuuntoHealthErrorForTelemetry,
   suuntoHealthSyncTestInternals,
@@ -179,6 +180,19 @@ describe('Suunto Health provider sync', () => {
     expect(sanitizeSuuntoHealthErrorForTelemetry(
       new SuuntoHealthValidationError('private-provider-detail'),
     ).message).toBe('Suunto Health response validation failed [unclassified_validation].');
+  });
+
+  it('exposes only a validated HTTP status for a Suunto provider request error', () => {
+    expect(getSuuntoHealthRequestTelemetry(new SuuntoHealthRequestError(429))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+      providerStatusCode: 429,
+    });
+    expect(getSuuntoHealthRequestTelemetry(new SuuntoHealthRequestError(700))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+    });
+    expect(getSuuntoHealthRequestTelemetry(new Error('provider body must not be logged'))).toBeNull();
   });
 
   beforeEach(() => {

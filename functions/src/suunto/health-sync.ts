@@ -72,6 +72,29 @@ export class SuuntoHealthRequestError extends Error {
   }
 }
 
+export interface SuuntoHealthRequestTelemetry {
+  errorName: 'SuuntoHealthRequestError';
+  errorCode: 'suunto_health_request_failed';
+  providerStatusCode?: number;
+}
+
+/**
+ * Provider response bodies can contain sensitive data. Keep production logs
+ * limited to the already-validated HTTP status and a stable error category.
+ */
+export function getSuuntoHealthRequestTelemetry(error: unknown): SuuntoHealthRequestTelemetry | null {
+  if (!(error instanceof SuuntoHealthRequestError)) return null;
+  const statusCode = error.providerStatusCode;
+  return {
+    errorName: 'SuuntoHealthRequestError',
+    errorCode: 'suunto_health_request_failed',
+    ...(typeof statusCode === 'number'
+      && Number.isSafeInteger(statusCode) && statusCode >= 100 && statusCode <= 599
+      ? { providerStatusCode: statusCode }
+      : {}),
+  };
+}
+
 export async function captureSuuntoHealthWriteLifecycleGuards(
   firebaseUserID: string,
   tokenRef: admin.firestore.DocumentReference,

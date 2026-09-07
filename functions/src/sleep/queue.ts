@@ -104,6 +104,7 @@ import {
 } from '../queue/revision-processing-lease';
 import { isSuuntoHealthSyncEnabled } from '../suunto/health-flags';
 import {
+    getSuuntoHealthRequestTelemetry,
     processSuuntoHealthQueueItem,
     sanitizeSuuntoHealthErrorForTelemetry,
     SuuntoHealthWriteLifecycleGuards,
@@ -3247,7 +3248,13 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
                 }
             }
         }
-        logger.error(`[SleepSync] Queue item ${queueItem.id} failed`, telemetryError);
+        const safeSuuntoRequestTelemetry = isSuuntoHealthQueueItem(queueItem)
+            ? getSuuntoHealthRequestTelemetry(telemetryError)
+            : null;
+        logger.error(
+            `[SleepSync] Queue item ${queueItem.id} failed`,
+            safeSuuntoRequestTelemetry || telemetryError,
+        );
         return increaseRetryCountForQueueItem(
             queueItem,
             telemetryError instanceof Error ? telemetryError : new Error(`${telemetryError}`),

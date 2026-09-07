@@ -47,6 +47,7 @@ const hoisted = vi.hoisted(() => ({
     releaseSleepQueueRevision: vi.fn(),
     captureSuuntoHealthWriteLifecycleGuards: vi.fn(),
     processSuuntoHealthQueueItem: vi.fn(),
+    getSuuntoHealthRequestTelemetry: vi.fn(() => null),
     captureActiveSuuntoWebhookWriteLifecycleGuards: vi.fn(),
     captureCurrentSuuntoWebhookWriteLifecycleGuards: vi.fn(),
     ensureSuuntoWebhookAccountBindingForProviderVerifiedToken: vi.fn(),
@@ -287,6 +288,7 @@ vi.mock('../service-connection-meta', () => ({
 vi.mock('../suunto/health-sync', () => ({
     captureSuuntoHealthWriteLifecycleGuards: hoisted.captureSuuntoHealthWriteLifecycleGuards,
     processSuuntoHealthQueueItem: hoisted.processSuuntoHealthQueueItem,
+    getSuuntoHealthRequestTelemetry: hoisted.getSuuntoHealthRequestTelemetry,
     sanitizeSuuntoHealthErrorForTelemetry: vi.fn(() => new Error('Suunto Health processing failed.')),
     suuntoCredentialFromSnapshot: vi.fn(() => ({
         accessToken: 'suunto-access-token',
@@ -5182,6 +5184,11 @@ describe('sleep queue', () => {
         hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(initialGuards);
         hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards);
         hoisted.processSuuntoHealthQueueItem.mockRejectedValueOnce(new Error('provider unavailable'));
+        hoisted.getSuuntoHealthRequestTelemetry.mockReturnValueOnce({
+            errorName: 'SuuntoHealthRequestError',
+            errorCode: 'suunto_health_request_failed',
+            providerStatusCode: 429,
+        });
         hoisted.updateHealthSyncState
             .mockResolvedValueOnce(false)
             .mockResolvedValueOnce(true);
@@ -5231,6 +5238,14 @@ describe('sleep queue', () => {
             retryCount: 1,
             dispatchedToCloudTask: null,
         }));
+        expect(hoisted.loggerError).toHaveBeenCalledWith(
+            expect.stringContaining('Queue item suunto-health-failure-after-credential-rotation failed'),
+            {
+                errorName: 'SuuntoHealthRequestError',
+                errorCode: 'suunto_health_request_failed',
+                providerStatusCode: 429,
+            },
+        );
     });
 
     it('skips a failed Suunto Health item when rebasing finds changed account authority', async () => {
