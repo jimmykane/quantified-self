@@ -1,4 +1,5 @@
 import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS, HEALTH_RECORDING_METHODS, HEALTH_VALUE_ORIGINS, HEALTH_VALUE_TYPES, getHealthMetricDefinition } from '@shared/health';
+import { MANUAL_HEALTH_AGGREGATION, MANUAL_POINT_SEMANTIC_VARIANT } from '@shared/manual-health';
 import type { DashboardSleepTrendContext, DashboardSleepTrendPoint } from '../../helpers/dashboard-sleep-chart.helper';
 import type { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
 
@@ -20,8 +21,8 @@ export function buildHealthPreviewSeries(kind: HealthPreviewKind): HealthWorkspa
     sourceLabel: kind === 'weight' ? 'Manual measurements' : 'Suunto',
     accountLabel: null,
     semanticLabel: kind === 'hrv' ? 'Overnight HRV' : kind === 'weight' ? 'Measured weight' : 'Sleep duration',
-    aggregation: kind === 'sleep' ? 'total' : 'average',
-    semanticVariant: kind === 'hrv' ? 'overnight_average' : kind === 'weight' ? 'measured' : 'sleep_duration',
+    aggregation: kind === 'weight' ? MANUAL_HEALTH_AGGREGATION : kind === 'sleep' ? 'total' : 'average',
+    semanticVariant: kind === 'hrv' ? 'overnight_average' : kind === 'weight' ? MANUAL_POINT_SEMANTIC_VARIANT : 'sleep_duration',
     origin: kind === 'weight' ? HEALTH_VALUE_ORIGINS.Recorded : HEALTH_VALUE_ORIGINS.ProviderSummary,
     recordingMethod: kind === 'weight' ? HEALTH_RECORDING_METHODS.Manual : HEALTH_RECORDING_METHODS.ProviderCalculated,
     unit: getHealthMetricDefinition(metricId).canonicalUnit,
@@ -49,6 +50,7 @@ export const HEALTH_PREVIEW_SLEEP: DashboardSleepTrendPoint = {
 
 /** The same normalized sleep model consumed by the dashboard and Health workspace. */
 export function buildHealthPreviewSleepTrend(): DashboardSleepTrendContext {
+  const nightlyHrv = new Map(buildHealthPreviewSeries('hrv').points.map(point => [point.calendarDate, Number(point.value)]));
   const points = buildHealthPreviewSeries('sleep').points.map((point, index) => {
     const totalSeconds = Number(point.value);
     const deepSeconds = 4_500 + (index % 4) * 600;
@@ -60,7 +62,7 @@ export function buildHealthPreviewSleepTrend(): DashboardSleepTrendContext {
       categoryLabel: `${18 + index} Aug`,
       endTimeMs, startTimeMs: endTimeMs - (totalSeconds + HEALTH_PREVIEW_SLEEP.awakeSeconds) * 1000,
       totalSeconds, deepSeconds, remSeconds, lightSeconds: totalSeconds - deepSeconds - remSeconds,
-      score: 78 + index % 8, averageHrvMs: 56 + index % 5,
+      score: 78 + index % 8, averageHrvMs: nightlyHrv.get(point.calendarDate) ?? null,
       averageHeartRateBpm: 49 + index % 4, minimumHeartRateBpm: 43 + index % 3,
     };
   });
