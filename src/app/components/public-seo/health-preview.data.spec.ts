@@ -4,6 +4,18 @@ import { MANUAL_HEALTH_AGGREGATION, MANUAL_POINT_SEMANTIC_VARIANT } from '@share
 import { buildHealthPreviewSeries, buildHealthPreviewSleepTrend, HEALTH_PREVIEW_END, HEALTH_PREVIEW_START } from './health-preview.data';
 
 describe('public Health sample data', () => {
+  it('keeps the weight preview on a gentle, consistent trend without daily spikes', () => {
+    const values = buildHealthPreviewSeries('weight').points.map(point => Number(point.value));
+    expect(values).toHaveLength(14);
+    expect(values[0] - values.at(-1)!).toBeGreaterThan(0);
+    expect(values[0] - values.at(-1)!).toBeLessThan(0.5);
+    for (let index = 1; index < values.length; index++) {
+      const change = values[index] - values[index - 1];
+      expect(change).toBeLessThanOrEqual(1e-10);
+      expect(Math.abs(change)).toBeLessThanOrEqual(0.08 + 1e-10);
+    }
+  });
+
   it('uses the same nightly HRV readings in the sleep and personal-range previews', () => {
     const hrv = buildHealthPreviewSeries('hrv');
     const sleep = buildHealthPreviewSleepTrend();

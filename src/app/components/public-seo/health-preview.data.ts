@@ -32,7 +32,7 @@ export function buildHealthPreviewSeries(kind: HealthPreviewKind): HealthWorkspa
       const timestampMs = Date.UTC(2026, 7, 31, 7) - (count - 1 - index) * DAY;
       const variation = variations[index % variations.length];
       const value = kind === 'sleep' ? 27_000 + variation * 660
-        : kind === 'weight' ? 73.8 - index * 0.035 + variation * 0.08
+        : kind === 'weight' ? 73.8 - index * 0.035 + variation * 0.005
           : 58 + variation + (index >= 63 && index <= 66 ? -10 : 0);
       return { timestampMs, calendarDate: new Date(timestampMs).toISOString().slice(0, 10), timezoneOffsetSeconds: 0, value, qualityCode: null };
     }),
