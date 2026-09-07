@@ -8,21 +8,22 @@ import type { TimelineNote, TimelineNoteRange, TimelineNotesLoad } from '@shared
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 
 /** Workspace-owned loading; shared charts only receive an explicit private-data input. */
 @Component({
   selector: 'app-timeline-notes-workspace', standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatTooltipModule],
+  imports: [MatButtonModule, MatIconModule, MatTooltipModule, AppChartSharedModule],
   template: `
-    <button mat-button type="button" (click)="open()" [disabled]="!service.uid()" aria-label="Timeline notes">
+    <button mat-button type="button" appHapticTap (click)="open()" [disabled]="!service.uid()" aria-label="Timeline notes">
       <mat-icon>event_note</mat-icon><span>Timeline notes</span>
     </button>
     @if (loading()) { <span class="status" role="status">Loading notes…</span> }
     @if (error()) {
-      <button mat-button type="button" (click)="refresh()" matTooltip="Notes could not load. Metric charts are still available.">Retry notes</button>
+      <button mat-button type="button" appHapticTap (click)="refresh()" matTooltip="Notes could not load. Metric charts are still available.">Retry notes</button>
     }
     @if (incomplete()) {
-      <button mat-button type="button" (click)="open()" matTooltip="Some notes are not shown because this view reached its note or data limit. Browse all notes here.">Some notes not shown</button>
+      <button mat-button type="button" appHapticTap (click)="open()" matTooltip="Some notes are not shown because this view reached its note or data limit. Browse all notes here.">Some notes not shown</button>
     }
   `,
   styleUrls: ['./timeline-notes-workspace.component.scss'],

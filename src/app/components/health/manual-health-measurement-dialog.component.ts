@@ -23,6 +23,7 @@ import {
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 const VO2_CONTEXT_STORAGE_KEY = 'health.manual.vo2-context';
 const VO2_METHOD_STORAGE_KEY = 'health.manual.vo2-method';
@@ -64,6 +65,7 @@ export type ManualHealthMeasurementDialogResult = ManualHealthMeasurementFields;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ManualHealthMeasurementDialogComponent {
+  protected readonly haptics = inject(AppHapticsService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly dialogRef = inject(MatDialogRef<
     ManualHealthMeasurementDialogComponent,
@@ -129,11 +131,13 @@ export class ManualHealthMeasurementDialogComponent {
   readonly actionLabel = computed(() => this.data.existing ? 'Save changes' : 'Add measurement');
 
   close(): void {
+    this.haptics.selection();
     this.dialogRef.close();
   }
 
   selectMetric(metricId: ManualHealthMetricId): void {
-    if (this.data.existing || !this.metricOptions.some(option => option.id === metricId)) return;
+    if (this.data.existing || metricId === this.selectedMetric() || !this.metricOptions.some(option => option.id === metricId)) return;
+    this.haptics.selection();
     this.selectedMetric.set(metricId);
     this.submitError.set(null);
     this.form.controls.canonicalValue.setValidators([
@@ -151,6 +155,7 @@ export class ManualHealthMeasurementDialogComponent {
     this.submitError.set(null);
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.haptics.error();
       return;
     }
     const value = this.form.getRawValue();
@@ -174,11 +179,13 @@ export class ManualHealthMeasurementDialogComponent {
       || Math.floor((observedAtMs + timezoneOffsetSeconds * 1000) / 60_000) * 60_000 !== calendarTimestamp
       || observedAtMs > Date.now() + (5 * 60 * 1000)) {
       this.submitError.set('Choose a valid date and time from 2000 onward, not in the future.');
+      this.haptics.error();
       return;
     }
     const canonicalValue = Number(value.canonicalValue);
     if (!Number.isFinite(canonicalValue) || canonicalValue <= 0 || canonicalValue > this.maximumValue()) {
       this.submitError.set(`Enter a ${this.valueLabel().toLowerCase()} within the supported range.`);
+      this.haptics.error();
       return;
     }
     const result: ManualHealthMeasurementDialogResult = {
@@ -199,6 +206,8 @@ export class ManualHealthMeasurementDialogComponent {
       this.rememberVo2Choice(VO2_CONTEXT_STORAGE_KEY, vo2Context);
       this.rememberVo2Choice(VO2_METHOD_STORAGE_KEY, vo2Method);
     }
+    // This only submits the draft; the workspace owns persisted success/error feedback.
+    this.haptics.selection();
     this.dialogRef.close(result);
   }
 

@@ -56,7 +56,7 @@
       @if (hasAvailableMetricSelections()) {
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Health metric</mat-label>
-          <mat-select [value]="routeState().metric" (selectionChange)="selectMetric($event.value)">
+          <mat-select [value]="routeState().metric" (openedChange)="$event && haptics.selection()" (selectionChange)="selectMetric($event.value)">
             @if (showSleepMetric()) {
               <mat-option value="sleep">Sleep overview</mat-option>
             }
@@ -330,6 +330,7 @@
           <section class="health-sleep-chart qs-glass-card-panel" aria-label="Normalized Sleep trend">
             <app-sleep-trend-chart
               [timelineNotes]="timelineNotes.context()"
+              [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"
               [darkTheme]="isDarkTheme()"
               [unitSettings]="unitSettings()"
               [isLoading]="false"

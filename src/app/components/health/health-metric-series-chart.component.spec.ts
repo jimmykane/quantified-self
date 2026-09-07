@@ -14,6 +14,7 @@ import { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -95,6 +96,9 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(host.querySelector('svg')).toBeNull();
     expect(eChartsLoader.init).toHaveBeenCalledWith(expect.any(HTMLDivElement), 'light', undefined);
     expect(eChartsLoader.setOption).toHaveBeenCalledTimes(1);
+    expect(eChartsLoader.attachMobileSeriesTapFeedback).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(), DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS,
+    );
     const option = eChartsLoader.setOption.mock.calls[0][1] as { series: Array<{ type: string }> };
     expect(option.series[0].type).toBe('line');
   });

@@ -35,6 +35,8 @@ import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manu
 import { Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import {
   AppHealthService,
   HealthWorkspaceRangeLoad,
@@ -177,6 +179,8 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HealthWorkspaceComponent {
+  protected readonly haptics = inject(AppHapticsService);
+  readonly mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
   private readonly userService = inject(AppUserService);
   private readonly userSettingsService = inject(AppUserSettingsQueryService);
   private readonly healthService = inject(AppHealthService);
@@ -982,10 +986,13 @@ export class HealthWorkspaceComponent {
   }
 
   selectPriorityMetric(metric: HealthWorkspaceMetricSelection): void {
-    this.selectAndSaveMetric(metric);
+    this.selectMetric(metric);
   }
 
   selectMetric(metric: HealthWorkspaceMetricSelection): void {
+    if (normalizeHealthWorkspaceMetric(metric) !== this.selectedMetric() || this.preferencesSaveFailed()) {
+      this.haptics.selection();
+    }
     this.selectAndSaveMetric(metric);
   }
 
@@ -994,6 +1001,7 @@ export class HealthWorkspaceComponent {
     if (normalizedRange === this.selectedRange() && !this.preferencesSaveFailed()) {
       return;
     }
+    this.haptics.selection();
     this.rangePreferenceTouched = true;
     this.selectedRange.set(normalizedRange);
     this.queueWorkspacePreferenceWrite();
@@ -1003,6 +1011,7 @@ export class HealthWorkspaceComponent {
     if (direction === 'newer' && !this.selectedWindow().canNavigateNewer) {
       return;
     }
+    this.haptics.selection();
     this.selectedEndDate.set(
       navigateHealthWorkspaceWindow(this.routeState(), direction, this.todayDate).endDate,
     );
@@ -1012,21 +1021,26 @@ export class HealthWorkspaceComponent {
     if (!this.selectedWindow().canNavigateNewer) {
       return;
     }
+    this.haptics.selection();
     this.selectedEndDate.set(this.todayDate);
   }
 
   retryPreferenceSave(): void {
+    this.haptics.selection();
     this.metricPreferenceTouched = true;
     this.rangePreferenceTouched = true;
     this.queueWorkspacePreferenceWrite();
   }
 
   showAllProviders(): void {
+    if (this.effectiveProviderFilters().length) this.haptics.selection();
     this.selectedProviders.set([]);
   }
 
   toggleProvider(provider: HealthProvider): void {
     const available = this.availableProviders();
+    if (!available.includes(provider)) return;
+    this.haptics.selection();
     const current = this.effectiveProviderFilters();
     if (!current.length) {
       this.selectedProviders.set([provider]);
@@ -1042,6 +1056,7 @@ export class HealthWorkspaceComponent {
     const metricId = this.selectedManualMetric() ?? HEALTH_METRIC_IDS.BodyWeight;
     const requestedForUserID = this.signedInUserID();
     if (!requestedForUserID || this.manualMutationBusy() || this.manualDialogRef) return;
+    this.haptics.selection();
     const dialogRef = this.dialog.open(ManualHealthMeasurementDialogComponent, {
       width: 'min(520px, calc(100vw - 24px))',
       maxWidth: '100vw',
@@ -1058,6 +1073,7 @@ export class HealthWorkspaceComponent {
   async editManualMeasurement(measurement: ManualHealthObservationEdit): Promise<void> {
     const requestedForUserID = this.signedInUserID();
     if (!requestedForUserID || this.manualMutationBusy() || this.manualDialogRef) return;
+    this.haptics.selection();
     const generation = this.manualAccountGeneration;
     let existing: ManualHealthMeasurementDialogValue = measurement;
     if (measurement.metricId === HEALTH_METRIC_IDS.BloodPressureSystolic) {
@@ -1069,6 +1085,7 @@ export class HealthWorkspaceComponent {
         if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       } catch {
         if (this.isCurrentManualAccount(requestedForUserID, generation)) {
+          this.haptics.error();
           this.snackBar.open('Measurement changed or could not be loaded. Refresh and try again.', 'Dismiss', { duration: 5000 });
           this.refreshRevision.update(current => current + 1);
         }
@@ -1098,6 +1115,7 @@ export class HealthWorkspaceComponent {
   deleteManualMeasurement(measurement: ManualHealthObservationEdit): void {
     const requestedForUserID = this.signedInUserID();
     if (!requestedForUserID || this.manualMutationBusy() || this.manualDialogRef) return;
+    this.haptics.selection();
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: 'min(440px, calc(100vw - 24px))',
       data: {
@@ -1178,6 +1196,7 @@ export class HealthWorkspaceComponent {
     const generation = this.manualAccountGeneration;
     const resolvedMutationId = clientMutationId ?? this.browserCompatibilityService.createRandomUUID();
     if (!resolvedMutationId) {
+      this.haptics.error();
       this.snackBar.open('This browser cannot create a secure measurement ID.', 'Dismiss', { duration: 5000 });
       return;
     }
@@ -1191,9 +1210,11 @@ export class HealthWorkspaceComponent {
       }, requestedForUserID);
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       this.revealManualMeasurement(metricId, value);
+      this.haptics.success();
       this.snackBar.open('Measurement added', undefined, { duration: 2500 });
     } catch {
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
+      this.haptics.error();
       const retryNotice = this.snackBar.open(
         'Measurement could not be added.',
         'Retry',
@@ -1201,6 +1222,7 @@ export class HealthWorkspaceComponent {
       );
       retryNotice.onAction().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
         if (this.isCurrentManualAccount(requestedForUserID, generation) && !this.manualMutationBusy()) {
+          this.haptics.selection();
           void this.createManualMeasurement(metricId, value, resolvedMutationId, requestedForUserID);
         }
       });
@@ -1227,9 +1249,11 @@ export class HealthWorkspaceComponent {
       }, requestedForUserID);
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       this.revealManualMeasurement(measurement.metricId, value);
+      this.haptics.success();
       this.snackBar.open('Measurement updated', undefined, { duration: 2500 });
     } catch {
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
+      this.haptics.error();
       this.snackBar.open('Measurement changed or could not be updated. Refresh and try again.', 'Dismiss', {
         duration: 5000,
       });
@@ -1253,9 +1277,11 @@ export class HealthWorkspaceComponent {
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
       this.refreshRevision.update(current => current + 1);
       void this.refreshAvailableHealthMetrics();
+      this.haptics.success();
       this.snackBar.open('Measurement deleted', undefined, { duration: 2500 });
     } catch {
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
+      this.haptics.error();
       this.snackBar.open('Measurement changed or could not be deleted. Refresh and try again.', 'Dismiss', {
         duration: 5000,
       });
@@ -1347,6 +1373,7 @@ export class HealthWorkspaceComponent {
           && this.queuedPreferenceWrite === null
         ) {
           this.preferencesSaveFailed.set(true);
+          this.haptics.error();
         }
       }
     }

@@ -15,17 +15,20 @@ import { TIMELINE_NOTE_CATEGORIES, TIMELINE_NOTE_LABELS, TIMELINE_NOTE_LIMITS, t
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 export interface TimelineNotesDialogData { uid: string; notes?: readonly TimelineNote[] }
 
 @Component({
   selector: 'app-timeline-notes-dialog', standalone: true,
   providers: [{ provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { subscriptSizing: 'dynamic' } }],
-  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatIconModule, MatInputModule, MatSelectModule, MatCheckboxModule, MatProgressSpinnerModule],
+  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatIconModule, MatInputModule, MatSelectModule, MatCheckboxModule, MatProgressSpinnerModule, AppChartSharedModule],
   templateUrl: './timeline-notes-dialog.component.html', styleUrls: ['./timeline-notes-dialog.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TimelineNotesDialogComponent {
+  protected readonly haptics = inject(AppHapticsService);
   readonly data = inject<TimelineNotesDialogData>(MAT_DIALOG_DATA);
   readonly service = inject(AppTimelineNotesService);
   private readonly ref = inject(MatDialogRef<TimelineNotesDialogComponent>);
@@ -99,16 +102,19 @@ export class TimelineNotesDialogComponent {
     this.cursors = [null]; await this.loadPage(0);
   }
   async save(): Promise<void> {
-    if (this.busy() || this.form.invalid) { this.form.markAllAsTouched(); return; }
+    if (this.busy()) return;
+    if (this.form.invalid) { this.form.markAllAsTouched(); this.haptics.error(); return; }
     this.error.set(null); this.conflict.set(false);
     try {
       const value = this.form.getRawValue();
       const fields = validateTimelineFields({ ...value, timeZone: this.zone,
         endDate: this.mode() === 'single' ? value.startDate : this.mode() === 'ongoing' ? null : value.endDate });
+      this.haptics.selection();
       this.busy.set(true);
       const note = this.existing();
       await this.service.save(this.data.uid, note ? { ...fields, mode: 'update', noteId: note.id, expectedRevision: note.revision }
         : { ...fields, mode: 'create', clientMutationId: this.mutationId! });
+      if (this.service.isOwner(this.data.uid)) this.haptics.success();
       this.busy.set(false);
       await this.showList();
     } catch (error) { this.showMutationError(error); }
@@ -127,7 +133,11 @@ export class TimelineNotesDialogComponent {
     } }).afterClosed());
     if (!confirmed || !this.service.isOwner(this.data.uid)) return;
     this.busy.set(true); this.error.set(null);
-    try { await this.service.remove(this.data.uid, { noteId: note.id, expectedRevision: note.revision }); this.busy.set(false); await this.showList(); }
+    try {
+      await this.service.remove(this.data.uid, { noteId: note.id, expectedRevision: note.revision });
+      if (this.service.isOwner(this.data.uid)) this.haptics.success();
+      this.busy.set(false); await this.showList();
+    }
     catch (error) { this.showMutationError(error); }
     finally { this.busy.set(false); }
   }
@@ -144,9 +154,13 @@ export class TimelineNotesDialogComponent {
   }
   async toggleVisibility(value: boolean, checkbox: MatCheckbox): Promise<void> {
     if (this.busy()) return;
+    this.haptics.selection();
     this.busy.set(true); this.error.set(null);
     try { await this.service.setShowOnCharts(this.data.uid, value); }
-    catch { this.error.set('Could not save chart visibility. Please try again.'); }
+    catch {
+      if (this.service.isOwner(this.data.uid)) this.haptics.error();
+      this.error.set('Could not save chart visibility. Please try again.');
+    }
     finally {
       // Material changes its own checked state before emitting. Restore the persisted value on failure.
       checkbox.checked = this.service.showOnCharts();
@@ -154,6 +168,7 @@ export class TimelineNotesDialogComponent {
     }
   }
   private showMutationError(error: unknown): void {
+    if (this.service.isOwner(this.data.uid)) this.haptics.error();
     const code = (error as { code?: string })?.code;
     this.conflict.set(code === 'functions/aborted');
     this.error.set(code === 'functions/aborted' ? this.existing()

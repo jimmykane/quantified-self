@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MatTooltip } from '@angular/material/tooltip';
+import { MatSelect } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { By } from '@angular/platform-browser';
@@ -45,6 +46,8 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppUserService } from '../../services/app.user.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { AppHealthWorkspaceMetric, AppHealthWorkspaceRange } from '../../models/app-user.interface';
 import {
   HealthWorkspaceSeries,
@@ -63,6 +66,7 @@ import { HealthActivityQueryService } from './health-activity-query.service';
   template: '<div class="sleep-chart-stub" role="img" aria-label="Sleep trend"></div>',
 })
 class SleepTrendStubComponent {
+  @Input() mobileTapFeedbackOptions: unknown;
   @Input() timelineNotes = null;
   @Input() darkTheme = false;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
@@ -311,6 +315,7 @@ function hrvBaselineSleepSessions(): SleepSession[] {
 }
 
 describe('HealthWorkspaceComponent', () => {
+  let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let fixture: ComponentFixture<HealthWorkspaceComponent>;
   let component: HealthWorkspaceComponent;
   let router: Router;
@@ -338,6 +343,7 @@ describe('HealthWorkspaceComponent', () => {
     } = {},
     savedMetric?: AppHealthWorkspaceMetric,
   ): Promise<void> {
+    haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     loadMetricRange = vi.fn().mockImplementation((_uid: string, request: { metricId: HealthMetricId }) =>
       loadImplementation ? loadImplementation(request.metricId) : Promise.resolve(rangeLoad(request.metricId)));
     loadAvailableMetricIds = availability.healthError
@@ -398,6 +404,7 @@ describe('HealthWorkspaceComponent', () => {
       imports: [HealthWorkspaceComponent],
       providers: [
         provideRouter([]),
+        { provide: AppHapticsService, useValue: haptics },
         { provide: AppEventService, useValue: { getEventMetaDataKeys: () => of([]) } },
         {
           provide: AppUserService,
@@ -469,6 +476,71 @@ describe('HealthWorkspaceComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
   }
+
+  it('keeps initialization, saved-view hydration, and sync refreshes silent', async () => {
+    await createComponent();
+    hydrateSavedMetric(HEALTH_METRIC_IDS.Steps);
+    hydrateSavedRange('14d');
+    syncStates.next([{ provider: HEALTH_PROVIDERS.GarminAPI, status: HEALTH_SYNC_STATUSES.Ready, updatedAtMs: 2 }]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
+  });
+
+  it('provides one selection pulse for metric, range, source, and window actions, but none for no-ops', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    component.selectMetric(component.routeState().metric);
+    component.selectRange(component.routeState().range);
+    component.showAllProviders();
+    component.jumpToToday();
+    host.querySelector<HTMLButtonElement>('.health-window-newer')!.click();
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    const select = fixture.debugElement.query(By.directive(MatSelect));
+    select.triggerEventHandler('openedChange', true);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    select.triggerEventHandler('openedChange', false);
+    select.triggerEventHandler('selectionChange', { value: HEALTH_METRIC_IDS.Steps });
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    host.querySelector<HTMLButtonElement>('button[aria-label="14 days"]')!.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const source = Array.from(host.querySelectorAll<HTMLButtonElement>('.health-provider-filter'))
+      .find(button => button.textContent?.includes('Garmin'))!;
+    source.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(4);
+    host.querySelector<HTMLButtonElement>('.health-provider-filter')!.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(5);
+    host.querySelector<HTMLButtonElement>('.health-window-older')!.click();
+    fixture.detectChanges();
+    expect(haptics.selection).toHaveBeenCalledTimes(6);
+    host.querySelector<HTMLButtonElement>('.health-window-today')!.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(7);
+  });
+
+  it('wires highlight selection, Sleep chart gestures, and mouse/keyboard observation disclosure', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    host.querySelector<HTMLButtonElement>('[aria-label="Open Sleep"]')!.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(SleepTrendStubComponent)).componentInstance.mobileTapFeedbackOptions)
+      .toEqual(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
+    const header = host.querySelector<HTMLElement>('mat-expansion-panel-header')!;
+    header.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+  });
 
   it('defaults to Resting heart rate for 30 days and keeps priority cards in product order', async () => {
     await createComponent();
@@ -1375,9 +1447,13 @@ describe('HealthWorkspaceComponent', () => {
     expect(addButton.querySelector('mat-spinner')?.getAttribute('diameter')).toBe('18');
     expect(addButton.textContent).toContain('Add measurement');
     expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent).toContain('Updating measurements');
+    expect(haptics.success).not.toHaveBeenCalled();
+    haptics.selection.mockClear();
 
     finishSave({ sourceRecordId: 'opaque', revisionOrder: 1 });
     await pendingSave;
+    expect(haptics.success).toHaveBeenCalledOnce();
+    expect(haptics.selection).not.toHaveBeenCalled();
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -1479,6 +1555,8 @@ describe('HealthWorkspaceComponent', () => {
     await oldRequest;
     expect(component.manualMutationBusy()).toBe(true);
     expect(notice).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).not.toHaveBeenCalled();
     finishNew();
     await newRequest;
     expect(component.manualMutationBusy()).toBe(false);
@@ -1509,11 +1587,15 @@ describe('HealthWorkspaceComponent', () => {
         clientMutationId: string,
       ) => Promise<void>;
     }).createManualMeasurement(HEALTH_METRIC_IDS.BodyWeight, value, mutationId);
+    expect(haptics.error).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
     retryAction.next();
 
     await vi.waitFor(() => expect(saveManualMeasurement).toHaveBeenCalledTimes(2));
     expect(saveManualMeasurement.mock.calls.map(([request]) => request.clientMutationId))
       .toEqual([mutationId, mutationId]);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(haptics.success).toHaveBeenCalledOnce();
   });
 
   it('does not submit a manual measurement when the browser cannot create a secure UUID', async () => {
@@ -1639,6 +1721,7 @@ describe('HealthWorkspaceComponent', () => {
       sourceRecordId: 'manual-record',
       expectedRevisionOrder: 42,
     }, 'user-1');
+    expect(haptics.success).toHaveBeenCalledTimes(2);
     expect(component.manualMutationBusy()).toBe(false);
   });
 
@@ -1912,6 +1995,7 @@ describe('HealthWorkspaceComponent', () => {
 
     expect(component.routeState().range).toBe('1y');
     expect(component.preferencesSaveFailed()).toBe(true);
+    expect(haptics.error).toHaveBeenCalledTimes(2);
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('This Health view is active, but it was not saved');
 
     component.retryPreferenceSave();

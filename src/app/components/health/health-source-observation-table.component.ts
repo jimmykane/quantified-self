@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
@@ -18,6 +19,7 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HealthSourceObservationTableComponent {
+  protected readonly haptics = inject(AppHapticsService);
   readonly sleep = input.required<boolean>();
   readonly detailTitle = input.required<string>();
   readonly sleepRows = input.required<readonly HealthSleepObservationRow[]>();
