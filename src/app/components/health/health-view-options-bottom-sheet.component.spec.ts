@@ -64,7 +64,7 @@ describe('HealthViewOptionsBottomSheetComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
-  it('prevents an empty selection and returns All sources using the existing empty-array convention', async () => {
+  it('prevents an empty selection and preserves the original selection when edits are reverted', async () => {
     const { component, fixture, dismiss } = await create();
     component.selectAll(false);
     fixture.detectChanges();
@@ -74,7 +74,27 @@ describe('HealthViewOptionsBottomSheetComponent', () => {
     expect(dismiss).not.toHaveBeenCalled();
     component.selectAll(true);
     component.apply();
+    expect(dismiss).toHaveBeenCalledWith({ range: '30d', providers: null });
+  });
+
+  it('returns All sources explicitly when changing from a provider subset', async () => {
+    const { component, dismiss } = await create({
+      ...initial,
+      providers: [initial.providers[0], { ...initial.providers[1], selected: false }],
+    });
+    component.selectAll(true);
+    component.apply();
     expect(dismiss).toHaveBeenCalledWith({ range: '30d', providers: [] });
+  });
+
+  it('preserves source selection for range-only edits from a provider subset', async () => {
+    const { component, dismiss } = await create({
+      ...initial,
+      providers: [initial.providers[0], { ...initial.providers[1], selected: false }],
+    });
+    component.selectRange('14d');
+    component.apply();
+    expect(dismiss).toHaveBeenCalledWith({ range: '14d', providers: null });
   });
 
   it('shows a single source as attribution, not redundant choices', async () => {
@@ -82,7 +102,7 @@ describe('HealthViewOptionsBottomSheetComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('mat-checkbox')).toHaveLength(0);
     expect(fixture.nativeElement.querySelector('.health-view-options-single-source').textContent).toBe('Garmin');
     component.apply();
-    expect(dismiss).toHaveBeenCalledWith({ range: '30d', providers: [] });
+    expect(dismiss).toHaveBeenCalledWith({ range: '30d', providers: null });
   });
 
   it('allows range changes while loading without clearing existing source filters', async () => {
@@ -102,6 +122,6 @@ describe('HealthViewOptionsBottomSheetComponent', () => {
     expect(component.canApply()).toBe(true);
     component.selectRange('1y');
     component.apply();
-    expect(dismiss).toHaveBeenCalledWith({ range: '1y', providers: [] });
+    expect(dismiss).toHaveBeenCalledWith({ range: '1y', providers: null });
   });
 });

@@ -14,7 +14,7 @@ export interface HealthViewOptionsData {
 
 export interface HealthViewOptionsResult {
   range: HealthWorkspaceRange;
-  /** null leaves source selection untouched when sources were still loading. */
+  /** null preserves the workspace filter when the source draft is unchanged. */
   providers: HealthProvider[] | null;
 }
 
@@ -62,10 +62,14 @@ export class HealthViewOptionsBottomSheetComponent {
 
   apply(): void {
     if (!this.canApply()) return;
+    const sourcesChanged = !this.data.sourcesLoading && this.data.providers.some(option =>
+      option.selected !== this.selectedProviders().includes(option.provider));
     // The workspace owns feedback for the accepted change, after its lifecycle check.
     this.sheet.dismiss({
       range: this.range(),
-      providers: this.data.sourcesLoading ? null : this.allSelected() ? [] : [...this.selectedProviders()],
+      // Visible choices may hide a filter retained from another metric/window.
+      // A range-only Apply must not replace that filter with the visible subset.
+      providers: !sourcesChanged ? null : this.allSelected() ? [] : [...this.selectedProviders()],
     });
   }
 

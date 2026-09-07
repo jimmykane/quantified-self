@@ -717,6 +717,33 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.routeState().range).toBe('14d');
   });
 
+  it.each([false, true])('preserves hidden source filters in a range-only draft (empty window: %s)', async empty => {
+    await createComponent(undefined, undefined, { sleepSessions: empty ? [] : [sleepSession()] }, 'sleep');
+    // A filter retained from another metric can include unavailable sources.
+    const original = [HEALTH_PROVIDERS.GarminAPI, HEALTH_PROVIDERS.COROSAPI];
+    component.selectedProviders.set(original);
+    component.openViewOptions();
+    expect(openBottomSheet.mock.calls[0][1].data.providers).toHaveLength(empty ? 0 : 1);
+    // The sheet returns null for an untouched source draft, even with a ready window.
+    viewOptionsDismissed.next({ range: '30d', providers: null });
+    expect(component.selectedProviders()).toEqual(original);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+
+    component.openViewOptions();
+    viewOptionsDismissed.next({ range: '14d', providers: null });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.selectedProviders()).toEqual(original);
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledWith('user-1', { metric: 'sleep', range: '14d' });
+    component.selectMetric(HEALTH_METRIC_IDS.RestingHeartRate);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.effectiveProviderFilters()).toEqual(original);
+  });
+
   it('opens highlight metrics without styling the highlight as selected', async () => {
     await createComponent();
     const host = fixture.nativeElement as HTMLElement;
