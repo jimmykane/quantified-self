@@ -55,11 +55,11 @@ const GITHUB_ISSUES_URL = 'https://github.com/jimmykane/quantified-self/issues';
 
 const TIMELINE_NOTES_HELP_CONTENT = `## Timeline notes
 
-Use **Timeline notes** in the Health or Training header to add private context such as sickness, injury, vacation, travel, or stress. Notes are available to every signed-in account; no subscription or connected device is needed. **Add measurement** stays separate.
+Use **Timeline notes** in the Health, Training, or Calendar header to add private context such as sickness, injury, vacation, travel, or stress. Notes are available to every signed-in account; no subscription or connected device is needed. **Add measurement** stays separate.
 
 Choose a single day, an inclusive date range, or an ongoing period. You can plan future days and ranges; ongoing notes must already have started. **End today** closes an ongoing note using its original time zone. Dates stay fixed when you travel.
 
-The manager lists all notes, including future plans, newest start date first. You can edit, delete with confirmation, or browse older pages. **Show on charts** is remembered across Health, Sleep, and Training. Tap a chart marker to open its note, or a grouped marker to see the overlapping notes. The manager is also the keyboard-accessible way to browse them. Weekly charts show which notes overlap a week while retaining their actual dates.
+The manager lists all notes, including future plans, newest start date first. You can edit, delete with confirmation, or browse older pages. **Show on charts and calendar** is remembered across Health, Sleep, Training, and Calendar. Tap a chart marker to open its note, or a grouped marker to see the overlapping notes. The manager is also the keyboard-accessible way to browse them. Weekly charts show which notes overlap a week while retaining their actual dates.
 
 In Health, notes appear on the Highlights trend charts as well as the detailed metric and Sleep charts. They follow each chart's date window, even when the explorer is showing older history.
 
@@ -158,6 +158,7 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 - A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.
 - Week and Month views separate activity-group circles when space allows. Narrow layouts, the dashboard tile, and Year view place multiple circles concentrically around the same center so a day stays readable in a compact cell.
 - Select a day with activity to open its details sheet. It shows the day's total duration, the same duration bars and available distance/ascent/descent totals by activity group, and individual activities with their available distance and elevation metrics.
+- In the full Calendar, a note icon marks days with **Timeline notes**, even when there is no workout. Select the day to see its notes, then select a note to open or edit it. Date ranges include their end day; ongoing notes stop at today in their original time zone. Notes never affect activity totals or circle sizes. Use **Timeline notes** in the header to manage them and **Show on charts and calendar** to show or hide them across workspaces. Dashboard calendar tiles and popovers do not show notes.
 - In day details, an activity group containing exactly one activity opens that activity directly, as does its individual activity row. Browser **Back** restores the same day's details sheet. Deleting an activity from its details page returns to the previous in-app page; the day sheet reopens when other activity remains on that day.
 - Calendar dates intentionally have no hover or touch tooltip. This keeps native vertical scrolling responsive on phones; day details remain available by selecting a date.
 

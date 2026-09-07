@@ -1,7 +1,7 @@
 # Timeline notes
 
 Timeline notes are private, user-created calendar context, independent of Health metrics, Sleep sessions, and workouts.
-Every authenticated account can use the compact **Timeline notes** header action in Health and Training, without a
+Every authenticated account can use the compact **Timeline notes** header action in Health, Training, and Calendar, without a
 subscription or connected provider. Existing workspace entry-point rollout and provider import checks are unchanged.
 
 ## Contract and lifecycle
@@ -56,8 +56,22 @@ to every note and its actual dates. Grouping single-day notes does not create a 
 Opt-in surfaces: Health Highlights and detailed metrics (recorded timezone), normalized Sleep (sleepDate), Training readiness,
 load/Form, freshness forecast (existing viewer-calendar convention), body weight, power-system history, weekly swimming
 and weekly durability. Weekly overlays identify overlapping buckets but retain actual note dates in tooltips. All shared
-inputs default null. Dashboard, workout details, calendar entries, public previews and non-calendar
-charts are unchanged.
+inputs default null. Dashboard, workout details, public previews and non-calendar charts are unchanged.
+The authenticated full Calendar integration is described below.
+
+## Calendar boundary
+
+The full `/calendar` page registers its visible date labels through the workspace component's `visibleRange` input.
+Month includes adjacent grid dates; Year excludes hidden outside-month cells. It reuses the same owner-scoped loader,
+limits, stale-response fences, refreshes, and `showOnCharts` preference (labelled **Show on charts and calendar**).
+`calendar-timeline-notes.helper.ts` maps inclusive note periods onto those fixed dates, resolving ongoing end dates once
+per note in its captured zone. No activity or metric document, totals, or duration-circle semantics change.
+
+An `event_note` indicator and accessible count mark note days, even without activities. Selecting a day opens its
+existing Material sheet, with a plain-text notes list above activities. Selecting a note dismisses the sheet and opens
+the shared note editor. Sheet notes stay reactive to loading/edits, visibility, and account changes; delayed selections
+are checked against the current owner and notes before opening. Note and activity failures remain independent.
+The shared grid's notes input defaults empty; dashboard tiles/popovers and public calendars remain unannotated.
 
 ## Verification and release
 

@@ -132,6 +132,18 @@
   cursor: pointer;
 }
 
+.activity-calendar-note-indicator {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  font-size: 12px;
+  line-height: 12px;
+  color: var(--mat-sys-primary);
+  pointer-events: none;
+}
+
 .activity-calendar-day-button:hover,
 .activity-calendar-day-button:focus-visible {
   background: var(--mat-sys-surface-container-high);

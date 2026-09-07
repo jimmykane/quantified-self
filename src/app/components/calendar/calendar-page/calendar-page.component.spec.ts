@@ -1,6 +1,7 @@
 import { Component, Input, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { MatDialog } from '@angular/material/dialog';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
@@ -13,7 +14,11 @@ import {
   DaysOfTheWeek,
   type EventInterface,
 } from '@sports-alliance/sports-lib';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
+import type { TimelineNote } from '@shared/timeline-notes';
+import { AppTimelineNotesService } from '../../../services/app.timeline-notes.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
+import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
 import { AppUserService } from '../../../services/app.user.service';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
@@ -47,6 +52,11 @@ describe('CalendarPageComponent', () => {
   let navigate: ReturnType<typeof vi.fn>;
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
+  let dismissed: Subject<string | undefined>;
+  const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'A trip', startDate: '2026-08-04', endDate: '2026-08-05', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+  const notesService = { uid: signal<string | null>('user-1'), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), invalidate: vi.fn(), isOwner: (uid: string) => notesService.uid() === uid };
+  const haptics = { selection: vi.fn() };
+  const dialogs = { open: vi.fn() };
   let dayDetailsNavigation: {
     restorationFor: ReturnType<typeof vi.fn>;
     consumeRestoration: ReturnType<typeof vi.fn>;
@@ -56,7 +66,12 @@ describe('CalendarPageComponent', () => {
     queryParams = new BehaviorSubject(convertToParamMap({ view: 'month', date: '2026-08-03' }));
     navigate = vi.fn().mockResolvedValue(true);
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
-    openBottomSheet = vi.fn();
+    dismissed = new Subject();
+    openBottomSheet = vi.fn().mockReturnValue({ afterDismissed: () => dismissed });
+    notesService.uid.set('user-1'); notesService.showOnCharts.set(true);
+    notesService.loadRange.mockReset().mockResolvedValue({ notes: [], incomplete: null });
+    notesService.invalidate.mockImplementation(() => notesService.changes$.next());
+    haptics.selection.mockClear(); dialogs.open.mockClear();
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
       consumeRestoration: vi.fn().mockReturnValue(true),
@@ -72,13 +87,17 @@ describe('CalendarPageComponent', () => {
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
+        { provide: AppTimelineNotesService, useValue: notesService },
+        { provide: AppHapticsService, useValue: haptics },
+        { provide: MatDialog, useValue: dialogs },
       ],
     }).overrideComponent(CalendarPageComponent, {
       remove: { imports: [ActivityRangeTableSectionComponent] },
       add: { imports: [ActivityRangeTableSectionStubComponent] },
     }).compileComponents();
     vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation(navigate);
-    vi.spyOn(TestBed.inject(MatBottomSheet), 'open').mockImplementation(openBottomSheet);
+    vi.spyOn(MatBottomSheet.prototype, 'open').mockImplementation(openBottomSheet);
+    vi.spyOn(MatDialog.prototype, 'open').mockImplementation(dialogs.open);
   });
 
   it('loads the visible month independently and renders its activity', async () => {
@@ -292,6 +311,52 @@ describe('CalendarPageComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('could not be loaded');
+  });
+  it('loads the visible grid and opens notes on days without activities using the shared manager', async () => {
+    notesService.loadRange.mockResolvedValue({ notes: [note], incomplete: null });
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().size).toBe(2));
+    expect(notesService.loadRange).toHaveBeenCalledWith('user-1', { startDate: '2026-07-27', endDate: '2026-09-06' });
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === note.startDate)!;
+    fixture.componentInstance.openDay(day);
+    const data = openBottomSheet.mock.calls.at(-1)?.[1].data as CalendarDayDetailsData;
+    expect(data.timelineNotes?.()).toEqual([note]);
+    expect(day.eventCount).toBe(0);
+    dismissed.next(note.id);
+    expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'user-1', notes: [note] } }));
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
+  it('clears an open sheet on account change and ignores a stale note selection', async () => {
+    notesService.loadRange.mockResolvedValue({ notes: [note], incomplete: null });
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().size).toBe(2));
+    fixture.componentInstance.openDay(fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === note.startDate)!);
+    const data = openBottomSheet.mock.calls.at(-1)?.[1].data as CalendarDayDetailsData;
+    notesService.uid.set('another-owner'); fixture.detectChanges();
+    expect(data.timelineNotes?.()).toEqual([]);
+    dismissed.next(note.id);
+    expect(dialogs.open).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('keeps notes available when activities fail and does not hide activities when notes fail', async () => {
+    watchEvents.mockReturnValue(throwError(() => new Error('offline')));
+    notesService.loadRange.mockResolvedValue({ notes: [note], incomplete: 'records' });
+    const fixture = TestBed.createComponent(CalendarPageComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().size).toBe(2));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('Some notes not shown');
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.calendar-status-announcement')).toBeNull();
+    notesService.loadRange.mockRejectedValue(new Error('notes unavailable'));
+    watchEvents.mockReturnValue(of([createEvent()]));
+    fixture.componentInstance.retry(); notesService.changes$.next();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Retry notes');
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(1);
   });
 
   it('shows the selected month empty state when only an adjacent grid day has an activity', async () => {

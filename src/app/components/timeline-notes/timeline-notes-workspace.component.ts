@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, NgZone, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, NgZone, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -21,7 +21,7 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
     </button>
     @if (loading()) { <span class="status" role="status">Loading notes…</span> }
     @if (error()) {
-      <button mat-button type="button" appHapticTap (click)="refresh()" matTooltip="Notes could not load. Metric charts are still available.">Retry notes</button>
+      <button mat-button type="button" appHapticTap (click)="refresh()" matTooltip="Notes could not load. The rest of this view is still available.">Retry notes</button>
     }
     @if (incomplete()) {
       <button mat-button type="button" appHapticTap (click)="open()" matTooltip="Some notes are not shown because this view reached its note or data limit. Browse all notes here.">Some notes not shown</button>
@@ -31,6 +31,8 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TimelineNotesWorkspaceComponent {
+  /** Non-chart workspaces can register an explicit visible calendar range. */
+  readonly visibleRange = input<TimelineNoteRange | null>(null);
   readonly service = inject(AppTimelineNotesService);
   private readonly dialogs = inject(MatDialog);
   private readonly haptics = inject(AppHapticsService);
@@ -68,6 +70,7 @@ export class TimelineNotesWorkspaceComponent {
   constructor() {
     // A new route instance means returning to the workspace, not reusing an old cache forever.
     this.service.invalidate();
+    effect(() => this.reportRange(this, this.visibleRange()));
     effect(() => {
       this.service.uid(); this.service.showOnCharts();
       untracked(() => { this.rangeKey = ''; this.schedule(); });

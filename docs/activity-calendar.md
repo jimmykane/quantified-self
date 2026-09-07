@@ -7,6 +7,8 @@ This document is the implementation and maintenance guide for the Activity Calen
 - The dashboard Activity Calendar tile shows the current month in a compact 1 x 1 tile and opens the full calendar. This is the creation default; persisted user-selected dimensions are not rewritten.
 - New dashboards include the tile by default. An existing editable dashboard that does not contain it receives a one-time automatic addition with an Undo action.
 - The authenticated `/calendar` route provides Week, Month, and Year views, period navigation, totals, activity-group bars, and day details.
+- Private [Timeline notes](timeline-notes.md) mark their dates in all three full-calendar views, including note-only days.
+  The shared header manager and **Show on charts and calendar** preference apply; dashboard tiles/popovers stay unchanged.
 - Selecting an active day opens an Angular Material bottom sheet with day totals, the shared activity-group duration bars and available distance/ascent/descent totals, plus recorded distance/ascent/descent for each individual activity, and links to individual events.
 - The public `/features/activity-calendar` route explains the feature without reading or exposing user activity data.
 
@@ -40,6 +42,14 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 - At most three groups are drawn in a day cell; an overflow count represents additional groups.
 - Week and Month layouts separate markers when space allows. Compact tiles, narrow layouts, and Year view use concentric markers.
 - Date cells do not use Material tooltips. This preserves native touch scrolling; their accessible names contain the date, activity count, duration, and group summary.
+- Note days add an `event_note` indicator and accessible note count, separate from activity circles. Their day sheet lists
+  note titles, categories, and actual dates above activities; selecting a note opens the shared editor. Inclusive periods,
+  future bounded dates, and ongoing periods through today in their captured zone are supported without changing totals.
+  Calendar owns the bounded notes load for its visible labels (including adjacent Month dates); the grid never fetches.
+  Open sheets receive owner-fenced reactive notes, and stale selections cannot open another account's note.
+  A notes failure leaves activity rendering intact, and an activities failure still permits viewing notes.
+  Note days can open before activity loading finishes: the sheet shows loading/error status instead of falsely reporting
+  no workouts, and its activities update when the selected day's data arrives.
 
 ## Period summaries
 
@@ -61,7 +71,7 @@ Keep these interaction contracts:
 - Previous and next controls have period-specific accessible labels.
 - The period label announces navigation changes.
 - Loading occupies a stable progress slot so cached and live emissions do not move the page.
-- Active days are buttons; empty days are non-interactive cells.
+- Days with activities or visible notes are buttons; entirely empty days are non-interactive cells.
 - Activity bars expose progressbar semantics only when recorded duration exists.
 - Start-of-week and weekend treatment must follow the user's settings and shared theme tokens.
 

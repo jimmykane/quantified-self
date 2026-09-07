@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, HostListener, LOCALE_ID, computed, effect, inject, signal } from '@angular/core';
-import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, LOCALE_ID, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { DataAscent, DataDistance, type EventInterface } from '@sports-alliance/sports-lib';
@@ -34,6 +34,8 @@ import {
   type CalendarDayDetailsData,
 } from '../calendar-day-details/calendar-day-details.component';
 import { ActivityRangeTableSectionComponent } from '../../event-table/activity-range-table-section.component';
+import { TimelineNotesWorkspaceComponent } from '../../timeline-notes/timeline-notes-workspace.component';
+import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
 
 interface CalendarEventsState {
   status: 'loading' | 'ready' | 'error';
@@ -60,6 +62,7 @@ interface CalendarSummaryMetric {
     ActivityCalendarGridComponent,
     ActivityCalendarVolumeListComponent,
     ActivityRangeTableSectionComponent,
+    TimelineNotesWorkspaceComponent,
   ],
   templateUrl: './calendar-page.component.html',
   styleUrls: ['./calendar-page.component.scss'],
@@ -73,6 +76,8 @@ export class CalendarPageComponent {
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
   private readonly locale = inject(LOCALE_ID);
+  private readonly destroy = inject(DestroyRef);
+  private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   private readonly reloadSequence = signal(0);
   private readonly today = signal(new Date());
   private readonly initialRouteState = resolveRouteState(this.route.snapshot.queryParamMap);
@@ -126,6 +131,12 @@ export class CalendarPageComponent {
     this.routeState().anchorDate,
     this.currentUser()?.settings?.unitSettings?.startOfTheWeek,
   ));
+  readonly timelineNoteRange = computed(() => calendarTimelineNoteRange(this.calendarModel()));
+  readonly notesByDate = computed(() => {
+    const workspace = this.notesWorkspace();
+    const notes = this.currentUser()?.uid === workspace?.service.uid() ? workspace?.context().notes ?? [] : [];
+    return calendarTimelineNotesByDate(this.calendarModel(), notes, this.today().getTime());
+  });
   readonly periodSummaryMetrics = computed<CalendarSummaryMetric[]>(() => {
     if (this.eventState().status !== 'ready') {
       return [
@@ -229,17 +240,32 @@ export class CalendarPageComponent {
 
   openDay(day: ActivityCalendarDayViewModel): void {
     const userId = `${this.currentUser()?.uid || ''}`.trim();
-    if (!day.eventCount || !userId) {
+    if ((!day.eventCount && !this.notesByDate().has(day.dateKey)) || !userId) {
       return;
     }
-    this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData>(CalendarDayDetailsComponent, {
+    // Keep an open sheet's notes live and owner-fenced through refreshes, edits, and account changes.
+    const timelineNotes = computed(() => this.currentUser()?.uid === userId
+      ? this.notesByDate().get(day.dateKey)?.notes ?? [] : []);
+    const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, string>(CalendarDayDetailsComponent, {
       data: {
         day,
         userId,
         locale: this.locale,
         unitSettings: this.currentUser()?.settings?.unitSettings ?? null,
         summariesSettings: this.currentUser()?.settings?.summariesSettings ?? null,
+        timelineNotes,
+        activities: computed(() => {
+          const currentDay = this.calendarModel().months.flatMap(month => month.days).find(candidate => candidate.dateKey === day.dateKey);
+          return {
+            day: currentDay ?? day,
+            status: this.currentUser()?.uid === userId && currentDay ? this.eventState().status : 'error',
+          };
+        }),
       },
+    });
+    sheet.afterDismissed().pipe(takeUntilDestroyed(this.destroy)).subscribe(noteId => {
+      const note = timelineNotes().find(note => note.id === noteId);
+      if (note && this.currentUser()?.uid === userId) this.notesWorkspace()?.context().select([note]);
     });
   }
 

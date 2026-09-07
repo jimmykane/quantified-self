@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import type { TimelineNote } from '@shared/timeline-notes';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
 import {
@@ -18,6 +20,26 @@ import { CalendarDayDetailsNavigationService } from '../../../services/calendar-
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
 
 describe('CalendarDayDetailsComponent', () => {
+  it('shows plain-text notes with actual dates, supports note-only days, and clears stale selections', async () => {
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: '<b>Trip</b>', startDate: '2026-08-01', endDate: null, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    const notes = signal<readonly TimelineNote[]>([note]);
+    const fixture = await renderDayDetails([], { timelineNotes: notes });
+    expect(fixture.nativeElement.querySelector('#calendar-day-notes-title')?.textContent).toBe('Timeline notes');
+    expect(fixture.nativeElement.textContent).toContain('No activities on this day');
+    const button = fixture.nativeElement.querySelector('mat-action-list button') as HTMLButtonElement;
+    expect(button.textContent).toContain('<b>Trip</b>');
+    expect(button.textContent).toContain('Travel');
+    expect([...button.querySelectorAll('[matListItemLine]')].map(line => line.textContent?.trim()))
+      .toEqual(['Travel', '2026-08-01 – ongoing']);
+    expect(button.querySelector('b')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#calendar-day-activities-title')).toBeNull();
+    button.click();
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledExactlyOnceWith(note.id);
+    notes.set([]); fixture.detectChanges();
+    fixture.componentInstance.selectNote(note.id);
+    expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('mat-action-list')).toBeNull();
+  });
   it('shows family totals and event detail links', async () => {
     const fixture = await renderDayDetails(createEvent());
 
@@ -69,7 +91,7 @@ describe('CalendarDayDetailsComponent', () => {
       createEvent('Evening run', undefined, 'Running', {}, 'event-2'),
     ]);
 
-    expect(fixture.componentInstance.familyVolumeRows[0].route).toBeNull();
+    expect(fixture.componentInstance.familyVolumeRows()[0].route).toBeNull();
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-row--link')).toBeNull();
     expect(fixture.nativeElement.querySelectorAll('.calendar-day-event-item')).toHaveLength(2);
   });
@@ -88,7 +110,7 @@ describe('CalendarDayDetailsComponent', () => {
 
   it('replaces generic timestamp names without repeating the activity type', async () => {
     const fixture = await renderDayDetails(createEvent('2026-08-03T08:30:00.000Z', 'New Event'));
-    const row = fixture.componentInstance.eventRows[0];
+    const row = fixture.componentInstance.eventRows()[0];
 
     expect(row.label).toBe('Running');
     expect(row.detailLabel).not.toContain('Running');
@@ -147,6 +169,20 @@ describe('CalendarDayDetailsComponent', () => {
 
     expect(styles).not.toMatch(/\.calendar-day-details\s*\{[^}]*\bbackground\s*:/s);
   });
+  it('does not call a note day empty while activities load or fail, and updates when they arrive', async () => {
+    const day = buildActivityCalendarViewModel([createEvent()], { view: 'month', anchorDate: new Date(2026, 7, 3) })
+      .months[0].days.find(day => day.eventCount)!;
+    const activities = signal({ status: 'loading' as 'loading' | 'ready' | 'error', day });
+    const fixture = await renderDayDetails([], { activities });
+    expect(fixture.nativeElement.textContent).toContain('Loading activities');
+    expect(fixture.nativeElement.textContent).not.toContain('No activities on this day');
+    activities.set({ status: 'error', day }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Activities could not be loaded');
+    expect(fixture.nativeElement.textContent).not.toContain('No activities on this day');
+    activities.set({ status: 'ready', day }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Morning run');
+    expect(fixture.nativeElement.querySelector('.calendar-day-number')?.textContent).toBe('1');
+  });
 
   it('keeps the header outside the day-detail scroll region', () => {
     const componentStyles = readFileSync(
@@ -178,7 +214,7 @@ describe('CalendarDayDetailsComponent', () => {
   });
 });
 
-async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]) {
+async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[], overrides: Partial<CalendarDayDetailsData> = {}) {
   const events = Array.isArray(eventOrEvents) ? eventOrEvents : [eventOrEvents];
   const model = buildActivityCalendarViewModel(events, {
     view: 'month',
@@ -187,9 +223,10 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
     locale: 'en-US',
   });
   const data: CalendarDayDetailsData = {
-    day: model.months[0].days.find(day => day.eventCount > 0),
+    day: model.months[0].days.find(day => day.dateKey === '2026-08-03'),
     userId: 'user-1',
     locale: 'en-US',
+    ...overrides,
   } as CalendarDayDetailsData;
   await TestBed.configureTestingModule({
     imports: [CalendarDayDetailsComponent],

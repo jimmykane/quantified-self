@@ -58,6 +58,18 @@ describe('Timeline notes workspace ownership', () => {
     await flush();
     expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2025-11-01', endDate: '2025-11-30' });
   });
+  it('loads an explicit calendar range, refreshes navigation, and honors the global visibility preference', async () => {
+    const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+    fixture.componentRef.setInput('visibleRange', { startDate: '2026-01-01', endDate: '2026-01-31' });
+    fixture.detectChanges(); await fixture.whenStable(); await flush();
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-01-01', endDate: '2026-01-31' });
+    fixture.componentRef.setInput('visibleRange', { startDate: '2026-02-01', endDate: '2026-02-28' });
+    fixture.detectChanges(); await fixture.whenStable(); await flush();
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-02-01', endDate: '2026-02-28' });
+    service.showOnCharts.set(false); await flush();
+    expect(fixture.componentInstance.context().notes).toEqual([]);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('provides one feedback for an accepted note marker, not empty or stale-account selections', async () => {
     await flush();
     const context = component.context();

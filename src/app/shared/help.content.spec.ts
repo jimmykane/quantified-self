@@ -23,6 +23,9 @@ describe('help.content', () => {
       expect(content).toContain('notes appear on the Highlights trend charts');
     }
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
+    const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
+    expect(calendar).toContain('a note icon marks days');
+    expect(calendar).toContain('Show on charts and calendar');
     expect(CONNECTED_SERVICES_POLICY_SECTION.content.join(' ')).toContain('content-free deletion receipt');
   });
   it('documents the supported activity catalog without overpromising source data', () => {
