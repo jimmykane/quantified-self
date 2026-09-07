@@ -638,6 +638,33 @@ describe('Health workspace helpers', () => {
     expect(negative.label).toBe('Far outside personal range');
   });
 
+  it('grades each HRV chart date against the personal range at that date', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const sourceSeries = hrvSeries([
+      ...Array.from({ length: 57 }, (_, index) => ({
+        daysAgo: index + 3,
+        value: index % 2 === 0 ? 49 : 51,
+      })),
+      { daysAgo: 2, value: 100 },
+      { daysAgo: 1, value: 100 },
+      { daysAgo: 0, value: 100 },
+    ]);
+    const normalTimestamp = sourceSeries.points.find(point => point.calendarDate === '2026-07-26')?.timestampMs;
+    const latestTimestamp = sourceSeries.points.find(point => point.calendarDate === '2026-08-01')?.timestampMs;
+    const status = buildHealthHrvPersonalRangeStatus(
+      sourceSeries,
+      endTimeMs,
+      null,
+      [normalTimestamp, latestTimestamp].filter((value): value is number => value !== undefined),
+    );
+
+    expect(status?.pointStatuses).toEqual([
+      { timestampMs: normalTimestamp, tone: 'positive', label: 'Within personal range' },
+      { timestampMs: latestTimestamp, tone: 'negative', label: 'Far outside personal range' },
+    ]);
+    expect(status?.tone).toBe('caution');
+  });
+
   it('counts one nightly HRV baseline value per calendar day', () => {
     const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
     const sameDaySamples = hrvSeries(Array.from({ length: 14 }, (_, index) => ({

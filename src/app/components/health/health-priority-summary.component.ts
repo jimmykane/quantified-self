@@ -7,6 +7,7 @@ import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   HealthPriorityRow,
   HealthHrvPersonalRangeStatus,
+  HealthHrvPersonalRangeTone,
   HealthWorkspaceMetricSelection,
   HealthWorkspaceSeries,
   formatHealthValue,
@@ -94,7 +95,7 @@ export class HealthPrioritySummaryComponent {
       ).map(model => {
         const latestPoint = model.series.points.at(-1);
         const personalRangeStatus = card.chartStatuses?.[model.series.id] || null;
-        const statusColor = personalRangeStatus ? personalRangeStatusColor(personalRangeStatus) : null;
+        const statusColor = personalRangeStatus ? personalRangeToneColor(personalRangeStatus.tone) : null;
         return {
           model,
           latestValueText: latestPoint
@@ -116,6 +117,11 @@ export class HealthPrioritySummaryComponent {
               normalRange: personalRangeStatus.normalRange,
               normalRangeColor: AppDataColors.Altitude,
               statusColor,
+              pointStatuses: personalRangeStatus.pointStatuses.map(pointStatus => ({
+                timestampMs: pointStatus.timestampMs,
+                color: personalRangeToneColor(pointStatus.tone),
+                label: pointStatus.label,
+              })),
             }
             : null,
           statusDescription: personalRangeStatus
@@ -129,8 +135,8 @@ export class HealthPrioritySummaryComponent {
   }));
 }
 
-function personalRangeStatusColor(status: HealthHrvPersonalRangeStatus): string {
-  switch (status.tone) {
+function personalRangeToneColor(tone: HealthHrvPersonalRangeTone): string {
+  switch (tone) {
     case 'positive': return AppDataColors.Altitude;
     case 'caution': return AppDataColors['Body Energy Moderate'];
     case 'negative': return AppDataColors['Heart Rate_0'];

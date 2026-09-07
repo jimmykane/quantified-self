@@ -157,7 +157,8 @@ const HEALTH_SYNC_REFRESH_FIELDS = [
 const HEALTH_SYNC_CURRENT_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const HEALTH_SYNC_DELAYED_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const PRIORITY_HRV_HISTORY_DAYS = 60;
+// The earliest date in the 14-day trend needs its own complete 60-day baseline.
+const PRIORITY_HRV_HISTORY_DAYS = 60 + 14 - 1;
 
 @Component({
   selector: 'app-health-workspace',
@@ -306,6 +307,7 @@ export class HealthWorkspaceComponent {
         fullSeriesById.get(series.id) || series,
         this.priorityHrvWindow.endTimeMs,
         this.unitSettings(),
+        series.points.map(point => point.timestampMs),
       );
       return status ? [[series.id, status]] : [];
     }));

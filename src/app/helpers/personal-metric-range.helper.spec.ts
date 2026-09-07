@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { calculatePersonalMetricRange, type PersonalMetricRangeObservation } from './personal-metric-range.helper';
+import {
+  calculatePersonalMetricPointRange,
+  calculatePersonalMetricRange,
+  type PersonalMetricRangeObservation,
+} from './personal-metric-range.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const END_TIME_MS = Date.parse('2026-08-01T23:59:59.999Z');
@@ -78,5 +82,30 @@ describe('personal metric range helper', () => {
 
     expect(result.observationDayCount).toBe(14);
     expect(result.baselineAverage).toBeLessThan(60);
+  });
+
+  it('grades one calendar-date point without averaging an adjacent night inside 24 hours', () => {
+    const baseline = observations(Array.from({ length: 20 }, (_, daysAgo) => ({
+      daysAgo: daysAgo + 1,
+      value: daysAgo % 2 === 0 ? 49 : 51,
+    })));
+    const point = {
+      timestampMs: END_TIME_MS,
+      calendarDate: '2026-08-01',
+      value: 100,
+    };
+    baseline[0] = {
+      ...baseline[0],
+      timestampMs: END_TIME_MS - (23 * 60 * 60 * 1000),
+      calendarDate: '2026-07-31',
+    };
+
+    const result = calculatePersonalMetricPointRange([...baseline, point], point, {
+      baselineWindowDays: 60,
+      baselineMinimumObservationDays: 14,
+    });
+
+    expect(result.pointValue).toBe(100);
+    expect(result.tone).toBe('negative');
   });
 });

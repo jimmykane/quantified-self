@@ -128,6 +128,7 @@ describe('Health metric chart helpers', () => {
     expect(option.grid).toMatchObject({ left: 2, right: 2 });
     expect(option.xAxis.show).toBe(false);
     expect(option.yAxis.show).toBe(false);
+    expect(option.series).toHaveLength(1);
     expect(option.series[0].showSymbol).toBe(false);
 
     const sparseModel = buildHealthChartModels([
@@ -145,7 +146,7 @@ describe('Health metric chart helpers', () => {
     expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
   });
 
-  it('uses the current personal-range status color for the HRV trend and latest point', () => {
+  it('colors each HRV point from its point-in-time personal-range status', () => {
     const hrvSeries = series({
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,
       unit: 'millisecond',
@@ -167,12 +168,19 @@ describe('Health metric chart helpers', () => {
         normalRange: { min: 30, max: 44 },
         normalRangeColor: AppDataColors.Altitude,
         statusColor: AppDataColors.Stress,
+        pointStatuses: [
+          { timestampMs: 0, color: AppDataColors.Altitude, label: 'Within personal range' },
+          { timestampMs: DAY_MS, color: AppDataColors.Stress, label: 'Outside personal range' },
+        ],
       },
     ) as {
       yAxis: { min: number; max: number };
       series: Array<{
-        lineStyle: { color: string };
-        itemStyle: { color: string };
+        data: Array<[number, number | null]>;
+        showSymbol: boolean;
+        z?: number;
+        lineStyle: { color?: string; width: number };
+        itemStyle?: { color: (params: { value?: unknown }) => string };
         markArea: { itemStyle: { color: string; opacity: number }; data: unknown };
         markPoint: { itemStyle: { color: string }; data: Array<{ coord: [number, number] }> };
       }>;
@@ -181,8 +189,21 @@ describe('Health metric chart helpers', () => {
 
     expect(option.yAxis.min).toBeLessThanOrEqual(30);
     expect(option.yAxis.max).toBeGreaterThanOrEqual(46);
-    expect(option.series[0].lineStyle.color).toBe(AppDataColors.Stress);
-    expect(option.series[0].itemStyle.color).toBe(AppDataColors.Stress);
+    expect(option.series[0].data).toEqual([
+      [0, 40],
+      [DAY_MS, 46],
+    ]);
+    expect(option.series[0].showSymbol).toBe(true);
+    expect(option.series[0].z).toBe(3);
+    expect(option.series[0].lineStyle).toEqual({ color: 'transparent', width: 1.5 });
+    expect(option.series[0].itemStyle?.color({ value: [0, 40] })).toBe(AppDataColors.Altitude);
+    expect(option.series[0].itemStyle?.color({ value: [DAY_MS, 46] })).toBe(AppDataColors.Stress);
+    expect(option.series[1]).toMatchObject({
+      data: [[0, 40], [DAY_MS, 46]],
+      showSymbol: false,
+      lineStyle: { color: AppDataColors.Stress, width: 1.5 },
+      silent: true,
+    });
     expect(option.series[0].markArea).toMatchObject({
       itemStyle: { color: AppDataColors.Altitude, opacity: 0.1 },
     });
@@ -190,8 +211,48 @@ describe('Health metric chart helpers', () => {
       itemStyle: { color: AppDataColors.Stress },
       data: [{ coord: [DAY_MS, 46] }],
     });
+    expect(option.tooltip.formatter({ value: [0, 40] }))
+      .toContain('Personal range: Within personal range');
     expect(option.tooltip.formatter({ value: [DAY_MS, 46] }))
       .toContain(`background:${AppDataColors.Stress}`);
+  });
+
+  it('does not connect point-in-time HRV colors across missing nights', () => {
+    const hrvSeries = series({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      unit: 'millisecond',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 40, qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 42, qualityCode: null },
+        { timestampMs: DAY_MS * 8, calendarDate: '1970-01-09', value: 46, qualityCode: null },
+      ],
+    });
+    const model = buildHealthChartModels([hrvSeries], 0, DAY_MS * 8)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 8,
+      buildDashboardEChartsStyleTokens(false, 320),
+      false,
+      null,
+      true,
+      {
+        normalRange: { min: 30, max: 44 },
+        normalRangeColor: AppDataColors.Altitude,
+        statusColor: AppDataColors.Stress,
+        pointStatuses: [
+          { timestampMs: 0, color: AppDataColors.Altitude, label: 'Within personal range' },
+          { timestampMs: DAY_MS, color: AppDataColors.Altitude, label: 'Within personal range' },
+          { timestampMs: DAY_MS * 8, color: AppDataColors.Stress, label: 'Outside personal range' },
+        ],
+      },
+    ) as {
+      series: Array<{ data: Array<[number, number | null]> }>;
+    };
+
+    expect(option.series).toHaveLength(2);
+    expect(option.series[0].data).toContainEqual([DAY_MS * 4 + DAY_MS / 2, null]);
+    expect(option.series[1].data).toEqual([[0, 40], [DAY_MS, 42]]);
   });
 
   it('uses the selected Sports Lib unit conversion consistently across a chart', () => {

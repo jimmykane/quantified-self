@@ -657,6 +657,11 @@ describe('HealthWorkspaceComponent', () => {
       startDate: component.priorityHrvHistoryStartDate,
       includeSamples: false,
     }));
+    expect(
+      (Date.parse(`${component.priorityHrvWindow.endDate}T00:00:00.000Z`)
+        - Date.parse(`${component.priorityHrvHistoryStartDate}T00:00:00.000Z`))
+      / (24 * 60 * 60 * 1000),
+    ).toBe(72);
   });
 
   it('shows a source-specific HRV personal range after enough recorded nights', async () => {
@@ -674,6 +679,16 @@ describe('HealthWorkspaceComponent', () => {
     expect(hrvCard?.textContent).toContain('7-day average');
     expect(hrvCard?.textContent).toContain('Range');
     expect(hrvCard?.querySelector<HTMLElement>('.health-priority-range-status-dot')?.style.backgroundColor).not.toBe('');
+    const setOption = TestBed.inject(EChartsLoaderService).setOption as ReturnType<typeof vi.fn>;
+    let hrvChartOption: { series?: Array<{ lineStyle?: { color?: string } }> } | undefined;
+    await vi.waitFor(() => {
+      hrvChartOption = setOption.mock.calls
+        .map(call => call[1] as { series?: Array<{ lineStyle?: { color?: string } }> })
+        .find(option => option.series?.[0]?.lineStyle?.color === 'transparent');
+      expect(hrvChartOption).toBeDefined();
+    });
+    expect(hrvChartOption?.series?.length).toBeGreaterThan(1);
+    expect(hrvChartOption?.series?.slice(1).every(series => series.lineStyle?.color !== 'transparent')).toBe(true);
   });
 
   it('restores and persists the account-owned metric and range without adding query parameters', async () => {

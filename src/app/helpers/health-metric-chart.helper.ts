@@ -55,6 +55,7 @@ export interface HealthChartStatusOverlay {
   normalRange: { min: number; max: number } | null;
   normalRangeColor: string;
   statusColor: string;
+  pointStatuses?: readonly { timestampMs: number; color: string; label: string }[];
 }
 
 const MAX_DISPLAY_POINTS = 600;
@@ -88,10 +89,11 @@ export function buildHealthMetricEChartsOption(
   const isBar = model.series.chartKind === 'bar';
   const pointsByTimestamp = new Map(model.displayedPoints.map(point => [point.timestampMs, point]));
   const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
-  const trendColor = model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability && statusOverlay
-    ? statusOverlay.statusColor
-    : seriesColor;
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
+  const hrvPointStatuses = model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability
+    ? new Map(statusOverlay?.pointStatuses?.map(point => [point.timestampMs, point]) || [])
+    : new Map<number, { timestampMs: number; color: string; label: string }>();
+  const useHrvPointColors = hrvPointStatuses.size > 0;
   const useBodyEnergyColors = isProviderBodyEnergySeries(model.series);
   const chartData = useStressStateColors
     ? stressStateChartData(model.data, model.categoryLabels)
@@ -136,6 +138,7 @@ export function buildHealthMetricEChartsOption(
         if (!point) {
           return '';
         }
+        const pointStatus = hrvPointStatuses.get(point.timestampMs);
         return renderDashboardEChartsTooltipCard(style, {
           title: formatTooltipDate(point.timestampMs),
           subtitle: model.series.sourceLabel,
@@ -151,12 +154,15 @@ export function buildHealthMetricEChartsOption(
             markerColor: resolveHealthValueColor(
               model.series.metricId,
               point.value,
-              trendColor,
+              pointStatus?.color || seriesColor,
               style.trendLineColor,
               useBodyEnergyColors,
             ),
           }],
-          notes: point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : [],
+          notes: [
+            ...(pointStatus ? [`Personal range: ${pointStatus.label}`] : []),
+            ...(point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : []),
+          ],
           stackHeader: true,
         });
       },
@@ -242,30 +248,45 @@ export function buildHealthMetricEChartsOption(
       name: model.series.sourceLabel,
       type: isBar ? 'bar' : isPoint ? 'scatter' : 'line',
       data: chartData,
+      dimensions: useStressStateColors
+        ? ['timestamp', 'value', 'visualValue']
+        : undefined,
+      encode: useStressStateColors
+        ? { x: 0, y: 1 }
+        : undefined,
       connectNulls: false,
       step: isCategorical ? 'end' : undefined,
-      showSymbol: compact
+      showSymbol: useHrvPointColors
+        ? true
+        : compact
         ? model.displayedPointCount <= 2
         : isPoint || model.displayedPointCount <= 60,
       symbol: 'circle',
       symbolSize: compact ? 4 : isPoint ? 8 : 5,
       barMaxWidth: 28,
+      z: useHrvPointColors ? 3 : undefined,
       lineStyle: {
-        ...(!useStressStateColors ? { color: trendColor } : {}),
+        ...(!useStressStateColors ? { color: useHrvPointColors ? 'transparent' : seriesColor } : {}),
         width: 1.5,
       },
       itemStyle: useStressStateColors
         ? undefined
+        : useHrvPointColors
+          ? {
+            color: (params: { value?: unknown }) => hrvPointStatuses.get(
+              chartTimestamp(params.value),
+            )?.color || seriesColor,
+          }
         : {
           color: useBodyEnergyColors
           ? (params: { value?: unknown }) => resolveHealthValueColor(
             model.series.metricId,
             chartValue(params.value),
-            trendColor,
+            seriesColor,
             style.trendLineColor,
             useBodyEnergyColors,
           )
-          : trendColor,
+          : seriesColor,
         },
       emphasis: { scale: 1.25 },
       markArea: statusOverlay?.normalRange
@@ -285,12 +306,14 @@ export function buildHealthMetricEChartsOption(
           symbolSize: compact ? 7 : 9,
           label: { show: false },
           itemStyle: {
-            color: statusOverlay.statusColor,
+            color: hrvPointStatuses.get(latestNumericPoint.timestampMs)?.color || statusOverlay.statusColor,
           },
           data: [{ coord: [latestNumericPoint.timestampMs, latestNumericPoint.value] }],
         }
         : undefined,
-    }],
+    }, ...(useHrvPointColors
+      ? buildPointStatusLineSeries(model.data, hrvPointStatuses, seriesColor)
+      : [])],
   };
 
   return option as ChartOption;
@@ -425,6 +448,47 @@ function stressStateChartData(
     value,
     typeof value === 'string' ? categoryIndexes.get(value) ?? null : null,
   ]);
+}
+
+function buildPointStatusLineSeries(
+  data: readonly HealthChartDatum[],
+  pointStatuses: ReadonlyMap<number, { color: string }>,
+  fallbackColor: string,
+): object[] {
+  const series: object[] = [];
+  let previous: HealthChartDatum | null = null;
+  for (const current of data) {
+    if (typeof current[1] !== 'number' || !Number.isFinite(current[1])) {
+      previous = null;
+      continue;
+    }
+    if (previous) {
+      series.push({
+        type: 'line',
+        data: [previous, current],
+        connectNulls: false,
+        showSymbol: false,
+        silent: true,
+        tooltip: { show: false },
+        lineStyle: {
+          color: pointStatuses.get(current[0])?.color || fallbackColor,
+          width: 1.5,
+        },
+        emphasis: { disabled: true },
+        z: 2,
+      });
+    }
+    previous = current;
+  }
+  return series;
+}
+
+function chartTimestamp(value: unknown): number {
+  if (!Array.isArray(value)) {
+    return Number.NaN;
+  }
+  const timestampMs = Number(value[0]);
+  return Number.isFinite(timestampMs) ? timestampMs : Number.NaN;
 }
 
 function buildSeriesModel(

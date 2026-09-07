@@ -13,6 +13,26 @@ export interface PersonalMetricRangeOptions {
   currentMinimumObservationDays: number;
 }
 
+export interface PersonalMetricPointRangeOptions {
+  baselineWindowDays: number;
+  baselineMinimumObservationDays: number;
+}
+
+export interface PersonalMetricPointRangeResult {
+  tone: PersonalMetricRangeTone;
+  reason: 'building_baseline' | 'within_range' | 'outside_range' | 'far_outside_range';
+  observationDayCount: number;
+  requiredObservationDayCount: number;
+  baselineAverage: number | null;
+  pointValue: number | null;
+  normalRange: { min: number; max: number } | null;
+}
+
+interface PersonalMetricRangeClassification {
+  tone: Exclude<PersonalMetricRangeTone, 'neutral'>;
+  reason: 'within_range' | 'outside_range' | 'far_outside_range';
+}
+
 interface PersonalMetricRangeResultBase {
   observationDayCount: number;
   requiredObservationDayCount: number;
@@ -91,15 +111,9 @@ export function calculatePersonalMetricRange(
     min: baselineAverage - standardDeviation,
     max: baselineAverage + standardDeviation,
   };
-  const distance = Math.abs(currentAverage - baselineAverage);
-  const reason = standardDeviation === 0 || distance <= standardDeviation
-    ? 'within_range'
-    : distance <= standardDeviation * 2
-      ? 'outside_range'
-      : 'far_outside_range';
+  const classification = classifyPersonalMetricValue(currentAverage, baselineAverage, standardDeviation);
   return {
-    tone: reason === 'within_range' ? 'positive' : reason === 'outside_range' ? 'caution' : 'negative',
-    reason,
+    ...classification,
     observationDayCount,
     requiredObservationDayCount: baselineMinimumObservationDays,
     currentObservationDayCount: currentValues.length,
@@ -107,6 +121,49 @@ export function calculatePersonalMetricRange(
     baselineAverage,
     currentAverage,
     normalRange,
+  };
+}
+
+/**
+ * Grades one daily observation against the rolling personal range that existed
+ * at that observation. The current value is selected by calendar date rather
+ * than a 24-hour window, so adjacent nights cannot be averaged together.
+ */
+export function calculatePersonalMetricPointRange(
+  observations: readonly PersonalMetricRangeObservation[],
+  point: PersonalMetricRangeObservation,
+  options: PersonalMetricPointRangeOptions,
+): PersonalMetricPointRangeResult {
+  const baselineWindowDays = positiveInteger(options.baselineWindowDays);
+  const requiredObservationDayCount = positiveInteger(options.baselineMinimumObservationDays);
+  const baselineStartTimeMs = point.timestampMs - (baselineWindowDays * DAY_MS) + 1;
+  const dailyValues = collapseByCalendarDate(observations.filter(observation =>
+    observation.timestampMs >= baselineStartTimeMs && observation.timestampMs <= point.timestampMs));
+  const pointValue = dailyValues.find(item => item.calendarDate === point.calendarDate)?.value ?? null;
+  if (dailyValues.length < requiredObservationDayCount || pointValue === null) {
+    return {
+      tone: 'neutral',
+      reason: 'building_baseline',
+      observationDayCount: dailyValues.length,
+      requiredObservationDayCount,
+      baselineAverage: null,
+      pointValue,
+      normalRange: null,
+    };
+  }
+  const values = dailyValues.map(item => item.value);
+  const baselineAverage = average(values);
+  const standardDeviation = Math.sqrt(average(values.map(value => (value - baselineAverage) ** 2)));
+  return {
+    ...classifyPersonalMetricValue(pointValue, baselineAverage, standardDeviation),
+    observationDayCount: dailyValues.length,
+    requiredObservationDayCount,
+    baselineAverage,
+    pointValue,
+    normalRange: {
+      min: baselineAverage - standardDeviation,
+      max: baselineAverage + standardDeviation,
+    },
   };
 }
 
@@ -138,6 +195,23 @@ function collapseByCalendarDate(
 
 function average(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function classifyPersonalMetricValue(
+  value: number,
+  baselineAverage: number,
+  standardDeviation: number,
+): PersonalMetricRangeClassification {
+  const distance = Math.abs(value - baselineAverage);
+  const reason = standardDeviation === 0 || distance <= standardDeviation
+    ? 'within_range'
+    : distance <= standardDeviation * 2
+      ? 'outside_range'
+      : 'far_outside_range';
+  return {
+    tone: reason === 'within_range' ? 'positive' : reason === 'outside_range' ? 'caution' : 'negative',
+    reason,
+  };
 }
 
 function positiveInteger(value: number): number {

@@ -61,7 +61,10 @@ import {
 } from './dashboard-sleep-chart.helper';
 import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
 import {
+  calculatePersonalMetricPointRange,
   calculatePersonalMetricRange,
+  type PersonalMetricPointRangeResult,
+  type PersonalMetricRangeResult,
   type PersonalMetricRangeTone,
 } from './personal-metric-range.helper';
 
@@ -202,6 +205,12 @@ type HealthHrvPersonalRangeSemanticVariant = typeof HEALTH_HRV_PERSONAL_RANGE_SE
 
 export type HealthHrvPersonalRangeTone = PersonalMetricRangeTone;
 
+export interface HealthHrvPersonalRangePointStatus {
+  timestampMs: number;
+  tone: HealthHrvPersonalRangeTone;
+  label: string;
+}
+
 export interface HealthHrvPersonalRangeStatus {
   tone: HealthHrvPersonalRangeTone;
   label: string;
@@ -210,6 +219,7 @@ export interface HealthHrvPersonalRangeStatus {
   requiredObservationDayCount: number;
   currentAverage: number | null;
   normalRange: { min: number; max: number } | null;
+  pointStatuses: readonly HealthHrvPersonalRangePointStatus[];
 }
 
 export interface HealthPriorityDetail {
@@ -746,19 +756,48 @@ export function buildHealthHrvPersonalRangeStatus(
   series: HealthWorkspaceSeries,
   endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null = null,
+  pointTimestampsMs: readonly number[] = series.points.map(point => point.timestampMs),
 ): HealthHrvPersonalRangeStatus | null {
   if (!isHealthHrvPersonalRangeSemanticVariant(series.semanticVariant)) {
     return null;
   }
-  const status = calculatePersonalMetricRange(series.points.flatMap(point =>
+  const observations = series.points.flatMap(point =>
     typeof point.value === 'number' && Number.isFinite(point.value)
       ? [{ timestampMs: point.timestampMs, calendarDate: point.calendarDate, value: point.value }]
-      : []), endTimeMs, {
+      : []);
+  const rangeOptions = {
     baselineWindowDays: HRV_PERSONAL_RANGE_DAYS,
     baselineMinimumObservationDays: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
     currentWindowDays: HRV_CURRENT_AVERAGE_DAYS,
     currentMinimumObservationDays: HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS,
-  });
+  };
+  const status = calculatePersonalMetricRange(observations, endTimeMs, rangeOptions);
+  const observationsByTimestamp = new Map(observations.map(observation => [observation.timestampMs, observation]));
+  const pointStatuses = [...new Set(pointTimestampsMs)]
+    .filter(timestampMs => Number.isFinite(timestampMs)
+      && timestampMs <= endTimeMs
+      && observationsByTimestamp.has(timestampMs))
+    .sort((left, right) => left - right)
+    .map(timestampMs => {
+      const observation = observationsByTimestamp.get(timestampMs);
+      if (!observation) {
+        return null;
+      }
+      const pointStatus = calculatePersonalMetricPointRange(
+        observations,
+        observation,
+        {
+          baselineWindowDays: HRV_PERSONAL_RANGE_DAYS,
+          baselineMinimumObservationDays: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+        },
+      );
+      return {
+        timestampMs,
+        tone: pointStatus.tone,
+        label: healthHrvPersonalRangeLabel(pointStatus.reason),
+      };
+    })
+    .filter((pointStatus): pointStatus is HealthHrvPersonalRangePointStatus => pointStatus !== null);
   if (status.reason === 'building_baseline') {
     return {
       tone: 'neutral',
@@ -768,6 +807,7 @@ export function buildHealthHrvPersonalRangeStatus(
       requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
       currentAverage: null,
       normalRange: null,
+      pointStatuses,
     };
   }
   if (status.reason === 'insufficient_current') {
@@ -779,6 +819,7 @@ export function buildHealthHrvPersonalRangeStatus(
       requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
       currentAverage: null,
       normalRange: null,
+      pointStatuses,
     };
   }
   const currentAverage = status.currentAverage;
@@ -786,11 +827,7 @@ export function buildHealthHrvPersonalRangeStatus(
     min: Math.max(0, status.normalRange.min),
     max: status.normalRange.max,
   };
-  const label = status.tone === 'positive'
-    ? 'Within personal range'
-    : status.tone === 'caution'
-      ? 'Outside personal range'
-      : 'Far outside personal range';
+  const label = healthHrvPersonalRangeLabel(status.reason);
   return {
     tone: status.tone,
     label,
@@ -817,7 +854,20 @@ export function buildHealthHrvPersonalRangeStatus(
     requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
     currentAverage,
     normalRange,
+    pointStatuses,
   };
+}
+
+function healthHrvPersonalRangeLabel(
+  reason: PersonalMetricRangeResult['reason'] | PersonalMetricPointRangeResult['reason'],
+): string {
+  switch (reason) {
+    case 'building_baseline': return 'Building personal range';
+    case 'insufficient_current': return 'Not enough recent HRV';
+    case 'within_range': return 'Within personal range';
+    case 'outside_range': return 'Outside personal range';
+    case 'far_outside_range': return 'Far outside personal range';
+  }
 }
 
 export function isHealthHrvPersonalRangeSemanticVariant(
