@@ -49,7 +49,10 @@ export function validateTimelineFields(value: Record<string, unknown>, nowMs = D
   if (!(TIMELINE_NOTE_CATEGORIES as readonly unknown[]).includes(value.category)) throw new TimelineNoteValidationError('Choose a note category.');
   const text = (value: unknown, maximum: number, required: boolean): string => {
     if (typeof value !== 'string' || value.length > maximum || (required && !value.trim())
-      || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) {
+      || [...value].some(character => {
+        const code = character.charCodeAt(0);
+        return (code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127;
+      })) {
       throw new TimelineNoteValidationError('Note text is missing, too long, or contains unsupported characters.');
     }
     return value.trim();

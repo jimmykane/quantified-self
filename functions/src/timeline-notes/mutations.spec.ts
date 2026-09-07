@@ -36,6 +36,15 @@ describe('Timeline notes', () => {
     expect(timelineNoteOverlaps(note, { startDate: '2026-09-08', endDate: '2026-09-09' }, now)).toBe(false);
     expect(timelineNoteOverlaps({ ...note, endDate: '2026-09-08' }, { startDate: '2026-09-08', endDate: '2026-09-09' }, now)).toBe(true);
   });
+  it('rejects unsupported controls while preserving plain-text whitespace and Unicode', () => {
+    for (const code of [...Array(32).keys(), 127].filter(code => ![9, 10, 13].includes(code))) {
+      for (const field of ['title', 'details']) {
+        expect(() => validateTimelineFields({ ...fields, [field]: `Before${String.fromCharCode(code)}after` }, now)).toThrow();
+      }
+    }
+    expect(validateTimelineFields({ ...fields, details: 'Notes\twith\nnewlines\r\nand Unicode: ταξίδι 🧳' }, now).details)
+      .toBe('Notes\twith\nnewlines\r\nand Unicode: ταξίδι 🧳');
+  });
   it('creates once, updates under revision fence, and never revives a deleted note', async () => {
     const fake = database();
     const first = await saveTimelineNote('owner', create, fake.deps);
