@@ -9,6 +9,7 @@ export const GARMIN_HEALTH_BACKFILL_ENDPOINTS: Readonly<Record<GarminHealthSumma
 
 export const GARMIN_HEALTH_BACKFILL_SECOND_MS = 1_000;
 export const GARMIN_HEALTH_BACKFILL_MAX_INCLUSIVE_DAYS = 90;
+const GARMIN_HEALTH_BACKFILL_MINIMUM_HEADROOM_MS = 30_000;
 const GARMIN_HEALTH_BACKFILL_WINDOW_MS = GARMIN_HEALTH_BACKFILL_MAX_INCLUSIVE_DAYS
   * 24 * 60 * 60 * 1_000;
 
@@ -114,11 +115,15 @@ export function clipGarminHealthBackfillCursorToMinimum(
   minimumStartMs: number,
 ): GarminHealthBackfillCursor {
   // A provider can echo a minimum equal to (or behind) the attempted start.
-  // Move at least one whole second so a malformed/repeated 400 cannot loop forever.
-  const clippedStartMs = Math.max(
+  // Always move forward, with headroom for pacing and provider/state-write latency.
+  const earliestStartMs = Math.max(
     cursor.nextStartMs + GARMIN_HEALTH_BACKFILL_SECOND_MS,
     ceilToGarminBackfillSecond(minimumStartMs),
   );
+  // The endpoint is inclusive: retain its last valid second when headroom is tight.
+  // A minimum beyond the range must still advance to the next family.
+  const headroomMs = Math.min(GARMIN_HEALTH_BACKFILL_MINIMUM_HEADROOM_MS, Math.max(0, rangeEndMs - earliestStartMs));
+  const clippedStartMs = earliestStartMs + headroomMs;
   const skippedWindows = countGarminHealthBackfillWindows(cursor.nextStartMs, rangeEndMs)
     - countGarminHealthBackfillWindows(clippedStartMs, rangeEndMs);
   if (clippedStartMs > rangeEndMs) {

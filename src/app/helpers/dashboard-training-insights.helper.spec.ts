@@ -68,11 +68,13 @@ describe('dashboard-training-insights.helper', () => {
             previousSourceKey: 'garmin:watch',
             changePct: 3.85,
           },
+          referenceVo2Max: null,
         },
         {
           discipline: 'cycling',
           ftpSetting: null,
           importedVo2Max: null,
+          referenceVo2Max: null,
         },
       ],
     });
@@ -109,6 +111,7 @@ describe('dashboard-training-insights.helper', () => {
           previousSourceKey: 'suunto:watch',
           changePct: null,
         },
+        referenceVo2Max: null,
       }],
     });
 

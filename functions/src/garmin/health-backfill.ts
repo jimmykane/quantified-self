@@ -59,6 +59,7 @@ import {
 const GARMIN_HEALTH_BACKFILL_BASE_URI = 'https://apis.garmin.com/wellness-api/rest/backfill';
 const GARMIN_HEALTH_BACKFILL_RESPONSE_BYTES = 16 * 1024;
 const GARMIN_HEALTH_BACKFILL_REQUEST_TIMEOUT_MS = 30_000;
+const GARMIN_HEALTH_BACKFILL_MAX_MINIMUM_START_ATTEMPTS = 3;
 export const GARMIN_HEALTH_BACKFILL_REQUEST_PACING_MS = 1_500;
 
 type TokenSnapshot = admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot;
@@ -72,8 +73,8 @@ class GarminHealthBackfillValidationError extends Error {
 
 class GarminHealthBackfillRequestError extends Error {
   readonly name = 'GarminHealthBackfillRequestError';
-  constructor(readonly statusCode: number | null) {
-    super('Garmin Health backfill request failed.');
+  constructor(readonly statusCode: number | null, message = 'Garmin Health backfill request failed.') {
+    super(message);
   }
 }
 
@@ -231,6 +232,7 @@ async function advanceCursorTransaction(
   nextCursor: GarminHealthBackfillCursor,
   total: number,
   guards: GarminHealthWriteLifecycleGuards,
+  resetRetryCount: boolean,
 ): Promise<'advanced' | 'superseded' | 'deleted' | 'lifecycle_changed'> {
   const db = admin.firestore();
   const stateRef = db.collection('users').doc(queueItem.userID!)
@@ -273,7 +275,8 @@ async function advanceCursorTransaction(
       garminHealthBackfillSummaryIndex: nextCursor.summaryIndex,
       garminHealthBackfillNextStartMs: nextCursor.nextStartMs,
       garminHealthBackfillWindowsCompleted: complete ? total : nextCursor.windowsCompleted,
-      retryCount: 0,
+      // Merely chasing a cutoff must not erase the cross-delivery retry budget.
+      ...(resetRetryCount ? { retryCount: 0 } : {}),
       ...(complete ? {
         processed: true,
         processedAt: Date.now(),
@@ -657,6 +660,7 @@ export async function processGarminHealthBackfillQueueItem(
 
   let cursor = parsed.cursor;
   let requestCount = 0;
+  let minimumStartAttempts = 0;
   while (!isCompleteGarminHealthBackfillCursor(cursor)) {
     if (requestCount > 0) await sleepForPacing();
 
@@ -713,6 +717,7 @@ export async function processGarminHealthBackfillQueueItem(
     const window = getGarminHealthBackfillWindow(cursor, parsed.rangeEndMs);
     if (!window) return QueueResult.Processed;
     let nextCursor: GarminHealthBackfillCursor;
+    let minimumStartMs: number | null = null;
     try {
       await requestPromise.get({
         headers: { Authorization: `Bearer ${refreshed.tokenData.accessToken}` },
@@ -736,7 +741,7 @@ export async function processGarminHealthBackfillQueueItem(
           parsed.rangeEndMs,
         );
       } else if (isGarminBackfillMinimumStartError(error)) {
-        const minimumStartMs = extractGarminBackfillMinimumStartMs(error);
+        minimumStartMs = extractGarminBackfillMinimumStartMs(error);
         if (minimumStartMs === null) {
           return moveToDlq(
             queueItem,
@@ -783,12 +788,14 @@ export async function processGarminHealthBackfillQueueItem(
     }
     requestCount += 1;
 
+    const familyAdvanced = nextCursor.summaryIndex !== cursor.summaryIndex;
     const transition = await advanceCursorTransaction(
       queueItem,
       cursor,
       nextCursor,
       parsed.total,
       currentGuards,
+      minimumStartMs === null || familyAdvanced,
     );
     if (transition === 'deleted') {
       return markQueueItemSkipped(
@@ -801,7 +808,41 @@ export async function processGarminHealthBackfillQueueItem(
     if (transition === 'lifecycle_changed') return markBackfillSkipped(queueItem, parsed.total);
     if (transition === 'superseded') return QueueResult.Processed;
     cursor = nextCursor;
+
+    if (minimumStartMs !== null) {
+      minimumStartAttempts += 1;
+      const telemetry = {
+        queueItemId: queueItem.id,
+        summaryType: window.summaryType,
+        statusCode: 400,
+        recoveryAttempt: minimumStartAttempts,
+        requestedStartMs: window.startMs,
+        providerMinimumStartMs: minimumStartMs,
+        nextStartMs: familyAdvanced ? null : nextCursor.nextStartMs,
+        windowsCompleted: nextCursor.windowsCompleted,
+        windowsTotal: parsed.total,
+      };
+      if (!familyAdvanced && minimumStartAttempts >= GARMIN_HEALTH_BACKFILL_MAX_MINIMUM_START_ATTEMPTS) {
+        const result = await retryGarminHealthBackfill(queueItem, parsed.total, new GarminHealthBackfillRequestError(
+          400,
+          'Garmin Health backfill minimum-start recovery exhausted.',
+        ));
+        logger.warn('[GarminHealthBackfill] Minimum-start recovery limit reached.', { ...telemetry, result });
+        return result;
+      }
+      logger.info('[GarminHealthBackfill] Provider minimum adjusted.', {
+        ...telemetry,
+        outcome: familyAdvanced ? 'family_skipped' : 'retry_inline',
+      });
+    }
+    if (minimumStartMs === null || familyAdvanced) minimumStartAttempts = 0;
   }
 
+  logger.info('[GarminHealthBackfill] Backfill requests completed.', {
+    queueItemId: queueItem.id,
+    requestCount,
+    windowsCompleted: parsed.total,
+    windowsTotal: parsed.total,
+  });
   return QueueResult.Processed;
 }

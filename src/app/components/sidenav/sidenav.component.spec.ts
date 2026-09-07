@@ -18,9 +18,6 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
-import { HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS } from '@shared/health-workspace-rollout';
-
-const HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID = HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UIDS[0];
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
@@ -270,9 +267,10 @@ describe('SideNavComponent', () => {
         expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
     });
 
-    it('links the staged Health user immediately after Dashboard', () => {
+    it.each(['free', 'basic', 'pro'])('links a signed-in %s user to Health immediately after Dashboard', stripeRole => {
         mockUserService.user = vi.fn().mockReturnValue({
-            uid: HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID,
+            uid: 'user-1',
+            stripeRole,
             displayName: 'Athlete',
             email: 'athlete@example.com'
         });
@@ -289,12 +287,16 @@ describe('SideNavComponent', () => {
         expect(navigationItems.indexOf(healthItem!)).toBe(navigationItems.indexOf(dashboardItem!) + 1);
     });
 
-    it('hides Health navigation from signed-in users outside the staged rollout', () => {
-        mockUserService.user = vi.fn().mockReturnValue({
+    it('removes Health navigation when the user signs out', () => {
+        const currentUser = signal({
             uid: 'another-user',
             displayName: 'Athlete',
             email: 'athlete@example.com'
         });
+        mockUserService.user = currentUser;
+        fixture.detectChanges();
+        expect(fixture.debugElement.query(By.css('[routerLink="/health"]'))).toBeTruthy();
+        currentUser.set(null);
 
         fixture.detectChanges();
         const healthItem = fixture.debugElement
@@ -323,7 +325,7 @@ describe('SideNavComponent', () => {
 
     it('orders signed-in navigation with Assistant last', () => {
         mockUserService.user = vi.fn().mockReturnValue({
-            uid: HEALTH_WORKSPACE_NAVIGATION_ALLOWED_UID,
+            uid: 'user-1',
             displayName: 'Athlete',
             email: 'athlete@example.com'
         });

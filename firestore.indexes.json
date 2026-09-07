@@ -1497,6 +1497,29 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "healthSourceRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "source.sourceRecordType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "metricIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "calendarDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "healthSampleChunks",
       "queryScope": "COLLECTION",
       "fields": [

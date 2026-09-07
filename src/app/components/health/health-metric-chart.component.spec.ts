@@ -1,5 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
@@ -9,7 +10,10 @@ import {
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
 import { describe, expect, it } from 'vitest';
-import { HealthMetricChartModel } from '../../helpers/health-metric-chart.helper';
+import {
+  HealthChartSeriesModel,
+  HealthChartStatusOverlay,
+} from '../../helpers/health-metric-chart.helper';
 import { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
@@ -20,11 +24,13 @@ import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.c
   template: '<div class="chart-stub"></div>',
 })
 class HealthMetricSeriesChartStubComponent {
-  @Input() model!: HealthMetricChartModel;
+  @Input() model!: HealthChartSeriesModel;
   @Input() startTimeMs = 0;
   @Input() endTimeMs = 0;
   @Input() darkTheme = false;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
+  @Input() statusOverlay: HealthChartStatusOverlay | null = null;
+  @Input() statusDescription: string | null = null;
 }
 
 function series(deviceLabel: string | null): HealthWorkspaceSeries {
@@ -83,5 +89,39 @@ describe('HealthMetricChartComponent', () => {
     const host = await render(null);
 
     expect(host.textContent).not.toContain('Device:');
+  });
+
+  it('passes HRV personal-range styling and accessible context to the series chart', async () => {
+    await render(null);
+    const source = series(null);
+    source.id = 'suunto-sleep-hrv';
+    source.metricId = HEALTH_METRIC_IDS.HeartRateVariability;
+    source.semanticVariant = 'sleep_session_average_hrv';
+    source.unit = 'millisecond';
+    fixture.componentRef.setInput('series', [source]);
+    fixture.componentRef.setInput('chartStatuses', {
+      [source.id]: {
+        tone: 'positive',
+        label: 'Within personal range',
+        detailText: '7-day average 42 ms · Range 35 ms–48 ms',
+        observationDayCount: 20,
+        currentAverage: 42,
+        normalRange: { min: 35, max: 48 },
+        pointStatuses: [{
+          timestampMs: 0,
+          tone: 'positive',
+          label: 'Within personal range',
+        }],
+      },
+    });
+    fixture.detectChanges();
+
+    const chart = fixture.debugElement.query(By.directive(HealthMetricSeriesChartStubComponent))
+      .componentInstance as HealthMetricSeriesChartStubComponent;
+    expect(chart.statusOverlay).toMatchObject({
+      normalRange: { min: 35, max: 48 },
+      pointStatuses: [{ timestampMs: 0, label: 'Within personal range' }],
+    });
+    expect(chart.statusDescription).toContain('Within personal range');
   });
 });

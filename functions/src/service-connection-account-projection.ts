@@ -233,6 +233,10 @@ export function projectionRevisionKeyFromEventTime(eventTime: string | undefined
   return `${`${seconds}`.padStart(12, '0')}:${nanos}`;
 }
 
+function projectionMemoryForService(serviceName: ProjectedServiceName): '256MiB' | '512MiB' {
+  return serviceName === ServiceNames.SuuntoApp ? '512MiB' : '256MiB';
+}
+
 function tokenProjectionTrigger(
   serviceName: ProjectedServiceName,
   document: string,
@@ -240,7 +244,7 @@ function tokenProjectionTrigger(
   return onDocumentWritten({
     document,
     region: 'europe-west2',
-    memory: '256MiB',
+    memory: projectionMemoryForService(serviceName),
     maxInstances: 20,
     concurrency: 10,
     retry: true,
@@ -267,3 +271,7 @@ export const projectCOROSConnectionOnTokenWrite = tokenProjectionTrigger(
   ServiceNames.COROSAPI,
   'COROSAPIAccessTokens/{userID}/tokens/{tokenID}',
 );
+
+export const serviceConnectionAccountProjectionTestInternals = {
+  projectionMemoryForService,
+};

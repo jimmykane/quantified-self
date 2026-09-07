@@ -128,6 +128,31 @@ beforeAll(async () => {
 });
 
 describe('MCP registered-contract compatibility', () => {
+  it('captures the modern contract with identical tool schemas and scoped visibility', async () => {
+    const legacy = await captureMcpContract();
+    const modern = await captureMcpContract(undefined, '2026-07-28');
+    expect(modern.server).toEqual({
+      ...legacy.server,
+      protocolVersion: '2026-07-28',
+      capabilities: { tools: { listChanged: false } },
+    });
+    expect(modern.authorizationServer).toEqual(legacy.authorizationServer);
+    expect(modern.protectedResource).toEqual(legacy.protectedResource);
+    expect(Object.keys(modern.profiles)).toEqual(Object.keys(legacy.profiles));
+    for (const [id, profile] of Object.entries(legacy.profiles)) {
+      expect(modern.profiles[id].scopes).toEqual(profile.scopes);
+      expect(modern.profiles[id].instructions).toEqual(profile.instructions);
+      expect(Object.keys(modern.profiles[id].tools)).toEqual(Object.keys(profile.tools));
+      for (const [name, digest] of Object.entries(profile.tools)) {
+        const oldTool = legacy.toolVariants[digest];
+        const newTool = modern.toolVariants[modern.profiles[id].tools[name]];
+        expect(oldTool.execution).toEqual({ taskSupport: 'forbidden' });
+        expect(newTool.execution).toBeUndefined();
+        expect({ ...newTool, execution: oldTool.execution }).toEqual(oldTool);
+      }
+    }
+  }, CONTRACT_CAPTURE_TIMEOUT_MS);
+
   it(
     'matches the settled baseline or its exact pending contract across every scope profile',
     async () => {

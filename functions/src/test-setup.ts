@@ -341,7 +341,8 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     // against the same persisted shape as production.
     DataSwimDistance: { type: actual.DataSwimDistance.type },
     DataSwimPaceAvg: { type: 'Average Swim Pace' },
-    DataVO2Max: { type: 'VO2 Max' },
+    // Manual Health writes validate VO2 max with the real canonical class.
+    DataVO2Max: actual.DataVO2Max,
     DURABILITY_PROTOCOL_VERSION: 1,
     normalizeDurabilityEvidenceValue: actual.normalizeDurabilityEvidenceValue,
     samplePowerCurveAtDuration: (

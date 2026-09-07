@@ -13,6 +13,7 @@ import type {
   DerivedTrainingCapacityDiscipline,
   DerivedTrainingCapacityImportedMetric,
   DerivedTrainingCapacityMetricPayload,
+  DerivedTrainingCapacityReferenceVo2Max,
   DerivedTrainingBuildBenchmarkReference,
   DerivedTrainingBuildComparisonDiscipline,
   DerivedTrainingBuildComparisonMetricPayload,
@@ -208,6 +209,7 @@ export interface DashboardTrainingSummaryContext {
 }
 
 export type DashboardTrainingCapacityImportedMetric = DerivedTrainingCapacityImportedMetric;
+export type DashboardTrainingCapacityReferenceVo2Max = DerivedTrainingCapacityReferenceVo2Max;
 export type DashboardTrainingCapacityDiscipline = DerivedTrainingCapacityDiscipline;
 
 export interface DashboardTrainingCapacityContext {
@@ -673,6 +675,58 @@ function resolveDashboardTrainingCapacityImportedMetric(
   };
 }
 
+function resolveDashboardTrainingCapacityReferenceVo2Max(
+  value: unknown,
+  discipline: 'running' | 'cycling',
+): DashboardTrainingCapacityReferenceVo2Max | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const raw = value as Partial<DerivedTrainingCapacityReferenceVo2Max>;
+  const metricValue = toFiniteNumber(raw.value);
+  const observedAtMs = toFiniteNumber(raw.observedAtMs);
+  const comparison = raw.comparison === null ? null : raw.comparison;
+  const comparisonValue = comparison ? toFiniteNumber(comparison.value) : null;
+  const comparisonObservedAtMs = comparison ? toFiniteNumber(comparison.observedAtMs) : null;
+  const comparisonDelta = comparison ? toFiniteNumber(comparison.delta) : null;
+  const comparisonGapDays = comparison ? toFiniteNumber(comparison.gapDays) : null;
+  if (
+    raw.kind !== 'vo2-max'
+    || raw.provenance !== 'manual-health-measurement'
+    || raw.context !== discipline
+    || (raw.method !== 'lab-test' && raw.method !== 'field-test')
+    || metricValue === null
+    || metricValue <= 0
+    || observedAtMs === null
+    || raw.comparison === undefined
+    || (comparison !== null && (
+      comparisonValue === null
+      || comparisonValue <= 0
+      || comparisonObservedAtMs === null
+      || comparisonDelta === null
+      || comparisonGapDays === null
+      || comparisonGapDays < 0
+      || comparisonGapDays > 14
+    ))
+  ) {
+    return null;
+  }
+  return {
+    kind: 'vo2-max',
+    value: metricValue,
+    context: discipline,
+    method: raw.method,
+    observedAtMs,
+    provenance: 'manual-health-measurement',
+    comparison: comparison === null ? null : {
+      value: comparisonValue!,
+      observedAtMs: comparisonObservedAtMs!,
+      delta: comparisonDelta!,
+      gapDays: comparisonGapDays!,
+    },
+  };
+}
+
 export function resolveDashboardTrainingCapacityContext(payload: unknown): DashboardTrainingCapacityContext | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
@@ -696,10 +750,17 @@ export function resolveDashboardTrainingCapacityContext(payload: unknown): Dashb
     const importedVo2Max = candidate.importedVo2Max === null
       ? null
       : resolveDashboardTrainingCapacityImportedMetric(candidate.importedVo2Max, 'vo2-max');
-    if ((candidate.ftpSetting !== null && !ftpSetting) || (candidate.importedVo2Max !== null && !importedVo2Max)) {
+    const referenceVo2Max = candidate.referenceVo2Max === null
+      ? null
+      : resolveDashboardTrainingCapacityReferenceVo2Max(candidate.referenceVo2Max, candidate.discipline);
+    if (
+      (candidate.ftpSetting !== null && !ftpSetting)
+      || (candidate.importedVo2Max !== null && !importedVo2Max)
+      || (candidate.referenceVo2Max !== null && !referenceVo2Max)
+    ) {
       return [];
     }
-    return [{ discipline: candidate.discipline, ftpSetting, importedVo2Max }];
+    return [{ discipline: candidate.discipline, ftpSetting, importedVo2Max, referenceVo2Max }];
   });
   const disciplineKinds = new Set(disciplines.map(discipline => discipline.discipline));
   if (disciplines.length !== 2 || disciplineKinds.size !== 2) {

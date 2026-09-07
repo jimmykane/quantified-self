@@ -970,7 +970,7 @@ describe('TrainingWorkspaceComponent', () => {
       trainingCapacity: {
         asOfDayMs: Date.UTC(2026, 6, 13),
         disciplines: [{
-          discipline: 'running', ftpSetting: null, importedVo2Max: null,
+          discipline: 'running', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null,
         }, {
           discipline: 'cycling',
           ftpSetting: {
@@ -979,6 +979,7 @@ describe('TrainingWorkspaceComponent', () => {
             previousValue: null, previousAtMs: null, previousSourceKey: null, changePct: null,
           },
           importedVo2Max: null,
+          referenceVo2Max: null,
         }],
       },
     };
@@ -1235,10 +1236,10 @@ describe('TrainingWorkspaceComponent', () => {
         asOfDayMs: 2,
         disciplines: [
           {
-            discipline: 'running', ftpSetting: null, importedVo2Max: null,
+            discipline: 'running', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null,
           },
           {
-            discipline: 'cycling', ftpSetting: null, importedVo2Max: null,
+            discipline: 'cycling', ftpSetting: null, importedVo2Max: null, referenceVo2Max: null,
           },
         ],
       },

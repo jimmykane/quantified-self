@@ -10,6 +10,13 @@ import {
   ViewChild,
 } from '@angular/core';
 import dayjs from 'dayjs';
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { SLEEP_SPORTS_LIB_METRIC_FIELDS } from '@shared/sleep';
+import { formatCanonicalSleepMetricSportsLibValue } from '@shared/sports-lib-health-data';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
 import type { EChartsType } from 'echarts/core';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
@@ -85,6 +92,12 @@ const NAP_SERIES = {
   color: AppColors.Yellow,
 } as const;
 
+const VITAL_AVERAGES = [
+  { key: 'averageHrvMs', label: 'Avg HRV', color: HRV_SERIES.color, field: SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv },
+  { key: 'averageHeartRateBpm', label: 'Avg HR', color: AVERAGE_HEART_RATE_SERIES.color, field: SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate },
+  { key: 'minimumHeartRateBpm', label: 'Avg Min HR', color: MINIMUM_HEART_RATE_SERIES.color, field: SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate },
+] as const;
+
 const GRID_BOTTOM_WITH_LEGEND = 58;
 const GRID_BOTTOM_COMPACT = 34;
 const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 58;
@@ -99,10 +112,12 @@ const STACK_BAR_EMPHASIS = { focus: 'none' as const };
   templateUrl: './charts.sleep-trend.component.html',
   styleUrls: ['./charts.sleep-trend.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
+  imports: [AppChartSharedModule, MatButtonModule, MatIconModule, MatTooltipModule],
 })
 export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
+  @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() isLoading = false;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
   @Input()
@@ -141,6 +156,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   };
 
   public latestDurationText = '--';
+  public vitalAverages: Array<{ label: string; color: string; display: string }> = [];
   public latestScoreText = '--';
   public latestHrvText = '--';
   public latestContextText = 'Latest sleep';
@@ -170,7 +186,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.sleepTrend) {
+    if (changes.darkTheme || changes.isLoading || changes.sleepTrend || changes.unitSettings) {
       void this.refreshChart();
     }
   }
@@ -204,6 +220,14 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private updateHeaderAndErrorState(points: DashboardSleepTrendPoint[] = this.getPoints()): void {
+    this.vitalAverages = VITAL_AVERAGES.flatMap(definition => {
+      const average = this.averageMetric(points.map(point => this.toFiniteMetric(point[definition.key])));
+      if (average === null) {
+        return [];
+      }
+      const display = formatCanonicalSleepMetricSportsLibValue(definition.field, average, this.unitSettings);
+      return display ? [{ label: definition.label, color: definition.color, display: [display.value, display.unit].filter(Boolean).join(' ') }] : [];
+    });
     const latest = this.sleepTrend?.latestPoint || this.getLatestRealPoint(points);
     const latestHrvMs = this.toFiniteMetric(latest?.averageHrvMs);
     this.latestDurationText = latest ? formatSleepDuration(latest.totalSeconds) : '--';
@@ -324,9 +348,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         color: HRV_SERIES.color,
         average: averageHrvMs,
         label: 'Avg HRV',
-        suffix: 'ms',
-        labelOffsetY: 0,
-        style,
       }),
     })] : [];
     const averageHeartRateSeries = hasAverageHeartRateSeries
@@ -335,9 +356,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           color: AVERAGE_HEART_RATE_SERIES.color,
           average: averageHeartRateBpm,
           label: 'Avg HR',
-          suffix: 'bpm',
-          labelOffsetY: -14,
-          style,
         }),
       })]
       : [];
@@ -347,9 +365,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
           color: MINIMUM_HEART_RATE_SERIES.color,
           average: averageMinimumHeartRateBpm,
           label: 'Avg Min HR',
-          suffix: 'bpm',
-          labelOffsetY: 14,
-          style,
         }),
       })]
       : [];
@@ -696,9 +711,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     color: string;
     average: number | null;
     label: string;
-    suffix: string;
-    labelOffsetY: number;
-    style: ReturnType<typeof buildDashboardEChartsStyleTokens>;
   }): Record<string, unknown> | undefined {
     if (input.average === null) {
       return undefined;
@@ -714,20 +726,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         opacity: 0.72,
       },
       label: {
-        show: true,
-        position: 'middle',
-        offset: [0, input.labelOffsetY],
-        distance: 8,
-        color: input.color,
-        backgroundColor: input.style.tooltipBackgroundColor,
-        borderColor: input.color,
-        borderWidth: 1,
-        borderRadius: 4,
-        padding: [2, 6],
-        fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
-        fontSize: input.style.axisFontSize,
-        fontWeight: 600,
-        formatter: `${input.label} ${Math.round(input.average)}${input.suffix}`,
+        // Values live in the wrapping average row, so close or equal lines cannot obscure them.
+        show: false,
       },
       data: [{
         name: input.label,

@@ -29,6 +29,16 @@
       </div>
       <div class="sleep-context-label">{{ sleepWindowLabel || 'Sleep window' }} · {{ latestContextText }}</div>
     </header>
+    @if (vitalAverages.length) {
+      <dl class="sleep-averages" aria-label="Window averages">
+        @for (average of vitalAverages; track average.label) {
+          <div class="sleep-average">
+            <dt><span class="sleep-average-marker" [style.background-color]="average.color" aria-hidden="true"></span>{{ average.label }}</dt>
+            <dd>{{ average.display }}</dd>
+          </div>
+        }
+      </dl>
+    }
     <div #chartDiv class="sleep-chart"></div>
   </section>
 </app-loading-overlay>

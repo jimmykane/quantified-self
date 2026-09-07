@@ -16,6 +16,7 @@
 
 .health-header-actions {
   gap: 0.25rem;
+  flex-wrap: wrap;
 }
 
 .health-explorer {
@@ -143,6 +144,39 @@
   margin-bottom: 0.5rem;
 }
 
+.health-detail-controls {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+}
+
+.health-add-measurement {
+  --mat-button-filled-container-height: 36px;
+
+  white-space: nowrap;
+}
+
+.health-add-measurement-content {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.health-add-measurement-content mat-icon,
+.health-add-measurement-content mat-spinner {
+  flex: 0 0 18px;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.health-add-measurement-content mat-icon {
+  font-size: 18px;
+  line-height: 18px;
+}
+
 .health-window-navigation {
   flex: 0 0 auto;
   gap: 0;
@@ -179,6 +213,9 @@
 
 .health-range-selector {
   --mat-button-toggle-height: 36px;
+
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .health-provider-filters {
@@ -404,7 +441,7 @@
     gap: 0.75rem;
   }
 
-  .health-header-actions span {
+  .health-header-actions a span {
     display: none;
   }
 
@@ -425,12 +462,22 @@
     flex-direction: column;
   }
 
+  .health-detail-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .health-add-measurement {
+    align-self: flex-start;
+  }
+
   .health-section-heading > p {
     display: none;
   }
 
   .health-window-navigation {
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
     width: 100%;
   }
 
@@ -442,6 +489,19 @@
     width: 44px;
   }
 
+  .health-window-older {
+    grid-column: 1;
+  }
+
+  .health-window-newer {
+    grid-column: 3;
+  }
+
+  .health-window-today {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
   .health-range-save-status {
     justify-content: flex-start;
     margin-top: -0.15rem;
@@ -450,11 +510,47 @@
   .health-range-selector {
     --mat-button-toggle-height: 40px;
 
-    flex: 1 1 auto;
+    display: flex;
+    grid-column: 2;
+    min-width: 0;
+    width: 100%;
   }
 
   .health-range-selector mat-button-toggle {
-    flex: 1 1 20%;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  // Material has no public token for horizontal label padding. This scoped
+  // density exception keeps all five ranges legible beside 44px touch targets.
+  :host ::ng-deep .health-range-selector .mat-button-toggle-button,
+  :host ::ng-deep .health-range-selector .mat-button-toggle-label-content {
+    min-width: 0;
+    width: 100%;
+  }
+
+  :host ::ng-deep .health-range-selector .mat-button-toggle-label-content {
+    box-sizing: border-box;
+    padding-inline: 4px;
+  }
+
+  .health-provider-filters {
+    flex-wrap: nowrap;
+    gap: 0.375rem;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .health-provider-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .health-provider-filter {
+    flex: 0 0 auto;
+    padding-inline: 0.5rem;
   }
 
   .health-sleep-chart {
@@ -488,5 +584,23 @@
     align-items: flex-start;
     flex-direction: column;
     min-height: 170px;
+  }
+}
+
+@media (max-width: 360px) {
+  .health-range-selector {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .health-window-older,
+  .health-window-newer,
+  .health-window-today {
+    grid-row: 2;
+  }
+
+  .health-window-today {
+    grid-column: 2;
+    justify-self: center;
   }
 }

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChartsEfficiencyTrendComponent } from './charts.efficiency-trend.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
+import { buildHomeSignalChartsPreviewData, HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS } from '../../home/home-signal-charts-preview-data.helper';
 
 describe('ChartsEfficiencyTrendComponent', () => {
   let fixture: ComponentFixture<ChartsEfficiencyTrendComponent>;
@@ -90,6 +91,23 @@ describe('ChartsEfficiencyTrendComponent', () => {
     await fixture.whenStable();
 
     expect(component.latestValueText).toBe('1.92');
+  });
+
+  it('shows the variation in unchanged preview values with a fitted, labelled y-axis', async () => {
+    component.trend = buildHomeSignalChartsPreviewData(HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS).efficiencyTrend;
+    const points = component.trend.points;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    expect(option.series[0].data).toEqual(points.map(point => [point.weekStartMs, point.value]));
+    expect(points.map(point => point.value)).toEqual([1.82, 1.85, 1.83, 1.88, 1.91, 1.94, 1.92, 1.96]);
+    expect(option.yAxis.min).toBeGreaterThan(1.7);
+    expect(option.yAxis.min).toBeLessThan(1.82);
+    expect(option.yAxis.max).toBeGreaterThan(1.96);
+    expect(option.yAxis.max).toBeLessThan(2.1);
+    expect(option.yAxis.axisLabel).toMatchObject({ show: true, hideOverlap: true });
+    expect(option.grid).toMatchObject({ outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' });
   });
 
   it('shows pending no-data message while stale', async () => {

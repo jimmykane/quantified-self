@@ -18,7 +18,10 @@ import {
   getHealthMetricDefinition,
 } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
+import { AppColors } from '../services/color/app.colors';
 import {
+  HealthHrvPersonalRangeStatus,
+  HealthHrvPersonalRangeTone,
   HealthWorkspaceSeries,
   HealthWorkspaceSeriesPoint,
   formatHealthAxisValue,
@@ -28,7 +31,11 @@ import {
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
-export type HealthChartDatum = [timestampMs: number, value: number | string | null];
+export type HealthChartDatum = [
+  timestampMs: number,
+  value: number | string | null,
+  visualValue?: number | null,
+];
 
 export interface HealthChartSeriesModel {
   series: HealthWorkspaceSeries;
@@ -44,6 +51,46 @@ export interface HealthChartSeriesModel {
   omittedPointCount: number;
   displayUnit: string;
   ariaLabel: string;
+}
+
+export interface HealthChartStatusOverlay {
+  normalRange: { min: number; max: number } | null;
+  normalRangeColor: string;
+  statusColor: string;
+  pointStatuses?: readonly { timestampMs: number; color: string; label: string }[];
+}
+
+export function healthHrvPersonalRangeToneColor(tone: HealthHrvPersonalRangeTone): string {
+  switch (tone) {
+    case 'positive': return AppDataColors.Altitude;
+    case 'caution': return AppDataColors['Body Energy Moderate'];
+    case 'negative': return AppDataColors['Heart Rate_0'];
+    case 'neutral': return AppColors.MediumGray;
+  }
+}
+
+export function buildHealthHrvChartStatusOverlay(
+  status: HealthHrvPersonalRangeStatus | null | undefined,
+): HealthChartStatusOverlay | null {
+  if (!status) {
+    return null;
+  }
+  return {
+    normalRange: status.normalRange,
+    normalRangeColor: AppDataColors.Altitude,
+    statusColor: healthHrvPersonalRangeToneColor(status.tone),
+    pointStatuses: status.pointStatuses.map(pointStatus => ({
+      timestampMs: pointStatus.timestampMs,
+      color: healthHrvPersonalRangeToneColor(pointStatus.tone),
+      label: pointStatus.label,
+    })),
+  };
+}
+
+export function healthHrvChartStatusDescription(
+  status: HealthHrvPersonalRangeStatus | null | undefined,
+): string | null {
+  return status ? `${status.label}. ${status.detailText}.` : null;
 }
 
 const MAX_DISPLAY_POINTS = 600;
@@ -70,6 +117,7 @@ export function buildHealthMetricEChartsOption(
   isMobileTooltipViewport: boolean,
   unitSettings: UserUnitSettingsInterface | null = null,
   compact = false,
+  statusOverlay: HealthChartStatusOverlay | null = null,
 ): ChartOption {
   const isCategorical = model.series.chartKind === 'step';
   const isPoint = model.series.chartKind === 'point';
@@ -77,7 +125,23 @@ export function buildHealthMetricEChartsOption(
   const pointsByTimestamp = new Map(model.displayedPoints.map(point => [point.timestampMs, point]));
   const seriesColor = resolveHealthMetricColor(model.series.metricId, style.trendLineColor);
   const useStressStateColors = model.series.metricId === HEALTH_METRIC_IDS.StressState && isCategorical;
+  const hrvPointStatuses = model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability
+    ? new Map(statusOverlay?.pointStatuses?.map(point => [point.timestampMs, point]) || [])
+    : new Map<number, { timestampMs: number; color: string; label: string }>();
+  const useHrvPointColors = hrvPointStatuses.size > 0;
   const useBodyEnergyColors = isProviderBodyEnergySeries(model.series);
+  const chartData = useStressStateColors
+    ? stressStateChartData(model.data, model.categoryLabels)
+    : model.data;
+  const numericBounds = statusOverlay?.normalRange && model.numericBounds
+    ? {
+      min: Math.min(model.numericBounds.min, statusOverlay.normalRange.min),
+      max: Math.max(model.numericBounds.max, statusOverlay.normalRange.max),
+    }
+    : model.numericBounds;
+  const latestNumericPoint = [...model.displayedPoints].reverse().find(point =>
+    typeof point.value === 'number' && Number.isFinite(point.value));
+  const showTimeOnXAxis = endTimeMs - startTimeMs < DAY_MS;
   const option = {
     animation: false,
     backgroundColor: 'transparent',
@@ -110,8 +174,9 @@ export function buildHealthMetricEChartsOption(
         if (!point) {
           return '';
         }
+        const pointStatus = hrvPointStatuses.get(point.timestampMs);
         return renderDashboardEChartsTooltipCard(style, {
-          title: formatTooltipDate(point.timestampMs),
+          title: formatTooltipDate(point.timestampMs, point.timezoneOffsetSeconds),
           subtitle: model.series.sourceLabel,
           rows: [{
             label: 'Reading',
@@ -125,12 +190,15 @@ export function buildHealthMetricEChartsOption(
             markerColor: resolveHealthValueColor(
               model.series.metricId,
               point.value,
-              seriesColor,
+              pointStatus?.color || seriesColor,
               style.trendLineColor,
               useBodyEnergyColors,
             ),
           }],
-          notes: point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : [],
+          notes: [
+            ...(pointStatus ? [`Personal range: ${pointStatus.label}`] : []),
+            ...(point.qualityCode ? [`Quality: ${humanize(point.qualityCode)}`] : []),
+          ],
           stackHeader: true,
         });
       },
@@ -148,7 +216,12 @@ export function buildHealthMetricEChartsOption(
         color: style.secondaryTextColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         fontSize: style.axisFontSize,
-        formatter: (value: number) => formatAxisDate(value),
+        formatter: (value: number) => {
+          const timezoneOffsetSeconds = nearestTimezoneOffsetSeconds(model.displayedPoints, value);
+          return showTimeOnXAxis
+            ? formatAxisTime(value, timezoneOffsetSeconds)
+            : formatAxisDate(value, timezoneOffsetSeconds);
+        },
       },
     },
     yAxis: isCategorical
@@ -160,7 +233,14 @@ export function buildHealthMetricEChartsOption(
         axisLine: { show: false },
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
-          color: style.secondaryTextColor,
+          color: useStressStateColors
+            ? (value: string) => resolveHealthValueColor(
+              model.series.metricId,
+              value,
+              seriesColor,
+              style.secondaryTextColor,
+            )
+            : style.secondaryTextColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: style.axisFontSize,
         },
@@ -168,8 +248,8 @@ export function buildHealthMetricEChartsOption(
       : {
         type: 'value',
         show: !compact,
-        min: model.numericBounds?.min,
-        max: model.numericBounds?.max,
+        min: numericBounds?.min,
+        max: numericBounds?.max,
         axisTick: { show: false },
         axisLine: { show: false },
         splitNumber: 3,
@@ -189,11 +269,12 @@ export function buildHealthMetricEChartsOption(
       },
     visualMap: useStressStateColors
       ? {
+        type: 'piecewise',
         show: false,
         seriesIndex: 0,
-        dimension: 1,
-        pieces: model.categoryLabels.map(value => ({
-          value,
+        dimension: 2,
+        pieces: model.categoryLabels.map((value, index) => ({
+          value: index,
           color: resolveHealthValueColor(
             model.series.metricId,
             value,
@@ -201,23 +282,44 @@ export function buildHealthMetricEChartsOption(
             style.trendLineColor,
           ),
         })),
+        outOfRange: { color: style.secondaryTextColor },
       }
       : undefined,
     series: [{
       name: model.series.sourceLabel,
       type: isBar ? 'bar' : isPoint ? 'scatter' : 'line',
-      data: model.data,
+      data: chartData,
+      dimensions: useStressStateColors
+        ? ['timestamp', 'value', 'visualValue']
+        : undefined,
+      encode: useStressStateColors
+        ? { x: 0, y: 1 }
+        : undefined,
       connectNulls: false,
       step: isCategorical ? 'end' : undefined,
-      showSymbol: compact
+      showSymbol: useHrvPointColors
+        ? true
+        : compact
         ? model.displayedPointCount <= 2
         : isPoint || model.displayedPointCount <= 60,
       symbol: 'circle',
       symbolSize: compact ? 4 : isPoint ? 8 : 5,
       barMaxWidth: 28,
-      lineStyle: { color: seriesColor, width: 2.25 },
-      itemStyle: {
-        color: useStressStateColors || useBodyEnergyColors
+      z: useHrvPointColors ? 3 : undefined,
+      lineStyle: {
+        ...(!useStressStateColors ? { color: useHrvPointColors ? 'transparent' : seriesColor } : {}),
+        width: 1.5,
+      },
+      itemStyle: useStressStateColors
+        ? undefined
+        : useHrvPointColors
+          ? {
+            color: (params: { value?: unknown }) => hrvPointStatuses.get(
+              chartTimestamp(params.value),
+            )?.color || seriesColor,
+          }
+        : {
+          color: useBodyEnergyColors
           ? (params: { value?: unknown }) => resolveHealthValueColor(
             model.series.metricId,
             chartValue(params.value),
@@ -226,9 +328,33 @@ export function buildHealthMetricEChartsOption(
             useBodyEnergyColors,
           )
           : seriesColor,
-      },
+        },
       emphasis: { scale: 1.25 },
-    }],
+      markArea: statusOverlay?.normalRange
+        ? {
+          silent: true,
+          itemStyle: { color: statusOverlay.normalRangeColor, opacity: 0.1 },
+          data: [[
+            { yAxis: statusOverlay.normalRange.min },
+            { yAxis: statusOverlay.normalRange.max },
+          ]],
+        }
+        : undefined,
+      markPoint: latestNumericPoint && statusOverlay
+        ? {
+          silent: true,
+          symbol: 'circle',
+          symbolSize: compact ? 7 : 9,
+          label: { show: false },
+          itemStyle: {
+            color: hrvPointStatuses.get(latestNumericPoint.timestampMs)?.color || statusOverlay.statusColor,
+          },
+          data: [{ coord: [latestNumericPoint.timestampMs, latestNumericPoint.value] }],
+        }
+        : undefined,
+    }, ...(useHrvPointColors
+      ? buildPointStatusLineSeries(model.data, hrvPointStatuses, seriesColor)
+      : [])],
   };
 
   return option as ChartOption;
@@ -304,14 +430,19 @@ function resolveHealthValueColor(
   }
   switch (value.trim().toLowerCase()) {
     case 'relaxing':
+    case 'recovering':
     case 'calm':
     case 'low':
       return AppDataColors.Altitude;
     case 'active':
+      return AppDataColors.Distance;
     case 'passive':
+    case 'inactive':
+      return AppColors.MediumGray;
     case 'medium':
       return AppDataColors.Stress;
     case 'stressful':
+    case 'stressed':
     case 'high':
       return AppDataColors['Heart Rate_0'];
     default:
@@ -348,6 +479,59 @@ function chartValue(value: unknown): unknown {
   return Array.isArray(value) ? value[1] : value;
 }
 
+function stressStateChartData(
+  data: readonly HealthChartDatum[],
+  categoryLabels: readonly string[],
+): HealthChartDatum[] {
+  const categoryIndexes = new Map(categoryLabels.map((value, index) => [value, index]));
+  return data.map(([timestampMs, value]) => [
+    timestampMs,
+    value,
+    typeof value === 'string' ? categoryIndexes.get(value) ?? null : null,
+  ]);
+}
+
+function buildPointStatusLineSeries(
+  data: readonly HealthChartDatum[],
+  pointStatuses: ReadonlyMap<number, { color: string }>,
+  fallbackColor: string,
+): object[] {
+  const series: object[] = [];
+  let previous: HealthChartDatum | null = null;
+  for (const current of data) {
+    if (typeof current[1] !== 'number' || !Number.isFinite(current[1])) {
+      previous = null;
+      continue;
+    }
+    if (previous) {
+      series.push({
+        type: 'line',
+        data: [previous, current],
+        connectNulls: false,
+        showSymbol: false,
+        silent: true,
+        tooltip: { show: false },
+        lineStyle: {
+          color: pointStatuses.get(current[0])?.color || fallbackColor,
+          width: 1.5,
+        },
+        emphasis: { disabled: true },
+        z: 2,
+      });
+    }
+    previous = current;
+  }
+  return series;
+}
+
+function chartTimestamp(value: unknown): number {
+  if (!Array.isArray(value)) {
+    return Number.NaN;
+  }
+  const timestampMs = Number(value[0]);
+  return Number.isFinite(timestampMs) ? timestampMs : Number.NaN;
+}
+
 function buildSeriesModel(
   series: HealthWorkspaceSeries,
   startTimeMs: number,
@@ -357,7 +541,10 @@ function buildSeriesModel(
   const sortedPoints = [...series.points].sort((left, right) => left.timestampMs - right.timestampMs);
   const displayedPoints = downsamplePoints(sortedPoints, MAX_DISPLAY_POINTS);
   const categoryLabels = series.chartKind === 'step'
-    ? [...new Set(displayedPoints.map(point => categoryValueLabel(point.value)))]
+    ? orderedCategoryLabels(
+      [...new Set(displayedPoints.map(point => categoryValueLabel(point.value)))],
+      series.metricId,
+    )
     : [];
   const numericValues = displayedPoints
     .map(point => typeof point.value === 'number' && Number.isFinite(point.value) ? point.value : null)
@@ -389,14 +576,26 @@ function buildSeriesModel(
     yMaxLabel: series.chartKind === 'step'
       ? categoryLabels.at(-1) || ''
       : formatHealthAxisValue(series.metricId, numericBounds?.max ?? 1, series.unit, series.nativeOnly, unitSettings),
-    startLabel: formatAxisDate(startTimeMs),
-    endLabel: formatAxisDate(endTimeMs),
+    startLabel: formatAxisDate(startTimeMs, nearestTimezoneOffsetSeconds(displayedPoints, startTimeMs)),
+    endLabel: formatAxisDate(endTimeMs, nearestTimezoneOffsetSeconds(displayedPoints, endTimeMs)),
     categoryLabels,
     displayedPointCount: displayedPoints.length,
     omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
     displayUnit,
     ariaLabel: `${series.sourceLabel}, ${series.semanticLabel}. ${readingCountText}. Latest ${latestText}. Values are not combined with other sources.`,
   };
+}
+
+function orderedCategoryLabels(labels: readonly string[], metricId: HealthMetricId): string[] {
+  if (metricId !== HEALTH_METRIC_IDS.StressState) {
+    return [...labels];
+  }
+  const providerOrder = ['relaxing', 'active', 'passive', 'stressful'];
+  const present = new Set(labels);
+  return [
+    ...providerOrder.filter(label => present.has(label)),
+    ...labels.filter(label => !providerOrder.includes(label)),
+  ];
 }
 
 function buildChartData(
@@ -493,21 +692,65 @@ function categoryValueLabel(value: number | string | boolean): string {
   return humanize(`${value}`) || 'Unknown';
 }
 
-function formatAxisDate(timestampMs: number): string {
+function formatAxisDate(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
+  const localTimestampMs = timestampInFixedOffset(timestampMs, timezoneOffsetSeconds);
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
-    .format(new Date(timestampMs));
+    .format(new Date(localTimestampMs));
 }
 
-function formatTooltipDate(timestampMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+function formatAxisTime(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
+  const localTimestampMs = timestampInFixedOffset(timestampMs, timezoneOffsetSeconds);
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+    .format(new Date(localTimestampMs));
+}
+
+function formatTooltipDate(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
+  const normalizedOffsetSeconds = normalizeTimezoneOffsetSeconds(timezoneOffsetSeconds);
+  const dateTime = new Intl.DateTimeFormat(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'UTC',
-    timeZoneName: 'short',
-  }).format(new Date(timestampMs));
+  }).format(new Date(timestampMs + (normalizedOffsetSeconds * 1_000)));
+  return `${dateTime} ${formatFixedTimezoneOffset(normalizedOffsetSeconds)}`;
+}
+
+function nearestTimezoneOffsetSeconds(
+  points: readonly HealthWorkspaceSeriesPoint[],
+  timestampMs: number,
+): number | null {
+  let nearest: HealthWorkspaceSeriesPoint | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const point of points) {
+    const distance = Math.abs(point.timestampMs - timestampMs);
+    if (distance < nearestDistance) {
+      nearest = point;
+      nearestDistance = distance;
+    }
+  }
+  return nearest?.timezoneOffsetSeconds ?? null;
+}
+
+function timestampInFixedOffset(timestampMs: number, timezoneOffsetSeconds?: number | null): number {
+  return timestampMs + (normalizeTimezoneOffsetSeconds(timezoneOffsetSeconds) * 1_000);
+}
+
+function normalizeTimezoneOffsetSeconds(timezoneOffsetSeconds?: number | null): number {
+  const value = Number(timezoneOffsetSeconds);
+  return Number.isFinite(value) && Math.abs(value) <= 18 * 60 * 60 ? value : 0;
+}
+
+function formatFixedTimezoneOffset(timezoneOffsetSeconds: number): string {
+  if (timezoneOffsetSeconds === 0) {
+    return 'UTC';
+  }
+  const absoluteMinutes = Math.abs(timezoneOffsetSeconds) / 60;
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = Math.floor(absoluteMinutes % 60);
+  const suffix = minutes > 0 ? `:${minutes.toString().padStart(2, '0')}` : '';
+  return `UTC${timezoneOffsetSeconds > 0 ? '+' : '-'}${hours}${suffix}`;
 }
 
 function humanize(value: string): string {

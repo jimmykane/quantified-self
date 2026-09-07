@@ -10,11 +10,13 @@ import { ReviewerBenchmarkPreviewComponent } from '../shared/reviewer-benchmark-
 import { AssistantExamplePreviewComponent } from '../shared/assistant-example-preview/assistant-example-preview.component';
 import { McpReadOnlyFlowPreviewComponent } from '../shared/mcp-read-only-flow-preview/mcp-read-only-flow-preview.component';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
+import { HealthPreviewComponent } from './health-preview.component';
 
 @Component({
   selector: 'app-public-feature-preview',
   standalone: true,
   imports: [
+    HealthPreviewComponent,
     HomeDashboardPreviewComponent,
     HomeMyTracksPreviewComponent,
     HomeSignalChartsPreviewComponent,

@@ -375,6 +375,12 @@ const topLevelRoutes: Routes = [
     },
   },
   {
+    path: PUBLIC_FEATURE_PATHS.health,
+    loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
+    resolve: publicSeoRouteData('health'),
+    data: { preload: true, animation: 'PublicSeo' },
+  },
+  {
     path: PUBLIC_FEATURE_PATHS.activityMap,
     loadComponent: () => import('./components/public-seo/public-seo-page.component').then(m => m.PublicSeoPageComponent),
     resolve: publicSeoRouteData('activityMap'),

@@ -8,6 +8,7 @@ import {
   HEALTH_VALUE_TYPES,
 } from '@shared/health';
 import { AppDataColors } from '../services/color/app.data.colors';
+import { AppColors } from '../services/color/app.colors';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
 import { buildHealthChartModels, buildHealthMetricEChartsOption } from './health-metric-chart.helper';
@@ -17,15 +18,24 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface HealthMetricColorOption {
   series: Array<{
-    lineStyle: { color: string };
+    lineStyle: { color: string; width: number };
     itemStyle: { color: string };
   }>;
 }
 
 interface StressStateColorOption {
   visualMap: {
-    pieces: Array<{ value: string; color: string }>;
+    type: string;
+    dimension: number;
+    pieces: Array<{ value: number; color: string }>;
+    outOfRange: { color: string };
   };
+  yAxis: { axisLabel: { color: (value: string) => string } };
+  series: Array<{
+    data: Array<[number, string | null, number | null]>;
+    lineStyle: { color?: string; width: number };
+    itemStyle?: unknown;
+  }>;
   tooltip: {
     formatter: (params: { value?: unknown }) => string;
   };
@@ -118,6 +128,7 @@ describe('Health metric chart helpers', () => {
     expect(option.grid).toMatchObject({ left: 2, right: 2 });
     expect(option.xAxis.show).toBe(false);
     expect(option.yAxis.show).toBe(false);
+    expect(option.series).toHaveLength(1);
     expect(option.series[0].showSymbol).toBe(false);
 
     const sparseModel = buildHealthChartModels([
@@ -133,6 +144,115 @@ describe('Health metric chart helpers', () => {
       true,
     ) as { series: Array<{ showSymbol: boolean; symbolSize: number }> };
     expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
+  });
+
+  it('colors each HRV point from its point-in-time personal-range status', () => {
+    const hrvSeries = series({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      unit: 'millisecond',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 40, qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 46, qualityCode: null },
+      ],
+    });
+    const model = buildHealthChartModels([hrvSeries], 0, DAY_MS)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS,
+      buildDashboardEChartsStyleTokens(false, 320),
+      false,
+      null,
+      true,
+      {
+        normalRange: { min: 30, max: 44 },
+        normalRangeColor: AppDataColors.Altitude,
+        statusColor: AppDataColors.Stress,
+        pointStatuses: [
+          { timestampMs: 0, color: AppDataColors.Altitude, label: 'Within personal range' },
+          { timestampMs: DAY_MS, color: AppDataColors.Stress, label: 'Outside personal range' },
+        ],
+      },
+    ) as {
+      yAxis: { min: number; max: number };
+      series: Array<{
+        data: Array<[number, number | null]>;
+        showSymbol: boolean;
+        z?: number;
+        lineStyle: { color?: string; width: number };
+        itemStyle?: { color: (params: { value?: unknown }) => string };
+        markArea: { itemStyle: { color: string; opacity: number }; data: unknown };
+        markPoint: { itemStyle: { color: string }; data: Array<{ coord: [number, number] }> };
+      }>;
+      tooltip: { formatter: (params: { value?: unknown }) => string };
+    };
+
+    expect(option.yAxis.min).toBeLessThanOrEqual(30);
+    expect(option.yAxis.max).toBeGreaterThanOrEqual(46);
+    expect(option.series[0].data).toEqual([
+      [0, 40],
+      [DAY_MS, 46],
+    ]);
+    expect(option.series[0].showSymbol).toBe(true);
+    expect(option.series[0].z).toBe(3);
+    expect(option.series[0].lineStyle).toEqual({ color: 'transparent', width: 1.5 });
+    expect(option.series[0].itemStyle?.color({ value: [0, 40] })).toBe(AppDataColors.Altitude);
+    expect(option.series[0].itemStyle?.color({ value: [DAY_MS, 46] })).toBe(AppDataColors.Stress);
+    expect(option.series[1]).toMatchObject({
+      data: [[0, 40], [DAY_MS, 46]],
+      showSymbol: false,
+      lineStyle: { color: AppDataColors.Stress, width: 1.5 },
+      silent: true,
+    });
+    expect(option.series[0].markArea).toMatchObject({
+      itemStyle: { color: AppDataColors.Altitude, opacity: 0.1 },
+    });
+    expect(option.series[0].markPoint).toMatchObject({
+      itemStyle: { color: AppDataColors.Stress },
+      data: [{ coord: [DAY_MS, 46] }],
+    });
+    expect(option.tooltip.formatter({ value: [0, 40] }))
+      .toContain('Personal range: Within personal range');
+    expect(option.tooltip.formatter({ value: [DAY_MS, 46] }))
+      .toContain(`background:${AppDataColors.Stress}`);
+  });
+
+  it('does not connect point-in-time HRV colors across missing nights', () => {
+    const hrvSeries = series({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      unit: 'millisecond',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 40, qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 42, qualityCode: null },
+        { timestampMs: DAY_MS * 8, calendarDate: '1970-01-09', value: 46, qualityCode: null },
+      ],
+    });
+    const model = buildHealthChartModels([hrvSeries], 0, DAY_MS * 8)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 8,
+      buildDashboardEChartsStyleTokens(false, 320),
+      false,
+      null,
+      true,
+      {
+        normalRange: { min: 30, max: 44 },
+        normalRangeColor: AppDataColors.Altitude,
+        statusColor: AppDataColors.Stress,
+        pointStatuses: [
+          { timestampMs: 0, color: AppDataColors.Altitude, label: 'Within personal range' },
+          { timestampMs: DAY_MS, color: AppDataColors.Altitude, label: 'Within personal range' },
+          { timestampMs: DAY_MS * 8, color: AppDataColors.Stress, label: 'Outside personal range' },
+        ],
+      },
+    ) as {
+      series: Array<{ data: Array<[number, number | null]> }>;
+    };
+
+    expect(option.series).toHaveLength(2);
+    expect(option.series[0].data).toContainEqual([DAY_MS * 4 + DAY_MS / 2, null]);
+    expect(option.series[1].data).toEqual([[0, 40], [DAY_MS, 42]]);
   });
 
   it('uses the selected Sports Lib unit conversion consistently across a chart', () => {
@@ -283,6 +403,7 @@ describe('Health metric chart helpers', () => {
         false,
       ) as HealthMetricColorOption;
       expect(option.series[0].lineStyle.color).toBe(color);
+      expect(option.series[0].lineStyle.width).toBe(1.5);
       expect(option.series[0].itemStyle.color).toBe(color);
     }
 
@@ -306,28 +427,55 @@ describe('Health metric chart helpers', () => {
       valueType: HEALTH_VALUE_TYPES.Category,
       unit: 'category',
       points: [
-        { timestampMs: 0, calendarDate: '1970-01-01', value: 'relaxing', qualityCode: null },
-        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 'active', qualityCode: null },
-        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 'stressful', qualityCode: null },
-        { timestampMs: DAY_MS * 3, calendarDate: '1970-01-04', value: 'provider-specific', qualityCode: null },
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 'passive', qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 'stressful', qualityCode: null },
+        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 'relaxing', qualityCode: null },
+        { timestampMs: DAY_MS * 3, calendarDate: '1970-01-04', value: 'active', qualityCode: null },
+        { timestampMs: DAY_MS * 4, calendarDate: '1970-01-05', value: 'provider-specific', qualityCode: null },
       ],
-    })], 0, DAY_MS * 3)[0];
+    })], 0, DAY_MS * 4)[0];
     const style = buildDashboardEChartsStyleTokens(false, 640);
     const option = buildHealthMetricEChartsOption(
       model,
       0,
-      DAY_MS * 3,
+      DAY_MS * 4,
       style,
       false,
     ) as StressStateColorOption;
 
-    expect(option.visualMap.pieces).toEqual([
-      { value: 'relaxing', color: AppDataColors.Altitude },
-      { value: 'active', color: AppDataColors.Stress },
-      { value: 'stressful', color: AppDataColors['Heart Rate_0'] },
-      { value: 'provider specific', color: style.trendLineColor },
+    expect(model.categoryLabels).toEqual([
+      'relaxing',
+      'active',
+      'passive',
+      'stressful',
+      'provider specific',
     ]);
-    expect(option.tooltip.formatter({ value: [DAY_MS * 3, 'provider-specific'] }))
+    expect(option.visualMap).toMatchObject({
+      type: 'piecewise',
+      dimension: 2,
+      outOfRange: { color: style.secondaryTextColor },
+    });
+    expect(option.visualMap.pieces).toEqual([
+      { value: 0, color: AppDataColors.Altitude },
+      { value: 1, color: AppDataColors.Distance },
+      { value: 2, color: AppColors.MediumGray },
+      { value: 3, color: AppDataColors['Heart Rate_0'] },
+      { value: 4, color: style.trendLineColor },
+    ]);
+    expect(option.series[0].data).toEqual([
+      [0, 'passive', 2],
+      [DAY_MS, 'stressful', 3],
+      [DAY_MS * 2, 'relaxing', 0],
+      [DAY_MS * 3, 'active', 1],
+      [DAY_MS * 4, 'provider specific', 4],
+    ]);
+    expect(option.series[0].lineStyle).toEqual({ width: 1.5 });
+    expect(option.series[0].itemStyle).toBeUndefined();
+    expect(option.yAxis.axisLabel.color('relaxing')).toBe(AppDataColors.Altitude);
+    expect(option.yAxis.axisLabel.color('active')).toBe(AppDataColors.Distance);
+    expect(option.yAxis.axisLabel.color('passive')).toBe(AppColors.MediumGray);
+    expect(option.yAxis.axisLabel.color('stressful')).toBe(AppDataColors['Heart Rate_0']);
+    expect(option.tooltip.formatter({ value: [DAY_MS * 4, 'provider-specific', 4] }))
       .toContain(`background:${style.trendLineColor}`);
   });
 
@@ -404,6 +552,60 @@ describe('Health metric chart helpers', () => {
 
     expect(model.startLabel).toBe(formatter.format(new Date(startTimeMs)));
     expect(model.endLabel).toBe(formatter.format(new Date(endTimeMs)));
+  });
+
+  it('formats Health axes and tooltips in each reading recorded timezone', () => {
+    const timestampMs = Date.parse('2026-09-06T21:00:00.000Z');
+    const timezoneOffsetSeconds = 3 * 60 * 60;
+    const stressSeries = series({
+      metricId: HEALTH_METRIC_IDS.StressState,
+      valueType: HEALTH_VALUE_TYPES.Category,
+      chartKind: 'step',
+      unit: 'category',
+      points: [{
+        timestampMs,
+        calendarDate: '2026-09-07',
+        timezoneOffsetSeconds,
+        value: 'passive',
+        qualityCode: '3',
+      }],
+    });
+    const endTimeMs = timestampMs + DAY_MS - 1;
+    const model = buildHealthChartModels([stressSeries], timestampMs, endTimeMs)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      timestampMs,
+      endTimeMs,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as {
+      xAxis: { axisLabel: { formatter: (value: number) => string } };
+      tooltip: { formatter: (params: { value?: unknown }) => string };
+    };
+    const providerLocalTimestampMs = timestampMs + timezoneOffsetSeconds * 1_000;
+    const expectedAxisDate = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(providerLocalTimestampMs));
+    const expectedAxisTime = new Intl.DateTimeFormat(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    }).format(new Date(providerLocalTimestampMs));
+    const expectedTooltipDate = new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    }).format(new Date(providerLocalTimestampMs));
+
+    expect(model.startLabel).toBe(expectedAxisDate);
+    expect(option.xAxis.axisLabel.formatter(timestampMs)).toBe(expectedAxisTime);
+    expect(option.tooltip.formatter({ value: [timestampMs, 'passive', 2] }))
+      .toContain(`${expectedTooltipDate} UTC+3`);
   });
 
   it('uses singular reading text in the chart accessibility label', () => {

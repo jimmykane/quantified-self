@@ -190,11 +190,16 @@ export {
 export { ensureDerivedMetrics } from './derived-metrics/ensure-derived-metrics';
 export { queryHealthRange } from './health/callable';
 export { queryActivityHealthRange } from './health/activity-callable';
+export {
+  saveManualHealthMeasurementCallable as saveManualHealthMeasurement,
+  deleteManualHealthMeasurementCallable as deleteManualHealthMeasurement,
+} from './health/manual-callable';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
 export {
   onDashboardDerivedMetricsActivityWrite,
   onDashboardDerivedMetricsEventWrite,
   onDashboardDerivedMetricsSleepWrite,
+  onDashboardDerivedMetricsHealthWrite,
 } from './derived-metrics/derived-metrics.trigger';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { getUpcomingRenewalAmount } from './stripe/get-upcoming-renewal-amount';

@@ -2,8 +2,15 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
-import { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
-import { buildHealthChartModels } from '../../helpers/health-metric-chart.helper';
+import {
+  HealthHrvPersonalRangeStatus,
+  HealthWorkspaceSeries,
+} from '../../helpers/health-workspace.helper';
+import {
+  buildHealthChartModels,
+  buildHealthHrvChartStatusOverlay,
+  healthHrvChartStatusDescription,
+} from '../../helpers/health-metric-chart.helper';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
 
 @Component({
@@ -20,10 +27,19 @@ export class HealthMetricChartComponent {
   readonly endTimeMs = input.required<number>();
   readonly darkTheme = input(false);
   readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
+  readonly chartStatuses = input<Readonly<Record<string, HealthHrvPersonalRangeStatus>>>({});
   readonly models = computed(() => buildHealthChartModels(
     this.series(),
     this.startTimeMs(),
     this.endTimeMs(),
     this.unitSettings(),
   ));
+  readonly renderedModels = computed(() => this.models().map(model => {
+    const status = this.chartStatuses()[model.series.id] || null;
+    return {
+      model,
+      statusOverlay: buildHealthHrvChartStatusOverlay(status),
+      statusDescription: healthHrvChartStatusDescription(status),
+    };
+  }));
 }

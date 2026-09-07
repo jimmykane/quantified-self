@@ -9,7 +9,9 @@
     "@google-cloud/billing": "^5.1.1",
     "@google-cloud/billing-budgets": "^6.1.1",
     "@google-cloud/tasks": "^6.2.1",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "@sports-alliance/sports-lib": "21.0.3",
     "blob": "^0.1.0",
     "bs58": "^4.0.1",
@@ -63,6 +65,7 @@
     "migrate-health-sleep-sports-lib-data": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-health-sleep-sports-lib-data.ts",
     "migrate-health-sleep-sports-lib-data-global": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/migrate-health-sleep-sports-lib-data-global.ts",
     "backfill-coros-daily-health": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-coros-daily-health.ts",
+    "backfill-existing-health": "node lib/functions/src/scripts/backfill-existing-health.js",
     "backfill-event-processing-entity": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-event-processing-entity.ts",
     "backfill-route-processing-entity": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-route-processing-entity.ts",
     "replace-stripe-price": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/replace-stripe-price.ts"

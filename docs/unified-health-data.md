@@ -2,7 +2,7 @@
 
 This document is the source of truth for the cross-provider health foundation introduced by issue #610. It defines the shared model and storage/query boundary that Garmin, Suunto, COROS, and Wahoo adapters can target without pretending that every provider exposes the same measurements or semantics. The COROS daily adapter added by issue #611 is the first production ingestion path; issue #612 adds production Suunto 24/7 Activity, daily-statistics, and Recovery ingestion; issue #613 adds production Garmin Health API 1.2.4 ingestion.
 
-Issue #614 adds the authenticated **Health** workspace on top of this foundation. COROS, Suunto, and Garmin ingestion still does not make provider-specific Health records part of the existing MCP or Training contracts; normalized Sleep remains separate and is resolved through typed references. Weight profile context and activity-level VO2 max already embedded in imported workouts can also be read on demand for Health without copying them into Health storage or changing the activity contract.
+Issue #614 adds the authenticated **Health** workspace on top of this foundation. Normalized Sleep remains separate and is resolved through typed references. Weight profile context and activity-level VO2 max already embedded in imported workouts can be read on demand for Health without copying them into Health storage or changing the activity contract. Canonical Health Weight can also supply source-separated Training context and the identity-free body-measurement MCP projection; qualifying manual VO2 max can provide a separately labelled Training reference without changing the public MCP wire schema.
 
 ## Goals
 
@@ -20,7 +20,7 @@ Issue #614 adds the authenticated **Health** workspace on top of this foundation
 - No cross-provider deduplication, ranking, or source-preference policy is applied.
 - No medical interpretation or diagnosis is produced.
 - No provider payload, credential, raw provider account ID, or signed URL is stored in the health model.
-- No new MCP tool, Training metric, normalized Sleep field, dashboard tile, or public page is added.
+- The foundation adds no new MCP tool, Training metric, normalized Sleep field, or dashboard tile. Public Health previews are described below.
 - No time-based retention or Firestore TTL policy is enabled for health source records or sample chunks.
 
 ## Architecture
@@ -59,6 +59,16 @@ users/{uid}/activities (activity VO2 max) ──┼─ queryActivityHealthRange
                                             └─ bounded identity-free observations
                                                         │
                                                         └─ /health only; no Health write
+
+/health manual Weight, VO2 max, body composition, blood oxygen, or paired blood pressure
+        │
+        ├─ saveManualHealthMeasurement (auth + App Check)
+        └─ deleteManualHealthMeasurement (auth + App Check)
+                │
+                └─ users/{uid}/healthSourceRecords (provider: QuantifiedSelf)
+                        ├─ /health source-separated workspace
+                        ├─ Training Weight / qualifying VO2 reference
+                        └─ identity-free MCP body Weight projection
 ```
 
 The shared implementation is split intentionally:
@@ -69,6 +79,7 @@ The shared implementation is split intentionally:
 - `functions/src/health/validation.ts` validates untrusted adapter input at runtime.
 - `functions/src/health/writer.ts` owns opaque IDs, revisions, sample chunking, replacement, deletion guards, and sync state.
 - `functions/src/health/query.ts` and `functions/src/health/callable.ts` provide the server adapter.
+- `shared/manual-health.ts` and `functions/src/health/manual-measurements.ts` define owner-scoped manual measurement mutations, idempotency, revision fences, and deletion-safe writes; `manual-callable.ts` enforces Authentication and App Check.
 - `shared/activity-health.ts` and `functions/src/health/activity-query.ts` define the separate bounded workout-evidence projection used only by Health; `activity-callable.ts` enforces Authentication and App Check.
 - `src/app/services/app.health.service.ts` provides the default direct listener, the bounded cross-page workspace loader, and the explicit callable alternative.
 - `src/app/components/health/health-activity-query.service.ts` is the lazy workspace-only client for workout evidence, keeping the direct Health-record service and result contract unchanged.
@@ -218,7 +229,7 @@ The validator counts recognized input JSON-escaped UTF-8 bytes cumulatively whil
 
 The per-revision payload stays below half Firestore's 10 MiB transaction request limit because replacing a source record can both write the new revision and delete the previous revision. The largest combined source-record/chunk fetch, including both look-ahead documents, is under 17 MiB. That leaves material serialization and projection headroom below the 32 MB non-streaming response limit for a second-generation HTTP function. See the official [Firestore quotas](https://firebase.google.com/docs/firestore/quotas) and [Cloud Functions quotas](https://firebase.google.com/docs/functions/quotas).
 
-Automatic indexes are disabled for every health collection except the date field needed by unfiltered range reads; the four explicit provider/metric/date composites remain available. This leaves write-request headroom for index entries and protocol overhead.
+Automatic indexes are disabled for every health collection except the date field needed by unfiltered range reads; the four explicit provider/metric/date composites remain available, alongside the source-type/metric/date composite for bounded manual Training references. This leaves write-request headroom for index entries and protocol overhead.
 
 Sample projection never splits a stored chunk to fit a point budget. It returns only complete matching chunks and reports truncation. The chunk cursor identifies the last consumed source chunk, which also lets sparse provider-first pages advance when their matching result is empty.
 
@@ -294,11 +305,29 @@ The Health workspace deliberately defines no source-selection policy. It gives e
 
 ## Health workspace contract
 
-The authenticated `/health` route is client-rendered and `noindex`. Owner-scoped reads remain available to signed-in, onboarded users who open the route directly, while all in-app entry points are temporarily presentation-gated by `shared/health-workspace-rollout.ts`. The staged UID sees a compact **Open Health** Dashboard action and a **Health · Beta** item immediately after Dashboard in primary navigation; other users receive no in-app link to `/health`. Provider connection and history-import plan checks are unchanged. Health is intentionally not a configurable dashboard tile.
+### Public Health previews
 
-The workspace opens on Resting heart rate for the latest 30 days when that metric is available. Its fixed priority order is Sleep, Heart rate, then HRV, with a latest row for each source series so differing semantics stay separate. The explorer groups the user's available historical metrics by the stable catalog categories; an empty current date window does not remove a Health metric that exists elsewhere in Health history. Average or overnight HRV found in the loaded selected or recent Sleep sessions can also surface HRV for legacy/unreferenced Sleep data. `/health` does not encode workspace state in query parameters. The selected metric and `today`, `14d`, `30d`, `90d`, or `1y` range are validated and stored together as the client-owned `appSettings.healthWorkspace` account preference; a missing or invalid metric falls back to Resting heart rate and a missing or invalid range falls back to 30 days. Late settings hydration restores untouched selections without replacing a choice made in the current session, and queued writes are fenced to the signed-in UID. The older/newer window position and provider filters remain local to the current workspace session and reset on the next visit. Today is one calendar day and can be paged one day at a time.
+The homepage introduces Health after the Training section and links to the indexable, prerendered
+`/features/health` overview. Both surfaces consume `HEALTH_FEATURE_CONTENT` and the same deferred
+`HealthPreviewComponent`. That component only adapts deterministic, source-labelled sample data; it does not
+read account data or initialize Health data services. The public page explains that Health remains in beta
+and is available to every signed-in user, with the existing provider connection and history-import requirements.
 
-Totals render as bars, scalar or point readings as lines/points, and categorical readings as stepped series. Health metric charts use the shared ECharts host, theme, tooltip, resize, and mobile-interaction stack; Sleep continues to reuse its normalized Sleep chart. Detailed chunks load for Today, 14-day, and 30-day windows; 90-day and 1-year views use stored summaries and explain when a metric is sample-only. Today combines the day's source-attributed summaries with any available intra-day chunks, but it does not imply continuous coverage where a provider supplies intermittent samples or daily summaries only. Coverage, freshness, device attribution, partial results, superseded revisions, conflicts, and safe sync state stay visible. The expandable source-observation table is the accessible textual equivalent of the charts.
+Sleep uses the existing standalone `ChartsSleepTrendComponent` (still re-exported by `AppChartsModule` for
+workspace/dashboard consumers) and `HealthSleepStageSummaryComponent`. HRV and weight use
+`HealthMetricSeriesChartComponent`, the canonical display helpers, and the same HRV personal-range helpers
+as Health. Changes to those renderers, colours, tooltips, and interactions therefore apply in the app, on home,
+and on the feature page. No public-only chart renderer or chart options are maintained. The HRV fixture
+includes baseline history outside its visible 14-day window; sleep stage totals agree with the sample night.
+SSR emits the copy, links, metadata, and preview placeholders; charts load in the browser when in view.
+
+### Authenticated workspace
+
+The authenticated `/health` route is client-rendered and `noindex`, with owner-scoped reads for every signed-in, onboarded user. All signed-in users see a compact **Open Health** action on their own Dashboard and a **Health · Beta** item immediately after Dashboard in primary navigation. There is no UID allowlist for workspace navigation. Signed-out navigation and shared dashboards do not expose these actions. Provider connection and history-import plan checks are unchanged. Health is intentionally not a configurable dashboard tile.
+
+The workspace opens on Resting heart rate for the latest 30 days when that metric is available. Highlights keep the priority order Sleep, Heart rate, then HRV and keep differing source semantics separate. HRV is shown only when an individual nightly recovery series has at least three observations in the current 14-day highlight window. The workspace loads 73 days of summaries so every plotted highlight date, including the oldest one, can be graded using its own complete preceding 60-day personal-range window. The selected HRV explorer loads a separate bounded 60-day pre-window summary context and includes the same pre-window span in its Sleep read; this gives the first visible date a complete baseline without expanding the visible date range or loading sample chunks. Stable opaque series identities join that context to the visible provider/account/semantic series without exposing account keys. Multiple eligible nightly values on one calendar day reduce to a median before the baseline calculation, preventing duplicate summaries from giving one night extra weight. The reusable personal-range and chart-overlay helpers calculate and render the same model in Highlights and the explorer. The baseline is the mean and population standard deviation from distinct days. One standard deviation around the mean is the normal band, between one and two deviations is cautionary, and beyond two is far outside; distance is symmetric, so an unusually high HRV can also be cautionary. The headline status compares the current seven-day average, requiring at least three distinct recent nights, with today's rolling 60-day range. Separately, each plotted nightly value is graded against the 60-day range ending on that date. Dates without enough point-in-time baseline data remain neutral. Explicit ECharts line segments and points preserve those historical green/yellow/red/neutral statuses instead of being recolored from the latest headline; the tooltip names the status for the hovered night. The fixed range band describes the selected window's end date. This deliberately approximates Suunto's personal-range presentation without claiming its unpublished proprietary calculation, and it is not a medical interpretation. A lone sleep-derived HRV scalar already present in the Sleep highlight is not repeated in a mostly empty HRV card. Every baseline remains scoped to one provider, local account, aggregation, semantic variant, origin, recording method, and unit; values are never blended across those boundaries. The explorer groups the user's available historical metrics by the stable catalog categories; an empty current date window does not remove a Health metric that exists elsewhere in Health history. Its Suunto Stress state chart preserves the provider's documented category order and maps relaxing, active, passive, and stressful to the app's green, blue, gray, and red palette through a discrete ECharts data dimension. Line segments, points, axis labels, and tooltip markers use the same mapping, while category text and vertical position keep the state understandable without color. Average or overnight HRV found in the loaded selected or recent Sleep sessions can also surface HRV for legacy/unreferenced Sleep data. `/health` does not encode workspace state in query parameters. The selected metric and `today`, `14d`, `30d`, `90d`, or `1y` range are validated and stored together as the client-owned `appSettings.healthWorkspace` account preference; a missing or invalid metric falls back to Resting heart rate and a missing or invalid range falls back to 30 days. Late settings hydration restores untouched selections without replacing a choice made in the current session, and queued writes are fenced to the signed-in UID. The older/newer window position and provider filters remain local to the current workspace session and reset on the next visit. Today is one calendar day and can be paged one day at a time.
+
+Totals render as bars, scalar or point readings as lines/points, and categorical readings as stepped series. Health metric charts use the shared ECharts host, theme, tooltip, resize, and mobile-interaction stack; Sleep continues to reuse its normalized Sleep chart. Each chart point retains its source-recorded timezone offset. Axis labels select the nearest reading's offset and tooltips use the exact reading's offset, preventing a provider-local day from being presented as the preceding UTC day while still handling offset changes across travel or daylight-saving transitions. When no valid offset exists, the deterministic UTC fallback remains. Detailed chunks load for Today, 14-day, and 30-day windows; 90-day and 1-year views use stored summaries and explain when a metric is sample-only. Today combines the day's source-attributed summaries with any available intra-day chunks, but it does not imply continuous coverage where a provider supplies intermittent samples or daily summaries only. Coverage, freshness, device attribution, partial results, superseded revisions, conflicts, and safe sync state stay visible. The expandable source-observation table is the accessible textual equivalent of the charts.
 
 ### Metric display and unit-preference boundary
 
@@ -314,9 +343,40 @@ Explicitly native-only or non-comparable provider readings are outside that conv
 provider-native label and are never represented as canonical values or as values converted to the user's preferred
 units.
 
-Weight and VO2 max are always discoverable in the Health catalog because either may exist only in imported workouts rather than `healthSourceRecords`. Selecting either metric starts the direct Health-record load and the bounded workout-evidence callable together for the same remembered window. Request generations discard both stale results after metric, range, or older/newer navigation. A failed workout query does not hide successfully loaded provider Health measurements; the workspace identifies that partial source explicitly. Workout coverage is shown as not applicable rather than implying daily measurement completeness, raw creator fields are not presented as device attribution, and the latest workout observation still supplies last-observed context.
+Weight and VO2 max remain discoverable in the Health catalog for workout evidence: either may exist only in imported workouts rather than `healthSourceRecords`. This existing workout exception is independent of manual entry; the other catalog metrics remain history-filtered. Selecting either metric starts the direct Health-record load and the bounded workout-evidence callable together for the same remembered window. Request generations discard both stale results after metric, range, or older/newer navigation. A failed workout query does not hide successfully loaded provider Health measurements; the workspace identifies that partial source explicitly. Workout coverage is shown as not applicable rather than implying daily measurement completeness, raw creator fields are not presented as device attribution, and the latest workout observation still supplies last-observed context.
 
-Future manual measurements use the existing Health schema rather than another store: provider `QuantifiedSelf`, origin `recorded`, recording method `manual`, and the canonical catalog metric/unit. A manual Weight is a real Health observation and suppresses the workout Weight fallback in the active filtered window. Manual VO2 max remains separate from provider Health and workout series through source, origin, recording method, and semantic variant. Manual Sleep remains in `sleepSessions` and is exposed to Health only through typed Sleep references. This compatibility is intentional; this implementation adds no manual-entry form, write callable, migration, or persistence path.
+Manual Weight, VO2 max, body fat, blood pressure, muscle mass, body water, bone mass, and blood oxygen use the existing Health schema rather than another store. A compact Material **Add measurement** action is always available in the Health header, independent of the explorer selection or data availability. Its picker lists every supported entry type and preselects the viewed metric when applicable. On save, the workspace clears local source filters, opens the saved metric, and moves the current range to the observation date when necessary; the remembered range is unchanged. Manual observations retain the same canonical metric IDs as provider measurements and remain source-separated.
+
+The save and delete callables derive the owner from Authentication, require App Check, validate strict request shapes and Sports Lib values, reject future or pre-2000 timestamps, and recheck the account-deletion guard inside the write transaction. Creates use a client UUID only as an idempotency key; persisted source/account keys are opaque hashes. Updates and deletes require the exact current source-record revision, so a stale tab cannot overwrite or remove a newer edit. Manual records are canonical point measurements with provider `QuantifiedSelf`, origin `recorded`, recording method `manual`, aggregation `measurement`, the user's observed timestamp and timezone offset, and no sample chunks.
+
+Blood pressure is one atomic source record containing `blood_pressure_systolic` and `blood_pressure_diastolic`, plus optional `pulse_rate` measured at the same time. The callable uses systolic as the entry discriminator (`metricId` and `canonicalValue`), requires `diastolicValue`, and optionally accepts `pulseValue`; those paired fields are rejected for other entry types. Editing from any of the three observations first reads the complete owner-scoped record from the server under the displayed revision, since a range projection contains only the selected metric. Adding/removing pulse updates both the stored metrics and their index membership. Delete confirmation explicitly covers the entire pair and optional pulse.
+
+Body fat, muscle mass, body water, bone mass, and blood oxygen are independent manual point measurements. They use `DataBodyFat`, `DataMuscleMass`, `DataBodyWater`, `DataBoneMass`, and `DataBloodOxygenSaturation`, with the existing canonical IDs and units: masses in kilograms and body fat/water/SpO2 as percentages. Muscle mass is not a muscle percentage, and bone mass is not a bone-density score. Values must be finite and positive; percentages are capped at 100 and masses at the existing 1,000-kilogram input-integrity ceiling. Numeric bounds are not diagnostic reference ranges. These entries accept neither VO2 context/method nor blood-pressure paired fields. The same authenticated, revision-fenced save/edit/delete flow applies, and manual SpO2 does not create or modify a Sleep session. This extension adds no schema, index, Function endpoint, migration, Training calculation, or MCP surface; MCP body measurements remain Weight-only. Resting HR, standalone pulse, HRV and manual Sleep entry remain out of scope.
+
+A provider or manual Health Weight is a true measurement. Workout Weight remains contextual fallback and is shown only when the active provider-filtered view contains no true Health Weight; it is never plotted or exposed as a weigh-in. Manual VO2 max remains separate from provider Health and workout series through provider/account, origin, recording method, and semantic variant. The user records a `general`, `running`, or `cycling` context plus `lab_test`, `field_test`, or `other_estimate` method. Only Running/Cycling lab or field observations become separately labelled Training references; general and other-estimate values remain Health-only. The nearest imported workout VO2 value within 14 days may be shown as a neutral comparison, never merged into or used to reinterpret the reference. Manual Sleep is not implemented; Sleep remains in `sleepSessions` and appears in Health only through typed references. No migration, backfill, or Firestore schema change is required. The Training manual-reference query requires the new `healthSourceRecords` composite on `source.sourceRecordType`, `metricIds`, and `calendarDate`; deploy it and wait for readiness before the Functions update.
+
+Manual dialogs bind to the account present when they open and close on account changes or workspace teardown.
+All numeric fields use the shared manual-entry ceilings and explicitly validate finite, strictly positive numbers,
+including the optional pulse when present. Material hints/errors format the bounds through the canonical Sports Lib
+display helpers. Inputs retain native number semantics and decimal keyboards but hide browser number steppers without
+overriding Material internals. Blank required readings/date/time fields have inline errors; no new clinical reference
+ranges are imposed, and the callable remains authoritative.
+Save/delete callable payloads carry an `expectedUserID` assertion that must equal the authenticated UID; it never selects
+an owner. This also rejects requests whose authentication changes during App Check or SDK waits/retries. Stale dialog
+results, mutation completions, and retry actions cannot update the replacement account's UI.
+
+Deleting a manual measurement atomically removes its leaf source record and writes `{ deleted: true }` at
+`users/{uid}/manualHealthMeasurementDeletions/{opaqueSourceRecordId}`. This server-only terminal marker contains no
+measurement value, observed timestamp, or raw mutation UUID. Creates check marker absence inside their write transaction,
+so even a delayed or changed-content retry cannot resurrect a deleted measurement. Markers have no TTL because create
+UUIDs have no retry expiry; they are removed by the existing recursive user-account cleanup. Health/Sleep schemas and
+queries remain unchanged, and the real source-record deletion continues to invalidate the Training view.
+
+While a manual mutation is pending, the workspace disables the add action and replaces its icon with a same-sized
+Material spinner, with a live accessible status. Weight input, its suffix, and persistence are kilograms in the pinned
+Sports Lib version: its unit settings do not include a pounds/weight preference. Imperial speed, pace, or distance
+settings must not relabel or reinterpret a Weight input. A future selectable Weight unit will require conversion into
+the displayed unit on edit and back into the canonical unit on save, together with matching input bounds.
 
 The compact provider footer reads the existing Health and Sleep sync-state documents. For a ready Garmin, Suunto, or COROS connection owned by an eligible Pro account, it offers the existing provider history callable only when a successful owner-scoped sync-state read proves that no prior Sleep/Health history request was made, or when that request failed and is retryable. A denied or failed state read cannot be interpreted as an absent backfill. A prior or cooldown-bound request suppresses the action, while Garmin's granular Health backfill state also exposes queued and running progress. The workspace does not invent progress states that Suunto and COROS do not publish. Wahoo and disconnected, permission-blocked, or reconnect-required sources never receive this action. The callable remains authoritative for plan access, provider rollout, connection credentials, permissions, deletion state, and cooldown enforcement. Request generations are UID-scoped so account/profile changes and component teardown cannot publish or clear another request's local state.
 
@@ -334,7 +394,7 @@ When a health source record needs a Sleep relationship, it stores a typed `sleep
 
 The validator also requires the health metric ID to match the referenced Sleep field. For example, `durationSeconds` maps to `sleep_duration`, while `vitals.averageHeartRateBpm` maps to `heart_rate`. The referenced value is resolved by the Sleep consumer; it is not copied into the health source record.
 
-The Health workspace also has a read-time compatibility projection for normalized non-nap Sleep sessions that contain average or overnight HRV but have no equivalent typed Health reference. It displays each field as its own Sleep-session semantic series, keeps it separate from standalone Health HRV, and suppresses the projection when a matching typed reference for the same Sleep document and field is already loaded. The projection does not write, migrate, or duplicate Sleep data.
+The Health workspace also has a read-time compatibility projection for normalized non-nap Sleep sessions that contain average or overnight HRV but have no equivalent typed Health reference. It displays each field as its own Sleep-session semantic series, keeps it separate from standalone Health HRV, and suppresses the projection when a matching typed reference for the same Sleep document and field is already loaded. The HRV highlight and its rolling 60-day personal ranges use only these Sleep-session variants plus provider nightly-average variants; activity-interval and Health Snapshot HRV remain source-separated explorer data and are not interpreted as nightly recovery. Within one provider account, a dedicated provider overnight average is preferred over a generic Sleep-session average. The 73-day highlight query loads summaries only, preserving the workspace rule that detailed sample chunks are limited to 1d, 14d, and 30d explorer windows. The projection does not write, migrate, or duplicate Sleep data.
 
 Sleep duration, in-bed duration, stage-duration totals, score, aggregate sleep heart rate, aggregate/overnight HRV and
 sample count, maximum SpO₂, and average respiration use the same Sports Lib 20.3 scalar boundary described above.
@@ -378,6 +438,14 @@ Issues #611–#613 should implement each provider independently against this fou
 ## Operational and release notes
 
 The Health foundation receives production COROS, Suunto, and Garmin records, and `/health` now provides the source-separated product surface. COROS, Suunto, and Garmin backfills keep their existing provider history controls rather than adding a foundation-wide migration.
+
+Operators can separately prepare a bounded existing-user catch-up using
+[`backfill-existing-health`](health-backfill-operations.md). It queues Health-only work for
+Garmin/Suunto and combined daily Health/Sleep work for COROS, with dry-run discovery, existing
+plan/connection guards, opaque submission receipts, and conservative resume semantics. It does
+not scan Health measurements to infer missing history, change provider mapping, or enable
+automatic backfill on connection. The receipts remain under the user's existing sync-state
+subtree and are removed by recursive account deletion. Production execution requires explicit approval.
 
 A release that begins using these collections must apply compatible Firestore indexes and Rules before enabling provider writes or Health reads, then deploy the Health callables and application through the normal release workflow. The workout-evidence extension adds two read indexes and `queryActivityHealthRange`, but changes no Firestore schema, Rules, provider ingestion, or backfill behavior. Deploy the indexes before the callable and frontend.
 

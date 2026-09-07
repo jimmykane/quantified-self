@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueResult } from '../queue-utils';
 import type { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
@@ -169,6 +170,7 @@ import { GarminHealthPermissionError } from './health-sync';
 import { GarminHealthAccountValidationError } from './health-lifecycle';
 import { isGarminHealthSyncEnabled } from './health-flags';
 import { processGarminHealthBackfillQueueItem } from './health-backfill';
+import { countGarminHealthBackfillRequests } from './health-backfill-range';
 
 function createQueueItem(): SleepSyncQueueItemInterface {
   return {
@@ -196,10 +198,31 @@ function createQueueItem(): SleepSyncQueueItemInterface {
   };
 }
 
+function seedRangeQueueItem(rangeStartMs: number, rangeEndMs: number, overrides = {}): SleepSyncQueueItemInterface {
+  const queueItem = {
+    ...createQueueItem(),
+    rangeStartMs,
+    rangeEndMs,
+    garminHealthBackfillNextStartMs: rangeStartMs,
+    garminHealthBackfillWindowsTotal: countGarminHealthBackfillRequests(rangeStartMs, rangeEndMs),
+    ...overrides,
+  };
+  hoisted.queueData = { ...queueItem };
+  hoisted.sleepStateData = {
+    provider: 'GarminAPI',
+    healthBackfillStatus: 'running',
+    healthBackfillWindowsTotal: queueItem.garminHealthBackfillWindowsTotal,
+    lastBackfillQueuedAtMs: rangeEndMs,
+    lastBackfillEndMs: rangeEndMs,
+  };
+  return queueItem;
+}
+
 describe('Garmin Health backfill processor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    hoisted.transactionSet.mockReset();
     tokenRef.get.mockReset().mockResolvedValue({ exists: true, data: () => tokenData });
     hoisted.getDeletionGuard.mockResolvedValue({ shouldSkip: false });
     hoisted.getDeletionGuardInTransaction.mockResolvedValue({ shouldSkip: false });
@@ -222,6 +245,170 @@ describe('Garmin Health backfill processor', () => {
       lastBackfillQueuedAtMs: 0,
       lastBackfillEndMs: 0,
     };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([false, true])('finishes all families despite a moving cutoff (resuming: %s)', async (resuming) => {
+    const nowMs = Date.parse('2026-04-30T12:00:00Z');
+    const startMs = Date.parse('2016-01-01T00:00:00Z');
+    const initialMinimumMs = nowMs - 30 * 24 * 60 * 60 * 1_000;
+    vi.setSystemTime(nowMs);
+    const total = countGarminHealthBackfillRequests(startMs, nowMs);
+    const queueItem = seedRangeQueueItem(startMs, nowMs, resuming ? {
+      garminHealthBackfillNextStartMs: initialMinimumMs,
+      garminHealthBackfillWindowsCompleted: total / 10 - 1,
+    } : {});
+    hoisted.transactionSet.mockImplementation(() => vi.setSystemTime(Date.now() + 3_000));
+    const requestsPerFamily = new Map<string, number>();
+    hoisted.requestGet.mockImplementation(async ({ url }: { url: string }) => {
+      vi.setSystemTime(Date.now() + 4_000);
+      const request = new URL(url);
+      const count = (requestsPerFamily.get(request.pathname) || 0) + 1;
+      requestsPerFamily.set(request.pathname, count);
+      // Bound the regression fixture even when the old worker loops indefinitely.
+      if (count > 3) throw { statusCode: 503 };
+      const minimumStartMs = initialMinimumMs + Date.now() - nowMs;
+      const requestedStartMs = Number(request.searchParams.get('summaryStartTimeInSeconds')) * 1_000;
+      if (requestedStartMs < minimumStartMs) {
+        throw {
+          statusCode: 400,
+          error: { minStartTimeInSeconds: minimumStartMs / 1_000, errorMessage: 'secret provider body' },
+        };
+      }
+      return '';
+    });
+
+    const processing = processGarminHealthBackfillQueueItem(queueItem);
+    await vi.runAllTimersAsync();
+
+    await expect(processing).resolves.toBe(QueueResult.Processed);
+    expect([...requestsPerFamily.values()]).toEqual(Array(10).fill(2));
+    expect(hoisted.queueData).toMatchObject({
+      processed: true,
+      garminHealthBackfillSummaryIndex: 10,
+      garminHealthBackfillWindowsCompleted: total,
+    });
+    expect(hoisted.increaseRetry).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('[GarminHealthBackfill] Provider minimum adjusted.', expect.objectContaining({
+      queueItemId: 'backfill-1', summaryType: 'dailies', recoveryAttempt: 1, statusCode: 400,
+    }));
+    expect(logger.info).toHaveBeenCalledWith('[GarminHealthBackfill] Backfill requests completed.', expect.objectContaining({
+      windowsCompleted: total, windowsTotal: total,
+    }));
+    const logs = JSON.stringify([vi.mocked(logger.info).mock.calls, vi.mocked(logger.warn).mock.calls, vi.mocked(logger.error).mock.calls]);
+    for (const sensitive of ['secret provider body', 'access-token', 'garmin-user-1', 'apis.garmin.com']) {
+      expect(logs).not.toContain(sensitive);
+    }
+  });
+
+  it('bounds minimum recovery and preserves the retry budget across task deliveries', async () => {
+    const queueItem = seedRangeQueueItem(0, 24 * 60 * 60 * 1_000, { retryCount: 4 });
+    hoisted.increaseRetry.mockImplementation(async () => {
+      hoisted.queueData.retryCount = Number(hoisted.queueData.retryCount) + 1;
+      return QueueResult.RetryIncremented;
+    });
+    for (const expectedRetryCount of [5, 6]) {
+      hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
+        // The fallback also terminates the old unbounded implementation.
+        if (hoisted.requestGet.mock.calls.length > 3) throw { statusCode: 503 };
+        const startSeconds = Number(new URL(url).searchParams.get('summaryStartTimeInSeconds'));
+        throw { statusCode: 400, error: { minStartTimeInSeconds: startSeconds + 1 } };
+      });
+      const processing = processGarminHealthBackfillQueueItem({ ...queueItem, ...hoisted.queueData });
+      await vi.runAllTimersAsync();
+
+      await expect(processing).resolves.toBe(QueueResult.RetryIncremented);
+      expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+      expect(hoisted.queueData).toMatchObject({
+        retryCount: expectedRetryCount,
+        processed: false,
+        garminHealthBackfillWindowsCompleted: 0,
+      });
+      expect(hoisted.increaseRetry).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ statusCode: 400, message: 'Garmin Health backfill minimum-start recovery exhausted.' }),
+        1, undefined, 'GARMIN_HEALTH_BACKFILL_RETRIES_EXHAUSTED', expect.any(Function),
+      );
+    }
+    expect(logger.warn).toHaveBeenCalledWith('[GarminHealthBackfill] Minimum-start recovery limit reached.', expect.objectContaining({
+      summaryType: 'dailies', recoveryAttempt: 3, result: QueueResult.RetryIncremented,
+    }));
+    expect(hoisted.moveDlq).not.toHaveBeenCalled();
+
+    // Accepted windows still reset the normal transient retry budget.
+    hoisted.requestGet.mockReset().mockResolvedValue('');
+    const recovered = processGarminHealthBackfillQueueItem({ ...queueItem, ...hoisted.queueData });
+    await vi.runAllTimersAsync();
+    await expect(recovered).resolves.toBe(QueueResult.Processed);
+    expect(hoisted.queueData).toMatchObject({ processed: true, retryCount: 0 });
+  });
+
+  it('skips unavailable families without treating each new family as a repeated cutoff failure', async () => {
+    hoisted.requestGet.mockRejectedValue({ statusCode: 400, error: { minStartTimeInSeconds: 1 } });
+
+    const processing = processGarminHealthBackfillQueueItem(createQueueItem());
+    await vi.runAllTimersAsync();
+
+    await expect(processing).resolves.toBe(QueueResult.Processed);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(10);
+    expect(hoisted.increaseRetry).not.toHaveBeenCalled();
+    expect(hoisted.queueData).toMatchObject({ processed: true, garminHealthBackfillWindowsCompleted: 10 });
+  });
+
+  it('reaches the existing failed-progress path when repeated cutoffs exhaust the durable retry budget', async () => {
+    const queueItem = seedRangeQueueItem(0, 24 * 60 * 60 * 1_000, { retryCount: 9 });
+    hoisted.requestGet.mockImplementation(async ({ url }: { url: string }) => {
+      const startSeconds = Number(new URL(url).searchParams.get('summaryStartTimeInSeconds'));
+      throw { statusCode: 400, error: { minStartTimeInSeconds: startSeconds + 1 } };
+    });
+    hoisted.increaseRetry.mockImplementationOnce(async (...args: unknown[]) => {
+      expect(hoisted.queueData.retryCount).toBe(9);
+      const onRetryExhausted = args[5] as (transaction: unknown, current: Record<string, unknown>) => Promise<void>;
+      await onRetryExhausted({
+        get: vi.fn(async () => ({ exists: true, data: () => ({ ...hoisted.sleepStateData }) })),
+        set: (_ref: unknown, data: Record<string, unknown>, options: unknown) => hoisted.transactionSet(data, options),
+      }, { ...hoisted.queueData });
+      return QueueResult.MovedToDLQ;
+    });
+
+    const processing = processGarminHealthBackfillQueueItem(queueItem);
+    await vi.runAllTimersAsync();
+
+    await expect(processing).resolves.toBe(QueueResult.MovedToDLQ);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(hoisted.transactionSet).toHaveBeenLastCalledWith(expect.objectContaining({
+      healthBackfillStatus: 'failed',
+      lastError: 'Garmin Health backfill exhausted automatic retries.',
+    }), { merge: true });
+    expect(logger.warn).toHaveBeenCalledWith('[GarminHealthBackfill] Minimum-start recovery limit reached.', expect.objectContaining({
+      result: QueueResult.MovedToDLQ,
+    }));
+  });
+
+  it.each(['deleted', 'superseded', 'disconnected'])('does not schedule a cutoff retry after the job is %s', async (reason) => {
+    const queueItem = seedRangeQueueItem(0, 24 * 60 * 60 * 1_000);
+    hoisted.requestGet.mockImplementation(async ({ url }: { url: string }) => {
+      if (hoisted.requestGet.mock.calls.length === 3) {
+        if (reason === 'deleted') hoisted.getDeletionGuardInTransaction.mockResolvedValueOnce({ shouldSkip: true });
+        if (reason === 'superseded') hoisted.queueData.garminHealthBackfillNextStartMs = 500_000;
+        if (reason === 'disconnected') metaRef.get.mockResolvedValueOnce({
+          exists: true, data: () => ({ connectionStateGeneration: 'disconnected-generation' }),
+        });
+      }
+      const startSeconds = Number(new URL(url).searchParams.get('summaryStartTimeInSeconds'));
+      throw { statusCode: 400, error: { minStartTimeInSeconds: startSeconds + 1 } };
+    });
+
+    const processing = processGarminHealthBackfillQueueItem(queueItem);
+    await vi.runAllTimersAsync();
+
+    await expect(processing).resolves.toBe(QueueResult.Processed);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3);
+    expect(hoisted.increaseRetry).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalledWith('[GarminHealthBackfill] Minimum-start recovery limit reached.', expect.anything());
   });
 
   it('requests every family through the documented endpoint aliases and completes durably', async () => {

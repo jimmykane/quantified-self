@@ -7,6 +7,10 @@ import {
 
 function createPayload(): DerivedBodyWeightTrendMetricPayload {
   const asOfDayMs = Date.UTC(2026, 6, 16);
+  const points = Array.from({ length: 28 }, (_, index) => ({
+    dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
+    weightKg: index === 24 || index === 26 || index === 27 ? 70.2 + ((27 - index) * 0.2) : null,
+  }));
   return {
     dayBoundary: 'UTC',
     asOfDayMs,
@@ -23,10 +27,23 @@ function createPayload(): DerivedBodyWeightTrendMetricPayload {
     change28dPercent: -1.68,
     recordedDayCount7d: 4,
     recordedDayCount28d: 8,
-    points: Array.from({ length: 28 }, (_, index) => ({
-      dayMs: asOfDayMs - ((27 - index) * 24 * 60 * 60 * 1000),
-      weightKg: index === 24 || index === 26 || index === 27 ? 70.2 + ((27 - index) * 0.2) : null,
-    })),
+    points,
+    series: [{
+      sourceKind: 'health-measurement',
+      provider: 'QuantifiedSelf',
+      sourceKey: 'opaque-manual-source',
+      latestWeightKg: 70.2,
+      latestWeightDayMs: asOfDayMs,
+      median7dKg: 70.3,
+      median28dKg: 70.7,
+      change7dKg: -0.4,
+      change7dPercent: -0.57,
+      change28dKg: -1.2,
+      change28dPercent: -1.68,
+      recordedDayCount7d: 4,
+      recordedDayCount28d: 8,
+      points,
+    }],
   };
 }
 
@@ -62,6 +79,8 @@ describe('training body-weight helper', () => {
     expect(model.chartPoints).toHaveLength(28);
     expect(model.chartPoints[0]).toEqual({ dayMs: payload.points[0].dayMs, weightKg: null });
     expect(model.chartPoints.filter(point => point.weightKg !== null)).toHaveLength(3);
+    expect(model.series).toHaveLength(1);
+    expect(model.series[0].sourceLabel).toBe('Manual');
     expect(model.sourceText).toContain('does not change Readiness');
   });
 
@@ -72,11 +91,43 @@ describe('training body-weight helper', () => {
       change7dPercent: null,
       change28dKg: null,
       change28dPercent: null,
+      series: createPayload().series.map(series => ({
+        ...series,
+        change7dKg: null,
+        change7dPercent: null,
+        change28dKg: null,
+        change28dPercent: null,
+      })),
     };
 
     const model = buildTrainingBodyWeightViewModel(payload, 'ready', null);
 
     expect(model.change7dText).toBe('Not enough comparison data');
     expect(model.change28dText).toBe('Not enough comparison data');
+  });
+
+  it('keeps providers and accounts separate without exposing opaque keys', () => {
+    const payload = createPayload();
+    payload.series = [
+      { ...payload.series[0], provider: 'GarminAPI', sourceKey: 'secret-one' },
+      { ...payload.series[0], provider: 'GarminAPI', sourceKey: 'secret-two' },
+    ];
+    payload.latestWeightKg = null;
+    payload.latestWeightDayMs = null;
+    payload.median7dKg = null;
+    payload.median28dKg = null;
+    payload.change7dKg = null;
+    payload.change7dPercent = null;
+    payload.change28dKg = null;
+    payload.change28dPercent = null;
+    payload.recordedDayCount7d = 0;
+    payload.recordedDayCount28d = 0;
+    payload.points = payload.points.map(point => ({ ...point, weightKg: null }));
+
+    const model = buildTrainingBodyWeightViewModel(payload, 'ready', null, 'en-US');
+
+    expect(model.series.map(series => series.sourceLabel)).toEqual(['Garmin account 1', 'Garmin account 2']);
+    expect(JSON.stringify(model)).not.toContain('secret-one');
+    expect(JSON.stringify(model)).not.toContain('secret-two');
   });
 });

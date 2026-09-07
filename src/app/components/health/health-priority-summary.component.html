@@ -5,7 +5,7 @@
         <p class="health-eyebrow">Highlights</p>
         <h2 id="health-priority-title">Your recent Health</h2>
       </div>
-      <p>Current context and recent trends, kept separate by source.</p>
+      <p>A quick look at your latest sleep and heart trends.</p>
     </div>
 
     <mat-card
@@ -56,14 +56,26 @@
                       <strong>{{ chart.latestValueText }}</strong>
                       <span class="health-priority-source-label">{{ chart.model.series.sourceLabel }}</span>
                     </div>
-                    <small>{{ chart.model.series.semanticLabel }}</small>
+                    <small>{{ chart.contextText }}</small>
+                    @if (chart.personalRangeStatus) {
+                      <div class="health-priority-range-status">
+                        <span
+                          class="health-priority-range-status-dot"
+                          [style.background-color]="chart.statusColor"
+                          aria-hidden="true"></span>
+                        <span>{{ chart.personalRangeStatus.label }}</span>
+                      </div>
+                      <small class="health-priority-range-detail">{{ chart.personalRangeStatus.detailText }}</small>
+                    }
                     <app-health-metric-series-chart
                       [model]="chart.model"
-                      [startTimeMs]="startTimeMs()"
-                      [endTimeMs]="endTimeMs()"
+                      [startTimeMs]="chart.startTimeMs"
+                      [endTimeMs]="chart.endTimeMs"
                       [darkTheme]="darkTheme()"
                       [unitSettings]="unitSettings()"
-                      [compact]="true">
+                      [compact]="true"
+                      [statusOverlay]="chart.statusOverlay"
+                      [statusDescription]="chart.statusDescription">
                     </app-health-metric-series-chart>
                   </section>
                 }

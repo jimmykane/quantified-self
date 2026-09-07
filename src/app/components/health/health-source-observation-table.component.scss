@@ -64,6 +64,24 @@ td:nth-child(4) {
   margin: 0.35rem 0 0;
 }
 
+.health-source-table-actions {
+  display: flex;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.health-source-table-actions-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (max-width: 720px) {
   .health-source-table-panel mat-expansion-panel-header {
     height: 48px;

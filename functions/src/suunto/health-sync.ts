@@ -28,15 +28,22 @@ import {
   parseSuuntoActivitySamples,
   parseSuuntoRecoverySamples,
   SUUNTO_HEALTH_MAX_RESPONSE_BYTES,
+  SUUNTO_HEALTH_MAX_SERIES_SOURCE_RECORDS,
+  SUUNTO_HEALTH_MAX_DAILY_SOURCE_RECORDS,
   SUUNTO_HEALTH_MAX_WINDOW_DAYS,
   SUUNTO_HEALTH_REQUEST_TIMEOUT_MS,
   SuuntoHealthResult,
+  SuuntoHealthResponseLimitError,
+  SuuntoHealthValidationError,
 } from './health';
 
 type TokenSnapshot = admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SUUNTO_HEALTH_CONTEXT_PADDING_MS = DAY_MS;
 const SUUNTO_HEALTH_MAX_TARGET_WINDOW_MS = (SUUNTO_HEALTH_MAX_WINDOW_DAYS - 2) * DAY_MS;
+const SUUNTO_HEALTH_MAX_PULL_ATTEMPTS = 64;
+const SUUNTO_HEALTH_PULL_BUDGET_MS = 4 * 60 * 1000;
+const SUUNTO_HEALTH_MAX_RESULT_BYTES = 16 * 1024 * 1024;
 
 interface SuuntoHealthRequestWindow {
   targetStartMs: number;
@@ -294,6 +301,13 @@ export async function processSuuntoHealthQueueItem(
   assertLifecycleContinuity(initialGuards, lifecycleGuards);
   onLifecycleGuardsCaptured?.(lifecycleGuards);
 
+  let pullAttempts = 0;
+  const pullDeadline = Date.now() + SUUNTO_HEALTH_PULL_BUDGET_MS;
+  const claimPullAttempt = (): void => {
+    if (++pullAttempts > SUUNTO_HEALTH_MAX_PULL_ATTEMPTS || Date.now() >= pullDeadline) {
+      throw new SuuntoHealthValidationError('Suunto Health pull budget exceeded.');
+    }
+  };
   const fetchPayload = async (url: string): Promise<unknown> => {
     await assertUserActiveBeforeProviderRequest(firebaseUserID, queueItem.id, tokenSnapshot.id);
     lifecycleGuards = await assertCurrentLifecycle(
@@ -303,6 +317,7 @@ export async function processSuuntoHealthQueueItem(
       initialGuards,
     );
     onLifecycleGuardsCaptured?.(lifecycleGuards);
+    claimPullAttempt();
     try {
       return await requestBoundedSuuntoHealthPayload(url, accessToken);
     } catch (error) {
@@ -351,6 +366,7 @@ export async function processSuuntoHealthQueueItem(
       initialGuards,
     );
     onLifecycleGuardsCaptured?.(lifecycleGuards);
+    claimPullAttempt();
     try {
       return await requestBoundedSuuntoHealthPayload(url, accessToken);
     } catch (error) {
@@ -360,7 +376,29 @@ export async function processSuuntoHealthQueueItem(
 
   const receivedAtMs = Date.now();
   const healthResultsBySource = new Map<string, SuuntoHealthResult>();
-  for (const window of buildSuuntoHealthRequestWindows(startMs, endMs)) {
+  let resultBytes = 0;
+  const processWindow = async (window: SuuntoHealthRequestWindow): Promise<void> => {
+    try {
+      await processBoundedWindow(window);
+    } catch (error) {
+      if (!(error instanceof SuuntoHealthResponseLimitError)
+        || window.targetEndMs - window.targetStartMs <= DAY_MS) throw error;
+      // Re-fetch, never truncate. Padding is reapplied to each child so a
+      // split cannot replace a complete provider-local day with half a day.
+      const midpoint = Math.floor((window.targetStartMs + window.targetEndMs) / 2);
+      for (const [targetStartMs, targetEndMs] of [
+        [window.targetStartMs, midpoint], [midpoint, window.targetEndMs],
+      ]) {
+        await processWindow({
+          targetStartMs, targetEndMs,
+          requestStartMs: Math.max(0, targetStartMs - SUUNTO_HEALTH_CONTEXT_PADDING_MS),
+          requestEndMs: targetEndMs + SUUNTO_HEALTH_CONTEXT_PADDING_MS,
+        });
+      }
+    }
+  };
+  const processBoundedWindow = async (window: SuuntoHealthRequestWindow): Promise<void> => {
+    const windowResults: SuuntoHealthResult[] = [];
     const activityPayload = await fetchPayload(
       `https://cloudapi.suunto.com/247samples/activity?from=${window.requestStartMs}&to=${window.requestEndMs - 1}`,
     );
@@ -377,7 +415,7 @@ export async function processSuuntoHealthQueueItem(
       receivedAtMs,
     )) {
       if (resultIntersectsTarget(result, window)) {
-        healthResultsBySource.set(sourceResultIdentity(result), result);
+        windowResults.push(result);
       }
     }
 
@@ -396,7 +434,7 @@ export async function processSuuntoHealthQueueItem(
     // for the padded Activity and Recovery responses.
     for (const result of statisticsResults) {
       if (resultIntersectsTarget(result, window)) {
-        healthResultsBySource.set(sourceResultIdentity(result), result);
+        windowResults.push(result);
       }
     }
 
@@ -416,9 +454,24 @@ export async function processSuuntoHealthQueueItem(
       receivedAtMs,
     )) {
       if (resultIntersectsTarget(result, window)) {
-        healthResultsBySource.set(sourceResultIdentity(result), result);
+        windowResults.push(result);
       }
     }
+    for (const result of windowResults) {
+      const key = sourceResultIdentity(result);
+      const previous = healthResultsBySource.get(key);
+      resultBytes += Buffer.byteLength(JSON.stringify(result), 'utf8')
+        - (previous ? Buffer.byteLength(JSON.stringify(previous), 'utf8') : 0);
+      if (resultBytes > SUUNTO_HEALTH_MAX_RESULT_BYTES
+        || (!previous && healthResultsBySource.size
+          >= 2 * SUUNTO_HEALTH_MAX_SERIES_SOURCE_RECORDS + SUUNTO_HEALTH_MAX_DAILY_SOURCE_RECORDS)) {
+        throw new SuuntoHealthValidationError('Suunto Health result budget exceeded.');
+      }
+      healthResultsBySource.set(key, result);
+    }
+  };
+  for (const window of buildSuuntoHealthRequestWindows(startMs, endMs)) {
+    await processWindow(window);
   }
 
   lifecycleGuards = await assertCurrentLifecycle(firebaseUserID, tokenSnapshot.ref, tokenCredential, initialGuards);
@@ -468,6 +521,8 @@ function suuntoHealthValidationTelemetryCode(message: string): string {
     [/ is outside the supported numeric range\.$/, 'numeric_value_out_of_range'],
     [/ response must be an array\.$/, 'expected_array'],
     [/ response exceeds the bounded item count\.$/, 'response_item_limit'],
+    [/^Suunto Health pull budget exceeded\.$/, 'pull_budget'],
+    [/^Suunto Health result budget exceeded\.$/, 'result_budget'],
     [/^Suunto activity HRExt minimum exceeds maximum\.$/, 'invalid_heart_rate_extrema'],
     [/ statistic value must be numeric or null\.$/, 'invalid_statistic_value'],
     [/ statistic value is outside the supported range\.$/, 'statistic_value_out_of_range'],

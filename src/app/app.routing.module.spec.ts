@@ -441,6 +441,12 @@ describe('AppRoutingModule routes', () => {
         descriptionText: 'Map GPS workouts, filter by sport or date',
       },
       {
+        path: PUBLIC_FEATURE_PATHS.health,
+        title: 'Sleep, HRV and Health Trends Across Your Devices',
+        h1: 'Your Health, Beyond Training.',
+        descriptionText: 'supported Garmin, Suunto and COROS sources',
+      },
+      {
         path: PUBLIC_FEATURE_PATHS.mcpServer,
         title: 'Read-only MCP Server for Training Data',
         h1: 'Connect ChatGPT or Claude to your training data',

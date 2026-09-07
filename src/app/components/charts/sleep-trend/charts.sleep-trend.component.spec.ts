@@ -4,6 +4,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
+import { SLEEP_SPORTS_LIB_METRIC_FIELDS } from '@shared/sleep';
+import { formatCanonicalSleepMetricSportsLibValue } from '@shared/sports-lib-health-data';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { ChartsSleepTrendComponent } from './charts.sleep-trend.component';
 import type { DashboardSleepTrendPoint } from '../../../helpers/dashboard-sleep-chart.helper';
 import { AppColors } from '../../../services/color/app.colors';
@@ -54,8 +58,7 @@ describe('ChartsSleepTrendComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsSleepTrendComponent],
-      imports: [MatButtonModule, MatIconModule],
+      imports: [ChartsSleepTrendComponent, MatButtonModule, MatIconModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },
@@ -394,22 +397,44 @@ describe('ChartsSleepTrendComponent', () => {
         data: [{ name: 'Avg HRV', yAxis: 52 }],
       },
     });
-    expect(hrvSeries.markLine.label.formatter).toBe('Avg HRV 52ms');
-    expect(hrvSeries.markLine.label).toMatchObject({
-      position: 'middle',
-      offset: [0, 0],
-      distance: 8,
-      color: AppColors.Green,
-      borderColor: AppColors.Green,
-      borderWidth: 1,
-      borderRadius: 4,
-      padding: [2, 6],
-    });
+    expect(hrvSeries.markLine.label.show).toBe(false);
+    expect(component.vitalAverages).toContainEqual({ label: 'Avg HRV', color: AppColors.Green, display: '52 ms' });
     expect(hrvSeries.markLine.lineStyle).toMatchObject({
       color: AppColors.Green,
       type: 'dashed',
     });
   });
+
+  it.each([null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })])(
+    'keeps coincident averages readable outside the plot with unit preferences %j', async unitSettings => {
+      const point = buildSleepPoint({ averageHrvMs: 50, averageHeartRateBpm: 50, minimumHeartRateBpm: 50 });
+      fixture.componentRef.setInput('unitSettings', unitSettings);
+      fixture.componentRef.setInput('sleepTrend', { points: [point], latestPoint: point, hasRealPoints: true });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const rows = [...fixture.nativeElement.querySelectorAll('.sleep-average')] as HTMLElement[];
+      expect(rows).toHaveLength(3);
+      for (const [index, field] of [SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv, SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate, SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate].entries()) {
+        const display = formatCanonicalSleepMetricSportsLibValue(field, 50, unitSettings)!;
+        expect(rows[index].querySelector('dd')?.textContent).toBe(`${display.value} ${display.unit}`);
+      }
+      await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+      const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+      const averages = option.series.filter((series: any) => series.markLine);
+      expect(averages).toHaveLength(3);
+      for (const series of averages) {
+        expect(series.markLine.label.show).toBe(false);
+        expect(series.markLine.data[0].yAxis).toBe(50);
+      }
+
+      const missingVitals = buildSleepPoint({ averageHrvMs: null, averageHeartRateBpm: null, minimumHeartRateBpm: null });
+      fixture.componentRef.setInput('sleepTrend', { points: [missingVitals], latestPoint: missingVitals });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(fixture.nativeElement.querySelector('.sleep-averages')).toBeNull();
+    },
+  );
 
   it('renders sleep heart-rate and SpO2 as secondary-axis lines', async () => {
     const point = buildSleepPoint();
@@ -455,9 +480,7 @@ describe('ChartsSleepTrendComponent', () => {
       data: [48, null],
       markLine: {
         label: {
-          formatter: 'Avg HR 48bpm',
-          position: 'middle',
-          offset: [0, -14],
+          show: false,
         },
         lineStyle: {
           color: AppColors.Blue,
@@ -476,9 +499,7 @@ describe('ChartsSleepTrendComponent', () => {
       data: [42, 44],
       markLine: {
         label: {
-          formatter: 'Avg Min HR 43bpm',
-          position: 'middle',
-          offset: [0, 14],
+          show: false,
         },
         lineStyle: {
           color: AppColors.Pink,

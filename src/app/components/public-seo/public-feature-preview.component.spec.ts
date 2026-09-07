@@ -23,6 +23,9 @@ describe('PublicFeaturePreviewComponent', () => {
   }
 
   it.each([
+    ['health-sleep', 'health'],
+    ['health-hrv', 'health'],
+    ['health-weight', 'health'],
     ['training-snapshot', 'training'],
     ['training-signals', 'signals'],
     ['dashboard', 'dashboard'],
@@ -38,5 +41,6 @@ describe('PublicFeaturePreviewComponent', () => {
 
     expect(placeholder).toBeTruthy();
     expect(placeholder?.getAttribute('aria-hidden')).toBe('true');
+    expect(element.querySelector('app-health-preview')).toBeNull();
   });
 });

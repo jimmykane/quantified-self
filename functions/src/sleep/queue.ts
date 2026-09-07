@@ -207,6 +207,8 @@ interface AddSleepSyncQueueItemInput {
     healthTrigger?: 'poll' | 'webhook' | 'backfill';
     dedupeKey?: string;
     dispatchImmediately?: boolean;
+    /** Admin catch-up only: never reset an existing deterministic queue ID or cursor. */
+    preserveExisting?: boolean;
     suuntoHealthTokenCredentialGeneration?: string | null;
     suuntoHealthRootOAuthCredentialGeneration?: string | null;
     suuntoHealthConnectionStateGeneration?: string | null;
@@ -271,7 +273,7 @@ function isValidSleepProvider(value: unknown): value is SleepProvider {
     return Object.values(SLEEP_PROVIDERS).includes(value as SleepProvider);
 }
 
-function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface): string | null {
+export function getMalformedSleepQueueItemReason(queueItem: SleepSyncQueueItemInterface): string | null {
     if (!SLEEP_SYNC_QUEUE_ITEM_TYPES.has(queueItem.type)) {
         return `invalid type ${queueItem.type || 'missing'}`;
     }
@@ -844,6 +846,13 @@ async function writeSleepQueueItemIfUserActive(
         const current = snapshot.exists
             ? snapshot.data() as Partial<SleepSyncQueueItemInterface>
             : null;
+        if (input.preserveExisting && current) {
+            return {
+                queueRevision: current.queueRevision || '',
+                dateCreated: Number(current.dateCreated),
+                shouldDispatchImmediately: false,
+            };
+        }
         const activeLease = current && (
             !current.userID || current.userID === userID
         ) ? getActiveRevisionProcessingLease(current, nowMs) : null;
@@ -2928,7 +2937,11 @@ export async function processSleepSyncQueueItem(queueItem: SleepSyncQueueItemInt
         }
         if (isGarminHealthQueueItem(queueItem)
             && error instanceof GarminHealthValidationError) {
-            logger.warn(`[HealthSync][Garmin] Queue item ${queueItem.id} contains an invalid provider response; moving to DLQ`);
+            logger.warn(`[HealthSync][Garmin] Queue item ${queueItem.id} contains an invalid provider response; moving to DLQ`, {
+                queueItemId: queueItem.id,
+                code: error.code,
+                validation: error.diagnostic ?? null,
+            });
             if (garminHealthLifecycleGuards && resolvedFirebaseUserID) {
                 const stateGuards = garminHealthStateGuardsForCurrentQueueRevision(
                     queueItem,

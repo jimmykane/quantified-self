@@ -27,9 +27,12 @@ import {
 } from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import {
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
+  buildHealthHrvPersonalRangeStatus,
+  HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
   buildHealthPriorityRows,
   buildSleepObservationRows,
   buildSleepPriorityRows,
@@ -45,7 +48,9 @@ import {
   resolveSleepReferenceValue,
   selectHealthPriorityTrendSeries,
   selectActivityHealthObservations,
+  selectWorkoutWeightContextFallback,
   sleepSessionHasHrv,
+  type HealthWorkspaceSeries,
 } from './health-workspace.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -112,6 +117,7 @@ function sampleChunk(input: {
   values?: Array<number | string>;
   valueType?: 'number' | 'category';
   normalizationStatus?: 'canonical' | 'native_only';
+  timezoneOffsetSeconds?: number | null;
 }): HealthSampleChunk {
   const startTimeMs = Date.parse('2026-08-01T00:00:00.000Z');
   const values = input.values || [50, 51, 52];
@@ -144,6 +150,7 @@ function sampleChunk(input: {
     calendarDate: '2026-08-01',
     startTimeMs,
     endTimeMs: startTimeMs + ((values.length - 1) * 60_000),
+    timezoneOffsetSeconds: input.timezoneOffsetSeconds,
     receivedAtMs: startTimeMs + DAY_MS,
     seriesKey: input.id,
     chunkIndex: 0,
@@ -179,6 +186,41 @@ function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
     createdAtMs: startTimeMs,
     updatedAtMs: startTimeMs,
     ...overrides,
+  };
+}
+
+function hrvSeries(values: ReadonlyArray<{ daysAgo: number; value: number }>): HealthWorkspaceSeries {
+  const endDayMs = Date.parse('2026-08-01T00:00:00.000Z');
+  return {
+    id: 'suunto-sleep-hrv',
+    metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+    provider: HEALTH_PROVIDERS.SuuntoApp,
+    providerLabel: 'Suunto',
+    sourceLabel: 'Suunto',
+    accountLabel: null,
+    semanticLabel: 'Average HRV · Sleep session · Provider summary · Provider calculated',
+    aggregation: 'average',
+    semanticVariant: 'sleep_session_average_hrv',
+    origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+    recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+    unit: HEALTH_UNITS.Millisecond,
+    normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+    nativeOnly: false,
+    valueType: HEALTH_VALUE_TYPES.Number,
+    chartKind: 'line',
+    points: values.map(({ daysAgo, value }) => {
+      const timestampMs = endDayMs - (daysAgo * DAY_MS);
+      return {
+        timestampMs,
+        calendarDate: new Date(timestampMs).toISOString().slice(0, 10),
+        value,
+        qualityCode: null,
+      };
+    }).sort((left, right) => left.timestampMs - right.timestampMs),
+    deviceLabel: 'Suunto test watch',
+    coverageText: 'Unknown',
+    freshnessText: 'Fresh',
+    hasConflict: false,
   };
 }
 
@@ -365,6 +407,45 @@ describe('Health workspace helpers', () => {
     expect(view.series[0].coverageText).toContain('/4 days');
   });
 
+  it('keeps series IDs stable across range projections without exposing account keys', () => {
+    const augustRecord = sourceRecord({
+      id: 'august-record',
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+      accountKey: 'secret-stable-account',
+      calendarDate: '2026-08-01',
+    });
+    const septemberRecord = sourceRecord({
+      id: 'september-record',
+      provider: HEALTH_PROVIDERS.SuuntoApp,
+      accountKey: 'secret-stable-account',
+      calendarDate: '2026-09-01',
+    });
+    const august = buildHealthMetricWorkspaceView(projectLoadedHealthRange(
+      [augustRecord],
+      [],
+      {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        metricIds: [HEALTH_METRIC_IDS.RestingHeartRate],
+      },
+      { sourceRecordsComplete: true, samplesComplete: true },
+    ));
+    const september = buildHealthMetricWorkspaceView(projectLoadedHealthRange(
+      [septemberRecord],
+      [],
+      {
+        startDate: '2026-09-01',
+        endDate: '2026-09-30',
+        metricIds: [HEALTH_METRIC_IDS.RestingHeartRate],
+      },
+      { sourceRecordsComplete: true, samplesComplete: true },
+    ));
+
+    expect(august.series[0].id).toBe(september.series[0].id);
+    expect(august.series[0].id).not.toContain('secret-stable-account');
+    expect(JSON.stringify(august.series)).not.toContain('secret-stable-account');
+  });
+
   it('keeps coverage and freshness scoped to unit and normalization-separated series', () => {
     const result = projectLoadedHealthRange([
       sourceRecord({
@@ -415,7 +496,7 @@ describe('Health workspace helpers', () => {
 
   it('renders canonical samples as lines and categorical samples as stepped series', () => {
     const result = projectLoadedHealthRange([], [
-      sampleChunk({ id: 'numeric' }),
+      sampleChunk({ id: 'numeric', timezoneOffsetSeconds: 10_800 }),
       sampleChunk({ id: 'category', values: ['rest', 'high', 'rest'], valueType: HEALTH_VALUE_TYPES.Category }),
       sampleChunk({ id: 'native', values: [1, 2], normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly }),
     ], {
@@ -426,6 +507,9 @@ describe('Health workspace helpers', () => {
 
     const view = buildHealthMetricWorkspaceView(result);
     expect(view.series.map(series => series.chartKind).sort()).toEqual(['line', 'line', 'step']);
+    const canonicalNumericSeries = view.series.find(series =>
+      series.metricId === HEALTH_METRIC_IDS.RestingHeartRate && !series.nativeOnly);
+    expect(canonicalNumericSeries?.points[0].timezoneOffsetSeconds).toBe(10_800);
     expect(view.series.filter(series => series.nativeOnly)).toHaveLength(1);
     expect(view.rows.every(row => row.valueText.includes('samples'))).toBe(true);
   });
@@ -469,6 +553,174 @@ describe('Health workspace helpers', () => {
       ['Suunto', 'sample'],
       ['Garmin', 'average'],
     ]);
+  });
+
+  it('requires enough source-separated HRV observations in the selected trend window', () => {
+    const hrvMetric = (value: number): HealthMetricValue => valueEntry({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      semanticVariant: 'sleep_session_average_hrv',
+      native: { metric: 'averageHrv', value, unit: 'ms' },
+      canonical: { value, unit: HEALTH_UNITS.Millisecond },
+    });
+    const result = projectLoadedHealthRange([
+      sourceRecord({
+        id: 'outside-window',
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        accountKey: 'suunto-one',
+        calendarDate: '2026-07-15',
+        metrics: [hrvMetric(35)],
+      }),
+      ...[
+        ['2026-07-27', 40],
+        ['2026-07-29', 42],
+        ['2026-08-01', 44],
+      ].map(([calendarDate, value], index) => sourceRecord({
+        id: `inside-window-${index}`,
+        provider: HEALTH_PROVIDERS.SuuntoApp,
+        accountKey: 'suunto-one',
+        calendarDate: `${calendarDate}`,
+        metrics: [hrvMetric(Number(value))],
+      })),
+    ], [], {
+      startDate: '2026-07-01',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+      includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const window = {
+      startTimeMs: Date.parse('2026-07-19T00:00:00.000Z'),
+      endTimeMs: Date.parse('2026-08-01T23:59:59.999Z'),
+      minimumPointCount: 3,
+    };
+
+    const trendSeries = selectHealthPriorityTrendSeries(result, [], null, window);
+
+    expect(trendSeries).toHaveLength(1);
+    expect(trendSeries[0].points.map(point => point.value)).toEqual([40, 42, 44]);
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      ...window,
+      startTimeMs: Date.parse('2026-07-29T00:00:00.000Z'),
+    })).toEqual([]);
+  });
+
+  it('keeps the personal HRV range on nightly recovery summaries', () => {
+    const hrvMetric = (semanticVariant: string, value: number): HealthMetricValue => valueEntry({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      semanticVariant,
+      native: { metric: semanticVariant, value, unit: 'ms' },
+      canonical: { value, unit: HEALTH_UNITS.Millisecond },
+    });
+    const result = projectLoadedHealthRange([
+      ...['2026-07-30', '2026-07-31', '2026-08-01'].map((calendarDate, index) => sourceRecord({
+        id: `hrv-${index}`,
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        accountKey: 'garmin-one',
+        calendarDate,
+        metrics: [
+          hrvMetric('health_snapshot_rmssd', 70 + index),
+          hrvMetric('sleep_session_average_hrv', 50 + index),
+          hrvMetric('overnight_rmssd', 40 + index),
+        ],
+      })),
+    ], [], {
+      startDate: '2026-07-01',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+      includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      minimumPointCount: 3,
+      semanticVariants: HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
+      semanticVariantPriority: HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
+    }).map(series => series.semanticVariant)).toEqual(['overnight_rmssd']);
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      minimumPointCount: 3,
+      semanticVariants: [],
+    })).toEqual([]);
+    expect(buildHealthHrvPersonalRangeStatus({
+      ...hrvSeries([{ daysAgo: 0, value: 72 }]),
+      semanticVariant: 'health_snapshot_rmssd',
+    }, Date.parse('2026-08-01T23:59:59.999Z'))).toBeNull();
+  });
+
+  it('grades the source-specific 7-day HRV average against a 60-day personal range', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const building = buildHealthHrvPersonalRangeStatus(hrvSeries(
+      Array.from({ length: 13 }, (_, daysAgo) => ({ daysAgo, value: 50 })),
+    ), endTimeMs);
+    expect(building).toMatchObject({
+      tone: 'neutral',
+      label: 'Building personal range',
+      detailText: '13/14 nights',
+      observationDayCount: 13,
+      currentAverage: null,
+      normalRange: null,
+    });
+
+    const withinRange = buildHealthHrvPersonalRangeStatus(hrvSeries(
+      Array.from({ length: 20 }, (_, daysAgo) => ({ daysAgo, value: daysAgo % 2 === 0 ? 49 : 51 })),
+    ), endTimeMs);
+    expect(withinRange.tone).toBe('positive');
+    expect(withinRange.label).toBe('Within personal range');
+    expect(withinRange.detailText).toMatch(/^7-day average .* ms · Range .* ms–.* ms$/);
+
+    const caution = buildHealthHrvPersonalRangeStatus(hrvSeries([
+      ...Array.from({ length: 15 }, (_, index) => ({ daysAgo: index + 5, value: 50 })),
+      ...Array.from({ length: 5 }, (_, daysAgo) => ({ daysAgo, value: 100 })),
+    ]), endTimeMs);
+    expect(caution.tone).toBe('caution');
+    expect(caution.label).toBe('Outside personal range');
+
+    const negative = buildHealthHrvPersonalRangeStatus(hrvSeries([
+      ...Array.from({ length: 17 }, (_, index) => ({ daysAgo: index + 7, value: 50 })),
+      { daysAgo: 0, value: 100 },
+      { daysAgo: 2, value: 100 },
+      { daysAgo: 4, value: 100 },
+    ]), endTimeMs);
+    expect(negative.tone).toBe('negative');
+    expect(negative.label).toBe('Far outside personal range');
+  });
+
+  it('grades each HRV chart date against the personal range at that date', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const sourceSeries = hrvSeries([
+      ...Array.from({ length: 57 }, (_, index) => ({
+        daysAgo: index + 3,
+        value: index % 2 === 0 ? 49 : 51,
+      })),
+      { daysAgo: 2, value: 100 },
+      { daysAgo: 1, value: 100 },
+      { daysAgo: 0, value: 100 },
+    ]);
+    const normalTimestamp = sourceSeries.points.find(point => point.calendarDate === '2026-07-26')?.timestampMs;
+    const latestTimestamp = sourceSeries.points.find(point => point.calendarDate === '2026-08-01')?.timestampMs;
+    const status = buildHealthHrvPersonalRangeStatus(
+      sourceSeries,
+      endTimeMs,
+      null,
+      [normalTimestamp, latestTimestamp].filter((value): value is number => value !== undefined),
+    );
+
+    expect(status?.pointStatuses).toEqual([
+      { timestampMs: normalTimestamp, tone: 'positive', label: 'Within personal range' },
+      { timestampMs: latestTimestamp, tone: 'negative', label: 'Far outside personal range' },
+    ]);
+    expect(status?.tone).toBe('caution');
+  });
+
+  it('counts one nightly HRV baseline value per calendar day', () => {
+    const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
+    const sameDaySamples = hrvSeries(Array.from({ length: 14 }, (_, index) => ({
+      daysAgo: 0,
+      value: 40 + index,
+    })));
+
+    expect(buildHealthHrvPersonalRangeStatus(sameDaySamples, endTimeMs)).toMatchObject({
+      tone: 'neutral',
+      observationDayCount: 1,
+      detailText: '1/14 nights',
+    });
   });
 
   it('renders provider-specific Body Energy scores as bars without changing other series', () => {
@@ -519,7 +771,7 @@ describe('Health workspace helpers', () => {
     expect(filtered.conflicts).toEqual([]);
   });
 
-  it('uses workout Weight only as fallback context after applying provider filters', () => {
+  it('keeps workout Weight out of measurement series and exposes it only as fallback context', () => {
     const directWeight = sourceRecord({
       id: 'health-weight',
       provider: HEALTH_PROVIDERS.GarminAPI,
@@ -537,32 +789,37 @@ describe('Health workspace helpers', () => {
       metricIds: [HEALTH_METRIC_IDS.BodyWeight],
     }, { sourceRecordsComplete: true, samplesComplete: true });
     const workout = activityObservation();
+    const garminWorkout = activityObservation({
+      id: 'garmin-workout-weight',
+      provider: HEALTH_PROVIDERS.GarminAPI,
+    });
 
-    expect(selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [workout])).toEqual([]);
+    expect(selectActivityHealthObservations(
+      HEALTH_METRIC_IDS.BodyWeight,
+      result,
+      [garminWorkout, workout],
+    )).toEqual([]);
+
+    const allSourcesView = buildHealthMetricWorkspaceView(
+      result,
+      [],
+      selectActivityHealthObservations(HEALTH_METRIC_IDS.BodyWeight, result, [garminWorkout, workout]),
+    );
+    expect(allSourcesView.series.map(series => series.provider)).toEqual([HEALTH_PROVIDERS.GarminAPI]);
+    expect(selectWorkoutWeightContextFallback(result, [garminWorkout, workout])).toBeNull();
 
     const corosOnly = filterHealthRangeResultByProviders(result, [HEALTH_PROVIDERS.COROSAPI]);
-    const fallback = selectActivityHealthObservations(
-      HEALTH_METRIC_IDS.BodyWeight,
+    const fallback = selectWorkoutWeightContextFallback(
       corosOnly,
       [workout],
       [HEALTH_PROVIDERS.COROSAPI],
     );
-    expect(fallback).toEqual([workout]);
-    const view = buildHealthMetricWorkspaceView(corosOnly, [], fallback);
-    expect(view.series).toHaveLength(1);
-    expect(view.series[0]).toMatchObject({
-      provider: HEALTH_PROVIDERS.COROSAPI,
-      semanticVariant: 'workout_profile_context',
-      coverageText: '1 workout date · coverage not applicable',
-      deviceLabel: null,
+    expect(fallback).toMatchObject({
+      sourceLabel: 'COROS',
+      valueText: '72.0 kg',
+      observedText: 'Aug 2, 2026',
     });
-    expect(view.rows[0].semanticsText).toContain('Workout profile context');
-    expect(view.rows[0]).toMatchObject({
-      deviceLabel: 'Not reported',
-      coverageText: 'Not applicable',
-      freshnessText: 'Last observed Aug 2, 2026',
-    });
-    expect(JSON.stringify(view)).not.toContain('opaque-workout-account');
+    expect(JSON.stringify(fallback)).not.toContain('opaque-workout-account');
   });
 
   it('treats future manual Weight as a real measurement that suppresses workout fallback', () => {
@@ -579,6 +836,7 @@ describe('Health workspace helpers', () => {
         canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
       })],
     });
+    manualWeight.source.sourceRecordType = 'manual_measurement';
     const result = projectLoadedHealthRange([manualWeight], [], {
       startDate: '2026-08-01',
       endDate: '2026-08-03',
@@ -588,8 +846,57 @@ describe('Health workspace helpers', () => {
     expect(selectActivityHealthObservations(
       HEALTH_METRIC_IDS.BodyWeight,
       result,
-      [activityObservation({ provider: HEALTH_PROVIDERS.QuantifiedSelf })],
+      [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
     )).toEqual([]);
+    expect(selectWorkoutWeightContextFallback(
+      result,
+      [activityObservation({ provider: HEALTH_PROVIDERS.GarminAPI })],
+    )).toBeNull();
+  });
+
+  it('exposes optimistic edit metadata only for canonical Quantified Self manual observations', () => {
+    const manualWeight = sourceRecord({
+      id: 'a'.repeat(64),
+      provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account',
+      metrics: [valueEntry({
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        aggregation: 'measurement',
+        semanticVariant: 'point',
+        origin: HEALTH_VALUE_ORIGINS.Recorded,
+        recordingMethod: HEALTH_RECORDING_METHODS.Manual,
+        native: { metric: 'Weight', value: 70, unit: 'kg' },
+        canonical: { value: 70, unit: HEALTH_UNITS.Kilogram },
+      })],
+    });
+    manualWeight.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    manualWeight.source.sourceRecordType = 'manual_measurement';
+    manualWeight.timezoneOffsetSeconds = 10_800;
+    manualWeight.source.revision.order = 4;
+    const result = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(buildHealthMetricWorkspaceView(result).rows[0]).toMatchObject({
+      sourceLabel: 'Manual',
+      manualMeasurement: {
+        sourceRecordId: 'a'.repeat(64),
+        expectedRevisionOrder: 4,
+        metricId: HEALTH_METRIC_IDS.BodyWeight,
+        canonicalValue: 70,
+        timezoneOffsetSeconds: 10_800,
+      },
+    });
+
+    manualWeight.source.sourceRecordType = 'daily';
+    const nonManualResult = projectLoadedHealthRange([manualWeight], [], {
+      startDate: '2026-08-01',
+      endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.BodyWeight],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    expect(buildHealthMetricWorkspaceView(nonManualResult).rows[0]?.manualMeasurement).toBeNull();
   });
 
   it('keeps workout VO2 separate from provider Health and manual series by discipline and origin', () => {
@@ -617,6 +924,7 @@ describe('Health workspace helpers', () => {
         canonical: { value: 50, unit: HEALTH_UNITS.MillilitersPerKilogramPerMinute },
       })],
     });
+    manualVo2.source.sourceRecordType = 'manual_measurement';
     const result = projectLoadedHealthRange([providerVo2, manualVo2], [], {
       startDate: '2026-08-01',
       endDate: '2026-08-03',
@@ -656,6 +964,36 @@ describe('Health workspace helpers', () => {
     ]));
     expect(view.series.filter(series => series.semanticVariant.startsWith('workout_imported_')))
       .toHaveLength(2);
+  });
+
+  it.each([
+    [HEALTH_METRIC_IDS.BodyFat, 22.5],
+    [HEALTH_METRIC_IDS.MuscleMass, 52.4],
+    [HEALTH_METRIC_IDS.BodyWater, 57.8],
+    [HEALTH_METRIC_IDS.BoneMass, 3.1],
+    [HEALTH_METRIC_IDS.BloodOxygenSaturation, 98],
+    [HEALTH_METRIC_IDS.BloodPressureSystolic, 120],
+    [HEALTH_METRIC_IDS.BloodPressureDiastolic, 80],
+    [HEALTH_METRIC_IDS.PulseRate, 65],
+  ] as const)('renders manual %s with canonical units and routes paired edit actions to the whole record', (metricId, value) => {
+    const record = sourceRecord({ id: 'a'.repeat(64), provider: HEALTH_PROVIDERS.QuantifiedSelf,
+      accountKey: 'manual-account', metrics: [valueEntry({ metricId, aggregation: 'measurement', semanticVariant: 'point',
+        origin: 'recorded', recordingMethod: 'manual', native: { metric: metricId, value },
+        canonical: { value, unit: HEALTH_METRIC_CATALOG[metricId].canonicalUnit } })] });
+    record.kind = HEALTH_SOURCE_RECORD_KINDS.PointMeasurement;
+    record.source.sourceRecordType = 'manual_measurement';
+    const result = projectLoadedHealthRange([record], [], { startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [metricId] },
+      { sourceRecordsComplete: true, samplesComplete: true });
+    for (const unitSettings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [], [], unitSettings);
+      const display = formatCanonicalHealthMetricSportsLibValue(metricId, value, unitSettings)!;
+      expect(view.rows[0].valueText).toBe(`${display.value} ${display.unit}`);
+      expect(view.rows[0].sourceLabel).toBe('Manual');
+      expect(view.rows[0].manualMeasurement).toMatchObject({ sourceRecordId: record.id,
+        metricId: ([HEALTH_METRIC_IDS.BloodPressureDiastolic, HEALTH_METRIC_IDS.PulseRate] as readonly HealthMetricId[]).includes(metricId)
+          ? HEALTH_METRIC_IDS.BloodPressureSystolic : metricId });
+      expect(view.series).toHaveLength(1);
+    }
   });
 
   it('resolves Sleep references against the normalized Sleep model', () => {

@@ -30,6 +30,16 @@ import {
   type ActivityHealthMetricId,
 } from '@shared/activity-health';
 import {
+  MANUAL_HEALTH_AGGREGATION,
+  MANUAL_HEALTH_SOURCE_RECORD_TYPE,
+  MANUAL_VO2_CONTEXTS,
+  MANUAL_VO2_METHODS,
+  manualHealthEntryMetric,
+  type ManualHealthMetricId,
+  type ManualVo2Context,
+  type ManualVo2Method,
+} from '@shared/manual-health';
+import {
   SLEEP_SPORTS_LIB_METRIC_FIELDS,
   SleepSession,
   normalizeSleepProvider,
@@ -50,6 +60,13 @@ import {
   type DashboardSleepTrendPoint,
 } from './dashboard-sleep-chart.helper';
 import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
+import {
+  calculatePersonalMetricPointRange,
+  calculatePersonalMetricRange,
+  type PersonalMetricPointRangeResult,
+  type PersonalMetricRangeResult,
+  type PersonalMetricRangeTone,
+} from './personal-metric-range.helper';
 
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
@@ -86,6 +103,7 @@ export interface HealthMetricCatalogGroup {
 export interface HealthWorkspaceSeriesPoint {
   timestampMs: number;
   calendarDate: string;
+  timezoneOffsetSeconds?: number | null;
   value: number | string | boolean;
   qualityCode: string | null;
 }
@@ -126,6 +144,24 @@ export interface HealthObservationTableRow {
   coverageText: string;
   freshnessText: string;
   conflict: boolean;
+  manualMeasurement: ManualHealthObservationEdit | null;
+}
+
+export interface ManualHealthObservationEdit {
+  sourceRecordId: string;
+  expectedRevisionOrder: number;
+  metricId: ManualHealthMetricId;
+  canonicalValue: number;
+  observedAtMs: number;
+  timezoneOffsetSeconds: number;
+  vo2Context?: ManualVo2Context;
+  vo2Method?: ManualVo2Method;
+}
+
+export interface WorkoutWeightContextFallback {
+  sourceLabel: string;
+  valueText: string;
+  observedText: string;
 }
 
 export interface HealthMetricWorkspaceView {
@@ -148,6 +184,43 @@ export interface HealthPriorityRow {
   observedAtMs: number;
   details?: readonly HealthPriorityDetail[];
   sleepPoint?: DashboardSleepTrendPoint;
+}
+
+export interface HealthPriorityTrendSelectionOptions {
+  startTimeMs?: number;
+  endTimeMs?: number;
+  minimumPointCount?: number;
+  semanticVariants?: readonly string[];
+  semanticVariantPriority?: readonly string[];
+}
+
+export const HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS = [
+  // Ordered from the most recovery-specific provider summary to the broadest
+  // normalized Sleep fallback. The priority selector preserves this order.
+  'overnight_rmssd',
+  'overnight_average',
+  'sleep_overnight_hrv',
+  'sleep_session_average_hrv',
+] as const;
+type HealthHrvPersonalRangeSemanticVariant = typeof HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS[number];
+
+export type HealthHrvPersonalRangeTone = PersonalMetricRangeTone;
+
+export interface HealthHrvPersonalRangePointStatus {
+  timestampMs: number;
+  tone: HealthHrvPersonalRangeTone;
+  label: string;
+}
+
+export interface HealthHrvPersonalRangeStatus {
+  tone: HealthHrvPersonalRangeTone;
+  label: string;
+  detailText: string;
+  observationDayCount: number;
+  requiredObservationDayCount: number;
+  currentAverage: number | null;
+  normalRange: { min: number; max: number } | null;
+  pointStatuses: readonly HealthHrvPersonalRangePointStatus[];
 }
 
 export interface HealthPriorityDetail {
@@ -180,6 +253,7 @@ interface MetricDatum {
   valueType: HealthValueType;
   timestampMs: number;
   calendarDate: string;
+  timezoneOffsetSeconds: number | null;
   value: number | string | boolean;
   deviceLabel: string | null;
   qualityCode: string | null;
@@ -189,10 +263,15 @@ interface MetricDatum {
   sampleCount: number;
   coverageStatus: HealthCoverageStatus;
   expectedUpdateIntervalMs: number | null;
+  manualMeasurement: ManualHealthObservationEdit | null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS = 36 * 60 * 60 * 1000;
+const HRV_PERSONAL_RANGE_DAYS = 60;
+const HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS = 14;
+const HRV_CURRENT_AVERAGE_DAYS = 7;
+const HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS = 3;
 const SLEEP_HRV_SEMANTIC_VARIANTS = new Set([
   'sleep_session_average_hrv',
   'sleep_overnight_hrv',
@@ -424,7 +503,7 @@ export function buildHealthMetricWorkspaceView(
 
   const projectionNowMs = resolveProjectionNowMs(result);
   const freshnessStatusByRowId = new Map<string, string>();
-  const series = [...grouped.values()].map((items, index): HealthWorkspaceSeries => {
+  const series = [...grouped.entries()].map(([seriesIdentity, items]): HealthWorkspaceSeries => {
     const first = items[0];
     const sourceLabel = accountLabels.get(accountIdentity(first.provider, first.accountKey)) || providerLabel(first.provider);
     const deviceLabels = [...new Set(items.map(item => item.deviceLabel).filter((item): item is string => !!item))];
@@ -435,12 +514,13 @@ export function buildHealthMetricWorkspaceView(
       .map(item => ({
         timestampMs: item.timestampMs,
         calendarDate: item.calendarDate,
+        timezoneOffsetSeconds: item.timezoneOffsetSeconds,
         value: item.value,
         qualityCode: item.qualityCode,
       }))
       .sort((left, right) => left.timestampMs - right.timestampMs);
     return {
-      id: `health-series-${index + 1}`,
+      id: opaqueHealthSeriesId(seriesIdentity),
       metricId: first.metricId,
       provider: first.provider,
       providerLabel: providerLabel(first.provider),
@@ -500,6 +580,7 @@ export function buildHealthMetricWorkspaceView(
         ? `Last observed ${formatCalendarDate(datum.calendarDate)}`
         : freshnessStatusByRowId.get(datum.rowId) || 'Unknown',
       conflict: !!datum.observationId && conflictingObservationIds.has(datum.observationId),
+      manualMeasurement: datum.manualMeasurement,
     };
     });
 
@@ -517,19 +598,45 @@ export function buildHealthMetricWorkspaceView(
 
 export function selectActivityHealthObservations(
   metricId: ActivityHealthMetricId,
-  result: HealthRangeResult,
+  _result: HealthRangeResult,
   observations: readonly ActivityHealthObservation[],
   selectedProviders: readonly HealthProvider[] = [],
 ): ActivityHealthObservation[] {
   const allowed = selectedProviders.length ? new Set(selectedProviders) : null;
   const filtered = observations.filter(observation => !allowed || allowed.has(observation.provider));
-  if (metricId !== HEALTH_METRIC_IDS.BodyWeight) {
-    return filtered;
-  }
+  // Workout Weight is profile context, not a weigh-in. It is presented only as
+  // a fallback note and never enters the Health chart or observation table.
+  return metricId === HEALTH_METRIC_IDS.BodyWeight ? [] : filtered;
+}
 
-  const hasRealWeight = result.observations.some(observation => observation.entry.metricId === HEALTH_METRIC_IDS.BodyWeight)
+export function selectWorkoutWeightContextFallback(
+  result: HealthRangeResult,
+  observations: readonly ActivityHealthObservation[],
+  selectedProviders: readonly HealthProvider[] = [],
+  unitSettings: UserUnitSettingsInterface | null = null,
+): WorkoutWeightContextFallback | null {
+  const hasActualWeight = result.observations.some(observation =>
+    observation.entry.metricId === HEALTH_METRIC_IDS.BodyWeight)
     || result.sampleChunks.some(chunk => chunk.metricId === HEALTH_METRIC_IDS.BodyWeight);
-  return hasRealWeight ? [] : filtered;
+  if (hasActualWeight) return null;
+  const allowed = selectedProviders.length ? new Set(selectedProviders) : null;
+  const latest = observations
+    .filter(observation => observation.metricId === HEALTH_METRIC_IDS.BodyWeight
+      && observation.sourceKind === ACTIVITY_HEALTH_SOURCE_KINDS.WorkoutProfileContext
+      && (!allowed || allowed.has(observation.provider)))
+    .sort((left, right) => right.observedAtMs - left.observedAtMs)[0];
+  if (!latest) return null;
+  return {
+    sourceLabel: providerLabel(latest.provider),
+    valueText: formatHealthValue(
+      HEALTH_METRIC_IDS.BodyWeight,
+      latest.value,
+      latest.unit,
+      false,
+      unitSettings,
+    ),
+    observedText: formatCalendarDate(localCalendarDate(latest.observedAtMs)),
+  };
 }
 
 export function sleepSessionHasHrv(session: SleepSession | null | undefined): boolean {
@@ -568,8 +675,14 @@ export function buildHealthPriorityRows(
     || compareText(left.id, right.id));
 }
 
-function comparePriorityTrendSeries(left: HealthWorkspaceSeries, right: HealthWorkspaceSeries): number {
-  return priorityTrendSeriesRank(right) - priorityTrendSeriesRank(left)
+function comparePriorityTrendSeries(
+  left: HealthWorkspaceSeries,
+  right: HealthWorkspaceSeries,
+  semanticVariantPriorities: ReadonlyMap<string, number>,
+): number {
+  return (semanticVariantPriorities.get(right.semanticVariant) || 0)
+    - (semanticVariantPriorities.get(left.semanticVariant) || 0)
+    || priorityTrendSeriesRank(right) - priorityTrendSeriesRank(left)
     || latestSeriesTimestamp(right) - latestSeriesTimestamp(left)
     || compareText(left.semanticLabel, right.semanticLabel);
 }
@@ -592,22 +705,178 @@ export function selectHealthPriorityTrendSeries(
   result: HealthRangeResult | null | undefined,
   sleepSessions: readonly SleepSession[] = [],
   unitSettings: UserUnitSettingsInterface | null = null,
+  options: HealthPriorityTrendSelectionOptions = {},
 ): HealthWorkspaceSeries[] {
   if (!result) {
     return [];
   }
   const grouped = new Map<string, HealthWorkspaceSeries[]>();
-  for (const series of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings).series) {
-    if (!series.points.length || series.valueType !== HEALTH_VALUE_TYPES.Number) {
+  const minimumPointCount = Math.max(1, Math.floor(options.minimumPointCount || 1));
+  const semanticVariantValues = options.semanticVariants;
+  const semanticVariants = semanticVariantValues === undefined
+    ? null
+    : new Set(semanticVariantValues);
+  const semanticVariantPriority = options.semanticVariantPriority || [];
+  const semanticVariantCount = semanticVariantPriority.length;
+  const semanticVariantPriorities = new Map(
+    semanticVariantPriority.map((semanticVariant, index) => [
+      semanticVariant,
+      semanticVariantCount - index,
+    ]),
+  );
+  for (const sourceSeries of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings).series) {
+    if (semanticVariants && !semanticVariants.has(sourceSeries.semanticVariant)) {
       continue;
     }
+    const points = sourceSeries.points.filter(point =>
+      (options.startTimeMs === undefined || point.timestampMs >= options.startTimeMs)
+      && (options.endTimeMs === undefined || point.timestampMs <= options.endTimeMs));
+    if (points.length < minimumPointCount || sourceSeries.valueType !== HEALTH_VALUE_TYPES.Number) {
+      continue;
+    }
+    const series = points.length === sourceSeries.points.length
+      ? sourceSeries
+      : { ...sourceSeries, points };
     const key = accountIdentity(series.provider, series.sourceLabel);
     grouped.set(key, [...(grouped.get(key) || []), series]);
   }
   return [...grouped.values()]
-    .map(seriesValues => [...seriesValues].sort(comparePriorityTrendSeries)[0])
+    .map(seriesValues => [...seriesValues].sort((left, right) =>
+      comparePriorityTrendSeries(left, right, semanticVariantPriorities))[0])
     .sort((left, right) => latestSeriesTimestamp(right) - latestSeriesTimestamp(left)
       || compareText(left.sourceLabel, right.sourceLabel));
+}
+
+/**
+ * Builds a source-specific HRV status inspired by Suunto's personal-range UI.
+ * The provider's proprietary range calculation is not public, so Health uses a
+ * deterministic 60-day mean and population standard deviation. One standard
+ * deviation is the personal range; one-to-two is cautionary and beyond two is
+ * far outside. Daily medians prevent dense intraday samples from outweighing
+ * daily measurements.
+ */
+export function buildHealthHrvPersonalRangeStatus(
+  series: HealthWorkspaceSeries,
+  endTimeMs: number,
+  unitSettings: UserUnitSettingsInterface | null = null,
+  pointTimestampsMs: readonly number[] = series.points.map(point => point.timestampMs),
+): HealthHrvPersonalRangeStatus | null {
+  if (!isHealthHrvPersonalRangeSemanticVariant(series.semanticVariant)) {
+    return null;
+  }
+  const observations = series.points.flatMap(point =>
+    typeof point.value === 'number' && Number.isFinite(point.value)
+      ? [{ timestampMs: point.timestampMs, calendarDate: point.calendarDate, value: point.value }]
+      : []);
+  const rangeOptions = {
+    baselineWindowDays: HRV_PERSONAL_RANGE_DAYS,
+    baselineMinimumObservationDays: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+    currentWindowDays: HRV_CURRENT_AVERAGE_DAYS,
+    currentMinimumObservationDays: HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS,
+  };
+  const status = calculatePersonalMetricRange(observations, endTimeMs, rangeOptions);
+  const observationsByTimestamp = new Map(observations.map(observation => [observation.timestampMs, observation]));
+  const pointStatuses = [...new Set(pointTimestampsMs)]
+    .filter(timestampMs => Number.isFinite(timestampMs)
+      && timestampMs <= endTimeMs
+      && observationsByTimestamp.has(timestampMs))
+    .sort((left, right) => left - right)
+    .map(timestampMs => {
+      const observation = observationsByTimestamp.get(timestampMs);
+      if (!observation) {
+        return null;
+      }
+      const pointStatus = calculatePersonalMetricPointRange(
+        observations,
+        observation,
+        {
+          baselineWindowDays: HRV_PERSONAL_RANGE_DAYS,
+          baselineMinimumObservationDays: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+        },
+      );
+      return {
+        timestampMs,
+        tone: pointStatus.tone,
+        label: healthHrvPersonalRangeLabel(pointStatus.reason),
+      };
+    })
+    .filter((pointStatus): pointStatus is HealthHrvPersonalRangePointStatus => pointStatus !== null);
+  if (status.reason === 'building_baseline') {
+    return {
+      tone: 'neutral',
+      label: 'Building personal range',
+      detailText: `${status.observationDayCount}/${status.requiredObservationDayCount} nights`,
+      observationDayCount: status.observationDayCount,
+      requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+      currentAverage: null,
+      normalRange: null,
+      pointStatuses,
+    };
+  }
+  if (status.reason === 'insufficient_current') {
+    return {
+      tone: 'neutral',
+      label: 'Not enough recent HRV',
+      detailText: `${status.currentObservationDayCount}/${status.requiredCurrentObservationDayCount} nights for a 7-day average`,
+      observationDayCount: status.observationDayCount,
+      requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+      currentAverage: null,
+      normalRange: null,
+      pointStatuses,
+    };
+  }
+  const currentAverage = status.currentAverage;
+  const normalRange = {
+    min: Math.max(0, status.normalRange.min),
+    max: status.normalRange.max,
+  };
+  const label = healthHrvPersonalRangeLabel(status.reason);
+  return {
+    tone: status.tone,
+    label,
+    detailText: `7-day average ${formatHealthValue(
+      series.metricId,
+      currentAverage,
+      series.unit,
+      series.nativeOnly,
+      unitSettings,
+    )} · Range ${formatHealthValue(
+      series.metricId,
+      normalRange.min,
+      series.unit,
+      series.nativeOnly,
+      unitSettings,
+    )}–${formatHealthValue(
+      series.metricId,
+      normalRange.max,
+      series.unit,
+      series.nativeOnly,
+      unitSettings,
+    )}`,
+    observationDayCount: status.observationDayCount,
+    requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+    currentAverage,
+    normalRange,
+    pointStatuses,
+  };
+}
+
+function healthHrvPersonalRangeLabel(
+  reason: PersonalMetricRangeResult['reason'] | PersonalMetricPointRangeResult['reason'],
+): string {
+  switch (reason) {
+    case 'building_baseline': return 'Building personal range';
+    case 'insufficient_current': return 'Not enough recent HRV';
+    case 'within_range': return 'Within personal range';
+    case 'outside_range': return 'Outside personal range';
+    case 'far_outside_range': return 'Far outside personal range';
+  }
+}
+
+export function isHealthHrvPersonalRangeSemanticVariant(
+  semanticVariant: string,
+): semanticVariant is HealthHrvPersonalRangeSemanticVariant {
+  return (HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS as readonly string[]).includes(semanticVariant);
 }
 
 export function buildSleepPriorityRows(
@@ -738,7 +1007,7 @@ export function providerLabel(provider: HealthProvider): string {
     case HEALTH_PROVIDERS.SuuntoApp: return 'Suunto';
     case HEALTH_PROVIDERS.COROSAPI: return 'COROS';
     case HEALTH_PROVIDERS.WahooAPI: return 'Wahoo';
-    case HEALTH_PROVIDERS.QuantifiedSelf: return 'Quantified Self';
+    case HEALTH_PROVIDERS.QuantifiedSelf: return 'Manual';
   }
 }
 
@@ -879,6 +1148,7 @@ function observationDatum(
     valueType: entry.valueType,
     timestampMs: observation.endTimeMs,
     calendarDate: observation.calendarDate,
+    timezoneOffsetSeconds: observation.timezoneOffsetSeconds ?? null,
     value,
     deviceLabel: resolveDeviceLabel(observation.device),
     qualityCode: entry.quality.nativeCode || entry.quality.status,
@@ -888,6 +1158,7 @@ function observationDatum(
     sampleCount: 1,
     coverageStatus: observation.coverage.status,
     expectedUpdateIntervalMs: positiveNumberOrNull(observation.coverage.expectedUpdateIntervalMs),
+    manualMeasurement: manualObservationEdit(observation, value, nativeOnly),
   };
 }
 
@@ -910,6 +1181,7 @@ function activityObservationDatum(observation: ActivityHealthObservation): Metri
     valueType: HEALTH_VALUE_TYPES.Number,
     timestampMs: observation.observedAtMs,
     calendarDate: localCalendarDate(observation.observedAtMs),
+    timezoneOffsetSeconds: null,
     value: observation.value,
     deviceLabel: null,
     qualityCode: HEALTH_QUALITY_STATUSES.Valid,
@@ -919,6 +1191,7 @@ function activityObservationDatum(observation: ActivityHealthObservation): Metri
     sampleCount: 1,
     coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
     expectedUpdateIntervalMs: null,
+    manualMeasurement: null,
   };
 }
 
@@ -947,6 +1220,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       valueType: chunk.valueType,
       timestampMs: chunk.startTimeMs + (Number(chunk.offsetMs[index]) || 0),
       calendarDate: chunk.calendarDate,
+      timezoneOffsetSeconds: chunk.timezoneOffsetSeconds ?? null,
       value,
       deviceLabel: resolveDeviceLabel(chunk.device),
       qualityCode: chunk.qualityCodes?.[index] || null,
@@ -956,6 +1230,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       sampleCount: values.length,
       coverageStatus: chunk.coverage.status,
       expectedUpdateIntervalMs: positiveNumberOrNull(chunk.coverage.expectedUpdateIntervalMs),
+      manualMeasurement: null,
     } satisfies MetricDatum];
   });
 }
@@ -1008,6 +1283,7 @@ function sleepHrvDatums(
         valueType: HEALTH_VALUE_TYPES.Number,
         timestampMs,
         calendarDate,
+        timezoneOffsetSeconds: session.timezoneOffsetSeconds ?? null,
         value,
         deviceLabel: null,
         qualityCode: HEALTH_QUALITY_STATUSES.Valid,
@@ -1017,9 +1293,53 @@ function sleepHrvDatums(
         sampleCount: 1,
         coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
         expectedUpdateIntervalMs: SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS,
+        manualMeasurement: null,
       } satisfies MetricDatum];
     });
   });
+}
+
+function manualObservationEdit(
+  observation: HealthObservation,
+  value: number | string | boolean,
+  nativeOnly: boolean,
+): ManualHealthObservationEdit | null {
+  const entry = observation.entry;
+  if (observation.provider !== HEALTH_PROVIDERS.QuantifiedSelf
+    || observation.sourceRecordType !== MANUAL_HEALTH_SOURCE_RECORD_TYPE
+    || entry.kind !== 'value'
+    || entry.aggregation !== MANUAL_HEALTH_AGGREGATION
+    || entry.origin !== HEALTH_VALUE_ORIGINS.Recorded
+    || entry.recordingMethod !== HEALTH_RECORDING_METHODS.Manual
+    || !manualHealthEntryMetric(entry.metricId)
+    || nativeOnly
+    || typeof value !== 'number'
+    || !Number.isFinite(value)) {
+    return null;
+  }
+  const base: ManualHealthObservationEdit = {
+    sourceRecordId: observation.sourceRecordId,
+    expectedRevisionOrder: observation.sourceRevisionOrder,
+    // BP rows all address one record. The editor re-reads the complete paired
+    // values under this revision fence before opening, never this single value.
+    metricId: manualHealthEntryMetric(entry.metricId)!,
+    canonicalValue: value,
+    observedAtMs: observation.endTimeMs,
+    timezoneOffsetSeconds: observation.timezoneOffsetSeconds || 0,
+  };
+  if (entry.metricId !== HEALTH_METRIC_IDS.Vo2Max) return base;
+  const qualifiers = entry.native.qualifiers;
+  const context = qualifiers?.['context'];
+  const method = qualifiers?.['method'];
+  if (!MANUAL_VO2_CONTEXTS.includes(context as ManualVo2Context)
+    || !MANUAL_VO2_METHODS.includes(method as ManualVo2Method)) {
+    return null;
+  }
+  return {
+    ...base,
+    vo2Context: context as ManualVo2Context,
+    vo2Method: method as ManualVo2Method,
+  };
 }
 
 function sleepHrvValues(session: SleepSession | null | undefined): Array<{
@@ -1095,6 +1415,21 @@ function metricDatumSeriesIdentity(datum: MetricDatum): string {
     datum.normalizationStatus,
     datum.valueType,
   ]);
+}
+
+/**
+ * Keeps the source-series identity stable across adjacent range loads without
+ * exposing the underlying account key to the rendered workspace model.
+ */
+function opaqueHealthSeriesId(identity: string): string {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < identity.length; index += 1) {
+    const code = identity.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ (code + index), 0x85ebca6b);
+  }
+  return `health-series-${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 function exactSeriesCoverageText(

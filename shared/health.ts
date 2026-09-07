@@ -445,6 +445,8 @@ export interface NormalizedHealthRangeQuery extends HealthRangeQuery {
 export interface HealthObservation {
   id: string;
   sourceRecordId: string;
+  /** Monotonic source revision used by owner-scoped optimistic mutations. */
+  sourceRevisionOrder: number;
   provider: HealthProvider;
   accountKey: string;
   calendarDate: string;

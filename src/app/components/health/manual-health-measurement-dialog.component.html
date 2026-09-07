@@ -1,0 +1,103 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+
+<mat-dialog-content>
+  <form id="manual-health-measurement-form" class="manual-health-form" [formGroup]="form" (ngSubmit)="submit()">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Measurement</mat-label>
+      <mat-select [value]="selectedMetric()" [disabled]="!!data.existing" (selectionChange)="selectMetric($event.value)">
+        @for (option of metricOptions; track option.id) {
+          <mat-option [value]="option.id">{{ option.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <p class="manual-health-context">{{ contextText() }}</p>
+
+    <div class="manual-health-readings" [class.manual-health-paired]="isBloodPressure()">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>{{ valueLabel() }}</mat-label>
+      <input
+        matInput
+        type="number"
+        inputmode="decimal"
+        autocomplete="off"
+        formControlName="canonicalValue"
+        step="any"
+        [max]="maximumValue()"
+        required>
+      <span matTextSuffix>{{ valueUnit() }}</span>
+      <mat-hint>{{ valueRangeHint() }}</mat-hint>
+      @if (form.controls.canonicalValue.invalid && form.controls.canonicalValue.touched) {
+        <mat-error>{{ form.controls.canonicalValue.hasError('required') ? valueLabel() + ' is required.' : valueRangeHint() }}</mat-error>
+      }
+    </mat-form-field>
+    @if (isBloodPressure()) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Diastolic</mat-label>
+        <input matInput type="number" inputmode="decimal" autocomplete="off" formControlName="diastolicValue" [max]="pressureMaximum" step="any" required>
+        <span matTextSuffix>{{ diastolicUnit }}</span>
+        <mat-hint>{{ diastolicRangeHint }}</mat-hint>
+        @if (form.controls.diastolicValue.invalid && form.controls.diastolicValue.touched) {
+          <mat-error>{{ form.controls.diastolicValue.hasError('required') ? 'Diastolic is required.' : diastolicRangeHint }}</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Pulse (optional)</mat-label>
+        <input matInput type="number" inputmode="decimal" autocomplete="off" formControlName="pulseValue" [max]="pulseMaximum" step="any">
+        <span matTextSuffix>{{ pulseUnit }}</span>
+        <mat-hint>{{ pulseRangeHint }} Leave empty if not measured.</mat-hint>
+        @if (form.controls.pulseValue.invalid && form.controls.pulseValue.touched) {
+          <mat-error>{{ pulseRangeHint }} Or leave it empty.</mat-error>
+        }
+      </mat-form-field>
+    }
+    </div>
+
+    <div class="manual-health-time-fields">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Date</mat-label>
+        <input matInput type="date" formControlName="observedDate" min="2000-01-01" [max]="todayDate" required>
+        <mat-error>Enter the measurement date.</mat-error>
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Time</mat-label>
+        <input matInput type="time" formControlName="observedTime" required>
+        <mat-error>Enter the measurement time.</mat-error>
+      </mat-form-field>
+    </div>
+
+    @if (isVo2()) {
+      <div class="manual-health-vo2-fields">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Context</mat-label>
+          <mat-select formControlName="vo2Context" required>
+            @for (context of vo2Contexts; track context) {
+              <mat-option [value]="context">{{ contextLabel(context) }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Method</mat-label>
+          <mat-select formControlName="vo2Method" required>
+            @for (method of vo2Methods; track method) {
+              <mat-option [value]="method">{{ methodLabel(method) }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+    }
+
+    @if (submitError()) {
+      <p class="manual-health-error" role="alert">
+        <mat-icon aria-hidden="true">error</mat-icon>
+        <span>{{ submitError() }}</span>
+      </p>
+    }
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Cancel</button>
+  <button mat-flat-button type="submit" form="manual-health-measurement-form" [disabled]="form.invalid">
+    {{ actionLabel() }}
+  </button>
+</mat-dialog-actions>

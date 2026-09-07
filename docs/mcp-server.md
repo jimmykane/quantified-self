@@ -11,9 +11,45 @@ The server is a Firebase Functions v2 HTTP function behind the production and be
 stateless Streamable HTTP transport with bounded POST/JSON responses; standalone GET/SSE and DELETE sessions are not
 supported. The HTTP, OAuth, projection, and metric-catalog implementation lives under `functions/src/mcp/`.
 
-Functions pins `@modelcontextprotocol/sdk` and overrides its compatible `@hono/node-server` adapter to `2.0.11` so the
-runtime does not retain the older adapter's published path-traversal advisory. Keep the initialize-request adapter test
-and re-check this override whenever the MCP SDK changes.
+Functions pins the `@modelcontextprotocol/server`, `client`, and `node` packages to `2.0.0` and overrides their compatible
+`@hono/node-server` adapter to `2.0.11` so the runtime does not retain the older adapter's published path-traversal
+advisory. Keep the Function-boundary HTTP tests and re-check this override whenever the MCP SDK changes.
+
+### Protocol compatibility
+
+The authenticated endpoint supports the legacy 2024/2025 initialize handshake and the `2026-07-28` per-request protocol
+on the same URL. `transport.ts` uses the SDK's classifier, not a hand-maintained header allowlist. Modern requests carry
+the reserved protocol/client envelope and use `server/discover`; malformed envelopes, header/body mismatches, and
+unsupported revisions are rejected, never silently downgraded. Both paths create fresh servers through the same factory
+after bearer validation and the existing scope prechecks. Client-supplied identity metadata never supplies authorization.
+
+Legacy responses remain stateless JSON. Modern read-only handlers also return JSON and advertise no tool-change
+subscription support; long-lived subscriptions are disabled. The Node adapter receives Firebase's already-parsed body
+explicitly. Neither transport changes OAuth client identity, permissions, grants, token rotation, or account data.
+
+`register-tool.ts` preserves the existing Zod validators and their exact registered draft-07 advertisement instead of
+accepting SDK v2's default schema-dialect rewrite. Legacy tools retain `execution.taskSupport: "forbidden"`; the SDK's
+modern codec removes that retired field. Modern responses also use the revision's `resultType` and reserved metadata
+envelope. The output contract suite runs every tool and leakage fixture through in-memory, legacy HTTP, and modern HTTP
+paths. The Function-boundary tests cover authentication, scope denial, size/media/method bounds, and rejection logging.
+Expected transport rejections remain warnings with fixed reasons and sanitized protocol versions; invalid JSON-RPC
+messages/batches are distinguished from protocol-envelope failures, and unexpected failures remain errors.
+A rejected modern envelope version is logged when no protocol-version header was supplied, without
+logging any other envelope or request data.
+
+Completed HTTP 200 protocol requests emit `[MCP] Streamable HTTP request served` at INFO with only `clientFamily`,
+sanitized `protocolVersion`, and `protocolVersionSource`. The source is `sdk` for modern requests and successful legacy
+initialization, `request_header` for validated stateless legacy follow-up headers, or `legacy_default` when such a
+follow-up omits the header. Initialization logs the version the SDK selected, not an unsupported requested version.
+This is transport/protocol evidence, not a claim that a tool returned a successful business result: handled tool errors
+can also travel over HTTP 200. Rejected HTTP requests and failed initialization do not emit this INFO event. No request
+or response payloads, tool arguments, credentials, user/connection IDs, or raw client identity metadata are logged.
+
+The registered legacy candidate digest is unchanged by this upgrade. It adds no tool/schema/scope/instruction refresh or
+local plugin-sync requirement of its own; the pre-existing `pending-change.json` release still needs its separately
+verified live refresh and promotion. Do not consume that record just because protocol tests pass. If a later registered
+app rescan switches protocol eras, verify its actual negotiated contract before choosing a promotion workflow; a modern
+diagnostic capture is not evidence that the registered legacy baseline was refreshed.
 
 This is an outbound user-authorized data interface, not a fitness-provider integration. It does not import provider data,
 write activities, mutate Training state, or require a public `/integrations/<provider>` page.
@@ -575,6 +611,18 @@ accepting the change. A server-only implementation or result fix needs no pendin
 remains byte-for-byte equivalent after canonicalization.
 Never edit the registered baseline or transition history directly; only the verified promotion command may update them.
 
+For a reproducible modern-protocol review artifact, run:
+
+```bash
+npm --prefix functions run mcp:contract:capture -- --protocol-version 2026-07-28 \
+  --output /tmp/quantified-self-mcp-2026-contract.json
+```
+
+This uses the real HTTP handler in-process, with no network or account-data reads, across the same authorization
+profiles. The snapshot records the negotiated modern version, schemas, metadata, and scope-specific tools. Capture
+defaults to `2025-11-25`; the registered compatibility gate and promotion commands continue to audit that legacy
+contract. The modern snapshot is review-only and cannot be used to bypass a breaking-contract finding.
+
 The repository-managed Lefthook pre-push hook runs `npm run hooks:mcp:pre-push` only when the pushed commits touch MCP
 Functions code, the contract command, or the Functions dependency manifests. The focused command runs the contract gate
 and the MCP output/server tests without running the full Functions suite. The npm-installed Lefthook package normally
@@ -734,15 +782,20 @@ catalog. It does not decide whether a Sports Lib metric exists or is numerically
 `metric-catalog.ts`. It decides only which canonical metrics are safe and meaningful as personal body measurements.
 Adding a numeric Sports Lib class still does not silently expose it as a body measurement.
 
-The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` values in persisted event stats.
+The current first-class type is `body_weight`, backed by canonical Sports Lib `Weight` point measurements in
+`users/{uid}/healthSourceRecords`. Provider-imported and Quantified Self manual Weight share the same canonical metric
+while retaining separate internal provenance.
 `list_measurement_types` describes its kilogram storage unit, median default, supported median/average/minimum/maximum/
 latest aggregations, day/week/month intervals, 366-day range limit, and the optional ready
 `body_weight_trend` Training snapshot, including that snapshot's separate `metrics:read` requirement and UTC day
 boundary.
 
-`query_measurements` reads the same bounded event pages as `query_metric`, excludes benchmark merges, resolves the
-requested persisted value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
-records in an explicit IANA timezone. It returns only the semantic type, canonical metric metadata, query parameters,
+`query_measurements` executes an owner-scoped, metric-first Health query in bounded pages. Its internal field mask
+retains `calendarDate` for the ordered snapshot cursor; that field is not added to the public response. It filters the widened calendar
+envelope to the exact requested timestamps, accepts only canonical point measurements with `aggregation=measurement`,
+resolves each value through its Sports Lib data class, rejects non-positive or non-finite body weight, and buckets
+records in an explicit IANA timezone. Workout profile Weight is deliberately excluded because it is not a weigh-in. It
+returns only the semantic type, canonical metric metadata, query parameters,
 bucket start, aggregate value, bucket count, and first/latest change summary. It never returns the Firestore document
 ID, exact source measurement timestamp, activity type, event/activity identity, name, label, provider/device metadata,
 or source provenance. Multiple same-bucket values default to a median; `latest` means the chronologically latest value
@@ -754,11 +807,16 @@ authorization for the new scope before the measurement tools are registered. The
 remains the fast 28-day Training view under the pre-existing Training metric permission, not the historical measurement
 API. No new Firestore collection, composite index, persistence format, reparse, or backfill is required.
 
+This source change does not alter a registered MCP tool name, input, output, scope, prompt, or bundled-skill contract.
+The strict derived projections explicitly remove the internal source-separated Weight series and manual VO2 reference
+before validating the frozen public schemas. The focused measurement, Training, and cross-domain skills therefore need
+no text change, and neither a registered ChatGPT app rescan nor a local plugin sync is required.
+
 To add another first-class measurement, add one explicit semantic definition backed by an already eligible canonical
 Sports Lib numeric type, define its value-validity rule, supported aggregations and intervals, and user-facing meaning,
 then update the tool-schema enum from the same exported ID tuple. Add positive catalog/query coverage, a negative
-sensitive-field leakage test, consent/Help/Policy/feature copy, and reconsider whether the existing 366-day event-read
-and 128 KiB response bounds remain appropriate. Do not infer measurement eligibility from a display name, unit, provider
+sensitive-field leakage test, consent/Help/Policy/feature copy, and reconsider whether the existing 366-day Health-record
+scan and 128 KiB response bounds remain appropriate. Do not infer measurement eligibility from a display name, unit, provider
 payload, or arbitrary persisted stat key.
 
 When a Sports Lib metric is added or changed:
@@ -950,7 +1008,7 @@ instead of being serialized. For example, `body_weight_trend` is discoverable th
 `get_training_metric` when ready; its safe payload contains only UTC day/value points, window coverage, medians, and
 change values—never source document or measurement identities.
 
-Internal derived schema 19 includes the original eight modeled families, the data-backed Fitness & Gym and Other
+Internal derived schema 20 includes the original eight modeled families, the data-backed Fitness & Gym and Other
 training volume groups, and the context/profile summaries introduced in schema 16. It retains the reusable maximum
 aggregation used for MTB longest-jump distance in schema 17 and canonical swimming, rowing, and paddling stroke-rate
 profile metrics with bounded pre-19 Cadence read compatibility. The registered MCP contract maps
@@ -1011,8 +1069,9 @@ requested bounded period, their units, and session coverage. It lets clients dis
 grouped values without returning readings, raw samples, provider identity, or source provenance in the discovery result.
 
 COROS daily ingestion also writes steps, its native calorie value, and detailed HRV/interval-heart-rate series to the
-separate unified Health collections. Existing MCP tools do not query `healthSourceRecords` or `healthSampleChunks`, and
-this adapter does not widen any registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
+separate unified Health collections. The body-measurement path reads only canonical Weight point measurements from
+`healthSourceRecords`; no MCP path reads `healthSampleChunks` or exposes Health source metadata, and this change does not
+widen any registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
 through the same normalized Sleep allowlist described above. Negative fixtures include Health-shaped source metadata
 and sample payloads and prove they cannot enter Sleep tool output. No registered-app rescan or local plugin sync is
 required for this internal ingestion change.

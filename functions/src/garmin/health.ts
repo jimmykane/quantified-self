@@ -42,9 +42,46 @@ export class GarminHealthValidationError extends Error {
   public readonly name = 'GarminHealthValidationError';
   public readonly code = 'garmin_health_invalid_response';
 
-  constructor(message: string) {
+  constructor(message: string, public readonly diagnostic?: GarminStressValidationDiagnostic) {
     super(message);
   }
+}
+
+// Internal error telemetry only: never retain raw strings, objects, or summaries.
+interface GarminStressValidationDiagnostic {
+  summaryType: 'dailies' | 'stressDetails';
+  summaryIndex: number;
+  field: 'averageStressLevel' | 'timeOffsetStressLevelValues';
+  reason: 'invalid_type' | 'non_finite' | 'out_of_range' | 'not_integer' | 'unsupported_stress_code';
+  valueType: string;
+  numericValue: number | null;
+  valueDisposition: 'included' | 'non_numeric' | 'non_finite' | 'outside_diagnostic_range';
+  sampleOffsetSeconds: number | null;
+}
+
+function stressValidationDiagnostic(
+  summaryType: GarminStressValidationDiagnostic['summaryType'],
+  summaryIndex: number,
+  field: GarminStressValidationDiagnostic['field'],
+  reason: GarminStressValidationDiagnostic['reason'],
+  value: unknown,
+  sampleOffsetSeconds: number | null = null,
+): GarminStressValidationDiagnostic {
+  // This telemetry bound is independent of (and never changes) validation.
+  const valueDisposition = typeof value !== 'number' ? 'non_numeric'
+    : !Number.isFinite(value) ? 'non_finite'
+      : Math.abs(value) > 1_000_000 ? 'outside_diagnostic_range'
+        : 'included';
+  return {
+    summaryType,
+    summaryIndex,
+    field,
+    reason,
+    valueType: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value,
+    numericValue: valueDisposition === 'included' ? value as number : null,
+    valueDisposition,
+    sampleOffsetSeconds,
+  };
 }
 
 export interface GarminHealthResult {
@@ -616,7 +653,20 @@ function mapDaily(
       canonicalUnit: HEALTH_UNITS.BeatsPerMinute,
     }));
   }
-  const averageStress = optionalNumber(interval.summary, 'averageStressLevel', -1, 100, true);
+  let averageStress: number | null;
+  try {
+    averageStress = optionalNumber(interval.summary, 'averageStressLevel', -1, 100, true);
+  } catch (error) {
+    if (!(error instanceof GarminHealthValidationError)) throw error;
+    const rejectedValue = interval.summary.averageStressLevel;
+    const reason = typeof rejectedValue !== 'number' ? 'invalid_type'
+      : !Number.isFinite(rejectedValue) ? 'non_finite'
+        : rejectedValue < -1 || rejectedValue > 100 ? 'out_of_range'
+          : 'not_integer';
+    throw new GarminHealthValidationError(error.message, stressValidationDiagnostic(
+      'dailies', index, 'averageStressLevel', reason, rejectedValue,
+    ));
+  }
   if (averageStress !== null) {
     if (averageStress > 0) {
       metrics.push(canonicalNumberMetric({
@@ -771,8 +821,17 @@ function mapStressDetails(
     100,
   );
   assertPointsWithinInterval(rawStressPoints, interval.durationSeconds, `${field}.timeOffsetStressLevelValues`);
-  if (rawStressPoints.some(point => point.value === 0 || (point.value < 0 && !STRESS_STATE_CODES[point.value]))) {
-    throw new GarminHealthValidationError(`${field}.timeOffsetStressLevelValues contains an unsupported stress code.`);
+  const unsupportedStressPoint = rawStressPoints.find(
+    point => point.value === 0 || (point.value < 0 && !STRESS_STATE_CODES[point.value]),
+  );
+  if (unsupportedStressPoint) {
+    throw new GarminHealthValidationError(
+      `${field}.timeOffsetStressLevelValues contains an unsupported stress code.`,
+      stressValidationDiagnostic(
+        'stressDetails', index, 'timeOffsetStressLevelValues', 'unsupported_stress_code',
+        unsupportedStressPoint.value, unsupportedStressPoint.offsetSeconds,
+      ),
+    );
   }
   const stressPoints = rawStressPoints.filter(point => point.value > 0);
   const statePoints = rawStressPoints.filter(point => point.value < 0);

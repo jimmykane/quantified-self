@@ -14,13 +14,13 @@ import { AppSignalChartsModule } from './app-signal-charts.module';
     CommonModule,
     SharedModule,
     AppSignalChartsModule,
+    ChartsSleepTrendComponent,
   ],
   declarations: [
     ChartsPieComponent,
     ChartsXYComponent,
     ChartsColumnsComponent,
     ChartsKpiComponent,
-    ChartsSleepTrendComponent,
     ChartRangeSelectorComponent,
   ],
   exports: [

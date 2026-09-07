@@ -22,6 +22,7 @@ import {
 } from '../../helpers/echarts-tooltip-interaction.helper';
 import { resolveEChartsThemeName } from '../../helpers/echarts-theme.helper';
 import {
+  HealthChartStatusOverlay,
   HealthChartSeriesModel,
   buildHealthMetricEChartsOption,
 } from '../../helpers/health-metric-chart.helper';
@@ -43,6 +44,8 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input() darkTheme = false;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() compact = false;
+  @Input() statusOverlay: HealthChartStatusOverlay | null = null;
+  @Input() statusDescription: string | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
@@ -65,7 +68,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   ngOnChanges(changes: SimpleChanges): void {
     if (this.viewInitialized && (
       changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
-      || changes.compact
+      || changes.compact || changes.statusOverlay
     )) {
       void this.refresh();
     }
@@ -101,6 +104,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
         isEChartsMobileTooltipViewport(),
         this.unitSettings,
         this.compact,
+        this.statusOverlay,
       ),
       ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
     );

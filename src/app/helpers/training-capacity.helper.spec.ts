@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DashboardTrainingCapacityContext } from './dashboard-derived-metrics.helper';
 import { buildTrainingCapacityViewModels } from './training-capacity.helper';
 
-function buildContext(options: { ftp?: number; vo2Max?: number } = {}): DashboardTrainingCapacityContext {
+function buildContext(options: { ftp?: number; vo2Max?: number; referenceVo2Max?: number } = {}): DashboardTrainingCapacityContext {
   const importedMetric = (
     kind: 'ftp-setting' | 'vo2-max',
     value: number,
@@ -25,10 +25,25 @@ function buildContext(options: { ftp?: number; vo2Max?: number } = {}): Dashboar
       discipline: 'running',
       ftpSetting: null,
       importedVo2Max: null,
+      referenceVo2Max: null,
     }, {
       discipline: 'cycling',
       ftpSetting: options.ftp === undefined ? null : importedMetric('ftp-setting', options.ftp),
       importedVo2Max: options.vo2Max === undefined ? null : importedMetric('vo2-max', options.vo2Max),
+      referenceVo2Max: options.referenceVo2Max === undefined ? null : {
+        kind: 'vo2-max',
+        value: options.referenceVo2Max,
+        context: 'cycling',
+        method: 'lab-test',
+        observedAtMs: Date.UTC(2026, 6, 11),
+        provenance: 'manual-health-measurement',
+        comparison: options.vo2Max === undefined ? null : {
+          value: options.vo2Max,
+          observedAtMs: Date.UTC(2026, 6, 12),
+          delta: options.referenceVo2Max - options.vo2Max,
+          gapDays: 1,
+        },
+      },
     }],
   };
 }
@@ -41,7 +56,7 @@ describe('training-capacity.helper', () => {
     expect(cycling.ftpSetting?.detailText).toContain('Imported from Garmin Connect');
     expect(cycling.importedVo2Max).toMatchObject({
       label: 'Imported VO₂ max',
-      valueText: '55.9 ml/kg/min',
+      valueText: '55.90 ml/kg/min',
     });
     expect(cycling.evidenceText).toContain('not fitted or compared');
     expect(cycling).not.toHaveProperty('modeledCriticalPower');
@@ -78,6 +93,22 @@ describe('training-capacity.helper', () => {
 
     expect(cycling.ftpSetting).toBeNull();
     expect(cycling.importedVo2Max).toBeNull();
+    expect(cycling.referenceVo2Max).toBeNull();
     expect(cycling.evidenceText).toContain('No imported FTP or VO₂ max');
+  });
+
+  it('keeps a manual lab reference separate from imported workout VO2 max', () => {
+    const cycling = buildTrainingCapacityViewModels(buildContext({
+      vo2Max: 55.9,
+      referenceVo2Max: 57.2,
+    }))[1];
+
+    expect(cycling.importedVo2Max?.valueText).toContain('55.9');
+    expect(cycling.referenceVo2Max).toMatchObject({
+      label: 'Lab test VO₂ max',
+      valueText: expect.stringContaining('57.2'),
+    });
+    expect(cycling.referenceVo2Max?.detailText).toContain('nearest imported workout');
+    expect(cycling.evidenceText).toContain('separate evidence');
   });
 });

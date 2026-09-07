@@ -1,9 +1,8 @@
 import { AddressInfo } from 'node:net';
 import { createServer as createHttpServer } from 'node:http';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
+import { Client } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 import { McpDataError } from './data.service';
 import {
@@ -1373,7 +1372,7 @@ describe('MCP HTTP scope enforcement', () => {
       request.on('data', chunk => chunks.push(Buffer.from(chunk)));
       request.on('end', async () => {
         const server = new McpServer({ name: 'adapter-test', version: '1.0.0' });
-        const transport = new StreamableHTTPServerTransport({
+        const transport = new NodeStreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
           enableJsonResponse: true,
         });

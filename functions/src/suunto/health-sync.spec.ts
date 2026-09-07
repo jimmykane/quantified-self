@@ -77,7 +77,7 @@ import {
   suuntoHealthSyncTestInternals,
   SuuntoHealthRequestError,
 } from './health-sync';
-import { SuuntoHealthValidationError } from './health';
+import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError } from './health';
 import type { SuuntoWebhookWriteLifecycleGuards } from './health-webhook-binding-lifecycle';
 
 const START_MS = Date.parse('2026-08-26T00:00:00.000Z');
@@ -297,6 +297,140 @@ describe('Suunto Health provider sync', () => {
 
     expect(result.healthResults).toHaveLength(1);
     expect(result.healthResults[0].input.sampleSeries[0].nativeValues).toEqual([50, 60]);
+  });
+
+  it.each([
+    ['activity', 0], ['recovery', 0], ['activity', 2], ['recovery', -5],
+  ] as const)('refetches dense %s ranges at offset %s without losing full-day samples', async (feed, offset) => {
+    const dayMs = 86_400_000;
+    hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
+      const request = new URL(url);
+      if (!request.pathname.endsWith(`/${feed}`)) return [];
+      const from = Number(request.searchParams.get('from'));
+      const to = Number(request.searchParams.get('to'));
+      return Array.from({ length: Math.floor((to - from + 1) / 60_000) }, (_, index) => ({
+        timestamp: new Date(from + index * 60_000 + offset * 3_600_000).toISOString()
+          .replace('Z', `${offset < 0 ? '-' : '+'}${String(Math.abs(offset)).padStart(2, '0')}:00`),
+        entryData: feed === 'activity' ? { HR: 60 } : { Balance: 0.5, StressState: 2 },
+      }));
+    });
+    const snapshot = tokenSnapshot();
+    const result = await processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 7 * dayMs }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    );
+    expect(result.healthResults).toHaveLength(offset === 0 ? 7 : 8);
+    for (const record of result.healthResults) {
+      expect(record.input.sampleSeries[0].nativeValues).toHaveLength(1440);
+      expect(record.input.endTimeMs - record.input.startTimeMs).toBe(dayMs);
+    }
+    const feedCalls = hoisted.requestGet.mock.calls.filter(([options]) =>
+      new URL(options.url).pathname.endsWith(`/${feed}`));
+    expect(feedCalls).toHaveLength(3); // rejected parent, then two bounded children
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(feed === 'activity' ? 7 : 9);
+  });
+
+  it('narrows daily-statistic sample-count failures and retains both sides', async () => {
+    const dayMs = 86_400_000;
+    hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
+      const request = new URL(url);
+      if (!request.pathname.endsWith('/daily-activity-statistics')) return [];
+      const start = Date.parse(request.searchParams.get('startdate')!);
+      const end = Date.parse(request.searchParams.get('enddate')!);
+      const samples = end - start > 6 * dayMs ? Array(65).fill(null)
+        : Array.from({ length: 9 }, (_, i) => ({
+          TimeISO8601: new Date(START_MS + (i - 1) * dayMs).toISOString(), Value: i,
+        }));
+      return [{ Name: 'stepcount', Aggregation: 'sum', Sources: [{ Name: 'watch', Samples: samples }] }];
+    });
+    const snapshot = tokenSnapshot();
+    const result = await processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 7 * dayMs }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    );
+    expect(result.healthResults).toHaveLength(7);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(8);
+  });
+
+  it('fails closed at the minimum target instead of truncating an oversized response', async () => {
+    hoisted.requestGet.mockReset().mockResolvedValue(Array(10_001).fill(null));
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 4 * 86_400_000 }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toBeInstanceOf(SuuntoHealthResponseLimitError);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(3); // 4d -> 2d -> 1d
+  });
+
+  it('does not split malformed values', async () => {
+    hoisted.requestGet.mockReset().mockResolvedValue([{ timestamp: 'invalid', entryData: { HR: 60 } }]);
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000 }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toBeInstanceOf(SuuntoHealthValidationError);
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['deletion', 'reconnect'])('rechecks %s before an adaptive child request', async change => {
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      if (change === 'deletion') hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
+      else hoisted.connectionStateGeneration = 'connection-generation-2';
+      return Array(10_001).fill(null);
+    });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000 }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toMatchObject({ name: change === 'deletion'
+      ? 'TokenRefreshSkippedForDeletedUserError' : 'SuuntoHealthAccountValidationError' });
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds adaptive pull time before making further requests', async () => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
+      clock.mockReturnValue(now + 4 * 60_000);
+      return Array(10_001).fill(null);
+    });
+    try {
+      const snapshot = tokenSnapshot();
+      await expect(processSuuntoHealthQueueItem(
+        { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000 }, snapshot, 'staged-user',
+        currentAuthorityGuards(snapshot),
+      )).rejects.toThrow('Suunto Health pull budget exceeded.');
+      expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it('limits the total adaptive HTTP attempts without returning partial success', async () => {
+    hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
+      const request = new URL(url);
+      if (!request.pathname.endsWith('/recovery')) return [];
+      const span = Number(request.searchParams.get('to')) + 1 - Number(request.searchParams.get('from'));
+      return span > 4 * 86_400_000 ? Array(10_001).fill(null) : [];
+    });
+    const snapshot = tokenSnapshot();
+    await expect(processSuuntoHealthQueueItem(
+      { ...queueItem(), rangeEndMs: START_MS + 28 * 86_400_000 }, snapshot, 'staged-user',
+      currentAuthorityGuards(snapshot),
+    )).rejects.toThrow('Suunto Health pull budget exceeded.');
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(64);
+  });
+
+  it('fails closed when accumulated result bytes exceed the memory budget', async () => {
+    const byteLength = vi.spyOn(Buffer, 'byteLength').mockReturnValue(17 * 1024 * 1024);
+    try {
+      const snapshot = tokenSnapshot();
+      await expect(processSuuntoHealthQueueItem(
+        queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot),
+      )).rejects.toThrow('Suunto Health result budget exceeded.');
+    } finally {
+      byteLength.mockRestore();
+    }
   });
 
   it('ignores a current-day statistic returned beyond an older requested range', async () => {
