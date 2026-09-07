@@ -159,7 +159,9 @@
 
 .health-add-measurement-content {
   align-items: center;
-  display: inline-flex;
+  // A block-level row avoids the extra descender space that an inline-flex row
+  // contributes to Material's label line box, which lifts the entire row.
+  display: flex;
   gap: 0.4rem;
   justify-content: center;
 }

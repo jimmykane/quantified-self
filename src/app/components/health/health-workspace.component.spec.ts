@@ -1356,10 +1356,24 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.manualMutationBusy()).toBe(false);
   });
 
+  it('keeps the measurement action in a block-level centered row, not a baseline-aligned inline row', () => {
+    const styles = readFileSync(resolve(
+      process.cwd(), 'src/app/components/health/health-workspace.component.scss',
+    ), 'utf8');
+    const contentRule = styles.match(/\.health-add-measurement-content\s*\{([^}]+)\}/)?.[1];
+    expect(contentRule).toMatch(/display:\s*flex\s*;/);
+    expect(contentRule).toMatch(/align-items:\s*center\s*;/);
+    expect(contentRule).toMatch(/justify-content:\s*center\s*;/);
+  });
+
   it('shows save progress, creates manual Weight with an idempotency key, and refreshes the range', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
     component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
     await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    const addButton = host.querySelector<HTMLButtonElement>('.health-add-measurement')!;
+    const contentRow = addButton.querySelector('.health-add-measurement-content')!;
+    expect(contentRow.querySelector('mat-icon')?.parentElement).toBe(contentRow);
     const callsBeforeMutation = loadMetricRange.mock.calls.length;
     let finishSave!: (value: { sourceRecordId: string; revisionOrder: number }) => void;
     saveManualMeasurement.mockReturnValueOnce(new Promise(resolve => { finishSave = resolve; }));
@@ -1375,10 +1389,10 @@ describe('HealthWorkspaceComponent', () => {
       timezoneOffsetSeconds: 7_200,
     });
     fixture.detectChanges();
-    const host = fixture.nativeElement as HTMLElement;
-    const addButton = host.querySelector<HTMLButtonElement>('.health-add-measurement')!;
     expect(addButton.disabled).toBe(true);
-    expect(addButton.querySelector('mat-spinner')).not.toBeNull();
+    expect(addButton.querySelector('.health-add-measurement-content')).toBe(contentRow);
+    expect(addButton.querySelector('mat-spinner')?.parentElement).toBe(contentRow);
+    expect(addButton.querySelector('mat-spinner')?.getAttribute('diameter')).toBe('18');
     expect(addButton.textContent).toContain('Add measurement');
     expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent).toContain('Updating measurements');
 
@@ -1399,6 +1413,8 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.manualMutationBusy()).toBe(false);
     expect(addButton.disabled).toBe(false);
     expect(addButton.querySelector('mat-spinner')).toBeNull();
+    expect(addButton.querySelector('.health-add-measurement-content')).toBe(contentRow);
+    expect(contentRow.querySelector('mat-icon')?.parentElement).toBe(contentRow);
     expect(host.querySelector('[role="status"].cdk-visually-hidden')?.textContent?.trim()).toBe('');
   });
 
