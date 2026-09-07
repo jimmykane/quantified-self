@@ -3,6 +3,7 @@ import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QueueResult } from '../queue-utils';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
+import { buildHealthBackfillJobs } from '../scripts/health-backfill-plan';
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -338,6 +339,7 @@ vi.mock('../garmin/health-sync', () => ({
 
 import {
     addSleepSyncQueueItem,
+    getMalformedSleepQueueItemReason,
     GARMIN_HEALTH_CONTINUATION_BUDGET_MS,
     GARMIN_HEALTH_WRITE_BATCH_SIZE,
     processSleepSyncQueueItem,
@@ -518,6 +520,33 @@ describe('sleep queue', () => {
                 'suunto-user-1',
                 expect.any(Number),
             );
+    });
+
+    it.each([false, true])('preserves an existing admin polling job transactionally (processed=%s)', async processed => {
+        hoisted.docGet.mockResolvedValueOnce({
+            exists: true,
+            data: () => ({ processed, retryCount: 4, queueRevision: 'original', dateCreated: 123 }),
+        });
+        await addSleepSyncQueueItem({
+            type: 'suunto_health_poll', provider: 'SuuntoApp', userID: 'test-user-uid',
+            providerUserId: 'suunto-user-1', rangeStartMs: 1000, rangeEndMs: 2000,
+            dedupeKey: 'admin-fixed-id', preserveExisting: true, dispatchImmediately: false,
+        });
+        expect(hoisted.docSet).not.toHaveBeenCalled();
+        expect(hoisted.docUpdate).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+    });
+
+    it.each(['GarminAPI', 'SuuntoApp', 'COROSAPI'] as const)('accepts the admin catch-up job shape for %s', provider => {
+        const jobs = buildHealthBackfillJobs(provider, 'test-user-uid', 'provider-account',
+            Date.parse('2026-07-01'), Date.parse('2026-09-01'), 'campaign');
+        expect(jobs.length).toBeGreaterThan(0);
+        for (const job of jobs) {
+            expect(getMalformedSleepQueueItemReason({
+                ...job.input, id: job.queueId, dateCreated: Date.now(),
+                processed: false, retryCount: 0, dispatchedToCloudTask: null,
+            })).toBeNull();
+        }
     });
 
     it('resolves Garmin Ping accounts in one bounded collection-group batch', async () => {
