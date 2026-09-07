@@ -123,7 +123,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('prior-import state cannot be verified');
     expect(healthSection?.content).toContain('Connectivity');
     expect(healthSection?.content).toContain('**Health (Beta)**');
-    expect(healthSection?.content).toContain('Eligible beta accounts');
+    expect(healthSection?.content).toContain('available to all signed-in users');
     expect(healthSection?.content).not.toContain('URL retains the metric');
     expect(HELP_SECTIONS.flatMap(section => section.links).some(link => link.target === '/health')).toBe(false);
   });

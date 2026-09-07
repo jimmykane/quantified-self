@@ -8,14 +8,15 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
-  it('shares Health copy and preview selection with home and explains staged availability', () => {
+  it('shares Health copy and preview selection with home and explains signed-in availability', () => {
     const page = PUBLIC_SEO_PAGES.health;
     expect(page.h1).toBe(HEALTH_FEATURE_CONTENT.title);
     expect(page.intro).toBe(HEALTH_FEATURE_CONTENT.intro);
     expect(page.sections.slice(0, 3)).toEqual(HEALTH_FEATURE_CONTENT.rows.map(row => ({
       eyebrow: 'Health history', title: row.title, copy: row.copy, preview: row.preview, items: [],
     })));
-    expect(page.faqItems[0].answer).toContain('staged beta');
+    expect(page.faqItems[0].answer).toContain('Health (Beta) is available to all signed-in users');
+    expect(page.faqItems[0].answer).toContain('Provider connection and history-import plan requirements still apply');
     expect(page.faqItems[1].answer).toContain('not currently for Health imports');
     expect(PUBLIC_SEO_PAGES.featuresHub.actions.some(action => action.routerLink === '/features/health')).toBe(true);
   });
