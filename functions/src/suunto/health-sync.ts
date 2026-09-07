@@ -67,7 +67,10 @@ export class SuuntoHealthRequestError extends Error {
   public readonly name = 'SuuntoHealthRequestError';
   public readonly code = 'suunto_health_request_failed';
 
-  constructor(public readonly providerStatusCode?: number) {
+  constructor(
+    public readonly providerStatusCode?: number,
+    public readonly responseByteLimitExceeded = false,
+  ) {
     super('Suunto Health request failed.');
   }
 }
@@ -76,6 +79,7 @@ export interface SuuntoHealthRequestTelemetry {
   errorName: 'SuuntoHealthRequestError';
   errorCode: 'suunto_health_request_failed';
   providerStatusCode?: number;
+  failureCategory?: 'response_byte_limit';
 }
 
 /**
@@ -88,6 +92,9 @@ export function getSuuntoHealthRequestTelemetry(error: unknown): SuuntoHealthReq
   return {
     errorName: 'SuuntoHealthRequestError',
     errorCode: 'suunto_health_request_failed',
+    ...(error.responseByteLimitExceeded === true
+      ? { failureCategory: 'response_byte_limit' as const }
+      : {}),
     ...(typeof statusCode === 'number'
       && Number.isSafeInteger(statusCode) && statusCode >= 100 && statusCode <= 599
       ? { providerStatusCode: statusCode }
@@ -349,7 +356,10 @@ export async function processSuuntoHealthQueueItem(
         // Provider errors may contain request URLs, credentials, or response
         // fragments. The validated numeric HTTP status is safe and lets us
         // distinguish provider failures from transport failures in Cloud Logs.
-        throw new SuuntoHealthRequestError(statusCode ?? undefined);
+        throw new SuuntoHealthRequestError(
+          statusCode ?? undefined,
+          error instanceof requestPromise.ResponseBodyTooLargeError,
+        );
       }
     }
 
@@ -393,7 +403,10 @@ export async function processSuuntoHealthQueueItem(
     try {
       return await requestBoundedSuuntoHealthPayload(url, accessToken);
     } catch (error) {
-      throw new SuuntoHealthRequestError(providerStatusCode(error) ?? undefined);
+      throw new SuuntoHealthRequestError(
+        providerStatusCode(error) ?? undefined,
+        error instanceof requestPromise.ResponseBodyTooLargeError,
+      );
     }
   };
 

@@ -37,7 +37,8 @@ vi.mock('../config', () => ({
   config: { suuntoapp: { subscription_key: 'test-subscription-key' } },
 }));
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async importOriginal => ({
+  ...await importOriginal<typeof import('../request-helper')>(),
   get: hoisted.requestGet,
 }));
 
@@ -79,6 +80,7 @@ import {
   SuuntoHealthRequestError,
 } from './health-sync';
 import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError } from './health';
+import { ResponseBodyTooLargeError } from '../request-helper';
 import type { SuuntoWebhookWriteLifecycleGuards } from './health-webhook-binding-lifecycle';
 
 const START_MS = Date.parse('2026-08-26T00:00:00.000Z');
@@ -580,6 +582,35 @@ describe('Suunto Health provider sync', () => {
       message: 'Suunto Health request failed.',
       providerStatusCode: undefined,
     }));
+  });
+
+  it.each([false, true])('logs the response byte limit without leaking payloads after refresh=%s', async refresh => {
+    const providerError = Object.assign(new ResponseBodyTooLargeError(4 * 1024 * 1024, 5 * 1024 * 1024), {
+      body: 'private-health-data',
+      url: 'https://example.invalid?token=private-token',
+      headers: { Authorization: 'private-credential' },
+    });
+    hoisted.requestGet.mockReset();
+    if (refresh) {
+      hoisted.requestGet.mockRejectedValueOnce({ statusCode: 401 });
+    }
+    hoisted.requestGet.mockRejectedValueOnce(providerError);
+    const snapshot = tokenSnapshot();
+    let caught: unknown;
+    try {
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(SuuntoHealthRequestError);
+    expect(getSuuntoHealthRequestTelemetry(sanitizeSuuntoHealthErrorForTelemetry(caught))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+      failureCategory: 'response_byte_limit',
+    });
+    expect(JSON.stringify(caught)).not.toContain('private-');
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(refresh ? 2 : 1);
   });
 
   it('checks the deletion guard before every provider request', async () => {
