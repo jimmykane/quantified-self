@@ -106,6 +106,7 @@ export function buildHealthMetricEChartsOption(
     : model.numericBounds;
   const latestNumericPoint = [...model.displayedPoints].reverse().find(point =>
     typeof point.value === 'number' && Number.isFinite(point.value));
+  const showTimeOnXAxis = endTimeMs - startTimeMs < DAY_MS;
   const option = {
     animation: false,
     backgroundColor: 'transparent',
@@ -140,7 +141,7 @@ export function buildHealthMetricEChartsOption(
         }
         const pointStatus = hrvPointStatuses.get(point.timestampMs);
         return renderDashboardEChartsTooltipCard(style, {
-          title: formatTooltipDate(point.timestampMs),
+          title: formatTooltipDate(point.timestampMs, point.timezoneOffsetSeconds),
           subtitle: model.series.sourceLabel,
           rows: [{
             label: 'Reading',
@@ -180,7 +181,12 @@ export function buildHealthMetricEChartsOption(
         color: style.secondaryTextColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         fontSize: style.axisFontSize,
-        formatter: (value: number) => formatAxisDate(value),
+        formatter: (value: number) => {
+          const timezoneOffsetSeconds = nearestTimezoneOffsetSeconds(model.displayedPoints, value);
+          return showTimeOnXAxis
+            ? formatAxisTime(value, timezoneOffsetSeconds)
+            : formatAxisDate(value, timezoneOffsetSeconds);
+        },
       },
     },
     yAxis: isCategorical
@@ -535,8 +541,8 @@ function buildSeriesModel(
     yMaxLabel: series.chartKind === 'step'
       ? categoryLabels.at(-1) || ''
       : formatHealthAxisValue(series.metricId, numericBounds?.max ?? 1, series.unit, series.nativeOnly, unitSettings),
-    startLabel: formatAxisDate(startTimeMs),
-    endLabel: formatAxisDate(endTimeMs),
+    startLabel: formatAxisDate(startTimeMs, nearestTimezoneOffsetSeconds(displayedPoints, startTimeMs)),
+    endLabel: formatAxisDate(endTimeMs, nearestTimezoneOffsetSeconds(displayedPoints, endTimeMs)),
     categoryLabels,
     displayedPointCount: displayedPoints.length,
     omittedPointCount: Math.max(0, sortedPoints.length - displayedPoints.length),
@@ -651,21 +657,65 @@ function categoryValueLabel(value: number | string | boolean): string {
   return humanize(`${value}`) || 'Unknown';
 }
 
-function formatAxisDate(timestampMs: number): string {
+function formatAxisDate(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
+  const localTimestampMs = timestampInFixedOffset(timestampMs, timezoneOffsetSeconds);
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
-    .format(new Date(timestampMs));
+    .format(new Date(localTimestampMs));
 }
 
-function formatTooltipDate(timestampMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+function formatAxisTime(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
+  const localTimestampMs = timestampInFixedOffset(timestampMs, timezoneOffsetSeconds);
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+    .format(new Date(localTimestampMs));
+}
+
+function formatTooltipDate(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
+  const normalizedOffsetSeconds = normalizeTimezoneOffsetSeconds(timezoneOffsetSeconds);
+  const dateTime = new Intl.DateTimeFormat(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'UTC',
-    timeZoneName: 'short',
-  }).format(new Date(timestampMs));
+  }).format(new Date(timestampMs + (normalizedOffsetSeconds * 1_000)));
+  return `${dateTime} ${formatFixedTimezoneOffset(normalizedOffsetSeconds)}`;
+}
+
+function nearestTimezoneOffsetSeconds(
+  points: readonly HealthWorkspaceSeriesPoint[],
+  timestampMs: number,
+): number | null {
+  let nearest: HealthWorkspaceSeriesPoint | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const point of points) {
+    const distance = Math.abs(point.timestampMs - timestampMs);
+    if (distance < nearestDistance) {
+      nearest = point;
+      nearestDistance = distance;
+    }
+  }
+  return nearest?.timezoneOffsetSeconds ?? null;
+}
+
+function timestampInFixedOffset(timestampMs: number, timezoneOffsetSeconds?: number | null): number {
+  return timestampMs + (normalizeTimezoneOffsetSeconds(timezoneOffsetSeconds) * 1_000);
+}
+
+function normalizeTimezoneOffsetSeconds(timezoneOffsetSeconds?: number | null): number {
+  const value = Number(timezoneOffsetSeconds);
+  return Number.isFinite(value) && Math.abs(value) <= 18 * 60 * 60 ? value : 0;
+}
+
+function formatFixedTimezoneOffset(timezoneOffsetSeconds: number): string {
+  if (timezoneOffsetSeconds === 0) {
+    return 'UTC';
+  }
+  const absoluteMinutes = Math.abs(timezoneOffsetSeconds) / 60;
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = Math.floor(absoluteMinutes % 60);
+  const suffix = minutes > 0 ? `:${minutes.toString().padStart(2, '0')}` : '';
+  return `UTC${timezoneOffsetSeconds > 0 ? '+' : '-'}${hours}${suffix}`;
 }
 
 function humanize(value: string): string {

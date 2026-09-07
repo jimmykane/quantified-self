@@ -103,6 +103,7 @@ export interface HealthMetricCatalogGroup {
 export interface HealthWorkspaceSeriesPoint {
   timestampMs: number;
   calendarDate: string;
+  timezoneOffsetSeconds?: number | null;
   value: number | string | boolean;
   qualityCode: string | null;
 }
@@ -252,6 +253,7 @@ interface MetricDatum {
   valueType: HealthValueType;
   timestampMs: number;
   calendarDate: string;
+  timezoneOffsetSeconds: number | null;
   value: number | string | boolean;
   deviceLabel: string | null;
   qualityCode: string | null;
@@ -512,6 +514,7 @@ export function buildHealthMetricWorkspaceView(
       .map(item => ({
         timestampMs: item.timestampMs,
         calendarDate: item.calendarDate,
+        timezoneOffsetSeconds: item.timezoneOffsetSeconds,
         value: item.value,
         qualityCode: item.qualityCode,
       }))
@@ -1145,6 +1148,7 @@ function observationDatum(
     valueType: entry.valueType,
     timestampMs: observation.endTimeMs,
     calendarDate: observation.calendarDate,
+    timezoneOffsetSeconds: observation.timezoneOffsetSeconds ?? null,
     value,
     deviceLabel: resolveDeviceLabel(observation.device),
     qualityCode: entry.quality.nativeCode || entry.quality.status,
@@ -1177,6 +1181,7 @@ function activityObservationDatum(observation: ActivityHealthObservation): Metri
     valueType: HEALTH_VALUE_TYPES.Number,
     timestampMs: observation.observedAtMs,
     calendarDate: localCalendarDate(observation.observedAtMs),
+    timezoneOffsetSeconds: null,
     value: observation.value,
     deviceLabel: null,
     qualityCode: HEALTH_QUALITY_STATUSES.Valid,
@@ -1215,6 +1220,7 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       valueType: chunk.valueType,
       timestampMs: chunk.startTimeMs + (Number(chunk.offsetMs[index]) || 0),
       calendarDate: chunk.calendarDate,
+      timezoneOffsetSeconds: chunk.timezoneOffsetSeconds ?? null,
       value,
       deviceLabel: resolveDeviceLabel(chunk.device),
       qualityCode: chunk.qualityCodes?.[index] || null,
@@ -1277,6 +1283,7 @@ function sleepHrvDatums(
         valueType: HEALTH_VALUE_TYPES.Number,
         timestampMs,
         calendarDate,
+        timezoneOffsetSeconds: session.timezoneOffsetSeconds ?? null,
         value,
         deviceLabel: null,
         qualityCode: HEALTH_QUALITY_STATUSES.Valid,

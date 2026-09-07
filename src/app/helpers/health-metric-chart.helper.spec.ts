@@ -554,6 +554,60 @@ describe('Health metric chart helpers', () => {
     expect(model.endLabel).toBe(formatter.format(new Date(endTimeMs)));
   });
 
+  it('formats Health axes and tooltips in each reading recorded timezone', () => {
+    const timestampMs = Date.parse('2026-09-06T21:00:00.000Z');
+    const timezoneOffsetSeconds = 3 * 60 * 60;
+    const stressSeries = series({
+      metricId: HEALTH_METRIC_IDS.StressState,
+      valueType: HEALTH_VALUE_TYPES.Category,
+      chartKind: 'step',
+      unit: 'category',
+      points: [{
+        timestampMs,
+        calendarDate: '2026-09-07',
+        timezoneOffsetSeconds,
+        value: 'passive',
+        qualityCode: '3',
+      }],
+    });
+    const endTimeMs = timestampMs + DAY_MS - 1;
+    const model = buildHealthChartModels([stressSeries], timestampMs, endTimeMs)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      timestampMs,
+      endTimeMs,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as {
+      xAxis: { axisLabel: { formatter: (value: number) => string } };
+      tooltip: { formatter: (params: { value?: unknown }) => string };
+    };
+    const providerLocalTimestampMs = timestampMs + timezoneOffsetSeconds * 1_000;
+    const expectedAxisDate = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(providerLocalTimestampMs));
+    const expectedAxisTime = new Intl.DateTimeFormat(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    }).format(new Date(providerLocalTimestampMs));
+    const expectedTooltipDate = new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    }).format(new Date(providerLocalTimestampMs));
+
+    expect(model.startLabel).toBe(expectedAxisDate);
+    expect(option.xAxis.axisLabel.formatter(timestampMs)).toBe(expectedAxisTime);
+    expect(option.tooltip.formatter({ value: [timestampMs, 'passive', 2] }))
+      .toContain(`${expectedTooltipDate} UTC+3`);
+  });
+
   it('uses singular reading text in the chart accessibility label', () => {
     const model = buildHealthChartModels([series({
       points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 50, qualityCode: null }],

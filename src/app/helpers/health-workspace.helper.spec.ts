@@ -117,6 +117,7 @@ function sampleChunk(input: {
   values?: Array<number | string>;
   valueType?: 'number' | 'category';
   normalizationStatus?: 'canonical' | 'native_only';
+  timezoneOffsetSeconds?: number | null;
 }): HealthSampleChunk {
   const startTimeMs = Date.parse('2026-08-01T00:00:00.000Z');
   const values = input.values || [50, 51, 52];
@@ -149,6 +150,7 @@ function sampleChunk(input: {
     calendarDate: '2026-08-01',
     startTimeMs,
     endTimeMs: startTimeMs + ((values.length - 1) * 60_000),
+    timezoneOffsetSeconds: input.timezoneOffsetSeconds,
     receivedAtMs: startTimeMs + DAY_MS,
     seriesKey: input.id,
     chunkIndex: 0,
@@ -455,7 +457,7 @@ describe('Health workspace helpers', () => {
 
   it('renders canonical samples as lines and categorical samples as stepped series', () => {
     const result = projectLoadedHealthRange([], [
-      sampleChunk({ id: 'numeric' }),
+      sampleChunk({ id: 'numeric', timezoneOffsetSeconds: 10_800 }),
       sampleChunk({ id: 'category', values: ['rest', 'high', 'rest'], valueType: HEALTH_VALUE_TYPES.Category }),
       sampleChunk({ id: 'native', values: [1, 2], normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly }),
     ], {
@@ -466,6 +468,9 @@ describe('Health workspace helpers', () => {
 
     const view = buildHealthMetricWorkspaceView(result);
     expect(view.series.map(series => series.chartKind).sort()).toEqual(['line', 'line', 'step']);
+    const canonicalNumericSeries = view.series.find(series =>
+      series.metricId === HEALTH_METRIC_IDS.RestingHeartRate && !series.nativeOnly);
+    expect(canonicalNumericSeries?.points[0].timezoneOffsetSeconds).toBe(10_800);
     expect(view.series.filter(series => series.nativeOnly)).toHaveLength(1);
     expect(view.rows.every(row => row.valueText.includes('samples'))).toBe(true);
   });
