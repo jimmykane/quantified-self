@@ -311,8 +311,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('New dashboards start with the Activity Calendar tile');
     expect(gettingStartedSection?.content).toContain('default 1 x 1 dashboard tile');
     expect(gettingStartedSection?.content).toContain('one-time addition to existing dashboards that lack it');
-    expect(gettingStartedSection?.content).toContain('Open Training');
-    expect(gettingStartedSection?.content).toContain('Open Health');
+    expect(gettingStartedSection?.content).toContain('Open **Training** or **Health** from the main navigation');
     expect(gettingStartedSection?.content).toContain('Select its calendar icon to open a mini calendar for the current month');
     expect(gettingStartedSection?.content).toContain('baseline comparisons');
     expect(gettingStartedSection?.content).not.toContain('Simplify dashboard');

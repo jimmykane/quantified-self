@@ -113,7 +113,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
     ],
     faqItems: [
-      { question: 'Is Health available to everyone?', answer: 'Health (Beta) is available to all signed-in users from the main navigation and their Dashboard. Provider connection and history-import plan requirements still apply. The previews on this page use sample data.' },
+      { question: 'Is Health available to everyone?', answer: 'Health (Beta) is available to all signed-in users from the main navigation. Provider connection and history-import plan requirements still apply. The previews on this page use sample data.' },
       { question: 'Do all four workout providers supply Health data?', answer: 'Garmin, Suunto, and COROS have supported Health imports. Wahoo is supported for activities, but not currently for Health imports. Metrics vary by provider, device, and permissions.' },
       { question: 'Are readings from different providers averaged together?', answer: 'No. Each source stays separately labelled. Personal HRV ranges use the history for that source, and missing readings stay missing.' },
       { question: 'What does the personal HRV range mean?', answer: 'It compares your recent overnight HRV with your own recorded history from the same source. A range appears only after enough nights are available. It provides personal trend context, not a diagnosis or a prescribed workout.' },
