@@ -215,7 +215,7 @@ export function buildHealthMetricEChartsOption(
       symbol: 'circle',
       symbolSize: compact ? 4 : isPoint ? 8 : 5,
       barMaxWidth: 28,
-      lineStyle: { color: seriesColor, width: 2.25 },
+      lineStyle: { color: seriesColor, width: 1.5 },
       itemStyle: {
         color: useStressStateColors || useBodyEnergyColors
           ? (params: { value?: unknown }) => resolveHealthValueColor(
