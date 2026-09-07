@@ -1,5 +1,6 @@
 export type PublicSeoPageKey =
   | 'featuresHub'
+  | 'health'
   | 'activityCalendar'
   | 'trainingAnalysis'
   | 'trainingDashboard'
@@ -19,6 +20,7 @@ export type PublicSeoPageKey =
 
 export const PUBLIC_FEATURE_PATHS = {
   hub: 'features',
+  health: 'features/health',
   activityCalendar: 'features/activity-calendar',
   trainingAnalysis: 'features/training-analysis',
   trainingDashboard: 'features/training-dashboard',

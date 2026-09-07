@@ -22,6 +22,7 @@ export const PRERENDERED_FEATURE_ROUTES = [
   PUBLIC_FEATURE_PATHS.trainingAnalysis,
   PUBLIC_FEATURE_PATHS.trainingDashboard,
   PUBLIC_FEATURE_PATHS.activityMap,
+  PUBLIC_FEATURE_PATHS.health,
   PUBLIC_FEATURE_PATHS.mcpServer,
   PUBLIC_FEATURE_PATHS.assistant,
   PUBLIC_FEATURE_PATHS.fitGpxTcxFileAnalyzer,

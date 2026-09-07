@@ -1,0 +1,24 @@
+<div class="health-preview" aria-label="Health preview with sample data">
+  <div class="preview-heading">
+    <strong>{{ series().semanticLabel }}</strong>
+    <span>{{ series().sourceLabel }} · Sample data</span>
+  </div>
+  @if (status(); as range) {
+    <p class="range-status">{{ range.label }}</p>
+  }
+  @if (kind() === 'sleep') {
+    <app-sleep-trend-chart class="sleep-trend" [sleepTrend]="sleepTrend" sleepRange="14d"
+      sleepWindowLabel="18–31 Aug · Sample data" [darkTheme]="darkTheme()">
+    </app-sleep-trend-chart>
+    <app-health-sleep-stage-summary
+      [point]="sleepPoint" sourceLabel="Suunto · Sample night"
+      [darkTheme]="darkTheme()" [unitSettings]="unitSettings()">
+    </app-health-sleep-stage-summary>
+  } @else {
+    <app-health-metric-series-chart
+    [model]="model()" [startTimeMs]="start" [endTimeMs]="end"
+    [darkTheme]="darkTheme()" [unitSettings]="unitSettings()"
+    [statusOverlay]="overlay()" [statusDescription]="statusDescription()">
+  </app-health-metric-series-chart>
+  }
+</div>

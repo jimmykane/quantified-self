@@ -1,3 +1,11 @@
+@if (previewKey() === 'health-sleep' || previewKey() === 'health-hrv' || previewKey() === 'health-weight') {
+  @defer (on viewport) {
+    <app-health-preview [kind]="previewKey() === 'health-sleep' ? 'sleep' : previewKey() === 'health-hrv' ? 'hrv' : 'weight'"></app-health-preview>
+  } @placeholder {
+    <div class="preview-placeholder preview-placeholder--health" [class.preview-placeholder--health-sleep]="previewKey() === 'health-sleep'" aria-hidden="true"></div>
+  }
+}
+
 @if (previewKey() === 'training-snapshot') {
   @defer (on viewport) {
     <app-training-snapshot-preview></app-training-snapshot-preview>

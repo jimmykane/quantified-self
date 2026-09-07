@@ -5,6 +5,7 @@ import {
 } from './public-seo-pages.paths';
 import type { PublicSeoPageKey } from './public-seo-pages.paths';
 import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
+import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
 
 export {
   PUBLIC_FEATURE_PATHS,
@@ -86,6 +87,41 @@ function routeAction(
 }
 
 export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
+  health: {
+    key: 'health', path: PUBLIC_FEATURE_PATHS.health, eyebrow: 'Health · Beta',
+    title: 'Sleep, HRV and Health Trends Across Your Devices',
+    description: 'Explore sleep, heart rate, HRV and body measurements from supported Garmin, Suunto and COROS sources. Track personal trends and add your own readings.',
+    h1: HEALTH_FEATURE_CONTENT.title,
+    intro: HEALTH_FEATURE_CONTENT.intro,
+    chips: ['Sleep stages', 'Resting heart rate', 'HRV personal range', 'Body measurements', 'Manual readings'],
+    actions: [
+      routeAction('Health Guide', '/help', 'flat', 'arrow_forward', 'health'),
+      routeAction('Explore Integrations', '/integrations'),
+    ],
+    sections: [
+      ...HEALTH_FEATURE_CONTENT.rows.map(row => ({
+        eyebrow: 'Health history', title: row.title, copy: row.copy, preview: row.preview, items: [],
+      })),
+      {
+        eyebrow: 'Your sources', title: 'Keep the source behind every reading',
+        copy: 'Browse your history by metric and date, and choose which sources to display. Availability depends on the connected provider, device, and permissions.',
+        items: [
+          { icon: 'hub', title: 'Supported health connections', copy: 'Import supported Health data from Garmin, Suunto, and COROS. Each source keeps its own readings and context.' },
+          { icon: 'edit_note', title: 'Your own measurements', copy: 'Add weight, body composition, blood pressure, blood oxygen, and VO₂ max readings. Manual measurements stay clearly labelled.' },
+          { icon: 'calendar_month', title: 'Daily detail and longer trends', copy: 'Explore Today, 14-day, 30-day, 90-day, and yearly windows, with detailed samples where available.' },
+        ],
+      },
+    ],
+    faqItems: [
+      { question: 'Is Health available to everyone?', answer: 'Health is currently in a staged beta with navigation enabled for selected accounts. Provider connection and history-import plan requirements still apply. The previews on this page use sample data.' },
+      { question: 'Do all four workout providers supply Health data?', answer: 'Garmin, Suunto, and COROS have supported Health imports. Wahoo is supported for activities, but not currently for Health imports. Metrics vary by provider, device, and permissions.' },
+      { question: 'Are readings from different providers averaged together?', answer: 'No. Each source stays separately labelled. Personal HRV ranges use the history for that source, and missing readings stay missing.' },
+      { question: 'What does the personal HRV range mean?', answer: 'It compares your recent overnight HRV with your own recorded history from the same source. A range appears only after enough nights are available. It provides personal trend context, not a diagnosis or a prescribed workout.' },
+    ],
+    closingTitle: 'Explore the Health beta',
+    closingCopy: 'Learn how the workspace handles sleep, personal ranges, source history, and manual measurements.',
+    closingActions: [routeAction('Read the Health Guide', '/help', 'flat', 'arrow_forward', 'health')],
+  },
   featuresHub: {
     key: 'featuresHub',
     path: PUBLIC_FEATURE_PATHS.hub,
@@ -98,6 +134,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     actions: [
       routeAction('Training Analysis', '/features/training-analysis', 'flat', 'arrow_forward'),
       routeAction('Training Dashboard', '/features/training-dashboard'),
+      routeAction('Health', '/features/health'),
       routeAction('Activity Map', '/features/activity-map'),
       routeAction('Activity Calendar', '/features/activity-calendar'),
       routeAction('Supported activity types', '/features/supported-activities'),
@@ -1762,6 +1799,7 @@ function buildRouteData(page: PublicSeoPage): PublicSeoRouteData {
 }
 
 export const PUBLIC_SEO_ROUTE_DATA: Record<PublicSeoPageKey, PublicSeoRouteData> = {
+  health: buildRouteData(PUBLIC_SEO_PAGES.health),
   featuresHub: buildRouteData(PUBLIC_SEO_PAGES.featuresHub),
   activityCalendar: buildRouteData(PUBLIC_SEO_PAGES.activityCalendar),
   trainingAnalysis: buildRouteData(PUBLIC_SEO_PAGES.trainingAnalysis),

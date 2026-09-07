@@ -168,7 +168,23 @@
     </div>
   </section>
 
-  <!-- 4. Assistant Launch Section -->
+  <!-- Health: shared public content and deferred app chart renderers. -->
+  <section class="features-section health-section public-below-fold" aria-labelledby="home-health-title">
+    <h2 id="home-health-title" class="section-title animate-on-scroll">{{ healthFeature.title }}</h2>
+    <p class="section-subtitle animate-on-scroll">{{ healthFeature.intro }}</p>
+    <div class="compact-row-stack">
+      @for (row of healthFeature.rows; track row.preview; let last = $last) {
+        <app-compact-feature-row class="animate-on-scroll"
+          [icon]="row.icon" [title]="row.title" [summary]="row.copy" [showDivider]="!last">
+          <app-public-feature-preview data-nosnippet [previewKey]="row.preview"></app-public-feature-preview>
+        </app-compact-feature-row>
+      }
+    </div>
+    <div class="section-actions animate-on-scroll">
+      <a mat-stroked-button routerLink="/features/health">Explore Health</a>
+    </div>
+  </section>
+
   <section class="features-section ai-insights-section public-below-fold">
     <div class="ai-insights-header animate-on-scroll">
       <h2 class="section-title">Ask About Your Training</h2>

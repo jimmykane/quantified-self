@@ -54,6 +54,7 @@ describe('public-startup-route', () => {
     expect(isPublicContentPath('/features/mcp-server')).toBe(true);
     expect(isPublicContentPath('/features/training-dashboard')).toBe(true);
     expect(isPublicContentPath('/features/activity-map')).toBe(true);
+    expect(isPublicContentPath('/features/health')).toBe(true);
     expect(isPublicContentPath('/guides/import-activities-to-suunto')).toBe(true);
     expect(isPublicContentPath('/guides/import-activities-to-wahoo')).toBe(true);
     expect(isPublicContentPath('/mcp/authorize')).toBe(false);

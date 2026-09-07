@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { HEALTH_FEATURE_CONTENT } from './health-feature.content';
 import {
   PUBLIC_FEATURE_PATHS,
   PUBLIC_GUIDE_PATHS,
@@ -7,9 +8,21 @@ import {
 } from './public-seo-pages.content';
 
 describe('public-seo-pages.content', () => {
+  it('shares Health copy and preview selection with home and explains staged availability', () => {
+    const page = PUBLIC_SEO_PAGES.health;
+    expect(page.h1).toBe(HEALTH_FEATURE_CONTENT.title);
+    expect(page.intro).toBe(HEALTH_FEATURE_CONTENT.intro);
+    expect(page.sections.slice(0, 3)).toEqual(HEALTH_FEATURE_CONTENT.rows.map(row => ({
+      eyebrow: 'Health history', title: row.title, copy: row.copy, preview: row.preview, items: [],
+    })));
+    expect(page.faqItems[0].answer).toContain('staged beta');
+    expect(page.faqItems[1].answer).toContain('not currently for Health imports');
+    expect(PUBLIC_SEO_PAGES.featuresHub.actions.some(action => action.routerLink === '/features/health')).toBe(true);
+  });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',
+      health: 'features/health',
       activityCalendar: 'features/activity-calendar',
       trainingAnalysis: 'features/training-analysis',
       trainingDashboard: 'features/training-dashboard',
@@ -274,6 +287,7 @@ describe('public-seo-pages.content', () => {
       PUBLIC_SEO_PAGES.activityCalendar,
       PUBLIC_SEO_PAGES.trainingAnalysis,
       PUBLIC_SEO_PAGES.trainingDashboard,
+      PUBLIC_SEO_PAGES.health,
       PUBLIC_SEO_PAGES.activityMap,
       PUBLIC_SEO_PAGES.mcpServer,
       PUBLIC_SEO_PAGES.assistant,
@@ -295,6 +309,7 @@ describe('public-seo-pages.content', () => {
       PUBLIC_SEO_PAGES.activityCalendar,
       PUBLIC_SEO_PAGES.trainingAnalysis,
       PUBLIC_SEO_PAGES.trainingDashboard,
+      PUBLIC_SEO_PAGES.health,
       PUBLIC_SEO_PAGES.activityMap,
       PUBLIC_SEO_PAGES.mcpServer,
       PUBLIC_SEO_PAGES.assistant,

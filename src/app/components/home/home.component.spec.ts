@@ -167,6 +167,9 @@ describe('HomeComponent', () => {
             if (section.classList.contains('integrations-section')) {
                 return 'integrations';
             }
+            if (section.classList.contains('health-section')) {
+                return 'health';
+            }
             if (section.classList.contains('features-section') && !section.classList.contains('ai-insights-section')) {
                 return 'performance';
             }
@@ -189,6 +192,7 @@ describe('HomeComponent', () => {
             'hero',
             'integrations',
             'performance',
+            'health',
             'ai-insights',
             'footprint',
             'hardware',
@@ -318,9 +322,9 @@ describe('HomeComponent', () => {
     it('uses the shared compact row primitive for every top-level homepage card', () => {
         const compactRows = fixture.nativeElement.querySelectorAll('app-compact-feature-row');
 
-        expect(compactRows.length).toBe(11);
+        expect(compactRows.length).toBe(14);
         expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
-        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(5);
+        expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(6);
         expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-feature-row'))).toBe(true);
         expect(fixture.nativeElement.querySelector('app-public-feature-preview[previewkey="reviewer-benchmark"]')).toBeTruthy();
     });
@@ -334,6 +338,9 @@ describe('HomeComponent', () => {
             'training-signals',
             'dashboard',
             'workout-analysis',
+            'health-sleep',
+            'health-hrv',
+            'health-weight',
             'assistant-example',
             'mcp-flow',
             'activity-map',

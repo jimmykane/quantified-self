@@ -54,8 +54,7 @@ describe('ChartsSleepTrendComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [ChartsSleepTrendComponent],
-      imports: [MatButtonModule, MatIconModule],
+      imports: [ChartsSleepTrendComponent, MatButtonModule, MatIconModule],
       providers: [
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn() } },

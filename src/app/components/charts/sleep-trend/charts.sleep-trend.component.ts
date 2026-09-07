@@ -10,6 +10,10 @@ import {
   ViewChild,
 } from '@angular/core';
 import dayjs from 'dayjs';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
 import type { EChartsType } from 'echarts/core';
 import {
   ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
@@ -99,7 +103,8 @@ const STACK_BAR_EMPHASIS = { focus: 'none' as const };
   templateUrl: './charts.sleep-trend.component.html',
   styleUrls: ['./charts.sleep-trend.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
+  imports: [AppChartSharedModule, MatButtonModule, MatIconModule, MatTooltipModule],
 })
 export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;

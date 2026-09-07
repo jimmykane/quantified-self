@@ -20,7 +20,7 @@ Issue #614 adds the authenticated **Health** workspace on top of this foundation
 - No cross-provider deduplication, ranking, or source-preference policy is applied.
 - No medical interpretation or diagnosis is produced.
 - No provider payload, credential, raw provider account ID, or signed URL is stored in the health model.
-- No new MCP tool, Training metric, normalized Sleep field, dashboard tile, or public page is added.
+- The foundation adds no new MCP tool, Training metric, normalized Sleep field, or dashboard tile. Public Health previews are described below.
 - No time-based retention or Firestore TTL policy is enabled for health source records or sample chunks.
 
 ## Architecture
@@ -304,6 +304,24 @@ A conflict is emitted only when canonical entries share metric ID, calendar date
 The Health workspace deliberately defines no source-selection policy. It gives every provider/account/aggregation/semantic variant/origin/recording method/unit its own labeled series, isolates native-only or non-comparable values, and highlights comparable conflicts without selecting or averaging either value. Multiple accounts use local ordinal labels; opaque account keys are never rendered.
 
 ## Health workspace contract
+
+### Public Health previews
+
+The homepage introduces Health after the Training section and links to the indexable, prerendered
+`/features/health` overview. Both surfaces consume `HEALTH_FEATURE_CONTENT` and the same deferred
+`HealthPreviewComponent`. That component only adapts deterministic, source-labelled sample data; it does not
+read account data, initialize Health data services, or change the staged workspace rollout. The public page
+explains beta availability and links to public help rather than promising immediate access to `/health`.
+
+Sleep uses the existing standalone `ChartsSleepTrendComponent` (still re-exported by `AppChartsModule` for
+workspace/dashboard consumers) and `HealthSleepStageSummaryComponent`. HRV and weight use
+`HealthMetricSeriesChartComponent`, the canonical display helpers, and the same HRV personal-range helpers
+as Health. Changes to those renderers, colours, tooltips, and interactions therefore apply in the app, on home,
+and on the feature page. No public-only chart renderer or chart options are maintained. The HRV fixture
+includes baseline history outside its visible 14-day window; sleep stage totals agree with the sample night.
+SSR emits the copy, links, metadata, and preview placeholders; charts load in the browser when in view.
+
+### Authenticated workspace
 
 The authenticated `/health` route is client-rendered and `noindex`. Owner-scoped reads remain available to signed-in, onboarded users who open the route directly, while all in-app entry points are temporarily presentation-gated by `shared/health-workspace-rollout.ts`. The staged UID sees a compact **Open Health** Dashboard action and a **Health · Beta** item immediately after Dashboard in primary navigation; other users receive no in-app link to `/health`. Provider connection and history-import plan checks are unchanged. Health is intentionally not a configurable dashboard tile.
 
