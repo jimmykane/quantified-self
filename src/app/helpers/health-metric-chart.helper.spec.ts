@@ -17,7 +17,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface HealthMetricColorOption {
   series: Array<{
-    lineStyle: { color: string };
+    lineStyle: { color: string; width: number };
     itemStyle: { color: string };
   }>;
 }
@@ -283,6 +283,7 @@ describe('Health metric chart helpers', () => {
         false,
       ) as HealthMetricColorOption;
       expect(option.series[0].lineStyle.color).toBe(color);
+      expect(option.series[0].lineStyle.width).toBe(1.5);
       expect(option.series[0].itemStyle.color).toBe(color);
     }
 

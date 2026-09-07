@@ -272,6 +272,23 @@ function sleepSession(overrides: Partial<SleepSession> = {}): SleepSession {
   };
 }
 
+function hrvSleepSessions(): SleepSession[] {
+  return [
+    { daysAgo: 4, value: 50 },
+    { daysAgo: 2, value: 52 },
+    { daysAgo: 0, value: 58 },
+  ].map(({ daysAgo, value }) => {
+    const endTimeMs = todayStartMs - (daysAgo * 24 * 60 * 60 * 1000);
+    return sleepSession({
+      id: `sleep-${daysAgo}`,
+      sleepDate: localCalendarDate(endTimeMs),
+      startTimeMs: endTimeMs - (8 * 60 * 60 * 1000),
+      endTimeMs,
+      vitals: { averageHrvMs: value, averageHeartRateBpm: 52 },
+    });
+  });
+}
+
 describe('HealthWorkspaceComponent', () => {
   let fixture: ComponentFixture<HealthWorkspaceComponent>;
   let component: HealthWorkspaceComponent;
@@ -486,7 +503,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(prioritySection?.textContent).not.toContain('Last 30 days');
     expect((fixture.nativeElement as HTMLElement).querySelector('#health-detail-title')?.textContent).toContain('Resting heart rate');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.tagName).toBe('MAT-CARD');
-    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card')).toHaveLength(3);
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card')).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card mat-card-header')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card mat-card-actions')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-explorer')?.classList).toContain('qs-glass-card-panel');
@@ -497,7 +514,7 @@ describe('HealthWorkspaceComponent', () => {
       '.health-metric-option .health-metric-option-icon',
     );
     expect(metricOptionIcons).toHaveLength((fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option').length);
-    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(3);
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card-selected')).toBeNull();
     expect(Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-open-button'),
@@ -511,6 +528,9 @@ describe('HealthWorkspaceComponent', () => {
     expect(prioritySourceLabels.length).toBeGreaterThan(0);
     expect(prioritySourceLabels.some(label => label.textContent?.trim() === 'Garmin')).toBe(true);
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-chart-source')).toHaveLength(2);
+    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Open HRV"]')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.classList)
+      .toContain('health-priority-grid-double');
     const sleepDetails = (fixture.nativeElement as HTMLElement).querySelector('.health-priority-card:first-child')?.textContent;
     expect(sleepDetails).toContain('Score86');
     expect(sleepDetails).toContain('HRV58 ms');
@@ -598,7 +618,7 @@ describe('HealthWorkspaceComponent', () => {
       metricId === HEALTH_METRIC_IDS.HeartRateVariability,
     )), undefined, {
       metricIds: [HEALTH_METRIC_IDS.HeartRate],
-      sleepSessions: [sleepSession()],
+      sleepSessions: hrvSleepSessions(),
     }, HEALTH_METRIC_IDS.HeartRateVariability);
 
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRateVariability);
@@ -614,8 +634,15 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.providerFilterOptions().map(provider => provider.label)).toContain('Garmin');
     expect(component.sleepHrvNotice()).toContain('never averaged with standalone HRV');
     expect(component.visiblePriorityCards().map(card => card.label)).toContain('HRV');
-    expect((fixture.nativeElement as HTMLElement).textContent)
-      .toContain('Sleep HRV is read from normalized Sleep sessions');
+    const hostText = (fixture.nativeElement as HTMLElement).textContent;
+    expect(hostText).toContain('Sleep HRV is read from normalized Sleep sessions');
+    expect(hostText).toContain('Sleep HRV · 14-day trend');
+    expect(hostText).toContain('7 ms above prior 7-day median');
+    expect(loadMetricRange).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      startDate: component.priorityHrvWindow.startDate,
+      includeSamples: true,
+    }));
   });
 
   it('restores and persists the account-owned metric and range without adding query parameters', async () => {
@@ -723,7 +750,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
     expect((host.querySelector('[aria-label="Open Heart rate"]') as HTMLButtonElement).disabled).toBe(false);
     expect(host.querySelector('[aria-label="Open Sleep"]')).toBeNull();
-    expect((host.querySelector('[aria-label="Open HRV"]') as HTMLButtonElement).disabled).toBe(true);
+    expect(host.querySelector('[aria-label="Open HRV"]')).toBeNull();
   });
 
   it('keeps the verified metric catalog filtered while a saved metric preference echoes back', async () => {

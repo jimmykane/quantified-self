@@ -169,6 +169,11 @@
   white-space: nowrap;
 }
 
+.health-priority-chart-source > .health-priority-comparison {
+  color: var(--mat-sys-on-surface);
+  font-weight: 500;
+}
+
 .health-priority-source-row {
   display: block;
   min-height: 27px;

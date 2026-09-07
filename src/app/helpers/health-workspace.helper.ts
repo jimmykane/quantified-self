@@ -178,6 +178,12 @@ export interface HealthPriorityRow {
   sleepPoint?: DashboardSleepTrendPoint;
 }
 
+export interface HealthPriorityTrendSelectionOptions {
+  startTimeMs?: number;
+  endTimeMs?: number;
+  minimumPointCount?: number;
+}
+
 export interface HealthPriorityDetail {
   label: string;
   valueText: string;
@@ -648,15 +654,23 @@ export function selectHealthPriorityTrendSeries(
   result: HealthRangeResult | null | undefined,
   sleepSessions: readonly SleepSession[] = [],
   unitSettings: UserUnitSettingsInterface | null = null,
+  options: HealthPriorityTrendSelectionOptions = {},
 ): HealthWorkspaceSeries[] {
   if (!result) {
     return [];
   }
   const grouped = new Map<string, HealthWorkspaceSeries[]>();
-  for (const series of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings).series) {
-    if (!series.points.length || series.valueType !== HEALTH_VALUE_TYPES.Number) {
+  const minimumPointCount = Math.max(1, Math.floor(options.minimumPointCount || 1));
+  for (const sourceSeries of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings).series) {
+    const points = sourceSeries.points.filter(point =>
+      (options.startTimeMs === undefined || point.timestampMs >= options.startTimeMs)
+      && (options.endTimeMs === undefined || point.timestampMs <= options.endTimeMs));
+    if (points.length < minimumPointCount || sourceSeries.valueType !== HEALTH_VALUE_TYPES.Number) {
       continue;
     }
+    const series = points.length === sourceSeries.points.length
+      ? sourceSeries
+      : { ...sourceSeries, points };
     const key = accountIdentity(series.provider, series.sourceLabel);
     grouped.set(key, [...(grouped.get(key) || []), series]);
   }
@@ -664,6 +678,41 @@ export function selectHealthPriorityTrendSeries(
     .map(seriesValues => [...seriesValues].sort(comparePriorityTrendSeries)[0])
     .sort((left, right) => latestSeriesTimestamp(right) - latestSeriesTimestamp(left)
       || compareText(left.sourceLabel, right.sourceLabel));
+}
+
+export function buildHealthPriorityTrendComparison(
+  series: HealthWorkspaceSeries,
+  unitSettings: UserUnitSettingsInterface | null = null,
+): string | null {
+  const latest = series.points.at(-1);
+  if (!latest || typeof latest.value !== 'number' || !Number.isFinite(latest.value)) {
+    return null;
+  }
+  const baselineValues = series.points
+    .filter(point => point.timestampMs < latest.timestampMs
+      && point.timestampMs >= latest.timestampMs - (7 * DAY_MS)
+      && typeof point.value === 'number'
+      && Number.isFinite(point.value))
+    .map(point => point.value as number)
+    .sort((left, right) => left - right);
+  if (baselineValues.length === 0) {
+    return null;
+  }
+  const middle = Math.floor(baselineValues.length / 2);
+  const median = baselineValues.length % 2 === 0
+    ? (baselineValues[middle - 1] + baselineValues[middle]) / 2
+    : baselineValues[middle];
+  const difference = latest.value - median;
+  if (difference === 0) {
+    return 'Matches prior 7-day median';
+  }
+  return `${formatHealthValue(
+    series.metricId,
+    Math.abs(difference),
+    series.unit,
+    series.nativeOnly,
+    unitSettings,
+  )} ${difference > 0 ? 'above' : 'below'} prior 7-day median`;
 }
 
 export function buildSleepPriorityRows(
