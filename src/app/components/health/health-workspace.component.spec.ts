@@ -523,6 +523,14 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-explorer')?.classList).toContain('qs-glass-card-panel');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-footer')?.tagName).toBe('FOOTER');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')).toBeNull();
+    const connectivityLinks = (fixture.nativeElement as HTMLElement).querySelectorAll(
+      'a[aria-label="Manage Health connections in Connectivity"]',
+    );
+    expect(connectivityLinks).toHaveLength(1);
+    expect(connectivityLinks[0].closest('.health-sync-footer')).not.toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector(
+      'app-page-header a[aria-label="Manage Health connections in Connectivity"]',
+    )).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
     const metricOptionIcons = (fixture.nativeElement as HTMLElement).querySelectorAll(
       '.health-metric-option .health-metric-option-icon',
