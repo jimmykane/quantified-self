@@ -571,7 +571,7 @@ describe('HealthWorkspaceComponent', () => {
     }));
     expect(loadMetricRange).toHaveBeenCalledWith('user-1', expect.objectContaining({
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,
-      includeSamples: true,
+      includeSamples: false,
     }));
   }, 10_000);
 
@@ -655,7 +655,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(loadMetricRange).toHaveBeenCalledWith('user-1', expect.objectContaining({
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,
       startDate: component.priorityHrvHistoryStartDate,
-      includeSamples: true,
+      includeSamples: false,
     }));
   });
 

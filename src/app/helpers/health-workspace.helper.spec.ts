@@ -32,6 +32,7 @@ import {
   buildHealthMetricCatalogGroups,
   buildHealthMetricWorkspaceView,
   buildHealthHrvPersonalRangeStatus,
+  HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
   buildHealthPriorityRows,
   buildSleepObservationRows,
   buildSleepPriorityRows,
@@ -556,6 +557,47 @@ describe('Health workspace helpers', () => {
       ...window,
       startTimeMs: Date.parse('2026-07-29T00:00:00.000Z'),
     })).toEqual([]);
+  });
+
+  it('keeps the personal HRV range on nightly recovery summaries', () => {
+    const hrvMetric = (semanticVariant: string, value: number): HealthMetricValue => valueEntry({
+      metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      semanticVariant,
+      native: { metric: semanticVariant, value, unit: 'ms' },
+      canonical: { value, unit: HEALTH_UNITS.Millisecond },
+    });
+    const result = projectLoadedHealthRange([
+      ...['2026-07-30', '2026-07-31', '2026-08-01'].map((calendarDate, index) => sourceRecord({
+        id: `hrv-${index}`,
+        provider: HEALTH_PROVIDERS.GarminAPI,
+        accountKey: 'garmin-one',
+        calendarDate,
+        metrics: [
+          hrvMetric('health_snapshot_rmssd', 70 + index),
+          hrvMetric('sleep_session_average_hrv', 50 + index),
+          hrvMetric('overnight_rmssd', 40 + index),
+        ],
+      })),
+    ], [], {
+      startDate: '2026-07-01',
+      endDate: '2026-08-01',
+      metricIds: [HEALTH_METRIC_IDS.HeartRateVariability],
+      includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      minimumPointCount: 3,
+      semanticVariants: HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
+      semanticVariantPriority: HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
+    }).map(series => series.semanticVariant)).toEqual(['overnight_rmssd']);
+    expect(selectHealthPriorityTrendSeries(result, [], null, {
+      minimumPointCount: 3,
+      semanticVariants: [],
+    })).toEqual([]);
+    expect(buildHealthHrvPersonalRangeStatus({
+      ...hrvSeries([{ daysAgo: 0, value: 72 }]),
+      semanticVariant: 'health_snapshot_rmssd',
+    }, Date.parse('2026-08-01T23:59:59.999Z'))).toBeNull();
   });
 
   it('grades the source-specific 7-day HRV average against a 60-day personal range', () => {

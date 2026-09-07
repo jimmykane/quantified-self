@@ -69,6 +69,7 @@ import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation
 import {
   HEALTH_WORKSPACE_DEFAULT_RANGE,
   HEALTH_WORKSPACE_RANGES,
+  HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
   HealthMetricCatalogGroup,
   HealthMetricWorkspaceView,
   HealthObservationTableRow,
@@ -285,6 +286,8 @@ export class HealthWorkspaceComponent {
       startTimeMs: this.priorityHrvWindow.startTimeMs,
       endTimeMs: this.priorityHrvWindow.endTimeMs,
       minimumPointCount: 3,
+      semanticVariants: HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
+      semanticVariantPriority: HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
     },
   ));
   readonly priorityHrvChartStatuses = computed(() => {
@@ -298,14 +301,14 @@ export class HealthWorkspaceComponent {
       [],
       this.unitSettings(),
     ).series.map(series => [series.id, series]));
-    return Object.fromEntries(this.priorityHrvTrendSeries().map(series => [
-      series.id,
-      buildHealthHrvPersonalRangeStatus(
+    return Object.fromEntries(this.priorityHrvTrendSeries().flatMap(series => {
+      const status = buildHealthHrvPersonalRangeStatus(
         fullSeriesById.get(series.id) || series,
         this.priorityHrvWindow.endTimeMs,
         this.unitSettings(),
-      ),
-    ]));
+      );
+      return status ? [[series.id, status]] : [];
+    }));
   });
   readonly isDarkTheme = computed(() => this.themeService.appTheme() === AppThemes.Dark);
 
@@ -901,12 +904,13 @@ export class HealthWorkspaceComponent {
       if (!uid) {
         return;
       }
-      void this.loadPriorityMetric(uid, HEALTH_METRIC_IDS.HeartRate, this.priorityWindow.startDate, generation);
+      void this.loadPriorityMetric(uid, HEALTH_METRIC_IDS.HeartRate, this.priorityWindow.startDate, generation, true);
       void this.loadPriorityMetric(
         uid,
         HEALTH_METRIC_IDS.HeartRateVariability,
         this.priorityHrvHistoryStartDate,
         generation,
+        false,
       );
     });
 
@@ -1158,13 +1162,14 @@ export class HealthWorkspaceComponent {
     metricId: HealthMetricId,
     startDate: string,
     generation: number,
+    includeSamples: boolean,
   ): Promise<void> {
     try {
       const result = await this.healthService.loadMetricRange(uid, {
         startDate,
         endDate: this.todayDate,
         metricId,
-        includeSamples: true,
+        includeSamples,
       });
       if (generation !== this.priorityLoadGeneration) {
         return;

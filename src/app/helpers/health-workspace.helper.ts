@@ -186,7 +186,19 @@ export interface HealthPriorityTrendSelectionOptions {
   startTimeMs?: number;
   endTimeMs?: number;
   minimumPointCount?: number;
+  semanticVariants?: readonly string[];
+  semanticVariantPriority?: readonly string[];
 }
+
+export const HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS = [
+  // Ordered from the most recovery-specific provider summary to the broadest
+  // normalized Sleep fallback. The priority selector preserves this order.
+  'overnight_rmssd',
+  'overnight_average',
+  'sleep_overnight_hrv',
+  'sleep_session_average_hrv',
+] as const;
+type HealthHrvPersonalRangeSemanticVariant = typeof HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS[number];
 
 export type HealthHrvPersonalRangeTone = PersonalMetricRangeTone;
 
@@ -650,8 +662,14 @@ export function buildHealthPriorityRows(
     || compareText(left.id, right.id));
 }
 
-function comparePriorityTrendSeries(left: HealthWorkspaceSeries, right: HealthWorkspaceSeries): number {
-  return priorityTrendSeriesRank(right) - priorityTrendSeriesRank(left)
+function comparePriorityTrendSeries(
+  left: HealthWorkspaceSeries,
+  right: HealthWorkspaceSeries,
+  semanticVariantPriorities: ReadonlyMap<string, number>,
+): number {
+  return (semanticVariantPriorities.get(right.semanticVariant) || 0)
+    - (semanticVariantPriorities.get(left.semanticVariant) || 0)
+    || priorityTrendSeriesRank(right) - priorityTrendSeriesRank(left)
     || latestSeriesTimestamp(right) - latestSeriesTimestamp(left)
     || compareText(left.semanticLabel, right.semanticLabel);
 }
@@ -681,7 +699,22 @@ export function selectHealthPriorityTrendSeries(
   }
   const grouped = new Map<string, HealthWorkspaceSeries[]>();
   const minimumPointCount = Math.max(1, Math.floor(options.minimumPointCount || 1));
+  const semanticVariantValues = options.semanticVariants;
+  const semanticVariants = semanticVariantValues === undefined
+    ? null
+    : new Set(semanticVariantValues);
+  const semanticVariantPriority = options.semanticVariantPriority || [];
+  const semanticVariantCount = semanticVariantPriority.length;
+  const semanticVariantPriorities = new Map(
+    semanticVariantPriority.map((semanticVariant, index) => [
+      semanticVariant,
+      semanticVariantCount - index,
+    ]),
+  );
   for (const sourceSeries of buildHealthMetricWorkspaceView(result, sleepSessions, [], unitSettings).series) {
+    if (semanticVariants && !semanticVariants.has(sourceSeries.semanticVariant)) {
+      continue;
+    }
     const points = sourceSeries.points.filter(point =>
       (options.startTimeMs === undefined || point.timestampMs >= options.startTimeMs)
       && (options.endTimeMs === undefined || point.timestampMs <= options.endTimeMs));
@@ -695,7 +728,8 @@ export function selectHealthPriorityTrendSeries(
     grouped.set(key, [...(grouped.get(key) || []), series]);
   }
   return [...grouped.values()]
-    .map(seriesValues => [...seriesValues].sort(comparePriorityTrendSeries)[0])
+    .map(seriesValues => [...seriesValues].sort((left, right) =>
+      comparePriorityTrendSeries(left, right, semanticVariantPriorities))[0])
     .sort((left, right) => latestSeriesTimestamp(right) - latestSeriesTimestamp(left)
       || compareText(left.sourceLabel, right.sourceLabel));
 }
@@ -712,7 +746,10 @@ export function buildHealthHrvPersonalRangeStatus(
   series: HealthWorkspaceSeries,
   endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null = null,
-): HealthHrvPersonalRangeStatus {
+): HealthHrvPersonalRangeStatus | null {
+  if (!isHealthHrvPersonalRangeSemanticVariant(series.semanticVariant)) {
+    return null;
+  }
   const status = calculatePersonalMetricRange(series.points.flatMap(point =>
     typeof point.value === 'number' && Number.isFinite(point.value)
       ? [{ timestampMs: point.timestampMs, calendarDate: point.calendarDate, value: point.value }]
@@ -722,15 +759,11 @@ export function buildHealthHrvPersonalRangeStatus(
     currentWindowDays: HRV_CURRENT_AVERAGE_DAYS,
     currentMinimumObservationDays: HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS,
   });
-  const observationPeriod = isSleepHrvSemanticVariant(series.semanticVariant)
-    || /(^|_)overnight($|_)/.test(series.semanticVariant)
-    ? 'nights'
-    : 'days with readings';
   if (status.reason === 'building_baseline') {
     return {
       tone: 'neutral',
       label: 'Building personal range',
-      detailText: `${status.observationDayCount}/${status.requiredObservationDayCount} ${observationPeriod}`,
+      detailText: `${status.observationDayCount}/${status.requiredObservationDayCount} nights`,
       observationDayCount: status.observationDayCount,
       requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
       currentAverage: null,
@@ -741,7 +774,7 @@ export function buildHealthHrvPersonalRangeStatus(
     return {
       tone: 'neutral',
       label: 'Not enough recent HRV',
-      detailText: `${status.currentObservationDayCount}/${status.requiredCurrentObservationDayCount} ${observationPeriod} for a 7-day average`,
+      detailText: `${status.currentObservationDayCount}/${status.requiredCurrentObservationDayCount} nights for a 7-day average`,
       observationDayCount: status.observationDayCount,
       requiredObservationDayCount: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
       currentAverage: null,
@@ -785,6 +818,12 @@ export function buildHealthHrvPersonalRangeStatus(
     currentAverage,
     normalRange,
   };
+}
+
+export function isHealthHrvPersonalRangeSemanticVariant(
+  semanticVariant: string,
+): semanticVariant is HealthHrvPersonalRangeSemanticVariant {
+  return (HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS as readonly string[]).includes(semanticVariant);
 }
 
 export function buildSleepPriorityRows(
