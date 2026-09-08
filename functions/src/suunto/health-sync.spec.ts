@@ -79,12 +79,29 @@ import {
   suuntoHealthSyncTestInternals,
   SuuntoHealthRequestError,
 } from './health-sync';
-import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError } from './health';
+import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError, SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS } from './health';
 import { ResponseBodyTooLargeError } from '../request-helper';
 import type { SuuntoWebhookWriteLifecycleGuards } from './health-webhook-binding-lifecycle';
 
 const START_MS = Date.parse('2026-08-26T00:00:00.000Z');
 const END_MS = Date.parse('2026-08-27T00:00:00.000Z');
+
+async function drainWindows(item: SleepSyncQueueItemInterface) {
+  const snapshot = tokenSnapshot();
+  const records = new Map<string, Awaited<ReturnType<typeof processSuuntoHealthQueueItem>>['healthResults'][number]>();
+  const attemptCounts: number[] = [];
+  for (let attempts = 0; attempts < 57; attempts++) {
+    const before = hoisted.requestGet.mock.calls.length;
+    const result = await processSuuntoHealthQueueItem(item, snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+    attemptCounts.push(hoisted.requestGet.mock.calls.length - before);
+    for (const record of result.healthResults) records.set(record.input.sourceRecordKey, record);
+    if (!result.continuation) return { healthResults: [...records.values()], attemptCounts };
+    expect(result.continuation.nextStartMs).toBeGreaterThan(item.suuntoHealthProgress?.nextStartMs ?? item.rangeStartMs!);
+    item = { ...item, suuntoHealthProgress: { ...result.continuation,
+      recordsWritten: 0, recordsUnchanged: 0, recordsStale: 0, lastObservedAtMs: 0 } };
+  }
+  throw Error('Continuation did not finish');
+}
 
 function tokenProjection(accessToken: string): Record<string, unknown> {
   return {
@@ -336,11 +353,7 @@ describe('Suunto Health provider sync', () => {
         entryData: feed === 'activity' ? { HR: 60 } : { Balance: 0.5, StressState: 2 },
       }));
     });
-    const snapshot = tokenSnapshot();
-    const result = await processSuuntoHealthQueueItem(
-      { ...queueItem(), rangeEndMs: START_MS + 7 * dayMs }, snapshot, 'staged-user',
-      currentAuthorityGuards(snapshot),
-    );
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 7 * dayMs });
     expect(result.healthResults).toHaveLength(offset === 0 ? 7 : 8);
     for (const record of result.healthResults) {
       expect(record.input.sampleSeries[0].nativeValues).toHaveLength(1440);
@@ -371,11 +384,7 @@ describe('Suunto Health provider sync', () => {
         }));
       return [{ Name: 'stepcount', Aggregation: 'sum', Sources: [{ Name: 'watch', Samples: samples }] }];
     });
-    const snapshot = tokenSnapshot();
-    const result = await processSuuntoHealthQueueItem(
-      { ...queueItem(), rangeEndMs: START_MS + 7 * dayMs }, snapshot, 'staged-user',
-      currentAuthorityGuards(snapshot),
-    );
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 7 * dayMs });
     expect(result.healthResults).toHaveLength(7);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(8);
   });
@@ -385,7 +394,7 @@ describe('Suunto Health provider sync', () => {
     if (limit === 'bytes') {
       hoisted.requestGet.mockRejectedValue(new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1));
     } else {
-      hoisted.requestGet.mockResolvedValue(Array(10_001).fill(null));
+      hoisted.requestGet.mockResolvedValue(Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null));
     }
     const snapshot = tokenSnapshot();
     await expect(processSuuntoHealthQueueItem(
@@ -413,7 +422,7 @@ describe('Suunto Health provider sync', () => {
       if (change === 'deletion') hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
       else hoisted.connectionStateGeneration = 'connection-generation-2';
       if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
-      return Array(10_001).fill(null);
+      return Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null);
     });
     const snapshot = tokenSnapshot();
     await expect(processSuuntoHealthQueueItem(
@@ -430,7 +439,7 @@ describe('Suunto Health provider sync', () => {
     hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
       clock.mockReturnValue(now + 4 * 60_000);
       if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
-      return Array(10_001).fill(null);
+      return Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null);
     });
     try {
       const snapshot = tokenSnapshot();
@@ -444,7 +453,7 @@ describe('Suunto Health provider sync', () => {
     }
   });
 
-  it.each(['samples', 'bytes'])('limits the total adaptive HTTP attempts after %s limits without returning partial success', async limit => {
+  it.each(['samples', 'bytes'])('completes a dense 28-day range exceeding 64 total pulls using bounded %s continuations', async limit => {
     hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
       const request = new URL(url);
       if (!request.pathname.endsWith('/recovery')) return [];
@@ -452,14 +461,25 @@ describe('Suunto Health provider sync', () => {
       if (limit === 'bytes' && span > 4 * 86_400_000) {
         throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
       }
-      return span > 4 * 86_400_000 ? Array(10_001).fill(null) : [];
+      return span > 4 * 86_400_000 ? Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null) : [];
     });
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 28 * 86_400_000 });
+    expect(hoisted.requestGet.mock.calls.length).toBeGreaterThan(64);
+    expect(Math.max(...result.attemptCounts)).toBeLessThanOrEqual(18);
+    expect(result.attemptCounts.slice(1).every(count => count === 3)).toBe(true);
+  });
+
+  it('rejects malformed or reconnected continuation authority before provider I/O', async () => {
     const snapshot = tokenSnapshot();
-    await expect(processSuuntoHealthQueueItem(
-      { ...queueItem(), rangeEndMs: START_MS + 28 * 86_400_000 }, snapshot, 'staged-user',
-      currentAuthorityGuards(snapshot),
-    )).rejects.toThrow('Suunto Health pull budget exceeded.');
-    expect(hoisted.requestGet).toHaveBeenCalledTimes(64);
+    const item = { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000,
+      suuntoHealthProgress: { nextStartMs: END_MS, targetWindowMs: 86_400_000, authorityDigest: 'f'.repeat(64),
+        recordsWritten: 1, recordsUnchanged: 0, recordsStale: 0, lastObservedAtMs: 0 } };
+    await expect(processSuuntoHealthQueueItem(item, snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    await expect(processSuuntoHealthQueueItem({ ...item,
+      suuntoHealthProgress: { ...item.suuntoHealthProgress, nextStartMs: START_MS },
+    }, snapshot, 'staged-user', currentAuthorityGuards(snapshot))).rejects.toThrow('Invalid Suunto Health progress');
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
   });
 
   it('fails closed when accumulated result bytes exceed the memory budget', async () => {

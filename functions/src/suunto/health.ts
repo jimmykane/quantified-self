@@ -30,6 +30,9 @@ const SUUNTO_RECOVERY_SOURCE_RECORD_TYPE = 'suunto_247_recovery';
 
 export const SUUNTO_HEALTH_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 export const SUUNTO_HEALTH_MAX_SAMPLES = 10_000;
+// Independent CPU bound for duplicate/complementary provider rows. HTTP input
+// remains capped at 4 MiB; only normalized samples occupy the parsed map.
+export const SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS = 100_000;
 export const SUUNTO_HEALTH_MAX_STATISTIC_GROUPS = 16;
 export const SUUNTO_HEALTH_MAX_STATISTIC_SOURCES = 64;
 export const SUUNTO_HEALTH_MAX_STATISTIC_SAMPLES_PER_SOURCE = 64;
@@ -197,12 +200,22 @@ function recognizedContentToken(value: unknown): string {
   return createHash('sha256').update(stableStringify(value)).digest('hex');
 }
 
-function dedupeByTimestamp<T extends ParsedTimestamp>(samples: T[]): T[] {
+function parseAndDedupeSamples<T extends ParsedTimestamp>(
+  value: unknown,
+  field: string,
+  parse: (item: unknown, index: number) => T,
+): T[] {
   const byTimestamp = new Map<string, T>();
-  for (const sample of samples) {
+  const rows = payloadArray(value, field, SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS);
+  for (let index = 0; index < rows.length; index++) {
+    // Validate every row, including duplicates, before merging its fields.
+    const sample = parse(rows[index], index);
     const key = `${sample.timestampMs}:${sample.timezoneOffsetSeconds ?? 'unknown'}`;
     const existing = byTimestamp.get(key);
     if (!existing) {
+      if (byTimestamp.size >= SUUNTO_HEALTH_MAX_SAMPLES) {
+        throw new SuuntoHealthResponseLimitError(`${field} response exceeds the bounded item count.`);
+      }
       byTimestamp.set(key, sample);
       continue;
     }
@@ -219,7 +232,7 @@ function dedupeByTimestamp<T extends ParsedTimestamp>(samples: T[]): T[] {
 }
 
 export function parseSuuntoActivitySamples(value: unknown): SuuntoActivitySample[] {
-  const samples = payloadArray(value, 'Suunto activity', SUUNTO_HEALTH_MAX_SAMPLES).map((item, index) => {
+  const deduplicated = parseAndDedupeSamples(value, 'Suunto activity', (item, index) => {
     const sample = asRecord(item, `activity[${index}]`);
     const timestamp = parseTimestamp(sample.timestamp, `activity[${index}].timestamp`, true);
     const entryData = asRecord(sample.entryData, `activity[${index}].entryData`);
@@ -245,7 +258,6 @@ export function parseSuuntoActivitySamples(value: unknown): SuuntoActivitySample
       energyJoules: optionalNumber(entryData, 'EnergyConsumption', 0, 1_000_000_000_000),
     };
   });
-  const deduplicated = dedupeByTimestamp(samples);
   for (const sample of deduplicated) {
     if (sample.minimumHeartRateBpm !== null
       && sample.maximumHeartRateBpm !== null
@@ -257,7 +269,7 @@ export function parseSuuntoActivitySamples(value: unknown): SuuntoActivitySample
 }
 
 export function parseSuuntoRecoverySamples(value: unknown): SuuntoRecoverySample[] {
-  const samples = payloadArray(value, 'Suunto recovery', SUUNTO_HEALTH_MAX_SAMPLES).map((item, index) => {
+  return parseAndDedupeSamples(value, 'Suunto recovery', (item, index) => {
     const sample = asRecord(item, `recovery[${index}]`);
     const timestamp = parseTimestamp(sample.timestamp, `recovery[${index}].timestamp`, true);
     const entryData = asRecord(sample.entryData, `recovery[${index}].entryData`);
@@ -270,7 +282,6 @@ export function parseSuuntoRecoverySamples(value: unknown): SuuntoRecoverySample
         : rawStressState as 1 | 2 | 3 | 4,
     };
   });
-  return dedupeByTimestamp(samples);
 }
 
 function statisticNumber(value: unknown, metricName: string): number | null {

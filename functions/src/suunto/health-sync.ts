@@ -17,6 +17,7 @@ import { toSuuntoAuthorizationHeader } from './authorization-header';
 import {
   areSuuntoWebhookWriteLifecycleGuardsContinuous,
   captureCurrentSuuntoWebhookWriteLifecycleGuards,
+  getSuuntoWebhookWriteLifecycleAuthorityDigest,
   type SuuntoWebhookWriteLifecycleGuards,
 } from './health-webhook-binding-lifecycle';
 import {
@@ -36,6 +37,7 @@ import {
   SuuntoHealthResponseLimitError,
   SuuntoHealthValidationError,
 } from './health';
+import { isValidSuuntoHealthProgress, type SuuntoHealthProgress } from './health-progress';
 
 type TokenSnapshot = admin.firestore.DocumentSnapshot | admin.firestore.QueryDocumentSnapshot;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -305,8 +307,14 @@ export async function processSuuntoHealthQueueItem(
 ): Promise<{
   healthResults: SuuntoHealthResult[];
   lifecycleGuards: SuuntoHealthWriteLifecycleGuards;
+  continuation: Pick<SuuntoHealthProgress, 'nextStartMs' | 'targetWindowMs' | 'authorityDigest'> | null;
 }> {
   const { startMs, endMs } = assertSuuntoHealthRange(queueItem.rangeStartMs, queueItem.rangeEndMs);
+  if (!isValidSuuntoHealthProgress(queueItem)) throw new SuuntoHealthValidationError('Invalid Suunto Health progress.');
+  const authorityDigest = getSuuntoWebhookWriteLifecycleAuthorityDigest(initialGuards);
+  if (queueItem.suuntoHealthProgress && queueItem.suuntoHealthProgress.authorityDigest !== authorityDigest) {
+    throw new SuuntoHealthAccountValidationError();
+  }
   const expectedRootGeneration = capturedTokenRootGeneration(initialGuards);
   const tokenData = await getTokenData(tokenSnapshot, ServiceNames.SuuntoApp, false, {
     opaqueTelemetry: true,
@@ -413,9 +421,10 @@ export async function processSuuntoHealthQueueItem(
   const receivedAtMs = Date.now();
   const healthResultsBySource = new Map<string, SuuntoHealthResult>();
   let resultBytes = 0;
-  const processWindow = async (window: SuuntoHealthRequestWindow): Promise<void> => {
+  const processWindow = async (window: SuuntoHealthRequestWindow): Promise<SuuntoHealthRequestWindow> => {
     try {
       await processBoundedWindow(window);
+      return window;
     } catch (error) {
       const responseLimitExceeded = error instanceof SuuntoHealthResponseLimitError
         || (error instanceof SuuntoHealthRequestError && error.responseByteLimitExceeded === true);
@@ -424,15 +433,14 @@ export async function processSuuntoHealthQueueItem(
       // Re-fetch, never truncate. Padding is reapplied to each child so a
       // split cannot replace a complete provider-local day with half a day.
       const midpoint = Math.floor((window.targetStartMs + window.targetEndMs) / 2);
-      for (const [targetStartMs, targetEndMs] of [
-        [window.targetStartMs, midpoint], [midpoint, window.targetEndMs],
-      ]) {
-        await processWindow({
-          targetStartMs, targetEndMs,
-          requestStartMs: Math.max(0, targetStartMs - SUUNTO_HEALTH_CONTEXT_PADDING_MS),
-          requestEndMs: targetEndMs + SUUNTO_HEALTH_CONTEXT_PADDING_MS,
-        });
-      }
+      // Finish only the left child in this invocation. After its records are
+      // durable, the queue hands off the remaining range at this learned size.
+      // Retrying later work must not refetch already committed target windows.
+      return processWindow({
+        targetStartMs: window.targetStartMs, targetEndMs: midpoint,
+        requestStartMs: window.requestStartMs,
+        requestEndMs: midpoint + SUUNTO_HEALTH_CONTEXT_PADDING_MS,
+      });
     }
   };
   const processBoundedWindow = async (window: SuuntoHealthRequestWindow): Promise<void> => {
@@ -508,9 +516,14 @@ export async function processSuuntoHealthQueueItem(
       healthResultsBySource.set(key, result);
     }
   };
-  for (const window of buildSuuntoHealthRequestWindows(startMs, endMs)) {
-    await processWindow(window);
-  }
+  const targetStartMs = queueItem.suuntoHealthProgress?.nextStartMs ?? startMs;
+  const targetEndMs = Math.min(endMs, targetStartMs
+    + (queueItem.suuntoHealthProgress?.targetWindowMs ?? SUUNTO_HEALTH_MAX_TARGET_WINDOW_MS));
+  const completedWindow = await processWindow({
+    targetStartMs, targetEndMs,
+    requestStartMs: Math.max(0, targetStartMs - SUUNTO_HEALTH_CONTEXT_PADDING_MS),
+    requestEndMs: targetEndMs + SUUNTO_HEALTH_CONTEXT_PADDING_MS,
+  });
 
   lifecycleGuards = await assertCurrentLifecycle(firebaseUserID, tokenSnapshot.ref, tokenCredential, initialGuards);
   onLifecycleGuardsCaptured?.(lifecycleGuards);
@@ -520,6 +533,11 @@ export async function processSuuntoHealthQueueItem(
         || left.input.sourceRecordType.localeCompare(right.input.sourceRecordType)
         || left.input.sourceRecordKey.localeCompare(right.input.sourceRecordKey)),
     lifecycleGuards,
+    continuation: completedWindow.targetEndMs < endMs ? {
+      nextStartMs: completedWindow.targetEndMs,
+      targetWindowMs: completedWindow.targetEndMs - completedWindow.targetStartMs,
+      authorityDigest,
+    } : null,
   };
 }
 
