@@ -8,6 +8,30 @@ const note: TimelineNote = { id: 'a'.repeat(64), category: 'sickness', title: '<
 const option = { xAxis: { type: 'time', min: date('2026-09-01'), max: date('2026-09-10') }, yAxis: { min: 0 },
   series: [{ name: 'HR', type: 'line', data: [[date('2026-09-01'), 65], [date('2026-09-03'), null]], markArea: { data: [[{ yAxis: 60 }, { yAxis: 70 }]] } }] };
 describe('timeline chart overlays', () => {
+  it.each(['2026-09-02', '2026-09-04'])('labels single-day and period markers with the note title (end: %s)', endDate => {
+    const named = { ...note, title: 'Vacation with family', endDate };
+    const result = addTimelineNotesToChart(option, [named]);
+    const marker = result.option.series[1].markLine.data[0];
+    expect(marker.label.formatter()).toBe(named.title);
+    expect(result.groups.get(marker.name)).toEqual([named]);
+    expect(result.option.series[0]).toBe(option.series[0]);
+  });
+  it('renders template-like titles literally on one line without changing the stored title', () => {
+    const named = { ...note, title: 'Trip {b} <West>\nwith family 🏝' };
+    const marker = addTimelineNotesToChart(option, [named]).option.series[1].markLine.data[0];
+    expect(typeof marker.label.formatter).toBe('function');
+    expect(marker.label.formatter()).toBe('Trip {b} <West> with family 🏝');
+    expect(marker.tooltip.formatter()).toContain('&lt;West&gt;');
+    expect(named.title).toContain('\n');
+  });
+  it.each([[320, 100], [1000, 160]])('bounds long marker titles at chart width %s without losing the full title', (width, labelWidth) => {
+    const named = { ...note, title: 'A long vacation title '.repeat(5).trim() };
+    const marker = addTimelineNotesToChart(option, [named], {}, date('2026-09-10'),
+      buildDashboardEChartsStyleTokens(false, width)).option.series[1].markLine.data[0];
+    expect(marker.label).toMatchObject({ width: labelWidth, overflow: 'truncate', ellipsis: '…' });
+    expect(marker.label.formatter()).toBe(named.title);
+    expect(marker.tooltip.formatter()).toContain(named.title);
+  });
   it.each([[false, 320], [true, 320], [false, 1000], [true, 1000]] as const)('uses the shared tooltip card and chrome (dark: %s, width: %s)', (darkTheme, width) => {
     const style = buildDashboardEChartsStyleTokens(darkTheme, width);
     const result = addTimelineNotesToChart(option, [{ ...note, color: 'purple' }], {}, date('2026-09-10'), style);
@@ -23,6 +47,17 @@ describe('timeline chart overlays', () => {
     expect(overlay.markLine.data[0].itemStyle.color).toBe(AppColors.Purple);
     expect(overlay.markArea.data[0][0].itemStyle.color).toBe(AppColors.Purple);
   });
+  it.each([[320, -14], [1000, 0]])('staggers adjacent titles only in compact charts (width: %s)', (width, offset) => {
+    const notes = ['2026-09-02', '2026-09-04', '2026-09-06'].map((startDate, index) => ({
+      ...note, id: String(index), title: `Travel ${index}`, startDate, endDate: startDate,
+    }));
+    const result = addTimelineNotesToChart(option, notes, {}, date('2026-09-10'), buildDashboardEChartsStyleTokens(false, width));
+    const markers = result.option.series[1].markLine.data;
+    expect(markers.map(marker => marker.label.offset)).toEqual([[0, 0], [0, offset], [0, 0]]);
+    expect(markers.map(marker => marker.label.formatter())).toEqual(notes.map(item => item.title));
+    expect(markers.map(marker => result.groups.get(marker.name))).toEqual(notes.map(item => [item]));
+    expect(result.option.series[0]).toBe(option.series[0]);
+  });
   it('keeps overlapping notes in separate wrapped cards with their original dates', () => {
     const ongoing = { ...note, id: 'b', title: 'A long note '.repeat(10), startDate: '2026-09-03', endDate: null };
     const result = addTimelineNotesToChart(option, [note, ongoing], {}, date('2026-09-05'));
@@ -30,6 +65,7 @@ describe('timeline chart overlays', () => {
     const content = document.createElement('div'); content.innerHTML = html;
     const cards = content.querySelectorAll('.qs-dashboard-echarts-tooltip-card');
     expect(cards).toHaveLength(2);
+    expect(result.option.series[1].markLine.data[0].label.formatter()).toBe('2 notes');
     expect(cards[0].textContent).toContain('2026-09-02 – 2026-09-04');
     expect(cards[1].textContent).toContain('2026-09-03 – ongoing');
     expect(cards[1].textContent).toContain(ongoing.title.trim());
@@ -54,6 +90,7 @@ describe('timeline chart overlays', () => {
     const result = addTimelineNotesToChart(option, [note, hidden]);
     expect([...result.groups.values()]).toEqual([[note]]);
     expect(result.option.series[1].markLine.data[0].tooltip.formatter()).not.toContain(hidden.title);
+    expect(result.option.series[1].markLine.data[0].label.formatter()).toBe(note.title);
     expect(result.option.series[0]).toBe(option.series[0]);
     expect(addTimelineNotesToChart(option, [hidden]).option).toBe(option);
   });

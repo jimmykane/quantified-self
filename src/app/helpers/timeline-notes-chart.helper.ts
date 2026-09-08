@@ -120,9 +120,14 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       };
       const labelColor = (option.textStyle as { color?: string } | undefined)?.color ?? axis.axisLabel?.color;
       const color = timelineNoteGroupColor(group.notes) ?? labelColor;
+      const label = group.notes.length > 1 ? `${group.notes.length} notes` : group.notes[0].title.replace(/\s+/g, ' ');
       markers.push({ name, xAxis: start, symbol: ['circle', 'none'], symbolSize: 8,
         lineStyle: { opacity: 0.2, color, type: 'dotted' }, itemStyle: { color },
-        label: { show: true, position: 'insideStartTop', rotate: 0, opacity: 1, formatter: group.notes.length > 1 ? `${group.notes.length} notes` : 'Note', color: labelColor, fontSize: 11 }, tooltip });
+        label: { show: true, position: 'insideStartTop', rotate: 0, opacity: 1,
+          // A callback keeps literal title text such as {b} out of ECharts' template interpolation.
+          formatter: () => label, width: style.isCompactLayout ? 100 : 160, overflow: 'truncate', ellipsis: '…',
+          offset: [0, style.isCompactLayout && markers.length % 2 ? -14 : 0],
+          color: labelColor, fontSize: 11 }, tooltip });
       if (group.hasPeriod) area.push([{ name, xAxis: start, itemStyle: { color, opacity: 0.055 }, tooltip }, { xAxis: group.end }]);
     });
     if (markers.length) overlays.push({ id: `timeline-note-overlay-${axisIndex}`, name: '', type: 'line', data: [],
