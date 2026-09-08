@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, NgZone, computed, effec
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import type { TimelineNote, TimelineNoteRange, TimelineNotesLoad } from '@shared/timeline-notes';
@@ -14,12 +15,17 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 /** Workspace-owned loading; shared charts only receive an explicit private-data input. */
 @Component({
   selector: 'app-timeline-notes-workspace', standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatTooltipModule, AppChartSharedModule],
+  imports: [MatButtonModule, MatIconModule, MatProgressBarModule, MatTooltipModule, AppChartSharedModule],
   template: `
-    <button mat-button type="button" appHapticTap (click)="open()" [disabled]="!service.uid()" aria-label="Timeline notes">
-      <mat-icon>event_note</mat-icon><span>Timeline notes</span>
-    </button>
-    @if (loading()) { <span class="status" role="status">Loading notes…</span> }
+    <div class="timeline-notes-action" [attr.aria-busy]="loading()">
+      <button mat-button type="button" class="timeline-notes-button" appHapticTap (click)="open()"
+        [disabled]="!service.uid()" aria-label="Timeline notes" matTooltip="Timeline notes">
+        <mat-icon aria-hidden="true">event_note</mat-icon><span>Timeline notes</span>
+      </button>
+      <mat-progress-bar class="timeline-notes-progress" [class.timeline-notes-progress-visible]="loading()"
+        mode="indeterminate" aria-hidden="true" />
+    </div>
+    <span class="cdk-visually-hidden" role="status">{{ loading() ? 'Loading notes…' : '' }}</span>
     @if (error()) {
       <button mat-button type="button" appHapticTap (click)="refresh()" matTooltip="Notes could not load. The rest of this view is still available.">Retry notes</button>
     }

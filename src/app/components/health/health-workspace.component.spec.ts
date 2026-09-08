@@ -1513,6 +1513,21 @@ describe('HealthWorkspaceComponent', () => {
     expect(contentRule).toMatch(/justify-content:\s*center\s*;/);
   });
 
+  it('uses a compact mobile measurement label with a full accessible name and a plain Material action', async () => {
+    await createComponent();
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.health-add-measurement')!;
+    expect(button.hasAttribute('mat-button')).toBe(true);
+    expect(button.hasAttribute('mat-flat-button')).toBe(false);
+    expect(button.getAttribute('aria-label')).toBe('Add measurement');
+    expect(button.querySelector('.health-add-measurement-label')?.textContent).toBe('Add measurement');
+    expect(button.querySelector('.health-add-measurement-label-compact')?.textContent).toBe('Add');
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/health/health-workspace.component.scss'), 'utf8');
+    const mobileStyles = styles.slice(styles.indexOf('@media (max-width: 720px)'));
+    expect(mobileStyles).toMatch(/\.health-add-measurement-label\s*\{\s*display: none;/);
+    expect(mobileStyles).toMatch(/\.health-add-measurement-label-compact\s*\{\s*display: inline;/);
+    expect(mobileStyles).toContain('--mat-button-text-container-height: 44px;');
+  });
+
   it('shows save progress, creates manual Weight with an idempotency key, and refreshes the range', async () => {
     await createComponent(metricId => Promise.resolve(rangeLoad(metricId, true)));
     component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);

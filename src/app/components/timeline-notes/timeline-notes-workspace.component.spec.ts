@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimelineNotesWorkspaceComponent } from './timeline-notes-workspace.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('Timeline notes workspace ownership', () => {
   const note = { id: 'a'.repeat(64), category: 'other' as const, title: 'Private', startDate: '2026-01-02', endDate: '2026-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
@@ -44,6 +46,34 @@ describe('Timeline notes workspace ownership', () => {
     expect(service.loadRange).toHaveBeenCalledWith('owner', { startDate: '2025-12-01', endDate: '2026-01-10' });
     expect(component.context().notes).toEqual([note]);
     component.context().select([note]); expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: [note] } }));
+  });
+  it('keeps the Notes action mounted and available while range loading changes, with out-of-flow progress', async () => {
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementation(() => new Promise(value => { resolveLoad = value; }));
+    const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const button = host.querySelector<HTMLButtonElement>('.timeline-notes-button')!;
+    const icon = button.querySelector('mat-icon');
+    const progress = host.querySelector('mat-progress-bar')!;
+    fixture.componentInstance.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    await flush(); fixture.detectChanges();
+    expect(host.querySelector('.timeline-notes-action')?.getAttribute('aria-busy')).toBe('true');
+    expect(progress.classList.contains('timeline-notes-progress-visible')).toBe(true);
+    expect(host.querySelector('[role="status"]')?.classList.contains('cdk-visually-hidden')).toBe(true);
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toContain('Timeline notes');
+    expect(button.textContent).not.toContain('Loading');
+    resolveLoad({ notes: [note], incomplete: null });
+    await flush(); fixture.detectChanges();
+    expect(host.querySelector('.timeline-notes-action')?.getAttribute('aria-busy')).toBe('false');
+    expect(host.querySelector('.timeline-notes-button')).toBe(button);
+    expect(button.querySelector('mat-icon')).toBe(icon);
+    expect(host.querySelector('mat-progress-bar')).toBe(progress);
+    expect(progress.classList.contains('timeline-notes-progress-visible')).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/timeline-notes/timeline-notes-workspace.component.scss'), 'utf8');
+    expect(styles.match(/\.timeline-notes-progress\s*\{([^}]+)\}/)?.[1]).toContain('position: absolute;');
   });
   it('keeps fixed Highlights windows loaded alongside an older explorer and releases them on removal', async () => {
     const heartRate = {}, hrv = {}, explorer = {};

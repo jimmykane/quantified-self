@@ -5,11 +5,49 @@
   gap: 4px;
 }
 
-.status {
-  font-size: 12px;
-  color: var(--mat-sys-on-surface-variant);
+.timeline-notes-action {
+  flex: 0 0 auto;
+  position: relative;
 }
 
-@media (max-width: 599px) {
+.timeline-notes-progress {
+  --mat-progress-bar-active-indicator-height: 2px;
+  --mat-progress-bar-track-height: 2px;
+
+  bottom: 3px;
+  left: 12px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 12px;
+  visibility: hidden;
+  width: auto;
+}
+
+.timeline-notes-progress-visible {
+  opacity: 1;
+  // Fast cached/range loads stay quiet; longer loads never resize the action.
+  transition: opacity 100ms linear 200ms, visibility 0s linear 200ms;
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-notes-progress-visible {
+    transition: visibility 0s linear 200ms;
+  }
+}
+
+@media (max-width: 720px) {
   button span { display: none; }
+
+  .timeline-notes-button {
+    height: 44px;
+    min-width: 44px;
+    padding-inline: 0;
+    width: 44px;
+  }
+
+  .timeline-notes-button mat-icon {
+    margin-inline: 0;
+  }
 }

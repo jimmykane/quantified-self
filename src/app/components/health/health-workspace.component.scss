@@ -167,9 +167,12 @@
 }
 
 .health-add-measurement {
-  --mat-button-filled-container-height: 36px;
-
+  flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.health-add-measurement-label-compact {
+  display: none;
 }
 
 .health-add-measurement-content {
@@ -478,7 +481,15 @@
   }
 
   .health-add-measurement {
-    align-self: flex-start;
+    --mat-button-text-container-height: 44px;
+  }
+
+  .health-add-measurement-label {
+    display: none;
+  }
+
+  .health-add-measurement-label-compact {
+    display: inline;
   }
 
   .health-section-heading > p {

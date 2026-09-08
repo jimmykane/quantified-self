@@ -8,7 +8,8 @@
     subtitle="Compare each source on its own terms. Health never blends providers or chooses a preferred source.">
     <div pageHeaderActions class="health-header-actions">
       <app-timeline-notes-workspace #timelineNotes />
-      <button mat-flat-button type="button" class="health-add-measurement"
+      <button mat-button type="button" class="health-add-measurement"
+        aria-label="Add measurement" matTooltip="Add measurement"
         [disabled]="manualMutationBusy()" (click)="openManualMeasurement()">
         <span class="health-add-measurement-content">
           @if (manualMutationBusy()) {
@@ -16,7 +17,8 @@
           } @else {
             <mat-icon aria-hidden="true">add</mat-icon>
           }
-          <span>Add measurement</span>
+          <span class="health-add-measurement-label">Add measurement</span>
+          <span class="health-add-measurement-label-compact" aria-hidden="true">Add</span>
         </span>
       </button>
       <span class="cdk-visually-hidden" role="status">{{ manualMutationBusy() ? 'Updating measurements…' : '' }}</span>
