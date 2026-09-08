@@ -7,6 +7,7 @@ import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-shee
 import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -48,7 +49,6 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
-import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
 import { HealthActivityQueryService } from './health-activity-query.service';
 import {
@@ -58,10 +58,12 @@ import {
 } from './health-priority-summary.component';
 import { HealthSourceObservationTableComponent } from './health-source-observation-table.component';
 import {
-  HealthViewOptionsBottomSheetComponent,
-  type HealthViewOptionsData,
-  type HealthViewOptionsResult,
-} from './health-view-options-bottom-sheet.component';
+  HealthSourcesBottomSheetComponent,
+  type HealthSourcesData,
+  type HealthSourcesResult,
+  type HealthSourceSyncView,
+  type HealthWorkspaceSourceOption,
+} from './health-sources-bottom-sheet.component';
 import {
   ManualHealthMeasurementDialogComponent,
   type ManualHealthMeasurementDialogResult,
@@ -115,19 +117,9 @@ interface HealthProviderView {
   presentation: ProviderPresentation | null;
 }
 
-interface HealthProviderFilterView extends HealthProviderView {
-  selected: boolean;
-}
+interface HealthSyncStateView extends HealthProviderView, HealthSourceSyncView {}
 
-interface HealthSyncStateView extends HealthProviderView {
-  statusLabel: string;
-  statusTooltip: string;
-  lastUpdateText: string;
-  lastUpdateDateTime: string | null;
-  tone: HealthSyncTone;
-}
-
-type HealthSyncTone = 'current' | 'delayed' | 'stale' | 'error' | 'neutral';
+type HealthSyncTone = HealthSourceSyncView['tone'];
 
 interface QueuedHealthWorkspacePreferenceWrite {
   uid: string;
@@ -169,13 +161,13 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
     MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
+    MatMenuModule,
     MatProgressSpinnerModule,
     MatSelectModule,
     MatTooltipModule,
     AppChartsModule,
     PageHeaderComponent,
     TimelineNotesWorkspaceComponent,
-    ServiceSourceIconComponent,
     HealthMetricChartComponent,
     HealthPrioritySummaryComponent,
     HealthSourceObservationTableComponent,
@@ -195,8 +187,8 @@ export class HealthWorkspaceComponent {
   private readonly themeService = inject(AppThemeService);
   private readonly dialog = inject(MatDialog);
   private readonly bottomSheet = inject(MatBottomSheet);
-  private viewOptionsRef: MatBottomSheetRef<HealthViewOptionsBottomSheetComponent, HealthViewOptionsResult> | null = null;
-  readonly viewOptionsOpen = signal(false);
+  private sourcesRef: MatBottomSheetRef<HealthSourcesBottomSheetComponent, HealthSourcesResult> | null = null;
+  readonly sourcesOpen = signal(false);
   private readonly destroyRef = inject(DestroyRef);
   private manualDialogRef: MatDialogRef<unknown> | null = null;
   private manualAccountGeneration = 0;
@@ -271,6 +263,7 @@ export class HealthWorkspaceComponent {
   readonly syncStates = signal<HealthSyncState[]>([]);
   readonly syncStatesStatus = signal<HealthLoadStatus>('loading');
   readonly selectedProviders = signal<HealthProvider[]>([]);
+  private readonly sourceInventory = signal<{ uid: string | null; providers: HealthProvider[] }>({ uid: null, providers: [] });
   readonly refreshRevision = signal(0);
   readonly manualMutationBusy = signal(false);
   readonly availableHealthMetricIds = signal<readonly HealthMetricId[] | null>(null);
@@ -378,11 +371,8 @@ export class HealthWorkspaceComponent {
     ? this.selectedWindow().label
     : `${this.selectedWindow().label} · ${RANGE_LABELS[this.routeState().range]}`);
   readonly selectedIsSleep = computed(() => this.routeState().metric === 'sleep');
-  readonly effectiveProviderFilters = computed(() => {
-    const available = new Set(this.availableProviders());
-    const selected = this.selectedProviders().filter(provider => available.has(provider));
-    return selected.length ? selected : [];
-  });
+  // A workspace selection is not broadened when a metric/window lacks that source.
+  readonly effectiveProviderFilters = computed(() => this.selectedProviders());
   readonly windowedSleepSessions = computed(() => {
     const window = this.selectedWindow();
     return this.selectedSleepSessions().filter(session => {
@@ -529,26 +519,32 @@ export class HealthWorkspaceComponent {
       ];
     return [...new Set(providers)].sort((left, right) => providerLabel(left).localeCompare(providerLabel(right)));
   });
-  readonly providerFilterOptions = computed<HealthProviderFilterView[]>(() => {
-    const selected = this.effectiveProviderFilters();
-    return this.availableProviders().map(provider => ({
+  readonly workspaceSourceOptions = computed<HealthWorkspaceSourceOption[]>(() => {
+    const inventory = this.sourceInventory();
+    const selected = this.selectedProviders();
+    const known = inventory.uid === this.signedInUserID() ? inventory.providers : [];
+    const statuses = new Map(this.syncStateViews().map(state => [state.provider, state]));
+    const inView = new Set(this.availableProviders());
+    return [...new Set([...known, ...selected])].map(provider => ({
       ...providerView(provider),
       selected: selected.length === 0 || selected.includes(provider),
-    }));
+      sync: statuses.get(provider) || null,
+      hasDataInView: this.isLoading() ? null : inView.has(provider),
+    })).sort((left, right) => left.label.localeCompare(right.label));
   });
   readonly allProvidersSelected = computed(() => this.effectiveProviderFilters().length === 0);
-  readonly viewOptionsSourceLabel = computed(() => {
-    if (this.isLoading()) return 'Sources loading…';
-    const options = this.providerFilterOptions();
-    if (!options.length) return 'No sources';
-    if (options.length === 1) return options[0].label;
-    const selected = options.filter(option => option.selected);
-    if (selected.length === options.length) return 'All sources';
-    return selected.length === 1 ? selected[0].label : `${selected.length} sources`;
+  readonly sourcesButtonLabel = computed(() => this.selectedProviders().length ? `Sources · ${this.selectedProviders().length}` : 'Sources');
+  readonly sourceAttention = computed(() => {
+    if (this.syncStatesStatus() === 'error' || this.syncStatesStatus() === 'denied'
+      || this.syncStateViews().some(state => state.tone === 'error' || state.tone === 'stale')) return 'error';
+    return this.syncStateViews().some(state => state.tone === 'delayed') ? 'delayed' : null;
   });
-  readonly viewOptionsRangeLabel = computed(() => this.selectedRange() === 'today' ? '1d' : this.selectedRange());
-  readonly viewOptionsAriaLabel = computed(() =>
-    `View options: ${RANGE_LABELS[this.selectedRange()]}, ${this.viewOptionsSourceLabel()}`);
+  readonly sourcesAriaLabel = computed(() => {
+    const selection = this.selectedProviders().length ? this.selectedProviders().map(providerLabel).join(', ') : 'All sources';
+    return `Health sources: ${selection}${this.sourceAttention() ? '. Check source status' : ''}`;
+  });
+  readonly rangeButtonLabel = computed(() => this.selectedRange() === 'today' ? '1d' : this.selectedRange());
+  readonly rangeAriaLabel = computed(() => `Health range: ${RANGE_LABELS[this.selectedRange()]}`);
   readonly selectedStatus = computed(() => {
     if (this.selectedIsSleep()) {
       return this.selectedSleepStatus();
@@ -709,7 +705,14 @@ export class HealthWorkspaceComponent {
       ),
     ];
   });
-  readonly visiblePriorityCards = computed<HealthPriorityCardView[]>(() => this.priorityCards().filter(card =>
+  readonly visiblePriorityCards = computed<HealthPriorityCardView[]>(() => this.priorityCards().map(card => {
+    const selected = this.selectedProviders();
+    return selected.length ? {
+      ...card,
+      rows: card.rows.filter(row => selected.includes(row.provider)),
+      chartSeries: card.chartSeries.filter(series => selected.includes(series.provider)),
+    } : card;
+  }).filter(card =>
     card.id === 'heart_rate_variability'
       ? card.chartSeries.length > 0
       : card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
@@ -722,9 +725,9 @@ export class HealthWorkspaceComponent {
       this.signedInUserID();
       this.routeState();
       onCleanup(() => {
-        const ref = this.viewOptionsRef;
-        this.viewOptionsRef = null;
-        this.viewOptionsOpen.set(false);
+        const ref = this.sourcesRef;
+        this.sourcesRef = null;
+        this.sourcesOpen.set(false);
         ref?.dismiss();
       });
     });
@@ -757,6 +760,8 @@ export class HealthWorkspaceComponent {
         return;
       }
       this.workspacePreferenceUserID = uid;
+      this.sourceInventory.set({ uid, providers: [] });
+      this.selectedProviders.set([]);
       this.metricPreferenceTouched = false;
       this.rangePreferenceTouched = false;
       this.preferenceWriteGeneration += 1;
@@ -852,6 +857,7 @@ export class HealthWorkspaceComponent {
           : window.startTimeMs;
         subscription = this.sleepService.watchForDashboard(uid, historyStartTimeMs, window.endTimeMs).subscribe({
           next: sessions => {
+            this.rememberProviders(uid, sessions.map(session => session.source.provider as HealthProvider));
             this.selectedSleepSessions.set(sessions);
             this.selectedSleepStatus.set('ready');
           },
@@ -918,6 +924,7 @@ export class HealthWorkspaceComponent {
           return;
         }
         if (healthOutcome.status === 'fulfilled') {
+          this.rememberHealthProviders(uid, healthOutcome.value);
           this.selectedHealthLoad.set(healthOutcome.value);
           this.selectedHealthStatus.set('ready');
         } else {
@@ -926,6 +933,7 @@ export class HealthWorkspaceComponent {
         if (!isActivityHealthMetricId(metric)) {
           this.selectedActivityHealthStatus.set('ready');
         } else if (activityOutcome.status === 'fulfilled' && activityOutcome.value) {
+          this.rememberProviders(uid, activityOutcome.value.observations.map(item => item.provider));
           this.selectedActivityHealthResult.set(activityOutcome.value);
           this.selectedActivityHealthStatus.set('ready');
         } else {
@@ -946,6 +954,7 @@ export class HealthWorkspaceComponent {
         const startMs = endMs - (PRIORITY_HRV_HISTORY_DAYS * DAY_MS) + 1;
         subscription = this.sleepService.watchForDashboard(uid, startMs, endMs).subscribe({
           next: sessions => {
+            this.rememberProviders(uid, sessions.map(session => session.source.provider as HealthProvider));
             this.prioritySleepSessions.set(sessions);
             this.prioritySleepStatus.set('ready');
           },
@@ -996,6 +1005,7 @@ export class HealthWorkspaceComponent {
       if (uid) {
         subscription = this.healthService.watchSyncStates(uid).subscribe({
           next: states => {
+            this.rememberProviders(uid, states.map(state => state.provider));
             this.syncStates.set(states);
             this.syncStatesStatus.set('ready');
             const providerAdvanced = states.some(state =>
@@ -1069,7 +1079,7 @@ export class HealthWorkspaceComponent {
   }
 
   toggleProvider(provider: HealthProvider): void {
-    const available = this.availableProviders();
+    const available = this.workspaceSourceOptions().map(option => option.provider);
     if (!available.includes(provider)) return;
     this.haptics.selection();
     const current = this.effectiveProviderFilters();
@@ -1083,50 +1093,54 @@ export class HealthWorkspaceComponent {
     this.selectedProviders.set(next.length === 0 || next.length === available.length ? [] : next);
   }
 
-  openViewOptions(): void {
+  openSources(): void {
     const uid = this.signedInUserID();
-    if (!uid || this.viewOptionsRef) return;
+    if (!uid || this.sourcesRef) return;
     const requested = this.routeState();
-    const sourcesLoading = this.isLoading();
-    const data: HealthViewOptionsData = {
-      range: requested.range,
-      ranges: this.ranges,
-      providers: sourcesLoading ? [] : this.providerFilterOptions(),
-      sourcesLoading,
+    const data: HealthSourcesData = {
+      providers: this.workspaceSourceOptions(),
+      syncStatus: this.syncStatesStatus(),
     };
     this.haptics.selection();
-    const ref = this.bottomSheet.open<HealthViewOptionsBottomSheetComponent, HealthViewOptionsData, HealthViewOptionsResult>(
-      HealthViewOptionsBottomSheetComponent,
-      { data, ariaLabel: 'Health view options', autoFocus: 'first-tabbable', restoreFocus: true },
+    const ref = this.bottomSheet.open<HealthSourcesBottomSheetComponent, HealthSourcesData, HealthSourcesResult>(
+      HealthSourcesBottomSheetComponent,
+      { data, ariaLabel: 'Health sources', autoFocus: 'first-tabbable', restoreFocus: true },
     );
-    this.viewOptionsRef = ref;
-    this.viewOptionsOpen.set(true);
+    this.sourcesRef = ref;
+    this.sourcesOpen.set(true);
     ref.afterDismissed().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(result => {
-      if (this.viewOptionsRef !== ref) return;
-      this.viewOptionsRef = null;
-      this.viewOptionsOpen.set(false);
+      if (this.sourcesRef !== ref) return;
+      this.sourcesRef = null;
+      this.sourcesOpen.set(false);
       const current = this.routeState();
       if (!result || uid !== this.signedInUserID() || current.metric !== requested.metric
-        || current.range !== requested.range || current.endDate !== requested.endDate
-        || !this.ranges.some(option => option.range === result.range)) return;
-      const available = this.availableProviders();
-      const selected = result.providers === null ? this.selectedProviders()
-        : [...new Set(result.providers)].filter(provider => available.includes(provider));
-      const nextProviders = result.providers === null ? selected
-        : selected.length === available.length ? [] : selected;
+        || current.range !== requested.range || current.endDate !== requested.endDate || result.providers === null) return;
+      const available = new Set(data.providers.map(option => option.provider));
+      // Validate against the opened draft, not a metric's changing page of data.
+      if (result.providers.some(provider => !available.has(provider))) return;
+      const nextProviders = [...new Set(result.providers)];
       const previous = this.selectedProviders();
       const sourcesChanged = nextProviders.length !== previous.length || nextProviders.some(provider => !previous.includes(provider));
-      const rangeChanged = result.range !== current.range;
-      if (!sourcesChanged && !rangeChanged) return;
+      if (!sourcesChanged) return;
       this.haptics.selection();
-      // Apply the draft together: only the range is persisted, through the existing settings queue.
       this.selectedProviders.set(nextProviders);
-      if (rangeChanged) {
-        this.rangePreferenceTouched = true;
-        this.selectedRange.set(result.range);
-        this.queueWorkspacePreferenceWrite();
-      }
     });
+  }
+
+  private rememberHealthProviders(uid: string, load: HealthWorkspaceRangeLoad): void {
+    this.rememberProviders(uid, [
+      ...load.providers,
+      ...load.result.observations.map(item => item.provider),
+      ...load.result.sampleChunks.map(item => item.provider),
+    ]);
+  }
+
+  private rememberProviders(uid: string, providers: readonly HealthProvider[]): void {
+    if (uid !== this.signedInUserID() || !providers.length) return;
+    this.sourceInventory.update(current => ({
+      uid,
+      providers: [...new Set([...(current.uid === uid ? current.providers : []), ...providers])],
+    }));
   }
 
   openManualMeasurement(): void {
@@ -1240,6 +1254,7 @@ export class HealthWorkspaceComponent {
       if (generation !== this.priorityLoadGeneration) {
         return;
       }
+      this.rememberHealthProviders(uid, result);
       if (metricId === HEALTH_METRIC_IDS.HeartRate) {
         this.priorityHeartRateLoad.set(result);
         this.priorityHeartRateStatus.set('ready');

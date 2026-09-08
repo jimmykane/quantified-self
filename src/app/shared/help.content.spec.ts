@@ -91,8 +91,11 @@ describe('help.content', () => {
     const healthSection = HELP_SECTIONS.find(section => section.id === 'health');
 
     expect(healthSection?.title).toBe('Health');
-    expect(healthSection?.content).toContain('**View options** at the bottom of the metric explorer');
-    expect(healthSection?.content).toContain('only the selected metric, not Highlights');
+    expect(healthSection?.content).toContain('**Sources** beside the Health title');
+    expect(healthSection?.content).toContain('filter Highlights and every metric');
+    expect(healthSection?.content).toContain('compact range dropdown between the older/newer arrows');
+    expect(healthSection?.content).toContain('a source with no readings does not silently switch');
+    expect(healthSection?.content).not.toContain('**View options**');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
@@ -138,7 +141,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
-    expect(healthSection?.content).toContain('source footer shows each provider\'s recency');
+    expect(healthSection?.content).toContain('**Sources** sheet shows each provider\'s recency');
     expect(healthSection?.content).toContain('Connectivity** for connection and import management');
     expect(healthSection?.content).not.toContain('**Import history**');
     expect(healthSection?.content).toContain('Connectivity');

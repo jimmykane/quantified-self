@@ -20,6 +20,8 @@ provides:
 - `pageHeaderLeading` for an existing icon action. Set `leadingAction` to preserve its Material touch target while
   keeping the title visually compact. Do not combine `leadingIcon` and `pageHeaderLeading` on the same header.
 - `pageHeaderContext` for projected, domain-specific status content that replaces the eyebrow without adding a banner.
+- `pageHeaderTitleActions` for a compact workspace-wide control that must stay beside the title at every breakpoint,
+  such as Health Sources. Keep this slot small; normal route actions belong in `pageHeaderActions`.
 - `pageHeaderActions` for existing Material controls. Route actions move to a dedicated full-width row below 800 px;
   compact headers retain their inline action layout.
 
