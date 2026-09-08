@@ -13,7 +13,12 @@ const hoisted = vi.hoisted(() => ({
   retryPendingDisconnectQueueRelease: vi.fn(),
   retryWahooReconnectQueueRelease: vi.fn(),
   retryPendingServiceRouteRestore: vi.fn(),
+  retryInterruptedExplicitDisconnects: vi.fn(),
+  retryServiceDisconnectCleanup: vi.fn(),
 }));
+
+vi.mock('../OAuth2', () => ({ retryInterruptedExplicitDisconnects: hoisted.retryInterruptedExplicitDisconnects }));
+vi.mock('../service-disconnect-cleanup', () => ({ retryServiceDisconnectCleanup: hoisted.retryServiceDisconnectCleanup }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
   onSchedule: (_opts: any, handler: any) => handler,
@@ -164,6 +169,17 @@ describe('retry-pending-service-disconnects', () => {
       startAfter: vi.fn().mockReturnThis(),
       get: vi.fn().mockResolvedValue({ docs: [] }),
     });
+  });
+
+  it('does not clear or enforce a subscription disconnect owned by an explicit disconnect', async () => {
+    const root = { id: 'test-user', data: () => ({
+      disconnectState: 'disconnect_pending', disconnectOperationGeneration: 'explicit-operation',
+    }) } as any;
+    const config = { serviceName: ServiceNames.SuuntoApp, collectionName: 'suuntoAppAccessTokens' };
+    expect(await retryPendingServiceDisconnectsTestInternals.clearPendingDisconnectRootIfEntitled(config, root)).toBe(false);
+    await retryPendingServiceDisconnectsTestInternals.retryPendingDisconnectRoot(config, root);
+    expect(hoisted.clearServiceDisconnectPending).not.toHaveBeenCalled();
+    expect(hoisted.cleanupServiceConnectionForUser).not.toHaveBeenCalled();
   });
 
   it('clears pending disconnect without deauth when entitlement is active again', async () => {

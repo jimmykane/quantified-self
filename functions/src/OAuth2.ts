@@ -2,7 +2,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
 import * as crypto from 'crypto';
 import * as admin from 'firebase-admin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
   Auth2ServiceTokenInterface,
@@ -53,11 +53,13 @@ import {
   SUUNTO_WEBHOOK_BINDING_AUTHORIZATION_SOURCES,
 } from './suunto/health-webhook-binding';
 import {
+  SERVICE_CONNECTION_STATES,
   SERVICE_DISCONNECT_RETRY_BLOCKERS,
   SERVICE_DISCONNECT_RETRY_REASON,
   type ServiceDisconnectRetryBlocker,
   type ServiceDisconnectRetryDetails,
 } from '../../shared/service-connection';
+import { getExplicitDisconnectSettingsUpdate } from './activity-sync/route-cleanup';
 export { deleteLocalServiceToken } from './service-token-store';
 
 interface PersistedOAuthCredentialGuard {
@@ -395,6 +397,7 @@ async function beginExplicitDisconnectOperation(
   userID: string,
   serviceName: ServiceNames,
   tokenCollectionName: string,
+  expectedOperationGeneration?: string,
 ): Promise<ExplicitDisconnectOperation> {
   const db = admin.firestore();
   const tokenRootRef = db.collection(tokenCollectionName).doc(userID);
@@ -417,13 +420,16 @@ async function beginExplicitDisconnectOperation(
       transaction.get(tokenRootRef),
       transaction.get(tokenRootRef.collection('tokens')),
     ]);
-    // The first explicit disconnect owns this root fence until its finally
-    // block completes. A second request must not replace that generation: the
-    // first may already be deauthorizing the provider credential.
+    // The first explicit disconnect owns this fence through finalization.
+    // Only an expired lease can be reclaimed by recovery or a later request.
     const rootData = rootSnapshot.exists
       ? rootSnapshot.data() as Record<string, unknown>
       : undefined;
     const nowMs = Date.now();
+    if (expectedOperationGeneration
+      && rootData?.[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD] !== expectedOperationGeneration) {
+      throw new OAuthFlowContextMismatchError(serviceName);
+    }
     if (getActiveServiceDisconnectOperationGeneration(rootData, nowMs)) {
       throw new ServiceDisconnectInProgressError(
         serviceName,
@@ -448,8 +454,13 @@ async function beginExplicitDisconnectOperation(
         nowMs,
       );
     }
-    const invalidatedOAuthFlowGeneration = crypto.randomUUID();
-    const disconnectOperationGeneration = crypto.randomUUID();
+    // Recovery keeps the episode identity, including its durable cleanup tasks.
+    // The existing operation/lease is the durable intent, including for older
+    // interrupted callables. A new OAuth flow clears it and invalidates recovery.
+    const previousLifecycle = getServiceDisconnectLifecycleGuardFromRootData(rootData);
+    const invalidatedOAuthFlowGeneration = (previousLifecycle.disconnectOperationGeneration
+      && previousLifecycle.oauthFlowGeneration) || crypto.randomUUID();
+    const disconnectOperationGeneration = previousLifecycle.disconnectOperationGeneration || crypto.randomUUID();
     const nextRootData = {
       ...(rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : {}),
       [OAUTH_FLOW_GENERATION_FIELD]: invalidatedOAuthFlowGeneration,
@@ -459,6 +470,20 @@ async function beginExplicitDisconnectOperation(
       codeVerifier: FieldValue.delete(),
     };
     transaction.set(tokenRootRef, nextRootData, { merge: true });
+    // Route disabling and the durable recovery marker commit before any provider
+    // I/O. A killed callable can never leave the old routes enabled. Rotating the
+    // metadata generation invalidates any already-running restore worker too.
+    transaction.set(db.collection('users').doc(userID).collection('config').doc('settings'),
+      getExplicitDisconnectSettingsUpdate(serviceName), { merge: true });
+    transaction.set(db.collection('users').doc(userID).collection('meta').doc(serviceName), {
+      connectionState: SERVICE_CONNECTION_STATES.DisconnectPending,
+      connectionStateGeneration: disconnectOperationGeneration,
+      disconnectGeneration: rootData?.disconnectGeneration || disconnectOperationGeneration,
+      disconnectReason: 'user_disconnect',
+      disconnectManualReviewRequired: false,
+      routeRestorePending: FieldValue.delete(),
+      routeRestoreConnectionGeneration: FieldValue.delete(),
+    }, { merge: true });
     return {
       lifecycleGuard: getServiceDisconnectLifecycleGuardFromRootData({
         ...nextRootData,
@@ -479,6 +504,7 @@ async function finishExplicitDisconnectOperation(
 ): Promise<ExplicitDisconnectFinishStatus> {
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
   return admin.firestore().runTransaction(async transaction => {
+    if ((await getUserDeletionGuardStateInTransaction(admin.firestore(), transaction, userID)).shouldSkip) return 'stale';
     const snapshot = await transaction.get(rootRef);
     if (!snapshot.exists) return 'root_missing';
     const current = getServiceDisconnectLifecycleGuardFromRootData(
@@ -962,6 +988,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(
 
 interface DeauthorizeServiceForUserOptions {
   missingTokensBehavior?: MissingTokensBehavior;
+  expectedOperationGeneration?: string;
 }
 
 interface DeauthorizeServiceForSubscriptionEnforcementOptions {
@@ -981,6 +1008,7 @@ export async function deauthorizeServiceForUser(
     userID,
     serviceName,
     adapter.tokenCollectionName,
+    options.expectedOperationGeneration,
   );
   const disconnectLifecycleGuard = disconnectOperation.lifecycleGuard;
   const operationCorrelationId = getDisconnectOperationCorrelationId(
@@ -1003,6 +1031,7 @@ export async function deauthorizeServiceForUser(
           missingTokensBehavior: options.missingTokensBehavior || 'throw',
           disconnectLifecycleGuard,
           initialTokenQuerySnapshot: disconnectOperation.tokenQuerySnapshot,
+          deferOperationalCleanup: true,
           tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
             recoverTerminalAuthFailure: false,
             expectedDisconnectOperationGeneration:
@@ -1037,6 +1066,15 @@ export async function deauthorizeServiceForUser(
     }
   })();
 
+  // Keep the durable marker and fence until credential and metadata cleanup are
+  // complete. The existing scheduler reclaims this exact episode after expiry.
+  if (!cleanupResult.ok) throw cleanupResult.error;
+  if (cleanupResult.outcome.preservedTokenCount > 0
+    || cleanupResult.outcome.connectionStateUpdate !== 'cleared') {
+    throw new ServiceDisconnectInProgressError(serviceName, SERVICE_DISCONNECT_RETRY_BLOCKERS.DisconnectOperation,
+      disconnectOperation.leaseExpiresAtMs, Date.now());
+  }
+
   logDisconnectLifecycle('info', {
     lifecycleEvent: 'disconnect_finalization_started',
     serviceName,
@@ -1067,7 +1105,6 @@ export async function deauthorizeServiceForUser(
     throw error;
   }
 
-  if (!cleanupResult.ok) throw cleanupResult.error;
   return cleanupResult.outcome;
 }
 
@@ -1117,4 +1154,43 @@ export async function disconnectServiceForUser(
   return deauthorizeServiceForUser(userID, serviceName, {
     missingTokensBehavior: 'ignore',
   });
+}
+
+/** A cursor also advances past deleted/malformed roots which cannot renew a lease. */
+export async function retryInterruptedExplicitDisconnects(): Promise<void> {
+  // Independent providers cannot starve each other if one call times out.
+  await Promise.all([ServiceNames.GarminAPI, ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.WahooAPI].map(async serviceName => {
+    try {
+      const collection = getServiceTokenRootDocumentRef('_scan', serviceName).parent;
+      const cursorRef = admin.firestore().doc(`pendingServiceDisconnectRetryCursors/${collection.id}_explicit_disconnect`);
+      const cursor = (await cursorRef.get()).data();
+      const query = collection.where(SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD, '<=', Date.now())
+        .orderBy(SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD).orderBy(FieldPath.documentId()).limit(1);
+      let page = cursor ? await query.startAfter(cursor.leaseExpiresAt, cursor.documentId).get() : await query.get();
+      if (page.empty && cursor) {
+        // Shared scheduler cursor documents are leaves, never subtree roots.
+        await cursorRef.delete();
+        page = await query.get();
+      }
+      const root = page.docs[0];
+      if (!root) return;
+      // Checkpoint before provider work so abrupt termination cannot pin the
+      // scan to a deleted user or an otherwise unrecoverable first root.
+      await cursorRef.set({ documentId: root.id, leaseExpiresAt: root.data()[SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD] });
+      const generation = root.data()[SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD];
+      if (typeof generation !== 'string' || !generation) return;
+      try {
+        await deauthorizeServiceForUser(root.id, serviceName, {
+          missingTokensBehavior: 'ignore',
+          expectedOperationGeneration: generation,
+        });
+      } catch (error) {
+        logger.warn('[OAuthDisconnect] Recovery deferred or superseded.', {
+          serviceName, reason: isOAuthFlowContextMismatchError(error) ? 'superseded' : 'retry_pending',
+        });
+      }
+    } catch {
+      logger.error('[OAuthDisconnect] Could not scan or checkpoint interrupted disconnects.', { serviceName });
+    }
+  }));
 }

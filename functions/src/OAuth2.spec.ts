@@ -823,8 +823,10 @@ describe('OAuth2', () => {
             (error500 as unknown as { statusCode: number }).statusCode = 500;
             (getTokenData as Mock).mockRejectedValueOnce(error500);
 
-            // Partial Success: Should NOT throw, but also NOT delete the token
-            await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.not.toThrow();
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toMatchObject({
+                name: 'ServiceDisconnectInProgressError',
+            });
+            expect(mockTransactionDocumentData?.disconnectOperationGeneration).toEqual(expect.any(String));
 
             expect(mockDelete).not.toHaveBeenCalled();
         });
@@ -834,8 +836,10 @@ describe('OAuth2', () => {
             (error502 as unknown as { statusCode: number }).statusCode = 502;
             (getTokenData as Mock).mockRejectedValueOnce(error502);
 
-            // Partial Success: Should NOT throw, but also NOT delete the token
-            await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.not.toThrow();
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toMatchObject({
+                name: 'ServiceDisconnectInProgressError',
+            });
+            expect(mockTransactionDocumentData?.disconnectOperationGeneration).toEqual(expect.any(String));
 
             expect(mockDelete).not.toHaveBeenCalled();
         });
@@ -887,7 +891,9 @@ describe('OAuth2', () => {
 
             (requestPromise.get as Mock).mockResolvedValue({});
 
-            await deauthorizeServiceForUser(userID, serviceName);
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toMatchObject({
+                name: 'ServiceDisconnectInProgressError',
+            });
 
             // Assertions for Partial Success:
             // 1. Token 1 (success) SHOULD be deleted.
@@ -978,7 +984,7 @@ describe('OAuth2', () => {
             );
         });
 
-        it('should not fail explicit disconnect if clearing service connection state fails after cleanup', async () => {
+        it('keeps explicit disconnect pending if clearing connection state fails after cleanup', async () => {
             const tokenData = { accessToken: 'mock-access' };
             const mockTokenDoc = {
                 id: 'token-doc-id',
@@ -1008,7 +1014,8 @@ describe('OAuth2', () => {
             (clearServiceConnectionState as Mock).mockRejectedValueOnce(new Error('meta write failed'));
 
             await expect(deauthorizeServiceForUser(userID, serviceName, {
-            })).resolves.not.toThrow();
+            })).rejects.toMatchObject({ name: 'ServiceDisconnectInProgressError' });
+            expect(mockTransactionDocumentData?.disconnectOperationGeneration).toEqual(expect.any(String));
 
             expect(mockDelete).toHaveBeenCalledTimes(1);
             expect(clearServiceConnectionState).toHaveBeenCalledWith(
@@ -1033,14 +1040,15 @@ describe('OAuth2', () => {
             );
         });
 
-        it('should not fail orphaned cleanup if clearing service connection state fails', async () => {
+        it('keeps an empty root pending if clearing connection state fails', async () => {
             mockGet.mockReset();
             mockGet.mockImplementation(() => Promise.resolve({ empty: true, size: 0, docs: [] } as unknown as admin.firestore.QuerySnapshot));
             (clearServiceConnectionState as Mock).mockRejectedValueOnce(new Error('meta write failed'));
 
             await expect(deauthorizeServiceForUser(userID, serviceName, {
                 missingTokensBehavior: 'ignore',
-            })).resolves.not.toThrow();
+            })).rejects.toMatchObject({ name: 'ServiceDisconnectInProgressError' });
+            expect(mockTransactionDocumentData?.disconnectOperationGeneration).toEqual(expect.any(String));
 
             expect(mockRecursiveDelete).not.toHaveBeenCalled();
             expect(clearServiceConnectionState).toHaveBeenCalledWith(
@@ -1668,7 +1676,8 @@ describe('OAuth2', () => {
             (error500 as any).statusCode = 500;
             (requestPromise.get as ReturnType<typeof vi.fn>).mockRejectedValue(error500);
 
-            await deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp);
+            await expect(deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp))
+                .rejects.toMatchObject({ name: 'ServiceDisconnectInProgressError' });
 
             // Token should NOT be deleted when API returns 500
             expect(mockDelete).not.toHaveBeenCalled();
@@ -1699,7 +1708,8 @@ describe('OAuth2', () => {
             (error502 as any).statusCode = 502;
             (requestPromise.get as ReturnType<typeof vi.fn>).mockRejectedValue(error502);
 
-            await deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp);
+            await expect(deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp))
+                .rejects.toMatchObject({ name: 'ServiceDisconnectInProgressError' });
 
             // Token should NOT be deleted when API returns 502
             expect(mockDelete).not.toHaveBeenCalled();

@@ -20,7 +20,7 @@ import { WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME } from './wahoo/constants';
 
 type ProviderIdentifierField = 'userName' | 'openId' | 'userID' | 'wahooUserID';
 
-interface ProviderOperationalCleanupConfig {
+export interface ProviderOperationalCleanupConfig {
   serviceName: ServiceNames;
   providerUserIdField: ProviderIdentifierField;
   providerUserId: string;
@@ -28,7 +28,7 @@ interface ProviderOperationalCleanupConfig {
   sleepProvider: string;
 }
 
-interface OperationalCleanupQuery {
+export interface OperationalCleanupQuery {
   collectionName: string;
   fieldName: string;
   sourceCollectionName: string | ((data: Record<string, unknown>) => string | null);
@@ -75,7 +75,7 @@ function providerUserIdFromTokenData(
   }
 }
 
-function getProviderOperationalCleanupConfig(
+export function getProviderOperationalCleanupConfig(
   serviceName: ServiceNames,
   tokenData: Record<string, unknown>,
 ): ProviderOperationalCleanupConfig | null {
@@ -151,7 +151,7 @@ function looksLikeLegacyGarminWorkoutQueueData(data: Record<string, unknown>): b
   );
 }
 
-function getExplicitFirebaseUidAssociation(
+export function getExplicitFirebaseUidAssociation(
   collectionName: string,
   data: Record<string, unknown>,
 ): string | null {
@@ -241,7 +241,7 @@ function shouldDeleteOperationalDoc(
   return !hasActiveConnection;
 }
 
-function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig): OperationalCleanupQuery[] {
+export function buildOperationalCleanupQueries(config: ProviderOperationalCleanupConfig): OperationalCleanupQuery[] {
   const isSleepDocForProvider = (data: Record<string, unknown>) =>
     serviceNameFromSleepProvider(data.provider) === config.serviceName;
   const isWorkoutDocForProvider = (data: Record<string, unknown>) =>

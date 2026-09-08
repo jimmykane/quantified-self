@@ -303,6 +303,16 @@ Every new provider needs a lifecycle plan before it is enabled.
 
 ### Disconnect
 
+Explicit user disconnects disable every activity-sync and saved-route direction involving the provider in the **initial transaction**, alongside the existing OAuth/disconnect-operation fence. That transaction also removes earlier automatic route-restoration intent and marks connection metadata disconnect-pending; no provider request starts until it commits. Token-root deletion triggers remain an idempotent fallback. Reconnecting does not restore the routes that the user explicitly disconnected.
+
+Credential removal and a server-only `users/{uid}/serviceDisconnectCleanup/{opaqueOperationAccountHash}` intent commit atomically. The intent contains only the provider lookup identity, lifecycle fence, server-timestamp cutoff and pagination/lease state—not credentials, callback URLs, raw payloads, state or PKCE. It shares ordinary recursive account deletion and is denied to browser clients by the existing Rules. Imported activities, saved routes, Health and Sleep history are not cleanup targets.
+
+The existing `retryPendingServiceDisconnects` scheduler re-drives these intents every 30 minutes (up to ten accounts concurrently, at most 25 operational roots per page, with a five-minute claim lease and resumable query cursor). Operational trees are recursively deleted through transaction-fenced writes; every delete rechecks user deletion, the original lifecycle, queue document revision and shared-account ownership. Queue tombstones commit with root removal. Newer queue documents are excluded by the credential-removal commit timestamp, and a replacement OAuth lifecycle retires stale cleanup. Transient failures retain the intent without a finite event-retry or TTL deadline.
+
+The same scheduler also reclaims one expired explicit-disconnect episode per provider per execution, retaining its original operation generation. The existing ten-minute lease orders this against in-flight callables; failures renew that lease, and a cursor in the existing scheduler-cursor collection advances past roots belonging to deleted users or otherwise unable to renew. This also finalizes interrupted legacy roots that already have an operation/lease, but cannot reconstruct operational identities from credentials removed before durable intents existed. Entitlement restoration cannot clear an explicit disconnect. Failed revocation or metadata finalization stays pending rather than reporting successful disconnect.
+
+For this lifecycle change, deploy the `serviceDisconnectCleanup.nextAttemptAt` collection-group index before updating Functions; keep the existing scheduler and four provider disconnect callables deployed. There are no new Functions, secrets or migration scripts. Validate the interruption cases with `npm run test:disconnect` (local Firestore, mocked provider I/O) and watch the sanitized `[ExplicitDisconnectCleanup]` page/retry logs and `[OAuthDisconnect]` lifecycle/recovery logs after an approved rollout.
+
 1. Start provider deauthorization when the partner supports it.
 2. If the partner call fails transiently, record the shared disconnect-pending state and pause new work rather than pretending the connection is gone.
 3. Keep disconnect available even when a formerly-Pro user no longer has entitlement.
