@@ -587,6 +587,35 @@ export class HealthWorkspaceComponent {
       return selectedProviders.length === 0 || selectedProviders.includes(provider);
     }) === true
     && this.metricView().series.length === 0);
+  readonly omittedSampleSourceNotice = computed(() => {
+    if (this.selectedIsSleep() || this.selectedWindow().includeSamples
+      || this.selectedStatus() !== 'ready' || !this.hasData()) return null;
+    const shownProviders = new Set(this.metricView().series.map(series => series.provider));
+    const filters = this.effectiveProviderFilters();
+    const omitted = (this.selectedHealthLoad()?.sampleBackedProviders || [])
+      .filter(provider => (!filters.length || filters.includes(provider)) && !shownProviders.has(provider));
+    return omitted.length
+      ? `${omitted.map(providerLabel).join(', ')}: detailed readings exist, but no daily summary is available in this view. Select 30 days or less to see those readings.`
+      : null;
+  });
+  readonly heartRateReadingNotice = computed(() => {
+    if (this.routeState().metric !== HEALTH_METRIC_IDS.HeartRate
+      || this.selectedStatus() !== 'ready' || !this.hasData()) return null;
+    const series = this.metricView().series;
+    const messages: string[] = [];
+    if (series.some(item => item.semanticVariant === 'rolling_7_day_average')) {
+      messages.push('7-day average is the provider’s rolling value, not the average of your selected date range.');
+    }
+    if (series.some(item => item.semanticVariant.startsWith('qs_daily_'))) {
+      messages.push('Calculated by QS uses only the readings recorded on each day; gaps remain gaps.');
+      if (series.some(item => ['qs_daily_interval_low', 'qs_daily_interval_high'].includes(item.semanticVariant))) {
+        messages.push('Lowest and highest interval averages are not the day’s true heart-rate extremes.');
+      }
+    } else if (series.some(item => ['activity_interval_average', 'daily_15_second'].includes(item.semanticVariant))) {
+      messages.push('Throughout the day charts show individual recorded intervals, not daily averages.');
+    }
+    return messages.join(' ') || null;
+  });
   readonly incompleteNotice = computed(() => {
     const loaded = this.selectedHealthLoad();
     const reasons: string[] = [];

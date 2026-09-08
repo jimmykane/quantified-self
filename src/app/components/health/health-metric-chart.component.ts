@@ -13,6 +13,7 @@ import {
   healthHrvChartStatusDescription,
 } from '../../helpers/health-metric-chart.helper';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
+import { HEALTH_METRIC_IDS } from '@shared/health';
 
 @Component({
   selector: 'app-health-metric-chart',
@@ -38,8 +39,12 @@ export class HealthMetricChartComponent {
   ));
   readonly renderedModels = computed(() => this.models().map(model => {
     const status = this.chartStatuses()[model.series.id] || null;
+    const [reading, ...details] = model.series.semanticLabel.split(' · ');
+    const describeHeartRate = model.series.metricId === HEALTH_METRIC_IDS.HeartRate && !model.series.nativeOnly;
     return {
       model,
+      title: describeHeartRate ? reading : model.series.sourceLabel,
+      summary: describeHeartRate ? [model.series.sourceLabel, ...details].join(' · ') : model.series.semanticLabel,
       statusOverlay: buildHealthHrvChartStatusOverlay(status),
       statusDescription: healthHrvChartStatusDescription(status),
     };

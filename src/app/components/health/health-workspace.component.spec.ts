@@ -2247,7 +2247,7 @@ describe('HealthWorkspaceComponent', () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent || '';
     expect(text).toContain('This metric is stored as detailed samples');
-    expect(text).toContain('Detailed samples load only for Today, 14-day, and 30-day windows');
+    expect(text).toContain('Choose 1d, 14d, or 30d to view the detailed readings');
     expect(text).not.toContain('No Heart rate data in this window');
   });
 
@@ -2275,6 +2275,26 @@ describe('HealthWorkspaceComponent', () => {
 
     expect(component.sampleOnlyLongRange()).toBe(false);
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('No Heart rate data in this window');
+  });
+
+  it('explains a missing sample-only source even when another provider has visible summaries', async () => {
+    await createComponent();
+    loadMetricRange.mockImplementation((_uid: string, request: { metricId: HealthMetricId }) => Promise.resolve({
+      ...rangeLoad(request.metricId),
+      providers: [HEALTH_PROVIDERS.GarminAPI, HEALTH_PROVIDERS.COROSAPI, HEALTH_PROVIDERS.SuuntoApp],
+      sampleBackedProviders: [HEALTH_PROVIDERS.SuuntoApp],
+    }));
+    component.selectMetric(HEALTH_METRIC_IDS.HeartRate);
+    component.selectRange('1y');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(component.hasData()).toBe(true);
+    expect(component.omittedSampleSourceNotice()).toContain('Suunto: detailed readings exist');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('no daily summary is available');
+    component.toggleProvider(HEALTH_PROVIDERS.GarminAPI);
+    fixture.detectChanges();
+    expect(component.omittedSampleSourceNotice()).toBeNull();
   });
 
   it('keeps a selected Health view active and offers retry when preference persistence fails', async () => {

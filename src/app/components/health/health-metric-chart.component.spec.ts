@@ -93,6 +93,15 @@ describe('HealthMetricChartComponent', () => {
     expect(host.textContent).not.toContain('Device:');
   });
 
+  it('names the Heart rate reading prominently and keeps the provider attributed underneath', async () => {
+    const host = await render(null);
+    fixture.componentRef.setInput('series', [{ ...series(null), metricId: HEALTH_METRIC_IDS.HeartRate,
+      semanticLabel: '7-day average · Provider reported', semanticVariant: 'rolling_7_day_average' }]);
+    fixture.detectChanges();
+    expect(host.querySelector('h3')?.textContent).toBe('7-day average');
+    expect(host.textContent).toContain('Garmin · Provider reported');
+  });
+
   it('uses flat shared rows while preserving source separation and status labels', async () => {
     const host = await render('Garmin Test');
     const second = { ...series(null), id: 'suunto-native', provider: HEALTH_PROVIDERS.SuuntoApp,

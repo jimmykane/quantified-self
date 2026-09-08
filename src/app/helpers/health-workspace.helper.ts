@@ -60,6 +60,7 @@ import {
   type DashboardSleepTrendPoint,
 } from './dashboard-sleep-chart.helper';
 import { formatDashboardRelativeDay } from './dashboard-relative-date.helper';
+import { heartRateSemanticLabel } from './health-heart-rate-summary.helper';
 import {
   calculatePersonalMetricPointRange,
   calculatePersonalMetricRange,
@@ -1154,7 +1155,8 @@ function observationDatum(
     unit,
     normalizationStatus,
     nativeOnly,
-    semanticLabel: null,
+    semanticLabel: entry.metricId === HEALTH_METRIC_IDS.HeartRate && !nativeOnly
+      ? heartRateSemanticLabel(entry.semanticVariant, entry.aggregation) : null,
     valueType: entry.valueType,
     timestampMs: observation.endTimeMs,
     calendarDate: observation.calendarDate,
@@ -1226,7 +1228,8 @@ function chunkDatums(chunk: HealthSampleChunk): MetricDatum[] {
       unit,
       normalizationStatus: chunk.normalizationStatus,
       nativeOnly: !useCanonical,
-      semanticLabel: null,
+      semanticLabel: chunk.metricId === HEALTH_METRIC_IDS.HeartRate && useCanonical
+        ? heartRateSemanticLabel(chunk.semanticVariant, chunk.aggregation) : null,
       valueType: chunk.valueType,
       timestampMs: chunk.startTimeMs + (Number(chunk.offsetMs[index]) || 0),
       calendarDate: chunk.calendarDate,

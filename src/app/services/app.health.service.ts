@@ -48,6 +48,7 @@ import type {
 } from '@shared/manual-health';
 import { MANUAL_HEALTH_SOURCE_RECORD_TYPE, MANUAL_HEALTH_VALUE_MAXIMUMS } from '@shared/manual-health';
 import { decodeHealthSourceRecordSportsLibData } from '@shared/sports-lib-health-data';
+import { countStaleHeartRateChunks, withDailyHeartRateSummaries } from '../helpers/health-heart-rate-summary.helper';
 
 export const HEALTH_WORKSPACE_LOAD_LIMITS = Object.freeze({
     sourceRecords: 2_048,
@@ -267,19 +268,29 @@ export class AppHealthService {
         }
 
         const sourcePage = await this.loadSourceRecordPages(uid, normalizedQuery);
+        const dailyHeartRate = request.metricId === HEALTH_METRIC_IDS.HeartRate
+            && !request.includeSamples
+            && Date.parse(normalizedQuery.endDate) - Date.parse(normalizedQuery.startDate) >= 30 * 86_400_000;
+        const sampleDates = dailyHeartRate ? sourcePage.values
+            .filter(record => record.sampleChunkIds.length > 0).map(record => record.calendarDate).sort() : [];
+        // Summaries require a known parent. Avoid reading empty months before
+        // or after that source history, without changing the displayed window.
+        const readQuery = dailyHeartRate ? { ...normalizedQuery, includeSamples: sampleDates.length > 0,
+            startDate: sampleDates[0] || normalizedQuery.startDate,
+            endDate: sampleDates.at(-1) || normalizedQuery.endDate } : normalizedQuery;
         let chunkPage: LoadedCollectionPage<HealthSampleChunk> = {
             values: [],
-            complete: !normalizedQuery.includeSamples,
+            complete: !readQuery.includeSamples,
             cursor: null,
             serializedBytes: sourcePage.serializedBytes,
             limitReached: sourcePage.limitReached,
         };
-        if (normalizedQuery.includeSamples && sourcePage.complete) {
-            chunkPage = await this.loadSampleChunkPages(uid, normalizedQuery, sourcePage.serializedBytes);
+        if (readQuery.includeSamples && sourcePage.complete) {
+            chunkPage = await this.loadSampleChunkPages(uid, readQuery, sourcePage.serializedBytes);
         }
 
         const limitReached = sourcePage.limitReached || chunkPage.limitReached;
-        return this.buildWorkspaceLoad(
+        const loaded = this.buildWorkspaceLoad(
             sourcePage.values,
             chunkPage.values,
             normalizedQuery,
@@ -290,6 +301,22 @@ export class AppHealthService {
             chunkPage.serializedBytes,
             limitReached,
         );
+        if (!dailyHeartRate) return loaded;
+
+        // Reuse the same owner-scoped pages and safety budgets. Old records need
+        // no migration: derived entries exist only in this workspace projection.
+        const summarizedRecords = withDailyHeartRateSummaries(sourcePage.values, chunkPage.values,
+            chunkPage.complete ? null : chunkPage.cursor?.calendarDate ?? normalizedQuery.startDate);
+        const result = projectLoadedHealthRange(summarizedRecords, [], normalizedQuery, {
+            sourceRecordsComplete: sourcePage.complete,
+            samplesComplete: chunkPage.complete,
+            sourceRecordCursor: sourcePage.cursor,
+            chunkCursor: chunkPage.cursor,
+        });
+        result.pageInfo.sampleRevisionMismatchCount = countStaleHeartRateChunks(sourcePage.values, chunkPage.values);
+        result.pageInfo.sampleAggregateComplete = chunkPage.complete && result.pageInfo.sampleRevisionMismatchCount === 0;
+        return { ...loaded, result, sampleChunkCount: chunkPage.values.length,
+            samplePointCount: chunkPage.values.reduce((count, chunk) => count + chunk.offsetMs.length, 0) };
     }
 
     private watchCollection<T>(userID: string, plan: HealthFirestoreQueryPlan): Observable<T[]> {
@@ -355,8 +382,14 @@ export class AppHealthService {
         let cursor: HealthQueryCursor | null = null;
         let serializedBytes = initialSerializedBytes;
         let samplePoints = 0;
+        let windowStart = queryValue.startDate;
         while (true) {
-            const plan = planHealthFirestoreQueries({ ...queryValue, chunkCursor: cursor }).chunks;
+            // The shared sample-query contract remains at 31 days. Long-range
+            // summaries walk those windows with one cumulative load budget.
+            const windowEnd = new Date(Math.min(Date.parse(queryValue.endDate),
+                Date.parse(windowStart) + 30 * 86_400_000)).toISOString().slice(0, 10);
+            const plan = planHealthFirestoreQueries({ ...queryValue,
+                startDate: windowStart, endDate: windowEnd, chunkCursor: cursor }).chunks;
             if (!plan) {
                 return { values, complete: true, cursor: null, serializedBytes, limitReached: null };
             }
@@ -381,6 +414,10 @@ export class AppHealthService {
                 cursor = { calendarDate: value.calendarDate, id: value.id };
             }
             if (snapshot.docs.length <= page.length) {
+                if (windowEnd < queryValue.endDate) {
+                    windowStart = new Date(Date.parse(windowEnd) + 86_400_000).toISOString().slice(0, 10);
+                    continue;
+                }
                 return { values, complete: true, cursor: null, serializedBytes, limitReached: null };
             }
             if (!cursor) {

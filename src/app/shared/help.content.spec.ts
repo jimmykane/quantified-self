@@ -102,6 +102,11 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('a source with no readings does not silently switch');
     expect(healthSection?.content).not.toContain('**View options**');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
+    expect(healthSection?.content).toContain('**Read Heart rate charts by their time period.**');
+    expect(healthSection?.content).toContain('unweighted arithmetic average');
+    expect(healthSection?.content).toContain('**not the day\'s true heart-rate extremes**');
+    expect(healthSection?.content).toContain('names the omitted source even when other providers have visible charts');
+    expect(healthSection?.content).toContain('**Calculated by QS**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
     expect(healthSection?.content).toContain('**Add measurement** at the top of Health');
@@ -146,7 +151,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('without overwriting your saved choice');
     expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
-    expect(healthSection?.content).toContain('Detailed sample streams load for 1d, 14-day, and 30-day windows');
+    expect(healthSection?.content).toContain('Detailed sample charts are available for 1d, 14-day, and 30-day windows');
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');

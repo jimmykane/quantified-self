@@ -26,6 +26,7 @@ import {
   type ActivityHealthObservation,
 } from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import { withDailyHeartRateSummaries } from './health-heart-rate-summary.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import {
@@ -241,6 +242,26 @@ function activityObservation(overrides: Partial<ActivityHealthObservation> = {})
 }
 
 describe('Health workspace helpers', () => {
+  it('formats calculated daily HR values and units through Sports Lib under default and saved unit preferences', () => {
+    const record = sourceRecord({ id: 'parent', provider: HEALTH_PROVIDERS.SuuntoApp, accountKey: 'suunto', metrics: [] });
+    record.metricIds = [HEALTH_METRIC_IDS.HeartRate];
+    record.sampleChunkIds = ['samples'];
+    const chunk = { ...sampleChunk({ id: 'samples', provider: HEALTH_PROVIDERS.SuuntoApp, accountKey: 'suunto',
+      metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: 'activity_interval_average', values: [61, 72, 80] }),
+      parentSourceRecordId: record.id, aggregation: 'average', revision: record.source.revision };
+    const projected = projectLoadedHealthRange(withDailyHeartRateSummaries([record], [chunk]), [], {
+      startDate: '2026-08-01', endDate: '2026-08-01', metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    for (const settings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(projected, [], [], settings);
+      const display = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.HeartRate, 71, settings)!;
+      const average = view.rows.find(row => row.semanticsText.includes('Daily average'))!;
+      expect(average.valueText).toBe(`${display.value} ${display.unit}`);
+      expect(average.semanticsText).toContain('Calculated by QS');
+      expect(average.sourceLabel).toBe('Suunto');
+      expect(view.series).toHaveLength(3);
+    }
+  });
   it('formats canonical values and units through Sports Lib while keeping native-only values provider-specific', () => {
     expect(formatHealthValue(
       HEALTH_METRIC_IDS.Vo2Max,
