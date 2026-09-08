@@ -117,7 +117,7 @@ describe('MCP Function protocol compatibility', () => {
     } });
     const tools = await post(modernRequest('tools/list'));
     const listing = await tools.json() as { result: { tools: Array<{ name: string; execution?: unknown }> } };
-    expect(listing.result.tools).toHaveLength(32);
+    expect(listing.result.tools).toHaveLength(34);
     expect(listing.result.tools.every(tool => tool.execution === undefined)).toBe(true);
     const call = await post(modernRequest('tools/call', { name: 'list_activity_types', arguments: {} }));
     expect(call.status).toBe(200);
@@ -221,6 +221,20 @@ describe('MCP Function protocol compatibility', () => {
     }));
     expect(denied.status).toBe(403);
     expect(denied.headers.get('www-authenticate')).toContain('activity-location:read');
+    expect(info).not.toHaveBeenCalled();
+  });
+
+  it('rejects ungranted Health and body-composition reads before transport dispatch', async () => {
+    authenticateBearer.mockResolvedValueOnce({ scopes: [MCP_OAUTH_SCOPES.MetricsRead] });
+    const healthDenied = await post(modernRequest('tools/call', { name: 'list_health_metrics', arguments: {} }));
+    expect(healthDenied.status).toBe(403);
+    expect(healthDenied.headers.get('www-authenticate')).toContain('health:read');
+    authenticateBearer.mockResolvedValueOnce({ scopes: [MCP_OAUTH_SCOPES.HealthRead] });
+    const measurementsDenied = await post(modernRequest('tools/call', {
+      name: 'query_health_metric', arguments: { metricId: 'body_fat', startDate: '2026-09-01', endDate: '2026-09-02' },
+    }));
+    expect(measurementsDenied.status).toBe(403);
+    expect(measurementsDenied.headers.get('www-authenticate')).toContain('measurements:read');
     expect(info).not.toHaveBeenCalled();
   });
 

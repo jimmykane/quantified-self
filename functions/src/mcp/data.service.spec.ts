@@ -287,6 +287,17 @@ describe('MCP data service', () => {
     };
   });
 
+  it('redacts unexpected Health reader errors instead of disclosing backend details', async () => {
+    dependencies.healthReads = {
+      fetchPage: vi.fn().mockRejectedValue(new Error('private callback token and provider account')),
+      fetchUnitSettings: vi.fn().mockResolvedValue(null),
+    };
+    await expect(createMcpDataService(dependencies).queryHealthMetric({
+      uid: 'owner', metricId: 'heart_rate', startDate: '2026-09-01', endDate: '2026-09-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    })).rejects.toMatchObject({ code: 'temporarily_unavailable', message: 'Health data could not be read safely. Try again later.' });
+  });
+
   it('restricts route source reads to the owning route path and project bucket', () => {
     expect(resolveMcpRouteSourcePath(
       'user-1',

@@ -5,10 +5,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { McpAuthorizationComponent } from './mcp-authorization.component';
 
 describe('McpAuthorizationComponent', () => {
   const assign = vi.fn();
+  const haptics = { selection: vi.fn() };
   const functions = {
     call: vi.fn(),
   };
@@ -30,6 +32,7 @@ describe('McpAuthorizationComponent', () => {
             redirectUri: 'https://client.example/oauth/callback',
             redirectHost: 'client.example',
             scopes: [
+              'health:read',
               'metrics:read',
               'measurements:read',
               'sleep:read',
@@ -62,6 +65,7 @@ describe('McpAuthorizationComponent', () => {
         { provide: AppFunctionsService, useValue: functions },
         { provide: AppWindowService, useValue: { windowRef } },
         { provide: LoggerService, useValue: { error: vi.fn() } },
+        { provide: AppHapticsService, useValue: haptics },
       ],
     }).compileComponents();
   });
@@ -77,6 +81,9 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('https://client.example/oauth/callback');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Body measurements');
+    expect(content).toContain('Health metrics');
+    expect(content).toContain('exact UTC times');
+    expect(content).toContain('No measurements can be added, edited or deleted');
     expect(content).toContain('Read bounded identity-free body-measurement history such as weight');
     expect(content).toContain('exact source timestamps');
     expect(content).toContain('selected canonical numeric metrics for one activity');
@@ -141,6 +148,7 @@ describe('McpAuthorizationComponent', () => {
       requestId: 'request-1',
       approved: true,
       grantedScopes: [
+        'health:read',
         'metrics:read',
         'measurements:read',
         'sleep:read',
@@ -151,6 +159,21 @@ describe('McpAuthorizationComponent', () => {
       ],
     });
     expect(assign).toHaveBeenCalledWith('https://client.example/oauth/callback?code=code-1');
+  });
+
+  it('keeps Health opt-in independent and gives feedback only for an accepted selection change', async () => {
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const healthOption = fixture.componentInstance.scopeOptions().find(option => option.scope === 'health:read');
+    expect(healthOption?.selected).toBe(true);
+    fixture.componentInstance.toggleScope('health:read', { checked: false } as never);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.selectedScopes()).not.toContain('health:read');
+    expect(fixture.componentInstance.selectedScopes()).toContain('measurements:read');
+    fixture.componentInstance.toggleScope('health:read', { checked: false } as never);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
   });
 
   it('removes dependent location permissions with their parent scope', async () => {

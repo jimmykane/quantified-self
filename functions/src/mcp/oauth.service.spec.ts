@@ -598,9 +598,10 @@ describe('MCP OAuth service', () => {
 
   it('accepts each independent read scope', () => {
     expect(normalizeOAuthScopes(
-      'metrics:read measurements:read activity-details:read activity-location:read routes:read route-location:read sleep:read',
+      'metrics:read health:read measurements:read activity-details:read activity-location:read routes:read route-location:read sleep:read',
     )).toEqual([
       MCP_OAUTH_SCOPES.MetricsRead,
+      MCP_OAUTH_SCOPES.HealthRead,
       MCP_OAUTH_SCOPES.MeasurementsRead,
       MCP_OAUTH_SCOPES.ActivityDetailsRead,
       MCP_OAUTH_SCOPES.ActivityLocationRead,
@@ -2262,6 +2263,34 @@ describe('MCP OAuth service', () => {
     });
     expect(store.accessTokens.size).toBe(0);
     expect(store.refreshTokens.size).toBe(0);
+  });
+
+  it('does not add Health permission to existing grants through token refresh', async () => {
+    const store = createMemoryStore();
+    const clientId = metadata().client_id;
+    const service = createMcpOAuthService({
+      store, fetchClientMetadata: vi.fn().mockResolvedValue(metadata()), now: () => 5_000,
+      randomToken: vi.fn().mockReturnValueOnce('rejected-access').mockReturnValueOnce('rejected-refresh')
+        .mockReturnValueOnce('rotated-access').mockReturnValueOnce('rotated-refresh'),
+    });
+    store.connections.set('user-1:existing-connection', {
+      connectionId: 'existing-connection', clientId, clientName: metadata().client_name,
+      redirectHost: 'client.example', scopes: [MCP_OAUTH_SCOPES.MetricsRead],
+      createdAtMs: 1, lastUsedAtMs: 1, revokedAtMs: null, status: 'active',
+    });
+    store.refreshTokens.set(hashOpaqueValue('existing-refresh'), {
+      uid: 'user-1', connectionId: 'existing-connection', clientId,
+      scopes: [MCP_OAUTH_SCOPES.MetricsRead], audience: 'https://quantified-self.io/mcp',
+      familyId: 'existing-family', createdAtMs: 1, expiresAtMs: 10_000, active: true,
+    });
+    const request = { grant_type: 'refresh_token', refresh_token: 'existing-refresh', client_id: clientId,
+      resource: 'https://quantified-self.io/mcp' };
+    await expect(service.exchangeRefreshToken({ ...request, scope: 'metrics:read health:read' },
+      'https://quantified-self.io')).rejects.toMatchObject({ code: 'invalid_scope' });
+    expect(store.refreshTokens.get(hashOpaqueValue('existing-refresh'))?.active).toBe(true);
+    const rotated = await service.exchangeRefreshToken(request, 'https://quantified-self.io');
+    expect(rotated.scope).toBe('metrics:read');
+    expect(store.accessTokens.get(hashOpaqueValue(rotated.access_token))?.scopes).toEqual([MCP_OAUTH_SCOPES.MetricsRead]);
   });
 
   it('activates an in-flight legacy authorization created before lifecycle statuses', async () => {

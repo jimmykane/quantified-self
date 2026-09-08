@@ -134,7 +134,7 @@
         <ol class="mcp-connections__setup-steps">
           <li>Let ChatGPT scan the available tools.</li>
           <li>Sign in to Quantified Self when prompted.</li>
-          <li>Choose the read-only metrics, body measurements, activity details, sleep, or saved-route permissions you want to grant.</li>
+          <li>Choose the read-only metrics, body measurements, Health metrics, activity details, sleep, or saved-route permissions you want to grant.</li>
         </ol>
       </section>
 
@@ -171,6 +171,7 @@
       <ul class="mcp-connections__authorization-list" aria-label="Available MCP permissions">
         <li><mat-icon aria-hidden="true">query_stats</mat-icon>{{ scopeLabels['metrics:read'] }}</li>
         <li><mat-icon aria-hidden="true">monitor_weight</mat-icon>{{ scopeLabels['measurements:read'] }}</li>
+        <li><mat-icon aria-hidden="true">monitor_heart</mat-icon>{{ scopeLabels['health:read'] }}</li>
         <li><mat-icon aria-hidden="true">directions_run</mat-icon>{{ scopeLabels['activity-details:read'] }}</li>
         <li><mat-icon aria-hidden="true">location_on</mat-icon>{{ scopeLabels['activity-location:read'] }}</li>
         <li><mat-icon aria-hidden="true">bedtime</mat-icon>{{ scopeLabels['sleep:read'] }}</li>
@@ -180,6 +181,12 @@
 
       <mat-divider></mat-divider>
 
+      <p>
+        Health metrics is a separate permission: existing connections must reconnect to grant it. It includes
+        source-separated summaries and bounded sample trends with dates and times, but no account IDs, device details,
+        or provider payloads. Body composition also needs Body measurements permission and is identity-free.
+        Sleep and Weight keep their existing permissions. MCP cannot add, edit, or delete measurements.
+      </p>
       <p>
         Activity details include non-location summaries, laps, jumps, swim lengths, and bounded on-demand chart
         series. Exact starts, ends, jump positions, and breadcrumb traces require Activity locations. Saved-route

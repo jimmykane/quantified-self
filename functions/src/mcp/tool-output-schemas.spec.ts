@@ -19,6 +19,7 @@ import {
   MCP_ACTIVITY_CHART_METRICS,
 } from './activity-chart.service';
 import { McpDataError } from './data.service';
+import { getMcpHealthCatalog } from './health.service';
 import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
   MCP_TRAINING_METRIC_SCHEMA_VERSION,
@@ -444,6 +445,21 @@ function createFixtureDataService(
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
   const service = {
+    listHealthMetrics: vi.fn().mockResolvedValue(getMcpHealthCatalog()),
+    queryHealthMetric: vi.fn().mockResolvedValue({
+      metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'heart_rate'),
+      startDate: '2026-07-01', endDate: '2026-07-02', mode: 'summaries', complete: true,
+      limitsReached: [], recordsRead: 1, chunksRead: 0, samplesRead: 0,
+      excludedValues: 0, sleepReferencesExcluded: 0, revisionMismatches: 0,
+      measurementDays: [], series: [{
+        seriesNumber: 1, provider: 'SuuntoApp', accountNumber: 1,
+        normalizationStatus: 'canonical', unit: 'bpm',
+        aggregation: 'average', semanticVariant: 'daily_average', origin: 'provider_summary',
+        recordingMethod: 'provider_calculated', readingCount: 1, returnedPointCount: 1,
+        downsampled: false, recordedDays: 1, partialDays: 0, unknownDays: 0,
+        points: [{ date: '2026-07-01', timeMs: null, value: 60, display: { value: '60', unit: 'bpm' } }],
+      }],
+    }),
     listMeasurementTypes: vi.fn().mockResolvedValue({
       measurementTypes: [{
         id: 'body_weight',
@@ -1142,6 +1158,8 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  list_health_metrics: {},
+  query_health_metric: { metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02' },
   list_measurement_types: {},
   query_measurements: {
     measurementType: 'body_weight',
@@ -1707,7 +1725,11 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       [...PUBLIC_MCP_TOOL_NAMES].sort(),
     );
     expect(tools.every(tool => Boolean(tool.outputSchema))).toBe(true);
-    expect(Buffer.byteLength(JSON.stringify(tools), 'utf8'))
+    const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric'].includes(tool.name));
+    // Keep the existing frozen surface's budget; account separately for the two
+    // additive Health contracts so schema growth remains bounded and visible.
+    expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !healthTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -1751,6 +1773,15 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       sourceEventCount: 0,
       payload: derivedPayloadFixtures[DERIVED_METRIC_KINDS.BodyWeightTrend],
     })).toBe(false);
+
+    const healthFixture = await dataService.queryHealthMetric({
+      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    });
+    expect(validators.get('query_health_metric')!({
+      ...healthFixture,
+      metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'body_fat'),
+    })).toBe(false); // Body composition must not expose otherwise-valid source series.
 
     for (const toolName of PUBLIC_MCP_TOOL_NAMES) {
       const result = await connection.client.callTool({
@@ -1830,6 +1861,22 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       ).toBe(true);
     }
   }, 30_000);
+
+  it('binds Health reads to bearer identity and grants rather than client-supplied arguments', async () => {
+    const dataService = createFixtureDataService();
+    const connection = await connectFixtureServer(dataService, [MCP_OAUTH_SCOPES.HealthRead]);
+    connections.push(connection);
+    const result = await connection.client.callTool({
+      name: 'query_health_metric',
+      arguments: { ...successfulToolArguments.query_health_metric, uid: 'private-other-user', measurementsAllowed: true },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(dataService.queryHealthMetric).toHaveBeenCalledWith({
+      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    });
+    expect(JSON.stringify(result)).not.toContain('private-other-user');
+  });
 
   it('covers empty results, terminal pagination, and nullable summaries', () => {
     const registry = createMcpOutputSchemaRegistry({
@@ -2110,8 +2157,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const propertyNames = collectPropertyNames(
       tools.map(tool => tool.outputSchema),
     );
-    // `id` is intentionally public only for the measurement-type catalog
-    // (`body_weight`); opaque activity, event, route, and source IDs are not.
+    // `id` is intentionally public for static measurement/Health metric catalogs;
+    // opaque activity, event, route, and source IDs are not.
     expect(propertyNames.has('id')).toBe(true);
     for (const forbidden of [
       'eventId',
@@ -2552,6 +2599,17 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
 
   it('fails closed on contract mismatches in every tool family', async () => {
     const mismatchService = createFixtureDataService();
+    const healthFixture = await mismatchService.queryHealthMetric({
+      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    });
+    mismatchService.listHealthMetrics = vi.fn().mockResolvedValue({
+      ...getMcpHealthCatalog(), accountKey: 'health-catalog-secret',
+    });
+    mismatchService.queryHealthMetric = vi.fn().mockResolvedValue({
+      ...healthFixture,
+      series: [{ ...healthFixture.series[0], accountKey: 'health-source-secret' }],
+    });
     const dailyReportFixture = await mismatchService.getDailyReport({
       uid: 'user-1',
       timeZone: 'Europe/Helsinki',
@@ -2710,6 +2768,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     connections.push(connection);
 
     for (const toolName of [
+      'list_health_metrics',
+      'query_health_metric',
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',
@@ -2741,6 +2801,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       'temporarily_unavailable',
       'This data is temporarily unavailable.',
     );
+    errorService.listHealthMetrics = vi.fn().mockRejectedValue(expectedError());
+    errorService.queryHealthMetric = vi.fn().mockRejectedValue(expectedError());
     errorService.listMeasurementTypes = vi.fn().mockImplementation(
       async () => {
         throw expectedError();
@@ -2778,6 +2840,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     connections.push(connection);
 
     for (const toolName of [
+      'list_health_metrics',
+      'query_health_metric',
       'list_measurement_types',
       'list_metrics',
       'list_sleep_sessions',

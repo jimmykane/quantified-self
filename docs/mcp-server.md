@@ -3,7 +3,7 @@
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
-authenticated user's persisted numeric activity metrics, first-class body-measurement history, ready Training-derived
+authenticated user's persisted numeric activity metrics, explicitly approved recorded Health metrics, first-class body-measurement history, ready Training-derived
 snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
 without granting browser or Firestore access.
 
@@ -134,7 +134,7 @@ download, and focused MCP/frontend tests aligned whenever any asset changes.
 ## Repository-local plugin
 
 The repository includes a local marketplace package that combines the registered Quantified Self MCP app, branding,
-starter prompts, and six bundled workflow skills. This is a development and local-installation surface, not a public
+starter prompts, and seven bundled workflow skills. This is a development and local-installation surface, not a public
 marketplace submission. It does not replace the hosted `/mcp` server or OAuth consent, and installing the plugin does
 not authorize a user automatically. Use the repo marketplace from the ChatGPT desktop app or Codex CLI; it is not a
 mobile installation path and does not publish anything to the universal plugin directory.
@@ -153,11 +153,12 @@ The bundled skills divide ownership deliberately:
 | `analyze-quantified-self` | Comparisons that need two or more data domains | Every domain used by the comparison |
 | `analyze-quantified-self-training` | Training load, volume, performance trends, and Training-derived metrics | `metrics:read` |
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
+| `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
 | `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
 | `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, and optional locations | `activity-details:read`; optional metric/location grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
-All six skills allow implicit or explicit invocation and declare the same hosted read-only MCP dependency. Their trigger
+All seven skills allow implicit or explicit invocation and declare the same hosted read-only MCP dependency. Their trigger
 descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
 skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
 is intentionally bounded. Skills discover the authenticated server's live tools and catalogs rather than copying tool
@@ -170,7 +171,7 @@ metadata, while the official CLI ingestion path—not a community manifest-types
 compatibility authority.
 
 `BUNDLED_SKILL_NAMES` is the exhaustive source registry. Before generating account-bound files, validation requires the
-source skill directory to contain exactly those six real directories and validates every frontmatter identity, UI
+source skill directory to contain exactly those seven real directories and validates every frontmatter identity, UI
 label, prompt reference, MCP dependency, and invocation policy. Isolated installation then compares every file in the
 installed and source skill trees recursively; missing, modified, unexpected, or symlinked content fails closed.
 
@@ -265,6 +266,8 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `metrics:read` for event metrics, ready Training-derived snapshots, and selected per-activity metrics when
   `activity-details:read` is also granted;
 - `measurements:read` for bounded identity-free first-class body-measurement history;
+- `health:read` for source-separated recorded Health summaries and bounded normalized sample trends; body composition
+  additionally requires `measurements:read`, while Weight and normalized Sleep keep their existing contracts;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
 - `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
   selected metrics, and on-demand chart series;
@@ -467,6 +470,8 @@ The analytics and map entries follow the
 
 | Tool | Scope | Result |
 | --- | --- | --- |
+| `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
+| `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
 | `list_measurement_types` | `measurements:read` | Supported first-class body-measurement types, units, aggregations, intervals, limits, and current-snapshot guidance |
 | `query_measurements` | `measurements:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
@@ -543,12 +548,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 32-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 34-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 32 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 34 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -1069,12 +1074,12 @@ requested bounded period, their units, and session coverage. It lets clients dis
 grouped values without returning readings, raw samples, provider identity, or source provenance in the discovery result.
 
 COROS daily ingestion also writes steps, its native calorie value, and detailed HRV/interval-heart-rate series to the
-separate unified Health collections. The body-measurement path reads only canonical Weight point measurements from
-`healthSourceRecords`; no MCP path reads `healthSampleChunks` or exposes Health source metadata, and this change does not
-widen any registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
+separate unified Health collections. The existing Weight path reads only canonical Weight point measurements from
+`healthSourceRecords`. The separately scoped Health tools described below can read `healthSampleChunks`; they do not
+widen any existing registered schema. COROS aggregate sleep HRV and sleep heart rate remain available only
 through the same normalized Sleep allowlist described above. Negative fixtures include Health-shaped source metadata
 and sample payloads and prove they cannot enter Sleep tool output. No registered-app rescan or local plugin sync is
-required for this internal ingestion change.
+required for the internal ingestion change alone; the new Health tool surface has its own refresh/sync lifecycle.
 
 `get_sleep_trend` is the preferred one-call path for recent sleep or recovery-oriented questions. It returns the exact
 requested range, IANA timezone, grouping, recorded-vital coverage, and the same safe duration, score, stage, and
@@ -1174,6 +1179,70 @@ whose `asOfDayMs` is not the current UTC day is reported as `stale` with score a
 invalid snapshots use explicit `not_ready` or `no_signal` statuses. The tool provides context only: it does not create a
 workout plan, prescribe exercise, or provide medical advice. It uses the existing sleep-session query shape, so it
 requires no new Firestore composite index.
+
+## Recorded Health tools
+
+`health.service.ts` is the explicit read-only Health projection boundary. `list_health_metrics` describes 34 approved
+canonical metrics; it does not scan user data or claim availability. It routes Weight to `query_measurements` and
+normalized Sleep to `get_sleep_trend`. Shared-catalog additions do not automatically become public MCP metrics.
+
+`query_health_metric` requires `health:read` and accepts one `metricId`, inclusive `startDate`/`endDate` calendar dates,
+`mode: summaries | samples`, and `maxPoints` (default 200, maximum 400 per series). Summary mode returns stored scalars,
+not a synthetic daily average. Sample mode reads normalized chunks and chooses evenly spaced representative points
+over each loaded series, preserving the first and last. It reports the original count and whether it downsampled.
+When under the requested point bound, every normalized point can be returned. These are not provider payloads or raw
+chunk documents, and representative output is not an exhaustive extrema or time-in-state calculation.
+
+Dates retain the provider's calendar day; there is no rebucketing into a caller-selected timezone. Summary points have
+`timeMs: null`; sample points have explicit UTC epoch milliseconds. Do not interpret the provider calendar date as UTC
+midnight or silently merge days across different source timezones. Each provider/account/aggregation/semantic variant/
+origin/recording-method combination stays separate. Provider names and response-local account/series ordinals are
+allowed; raw or opaque account keys, document/revision IDs, device data, native payloads and arbitrary strings are not.
+Unknown semantics use the fixed `other` label while remaining separate internally. Canonical categorical values use
+a fixed safe vocabulary. The one approved native variant is Garmin Body Battery: finite 0–100 values with its exact
+provider/metric/unit/semantic allowlist, labelled `native_only` and `garmin_body_battery_points`. It is never converted
+to a percentage or combined with canonical resources. The catalog advertises this exception in `nativeVariants`.
+Other native-only/non-comparable values and Sleep references are counted and excluded. Empty
+summaries can coexist with sample-only metrics: query sample mode over a supported short range before claiming no data.
+
+Body mass index, body fat, body water, muscle mass and bone mass additionally require `measurements:read`. HTTP prechecks
+and the data boundary both enforce it before database work. Only canonical `point_measurement` / `measurement` / `point`
+entries are eligible. These return date buckets containing individual values, with no provider, account, device,
+source provenance or exact measurement timestamp; profile snapshots are not measurements. The runtime and advertised
+output schemas forbid source series for body-composition metrics. Existing Weight tools and schemas remain unchanged.
+
+Canonical numeric values retain their shared canonical units. Each reading also includes a Sports Lib `display`
+value/unit pair generated from the same converted instance using the owner's `settings.unitSettings`. Clients must
+not attach a display unit to an unconverted canonical number. The catalog identifies the authoritative Sports Lib type.
+For series calculations, pair each numeric value with that series' `unit` and `normalizationStatus`, not blindly with
+the catalog's canonical unit. The approved native Body Battery variant uses an explicit Garmin-labelled display fallback.
+
+Reads are owner-scoped and metric-first, ordered by calendar date/document ID, using existing indexes and field
+projections. Pages remain 32 source records and 8 chunks. Processing is capped at 2,048 records, 256 chunks, 100,000
+sample points and 16 MiB of selected serialized document data. A final one-document lookahead detects record/chunk
+overflow; the read counters describe processed documents, not billed Firestore reads. Limits return `complete: false` plus
+the reason; this is scan completeness, not a claim that the provider recorded every day. Samples are not read after an
+incomplete parent scan. A chunk must have a loaded same-owner/provider/account parent, be named in its current chunk
+list, and match revision order, token and digest. Missing/stale parents never authorize sample disclosure.
+
+Outputs are limited to 32 series, 400 points per series, 8,192 scalar readings, 2,048 body readings per date and 512 KiB;
+output/series limits fail with a safe `query_too_large` error. Narrow the date range rather than retrying unchanged
+oversized work. Returned coverage counts retain partial/unknown source days across pages. Unexpected errors are generic
+and never return backend messages or log payloads. The existing bearer, deletion/revocation and HTTP rate-limit checks
+remain in force. A bounded in-memory display cache is local to a single owner/metric request; no records, persistent
+caches, measurements, imports or backfills are created by these reads.
+
+### Health release follow-up
+
+The internal Assistant keeps its existing scopes and tool allowlist; this PR does not expand Gemini access. No new
+Functions, Rules, indexes, migration or provider ingestion are needed. Deployment remains separately authorized:
+release the updated consent/Connections/Help/Policies frontend before advertising Health access, and deploy the existing
+`mcpApi`, `getMcpAuthorizationRequest`, `decideMcpAuthorization`, `listMcpConnections` and `revokeMcpConnection` functions
+together so every OAuth path recognizes the grant. Then refresh/rescan the registered ChatGPT app against the exact
+pending contract, verify a new conversation and promote only the verified digest through the documented lifecycle.
+Existing clients must reconnect to grant Health access; old tokens cannot acquire it through refresh. Run
+`npm run plugin:sync` separately after the deployment/rescan; fixture validation is not installation into a real profile.
+The pending record retains earlier unpromoted changes, and this implementation never edits the registered baseline.
 
 ## Bounds and operational controls
 

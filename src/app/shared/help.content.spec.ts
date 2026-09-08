@@ -1289,6 +1289,10 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('does not send activity, route, account, or prompt data');
     expect(dataAndPrivacySection?.content).toContain('Original files');
     expect(dataAndPrivacySection?.content).toContain('full-resolution recordings');
+    expect(dataAndPrivacySection?.content).toContain('**Health metrics**');
+    expect(dataAndPrivacySection?.content).toContain('Existing clients must reconnect to grant Health access');
+    expect(dataAndPrivacySection?.content).toContain('Body composition also needs **Body measurements**');
+    expect(dataAndPrivacySection?.content).toContain('exact UTC times');
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('Only clients that finish authorization appear');
