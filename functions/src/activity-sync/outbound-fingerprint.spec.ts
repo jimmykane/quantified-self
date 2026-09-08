@@ -151,6 +151,16 @@ describe('activity sync outbound fingerprints', () => {
     expect(first.fingerprintIds[1]).toBe(second.fingerprintIds[1]);
   });
 
+  it('keeps exact-only suppression with safe diagnostics when semantic parsing fails', async () => {
+    mocks.importer.mockRejectedValueOnce(new Error('File CRC mismatch'));
+    const result = await buildActivitySyncOutboundFingerprintIds(Buffer.from('bad-fit'));
+    expect(result.fingerprintIds).toEqual([result.exactFingerprintId]);
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      '[ActivitySync] Could not create a semantic outbound FIT fingerprint.',
+      expect.objectContaining({ errorName: 'Error', errorMessage: 'File CRC mismatch', payloadBytes: 7, fallback: 'exact_only' }),
+    );
+  });
+
   it('writes receipts under the user root before provider delivery', async () => {
     const result = await recordActivitySyncOutboundFingerprint({
       userID: 'user-1',

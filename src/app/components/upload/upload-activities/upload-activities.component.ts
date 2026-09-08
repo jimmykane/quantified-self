@@ -1,5 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { Component, DestroyRef, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { take } from 'rxjs';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,7 +16,7 @@ import { FileInterface } from '../file.interface';
 import { USAGE_LIMITS } from '@shared/limits';
 import { isSupportedActivityFileBaseExtension } from '@shared/activity-file-formats';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
-import { UploadError } from '../../../services/upload-error';
+import { markUploadErrorUserActionHandled, UploadError } from '../../../services/upload-error';
 
 const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
 const ACCOUNT_DELETION_UPLOAD_ERROR_CODE = 'user_deleted_or_deleting';
@@ -43,6 +45,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   protected authService = inject(AppAuthService);
   protected fitUploadService = inject(AppFitUploadService);
   protected browserCompatibilityService = inject(BrowserCompatibilityService);
+  private readonly destroyRef = inject(DestroyRef);
 
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
@@ -171,6 +174,21 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
         } catch (error: unknown) {
           if (this.isAccountDeletionUploadError(error)) {
             await this.clearDeletedAccountSession(uploadUserID);
+          }
+
+          if (error instanceof UploadError && error.status === 400 && error.code === 'route_file_in_activity_upload') {
+            this.snackBar.open(
+              'This file contains a route, not a workout. Open Routes and select the file there.',
+              'Upload as route', { duration: 10000 },
+            ).onAction().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+              if (!uploadUserID || this.authService.currentUser?.uid !== uploadUserID) return;
+              this.hapticsService.selection();
+              void this.router.navigate(['/routes']);
+            });
+            // Preserve the actionable message instead of replacing it with the
+            // abstract uploader's generic batch-failure snackbar.
+            reject(markUploadErrorUserActionHandled(error));
+            return;
           }
 
           const message = this.getUploadErrorMessage(error);

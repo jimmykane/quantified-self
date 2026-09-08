@@ -31,6 +31,7 @@ import {
   MAX_ACTIVITY_UPLOAD_BYTES_LABEL,
 } from '../shared/activity-processing-config';
 import { parseActivityFilePayload } from '../shared/activity-file-parser';
+import { getActivityParserDiagnostics } from '../shared/activity-parser-diagnostics';
 import { isSupportedActivityFileBaseExtension } from '../../../shared/activity-file-formats';
 import { preserveEventTagsOnRewrite } from '../../../shared/event-tags';
 
@@ -40,7 +41,7 @@ const ROUTE_ONLY_PARSER_ERROR_PATTERN = /no activities found in gpx.*importroute
 const ROUTE_OR_COURSE_ACTIVITY_TYPES = new Set(['route', 'course']);
 
 class HttpStatusError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly code?: string) {
     super(message);
     this.name = 'HttpStatusError';
   }
@@ -91,7 +92,7 @@ function isRouteOrCourseActivity(activity: unknown): boolean {
 
 function assertUploadedActivitiesAreWorkouts(activities: readonly unknown[]): void {
   if (activities.some(isRouteOrCourseActivity)) {
-    throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE);
+    throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, 'route_file_in_activity_upload');
   }
 }
 
@@ -425,11 +426,11 @@ export const uploadActivity = onRequest({
       if (isRouteOnlyParserError(error)) {
         logger.warn('[uploadActivity] Rejected route/course file submitted to activity upload', {
           resolvedExtension,
-          error: getErrorMessage(error),
+          reason: 'route_only',
         });
-        throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE);
+        throw new HttpStatusError(400, ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, 'route_file_in_activity_upload');
       }
-      logger.warn('[uploadActivity] Activity parsing failed', error);
+      logger.warn('[uploadActivity] Activity parsing failed', getActivityParserDiagnostics(error, payloadForParsing, resolvedExtension));
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 
@@ -476,7 +477,7 @@ export const uploadActivity = onRequest({
     }
 
     if (error instanceof HttpStatusError) {
-      response.status(error.status).json({ error: error.message });
+      response.status(error.status).json({ error: error.message, ...(error.code ? { code: error.code } : {}) });
       return;
     }
 

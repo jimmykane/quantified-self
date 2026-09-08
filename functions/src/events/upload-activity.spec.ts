@@ -4,6 +4,9 @@ import { gzipSync } from 'node:zlib';
 import type { Response } from 'express';
 import type { Request } from 'firebase-functions/v2/https';
 import { USAGE_LIMITS } from '../../../shared/limits';
+import * as logger from 'firebase-functions/logger';
+
+vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
 const hoisted = vi.hoisted(() => {
   const capturedOnRequestOptions = { value: undefined as unknown };
@@ -823,6 +826,11 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
+    expect(logger.warn).toHaveBeenCalledWith('[uploadActivity] Activity parsing failed', expect.objectContaining({
+      format: 'fit', payloadBytes: expect.any(Number), sportsLibVersion: expect.any(String),
+      errorMessage: 'Unclassified parser error; message withheld.',
+    }));
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
   });
 
   it('should reject route-only GPX files before writing event data', async () => {
@@ -841,7 +849,7 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, code: 'route_file_in_activity_upload' });
     expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();
@@ -872,7 +880,7 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, code: 'route_file_in_activity_upload' });
     expect(event.setID).not.toHaveBeenCalled();
     expect(routeActivity.setID).not.toHaveBeenCalled();
     expect(hoisted.mockGenerateActivityID).not.toHaveBeenCalled();
@@ -905,7 +913,7 @@ describe('uploadActivity', () => {
     }), response);
 
     expect(response.status).toHaveBeenCalledWith(400);
-    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE });
+    expect(response.json).toHaveBeenCalledWith({ error: ROUTE_OR_COURSE_ACTIVITY_UPLOAD_ERROR_MESSAGE, code: 'route_file_in_activity_upload' });
     expect(courseActivity.setID).not.toHaveBeenCalled();
     expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
     expect(hoisted.mockDocSet).not.toHaveBeenCalled();

@@ -4,6 +4,7 @@ import { describe, it, vi, expect, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
+import type { DocumentSnapshot } from 'firebase-admin/firestore';
 
 // Mock dependencies BEFORE importing the module under test
 vi.mock('../config', () => ({
@@ -1140,6 +1141,62 @@ describe('importActivityToSuuntoApp', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it.each(['NEW', 'PROCESSING'])('returns pending for an opted-in direct upload with status %s', async (status) => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({ id: 'pending-id', url: 'https://storage.suunto.com/upload', headers: {} });
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue({ status });
+
+        await expect(importActivityToSuuntoApp(createMockRequest({
+            data: { file: Buffer.from('fit').toString('base64'), supportsPendingStatus: true },
+        }) as Parameters<typeof importActivityToSuuntoApp>[0])).resolves.toEqual({
+            status: 'pending', code: 'PROCESSING', uploadId: 'pending-id', providerUserId: 'token1',
+            message: `Suunto is still processing the activity with status ${status}.`,
+        });
+        expect(requestMocks.post).toHaveBeenCalledTimes(1);
+        expect(requestMocks.put).toHaveBeenCalledTimes(1);
+        expect(requestMocks.get).toHaveBeenCalledTimes(1);
+        expect(logger.info).toHaveBeenCalledWith(
+            '[SuuntoActivityUpload] Activity is still processing; client status check required.',
+            { uploadId: 'pending-id', providerStatus: status },
+        );
+    });
+
+    it.each([
+        { status: 'NEW' },
+        { status: 'PROCESSED', workoutKey: 'workout-key' },
+        { status: 'ERROR', message: 'already exists' },
+    ])('checks an opted-in existing upload once without resending bytes: %j', async (providerResult) => {
+        const admin = await import('firebase-admin');
+        vi.mocked(admin.firestore().collection('suuntoAppAccessTokens').doc('test-user-id')
+            .collection('tokens').doc('token1').get).mockResolvedValueOnce({
+            exists: true, id: 'token1', data: () => ({}),
+        } as unknown as DocumentSnapshot);
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.get.mockResolvedValue(providerResult);
+
+        const result = await importActivityToSuuntoApp(createMockRequest({
+            data: { resumeUploadId: 'pending-id', resumeProviderUserId: 'token1', supportsPendingStatus: true },
+        }) as Parameters<typeof importActivityToSuuntoApp>[0]);
+        expect(result.status).toBe(providerResult.status === 'NEW' ? 'pending' : providerResult.status === 'PROCESSED' ? 'success' : 'info');
+        expect(requestMocks.get).toHaveBeenCalledTimes(1);
+        expect(requestMocks.post).not.toHaveBeenCalled();
+        expect(requestMocks.put).not.toHaveBeenCalled();
+        expect(outboundFingerprintMocks.recordActivitySyncOutboundFingerprint).not.toHaveBeenCalled();
+    });
+
+    it('does not treat an unknown provider response as a successful pending response', async () => {
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+        requestMocks.post.mockResolvedValue({ id: 'unknown-id', url: 'https://storage.suunto.com/upload', headers: {} });
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue({});
+        await expect(importActivityToSuuntoApp(createMockRequest({
+            data: { file: Buffer.from('fit').toString('base64'), supportsPendingStatus: true },
+        }) as Parameters<typeof importActivityToSuuntoApp>[0])).rejects.toMatchObject({
+            code: 'unavailable', details: { retryMode: 'resume', resumeUploadId: 'unknown-id' },
+        });
     });
 
     it('should resume a direct upload from callable identifiers without initializing or sending the blob again', async () => {

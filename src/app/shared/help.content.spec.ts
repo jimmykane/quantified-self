@@ -941,7 +941,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
     expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job instead of uploading the FIT again');
-    expect(serviceConnectionsSection?.content).toContain('retry never replaces an issued job automatically');
+    expect(serviceConnectionsSection?.content).toContain('A pending or ambiguous job is never replaced automatically');
+    expect(serviceConnectionsSection?.content).toContain('After eight automatic checks');
+    expect(serviceConnectionsSection?.content).toContain('**Check status again**');
+    expect(serviceConnectionsSection?.content).toContain('An explicit processing failure that requires a restart stops status checks');
     expect(serviceConnectionsSection?.content).toContain('clear the upload list and choose the FIT file again');
     expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');

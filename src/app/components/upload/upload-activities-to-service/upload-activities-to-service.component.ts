@@ -17,6 +17,7 @@ const SERVICE_ACTIVITY_UPLOAD_DELAY_MS = 2000;
 const WAHOO_STATUS_POLL_DELAY_MS = 2000;
 const WAHOO_STATUS_POLL_MAX_DELAY_MS = 60_000;
 const WAHOO_STATUS_POLL_MAX_ATTEMPTS = 8;
+const SUUNTO_STATUS_POLL_MIN_DELAY_MS = 10_000;
 const WAITING_FOR_NEXT_UPLOAD_MESSAGE = 'Waiting before next upload...';
 const RETRYABLE_WAHOO_STATUS_ERROR_CODES = new Set([
   'aborted',
@@ -41,6 +42,9 @@ interface ServiceUploadRow {
   jobId?: string;
   uploadId?: string;
   providerUserId?: string;
+  ownerUid?: string;
+  destinationServiceName?: ServiceNames;
+  statusCheckInProgress?: boolean;
 }
 
 interface SuuntoUploadResumeState {
@@ -94,6 +98,9 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private _serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
   @Input() set serviceName(value: ServiceNames) {
+    if (this._serviceName !== value) {
+      this.clearAllWahooStatusPolls();
+    }
     this._serviceName = value || ServiceNames.SuuntoApp;
     this.destinationName = getProviderDisplayName(this._serviceName, 'destination');
     this.callableFunction = this._serviceName === ServiceNames.COROSAPI
@@ -191,6 +198,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       return;
     }
 
+    this.hapticsService.selection();
     await this.processRows(rows.map((row) => row.id), true);
     this.clearUploadEvent(event);
   }
@@ -200,6 +208,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       return;
     }
 
+    if (!this.isCurrentUploadRow(row)) return;
+    this.hapticsService.selection();
     await this.processRows([row.id], true);
   }
 
@@ -208,25 +218,33 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       return;
     }
 
-    await this.processRows(this.failedRows().map((row) => row.id), true);
+    const rows = this.failedRows().filter(row => this.isCurrentUploadRow(row));
+    if (!rows.length) return;
+    this.hapticsService.selection();
+    await this.processRows(rows.map((row) => row.id), true);
   }
 
-  async refreshUpload(row: ServiceUploadRow): Promise<void> {
+  async refreshUpload(row: ServiceUploadRow, automatic = false): Promise<void> {
     if (this.isDestroyed
       || row.status !== 'processing'
       || !row.uploadId
       || !this.usesAsynchronousStatusPolling
-      || (this.serviceName === ServiceNames.COROSAPI && !row.providerUserId)
+      || (this.serviceName !== ServiceNames.WahooAPI && !row.providerUserId)
+      || !this.isCurrentUploadRow(row)
       || this.wahooStatusChecksInProgress.has(row.id)) {
       return;
     }
 
+    if (!automatic) this.hapticsService.selection();
+    const serviceName = this.serviceName;
+    const ownerUid = this.auth.currentUser?.uid;
     this.clearWahooStatusPoll(row.id);
     this.wahooStatusChecksInProgress.add(row.id);
     this.wahooStatusPollAttempts.set(row.id, (this.wahooStatusPollAttempts.get(row.id) || 0) + 1);
-    this.updateRow(row.id, { message: `Checking ${this.destinationName} processing status...` });
+    this.updateRow(row.id, { message: `Checking ${this.destinationName} processing status...`, statusCheckInProgress: true });
     try {
       const result = await this.getServiceUploadStatusResult(row);
+      if (!this.isCurrentUploadRow(row) || serviceName !== this.serviceName || ownerUid !== this.auth.currentUser?.uid) return;
       if (result.pending) {
         this.scheduleNextWahooStatusPoll(
           row,
@@ -239,13 +257,16 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         this.updateRow(row.id, { status: 'duplicate', progress: 100, message });
         this.processingService.updateJob(row.jobId || row.id, { status: 'duplicate', progress: 100, details: message });
         this.resetWahooStatusPolling(row.id);
+        if (!automatic) this.hapticsService.warning();
         return;
       }
       const message = result.message || `Uploaded to ${this.destinationName}`;
       this.updateRow(row.id, { status: 'success', progress: 100, message });
       this.processingService.completeJob(row.jobId || row.id, message);
       this.resetWahooStatusPolling(row.id);
+      if (!automatic) this.hapticsService.success();
     } catch (error) {
+      if (!this.isCurrentUploadRow(row) || serviceName !== this.serviceName || ownerUid !== this.auth.currentUser?.uid) return;
       const message = this.getErrorMessage(error);
       this.logger.error(error);
       if (this.isRetryableWahooStatusError(error)) {
@@ -260,20 +281,23 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         status: 'failed',
         progress: 0,
         message,
-        ...this.getAsynchronousUploadStateUpdate(error),
+        ...this.getUploadResumeStateUpdate(error),
       });
       this.processingService.failJob(row.jobId || row.id, message);
       this.resetWahooStatusPolling(row.id);
+      if (!automatic) this.hapticsService.error();
     } finally {
       this.wahooStatusChecksInProgress.delete(row.id);
+      this.updateRow(row.id, { statusCheckInProgress: false });
     }
   }
 
   clearRows(): void {
-    if (this.isUploading) {
+    if (this.isUploading || !this.hasRows()) {
       return;
     }
 
+    this.hapticsService.selection();
     this.clearAllWahooStatusPolls();
     this.uploadRows.set([]);
   }
@@ -290,6 +314,13 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     if (!this.auth.currentUser) {
       throw new Error('User not logged in');
     }
+    const ownerUid = this.auth.currentUser.uid;
+    const serviceName = this.serviceName;
+    const assertUploadContext = () => {
+      if (this.isDestroyed || ownerUid !== this.auth.currentUser?.uid || serviceName !== this.serviceName) {
+        throw new Error('The upload session has changed.');
+      }
+    };
 
     const isSuuntoResume = this.serviceName === ServiceNames.SuuntoApp && !!suuntoResumeState;
     let callablePayload: Record<string, unknown>;
@@ -297,6 +328,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       callablePayload = {
         resumeUploadId: suuntoResumeState.uploadId,
         resumeProviderUserId: suuntoResumeState.providerUserId,
+        supportsPendingStatus: true,
       };
     } else {
       if (file.file.size > MAX_ACTIVITY_UPLOAD_TO_SERVICE_BYTES) {
@@ -315,9 +347,10 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           filename: file.name,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         }
-        : { file: base64String };
+        : { file: base64String, ...(this.serviceName === ServiceNames.SuuntoApp ? { supportsPendingStatus: true } : {}) };
     }
 
+    assertUploadContext();
     if (file.jobId) {
       this.processingService.updateJob(file.jobId, { progress: 50 });
     }
@@ -327,13 +360,14 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       callablePayload,
     );
 
+    assertUploadContext();
     if (file.jobId) {
       this.processingService.updateJob(file.jobId, { progress: 100 });
     }
 
     this.logger.info(`${this.destinationName} upload response:`, response.data);
 
-    const result = this.toServiceUploadResult(response.data);
+    const result = this.toServiceUploadResult(response.data, suuntoResumeState);
     if (result.duplicate) {
       const message = result.message || `Activity already exists in ${this.destinationName}`;
       if (file.jobId) {
@@ -370,7 +404,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
   private async processRow(rowId: string): Promise<boolean> {
     const row = this.findRow(rowId);
-    if (!row || row.status === 'uploading') {
+    if (!row || row.status === 'uploading' || !this.isCurrentUploadRow(row)) {
       return false;
     }
 
@@ -396,7 +430,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     this.processingService.updateJob(jobId, { status: 'processing', progress: 0 });
 
     try {
-      const result = this.usesAsynchronousStatusPolling && row.uploadId
+      const result = this.usesAsynchronousStatusPolling && this.serviceName !== ServiceNames.SuuntoApp && row.uploadId
         ? await this.getServiceUploadStatusResult(row)
         : await this.processAndUploadFile(
           this.toFileItem(row, jobId),
@@ -405,7 +439,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
             : undefined,
         );
       const completedRow = this.findRow(rowId);
-      if (!completedRow) {
+      if (!completedRow || !this.isCurrentUploadRow(row)) {
         return true;
       }
 
@@ -443,11 +477,10 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       this.processingService.completeJob(jobId, message);
       return true;
     } catch (error: unknown) {
+      if (!this.isCurrentUploadRow(row)) return false;
       this.logger.error(error);
       const message = this.getErrorMessage(error);
-      const resumeStateUpdate = this.usesAsynchronousStatusPolling
-        ? this.getAsynchronousUploadStateUpdate(error)
-        : this.getSuuntoResumeStateUpdate(error);
+      const resumeStateUpdate = this.getUploadResumeStateUpdate(error);
       this.updateRow(row.id, {
         status: 'failed',
         progress: 0,
@@ -503,6 +536,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       attempts: 0,
       progress: 0,
       message: isFitFile ? null : 'Only FIT files are supported.',
+      ownerUid: this.auth.currentUser?.uid,
+      destinationServiceName: this.serviceName,
     };
   }
 
@@ -522,7 +557,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   ): void {
     const delayMs = this.scheduleWahooStatusPoll(row.id, retryAfterMs);
     const details = delayMs === undefined
-      ? `${message} Automatic status checks are paused to avoid rate limits. Use Refresh to check again.`
+      ? `${message} Automatic status checks are paused to avoid rate limits. Use Check status again.`
       : `${message} Checking again in ${this.formatWahooStatusPollDelay(delayMs)}.`;
     this.updateRow(row.id, { message: details });
     this.processingService.updateJob(row.jobId || row.id, { status: 'processing', progress: 75, details });
@@ -534,7 +569,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       || !this.usesAsynchronousStatusPolling
       || row?.status !== 'processing'
       || !row.uploadId
-      || (this.serviceName === ServiceNames.COROSAPI && !row.providerUserId)) {
+      || (this.serviceName !== ServiceNames.WahooAPI && !row.providerUserId)
+      || !this.isCurrentUploadRow(row)) {
       return undefined;
     }
 
@@ -545,7 +581,9 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
     this.clearWahooStatusPoll(rowId);
     const exponentialDelayMs = Math.min(
-      this.wahooStatusPollDelayMs * (2 ** pollAttemptCount),
+      (this.serviceName === ServiceNames.SuuntoApp
+        ? Math.max(SUUNTO_STATUS_POLL_MIN_DELAY_MS, this.wahooStatusPollDelayMs)
+        : this.wahooStatusPollDelayMs) * (2 ** pollAttemptCount),
       this.wahooStatusPollMaxDelayMs,
     );
     const delayMs = retryAfterMs === undefined
@@ -555,7 +593,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       this.wahooStatusPollTimers.delete(rowId);
       const currentRow = this.findRow(rowId);
       if (currentRow) {
-        void this.refreshUpload(currentRow);
+        void this.refreshUpload(currentRow, true);
       }
     }, delayMs);
     this.wahooStatusPollTimers.set(rowId, timer);
@@ -589,6 +627,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   private isRetryableWahooStatusError(error: unknown): boolean {
+    const retryMode = (error as { details?: { retryMode?: unknown } } | null)?.details?.retryMode;
+    if (retryMode === 'restart' || retryMode === 'none') return false;
     const code = `${(error as { code?: unknown } | null)?.code || ''}`
       .trim()
       .toLowerCase()
@@ -601,6 +641,16 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   ): Promise<ServiceUploadResult> {
     if (!row.uploadId) {
       throw new Error(`Missing ${this.destinationName} upload identifier.`);
+    }
+    if (this.serviceName === ServiceNames.SuuntoApp) {
+      const response = await this.functionsService.call<unknown, ServiceUploadCallableResponse>(
+        'importActivityToSuuntoApp', {
+          resumeUploadId: row.uploadId,
+          resumeProviderUserId: row.providerUserId,
+          supportsPendingStatus: true,
+        },
+      );
+      return this.toServiceUploadResult(response.data, row);
     }
     const callableFunction: FunctionName = this.serviceName === ServiceNames.COROSAPI
       ? 'getCOROSAPIWorkoutFileUploadStatus'
@@ -633,6 +683,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     return this.uploadRows().find((row) => row.id === rowId);
   }
 
+  private isCurrentUploadRow(row: ServiceUploadRow): boolean {
+    return !this.isDestroyed && !!this.auth.currentUser && !!this.findRow(row.id)
+      && (row.ownerUid === undefined || row.ownerUid === this.auth.currentUser.uid)
+      && (row.destinationServiceName === undefined || row.destinationServiceName === this.serviceName);
+  }
+
   private async waitBeforeNextUpload(rowIds: string[], startIndex: number): Promise<void> {
     const nextRow = this.findNextUploadableRow(rowIds, startIndex);
     if (!nextRow || this.uploadDelayMs <= 0) {
@@ -662,7 +718,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   private showBatchSummary(rowIds: string[]): void {
-    const rows = this.uploadRows().filter((row) => rowIds.includes(row.id));
+    const rows = this.uploadRows().filter((row) => rowIds.includes(row.id) && this.isCurrentUploadRow(row));
     if (rows.length === 0) {
       return;
     }
@@ -693,6 +749,9 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     }
 
     this.snackBar.open(message, 'OK', { duration: 5000 });
+    if (failedUploads > 0) this.hapticsService.error();
+    else if (pendingUploads === 0 && successfulUploads > 0) this.hapticsService.success();
+    else if (pendingUploads === 0 && duplicateUploads > 0) this.hapticsService.warning();
   }
 
   private readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
@@ -820,6 +879,12 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     return {};
   }
 
+  private getUploadResumeStateUpdate(error: unknown): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'> | Record<string, never> {
+    return this.serviceName === ServiceNames.SuuntoApp
+      ? this.getSuuntoResumeStateUpdate(error)
+      : this.getAsynchronousUploadStateUpdate(error);
+  }
+
   private getAsynchronousUploadStateUpdate(
     error: unknown,
   ): Pick<ServiceUploadRow, 'uploadId' | 'providerUserId'> | Record<string, never> {
@@ -860,7 +925,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     if (responseStatus === 'pending' || responseStatus === 'processing') {
       if (this.usesAsynchronousStatusPolling
         && (!uploadId
-          || (this.serviceName === ServiceNames.COROSAPI && !providerUserId))) {
+          || (this.serviceName !== ServiceNames.WahooAPI && !providerUserId))) {
         throw new Error(`${this.destinationName} returned an incomplete upload status.`);
       }
       return {
@@ -872,7 +937,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
         message: responseMessage,
       };
     }
-    if (this.usesAsynchronousStatusPolling && responseStatus !== 'success') {
+    if (this.usesAsynchronousStatusPolling && responseStatus !== 'success'
+      && !(this.serviceName === ServiceNames.SuuntoApp && responseStatus === 'ok')) {
       throw new Error(`${this.destinationName} returned an invalid upload status.`);
     }
     return {
@@ -883,6 +949,6 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   private get usesAsynchronousStatusPolling(): boolean {
-    return this.serviceName === ServiceNames.WahooAPI || this.serviceName === ServiceNames.COROSAPI;
+    return this.serviceName === ServiceNames.WahooAPI || this.serviceName === ServiceNames.COROSAPI || this.serviceName === ServiceNames.SuuntoApp;
   }
 }

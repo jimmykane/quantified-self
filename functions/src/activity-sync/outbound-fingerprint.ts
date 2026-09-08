@@ -5,6 +5,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { EventImporterFIT, ServiceNames } from '@sports-alliance/sports-lib';
 
 import { createParsingOptions } from '../../../shared/parsing-options';
+import { getActivityParserDiagnostics } from '../shared/activity-parser-diagnostics';
 import {
   getUserDeletionGuardStateInTransaction,
   UserDeletionGuardReadError,
@@ -81,7 +82,8 @@ async function buildSemanticFingerprintId(fileBuffer: Buffer): Promise<string | 
     // Exact-byte suppression remains available when an otherwise provider-
     // accepted FIT cannot be normalized by the local parser.
     logger.warn('[ActivitySync] Could not create a semantic outbound FIT fingerprint.', {
-      errorName: error instanceof Error ? error.name : typeof error,
+      ...getActivityParserDiagnostics(error, fileBuffer, 'fit'),
+      fallback: 'exact_only',
     });
     return null;
   }
