@@ -32,6 +32,14 @@ describe('timeline chart overlays', () => {
     expect(cards[1].textContent).toContain(ongoing.title.trim());
     expect(html).toContain('max-width:min(260px, calc(100vw - 32px))');
   });
+  it('excludes hidden notes from markers, bands, group counts and tooltips without changing readings', () => {
+    const hidden = { ...note, id: 'b'.repeat(64), title: 'Hidden private note', showOnCharts: false };
+    const result = addTimelineNotesToChart(option, [note, hidden]);
+    expect([...result.groups.values()]).toEqual([[note]]);
+    expect(result.option.series[1].markLine.data[0].tooltip.formatter()).not.toContain(hidden.title);
+    expect(result.option.series[0]).toBe(option.series[0]);
+    expect(addTimelineNotesToChart(option, [hidden]).option).toBe(option);
+  });
   it('preserves metrics, gaps, axes and reference bands and escapes user text', () => {
     const result = addTimelineNotesToChart(option, [note]);
     expect(result.option.xAxis).toBe(option.xAxis); expect(result.option.yAxis).toBe(option.yAxis);

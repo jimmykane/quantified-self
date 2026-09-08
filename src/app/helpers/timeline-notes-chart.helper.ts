@@ -1,5 +1,5 @@
 import type { EChartsType } from 'echarts/core';
-import { timelineNoteEnd, timelineNoteDates, TIMELINE_NOTE_LABELS, type TimelineNote, type TimelineNoteRange } from '@shared/timeline-notes';
+import { isTimelineNoteVisible, timelineNoteEnd, timelineNoteDates, TIMELINE_NOTE_LABELS, type TimelineNote, type TimelineNoteRange } from '@shared/timeline-notes';
 import {
   buildDashboardEChartsStyleTokens,
   buildDashboardEChartsTooltipChrome,
@@ -57,7 +57,7 @@ function projection(axis: Axis, series: Series[], hints: TimelineNoteAxisHints):
 }
 
 export function groupTimelineNotes(notes: readonly TimelineNote[], range: TimelineNoteRange, nowMs = Date.now()): NoteGroup[] {
-  const sorted = notes.map(note => ({ note, end: timelineNoteEnd(note, nowMs) }))
+  const sorted = notes.filter(isTimelineNoteVisible).map(note => ({ note, end: timelineNoteEnd(note, nowMs) }))
     .filter(({ note, end }) => note.startDate <= range.endDate && end >= range.startDate)
     .sort((a, b) => a.note.startDate.localeCompare(b.note.startDate) || a.note.id.localeCompare(b.note.id));
   const groups: NoteGroup[] = [];

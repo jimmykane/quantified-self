@@ -1,4 +1,4 @@
-import { timelineNoteEnd, type TimelineNote, type TimelineNoteRange } from '@shared/timeline-notes';
+import { isTimelineNoteVisible, timelineNoteEnd, type TimelineNote, type TimelineNoteRange } from '@shared/timeline-notes';
 import type { ActivityCalendarDayViewModel, ActivityCalendarViewModel } from './activity-calendar.helper';
 
 export interface CalendarDayTimelineNotes {
@@ -24,6 +24,7 @@ export function calendarTimelineNotesByDate(
   nowMs = Date.now(),
 ): ReadonlyMap<string, CalendarDayTimelineNotes> {
   const periods = [...new Map(notes.map(note => [note.id, note])).values()]
+    .filter(isTimelineNoteVisible)
     .sort((a, b) => b.startDate.localeCompare(a.startDate) || a.id.localeCompare(b.id))
     .map(note => ({ note, endDate: timelineNoteEnd(note, nowMs) }));
   const result = new Map<string, CalendarDayTimelineNotes>();

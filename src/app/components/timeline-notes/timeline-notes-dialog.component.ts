@@ -11,7 +11,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import { TIMELINE_NOTE_CATEGORIES, TIMELINE_NOTE_LABELS, TIMELINE_NOTE_LIMITS, timelineToday, timelineNoteDates,
-  validateTimelineFields, type TimelineNote } from '@shared/timeline-notes';
+  validateTimelineFields, isTimelineNoteVisible, type TimelineNote } from '@shared/timeline-notes';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
@@ -41,7 +41,7 @@ export class TimelineNotesDialogComponent {
   readonly conflict = signal(false);
   readonly existing = signal<TimelineNote | null>(null);
   readonly notes = signal<readonly TimelineNote[]>([]);
-  readonly rows = computed(() => this.notes().map(note => ({ note, dates: timelineNoteDates(note), category: TIMELINE_NOTE_LABELS[note.category] })));
+  readonly rows = computed(() => this.notes().map(note => ({ note, dates: timelineNoteDates(note), category: TIMELINE_NOTE_LABELS[note.category], hidden: !isTimelineNoteVisible(note) })));
   readonly mode = signal<'single' | 'range' | 'ongoing'>('single');
   readonly options = TIMELINE_NOTE_CATEGORIES.map(id => ({ id, label: TIMELINE_NOTE_LABELS[id] }));
   readonly limits = TIMELINE_NOTE_LIMITS;
@@ -53,7 +53,7 @@ export class TimelineNotesDialogComponent {
   private zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   private loadVersion = 0;
   readonly form = this.builder.nonNullable.group({ category: ['other', Validators.required], title: ['Other', [Validators.required, Validators.maxLength(TIMELINE_NOTE_LIMITS.title)]],
-    details: ['', Validators.maxLength(TIMELINE_NOTE_LIMITS.details)], startDate: [timelineToday(this.zone), Validators.required], endDate: [timelineToday(this.zone)] });
+    details: ['', Validators.maxLength(TIMELINE_NOTE_LIMITS.details)], startDate: [timelineToday(this.zone), Validators.required], endDate: [timelineToday(this.zone)], showOnCharts: [true] });
   readonly title = computed(() => this.view() === 'list' ? 'Timeline notes' : this.existing() ? 'Edit note' : 'Add note');
 
   constructor() {
@@ -86,7 +86,7 @@ export class TimelineNotesDialogComponent {
     const today = timelineToday(this.zone);
     this.mutationId = note ? null : this.compatibility.createRandomUUID();
     this.form.reset({ category: note?.category ?? 'other', title: note?.title ?? 'Other', details: note?.details ?? '',
-      startDate: note?.startDate ?? today, endDate: note?.endDate ?? today });
+      startDate: note?.startDate ?? today, endDate: note?.endDate ?? today, showOnCharts: note ? isTimelineNoteVisible(note) : true });
     this.mode.set(note?.endDate === null ? 'ongoing' : note && note.endDate !== note.startDate ? 'range' : 'single');
     this.view.set('edit');
   }

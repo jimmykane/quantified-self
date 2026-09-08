@@ -15,6 +15,8 @@ export interface TimelineNoteFields {
   /** Inclusive; equal to startDate for a single day, null for an ongoing period. */
   endDate: string | null;
   timeZone: string;
+  /** Charts and Calendar visibility. Missing on older notes means visible. */
+  showOnCharts?: boolean;
 }
 export interface TimelineNote extends TimelineNoteFields {
   id: string;
@@ -46,6 +48,9 @@ export function timelineToday(timeZone: string, nowMs = Date.now()): string {
 }
 
 export function validateTimelineFields(value: Record<string, unknown>, nowMs = Date.now()): TimelineNoteFields {
+  if (value.showOnCharts !== undefined && typeof value.showOnCharts !== 'boolean') {
+    throw new TimelineNoteValidationError('Choose whether to show this note on charts and calendar.');
+  }
   if (!(TIMELINE_NOTE_CATEGORIES as readonly unknown[]).includes(value.category)) throw new TimelineNoteValidationError('Choose a note category.');
   const text = (value: unknown, maximum: number, required: boolean): string => {
     if (typeof value !== 'string' || value.length > maximum || (required && !value.trim())
@@ -70,7 +75,8 @@ export function validateTimelineFields(value: Record<string, unknown>, nowMs = D
   try { today = timelineToday(value.timeZone, nowMs); } catch { throw new TimelineNoteValidationError('Choose a valid time zone.'); }
   if (value.endDate === null && value.startDate > today) throw new TimelineNoteValidationError('An ongoing period must already have started.');
   return { category: value.category as TimelineNoteCategory, title, ...(details ? { details } : {}),
-    startDate: value.startDate, endDate: value.endDate as string | null, timeZone: value.timeZone };
+    startDate: value.startDate, endDate: value.endDate as string | null, timeZone: value.timeZone,
+    ...(typeof value.showOnCharts === 'boolean' ? { showOnCharts: value.showOnCharts } : {}) };
 }
 
 export function decodeTimelineNote(id: string, value: unknown): TimelineNote | null {
@@ -90,6 +96,9 @@ export function decodeTimelineNote(id: string, value: unknown): TimelineNote | n
 
 export function timelineNoteEnd(note: TimelineNoteFields, nowMs = Date.now()): string {
   return note.endDate ?? timelineToday(note.timeZone, nowMs);
+}
+export function isTimelineNoteVisible(note: Pick<TimelineNoteFields, 'showOnCharts'>): boolean {
+  return note.showOnCharts !== false;
 }
 export function timelineNoteOverlaps(note: TimelineNoteFields, range: TimelineNoteRange, nowMs = Date.now()): boolean {
   return note.startDate <= range.endDate && timelineNoteEnd(note, nowMs) >= range.startDate;

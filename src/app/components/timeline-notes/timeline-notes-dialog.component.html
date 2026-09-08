@@ -13,11 +13,11 @@
       <button mat-flat-button type="button" appHapticTap [disabled]="busy()" (click)="edit(null)"><span class="note-action"><mat-icon>add</mat-icon><span>Add note</span></span></button>
       <mat-checkbox [checked]="service.showOnCharts()" [disabled]="busy()" (change)="toggleVisibility($event.checked, $event.source)">Show on charts and calendar</mat-checkbox>
     </div>
-    <p class="note-hint">Private context across Health, Sleep, Training, and Calendar. Notes do not change your measurements or scores.</p>
+    <p class="note-hint">Private context across Health, Sleep, Training, and Calendar. Individually hidden notes stay hidden when this is on. Notes do not change your measurements or scores.</p>
     <ul class="note-list" aria-label="Timeline notes">
       @for (row of rows(); track row.note.id) {
         <li><button mat-button type="button" appHapticTap class="note-row" [disabled]="busy()" (click)="edit(row.note)">
-          <span class="note-row-content"><strong>{{ row.note.title }}</strong><span>{{ row.category }} · {{ row.dates }}</span></span>
+          <span class="note-row-content"><strong>{{ row.note.title }}</strong><span>{{ row.category }} · {{ row.dates }}@if (row.hidden) { · Hidden }</span></span>
         </button></li>
       } @empty { @if (!busy() && !error()) { <li>No notes yet. Add context such as a vacation or a period of sickness.</li> } }
     </ul>
@@ -39,6 +39,10 @@
         @if (mode() === 'range') { <mat-form-field appearance="outline"><mat-label>End date (inclusive)</mat-label><input matInput type="date" formControlName="endDate" (change)="haptics.selection()" required></mat-form-field> }
       </div>
       <mat-form-field appearance="outline"><mat-label>Details (optional)</mat-label><textarea matInput formControlName="details" rows="3" [maxlength]="limits.details"></textarea></mat-form-field>
+      <div class="note-visibility">
+        <mat-checkbox formControlName="showOnCharts" (change)="haptics.selection()" aria-describedby="note-visibility-hint">Show this note on charts and calendar</mat-checkbox>
+        <p id="note-visibility-hint" class="note-hint">Hidden notes stay in this manager.@if (!service.showOnCharts()) { All notes are currently hidden by the global setting. This choice applies when you turn it back on. }</p>
+      </div>
       <p class="note-hint">Calendar dates stay the same when you travel. Details are private and shown as plain text.</p>
     </form>
   }

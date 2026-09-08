@@ -12,6 +12,10 @@ characters, ISO calendar `startDate`, nullable inclusive `endDate`, captured IAN
 server-generated `createdAtMs`/`updatedAtMs`. Equal dates mean one day; null end means ongoing. Past and planned bounded
 dates are allowed; ongoing periods must already have started. Editing preserves the captured zone and calendar labels.
 “End today” uses that zone. Ongoing overlays stop today and never extend into a forecast.
+Optional `showOnCharts` controls each note's chart and Calendar visibility; missing means true for existing notes.
+New editor saves include the boolean. The existing save transaction validates it and includes it in revision/retry
+comparisons; older-client updates that omit it preserve the stored choice. Omitted and explicit true are equivalent for
+legacy create retries. No migration, new endpoint, index, or Security Rules change is needed.
 
 `saveTimelineNote` and `deleteTimelineNote` require Authentication, App Check, and an originating UID matching the
 authenticated account. They use the shared transactional account-deletion guard, explicit input allowlists and strict
@@ -42,6 +46,14 @@ and returning to the workspace. Notes failing to load never block metric renderi
 notes. The global preference is `settings.appSettings.timelineNotes.showOnCharts`, default true. The Material manager
 supports create/edit, confirmed delete, End today, retries and explicit conflict reload while preserving unsaved drafts.
 Failed history-page requests retry that same page; failed visibility saves restore the persisted checkbox state.
+The global toggle remains the master switch. A note appears only when it and the global setting are enabled; switching
+the global toggle off/on never rewrites individual choices. The editor's **Show this note on charts and calendar**
+checkbox is a draft saved with **Save**, not an immediate write. Failed saves retain it and conflict reload restores the
+latest stored choice. The manager lists hidden notes with a **Hidden** label, even while global visibility is off.
+Range paging still loads/counts hidden records within the existing caps; filtering happens before workspace projection,
+with the chart/Calendar helpers also excluding hidden notes from groups, tooltips, counts, and day details. A queued
+marker selection is checked against current visibility before opening. Hidden is a display choice, not deletion or a
+new access-control boundary; all notes remain private owner-readable records.
 
 ## Chart boundary
 
@@ -84,3 +96,6 @@ and workspace suites, full frontend/Functions suites, `npm run test:rules`, Func
 Use only emulator-backed fixture accounts for browser mutations; verify desktop/mobile, keyboard navigation, themes,
 range navigation, visibility, marker taps and create/edit/delete/End today. Deploying rules/indexes and the two callables
 requires separate approval. No migration, backfill or scheduler is required.
+For per-note visibility, release the updated existing `saveTimelineNote` callable before the frontend; the old callable
+rejects the new field. `deleteTimelineNote`, Rules, and indexes do not need a deployment for this addition. Already-open
+older frontends do not understand the per-note display flag until refreshed, but their edits preserve it on the server.
