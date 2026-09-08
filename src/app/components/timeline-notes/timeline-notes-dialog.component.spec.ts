@@ -3,12 +3,15 @@ import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dial
 import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatCheckbox } from '@angular/material/checkbox';
+import { MatDatepickerInput } from '@angular/material/datepicker';
+import { MatSelect } from '@angular/material/select';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { timelineNoteDateInput } from './timeline-note-date-adapter';
 
 describe('Timeline notes editor', () => {
   const note = { id: 'a'.repeat(64), category: 'sickness' as const, title: 'Sickness', startDate: '2026-01-01', endDate: null, timeZone: 'Europe/Helsinki', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
@@ -25,6 +28,48 @@ describe('Timeline notes editor', () => {
       { provide: AppTimelineNotesService, useValue: service }, { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => '123e4567-e89b-42d3-a456-426614174000' } },
     ] });
     component = TestBed.runInInjectionContext(() => new TimelineNotesDialogComponent());
+  });
+  it('offers Material category icons and named colors, persisting only the saved choice', async () => {
+    const fixture = TestBed.createComponent(TimelineNotesDialogComponent);
+    fixture.componentInstance.edit({ ...note, color: 'purple' });
+    fixture.detectChanges();
+    const category = fixture.debugElement.queryAll(By.directive(MatSelect))[0].componentInstance as MatSelect;
+    expect(category.options.map(option => option._getHostElement().querySelector('mat-icon')?.textContent))
+      .toEqual(['sick', 'healing', 'beach_access', 'flight', 'psychology', 'event_note']);
+    const color = fixture.debugElement.queryAll(By.directive(MatSelect))[1].componentInstance as MatSelect;
+    expect(color.options.map(option => option.value)).toEqual(['default', 'blue', 'purple', 'pink', 'orange', 'red', 'green']);
+    expect(color.value).toBe('purple');
+    fixture.componentInstance.form.controls.color.setValue('blue');
+    service.save.mockRejectedValueOnce(new Error('offline'));
+    await fixture.componentInstance.save();
+    expect(fixture.componentInstance.form.controls.color.value).toBe('blue');
+    expect(fixture.componentInstance.view()).toBe('edit');
+    await fixture.componentInstance.save();
+    expect(service.save).toHaveBeenLastCalledWith('owner', expect.objectContaining({ color: 'blue', timeZone: note.timeZone }));
+    fixture.componentInstance.edit(null);
+    expect(fixture.componentInstance.form.controls.color.value).toBe('default');
+  });
+  it('uses Material date inputs, rejects impossible dates, and saves inclusive labels in the captured zone', async () => {
+    const fixture = TestBed.createComponent(TimelineNotesDialogComponent);
+    fixture.componentInstance.mode.set('range'); fixture.detectChanges();
+    const dates = fixture.debugElement.queryAll(By.directive(MatDatepickerInput));
+    expect(dates).toHaveLength(2);
+    expect(fixture.nativeElement.querySelector('input[type="date"]')).toBeNull();
+    const typeDate = (index: number, value: string) => {
+      const input = dates[index].nativeElement as HTMLInputElement;
+      input.value = value; input.dispatchEvent(new Event('input')); input.dispatchEvent(new Event('blur'));
+      fixture.detectChanges();
+    };
+    typeDate(0, '02/29/2023');
+    expect(fixture.componentInstance.form.controls.startDate.hasError('matDatepickerParse')).toBe(true);
+    await fixture.componentInstance.save();
+    expect(service.save).not.toHaveBeenCalled();
+    typeDate(0, '03/28/2027'); typeDate(1, '03/27/2027');
+    expect(fixture.componentInstance.form.controls.endDate.hasError('matDatepickerMin')).toBe(true);
+    typeDate(1, '03/29/2027');
+    expect(fixture.componentInstance.form.valid).toBe(true);
+    await fixture.componentInstance.save();
+    expect(service.save).toHaveBeenCalledWith('owner', expect.objectContaining({ startDate: '2027-03-28', endDate: '2027-03-29', timeZone: 'Europe/Helsinki' }));
   });
   it('defaults new and legacy notes to visible and saves an individual choice only on Save', async () => {
     const fixture = TestBed.createComponent(TimelineNotesDialogComponent);
@@ -94,7 +139,7 @@ describe('Timeline notes editor', () => {
   it('creates a future single day and only prefills unchanged category titles', async () => {
     component.edit(null); component.form.controls.category.setValue('vacation'); component.categoryChanged('vacation');
     expect(component.form.controls.title.value).toBe('Vacation');
-    component.form.patchValue({ title: 'Summer trip', startDate: '2027-06-01' }); component.categoryChanged('travel');
+    component.form.patchValue({ title: 'Summer trip', startDate: timelineNoteDateInput('2027-06-01') }); component.categoryChanged('travel');
     expect(component.form.controls.title.value).toBe('Summer trip');
     await component.save();
     expect(service.save).toHaveBeenCalledWith('owner', expect.objectContaining({ mode: 'create', startDate: '2027-06-01', endDate: '2027-06-01' }));
@@ -103,6 +148,21 @@ describe('Timeline notes editor', () => {
     await component.remove(); expect(service.remove).toHaveBeenCalledWith('owner', { noteId: note.id, expectedRevision: 1 });
     expect(haptics.success).toHaveBeenCalledOnce();
   });
+  it('gives date feedback only for accepted changed dates, never invalid, unchanged or busy input', () => {
+    component.dateChanged('startDate', timelineNoteDateInput(note.startDate));
+    component.dateChanged('startDate', null);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.form.controls.startDate.setValue(timelineNoteDateInput('2026-01-02'));
+    component.dateChanged('startDate', component.form.controls.startDate.value);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    component.dateChanged('startDate', component.form.controls.startDate.value);
+    component.busy.set(true);
+    component.dateChanged('startDate', timelineNoteDateInput('2026-01-03'));
+    component.busy.set(false);
+    component.form.controls.startDate.setErrors({ matDatepickerMax: true });
+    component.dateChanged('startDate', timelineNoteDateInput('2030-01-01'));
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('keeps busy submissions silent and uses only error feedback for invalid date ranges', async () => {
     component.busy.set(true);
     await component.save();
@@ -110,7 +170,7 @@ describe('Timeline notes editor', () => {
     expect(haptics.error).not.toHaveBeenCalled();
     component.busy.set(false);
     component.mode.set('range');
-    component.form.controls.endDate.setValue('2025-12-31');
+    component.form.controls.endDate.setValue(timelineNoteDateInput('2025-12-31'));
     await component.save();
     expect(service.save).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();

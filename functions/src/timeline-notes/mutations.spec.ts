@@ -19,6 +19,33 @@ function database() {
 }
 describe('Timeline notes', () => {
   beforeEach(() => mocks.guard.mockResolvedValue({ shouldSkip: false }));
+  it.each([null, 1, 'RED', '#ff0000', 'url(secret)', {}, []])('rejects unsupported colors %j', color => {
+    expect(() => validateSaveTimelineNote({ ...create, color }, now)).toThrow();
+  });
+  it('saves and resets colors with safe retries and preserves them for older clients', async () => {
+    const fake = database();
+    const note = await saveTimelineNote('owner', { ...create, color: 'purple' }, fake.deps);
+    expect(note.color).toBe('purple');
+    expect(decodeTimelineNote(note.id, note)?.color).toBe('purple');
+    expect(decodeTimelineNote(note.id, { ...note, color: 'url(secret)' })).toBeNull();
+    expect(await saveTimelineNote('owner', { ...create, color: 'purple' }, fake.deps)).toEqual(note);
+    await expect(saveTimelineNote('owner', { ...create, color: 'blue' }, fake.deps)).rejects.toThrow();
+    const update = { ...fields, mode: 'update', noteId: note.id, expectedRevision: 1, endDate: '2026-09-07' };
+    const edited = await saveTimelineNote('owner', update, fake.deps);
+    expect(edited).toMatchObject({ color: 'purple', revision: 2 });
+    expect(await saveTimelineNote('owner', update, fake.deps)).toEqual(edited);
+    const reset = { ...update, expectedRevision: 2, color: 'default' };
+    const resetNote = await saveTimelineNote('owner', reset, fake.deps);
+    expect(resetNote).toMatchObject({ color: 'default', revision: 3 });
+    expect(await saveTimelineNote('owner', reset, fake.deps)).toEqual(resetNote);
+    await expect(saveTimelineNote('owner', { ...reset, color: 'red' }, fake.deps)).rejects.toThrow();
+  });
+  it('treats omitted/default colors equally without changing legacy notes', async () => {
+    const fake = database();
+    const note = await saveTimelineNote('owner', create, fake.deps);
+    expect(note.color).toBeUndefined();
+    expect(await saveTimelineNote('owner', { ...create, color: 'default' }, fake.deps)).toEqual(note);
+  });
   it.each([null, 0, 1, 'false', [], {}])('rejects non-boolean per-note visibility %j', showOnCharts => {
     expect(() => validateSaveTimelineNote({ ...create, showOnCharts }, now)).toThrow();
   });

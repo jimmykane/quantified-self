@@ -3,6 +3,8 @@ export const TIMELINE_NOTES_COLLECTION = 'timelineNotes';
 export const TIMELINE_NOTE_DELETIONS_COLLECTION = 'timelineNoteDeletions';
 export const TIMELINE_NOTE_CATEGORIES = ['sickness', 'injury', 'vacation', 'travel', 'stress', 'other'] as const;
 export type TimelineNoteCategory = typeof TIMELINE_NOTE_CATEGORIES[number];
+export const TIMELINE_NOTE_COLORS = ['default', 'blue', 'purple', 'pink', 'orange', 'red', 'green'] as const;
+export type TimelineNoteColor = typeof TIMELINE_NOTE_COLORS[number];
 export const TIMELINE_NOTE_LABELS: Record<TimelineNoteCategory, string> = {
   sickness: 'Sickness', injury: 'Injury', vacation: 'Vacation', travel: 'Travel', stress: 'Stress', other: 'Other',
 };
@@ -17,6 +19,8 @@ export interface TimelineNoteFields {
   timeZone: string;
   /** Charts and Calendar visibility. Missing on older notes means visible. */
   showOnCharts?: boolean;
+  /** Named presentation color; omitted/default preserves the theme's neutral appearance. */
+  color?: TimelineNoteColor;
 }
 export interface TimelineNote extends TimelineNoteFields {
   id: string;
@@ -48,6 +52,9 @@ export function timelineToday(timeZone: string, nowMs = Date.now()): string {
 }
 
 export function validateTimelineFields(value: Record<string, unknown>, nowMs = Date.now()): TimelineNoteFields {
+  if (value.color !== undefined && !(TIMELINE_NOTE_COLORS as readonly unknown[]).includes(value.color)) {
+    throw new TimelineNoteValidationError('Choose a note color from the palette.');
+  }
   if (value.showOnCharts !== undefined && typeof value.showOnCharts !== 'boolean') {
     throw new TimelineNoteValidationError('Choose whether to show this note on charts and calendar.');
   }
@@ -76,7 +83,8 @@ export function validateTimelineFields(value: Record<string, unknown>, nowMs = D
   if (value.endDate === null && value.startDate > today) throw new TimelineNoteValidationError('An ongoing period must already have started.');
   return { category: value.category as TimelineNoteCategory, title, ...(details ? { details } : {}),
     startDate: value.startDate, endDate: value.endDate as string | null, timeZone: value.timeZone,
-    ...(typeof value.showOnCharts === 'boolean' ? { showOnCharts: value.showOnCharts } : {}) };
+    ...(typeof value.showOnCharts === 'boolean' ? { showOnCharts: value.showOnCharts } : {}),
+    ...(value.color !== undefined ? { color: value.color as TimelineNoteColor } : {}) };
 }
 
 export function decodeTimelineNote(id: string, value: unknown): TimelineNote | null {

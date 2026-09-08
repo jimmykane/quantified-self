@@ -12,7 +12,7 @@
       <mat-action-list>
         @for (row of noteRows(); track row.note.id) {
         <button mat-list-item [lines]="3" type="button" (click)="selectNote(row.note.id)">
-          <mat-icon matListItemIcon aria-hidden="true">event_note</mat-icon>
+          <mat-icon matListItemIcon [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
           <span matListItemTitle>{{ row.note.title }}</span>
           <span matListItemLine>{{ row.category }}</span>
           <span matListItemLine>{{ row.dates }}</span>

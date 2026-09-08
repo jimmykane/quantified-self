@@ -6,6 +6,7 @@ import {
   renderDashboardEChartsTooltipCard,
   type DashboardEChartsStyleTokens,
 } from './dashboard-echarts-style.helper';
+import { timelineNoteGroupColor } from './timeline-note-appearance.helper';
 
 type Option = Parameters<EChartsType['setOption']>[0];
 export interface TimelineNoteChartContext {
@@ -117,10 +118,11 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
           stackHeader: true,
         })).join(''),
       };
-      const color = (option.textStyle as { color?: string } | undefined)?.color ?? axis.axisLabel?.color;
+      const labelColor = (option.textStyle as { color?: string } | undefined)?.color ?? axis.axisLabel?.color;
+      const color = timelineNoteGroupColor(group.notes) ?? labelColor;
       markers.push({ name, xAxis: start, symbol: ['circle', 'none'], symbolSize: 8,
         lineStyle: { opacity: 0.2, color, type: 'dotted' }, itemStyle: { color },
-        label: { show: true, position: 'insideStartTop', rotate: 0, opacity: 1, formatter: group.notes.length > 1 ? `${group.notes.length} notes` : 'Note', color, fontSize: 11 }, tooltip });
+        label: { show: true, position: 'insideStartTop', rotate: 0, opacity: 1, formatter: group.notes.length > 1 ? `${group.notes.length} notes` : 'Note', color: labelColor, fontSize: 11 }, tooltip });
       if (group.hasPeriod) area.push([{ name, xAxis: start, itemStyle: { color, opacity: 0.055 }, tooltip }, { xAxis: group.end }]);
     });
     if (markers.length) overlays.push({ id: `timeline-note-overlay-${axisIndex}`, name: '', type: 'line', data: [],

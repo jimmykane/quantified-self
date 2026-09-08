@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, type Signal } from '@angular/core';
 import { TIMELINE_NOTE_LABELS, timelineNoteDates, type TimelineNote } from '@shared/timeline-notes';
+import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -74,6 +75,7 @@ export class CalendarDayDetailsComponent {
   readonly familyVolumeRows = computed(() => this.buildFamilyVolumeRows());
   readonly noteRows = computed(() => (this.data.timelineNotes?.() ?? []).map(note => ({
     note, category: TIMELINE_NOTE_LABELS[note.category], dates: timelineNoteDates(note),
+    icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
   })));
 
   selectNote(noteId: string): void {

@@ -59,6 +59,8 @@ Use **Timeline notes** in the Health, Training, or Calendar header to add privat
 
 Choose a single day, an inclusive date range, or an ongoing period. You can plan future days and ranges; ongoing notes must already have started. **End today** closes an ongoing note using its original time zone. Dates stay fixed when you travel.
 
+Each category has its own icon. Choose a **Color** in the editor to recognize a note in lists, on charts, and in Calendar, then select **Save**. **Default** restores the normal appearance. Overlapping notes with different colors share a neutral marker; opening it shows each note individually. Use the calendar buttons to pick dates, or type them in your local date format.
+
 The manager lists all notes, including future plans, newest start date first. You can edit, delete with confirmation, or browse older pages. **Show on charts and calendar** is the global switch remembered across Health, Sleep, Training, and Calendar. Each note also has **Show this note on charts and calendar**, enabled by default; change it in the editor and select **Save**. A note appears only when both switches are on. Turning the global switch back on preserves your individual choices. Hidden notes remain editable in the manager with a **Hidden** label; hiding does not delete them. Tap a chart marker to open its note, or a grouped marker to see the overlapping notes. The manager is also the keyboard-accessible way to browse them. Weekly charts show which notes overlap a week while retaining their actual dates.
 
 In Health, notes appear on the Highlights trend charts as well as the detailed metric and Sleep charts. They follow each chart's date window, even when the explorer is showing older history.

@@ -8,22 +8,30 @@ import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule, type MatCheckbox } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
+import type { Dayjs } from 'dayjs';
 import { firstValueFrom } from 'rxjs';
 import type { QueryDocumentSnapshot } from 'firebase/firestore';
-import { TIMELINE_NOTE_CATEGORIES, TIMELINE_NOTE_LABELS, TIMELINE_NOTE_LIMITS, timelineToday, timelineNoteDates,
+import { TIMELINE_NOTE_CATEGORIES, TIMELINE_NOTE_COLORS, TIMELINE_NOTE_LABELS, TIMELINE_NOTE_LIMITS, timelineToday, timelineNoteDates,
   validateTimelineFields, isTimelineNoteVisible, type TimelineNote } from '@shared/timeline-notes';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { MAT_DAYJS_DATE_FORMATS } from '../../shared/adapters/mat-dayjs-date.module';
+import { TimelineNoteDateAdapter, timelineNoteDateInput, timelineNoteDateLabel } from './timeline-note-date-adapter';
+import { TIMELINE_NOTE_ICONS, TIMELINE_NOTE_COLOR_LABELS, timelineNoteColor } from '../../helpers/timeline-note-appearance.helper';
 
 export interface TimelineNotesDialogData { uid: string; notes?: readonly TimelineNote[] }
 
 @Component({
   selector: 'app-timeline-notes-dialog', standalone: true,
-  providers: [{ provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { subscriptSizing: 'dynamic' } }],
-  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatIconModule, MatInputModule, MatSelectModule, MatCheckboxModule, MatProgressSpinnerModule, AppChartSharedModule],
+  providers: [{ provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { subscriptSizing: 'dynamic' } },
+    { provide: DateAdapter, useClass: TimelineNoteDateAdapter, deps: [MAT_DATE_LOCALE] },
+    { provide: MAT_DATE_FORMATS, useValue: MAT_DAYJS_DATE_FORMATS }],
+  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatIconModule, MatInputModule, MatSelectModule, MatCheckboxModule, MatProgressSpinnerModule, MatDatepickerModule, AppChartSharedModule],
   templateUrl: './timeline-notes-dialog.component.html', styleUrls: ['./timeline-notes-dialog.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -41,9 +49,11 @@ export class TimelineNotesDialogComponent {
   readonly conflict = signal(false);
   readonly existing = signal<TimelineNote | null>(null);
   readonly notes = signal<readonly TimelineNote[]>([]);
-  readonly rows = computed(() => this.notes().map(note => ({ note, dates: timelineNoteDates(note), category: TIMELINE_NOTE_LABELS[note.category], hidden: !isTimelineNoteVisible(note) })));
+  readonly rows = computed(() => this.notes().map(note => ({ note, dates: timelineNoteDates(note), category: TIMELINE_NOTE_LABELS[note.category],
+    icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note), hidden: !isTimelineNoteVisible(note) })));
   readonly mode = signal<'single' | 'range' | 'ongoing'>('single');
-  readonly options = TIMELINE_NOTE_CATEGORIES.map(id => ({ id, label: TIMELINE_NOTE_LABELS[id] }));
+  readonly options = TIMELINE_NOTE_CATEGORIES.map(id => ({ id, label: TIMELINE_NOTE_LABELS[id], icon: TIMELINE_NOTE_ICONS[id] }));
+  readonly colorOptions = TIMELINE_NOTE_COLORS.map(id => ({ id, label: TIMELINE_NOTE_COLOR_LABELS[id], color: timelineNoteColor({ color: id }) }));
   readonly limits = TIMELINE_NOTE_LIMITS;
   readonly nextCursor = signal<QueryDocumentSnapshot | null>(null);
   readonly pageNumber = signal(0);
@@ -52,9 +62,15 @@ export class TimelineNotesDialogComponent {
   private mutationId: string | null = null;
   private zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   private loadVersion = 0;
+  private committedDates = { startDate: '', endDate: '' };
   readonly form = this.builder.nonNullable.group({ category: ['other', Validators.required], title: ['Other', [Validators.required, Validators.maxLength(TIMELINE_NOTE_LIMITS.title)]],
-    details: ['', Validators.maxLength(TIMELINE_NOTE_LIMITS.details)], startDate: [timelineToday(this.zone), Validators.required], endDate: [timelineToday(this.zone)], showOnCharts: [true] });
+    details: ['', Validators.maxLength(TIMELINE_NOTE_LIMITS.details)],
+    startDate: this.builder.control<Dayjs | null>(timelineNoteDateInput(timelineToday(this.zone)), Validators.required),
+    endDate: this.builder.control<Dayjs | null>(timelineNoteDateInput(timelineToday(this.zone))), showOnCharts: [true], color: ['default'] });
   readonly title = computed(() => this.view() === 'list' ? 'Timeline notes' : this.existing() ? 'Edit note' : 'Add note');
+  get selectedCategory() { return this.options.find(option => option.id === this.form.controls.category.value)!; }
+  get selectedColor() { return this.colorOptions.find(option => option.id === this.form.controls.color.value)!; }
+  get today(): Dayjs { return timelineNoteDateInput(timelineToday(this.zone)); }
 
   constructor() {
     effect(() => { if (this.service.uid() !== this.data.uid) this.ref.close(); });
@@ -86,7 +102,9 @@ export class TimelineNotesDialogComponent {
     const today = timelineToday(this.zone);
     this.mutationId = note ? null : this.compatibility.createRandomUUID();
     this.form.reset({ category: note?.category ?? 'other', title: note?.title ?? 'Other', details: note?.details ?? '',
-      startDate: note?.startDate ?? today, endDate: note?.endDate ?? today, showOnCharts: note ? isTimelineNoteVisible(note) : true });
+      startDate: timelineNoteDateInput(note?.startDate ?? today), endDate: timelineNoteDateInput(note?.endDate ?? today),
+      showOnCharts: note ? isTimelineNoteVisible(note) : true, color: note?.color ?? 'default' });
+    this.committedDates = { startDate: note?.startDate ?? today, endDate: note?.endDate ?? today };
     this.mode.set(note?.endDate === null ? 'ongoing' : note && note.endDate !== note.startDate ? 'range' : 'single');
     this.view.set('edit');
   }
@@ -95,6 +113,12 @@ export class TimelineNotesDialogComponent {
     if (!current || Object.values(TIMELINE_NOTE_LABELS).includes(current)) {
       this.form.controls.title.setValue(this.options.find(option => option.id === category)?.label ?? 'Other');
     }
+  }
+  dateChanged(field: 'startDate' | 'endDate', value: Dayjs | null): void {
+    const label = timelineNoteDateLabel(value);
+    if (this.busy() || !label || this.form.controls[field].invalid || label === this.committedDates[field]) return;
+    this.committedDates[field] = label;
+    this.haptics.selection();
   }
   async showList(): Promise<void> {
     if (this.busy()) return;
@@ -107,8 +131,9 @@ export class TimelineNotesDialogComponent {
     this.error.set(null); this.conflict.set(false);
     try {
       const value = this.form.getRawValue();
-      const fields = validateTimelineFields({ ...value, timeZone: this.zone,
-        endDate: this.mode() === 'single' ? value.startDate : this.mode() === 'ongoing' ? null : value.endDate });
+      const startDate = timelineNoteDateLabel(value.startDate);
+      const fields = validateTimelineFields({ ...value, startDate, timeZone: this.zone,
+        endDate: this.mode() === 'single' ? startDate : this.mode() === 'ongoing' ? null : timelineNoteDateLabel(value.endDate) });
       this.haptics.selection();
       this.busy.set(true);
       const note = this.existing();
@@ -122,7 +147,7 @@ export class TimelineNotesDialogComponent {
   }
   async endToday(): Promise<void> {
     if (this.busy()) return;
-    this.form.controls.endDate.setValue(timelineToday(this.zone)); this.mode.set('range');
+    this.form.controls.endDate.setValue(this.today); this.mode.set('range');
     await this.save();
   }
   async remove(): Promise<void> {

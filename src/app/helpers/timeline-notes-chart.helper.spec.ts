@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { addTimelineNotesToChart, groupTimelineNotes, TimelineNotesChartBinding } from './timeline-notes-chart.helper';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome, renderDashboardEChartsTooltipCard } from './dashboard-echarts-style.helper';
+import { AppColors } from '../services/color/app.colors';
 const date = (day: string) => Date.parse(`${day}T00:00:00Z`);
 const note: TimelineNote = { id: 'a'.repeat(64), category: 'sickness', title: '<script>private</script>', startDate: '2026-09-02', endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 const option = { xAxis: { type: 'time', min: date('2026-09-01'), max: date('2026-09-10') }, yAxis: { min: 0 },
@@ -9,7 +10,7 @@ const option = { xAxis: { type: 'time', min: date('2026-09-01'), max: date('2026
 describe('timeline chart overlays', () => {
   it.each([[false, 320], [true, 320], [false, 1000], [true, 1000]] as const)('uses the shared tooltip card and chrome (dark: %s, width: %s)', (darkTheme, width) => {
     const style = buildDashboardEChartsStyleTokens(darkTheme, width);
-    const result = addTimelineNotesToChart(option, [note], {}, date('2026-09-10'), style);
+    const result = addTimelineNotesToChart(option, [{ ...note, color: 'purple' }], {}, date('2026-09-10'), style);
     const overlay = result.option.series[1];
     const tooltip = overlay.markLine.data[0].tooltip;
     expect(tooltip).toMatchObject(buildDashboardEChartsTooltipChrome(style));
@@ -19,6 +20,8 @@ describe('timeline chart overlays', () => {
     expect(tooltip.formatter()).toContain('overflow-wrap:anywhere');
     expect(tooltip.formatter()).not.toContain('<script>');
     expect(overlay.markArea.data[0][0].tooltip).toBe(tooltip);
+    expect(overlay.markLine.data[0].itemStyle.color).toBe(AppColors.Purple);
+    expect(overlay.markArea.data[0][0].itemStyle.color).toBe(AppColors.Purple);
   });
   it('keeps overlapping notes in separate wrapped cards with their original dates', () => {
     const ongoing = { ...note, id: 'b', title: 'A long note '.repeat(10), startDate: '2026-09-03', endDate: null };
@@ -31,6 +34,20 @@ describe('timeline chart overlays', () => {
     expect(cards[1].textContent).toContain('2026-09-03 – ongoing');
     expect(cards[1].textContent).toContain(ongoing.title.trim());
     expect(html).toContain('max-width:min(260px, calc(100vw - 32px))');
+  });
+  it('colors markers and periods without changing label contrast, metrics or mixed-group colors', () => {
+    const source = { ...option, textStyle: { color: '#222222' } };
+    const colored = { ...note, color: 'purple' as const };
+    const overlay = addTimelineNotesToChart(source, [colored]).option.series[1];
+    expect(overlay.markLine.data[0].itemStyle.color).toBe(AppColors.Purple);
+    expect(overlay.markLine.data[0].lineStyle.color).toBe(AppColors.Purple);
+    expect(overlay.markArea.data[0][0].itemStyle.color).toBe(AppColors.Purple);
+    expect(overlay.markLine.data[0].label.color).toBe('#222222');
+    const mixed = addTimelineNotesToChart(source, [colored, { ...note, id: 'b', color: 'blue' }]);
+    expect(mixed.option.series[1].markLine.data[0].itemStyle.color).toBe('#222222');
+    expect(mixed.option.series[0]).toBe(source.series[0]);
+    const hidden = addTimelineNotesToChart(source, [colored, { ...note, id: 'b', color: 'blue', showOnCharts: false }]);
+    expect(hidden.option.series[1].markLine.data[0].itemStyle.color).toBe(AppColors.Purple);
   });
   it('excludes hidden notes from markers, bands, group counts and tooltips without changing readings', () => {
     const hidden = { ...note, id: 'b'.repeat(64), title: 'Hidden private note', showOnCharts: false };
