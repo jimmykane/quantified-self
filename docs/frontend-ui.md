@@ -51,6 +51,29 @@ Give each primary route title a stable `titleId` and reference it from the route
 `aria-labelledby`. Keep a title status concise and expose failures with the supplied warning status or an equivalent
 projected `role="alert"` state.
 
+## Account profile recovery
+
+Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
+server snapshots; permission or App Check failures refresh both credentials with the existing bounded retry/backoff.
+The recovery panel on `/login` explains that the user is still signed in. Its Retry action restarts the profile stream
+and refreshes credentials without signing out, clearing persistence, or writing account data. Actual Auth sign-out or
+an account switch cancels the old profile load and ends its recovery attempt.
+
+The full Firestore SDK can return an incorrect persisted `NoDocument` result even through `getDocFromServer()`.
+Before publishing a profile with missing required agreements (including a wholly missing profile),
+`UserProfileVerificationService` checks the four profile documents through a lazily loaded Firestore Lite client.
+That client uses the same Firebase app's Auth and App Check providers, but does not use the watch/persistence cache.
+Both readers share the same profile merge function. Failures remain recovery states; only verified missing data may
+produce a new onboarding profile. Generation checks prevent an older asynchronous claim merge from reopening the
+profile gate during verification or a retry.
+
+Complete profile snapshots add no Firestore reads. Incomplete snapshots require at most four additional document
+reads per verification attempt; concurrent checks share one bounded request, and identical listener snapshots do
+not repeat verification. Transient failures use the existing bounded retry budget. The fallback does not clear or
+repair the broader SDK cache. An already completed account that recovers while on `/onboarding` leaves that route
+without rewriting its completion flag or repeating completion analytics. The recovery behaviour applies to local,
+beta, and production builds; only the App Check debug provider is development-specific.
+
 ## Surface elevation
 
 ### Shared compact rows

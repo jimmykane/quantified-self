@@ -563,6 +563,21 @@ describe('OnboardingComponent', () => {
         expect(component.isLoading).toBe(false);
     });
 
+    it('should leave onboarding without reads, writes or completion analytics when the account is already complete', async () => {
+        await fixture.whenStable();
+        vi.clearAllMocks();
+        component.user = { ...component.user, onboardingCompleted: true } as any;
+        component.canFinish = false;
+
+        await component.finishOnboarding();
+
+        expect(mockUserService.hasPaidAccess).not.toHaveBeenCalled();
+        expect(mockUserService.setFreeTier).not.toHaveBeenCalled();
+        expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        expect(mockAnalyticsService.logEvent).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
     it('should stop finishOnboarding when setFreeTier fails before updating onboarding flag', async () => {
         component.canFinish = false;
         mockUserService.hasPaidAccess.mockResolvedValue(false);

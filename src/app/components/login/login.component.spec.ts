@@ -15,6 +15,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY } from '../../authentication/auth-redirect-url';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
 import { MemoryStorage } from '../../services/storage/memory.storage';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -47,7 +48,9 @@ describe('LoginComponent', () => {
         hasActionableProfileReadFailure: signal(false),
         profileReadState: signal<any>({ status: 'signed-out' }),
         profileReadState$: profileReadStateSubject.asObservable(),
+        retryProfileRead: vi.fn().mockResolvedValue(true),
     };
+    const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
 
     const mockRouter = {
         navigate: vi.fn(),
@@ -80,6 +83,7 @@ describe('LoginComponent', () => {
         mockUserService.isProfileReadBlocking.set(false);
         mockUserService.hasActionableProfileReadFailure.set(false);
         mockUserService.profileReadState.set({ status: 'signed-out' });
+        mockUserService.retryProfileRead.mockReset().mockResolvedValue(true);
         profileReadStateSubject.next({ status: 'signed-out' });
         (mockRouter.navigate as any).mockResolvedValue(true);
         (mockRouter.navigateByUrl as any).mockResolvedValue(true);
@@ -113,6 +117,7 @@ describe('LoginComponent', () => {
                 LoginComponent, // Provide the component itself
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: AppEventService, useValue: {} },
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: { snapshot: activatedRouteSnapshot } },
@@ -142,19 +147,24 @@ describe('LoginComponent', () => {
 
         expect(template).toContain('!userService.hasActionableProfileReadFailure()');
         expect(template).toContain('data-testid="profile-read-error"');
-        expect(template).toContain('Sign out and try again');
+        expect(template).toContain("You're still signed in");
+        expect(template).toContain("'Retry'");
+        expect(template).not.toContain('Sign out and try again');
         expect(template).toContain('(click)="recoverFromProfileReadError()"');
         expect(template).toContain('[disabled]="isProfileRecoveryInProgress"');
         expect(template).not.toContain('(click)="recoverFromProfileReadError()" [disabled]="isLoading"');
         expect(template).toContain("We can't reach your account data");
     });
 
-    it('should sign out to recover from a terminal profile read error', async () => {
+    it('should retry profile loading without signing out and give feedback after success', async () => {
         await component.recoverFromProfileReadError();
 
-        expect(mockAuthService.signOut).toHaveBeenCalledTimes(1);
-        expect(component.isLoading).toBe(true);
-        expect(component.isProfileRecoveryInProgress).toBe(true);
+        expect(mockAuthService.signOut).not.toHaveBeenCalled();
+        expect(mockUserService.retryProfileRead).toHaveBeenCalledTimes(1);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.success).toHaveBeenCalledTimes(1);
+        expect(component.isLoading).toBe(false);
+        expect(component.isProfileRecoveryInProgress).toBe(false);
     });
 
     it('should keep the recovery action available when profile loading fails during login', async () => {
@@ -182,14 +192,33 @@ describe('LoginComponent', () => {
         expect(mockRouter.navigateByUrl).not.toHaveBeenCalled();
     });
 
-    it('should re-enable profile recovery when sign-out fails', async () => {
-        mockAuthService.signOut.mockRejectedValueOnce(new Error('sign-out failed'));
+    it('should re-enable profile recovery when the retry fails', async () => {
+        mockUserService.retryProfileRead.mockRejectedValueOnce(new Error('retry failed'));
 
         await component.recoverFromProfileReadError();
 
         expect(component.isLoading).toBe(false);
         expect(component.isProfileRecoveryInProgress).toBe(false);
         expect(mockSnackBar.open).toHaveBeenCalled();
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(mockAuthService.signOut).not.toHaveBeenCalled();
+    });
+
+    it('should ignore repeat clicks while recovery is pending and report an unsuccessful recovery', async () => {
+        let finish!: (ready: boolean) => void;
+        mockUserService.retryProfileRead.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+        const recovery = component.recoverFromProfileReadError();
+        await component.recoverFromProfileReadError();
+        expect(mockUserService.retryProfileRead).toHaveBeenCalledTimes(1);
+        expect(component.isProfileRecoveryInProgress).toBe(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(haptics.error).not.toHaveBeenCalled();
+        finish(false);
+        await recovery;
+        expect(component.isProfileRecoveryInProgress).toBe(false);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
     });
 
     it('should stop waiting when Firebase signs out during post-login profile loading', async () => {

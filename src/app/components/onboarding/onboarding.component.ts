@@ -17,6 +17,7 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppUserInterface } from '../../models/app-user.interface';
 
 @Component({
     selector: 'app-onboarding',
@@ -231,6 +232,12 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     async finishOnboarding() {
         this.isLoading = true;
         try {
+            // A recovered existing account may still be on /onboarding. Leave
+            // without rewriting its profile or repeating completion analytics.
+            if ((this.user as AppUserInterface).onboardingCompleted === true) {
+                await this.router.navigate(['/dashboard']);
+                return;
+            }
             // Implicit Free Tier Selection:
             // If the user clicks continue but hasn't explicitly selected a plan (canFinish is false),
             // and they don't have paid access, we assume they want the Free Tier.

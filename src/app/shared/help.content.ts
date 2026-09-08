@@ -1103,6 +1103,7 @@ This action cannot be undone.
 - Check spam or junk if the magic link email does not arrive.
 - Make sure you are opening the link for the same email address you entered.
 - If one sign-in method does not match your existing account, try the provider you originally used.
+- If you see **We couldn't load your account** or **We can't reach your account data**, check your connection and select **Retry**. This keeps you signed in while your account data is verified again; it does not reset your account or require you to repeat onboarding. If your sign-in session has actually expired, sign in again.
 
 ## Imports taking longer than expected
 

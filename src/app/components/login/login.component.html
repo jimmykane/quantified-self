@@ -9,14 +9,14 @@
           <mat-icon aria-hidden="true">error_outline</mat-icon>
           @if (userService.profileReadState().status === 'error') {
           <h2 class="title">We couldn't load your account</h2>
-          <p class="subtitle">Your account data could not be verified securely. Check your connection, then sign out and try again.</p>
+          <p class="subtitle">You're still signed in, but we couldn't verify your account data. Check your connection, then try again.</p>
           } @else {
           <h2 class="title">We can't reach your account data</h2>
-          <p class="subtitle">The secure server check is still retrying. Check your connection or sign out and try again.</p>
+          <p class="subtitle">You're still signed in. The secure server check is retrying. Check your connection, then try again.</p>
           }
-          <button mat-raised-button class="action-button qs-mat-primary" data-testid="profile-read-error-sign-out"
+          <button mat-raised-button class="action-button qs-mat-primary" data-testid="profile-read-error-retry"
             (click)="recoverFromProfileReadError()" [disabled]="isProfileRecoveryInProgress">
-            {{ isProfileRecoveryInProgress ? 'Signing out…' : 'Sign out and try again' }}
+            {{ isProfileRecoveryInProgress ? 'Retrying…' : 'Retry' }}
           </button>
         </div>
         } @else {
