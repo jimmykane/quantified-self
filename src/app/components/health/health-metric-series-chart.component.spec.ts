@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DistanceUnits } from '@sports-alliance/sports-lib';
 import {
   HEALTH_METRIC_IDS,
@@ -50,6 +52,16 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 }
 
 describe('HealthMetricSeriesChartComponent', () => {
+  it('gives Highlights a readable plot height on both breakpoints without enlarging full charts', () => {
+    const styles = readFileSync(resolve(process.cwd(),
+      'src/app/components/health/health-metric-series-chart.component.scss'), 'utf8');
+    expect(styles).toMatch(/\.health-metric-series-chart\s*\{\s*height:\s*190px/);
+    expect(styles).toMatch(/@media[^}]+height:\s*210px/);
+    expect(styles.match(/\.health-metric-series-chart-compact\s*\{/g)).toHaveLength(1);
+    expect(styles).toMatch(/\.health-metric-series-chart-compact\s*\{\s*height:\s*112px/);
+    expect(styles.indexOf('.health-metric-series-chart-compact')).toBeGreaterThan(styles.indexOf('@media'));
+  });
+
   let fixture: ComponentFixture<HealthMetricSeriesChartComponent>;
   let chart: { isDisposed: ReturnType<typeof vi.fn>; dispatchAction: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> };
   let eChartsLoader: {
