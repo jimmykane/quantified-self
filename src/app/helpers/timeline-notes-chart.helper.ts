@@ -1,6 +1,11 @@
 import type { EChartsType } from 'echarts/core';
 import { timelineNoteEnd, timelineNoteDates, TIMELINE_NOTE_LABELS, type TimelineNote, type TimelineNoteRange } from '@shared/timeline-notes';
-import { escapeDashboardEChartsTooltipHtml } from './dashboard-echarts-style.helper';
+import {
+  buildDashboardEChartsStyleTokens,
+  buildDashboardEChartsTooltipChrome,
+  renderDashboardEChartsTooltipCard,
+  type DashboardEChartsStyleTokens,
+} from './dashboard-echarts-style.helper';
 
 type Option = Parameters<EChartsType['setOption']>[0];
 export interface TimelineNoteChartContext {
@@ -67,7 +72,8 @@ export function groupTimelineNotes(notes: readonly TimelineNote[], range: Timeli
 }
 
 /** Appends empty marker series; metric data, axes, reference bands and formulas are untouched. */
-export function addTimelineNotesToChart(option: Option, notes: readonly TimelineNote[], hints: TimelineNoteAxisHints = {}, nowMs = Date.now()): {
+export function addTimelineNotesToChart(option: Option, notes: readonly TimelineNote[], hints: TimelineNoteAxisHints = {}, nowMs = Date.now(),
+  style: DashboardEChartsStyleTokens = buildDashboardEChartsStyleTokens(false, 0)): {
   option: Option; range: TimelineNoteRange | null; groups: Map<string, readonly TimelineNote[]>;
 } {
   const axes: Axis[] = option.xAxis ? (Array.isArray(option.xAxis) ? option.xAxis : [option.xAxis]) as Axis[] : [];
@@ -101,8 +107,16 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
     positions.forEach((group, start) => {
       const name = `timeline-note-${axisIndex}-${markers.length}`;
       groups.set(name, group.notes);
-      const text = group.notes.map(note => `${TIMELINE_NOTE_LABELS[note.category]}: ${note.title} · ${timelineNoteDates(note)}`).join('\n');
-      const tooltip = { show: true, trigger: 'item', formatter: () => escapeDashboardEChartsTooltipHtml(text).replace(/\n/g, '<br>') };
+      const tooltip = {
+        ...buildDashboardEChartsTooltipChrome(style),
+        show: true,
+        trigger: 'item',
+        formatter: () => group.notes.map(note => renderDashboardEChartsTooltipCard(style, {
+          title: `${TIMELINE_NOTE_LABELS[note.category]}: ${note.title}`,
+          subtitle: timelineNoteDates(note),
+          stackHeader: true,
+        })).join(''),
+      };
       const color = (option.textStyle as { color?: string } | undefined)?.color ?? axis.axisLabel?.color;
       markers.push({ name, xAxis: start, symbol: ['circle', 'none'], symbolSize: 8,
         lineStyle: { opacity: 0.2, color, type: 'dotted' }, itemStyle: { color },
@@ -132,10 +146,11 @@ export class TimelineNotesChartBinding {
     if (this.context?.reportRange !== context?.reportRange) { this.context?.reportRange(this, null); this.rangeKey = ''; }
     this.context = context; this.hints = hints;
   }
-  apply(chart: EChartsType, option: Option): Option {
+  apply(chart: EChartsType, option: Option, darkTheme = false): Option {
     if (!this.context) { this.detach(); return option; }
     if (this.chart !== chart) { this.detach(); this.chart = chart; chart.on('click', this.click); }
-    const result = addTimelineNotesToChart(option, this.context.notes, this.hints);
+    const style = buildDashboardEChartsStyleTokens(darkTheme, chart.getWidth());
+    const result = addTimelineNotesToChart(option, this.context.notes, this.hints, Date.now(), style);
     this.groups = result.groups;
     const key = JSON.stringify(result.range);
     if (key !== this.rangeKey) { this.rangeKey = key; this.context.reportRange(this, result.range); }

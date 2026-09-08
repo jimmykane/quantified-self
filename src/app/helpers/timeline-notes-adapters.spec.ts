@@ -24,7 +24,7 @@ describe('explicit Timeline note chart adapters', () => {
     [ChartsSleepTrendComponent, 'refreshChart', false],
     [HealthMetricSeriesChartComponent, 'refresh', false],
   ] as const)('%s opts in explicitly, refreshes on note changes, and never fetches notes', async (Type, method, weekly) => {
-    const chart = { isDisposed: () => false, on: vi.fn(), off: vi.fn(), dispatchAction: vi.fn() };
+    const chart = { isDisposed: () => false, on: vi.fn(), off: vi.fn(), dispatchAction: vi.fn(), getWidth: () => 320 };
     const loader = { init: vi.fn().mockResolvedValue(chart), setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
       subscribeToViewportResize: () => () => {}, attachMobileSeriesTapFeedback: () => () => {} };
     const component = new Type(loader as never, { error: vi.fn() } as never) as any;

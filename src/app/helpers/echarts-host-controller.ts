@@ -136,7 +136,7 @@ export class EChartsHostController {
     if (!this.chart) {
       return false;
     }
-    this.config.eChartsLoader.setOption(this.chart, this.timelineNotes.apply(this.chart, option), settings);
+    this.config.eChartsLoader.setOption(this.chart, this.timelineNotes.apply(this.chart, option, this.currentTheme === 'dark'), settings);
     return true;
   }
 

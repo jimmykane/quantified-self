@@ -1,11 +1,37 @@
 import { describe, expect, it, vi } from 'vitest';
 import { addTimelineNotesToChart, groupTimelineNotes, TimelineNotesChartBinding } from './timeline-notes-chart.helper';
 import type { TimelineNote } from '@shared/timeline-notes';
+import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome, renderDashboardEChartsTooltipCard } from './dashboard-echarts-style.helper';
 const date = (day: string) => Date.parse(`${day}T00:00:00Z`);
 const note: TimelineNote = { id: 'a'.repeat(64), category: 'sickness', title: '<script>private</script>', startDate: '2026-09-02', endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 const option = { xAxis: { type: 'time', min: date('2026-09-01'), max: date('2026-09-10') }, yAxis: { min: 0 },
   series: [{ name: 'HR', type: 'line', data: [[date('2026-09-01'), 65], [date('2026-09-03'), null]], markArea: { data: [[{ yAxis: 60 }, { yAxis: 70 }]] } }] };
 describe('timeline chart overlays', () => {
+  it.each([[false, 320], [true, 320], [false, 1000], [true, 1000]] as const)('uses the shared tooltip card and chrome (dark: %s, width: %s)', (darkTheme, width) => {
+    const style = buildDashboardEChartsStyleTokens(darkTheme, width);
+    const result = addTimelineNotesToChart(option, [note], {}, date('2026-09-10'), style);
+    const overlay = result.option.series[1];
+    const tooltip = overlay.markLine.data[0].tooltip;
+    expect(tooltip).toMatchObject(buildDashboardEChartsTooltipChrome(style));
+    expect(tooltip.formatter()).toBe(renderDashboardEChartsTooltipCard(style, {
+      title: 'Sickness: <script>private</script>', subtitle: '2026-09-02 – 2026-09-04', stackHeader: true,
+    }));
+    expect(tooltip.formatter()).toContain('overflow-wrap:anywhere');
+    expect(tooltip.formatter()).not.toContain('<script>');
+    expect(overlay.markArea.data[0][0].tooltip).toBe(tooltip);
+  });
+  it('keeps overlapping notes in separate wrapped cards with their original dates', () => {
+    const ongoing = { ...note, id: 'b', title: 'A long note '.repeat(10), startDate: '2026-09-03', endDate: null };
+    const result = addTimelineNotesToChart(option, [note, ongoing], {}, date('2026-09-05'));
+    const html = result.option.series[1].markLine.data[0].tooltip.formatter();
+    const content = document.createElement('div'); content.innerHTML = html;
+    const cards = content.querySelectorAll('.qs-dashboard-echarts-tooltip-card');
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain('2026-09-02 – 2026-09-04');
+    expect(cards[1].textContent).toContain('2026-09-03 – ongoing');
+    expect(cards[1].textContent).toContain(ongoing.title.trim());
+    expect(html).toContain('max-width:min(260px, calc(100vw - 32px))');
+  });
   it('preserves metrics, gaps, axes and reference bands and escapes user text', () => {
     const result = addTimelineNotesToChart(option, [note]);
     expect(result.option.xAxis).toBe(option.xAxis); expect(result.option.yAxis).toBe(option.yAxis);
@@ -72,11 +98,23 @@ describe('timeline chart overlays', () => {
   it('annotates both Form axes and releases click handlers and range registrations', () => {
     const result = addTimelineNotesToChart({ ...option, xAxis: [option.xAxis, option.xAxis], series: [option.series[0], { ...option.series[0], xAxisIndex: 1, yAxisIndex: 1 }] }, [note]);
     expect(result.option.series).toHaveLength(4);
-    const chart = { on: vi.fn(), off: vi.fn() };
+    const chart = { on: vi.fn(), off: vi.fn(), getWidth: () => 320 };
     const context = { notes: [note], select: vi.fn(), reportRange: vi.fn() };
     const binding = new TimelineNotesChartBinding(); binding.set(context); binding.apply(chart as never, option);
     chart.on.mock.calls[0][1]({ name: 'timeline-note-0-0', componentType: 'markLine' });
     expect(context.select).toHaveBeenCalledWith([note]);
     binding.dispose(); expect(chart.off).toHaveBeenCalledOnce(); expect(context.reportRange).toHaveBeenLastCalledWith(binding, null);
+  });
+  it('uses the active chart theme and width for note tooltips on every render', () => {
+    const chart = { on: vi.fn(), off: vi.fn(), getWidth: vi.fn().mockReturnValue(320) };
+    const binding = new TimelineNotesChartBinding();
+    binding.set({ notes: [note], select: vi.fn(), reportRange: vi.fn() });
+    const compact = binding.apply(chart as never, option, true).series[1].markLine.data[0].tooltip;
+    expect(compact).toMatchObject(buildDashboardEChartsTooltipChrome(buildDashboardEChartsStyleTokens(true, 320)));
+    chart.getWidth.mockReturnValue(1000);
+    const wide = binding.apply(chart as never, option, false).series[1].markLine.data[0].tooltip;
+    expect(wide).toMatchObject(buildDashboardEChartsTooltipChrome(buildDashboardEChartsStyleTokens(false, 1000)));
+    expect(wide.formatter()).not.toBe(compact.formatter());
+    binding.dispose();
   });
 });

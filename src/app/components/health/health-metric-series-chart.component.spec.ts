@@ -63,7 +63,7 @@ describe('HealthMetricSeriesChartComponent', () => {
   });
 
   let fixture: ComponentFixture<HealthMetricSeriesChartComponent>;
-  let chart: { isDisposed: ReturnType<typeof vi.fn>; dispatchAction: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> };
+  let chart: { isDisposed: ReturnType<typeof vi.fn>; dispatchAction: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn>; getWidth: ReturnType<typeof vi.fn> };
   let eChartsLoader: {
     init: ReturnType<typeof vi.fn>;
     setOption: ReturnType<typeof vi.fn>;
@@ -79,6 +79,7 @@ describe('HealthMetricSeriesChartComponent', () => {
       dispatchAction: vi.fn(),
       on: vi.fn(),
       off: vi.fn(),
+      getWidth: vi.fn().mockReturnValue(320),
     };
     eChartsLoader = {
       init: vi.fn().mockResolvedValue(chart),

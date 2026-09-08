@@ -52,6 +52,8 @@ in the escaped tooltip and manager. Single markers open the editor; grouped mark
 manager provides the keyboard-accessible alternative to click/tap, without requiring hover.
 Distinct dates projected onto the same weekly bucket or clipped endpoint share one selectable marker, preserving access
 to every note and its actual dates. Grouping single-day notes does not create a period band between them.
+Note tooltips reuse the shared ECharts tooltip card and chrome with the active chart theme and responsive typography.
+Titles wrap above their actual dates, grouped notes remain separate, and the chart's existing tooltip positioning is retained.
 
 Opt-in surfaces: Health Highlights and detailed metrics (recorded timezone), normalized Sleep (sleepDate), Training readiness,
 load/Form, freshness forecast (existing viewer-calendar convention), body weight, power-system history, weekly swimming
