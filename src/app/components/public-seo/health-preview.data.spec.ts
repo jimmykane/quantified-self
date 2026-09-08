@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { HEALTH_PROVIDERS, HEALTH_RECORDING_METHODS, HEALTH_VALUE_ORIGINS } from '@shared/health';
 import { MANUAL_HEALTH_AGGREGATION, MANUAL_POINT_SEMANTIC_VARIANT } from '@shared/manual-health';
-import { buildHealthPreviewSeries, buildHealthPreviewSleepTrend, HEALTH_PREVIEW_END, HEALTH_PREVIEW_START } from './health-preview.data';
+import { buildHealthPreviewSeries, buildHealthPreviewSleepTrend, HEALTH_PREVIEW_END, HEALTH_PREVIEW_START, HEALTH_PREVIEW_NOTES } from './health-preview.data';
+import { validateTimelineFields } from '@shared/timeline-notes';
+import { addTimelineNotesToChart } from '../../helpers/timeline-notes-chart.helper';
 
 describe('public Health sample data', () => {
+  it('uses valid fictional notes within the visible window without changing HRV values', () => {
+    expect(HEALTH_PREVIEW_NOTES.map(note => note.category)).toEqual(['travel', 'stress', 'sickness']);
+    for (const note of HEALTH_PREVIEW_NOTES) {
+      expect(() => validateTimelineFields({ ...note })).not.toThrow();
+      expect(Date.parse(note.startDate)).toBeGreaterThanOrEqual(HEALTH_PREVIEW_START);
+      expect(note.endDate).not.toBeNull();
+      expect(Date.parse(note.endDate!)).toBeLessThanOrEqual(HEALTH_PREVIEW_END);
+    }
+    const series = { type: 'line' as const, data: buildHealthPreviewSeries('hrv').points
+      .filter(point => point.timestampMs >= HEALTH_PREVIEW_START).map(point => [point.timestampMs, Number(point.value)]) };
+    const originalData = structuredClone(series.data);
+    const result = addTimelineNotesToChart({ xAxis: { type: 'time', min: HEALTH_PREVIEW_START, max: HEALTH_PREVIEW_END }, series: [series] }, HEALTH_PREVIEW_NOTES);
+    expect(result.groups.size).toBe(3);
+    expect(result.option.series?.[0]).toBe(series);
+    expect(series.data).toEqual(originalData);
+  });
   it('keeps the weight preview on a gentle, consistent trend without daily spikes', () => {
     const values = buildHealthPreviewSeries('weight').points.map(point => Number(point.value));
     expect(values).toHaveLength(14);

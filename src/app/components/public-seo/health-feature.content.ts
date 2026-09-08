@@ -12,7 +12,7 @@ export const HEALTH_FEATURE_CONTENT = {
     },
     {
       icon: 'monitor_heart', title: 'Get to Know Your Usual',
-      copy: 'Follow resting heart rate and HRV over time. Compare nightly HRV with your personal range when enough history is available.',
+      copy: 'Follow resting heart rate and HRV over time. Compare nightly HRV with your personal range when enough history is available. Add context with notes about travel, sickness, stress, and time away.',
       preview: 'health-hrv' as PublicFeaturePreviewKey,
     },
     {

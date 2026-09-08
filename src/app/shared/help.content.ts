@@ -68,7 +68,7 @@ Notes never change your measurements, readiness, or forecasts. Ongoing shading s
 
 const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
 
-See the [Health feature overview](/features/health) for sleep, HRV, and measurement previews using sample data.
+See the [Health feature overview](/features/health) for sleep, HRV, and measurement previews using sample data. The HRV preview includes fictional travel, sickness, and stress notes; select a marker or **View sample notes** to read them. These examples never load or change your account notes.
 
 - **Health (Beta)** is the authenticated workspace for source-attributed Sleep, heart rate, HRV, movement, energy, wellness, body, and fitness measurements imported from supported connected services. It is available to all signed-in users; the plan and connection requirements for importing provider history do not change.
 - Open **Health** from the main navigation. Health is a fixed workspace, not a configurable dashboard tile.

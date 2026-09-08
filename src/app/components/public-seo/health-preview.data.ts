@@ -2,11 +2,25 @@ import { HEALTH_METRIC_IDS, HEALTH_PROVIDERS, HEALTH_RECORDING_METHODS, HEALTH_V
 import { MANUAL_HEALTH_AGGREGATION, MANUAL_POINT_SEMANTIC_VARIANT } from '@shared/manual-health';
 import type { DashboardSleepTrendContext, DashboardSleepTrendPoint } from '../../helpers/dashboard-sleep-chart.helper';
 import type { HealthWorkspaceSeries } from '../../helpers/health-workspace.helper';
+import type { TimelineNote } from '@shared/timeline-notes';
 
 export type HealthPreviewKind = 'sleep' | 'hrv' | 'weight';
 const DAY = 86_400_000;
 export const HEALTH_PREVIEW_END = Date.UTC(2026, 7, 31, 23, 59, 59);
 export const HEALTH_PREVIEW_START = Date.UTC(2026, 7, 18);
+
+/** Fictional, closed periods: public examples never read or write account notes. */
+export const HEALTH_PREVIEW_NOTES: readonly TimelineNote[] = [
+  { id: 'sample-travel', category: 'travel', title: 'Weekend away',
+    details: 'Away for the weekend; different sleep schedule.', startDate: '2026-08-21', endDate: '2026-08-24',
+    timeZone: 'UTC', revision: 1, createdAtMs: HEALTH_PREVIEW_END, updatedAtMs: HEALTH_PREVIEW_END },
+  { id: 'sample-stress', category: 'stress', title: 'Busy week at work',
+    details: 'A deadline and a late evening at work.', startDate: '2026-08-27', endDate: '2026-08-27',
+    timeZone: 'UTC', revision: 1, createdAtMs: HEALTH_PREVIEW_END, updatedAtMs: HEALTH_PREVIEW_END },
+  { id: 'sample-sickness', category: 'sickness', title: 'Feeling unwell',
+    details: 'Sore throat and a couple of quiet days at home.', startDate: '2026-08-29', endDate: '2026-08-30',
+    timeZone: 'UTC', revision: 1, createdAtMs: HEALTH_PREVIEW_END, updatedAtMs: HEALTH_PREVIEW_END },
+];
 
 /** Deterministic sample measurements; no account data or runtime reads. */
 export function buildHealthPreviewSeries(kind: HealthPreviewKind): HealthWorkspaceSeries {

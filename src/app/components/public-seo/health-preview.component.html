@@ -18,7 +18,27 @@
     <app-health-metric-series-chart
     [model]="model()" [startTimeMs]="start" [endTimeMs]="end"
     [darkTheme]="darkTheme()" [unitSettings]="unitSettings()"
-    [statusOverlay]="overlay()" [statusDescription]="statusDescription()">
+    [statusOverlay]="overlay()" [statusDescription]="statusDescription()" [timelineNotes]="timelineNotes()">
   </app-health-metric-series-chart>
   }
+  @if (kind() === 'hrv') {
+    <button mat-button type="button" (click)="openNotes()">View sample notes</button>
+  }
 </div>
+
+<ng-template #sampleNotes let-notes>
+  <h2 mat-dialog-title>Sample timeline notes</h2>
+  <mat-dialog-content>
+    <p>Fictional context alongside sample readings—not an explanation of changes in HRV.</p>
+    @for (note of notes; track note.id) {
+      <article>
+        <h3>{{ note.categoryLabel }}: {{ note.title }}</h3>
+        <p>{{ note.dates }}</p>
+        <p>{{ note.details }}</p>
+      </article>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" appHapticTap mat-dialog-close>Close</button>
+  </mat-dialog-actions>
+</ng-template>
