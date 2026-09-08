@@ -6,6 +6,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppThemes, DataWeight, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { describe, expect, it, vi } from 'vitest';
+import type { EChartsType } from 'echarts/core';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
@@ -17,7 +18,10 @@ import { buildHealthPreviewSeries, HEALTH_PREVIEW_SLEEP, HEALTH_PREVIEW_NOTES } 
 
 describe('HealthPreviewComponent', () => {
   async function render(kind: 'sleep' | 'hrv' | 'weight') {
-    const chart = { isDisposed: () => false, dispatchAction: vi.fn(), on: vi.fn(), off: vi.fn() };
+    const chart = {
+      isDisposed: () => false, dispatchAction: vi.fn(), on: vi.fn(), off: vi.fn(),
+      getWidth: vi.fn().mockReturnValue(320),
+    } satisfies Pick<EChartsType, 'isDisposed' | 'dispatchAction' | 'on' | 'off' | 'getWidth'>;
     await TestBed.configureTestingModule({
       imports: [HealthPreviewComponent],
       providers: [
@@ -34,16 +38,29 @@ describe('HealthPreviewComponent', () => {
     fixture.componentRef.setInput('kind', kind);
     fixture.detectChanges();
     await fixture.whenStable();
+    // ECharts initialization is asynchronous outside Angular's stability tracking.
+    await vi.waitFor(() => expect(TestBed.inject(EChartsLoaderService).setOption).toHaveBeenCalled());
     return fixture;
   }
 
   it('renders HRV through the real Health chart with the real personal-range calculation', async () => {
     const fixture = await render('hrv');
-    const chart = fixture.debugElement.query(By.directive(HealthMetricSeriesChartComponent)).componentInstance;
+    const chart = fixture.debugElement.query(By.directive(HealthMetricSeriesChartComponent)).componentInstance as HealthMetricSeriesChartComponent;
     expect(chart.model.displayedPoints).toHaveLength(14);
     expect(chart.darkTheme).toBe(true);
-    expect(chart.statusOverlay.normalRange).not.toBeNull();
-    expect(chart.statusOverlay.pointStatuses).toHaveLength(14);
+    expect(chart.statusOverlay?.pointStatuses).toHaveLength(14);
+    expect(chart.statusOverlay?.pointStatuses?.some(point => point.normalRange !== null)).toBe(true);
+    // Input models alone do not prove the asynchronous chart initialization succeeded.
+    const setOption = vi.mocked(TestBed.inject(EChartsLoaderService).setOption);
+    expect(setOption).toHaveBeenCalledOnce();
+    expect(setOption.mock.calls[0][1].series).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'timeline-note-overlay-0',
+        markLine: expect.objectContaining({
+          data: expect.arrayContaining([expect.objectContaining({ name: 'timeline-note-0-0' })]),
+        }),
+      }),
+    ]));
     expect(fixture.nativeElement.textContent).toContain('Sample data');
   });
 
