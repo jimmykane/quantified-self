@@ -129,26 +129,28 @@ describe('Health metric chart helpers', () => {
     expect(option.tooltip.formatter({ value: [0, 52] })).toContain('52.00 ml/kg/min');
   });
 
-  it('keeps compact Health charts focused on the trend without duplicate axes', () => {
+  it.each([280, 320, 480])('keeps compact Health value scales visible without expanding the grid (%i px)', width => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
     const option = buildHealthMetricEChartsOption(
       model,
       0,
       DAY_MS * 13,
-      buildDashboardEChartsStyleTokens(false, 320),
+      buildDashboardEChartsStyleTokens(false, width),
       false,
       null,
       true,
     ) as {
       grid: { left: number; right: number };
       xAxis: { show: boolean };
-      yAxis: { show: boolean };
+      yAxis: { show: boolean; axisLabel: { hideOverlap: boolean; formatter: (value: number) => string } };
       series: Array<{ showSymbol: boolean }>;
     };
 
-    expect(option.grid).toMatchObject({ left: 2, right: 2 });
+    expect(option.grid).toMatchObject({ left: 2, right: 2, outerBoundsContain: 'axisLabel' });
     expect(option.xAxis.show).toBe(false);
-    expect(option.yAxis.show).toBe(false);
+    expect(option.yAxis).toMatchObject({ show: true, splitNumber: 3, axisLabel: { hideOverlap: true } });
+    expect(option.yAxis.axisLabel.formatter(50)).toBe('50');
+    expect(model.displayUnit).toBe('bpm');
     expect(option.series).toHaveLength(1);
     expect(option.series[0].showSymbol).toBe(false);
 
@@ -299,7 +301,7 @@ describe('Health metric chart helpers', () => {
     expect(option.series.every(item => !item.markArea)).toBe(true);
   });
 
-  it('uses the selected Sports Lib unit conversion consistently across a chart', () => {
+  it.each([false, true])('uses the selected Sports Lib unit conversion consistently across a chart (compact: %s)', compact => {
     const unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     const distanceSeries = series({
       metricId: HEALTH_METRIC_IDS.Distance,
@@ -314,13 +316,15 @@ describe('Health metric chart helpers', () => {
       buildDashboardEChartsStyleTokens(false, 640),
       false,
       unitSettings,
+      compact,
     ) as {
       tooltip: { formatter: (params: { value?: unknown }) => string };
-      yAxis: { axisLabel: { formatter: (value: number) => string } };
+      yAxis: { show: boolean; axisLabel: { formatter: (value: number) => string } };
     };
 
     expect(model.ariaLabel).toContain('Latest 6.22 mi');
     expect(model.displayUnit).toBe('mi');
+    expect(option.yAxis.show).toBe(true);
     expect(option.tooltip.formatter({ value: [0, 10_000] })).toContain('6.22 mi');
     expect(option.yAxis.axisLabel.formatter(10_000)).toBe('6.22');
   });
@@ -399,7 +403,7 @@ describe('Health metric chart helpers', () => {
     expect(emptyModel.yMaxLabel).toBe('100%');
   });
 
-  it('creates an ECharts stepped categorical series without coercing categories to numbers', () => {
+  it.each([false, true])('keeps categorical axis labels without coercing categories to numbers (compact: %s)', compact => {
     const model = buildHealthChartModels([series({
       chartKind: 'step',
       valueType: HEALTH_VALUE_TYPES.Category,
@@ -417,9 +421,11 @@ describe('Health metric chart helpers', () => {
       DAY_MS,
       buildDashboardEChartsStyleTokens(false, 640),
       false,
+      null,
+      compact,
     ) as any;
     expect(option.series[0]).toMatchObject({ type: 'line', step: 'end', connectNulls: false });
-    expect(option.yAxis).toMatchObject({ type: 'category', data: ['rest', 'high'] });
+    expect(option.yAxis).toMatchObject({ show: true, type: 'category', data: ['rest', 'high'] });
   });
 
   it('uses the established app data colors for matching Health metrics', () => {

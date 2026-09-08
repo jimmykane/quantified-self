@@ -247,12 +247,13 @@ export function buildHealthMetricEChartsOption(
     yAxis: isCategorical
       ? {
         type: 'category',
-        show: !compact,
+        show: true,
         data: model.categoryLabels,
         axisTick: { show: false },
         axisLine: { show: false },
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
+          hideOverlap: compact,
           color: useStressStateColors
             ? (value: string) => resolveHealthValueColor(
               model.series.metricId,
@@ -267,7 +268,7 @@ export function buildHealthMetricEChartsOption(
       }
       : {
         type: 'value',
-        show: !compact,
+        show: true,
         min: numericBounds?.min,
         max: numericBounds?.max,
         axisTick: { show: false },
@@ -275,6 +276,7 @@ export function buildHealthMetricEChartsOption(
         splitNumber: 3,
         splitLine: { lineStyle: { color: style.gridColor } },
         axisLabel: {
+          hideOverlap: compact,
           color: style.secondaryTextColor,
           fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
           fontSize: style.axisFontSize,
