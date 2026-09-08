@@ -170,7 +170,7 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(option.series[0].markPoint).toBeTruthy();
   });
 
-  it('adds selectable notes to compact Highlights without changing values or the personal range', async () => {
+  it('adds selectable notes to compact Highlights while preserving the visible value axis and personal range', async () => {
     const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'Travel', startDate: '1970-01-01', endDate: '1970-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
     const context = { notes: [note], select: vi.fn(), reportRange: vi.fn() };
     fixture.componentRef.setInput('compact', true);
@@ -186,6 +186,7 @@ describe('HealthMetricSeriesChartComponent', () => {
     type Axis = { type: string; min: number; max: number; show: boolean };
     type Option = { xAxis: Axis; yAxis: Axis; series: Array<{ id?: string; data: unknown[]; markArea?: unknown; markLine?: { data: Array<{ name: string }> } }> };
     const before = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
+    expect(before.yAxis.show).toBe(true);
     fixture.componentRef.setInput('timelineNotes', context);
     fixture.detectChanges(); await fixture.whenStable();
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(3));
@@ -195,7 +196,7 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(annotated.series.find(item => item.id === 'hrv-personal-range-band'))
       .toEqual(before.series.find(item => item.id === 'hrv-personal-range-band'));
     expect(annotated.xAxis).toMatchObject({ type: 'time', min: 0, max: DAY_MS, show: false });
-    expect(annotated.yAxis).toMatchObject({ min: before.yAxis.min, max: before.yAxis.max, show: false });
+    expect(annotated.yAxis).toMatchObject({ min: before.yAxis.min, max: before.yAxis.max, show: true });
     expect(context.reportRange).toHaveBeenCalledWith(expect.anything(), { startDate: '1970-01-01', endDate: '1970-01-02' });
     const overlay = annotated.series.at(-1)!;
     expect(overlay.id).toBe('timeline-note-overlay-0');
@@ -209,6 +210,7 @@ describe('HealthMetricSeriesChartComponent', () => {
     fixture.detectChanges(); await fixture.whenStable();
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(4));
     const hidden = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
+    expect(hidden.yAxis).toMatchObject({ min: before.yAxis.min, max: before.yAxis.max, show: true });
     expect(hidden.series).toHaveLength(before.series.length);
     expect(hidden.series[0]).toMatchObject({ ...before.series[0], itemStyle: { color: expect.any(Function) } });
     expect(hidden.series.slice(1)).toEqual(before.series.slice(1));
