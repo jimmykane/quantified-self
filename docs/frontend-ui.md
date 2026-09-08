@@ -53,6 +53,27 @@ projected `role="alert"` state.
 
 ## Surface elevation
 
+### Shared compact rows
+
+`CompactRowComponent` (`app-compact-row`) in `src/app/components/shared/compact-row/` is the flat content-row
+primitive shared by Home, public feature pages, benchmark previews, and Health. It replaces the feature-specific
+`CompactFeatureRowComponent` name; existing callers use the same component rather than a compatibility wrapper.
+
+The default `layout="columns"` and `density="comfortable"` preserve the public feature presentation: optional icon,
+heading, content, and action. `layout="stacked"` keeps an optional action beside the heading and gives content the
+full row width at every breakpoint. `density="compact"` uses smaller icon/header spacing and Material text roles;
+Health uses this combination for Highlights and source-separated charts. The primitive adds no card background,
+rounded container, shadow, or nested content padding. `showDivider` controls the bottom divider.
+
+`title`, optional `titleId`, and `headingLevel` (2, 3, or 4) own heading semantics; `summary`, `icon`, and `iconTone`
+provide optional context. Default projected content can contain existing charts, tables, or metric displays.
+`compactRowAction` projects a Material control into the action slot. The row is presentational: consumers retain
+their existing Sports Lib formatting, data loading, accessible chart descriptions, and single haptic action owner.
+
+Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces.
+
+### Bounded surfaces
+
 Use `.qs-glass-card-panel` for shared content surfaces that are not already represented by an ordinary Material card.
 Both that primitive and default Material cards are intentionally flat through `--qs-card-shadow: none`; their border is
 the primary separation from the workspace background. Floating menus, dialogs, datepickers, configuration submenus,

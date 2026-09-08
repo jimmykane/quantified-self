@@ -564,11 +564,12 @@ describe('HealthWorkspaceComponent', () => {
     expect(prioritySection?.textContent).toContain('Highlights');
     expect(prioritySection?.textContent).not.toContain('Last 30 days');
     expect((fixture.nativeElement as HTMLElement).querySelector('#health-detail-title')?.textContent).toContain('Resting heart rate');
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.tagName).toBe('MAT-CARD');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.tagName).toBe('DIV');
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card app-compact-row')).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card')).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card mat-card-header')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card mat-card-actions')).toBeNull();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.health-explorer')?.classList).toContain('qs-glass-card-panel');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.health-explorer')?.classList).not.toContain('qs-glass-card-panel');
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-footer')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.qs-page-header__title-row .health-sources-button')).not.toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')).toBeNull();
@@ -584,7 +585,7 @@ describe('HealthWorkspaceComponent', () => {
       '.health-metric-option .health-metric-option-icon',
     );
     expect(metricOptionIcons).toHaveLength((fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option').length);
-    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-avatar > mat-icon')).toHaveLength(2);
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card .compact-row__icon > mat-icon')).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-card-selected')).toBeNull();
     expect(Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-open-button'),

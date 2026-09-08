@@ -20,7 +20,7 @@ import { signal } from '@angular/core';
 import { AppThemeService } from '../../services/app.theme.service';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
-import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 
@@ -149,9 +149,9 @@ describe('HomeComponent', () => {
         expect(aiSectionText).not.toContain('complete training history');
         expect(aiSectionText).not.toContain('Read-only MCP Server');
         expect(aiSectionText).toContain('Explore the Assistant');
-        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid app-compact-feature-row').length).toBe(3);
+        expect(fixture.nativeElement.querySelectorAll('.ai-insights-section .features-grid app-compact-row').length).toBe(3);
         expect(fixture.nativeElement.querySelector('.mcp-access-row').classList)
-            .toContain('compact-feature-row-host--without-divider');
+            .toContain('compact-row-host--without-divider');
         expect(fixture.nativeElement.querySelector('a[routerlink="/features/ai-insights"], a[ng-reflect-router-link="/features/ai-insights"]')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('.ai-insights-section a[routerlink="/features/mcp-server"], .ai-insights-section a[ng-reflect-router-link="/features/mcp-server"]')).toBeTruthy();
         expect(text).not.toContain('New Feature');
@@ -238,7 +238,7 @@ describe('HomeComponent', () => {
         expect(text).toContain('Upload Your Own Files');
         expect(text).toContain('FIT, TCX, GPX, JSON, and SML activity files');
         expect(text).toContain('send FIT activities directly to Suunto, COROS, or Wahoo');
-        const integrationDividerRows = fixture.debugElement.queryAll(By.directive(CompactFeatureRowComponent))
+        const integrationDividerRows = fixture.debugElement.queryAll(By.directive(CompactRowComponent))
             .filter(row => row.nativeElement.classList.contains('integration-capability'));
         expect(integrationDividerRows).toHaveLength(3);
         expect(integrationDividerRows[0].componentInstance.showDivider()).toBe(true);
@@ -265,8 +265,8 @@ describe('HomeComponent', () => {
 
         expect(performanceCards.length).toBe(3);
         expect(trainingPreview).toBeTruthy();
-        expect(trainingPreview.classList).toContain('compact-feature-row-host--without-divider');
-        expect(performanceCards[0].classList).not.toContain('compact-feature-row-host--without-divider');
+        expect(trainingPreview.classList).toContain('compact-row-host--without-divider');
+        expect(performanceCards[0].classList).not.toContain('compact-row-host--without-divider');
         expect(trainingPreview.querySelector('.training-preview-data > div[data-nosnippet]')).toBeTruthy();
         expect(signalPreviews.length).toBe(0);
         expect(previewKeys).toContain('training-snapshot');
@@ -283,7 +283,7 @@ describe('HomeComponent', () => {
             '.training-actions a[routerlink="/features/training-analysis"], .training-actions a[ng-reflect-router-link="/features/training-analysis"]'
         ) as HTMLAnchorElement | null;
         expect(trainingCta).toBeTruthy();
-        expect(trainingPreview.querySelector('[compactFeatureRowAction]')).toBeNull();
+        expect(trainingPreview.querySelector('[compactRowAction]')).toBeNull();
         expect(
             fixture.nativeElement.querySelector('.features-grid')?.compareDocumentPosition(trainingCta!) & Node.DOCUMENT_POSITION_FOLLOWING
         ).toBeTruthy();
@@ -320,12 +320,12 @@ describe('HomeComponent', () => {
     });
 
     it('uses the shared compact row primitive for every top-level homepage card', () => {
-        const compactRows = fixture.nativeElement.querySelectorAll('app-compact-feature-row');
+        const compactRows = fixture.nativeElement.querySelectorAll('app-compact-row');
 
         expect(compactRows.length).toBe(14);
         expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
         expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(6);
-        expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-feature-row'))).toBe(true);
+        expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-row'))).toBe(true);
         expect(fixture.nativeElement.querySelector('app-public-feature-preview[previewkey="reviewer-benchmark"]')).toBeTruthy();
     });
 

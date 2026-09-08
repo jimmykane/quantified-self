@@ -311,6 +311,12 @@ The Health workspace deliberately defines no source-selection policy. It gives e
 
 ## Health workspace contract
 
+Health uses the shared `app-compact-row` primitive for Highlights and provider chart sections, with its compact stacked
+layout. Dividers separate sections instead of nested card outlines; the metric explorer and normalized Sleep chart do
+not add another card wrapper. The Sources sheet, date controls, observation-table disclosure, provider isolation,
+Sports Lib display formatting, chart calculations, and data-loading behavior are unchanged. See
+[`frontend-ui.md`](./frontend-ui.md#shared-compact-rows) for the shared presentation API.
+
 ### Public Health previews
 
 The homepage introduces Health after the Training section and links to the indexable, prerendered

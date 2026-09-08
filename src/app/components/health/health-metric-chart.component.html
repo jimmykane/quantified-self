@@ -1,17 +1,14 @@
 <div class="health-chart-grid" aria-label="Source-separated metric charts">
   @for (chart of renderedModels(); track chart.model.series.id) {
     @let model = chart.model;
-    <mat-card
-      appearance="outlined"
+    <app-compact-row
       class="health-chart-panel"
+      [title]="model.series.sourceLabel"
+      [summary]="model.series.semanticLabel"
+      layout="stacked" density="compact"
       [class.health-chart-panel-native]="model.series.nativeOnly">
-      <mat-card-header class="health-chart-header">
-        <div class="health-chart-heading">
-          <mat-card-title>{{ model.series.sourceLabel }}</mat-card-title>
-          <mat-card-subtitle>{{ model.series.semanticLabel }}</mat-card-subtitle>
-        </div>
         @if (model.series.nativeOnly || model.series.hasConflict) {
-          <mat-chip-set class="health-chart-status" aria-label="Series status">
+          <mat-chip-set compactRowAction class="health-chart-status" aria-label="Series status">
             @if (model.series.nativeOnly) {
               <mat-chip>Native only</mat-chip>
             }
@@ -20,9 +17,6 @@
             }
           </mat-chip-set>
         }
-      </mat-card-header>
-
-      <mat-card-content class="health-chart-content">
         <app-health-metric-series-chart
           [timelineNotes]="timelineNotes()"
           [model]="model"
@@ -33,9 +27,7 @@
           [statusOverlay]="chart.statusOverlay"
           [statusDescription]="chart.statusDescription">
         </app-health-metric-series-chart>
-      </mat-card-content>
-
-      <mat-card-footer class="health-chart-footer">
+      <div class="health-chart-footer">
         @if (model.displayUnit; as displayUnit) {
           <span>{{ displayUnit }}</span>
         }
@@ -47,7 +39,7 @@
         @if (model.omittedPointCount > 0) {
           <span>{{ model.displayedPointCount }} of {{ model.displayedPointCount + model.omittedPointCount }} points shown</span>
         }
-      </mat-card-footer>
-    </mat-card>
+      </div>
+    </app-compact-row>
   }
 </div>

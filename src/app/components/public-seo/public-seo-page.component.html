@@ -39,14 +39,14 @@
       <p>{{ section.copy }}</p>
     </div>
 
-    <div class="compact-feature-row-stack">
+    <div class="compact-row-stack">
       @for (item of section.items; track item.title; let last = $last) {
-      <app-compact-feature-row
+      <app-compact-row
         [icon]="item.icon"
         [title]="item.title"
         [summary]="item.copy"
         [showDivider]="!last"
-      ></app-compact-feature-row>
+      ></app-compact-row>
       }
     </div>
 

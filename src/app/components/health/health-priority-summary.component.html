@@ -8,8 +8,7 @@
       <p>A quick look at your latest sleep and heart trends.</p>
     </div>
 
-    <mat-card
-      appearance="outlined"
+    <div
       class="health-priority-grid"
       [class.health-priority-grid-single]="renderedCards().length === 1"
       [class.health-priority-grid-double]="renderedCards().length === 2"
@@ -18,14 +17,10 @@
         <section
           class="health-priority-card"
           [attr.aria-labelledby]="'health-priority-card-' + card.id">
-          <header class="health-priority-card-header">
-            <div class="health-priority-title-row">
-              <span class="health-priority-avatar">
-                <mat-icon aria-hidden="true">{{ card.icon }}</mat-icon>
-              </span>
-              <h3 [id]="'health-priority-card-' + card.id">{{ card.label }}</h3>
-            </div>
+          <app-compact-row [title]="card.label" [titleId]="'health-priority-card-' + card.id"
+            [icon]="card.icon" layout="stacked" density="compact" [showDivider]="false">
             <button
+              compactRowAction
               mat-button
               type="button"
               class="health-priority-open-button"
@@ -35,7 +30,6 @@
               <span>Open</span>
               <mat-icon aria-hidden="true">arrow_forward</mat-icon>
             </button>
-          </header>
 
           <div class="health-priority-content">
             @if (card.loading) {
@@ -117,8 +111,9 @@
               <span class="health-priority-state">{{ card.emptyText }}</span>
             }
           </div>
+          </app-compact-row>
         </section>
       }
-    </mat-card>
+    </div>
   </section>
 }

@@ -10,7 +10,7 @@ import {
   type MatTooltipDefaultOptions,
 } from '@angular/material/tooltip';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
 import { HEALTH_FEATURE_CONTENT } from '../public-seo/health-feature.content';
 import { ProviderDataFlowMatrixComponent } from '../shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
@@ -34,7 +34,7 @@ const HOME_TOOLTIP_DEFAULT_OPTIONS: MatTooltipDefaultOptions = {
     MatIconModule,
     MatTooltipModule,
     PublicFeaturePreviewComponent,
-    CompactFeatureRowComponent,
+    CompactRowComponent,
     ProviderDataFlowMatrixComponent,
   ],
   providers: [

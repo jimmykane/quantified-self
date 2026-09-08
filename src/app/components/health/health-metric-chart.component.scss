@@ -5,48 +5,20 @@
 
 .health-chart-grid {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.5rem 1rem;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
 }
 
 .health-chart-panel {
-  --qs-glass-panel-radius: 12px;
-
-  box-shadow: none !important;
   min-width: 0;
 }
 
 .health-chart-panel-native {
-  border-style: dashed;
-}
-
-.health-chart-header {
-  align-items: flex-start;
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
-  padding: 0.7rem 0.75rem 0;
-}
-
-.health-chart-heading {
-  min-width: 0;
-}
-
-.health-chart-heading mat-card-title {
-  font: var(--mat-sys-title-small);
-}
-
-.health-chart-heading mat-card-subtitle {
-  font: var(--mat-sys-body-small);
-  margin-top: 0.15rem;
+  border-bottom-style: dashed;
 }
 
 .health-chart-status {
   flex: 0 0 auto;
-}
-
-.health-chart-content {
-  padding: 0.2rem 0.75rem 0;
 }
 
 .health-chart-footer {
@@ -55,17 +27,10 @@
   flex-wrap: wrap;
   font: var(--mat-sys-body-small);
   gap: 0.2rem 0.6rem;
-  padding: 0 0.75rem 0.65rem;
 }
 
 .health-chart-footer span:first-child {
   font-family: 'Barlow Condensed', sans-serif;
   font-variant-numeric: tabular-nums;
   font-weight: 650;
-}
-
-@media (max-width: 480px) {
-  .health-chart-header {
-    flex-wrap: wrap;
-  }
 }

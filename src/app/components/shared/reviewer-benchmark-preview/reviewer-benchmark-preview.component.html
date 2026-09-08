@@ -1,7 +1,7 @@
 <div class="reviewer-preview" data-nosnippet>
   <ng-container [ngTemplateOutlet]="comparisonCharts"></ng-container>
 
-  <app-compact-feature-row
+  <app-compact-row
     icon="merge_type"
     iconTone="secondary"
     title="Benchmark Merge Workflow"
@@ -21,9 +21,9 @@
         <div class="stat-item"><span class="stat-label">Auto Align</span><span class="stat-value success">+/-15s</span></div>
       </div>
     </div>
-  </app-compact-feature-row>
+  </app-compact-row>
 
-  <app-compact-feature-row
+  <app-compact-row
     icon="route"
     iconTone="secondary"
     title="GNSS Trace Comparison"
@@ -50,9 +50,9 @@
         <div class="stat-item"><span class="stat-label">RMSE</span><span class="stat-value warning">1.1m</span></div>
       </div>
     </div>
-  </app-compact-feature-row>
+  </app-compact-row>
 
-  <app-compact-feature-row
+  <app-compact-row
     icon="sensors"
     iconTone="secondary"
     title="Sensor Quality Reports"
@@ -77,11 +77,11 @@
         <div class="stat-item"><span class="stat-label">Reports</span><span class="stat-value success">Save / Share</span></div>
       </div>
     </div>
-  </app-compact-feature-row>
+  </app-compact-row>
 </div>
 
 <ng-template #comparisonCharts>
-  <app-compact-feature-row
+  <app-compact-row
     icon="monitoring"
     iconTone="secondary"
     title="Multi-Device Chart Comparison"
@@ -124,5 +124,5 @@
         ></app-event-card-chart-panel>
       </div>
     </div>
-  </app-compact-feature-row>
+  </app-compact-row>
 </ng-template>

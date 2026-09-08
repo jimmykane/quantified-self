@@ -50,7 +50,7 @@
     (metricSelected)="selectPriorityMetric($event)">
   </app-health-priority-summary>
 
-  <section class="health-explorer qs-glass-card-panel" aria-labelledby="health-explorer-title">
+  <section class="health-explorer" aria-labelledby="health-explorer-title">
     <div class="health-section-heading health-explorer-heading">
       <div>
         <p class="health-eyebrow">Metric explorer</p>
@@ -268,7 +268,7 @@
         }
 
         @if (isLoading()) {
-          <div class="health-detail-state qs-glass-card-panel" role="status" aria-live="polite">
+          <div class="health-detail-state" role="status" aria-live="polite">
             <mat-spinner diameter="34" aria-hidden="true"></mat-spinner>
             <div>
               <strong>Loading {{ detailTitle() }}</strong>
@@ -276,7 +276,7 @@
             </div>
           </div>
         } @else if (isDenied()) {
-          <div class="health-detail-state health-detail-state-error qs-glass-card-panel" role="alert">
+          <div class="health-detail-state health-detail-state-error" role="alert">
             <mat-icon aria-hidden="true">lock</mat-icon>
             <div>
               <strong>Health data access was denied</strong>
@@ -285,7 +285,7 @@
             </div>
           </div>
         } @else if (hasLoadError()) {
-          <div class="health-detail-state health-detail-state-error qs-glass-card-panel" role="alert">
+          <div class="health-detail-state health-detail-state-error" role="alert">
             <mat-icon aria-hidden="true">sync_problem</mat-icon>
             <div>
               <strong>Health data could not be loaded</strong>
@@ -294,7 +294,7 @@
             </div>
           </div>
         } @else if (sampleOnlyLongRange()) {
-          <div class="health-detail-state qs-glass-card-panel">
+          <div class="health-detail-state">
             <mat-icon aria-hidden="true">timeline</mat-icon>
             <div>
               <strong>This metric is stored as detailed samples</strong>
@@ -303,7 +303,7 @@
             </div>
           </div>
         } @else if (isEmpty()) {
-          <div class="health-detail-state qs-glass-card-panel">
+          <div class="health-detail-state">
             <mat-icon aria-hidden="true">monitor_heart</mat-icon>
             <div>
               <strong>No {{ detailTitle() }} data in this window</strong>
@@ -321,7 +321,7 @@
             </div>
           </div>
         } @else if (selectedIsSleep()) {
-          <section class="health-sleep-chart qs-glass-card-panel" aria-label="Normalized Sleep trend">
+          <section class="health-sleep-chart" aria-label="Normalized Sleep trend">
             <app-sleep-trend-chart
               [timelineNotes]="timelineNotes.context()"
               [mobileTapFeedbackOptions]="mobileTapFeedbackOptions"

@@ -29,14 +29,14 @@ describe('WorkoutDataComparisonPageComponent', () => {
   it('renders the comparison feature page content and provider chips', () => {
     const text = fixture.nativeElement.textContent as string;
     const providerChips = fixture.nativeElement.querySelectorAll('.provider-chip');
-    const compactRows = fixture.nativeElement.querySelectorAll('app-compact-feature-row');
+    const compactRows = fixture.nativeElement.querySelectorAll('app-compact-row');
     const faqItems = fixture.nativeElement.querySelectorAll('.faq-item');
 
     expect(providerChips.length).toBe(4);
     expect(compactRows.length).toBe(11);
     expect(fixture.nativeElement.querySelector('.feature-card')).toBeNull();
     expect(fixture.nativeElement.querySelector('.tool-row')).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('.compact-feature-row-host--without-divider').length).toBe(3);
+    expect(fixture.nativeElement.querySelectorAll('.compact-row-host--without-divider').length).toBe(3);
     expect(faqItems.length).toBe(5);
     expect(text).toContain('Compare workout files, providers, and sports devices');
     expect(text).toContain('Garmin, Suunto, COROS, Wahoo, FIT, TCX, GPX, JSON, and SML recordings');

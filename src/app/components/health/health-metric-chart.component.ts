@@ -1,6 +1,6 @@
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { MatCardModule } from '@angular/material/card';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { MatChipsModule } from '@angular/material/chips';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
@@ -17,7 +17,7 @@ import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.c
 @Component({
   selector: 'app-health-metric-chart',
   standalone: true,
-  imports: [MatCardModule, MatChipsModule, HealthMetricSeriesChartComponent],
+  imports: [CompactRowComponent, MatChipsModule, HealthMetricSeriesChartComponent],
   templateUrl: './health-metric-chart.component.html',
   styleUrls: ['./health-metric-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

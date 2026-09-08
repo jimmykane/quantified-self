@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -66,7 +66,7 @@ export interface HealthPriorityCardView {
   standalone: true,
   imports: [
     MatButtonModule,
-    MatCardModule,
+    CompactRowComponent,
     MatIconModule,
     MatProgressSpinnerModule,
     HealthMetricSeriesChartComponent,

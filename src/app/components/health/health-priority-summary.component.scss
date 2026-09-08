@@ -33,13 +33,11 @@
 }
 
 .health-priority-grid {
-  --health-priority-divider: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
-  --qs-glass-panel-radius: 14px;
+  --health-priority-divider: 1px solid var(--mat-sys-outline-variant);
 
   display: grid;
   gap: 0;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  overflow: hidden;
 }
 
 .health-priority-grid-double {
@@ -51,60 +49,25 @@
 }
 
 .health-priority-card {
-  align-content: start;
-  display: grid;
-  gap: 0.25rem;
   min-width: 0;
-  padding: 0.5rem 0.625rem;
+  padding-inline: 0.625rem;
 }
+
+.health-priority-card:first-child { padding-inline-start: 0; }
+.health-priority-card:last-child { padding-inline-end: 0; }
 
 .health-priority-card + .health-priority-card {
   border-left: var(--health-priority-divider);
 }
 
-.health-priority-card-header,
-.health-priority-title-row,
 .health-priority-open-button {
   align-items: center;
   display: flex;
 }
 
-.health-priority-card-header {
-  gap: 0.5rem;
-  justify-content: space-between;
-  min-height: 30px;
-}
-
-.health-priority-title-row {
-  gap: 0.4rem;
-  min-width: 0;
-}
-
-.health-priority-title-row h3 {
-  font: var(--mat-sys-title-small);
-  margin: 0;
-}
-
-.health-priority-avatar {
-  display: grid;
-  flex: 0 0 22px;
-  height: 22px;
-  place-items: center;
-  width: 22px;
-}
-
-.health-priority-avatar mat-icon {
-  color: var(--mat-sys-primary);
-  font-size: 18px;
-  height: 18px;
-  line-height: 18px;
-  overflow: visible;
-  width: 18px;
-}
-
 .health-priority-open-button {
   flex: 0 0 auto;
-  height: 30px;
+  min-height: 44px;
   min-width: 0;
   padding-inline: 0.35rem;
 }
@@ -270,6 +233,8 @@
     border-left: 0;
     border-top: var(--health-priority-divider);
   }
+
+  .health-priority-card { padding-inline: 0; }
 }
 
 @media (max-width: 720px) {

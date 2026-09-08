@@ -1,0 +1,171 @@
+:host {
+  display: block;
+  min-width: 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+:host(.compact-row-host--without-divider) {
+  border-bottom: 0;
+}
+
+.compact-row {
+  display: grid;
+  grid-template-columns: 48px minmax(180px, 240px) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 1.25rem;
+  padding: 1.25rem 0.5rem;
+}
+
+.compact-row__icon {
+  display: flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+
+  mat-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 24px;
+  }
+}
+
+.compact-row--primary .compact-row__icon {
+  color: var(--mat-sys-on-primary-container);
+  background: var(--mat-sys-primary-container);
+}
+
+.compact-row--secondary .compact-row__icon {
+  color: var(--mat-sys-on-secondary-container);
+  background: var(--mat-sys-secondary-container);
+}
+
+.compact-row--tertiary .compact-row__icon {
+  color: var(--mat-sys-on-tertiary-container);
+  background: var(--mat-sys-tertiary-container);
+}
+
+.compact-row--neutral .compact-row__icon {
+  color: var(--mat-sys-on-surface-variant);
+  background: var(--mat-sys-surface-container-high);
+}
+
+.compact-row__title {
+  display: flex;
+  min-height: 48px;
+  align-self: start;
+  align-items: center;
+  margin: 0;
+  color: var(--mat-sys-on-surface);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.compact-row__body {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  padding-top: 0.15rem;
+}
+
+.compact-row__summary {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.compact-row__action {
+  display: grid;
+  align-self: center;
+  white-space: nowrap;
+
+  &:empty {
+    display: none;
+  }
+}
+
+.compact-row--without-icon {
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
+}
+
+@media (max-width: 900px) {
+  .compact-row--columns {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1.25rem 0;
+  }
+
+  .compact-row--columns .compact-row__body,
+  .compact-row--columns .compact-row__action {
+    grid-column: 2;
+  }
+
+  .compact-row--columns .compact-row__action {
+    justify-self: start;
+  }
+
+  .compact-row--columns.compact-row--without-icon {
+    grid-template-columns: minmax(0, 1fr);
+
+    .compact-row__body,
+    .compact-row__action {
+      grid-column: 1;
+    }
+  }
+}
+
+@media (max-width: 520px) {
+  .compact-row--columns .compact-row__body,
+  .compact-row--columns .compact-row__action {
+    grid-column: 1 / -1;
+  }
+
+  .compact-row--columns .compact-row__action {
+    width: 100%;
+  }
+}
+
+// Content rows in a workspace keep their action beside the heading and give
+// charts/tables the complete row width, including on narrow screens.
+.compact-row--stacked {
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+
+  .compact-row__icon { grid-column: 1; grid-row: 1; align-self: center; }
+  .compact-row__title { grid-column: 2; grid-row: 1; align-self: center; }
+  .compact-row__action { grid-column: 3; grid-row: 1; justify-self: end; }
+  .compact-row__body { grid-column: 1 / -1; grid-row: 2; }
+
+  &.compact-row--without-icon {
+    grid-template-columns: minmax(0, 1fr) auto;
+    .compact-row__title { grid-column: 1; }
+    .compact-row__action { grid-column: 2; }
+  }
+}
+
+.compact-row--compact {
+  gap: 0.4rem 0.5rem;
+  padding: 0.5rem 0;
+
+  .compact-row__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    mat-icon { width: 18px; height: 18px; font-size: 18px; }
+  }
+
+  .compact-row__title {
+    min-height: 32px;
+    font: var(--mat-sys-title-small);
+    font-weight: 600;
+  }
+
+  .compact-row__body { gap: 0.25rem; padding-top: 0; }
+  .compact-row__summary { font: var(--mat-sys-body-small); }
+
+  &.compact-row--stacked:not(.compact-row--without-icon) {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+}

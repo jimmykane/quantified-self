@@ -4,7 +4,7 @@ import { AppThemes, ChartCursorBehaviours, XAxisTypes } from '@sports-alliance/s
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
 import { SharedModule } from '../../../modules/shared.module';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { CompactFeatureRowComponent } from '../compact-feature-row/compact-feature-row.component';
+import { CompactRowComponent } from '../compact-row/compact-row.component';
 import {
   REVIEWER_BENCHMARK_ALTITUDE_PANEL,
   REVIEWER_BENCHMARK_DURATION_SECONDS,
@@ -14,7 +14,7 @@ import {
 @Component({
   selector: 'app-reviewer-benchmark-preview',
   standalone: true,
-  imports: [MatIconModule, CompactFeatureRowComponent, SharedModule],
+  imports: [MatIconModule, CompactRowComponent, SharedModule],
   templateUrl: './reviewer-benchmark-preview.component.html',
   styleUrls: ['./reviewer-benchmark-preview.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
