@@ -83,6 +83,27 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 }
 
 describe('Health metric chart helpers', () => {
+  it.each([1, 14, 30, 90, 365])('keeps %i-day date axes collision-safe without changing readings or the selected window', days => {
+    const start = Date.UTC(2026, 5, 11);
+    const end = start + days * DAY_MS - 1;
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.HeartRate,
+      points: [{ timestampMs: end, calendarDate: new Date(end).toISOString().slice(0, 10), value: 80, qualityCode: null }],
+    })], start, end)[0];
+    for (const width of [280, 360, 640, 1000]) {
+      const option = buildHealthMetricEChartsOption(model, start, end,
+        buildDashboardEChartsStyleTokens(false, width), width < 600) as {
+        xAxis: { type: string; min: number; max: number; splitNumber: number; axisLabel: { hideOverlap: boolean } };
+        series: Array<{ data: unknown }>;
+      };
+      expect(option.xAxis).toMatchObject({
+        type: 'time', min: start, max: end, splitNumber: width < 680 ? 3 : 6,
+        axisLabel: { hideOverlap: true },
+      });
+      expect(option.series[0].data).toBe(model.data);
+    }
+  });
+
   it('inserts null ECharts data across gaps instead of connecting missing periods', () => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
     expect(model.data.filter(([, value]) => value === null)).toHaveLength(1);

@@ -225,10 +225,14 @@ export function buildHealthMetricEChartsOption(
       min: startTimeMs,
       max: endTimeMs,
       boundaryGap: false,
+      splitNumber: style.isCompactLayout ? 3 : 6,
       axisTick: { show: false },
       axisLine: { lineStyle: { color: style.axisColor } },
       splitLine: { show: false },
       axisLabel: {
+        // Time axes can emit extra calendar-boundary ticks. Resolve collisions
+        // against the actual rendered panel width, including subsequent resizes.
+        hideOverlap: true,
         color: style.secondaryTextColor,
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
         fontSize: style.axisFontSize,
