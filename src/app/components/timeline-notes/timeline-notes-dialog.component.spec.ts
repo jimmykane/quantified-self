@@ -4,6 +4,7 @@ import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { MatCheckbox } from '@angular/material/checkbox';
 import { MatDatepickerInput } from '@angular/material/datepicker';
+import { DateAdapter } from '@angular/material/core';
 import { MatSelect } from '@angular/material/select';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +12,7 @@ import { TimelineNotesDialogComponent } from './timeline-notes-dialog.component'
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { timelineNoteDateInput } from './timeline-note-date-adapter';
+import { TimelineNoteDateAdapter, timelineNoteDateInput, timelineNoteDateLabel } from './timeline-note-date-adapter';
 
 describe('Timeline notes editor', () => {
   const note = { id: 'a'.repeat(64), category: 'sickness' as const, title: 'Sickness', startDate: '2026-01-01', endDate: null, timeZone: 'Europe/Helsinki', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
@@ -22,12 +23,26 @@ describe('Timeline notes editor', () => {
     service.showOnCharts.set(true);
     vi.clearAllMocks(); service.list.mockResolvedValue({ notes: [note], cursor: null }); service.save.mockResolvedValue(note);
     TestBed.configureTestingModule({ providers: [
+      { provide: DateAdapter, useFactory: () => new TimelineNoteDateAdapter('en-US') },
       { provide: MAT_DIALOG_DATA, useValue: { uid: 'owner', notes: [note] } },
       { provide: AppHapticsService, useValue: haptics },
       { provide: MatDialogRef, useValue: { close: vi.fn() } }, { provide: MatDialog, useValue: { open: () => ({ afterClosed: () => of(true) }) } },
       { provide: AppTimelineNotesService, useValue: service }, { provide: BrowserCompatibilityService, useValue: { createRandomUUID: () => '123e4567-e89b-42d3-a456-426614174000' } },
     ] });
     component = TestBed.runInInjectionContext(() => new TimelineNotesDialogComponent());
+  });
+  it('uses the edited note zone for the Material calendar, date limit, and End today', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-08T12:30:00Z'));
+    try {
+      const fixture = TestBed.createComponent(TimelineNotesDialogComponent);
+      fixture.componentInstance.edit({ ...note, timeZone: 'Pacific/Kiritimati' });
+      fixture.detectChanges();
+      const adapter = fixture.debugElement.injector.get(DateAdapter) as TimelineNoteDateAdapter;
+      expect(timelineNoteDateLabel(adapter.today())).toBe('2026-09-09');
+      expect(timelineNoteDateLabel(fixture.debugElement.query(By.directive(MatDatepickerInput)).injector.get(MatDatepickerInput).max)).toBe('2026-09-09');
+      await fixture.componentInstance.endToday();
+      expect(service.save).toHaveBeenCalledWith('owner', expect.objectContaining({ timeZone: 'Pacific/Kiritimati', endDate: '2026-09-09' }));
+    } finally { vi.useRealTimers(); }
   });
   it('offers Material category icons and named colors, persisting only the saved choice', async () => {
     const fixture = TestBed.createComponent(TimelineNotesDialogComponent);
@@ -70,6 +85,26 @@ describe('Timeline notes editor', () => {
     expect(fixture.componentInstance.form.valid).toBe(true);
     await fixture.componentInstance.save();
     expect(service.save).toHaveBeenCalledWith('owner', expect.objectContaining({ startDate: '2027-03-28', endDate: '2027-03-29', timeZone: 'Europe/Helsinki' }));
+  });
+  it.each(['single', 'ongoing'] as const)('ignores hidden range errors in %s mode and restores validation on return', async mode => {
+    const fixture = TestBed.createComponent(TimelineNotesDialogComponent);
+    fixture.componentInstance.mode.set('range'); fixture.detectChanges();
+    const end = fixture.nativeElement.querySelector('input[formControlName="endDate"]') as HTMLInputElement;
+    end.value = 'not a date'; end.dispatchEvent(new Event('input')); fixture.detectChanges();
+    expect(fixture.componentInstance.form.invalid).toBe(true);
+    fixture.componentInstance.mode.set(mode); fixture.detectChanges();
+    expect(fixture.componentInstance.form.valid).toBe(true);
+    expect(fixture.componentInstance.form.controls.endDate.disabled).toBe(true);
+    fixture.componentInstance.mode.set('range'); fixture.detectChanges();
+    expect(fixture.componentInstance.form.controls.endDate.enabled).toBe(true);
+    expect(fixture.componentInstance.form.invalid).toBe(true);
+    fixture.componentInstance.mode.set(mode); fixture.detectChanges();
+    service.save.mockRejectedValueOnce(new Error('offline'));
+    await fixture.componentInstance.save(); fixture.detectChanges();
+    expect(fixture.componentInstance.form.valid).toBe(true);
+    expect(fixture.componentInstance.form.controls.endDate.disabled).toBe(true);
+    await fixture.componentInstance.save();
+    expect(service.save).toHaveBeenCalledWith('owner', expect.objectContaining({ startDate: note.startDate, endDate: mode === 'single' ? note.startDate : null }));
   });
   it('defaults new and legacy notes to visible and saves an individual choice only on Save', async () => {
     const fixture = TestBed.createComponent(TimelineNotesDialogComponent);

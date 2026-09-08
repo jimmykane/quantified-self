@@ -43,6 +43,7 @@ export class TimelineNotesDialogComponent {
   private readonly dialogs = inject(MatDialog);
   private readonly compatibility = inject(BrowserCompatibilityService);
   private readonly builder = inject(FormBuilder);
+  private readonly dateAdapter = inject(DateAdapter) as TimelineNoteDateAdapter;
   readonly view = signal<'list' | 'edit'>('list');
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -70,13 +71,18 @@ export class TimelineNotesDialogComponent {
   readonly title = computed(() => this.view() === 'list' ? 'Timeline notes' : this.existing() ? 'Edit note' : 'Add note');
   get selectedCategory() { return this.options.find(option => option.id === this.form.controls.category.value)!; }
   get selectedColor() { return this.colorOptions.find(option => option.id === this.form.controls.color.value)!; }
-  get today(): Dayjs { return timelineNoteDateInput(timelineToday(this.zone)); }
+  get today(): Dayjs { return this.dateAdapter.today(); }
 
   constructor() {
     effect(() => { if (this.service.uid() !== this.data.uid) this.ref.close(); });
     effect(() => {
       this.ref.disableClose = this.busy();
-      if (this.busy()) this.form.disable({ emitEvent: false }); else this.form.enable({ emitEvent: false });
+      if (this.busy()) this.form.disable({ emitEvent: false });
+      else {
+        this.form.enable({ emitEvent: false });
+        // Keep an unfinished range draft, but do not let a hidden end field block a single/ongoing note.
+        if (this.mode() !== 'range') this.form.controls.endDate.disable({ emitEvent: false });
+      }
     });
     if (this.data.notes?.length === 1) this.edit(this.data.notes[0]);
     else if (this.data.notes?.length) this.notes.set(this.data.notes);
@@ -99,6 +105,7 @@ export class TimelineNotesDialogComponent {
     if (this.busy()) return;
     this.error.set(null); this.conflict.set(false); this.existing.set(note);
     this.zone = note?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    this.dateAdapter.timeZone = this.zone;
     const today = timelineToday(this.zone);
     this.mutationId = note ? null : this.compatibility.createRandomUUID();
     this.form.reset({ category: note?.category ?? 'other', title: note?.title ?? 'Other', details: note?.details ?? '',

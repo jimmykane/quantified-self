@@ -56,8 +56,11 @@ latest stored choice. The manager lists hidden notes with a **Hidden** label, ev
 Category options and note lists use Material category icons. The editor's named color selector uses the existing app
 palette, with text labels so color is never the only identifier. Both are draft changes until Save. Material datepicker
 inputs reuse the app's Dayjs adapter and localized formats; the note-scoped adapter strictly rejects invalid typed dates
-instead of silently rolling them forward. Form values serialize local calendar parts, never UTC instants. End dates
-are inclusive and cannot precede the start; ongoing starts cannot be in the future in the note's captured zone.
+instead of silently rolling them forward. Date-only values use a UTC calendar carrier so even a date skipped by the
+browser's zone remains editable; persistence still uses fixed date labels, not converted timestamps. The calendar's
+today indicator, ongoing-date limit, and End today all follow the note's captured zone. End dates are inclusive and
+cannot precede the start; ongoing starts cannot be in the future. An unfinished range end is retained as draft input
+but disabled outside range mode so its validation cannot block saving a single-day or ongoing note.
 Range paging still loads/counts hidden records within the existing caps; filtering happens before workspace projection,
 with the chart/Calendar helpers also excluding hidden notes from groups, tooltips, counts, and day details. A queued
 marker selection is checked against current visibility before opening. Hidden is a display choice, not deletion or a
