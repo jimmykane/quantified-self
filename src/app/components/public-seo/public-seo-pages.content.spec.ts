@@ -20,6 +20,15 @@ describe('public-seo-pages.content', () => {
     expect(page.faqItems[1].answer).toContain('not currently for Health imports');
     expect(PUBLIC_SEO_PAGES.featuresHub.actions.some(action => action.routerLink === '/features/health')).toBe(true);
   });
+  it('makes manual measurement logging explicit in the shared Health preview copy', () => {
+    const row = HEALTH_FEATURE_CONTENT.rows.find(row => row.preview === 'health-weight')!;
+    expect(row.title).toBe('Log Your Measurements');
+    for (const measurement of ['blood pressure', 'weight', 'body composition', 'blood oxygen', 'VO₂ max']) {
+      expect(row.copy).toContain(measurement);
+    }
+    expect(row.copy).toContain('manual entries clearly labelled');
+    expect(PUBLIC_SEO_PAGES.health.sections.find(section => section.preview === 'health-weight')?.copy).toBe(row.copy);
+  });
   it('defines distinct public feature and guide paths', () => {
     expect(PUBLIC_FEATURE_PATHS).toEqual({
       hub: 'features',

@@ -16,8 +16,8 @@ export const HEALTH_FEATURE_CONTENT = {
       preview: 'health-hrv' as PublicFeaturePreviewKey,
     },
     {
-      icon: 'monitor_weight', title: 'Track Your Measurements',
-      copy: 'Follow weight and body measurements alongside your imported history. Add your own readings and keep their source visible.',
+      icon: 'monitor_weight', title: 'Log Your Measurements',
+      copy: 'Log blood pressure, weight, body composition, blood oxygen, and VO₂ max. Follow your readings over time alongside imported health data, with manual entries clearly labelled.',
       preview: 'health-weight' as PublicFeaturePreviewKey,
     },
   ],
