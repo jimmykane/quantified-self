@@ -112,6 +112,8 @@ export type HealthWorkspaceChartKind = 'bar' | 'line' | 'point' | 'step';
 
 export interface HealthWorkspaceSeries {
   id: string;
+  /** Stable provider/account identity for display selection, independent of metric semantics. */
+  sourceSelectionKey?: string;
   metricId: HealthMetricId;
   provider: HealthProvider;
   providerLabel: string;
@@ -176,6 +178,7 @@ export interface HealthMetricWorkspaceView {
 
 export interface HealthPriorityRow {
   id: string;
+  sourceSelectionKey?: string;
   provider: HealthProvider;
   providerLabel: string;
   sourceLabel: string;
@@ -522,6 +525,7 @@ export function buildHealthMetricWorkspaceView(
       .sort((left, right) => left.timestampMs - right.timestampMs);
     return {
       id: opaqueHealthSeriesId(seriesIdentity),
+      sourceSelectionKey: opaqueHealthSeriesId(accountIdentity(first.provider, first.accountKey)),
       metricId: first.metricId,
       provider: first.provider,
       providerLabel: providerLabel(first.provider),
@@ -664,6 +668,7 @@ export function buildHealthPriorityRows(
     }
     return [{
       id: `health-priority-${index + 1}`,
+      sourceSelectionKey: series.sourceSelectionKey,
       provider: series.provider,
       providerLabel: series.providerLabel,
       sourceLabel: series.sourceLabel,
@@ -929,6 +934,7 @@ export function buildSleepPriorityRows(
     ].filter((detail): detail is HealthPriorityDetail => detail !== null);
     return {
       id: `sleep-priority-${index + 1}`,
+      sourceSelectionKey: opaqueHealthSeriesId(key),
       provider,
       providerLabel: providerLabel(provider),
       sourceLabel: accountLabels.get(key) || providerLabel(provider),

@@ -136,6 +136,10 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
+    expect(healthSection?.content).toContain('**Choose a Highlight source.**');
+    expect(healthSection?.content).toContain('remembered separately for each highlight in your account settings');
+    expect(healthSection?.content).toContain('without overwriting your saved choice');
+    expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
     expect(healthSection?.content).toContain('Detailed sample streams load for 1d, 14-day, and 30-day windows');
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');

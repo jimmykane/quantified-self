@@ -442,6 +442,8 @@ describe('Health workspace helpers', () => {
     ));
 
     expect(august.series[0].id).toBe(september.series[0].id);
+    expect(august.series[0].sourceSelectionKey).toMatch(/^health-series-[a-f0-9]{16}$/);
+    expect(august.series[0].sourceSelectionKey).toBe(september.series[0].sourceSelectionKey);
     expect(august.series[0].id).not.toContain('secret-stable-account');
     expect(JSON.stringify(august.series)).not.toContain('secret-stable-account');
   });
@@ -1182,6 +1184,9 @@ describe('Health workspace helpers', () => {
       }),
     ], null, Date.parse('2026-08-03T12:00:00.000Z'));
     expect(rows.map(row => row.sourceLabel)).toEqual(['Garmin account 2', 'Garmin account 1']);
+    expect(new Set(rows.map(row => row.sourceSelectionKey)).size).toBe(2);
+    const single = buildSleepPriorityRows([sleepSession()]);
+    expect(single[0].sourceSelectionKey).toBe(rows[1].sourceSelectionKey);
     expect(rows[0]).toMatchObject({
       contextText: 'Today',
       details: [

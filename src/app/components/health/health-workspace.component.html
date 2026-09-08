@@ -5,7 +5,7 @@
     titleId="health-title"
     leadingIcon="cardiology"
     eyebrow="Cross-service health history"
-    subtitle="Compare each source on its own terms. Health never blends providers or chooses a preferred source.">
+    subtitle="Explore your health history, with each source kept separate.">
     <button pageHeaderTitleActions mat-button type="button" class="health-sources-button"
       [attr.aria-label]="sourcesAriaLabel()" [matTooltip]="sourcesAriaLabel()"
       aria-haspopup="dialog" [attr.aria-expanded]="sourcesOpen()" (click)="openSources()">
@@ -47,6 +47,8 @@
     [endTimeMs]="priorityWindow.endTimeMs"
     [darkTheme]="isDarkTheme()"
     [unitSettings]="unitSettings()"
+    [preferredSources]="preferredHighlightSources()"
+    (sourceSelected)="selectHighlightSource($event)"
     (metricSelected)="selectPriorityMetric($event)">
   </app-health-priority-summary>
 

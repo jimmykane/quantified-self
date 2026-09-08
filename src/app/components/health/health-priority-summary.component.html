@@ -42,14 +42,40 @@
                 <mat-icon aria-hidden="true">error_outline</mat-icon>
                 Source status needs attention
               </span>
-            } @else if (card.chartModels.length > 0) {
-              <div class="health-priority-chart-list">
-                @for (chart of card.chartModels; track chart.model.series.id) {
+            } @else if (card.sources.length > 1) {
+              <mat-tab-group class="health-priority-source-tabs" mat-stretch-tabs
+                animationDuration="0ms" [selectedIndex]="card.selectedSourceIndex"
+                [attr.aria-label]="card.label + ' highlight source'"
+                (selectedIndexChange)="selectSource(card.id, $event)">
+                @for (source of card.sources; track source.key) {
+                  <mat-tab>
+                    <ng-template mat-tab-label>
+                      <span class="health-priority-tab-label">
+                        <span>{{ source.label }}</span>
+                        <strong>{{ source.valueText }}</strong>
+                      </span>
+                    </ng-template>
+                    <ng-template matTabContent>
+                      <ng-container *ngTemplateOutlet="sourceContent; context: { $implicit: source, multiple: true }"></ng-container>
+                    </ng-template>
+                  </mat-tab>
+                }
+              </mat-tab-group>
+            } @else if (card.sources.length === 1) {
+              <ng-container *ngTemplateOutlet="sourceContent; context: { $implicit: card.sources[0], multiple: false }"></ng-container>
+            } @else {
+              <span class="health-priority-state">{{ card.emptyText }}</span>
+            }
+
+            <ng-template #sourceContent let-source let-multiple="multiple">
+                @if (source.chart; as chart) {
                   <section class="health-priority-chart-source">
-                    <div class="health-priority-reading">
-                      <strong>{{ chart.latestValueText }}</strong>
-                      <span class="health-priority-source-label">{{ chart.model.series.sourceLabel }}</span>
-                    </div>
+                    @if (!multiple) {
+                      <div class="health-priority-reading">
+                        <strong>{{ chart.latestValueText }}</strong>
+                        <span class="health-priority-source-label">{{ chart.model.series.sourceLabel }}</span>
+                      </div>
+                    }
                     <small>{{ chart.contextText }}</small>
                     @if (chart.personalRangeStatus) {
                       <div class="health-priority-range-status">
@@ -73,17 +99,15 @@
                       [statusDescription]="chart.statusDescription">
                     </app-health-metric-series-chart>
                   </section>
-                }
-              </div>
-            } @else if (card.rows.length > 0) {
-              <div class="health-priority-source-list">
-                @for (row of card.rows; track row.id) {
+                } @else if (source.row; as row) {
                   <div class="health-priority-source-row">
                     <div class="health-priority-value">
-                      <div class="health-priority-reading">
-                        <strong>{{ row.valueText }}</strong>
-                        <span class="health-priority-source-label">{{ row.sourceLabel }}</span>
-                      </div>
+                      @if (!multiple) {
+                        <div class="health-priority-reading">
+                          <strong>{{ row.valueText }}</strong>
+                          <span class="health-priority-source-label">{{ row.sourceLabel }}</span>
+                        </div>
+                      }
                       <small>{{ row.contextText }}</small>
                       @if (row.details?.length) {
                         <dl class="health-priority-details">
@@ -106,10 +130,7 @@
                     </div>
                   </div>
                 }
-              </div>
-            } @else {
-              <span class="health-priority-state">{{ card.emptyText }}</span>
-            }
+            </ng-template>
           </div>
           </app-compact-row>
         </section>

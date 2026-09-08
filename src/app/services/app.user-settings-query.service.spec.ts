@@ -240,6 +240,31 @@ describe('AppUserSettingsQueryService', () => {
     });
 
     describe('Health workspace preferences', () => {
+        it('merges only the chosen highlight without replaying other saved sources', async () => {
+            const user = createMockUser({ uid: 'test-uid' });
+            mockUserSubject.next(user);
+            await service.updateHealthWorkspacePreferences('test-uid', {
+                metric: 'sleep', range: '30d',
+                highlightSources: { heart_rate: 'health-series-0123456789abcdef' },
+            });
+            expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
+                settings: { appSettings: { healthWorkspace: {
+                    metric: 'sleep', range: '30d',
+                    highlightSources: { heart_rate: 'health-series-0123456789abcdef' },
+                } } },
+            });
+        });
+
+        it('rejects raw or unsupported highlight preferences before persistence', async () => {
+            mockUserSubject.next(createMockUser({ uid: 'test-uid' }));
+            for (const highlightSources of [{ heart_rate: 'raw-account-id' }, { unknown: 'health-series-0123456789abcdef' }, null]) {
+                await expect(service.updateHealthWorkspacePreferences('test-uid', {
+                    metric: 'sleep', range: '30d', highlightSources: highlightSources as never,
+                })).rejects.toThrow('opaque Health highlight');
+            }
+            expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
+        });
+
         it('writes the selected metric and range as one client-owned Health workspace setting', async () => {
             const user = createMockUser({ uid: 'test-uid' });
             mockUserSubject.next(user);
