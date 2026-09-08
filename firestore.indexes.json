@@ -1569,6 +1569,21 @@
     }
   ],
   "fieldOverrides": [
+    {
+      "collectionGroup": "serviceDisconnectCleanup",
+      "fieldPath": "*",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "serviceDisconnectCleanup",
+      "fieldPath": "nextAttemptAt",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
+    },
+    {
+      "collectionGroup": "serviceDisconnectCleanup",
+      "fieldPath": "userID",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
+    },
     { "collectionGroup": "timelineNotes", "fieldPath": "title", "indexes": [] },
     { "collectionGroup": "timelineNotes", "fieldPath": "details", "indexes": [] },
     {

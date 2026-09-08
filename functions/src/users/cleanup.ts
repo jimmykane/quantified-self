@@ -37,6 +37,7 @@ import {
 import { cleanupMcpOAuthStateForUser } from '../mcp/oauth.service';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { cleanupRejectedRouteOriginalFilesForUser } from '../routes/rejected-original-cleanup';
+import { cleanupServiceDisconnectTasksForUser } from '../service-disconnect-cleanup';
 
 export { ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from '../orphaned-service-tokens';
 
@@ -1069,6 +1070,9 @@ export const cleanupUserAccounts = functions
 
     await collectArchivedProviderIdentifiersForUser(uid, providerIdentifiers);
     await cleanupTopLevelQueueState(uid, providerIdentifiers);
+    // Disconnect may already have removed every credential. Its independent
+    // cleanup records still own provider-only operational rows in that case.
+    await cleanupServiceDisconnectTasksForUser(uid);
 
     if (mcpOAuthCleanupFailed) {
         throw mcpOAuthCleanupError instanceof Error

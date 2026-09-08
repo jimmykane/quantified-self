@@ -424,6 +424,9 @@ export async function clearServiceDisconnectPending(
     const rootData = snapshot.exists
       ? snapshot.data() as PendingServiceDisconnectRootData
       : null;
+    // Entitlement recovery must never undo an explicit user disconnect,
+    // including an interrupted episode waiting for its lease to expire.
+    if (rootData?.disconnectOperationGeneration) return { status: 'skipped' as const };
     let pendingData = isServiceDisconnectPendingData(rootData) ? rootData : null;
 
     // A previous OAuth callback may have cleared the root fields and then lost

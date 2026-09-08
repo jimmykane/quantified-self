@@ -820,6 +820,9 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('marked **PRO**');
     expect(serviceConnectionsSection?.content).toContain('MCP is marked **FREE**');
     expect(serviceConnectionsSection?.content).toContain('can always be disconnected');
+    expect(serviceConnectionsSection?.content).toContain('When a disconnect begins, automatic activity and saved-route delivery');
+    expect(serviceConnectionsSection?.content).toContain('you do not need to keep the page open');
+    expect(serviceConnectionsSection?.content).toContain('Health history, and Sleep sessions stay in your account');
     expect(serviceConnectionsSection?.content).toContain('an automated subscription check disconnects');
     expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
     expect(serviceConnectionsSection?.content).toContain('Choose an action');
