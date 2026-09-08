@@ -74,6 +74,7 @@ vi.mock('./health-webhook-binding-lifecycle', async importOriginal => ({
 
 import {
   getSuuntoHealthRequestTelemetry,
+  getSuuntoHealthFailureTelemetry,
   processSuuntoHealthQueueItem,
   sanitizeSuuntoHealthErrorForTelemetry,
   suuntoHealthSyncTestInternals,
@@ -187,6 +188,60 @@ function queueItem(): SleepSyncQueueItemInterface {
 }
 
 describe('Suunto Health provider sync', () => {
+  it.each([10, 14, 4])('retains RPC code %s without error messages, account paths or credentials', code => {
+    const error = Object.assign(new Error('private-account/private-token/private-health'), {
+      code, details: 'private-details', cause: new Error('private-cause'),
+    });
+    expect(getSuuntoHealthFailureTelemetry(error, 'health_write', 42)).toEqual({
+      errorCode: 'suunto_health_processing_failed', errorName: 'Error', failureCategory: 'rpc_error',
+      failureStage: 'health_write', processingElapsedMs: 42, rpcStatusCode: code,
+    });
+    expect(sanitizeSuuntoHealthErrorForTelemetry(error).message).toBe('Suunto Health processing failed.');
+  });
+
+  it('distinguishes provider HTTP, response limits, transport and validation failures', () => {
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(500), 'activity_request', 17))
+      .toMatchObject({ errorCode: 'suunto_health_request_failed', providerStatusCode: 500, failureCategory: 'provider_http_error' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(undefined, true), 'activity_request', 17))
+      .toMatchObject({ failureCategory: 'response_byte_limit' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(undefined, false, 'ETIMEDOUT'), 'statistics_request', 17))
+      .toMatchObject({ transportCode: 'ETIMEDOUT', failureCategory: 'transport_error' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthValidationError('private-field must be a string.'), 'activity_mapping', 17))
+      .toMatchObject({ failureCategory: 'validation_error', validationCode: 'expected_string' });
+  });
+
+  it('bounds diagnostic fields and does not trust arbitrary names, codes, causes or throwing accessors', () => {
+    for (const error of [Object.assign(new Error('private-message'), { name: 'private-name', code: 'private-code' }),
+      { get name() { throw new Error('private-getter'); } }, null]) {
+      const output = getSuuntoHealthFailureTelemetry(error, 'unknown', Infinity);
+      expect(output).toMatchObject({ errorName: 'UnknownError', processingElapsedMs: 0 });
+      expect(JSON.stringify(output)).not.toContain('private');
+    }
+    expect(getSuuntoHealthFailureTelemetry(new TypeError('private'), 'health_write', -1))
+      .toMatchObject({ errorName: 'TypeError', processingElapsedMs: 0 });
+    expect(getSuuntoHealthFailureTelemetry(new Error(), 'unknown', 9_999_999).processingElapsedMs).toBe(1_800_000);
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(700, false, 'private-token'), 'unknown', 1))
+      .not.toHaveProperty('providerStatusCode');
+    expect(JSON.stringify(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(700, false, 'private-token'), 'unknown', 1)))
+      .not.toContain('private');
+  });
+
+  it.each([0, 1, 2])('reports the failing feed %s and preserves an allowlisted transport code', async index => {
+    const stages: string[] = [];
+    hoisted.requestGet.mockReset();
+    for (let i = 0; i < index; i++) hoisted.requestGet.mockResolvedValueOnce([]);
+    hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('private-url-and-body'), { code: 'ECONNRESET' }));
+    const snapshot = tokenSnapshot();
+    let caught: unknown;
+    try {
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot), undefined,
+        stage => stages.push(stage));
+    } catch (error) { caught = error; }
+    expect(stages.at(-1)).toBe(['activity_request', 'statistics_request', 'recovery_request'][index]);
+    expect(getSuuntoHealthRequestTelemetry(caught)).toMatchObject({ transportCode: 'ECONNRESET' });
+    expect(JSON.stringify(caught)).not.toContain('private');
+  });
+
   it('reports only an allowlisted validation code without provider field detail', () => {
     const telemetryError = sanitizeSuuntoHealthErrorForTelemetry(
       new SuuntoHealthValidationError('activity[42].entryData.HR is outside the supported numeric range.'),

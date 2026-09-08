@@ -48,7 +48,7 @@ const hoisted = vi.hoisted(() => ({
     releaseSleepQueueRevision: vi.fn(),
     captureSuuntoHealthWriteLifecycleGuards: vi.fn(),
     processSuuntoHealthQueueItem: vi.fn(),
-    getSuuntoHealthRequestTelemetry: vi.fn(() => null),
+    getSuuntoHealthFailureTelemetry: vi.fn(() => null),
     captureActiveSuuntoWebhookWriteLifecycleGuards: vi.fn(),
     captureCurrentSuuntoWebhookWriteLifecycleGuards: vi.fn(),
     ensureSuuntoWebhookAccountBindingForProviderVerifiedToken: vi.fn(),
@@ -289,7 +289,7 @@ vi.mock('../service-connection-meta', () => ({
 vi.mock('../suunto/health-sync', () => ({
     captureSuuntoHealthWriteLifecycleGuards: hoisted.captureSuuntoHealthWriteLifecycleGuards,
     processSuuntoHealthQueueItem: hoisted.processSuuntoHealthQueueItem,
-    getSuuntoHealthRequestTelemetry: hoisted.getSuuntoHealthRequestTelemetry,
+    getSuuntoHealthFailureTelemetry: hoisted.getSuuntoHealthFailureTelemetry,
     sanitizeSuuntoHealthErrorForTelemetry: vi.fn(() => new Error('Suunto Health processing failed.')),
     suuntoCredentialFromSnapshot: vi.fn(() => ({
         accessToken: 'suunto-access-token',
@@ -5213,7 +5213,7 @@ describe('sleep queue', () => {
             expect(final).toBe(QueueResult.Processed);
             expect(hoisted.processSuuntoHealthQueueItem).toHaveBeenLastCalledWith(
                 expect.objectContaining({ suuntoHealthProgress: expect.objectContaining(continuation) }),
-                expect.anything(), 'test-user-uid', expect.anything(), expect.any(Function));
+                expect.anything(), 'test-user-uid', expect.anything(), expect.any(Function), expect.any(Function));
             expect(state).toMatchObject({ processed: true, resultStatus: 'success', healthRecordsWritten: 1 });
             expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith('test-user-uid', 'SuuntoApp',
                 expect.objectContaining({ lastObservedAtMs: start + 3_600_000 }), expect.any(Number), expect.anything());
@@ -5258,8 +5258,12 @@ describe('sleep queue', () => {
         hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
         hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(initialGuards);
         hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards);
-        hoisted.processSuuntoHealthQueueItem.mockRejectedValueOnce(new Error('provider unavailable'));
-        hoisted.getSuuntoHealthRequestTelemetry.mockReturnValueOnce({
+        const originalError = new Error('private-provider-error');
+        hoisted.processSuuntoHealthQueueItem.mockImplementationOnce(async (_item, _token, _uid, _guards, _onGuards, onStage) => {
+            onStage('statistics_request');
+            throw originalError;
+        });
+        hoisted.getSuuntoHealthFailureTelemetry.mockReturnValueOnce({
             errorName: 'SuuntoHealthRequestError',
             errorCode: 'suunto_health_request_failed',
             providerStatusCode: 429,
@@ -5286,6 +5290,9 @@ describe('sleep queue', () => {
         });
 
         expect(result).toBe(QueueResult.RetryIncremented);
+        expect(hoisted.getSuuntoHealthFailureTelemetry).toHaveBeenCalledWith(
+            originalError, 'statistics_request', expect.any(Number),
+        );
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(2);
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
             1,
