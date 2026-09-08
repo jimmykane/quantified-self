@@ -65,12 +65,13 @@ Before publishing a profile with missing required agreements (including a wholly
 That client uses the same Firebase app's Auth and App Check providers, but does not use the watch/persistence cache.
 Both readers share the same profile merge function. Failures remain recovery states; only verified missing data may
 produce a new onboarding profile. Generation checks prevent an older asynchronous claim merge from reopening the
-profile gate during verification or a retry.
+profile gate or continuing token retries during verification or a profile retry.
 
 Complete profile snapshots add no Firestore reads. Incomplete snapshots require at most four additional document
-reads per verification attempt; concurrent checks share one bounded request, and identical listener snapshots do
-not repeat verification. Transient failures use the existing bounded retry budget. The fallback does not clear or
-repair the broader SDK cache. An already completed account that recovers while on `/onboarding` leaves that route
+reads per verification attempt; concurrent checks for the same snapshot and Auth session share one bounded request,
+and identical listener snapshots do not repeat verification. Changed snapshots, a complete listener result, or a
+restarted profile load invalidate the old shared result. Transient failures use the existing bounded retry budget.
+The fallback does not clear or repair the broader SDK cache. An already completed account that recovers while on `/onboarding` leaves that route
 without rewriting its completion flag or repeating completion analytics. The recovery behaviour applies to local,
 beta, and production builds; only the App Check debug provider is development-specific.
 

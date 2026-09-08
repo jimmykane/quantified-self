@@ -86,6 +86,58 @@ describe('UserProfileVerificationService', () => {
     await expect(result).rejects.toMatchObject({ code: 'cancelled' });
   });
 
+  it('does not reuse a pending read after the listener profile changes', async () => {
+    let resolveOld!: (snapshot: { data: () => undefined }) => void;
+    const oldSnapshot = new Promise<{ data: () => undefined }>(resolve => { resolveOld = resolve; });
+    sdk.getDoc.mockReturnValue(oldSnapshot);
+    const oldRead = service.verifyIfIncomplete('u1', null);
+    await vi.waitFor(() => expect(sdk.getDoc).toHaveBeenCalledTimes(4));
+
+    sdk.getDoc.mockResolvedValue({ data: () => ({ ...agreements, onboardingCompleted: true }) });
+    const newRead = service.verifyIfIncomplete('u1', { uid: 'u1', acceptedTos: false } as AppUserInterface);
+    resolveOld({ data: () => undefined });
+
+    expect(await oldRead).toBeNull();
+    expect(await newRead).toEqual(expect.objectContaining({ onboardingCompleted: true }));
+    expect(sdk.getDoc).toHaveBeenCalledTimes(8);
+  });
+
+  it('does not reuse an older missing result after a complete listener snapshot', async () => {
+    let resolveOld!: (snapshot: { data: () => undefined }) => void;
+    sdk.getDoc.mockReturnValue(new Promise(resolve => { resolveOld = resolve; }));
+    const oldRead = service.verifyIfIncomplete('u1', null);
+    await vi.waitFor(() => expect(sdk.getDoc).toHaveBeenCalledTimes(4));
+
+    const complete = { uid: 'u1', ...agreements, onboardingCompleted: true } as AppUserInterface;
+    expect(await service.verifyIfIncomplete('u1', complete)).toBe(complete);
+    expect(sdk.getDoc).toHaveBeenCalledTimes(4);
+    sdk.getDoc.mockResolvedValue({ data: () => complete });
+    const newRead = service.verifyIfIncomplete('u1', null);
+    resolveOld({ data: () => undefined });
+
+    expect(await oldRead).toBeNull();
+    expect(await newRead).toEqual(expect.objectContaining({ onboardingCompleted: true }));
+    expect(sdk.getDoc).toHaveBeenCalledTimes(8);
+  });
+
+  it('starts a fresh read when the same account signs in again during verification', async () => {
+    let resolveOld!: (snapshot: { data: () => undefined }) => void;
+    sdk.getDoc.mockReturnValue(new Promise(resolve => { resolveOld = resolve; }));
+    const oldRead = service.verifyIfIncomplete('u1', null);
+    const discarded = expect(oldRead).rejects.toMatchObject({ code: 'cancelled' });
+    await vi.waitFor(() => expect(sdk.getDoc).toHaveBeenCalledTimes(4));
+
+    auth.currentUser = { uid: 'u1' };
+    sdk.getDoc.mockResolvedValue({ data: () => ({ ...agreements, onboardingCompleted: true }) });
+    const newRead = service.verifyIfIncomplete('u1', null);
+    // Attach both handlers before finishing the old request to avoid an
+    // unhandled rejection when a broken implementation shares the promise.
+    const recovered = expect(newRead).resolves.toEqual(expect.objectContaining({ onboardingCompleted: true }));
+    resolveOld({ data: () => undefined });
+    await Promise.all([discarded, recovered]);
+    expect(sdk.getDoc).toHaveBeenCalledTimes(8);
+  });
+
   it('releases timed-out verification so a later retry can make a new request', async () => {
     vi.useFakeTimers();
     try {

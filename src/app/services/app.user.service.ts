@@ -363,7 +363,7 @@ export class AppUserService implements OnDestroy {
         return NEVER;
       }
 
-      return this.mergeClaimsWithAuthRetry(tokenUser, profile.dbUser).pipe(
+      return this.mergeClaimsWithAuthRetry(tokenUser, profile.dbUser, profile.readGeneration).pipe(
         // A newer verification/retry may be pending while this async claim
         // merge finishes. It must not reopen the profile gate with stale data.
         filter(() => profile.readGeneration === this.profileReadGeneration),
@@ -511,12 +511,18 @@ export class AppUserService implements OnDestroy {
 
   private mergeClaimsWithAuthRetry(
     firebaseUser: FirebaseUserType,
-    dbUser: AppUserInterface | null
+    dbUser: AppUserInterface | null,
+    readGeneration: number
   ): Observable<AppUserInterface | null> {
-    return defer(() => from(this.mergeClaims(firebaseUser, dbUser))).pipe(
+    return defer(() => readGeneration === this.profileReadGeneration
+      ? from(this.mergeClaims(firebaseUser, dbUser))
+      : NEVER).pipe(
       retry({
         count: AppUserService.transientReadRetryCount,
         delay: (error, retryCount) => {
+          if (readGeneration !== this.profileReadGeneration) {
+            return NEVER;
+          }
           if (!this.isFirestoreTransientReadError(error) || this.auth.currentUser?.uid !== firebaseUser.uid) {
             return throwError(() => error);
           }
@@ -547,26 +553,30 @@ export class AppUserService implements OnDestroy {
 
   private getUserProfileWithAuthRetry(firebaseUser: FirebaseUserType, forceRefresh = false): Observable<AppUserInterface | null> {
     let refreshCredentials = forceRefresh;
-    const loadUserProfile = () => defer(() => from(Promise.all([
-      firebaseUser.getIdToken(refreshCredentials),
-      this.appCheckReadiness.isConfigured() ? this.appCheckReadiness.getToken(refreshCredentials) : Promise.resolve(),
-    ])).pipe(
-      switchMap(() => this.getUserByID(firebaseUser.uid, {
-        requireCompleteProfile: true,
-        waitForServer: true,
-      })),
-      switchMap(profile => {
-        if (!this.profileVerification.needsVerification(profile)) {
-          return of(profile);
-        }
-        this.beginProfileRead(firebaseUser.uid);
-        return from(this.profileVerification.verifyIfIncomplete(firebaseUser.uid, profile));
-      }),
-      timeout({
-        first: AppUserService.profileReadServerTimeoutMs,
-        with: () => throwError(() => this.createProfileReadTimeoutError()),
-      })
-    ));
+    const loadUserProfile = () => defer(() => {
+      this.profileVerification.invalidatePendingRead(firebaseUser.uid);
+      return from(Promise.all([
+        firebaseUser.getIdToken(refreshCredentials),
+        this.appCheckReadiness.isConfigured() ? this.appCheckReadiness.getToken(refreshCredentials) : Promise.resolve(),
+      ])).pipe(
+        switchMap(() => this.getUserByID(firebaseUser.uid, {
+          requireCompleteProfile: true,
+          waitForServer: true,
+        })),
+        switchMap(profile => {
+          if (!this.profileVerification.needsVerification(profile)) {
+            this.profileVerification.invalidatePendingRead(firebaseUser.uid);
+            return of(profile);
+          }
+          this.beginProfileRead(firebaseUser.uid);
+          return from(this.profileVerification.verifyIfIncomplete(firebaseUser.uid, profile));
+        }),
+        timeout({
+          first: AppUserService.profileReadServerTimeoutMs,
+          with: () => throwError(() => this.createProfileReadTimeoutError()),
+        })
+      );
+    });
 
     return loadUserProfile().pipe(
       retry({

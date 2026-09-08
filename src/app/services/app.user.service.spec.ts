@@ -18,6 +18,9 @@ import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.h
 import { AppCheckReadinessService } from './app-check-readiness.service';
 import { UserProfileVerificationService } from './user-profile-verification.service';
 
+const verificationSDK = vi.hoisted(() => ({ getFirestore: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
+vi.mock('firebase/firestore/lite', () => verificationSDK);
+
 vi.mock('app/firebase/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
     return {
@@ -86,6 +89,7 @@ describe('AppUserService', () => {
         };
         mockAppCheck = { isConfigured: vi.fn().mockReturnValue(true), getToken: vi.fn().mockResolvedValue('app-check-token') };
         mockVerification = {
+            invalidatePendingRead: vi.fn(),
             needsVerification: vi.fn().mockImplementation(UserProfileVerificationService.prototype.needsVerification),
             verifyIfIncomplete: vi.fn().mockImplementation((_uid, profile) => Promise.resolve(profile)),
         };
@@ -783,7 +787,9 @@ describe('AppUserService', () => {
     it('should discard a stale claim merge while a newer profile verification is pending', async () => {
         const profiles = new Subject<AppUserInterface | null>();
         let resolveClaims!: (result: { claims: object }) => void;
-        mockAuth.currentUser.getIdTokenResult.mockReturnValueOnce(new Promise(resolve => { resolveClaims = resolve; }));
+        mockAuth.currentUser.getIdTokenResult
+            .mockResolvedValueOnce({ claims: {} }) // Constructor logging context.
+            .mockReturnValueOnce(new Promise(resolve => { resolveClaims = resolve; }));
         let confirm!: (profile: AppUserInterface) => void;
         mockVerification.verifyIfIncomplete.mockReturnValue(new Promise(resolve => { confirm = resolve; }));
         service = TestBed.inject(AppUserService);
@@ -803,6 +809,85 @@ describe('AppUserService', () => {
         await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
         expect(emitted).toHaveLength(1);
         expect(emitted[0].onboardingCompleted).toBe(true);
+        subscription.unsubscribe();
+    });
+
+    it.each(['before', 'after'])('should stop claim retries when the failure arrives %s a newer verification starts', async (failureTiming) => {
+        vi.useFakeTimers();
+        try {
+            const profiles = new Subject<AppUserInterface | null>();
+            let rejectClaims!: (error: Error) => void;
+            mockAuth.currentUser.getIdTokenResult
+                .mockResolvedValueOnce({ claims: {} }) // Constructor logging context.
+                .mockReturnValueOnce(new Promise((_resolve, reject) => { rejectClaims = reject; }));
+            let confirm!: (profile: AppUserInterface) => void;
+            mockVerification.verifyIfIncomplete.mockReturnValue(new Promise(resolve => { confirm = resolve; }));
+            service = TestBed.inject(AppUserService);
+            vi.spyOn(service, 'getUserByID').mockReturnValue(profiles);
+            await vi.advanceTimersByTimeAsync(0);
+            const complete = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true } as AppUserInterface;
+            profiles.next(complete);
+            const error = Object.assign(new Error('old token failure'), { code: 'auth/network-request-failed' });
+            if (failureTiming === 'before') {
+                rejectClaims(error);
+                await vi.advanceTimersByTimeAsync(0);
+            }
+            profiles.next(null);
+            if (failureTiming === 'after') {
+                rejectClaims(error);
+            }
+            await vi.advanceTimersByTimeAsync(750);
+
+            expect(service.profileReadState()).toEqual({ status: 'loading', uid: 'u1' });
+            expect(mockAuth.currentUser.getIdTokenResult).toHaveBeenCalledTimes(2);
+            confirm({ ...complete, onboardingCompleted: true });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(service.profileReadState().status).toBe('ready');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it.each(['complete snapshot', 'manual retry'])('should discard old missing verification across a %s', async (recoveryTrigger) => {
+        const profiles = new Subject<AppUserInterface | null>();
+        const complete = {
+            uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true,
+        } as AppUserInterface;
+        let resolveOld!: (snapshot: { data: () => undefined }) => void;
+        verificationSDK.getDoc.mockReturnValue(new Promise(resolve => { resolveOld = resolve; }));
+        verificationSDK.doc.mockImplementation((_firestore, path) => path);
+        TestBed.overrideProvider(UserProfileVerificationService, { useFactory: () => new UserProfileVerificationService() });
+        service = TestBed.inject(AppUserService);
+        const read = vi.spyOn(service, 'getUserByID').mockReturnValue(profiles);
+        const emitted: AppUserInterface[] = [];
+        const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
+        await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+        profiles.next(null);
+        await vi.waitFor(() => expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4));
+
+        let recovery: Promise<boolean> | undefined;
+        if (recoveryTrigger === 'complete snapshot') {
+            profiles.next(complete);
+            await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        } else {
+            recovery = service.retryProfileRead();
+            await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+        }
+
+        verificationSDK.getDoc.mockResolvedValue({ data: () => complete });
+        profiles.next(null);
+        resolveOld({ data: () => undefined });
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        TestBed.flushEffects();
+        if (recovery) {
+            expect(await recovery).toBe(true);
+        }
+        expect(emitted.length).toBeGreaterThan(0);
+        expect(emitted.every(profile => profile.onboardingCompleted === true)).toBe(true);
+        expect(verificationSDK.getDoc).toHaveBeenCalledTimes(8);
+        expect(setDoc).not.toHaveBeenCalled();
+        expect(updateDoc).not.toHaveBeenCalled();
+        expect(mockAuth.signOut).not.toHaveBeenCalled();
         subscription.unsubscribe();
     });
 

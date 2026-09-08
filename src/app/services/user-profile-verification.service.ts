@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Auth } from 'app/firebase/auth';
+import { Auth, FirebaseUserType } from 'app/firebase/auth';
 import { Firestore } from 'app/firebase/firestore';
 import { getUserLegalAgreementsPath } from '@shared/user-profile-firestore';
 import { AppUserInterface } from '../models/app-user.interface';
@@ -35,7 +35,17 @@ export function mergeUserProfileDocuments(userID: string, documents: UserProfile
 export class UserProfileVerificationService {
   private readonly auth = inject(Auth);
   private readonly firestore = inject(Firestore);
-  private readonly pendingReads = new Map<string, Promise<AppUserInterface | null>>();
+  private readonly pendingReads = new Map<string, {
+    firebaseUser: FirebaseUserType | null;
+    profile: AppUserInterface | null;
+    read: Promise<AppUserInterface | null>;
+  }>();
+
+  invalidatePendingRead(userID: string): void {
+    // The SDK request itself cannot be cancelled. Stop sharing its result
+    // once a newer snapshot or profile-load attempt supersedes it.
+    this.pendingReads.delete(userID);
+  }
 
   needsVerification(profile: AppUserInterface | null): boolean {
     return !profile || !REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES.every(name =>
@@ -45,12 +55,14 @@ export class UserProfileVerificationService {
 
   verifyIfIncomplete(userID: string, profile: AppUserInterface | null): Promise<AppUserInterface | null> {
     if (!this.needsVerification(profile)) {
+      this.invalidatePendingRead(userID);
       return Promise.resolve(profile);
     }
 
+    const firebaseUser = this.auth.currentUser;
     const pending = this.pendingReads.get(userID);
-    if (pending) {
-      return pending;
+    if (pending && pending.firebaseUser === firebaseUser && pending.profile === profile) {
+      return pending.read;
     }
 
     // Bound the shared request too: a stalled read must not remain memoized
@@ -61,11 +73,11 @@ export class UserProfileVerificationService {
         code: 'deadline-exceeded',
       })),
     }))).finally(() => {
-      if (this.pendingReads.get(userID) === read) {
+      if (this.pendingReads.get(userID)?.read === read) {
         this.pendingReads.delete(userID);
       }
     });
-    this.pendingReads.set(userID, read);
+    this.pendingReads.set(userID, { firebaseUser, profile, read });
     return read;
   }
 
