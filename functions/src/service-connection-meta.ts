@@ -38,6 +38,8 @@ import {
 import {
   getServiceTokenRootDocumentRef,
   getServiceDisconnectOperationGeneration,
+  OAUTH_FLOW_CREATED_AT_FIELD,
+  OAUTH_FLOW_EXPIRES_AT_FIELD,
 } from './service-token-store';
 import {
   doesRootMatchServiceDisconnectLifecycleGuard,
@@ -498,6 +500,7 @@ async function setServiceMetaIfUserActive(
   payload: Record<string, unknown>,
   expectedTokenCredentialGeneration?: DocumentGenerationGuard,
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
+  requireNoPendingDisconnect = false,
 ): Promise<boolean> {
   const db = admin.firestore();
   const ref = serviceMetaRef(db, userID, serviceName);
@@ -517,12 +520,15 @@ async function setServiceMetaIfUserActive(
       return false;
     }
 
-    const [credentialGenerationSnapshot, oauthFlowGenerationSnapshot] = await Promise.all([
+    const [credentialGenerationSnapshot, oauthFlowGenerationSnapshot, pendingDisconnectRootSnapshot] = await Promise.all([
       expectedTokenCredentialGeneration
         ? transaction.get(expectedTokenCredentialGeneration.documentRef)
         : Promise.resolve(null),
       expectedOAuthFlowGeneration
         ? transaction.get(expectedOAuthFlowGeneration.documentRef)
+        : Promise.resolve(null),
+      requireNoPendingDisconnect
+        ? transaction.get(getServiceTokenRootDocumentRef(userID, serviceName))
         : Promise.resolve(null),
     ]);
     if (expectedTokenCredentialGeneration && credentialGenerationSnapshot && (
@@ -539,11 +545,21 @@ async function setServiceMetaIfUserActive(
     )) {
       return false;
     }
+    if (requireNoPendingDisconnect && (
+      !pendingDisconnectRootSnapshot?.exists
+      || isServiceDisconnectPendingData(
+        pendingDisconnectRootSnapshot.data() as Record<string, unknown> | undefined,
+      )
+    )) {
+      return false;
+    }
 
     transaction.set(ref, payload, { merge: true });
     if (expectedOAuthFlowGeneration) {
       transaction.set(expectedOAuthFlowGeneration.documentRef, {
         [expectedOAuthFlowGeneration.fieldName]: FieldValue.delete(),
+        [OAUTH_FLOW_CREATED_AT_FIELD]: FieldValue.delete(),
+        [OAUTH_FLOW_EXPIRES_AT_FIELD]: FieldValue.delete(),
       }, { merge: true });
     }
     return true;
@@ -1243,7 +1259,7 @@ export async function markServiceConnected(
     providerBindingCheckLeaseId: FieldValue.delete(),
     providerBindingCheckLeaseExpiresAt: FieldValue.delete(),
     providerBindingCheckNextRetryAt: FieldValue.delete(),
-  }, expectedTokenCredentialGeneration, expectedOAuthFlowGeneration);
+  }, expectedTokenCredentialGeneration, expectedOAuthFlowGeneration, !!expectedOAuthFlowGeneration);
   if (!didWrite) {
     return didWrite;
   }

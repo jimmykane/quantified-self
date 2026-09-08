@@ -7,6 +7,26 @@ export const SERVICE_CONNECTION_STATES = {
 export type ServiceConnectionState = typeof SERVICE_CONNECTION_STATES[keyof typeof SERVICE_CONNECTION_STATES];
 export type ProviderBindingState = 'bound' | 'unbound';
 
+export const SERVICE_OAUTH_COMPLETION_OUTCOMES = {
+  Connected: 'connected',
+  DisconnectRecoveryCompleted: 'disconnect_recovery_completed',
+  DisconnectRecoveryPending: 'disconnect_recovery_pending',
+} as const;
+
+export type ServiceOAuthCompletionResult =
+  | {
+    connected: true;
+    outcome: typeof SERVICE_OAUTH_COMPLETION_OUTCOMES.Connected;
+  }
+  | {
+    connected: false;
+    outcome: typeof SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryCompleted;
+  }
+  | {
+    connected: false;
+    outcome: typeof SERVICE_OAUTH_COMPLETION_OUTCOMES.DisconnectRecoveryPending;
+  };
+
 /**
  * Browser-safe account information derived by the backend from an OAuth token
  * document. This projection must never contain credentials or lifecycle

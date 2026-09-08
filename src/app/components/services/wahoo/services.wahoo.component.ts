@@ -114,13 +114,9 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
     return token.redirect_uri;
   }
 
-  async requestAndSetToken(): Promise<void> {
-    const authorizationError = this.route.snapshot.queryParamMap.get('error');
-    const state = this.route.snapshot.queryParamMap.get('state');
-    const code = this.route.snapshot.queryParamMap.get('code');
-    if (authorizationError) throw new Error('Wahoo authorization was not completed.');
-    if (!state || !code) throw new Error('Wahoo authorization callback is missing state or code.');
-    await this.userService.requestAndSetCurrentUserWahooAPIAccessToken(state, code);
+  async requestAndSetToken(params = this.route.snapshot.queryParamMap) {
+    const { state, code } = this.getOAuthCallbackParameters(params);
+    return this.userService.requestAndSetCurrentUserWahooAPIAccessToken(state, code);
   }
 
   private async hydrateWahooAccountId(): Promise<void> {
