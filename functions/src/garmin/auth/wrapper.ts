@@ -20,6 +20,7 @@ import {
 } from '../../service-auth-lifecycle';
 import { hasServiceOAuthConnectAccess } from '../../service-oauth-access';
 import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
+import type { ServiceOAuthCompletionResult } from '../../../../shared/service-connection';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
 
@@ -95,7 +96,7 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions
 export const requestAndSetGarminAPIAccessToken = functions
   .runWith({ secrets: FUNCTION_SECRET_BINDINGS.requestAndSetGarminAPIAccessToken })
   .region(FUNCTIONS_MANIFEST.requestAndSetGarminAPIAccessToken.region)
-  .https.onCall(async (data: SetAccessTokenRequest, context) => {
+  .https.onCall(async (data: SetAccessTokenRequest, context): Promise<ServiceOAuthCompletionResult> => {
   // 1. App Check Verification
   if (context.app == undefined) {
     throw new functions.https.HttpsError(
@@ -128,16 +129,20 @@ export const requestAndSetGarminAPIAccessToken = functions
   }
 
   if (!await validateOAuth2State(userID, SERVICE_NAME, state)) {
-    logger.error(`Invalid state ${state} for user ${userID}`);
+    logger.warn('Rejected Garmin OAuth callback because state validation failed.', {
+      serviceName: SERVICE_NAME,
+    });
     throw new functions.https.HttpsError('permission-denied', 'Invalid state');
   }
 
   try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
-    return; // Success (return void/empty)
+    return await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code, state);
   } catch (e: any) {
-    logger.error('Error exchanging Garmin token:', e);
     const status = e.statusCode || 500;
+    logger.error('Garmin authorization code flow failed.', {
+      serviceName: SERVICE_NAME,
+      providerStatus: status,
+    });
     if (isOAuthFlowContextMismatchError(e)) {
       throw new functions.https.HttpsError('permission-denied', 'Invalid OAuth state');
     }

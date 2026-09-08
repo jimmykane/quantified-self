@@ -60,6 +60,12 @@ export type {
 
 export { getServiceDisconnectLifecycleGuardFromRootData } from './service-disconnect-pending-state';
 
+export type ClearServiceDisconnectPendingResult =
+  | 'cleared'
+  | 'no_pending'
+  | 'skipped_user'
+  | 'stale_lifecycle';
+
 function buildPendingDisconnectDataFromServiceMeta(
   data: ServiceConnectionMetaFields | undefined,
 ): PendingServiceDisconnectRootData | null {
@@ -404,7 +410,7 @@ export async function clearServiceDisconnectPending(
   serviceName: ServiceNames,
   expectedOAuthCredentialGeneration?: DocumentGenerationGuard,
   expectedOAuthFlowGeneration?: DocumentGenerationGuard,
-): Promise<void> {
+): Promise<ClearServiceDisconnectPendingResult> {
   const db = admin.firestore();
   const rootRef = getServiceTokenRootDocumentRef(userID, serviceName);
   const serviceMetaRef = db.collection('users').doc(userID).collection('meta').doc(serviceName);
@@ -453,9 +459,11 @@ export async function clearServiceDisconnectPending(
   if (
     clearResult.status === 'skipped'
     || clearResult.status === 'stale_credential'
-    || clearResult.status === 'no_pending'
   ) {
-    return;
+    return clearResult.status === 'skipped' ? 'skipped_user' : 'stale_lifecycle';
+  }
+  if (clearResult.status === 'no_pending') {
+    return 'no_pending';
   }
 
   try {
@@ -471,7 +479,7 @@ export async function clearServiceDisconnectPending(
         expectedOAuthFlowGeneration,
       );
       if (!didStartQueueReleaseRepair) {
-        return;
+        return 'stale_lifecycle';
       }
     }
     const didClearConnectionState = await clearServiceConnectionState(userID, serviceName, {
@@ -490,7 +498,7 @@ export async function clearServiceDisconnectPending(
       } : {}),
     });
     if (!didClearConnectionState) {
-      return;
+      return 'stale_lifecycle';
     }
 
     if (clearResult.status === 'pending_found') {
@@ -518,6 +526,7 @@ export async function clearServiceDisconnectPending(
         }
       }
     }
+    return 'cleared';
   } catch (error) {
     if (
       clearResult.status === 'pending_found'
@@ -528,7 +537,7 @@ export async function clearServiceDisconnectPending(
         serviceName,
         pendingDisconnectGeneration: `${clearResult.pendingData.disconnectGeneration || ''}`.trim(),
       });
-      return;
+      return 'cleared';
     }
     if (clearResult.status === 'pending_found') {
       await restoreServiceDisconnectPendingAfterClearFailure(

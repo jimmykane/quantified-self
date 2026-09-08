@@ -15,6 +15,7 @@ const hoisted = vi.hoisted(() => ({
   retryPendingServiceRouteRestore: vi.fn(),
   retryInterruptedExplicitDisconnects: vi.fn(),
   retryServiceDisconnectCleanup: vi.fn(),
+  reconcileExpiredServiceOAuthRoots: vi.fn(),
 }));
 
 vi.mock('../OAuth2', () => ({ retryInterruptedExplicitDisconnects: hoisted.retryInterruptedExplicitDisconnects }));
@@ -86,7 +87,14 @@ vi.mock('../service-disconnect-pending', () => ({
   recordServiceDisconnectRetryFailure: hoisted.recordServiceDisconnectRetryFailure,
 }));
 
-import { retryPendingServiceDisconnectsTestInternals } from './retry-pending-service-disconnects';
+vi.mock('../service-oauth-root-reconciliation', () => ({
+  reconcileExpiredServiceOAuthRoots: hoisted.reconcileExpiredServiceOAuthRoots,
+}));
+
+import {
+  retryPendingServiceDisconnects,
+  retryPendingServiceDisconnectsTestInternals,
+} from './retry-pending-service-disconnects';
 
 function buildCursorRef(data?: Record<string, unknown>) {
   return {
@@ -156,12 +164,20 @@ describe('retry-pending-service-disconnects', () => {
       retryableDisconnectFailures: [],
     });
     hoisted.getTokenData.mockResolvedValue({ accessToken: 'pending-token' });
-    hoisted.clearServiceDisconnectPending.mockResolvedValue(undefined);
+    hoisted.clearServiceDisconnectPending.mockResolvedValue('cleared');
     hoisted.recordServiceDisconnectRetryFailure.mockResolvedValue(undefined);
     hoisted.retryPendingHealthLifecycleProjection.mockResolvedValue(true);
     hoisted.retryPendingDisconnectQueueRelease.mockResolvedValue(true);
     hoisted.retryWahooReconnectQueueRelease.mockResolvedValue(true);
     hoisted.retryPendingServiceRouteRestore.mockResolvedValue(true);
+    hoisted.retryInterruptedExplicitDisconnects.mockResolvedValue(undefined);
+    hoisted.retryServiceDisconnectCleanup.mockResolvedValue(undefined);
+    hoisted.reconcileExpiredServiceOAuthRoots.mockResolvedValue({
+      rootsScanned: 0,
+      cleaned: 0,
+      failed: 0,
+      byOutcome: {},
+    });
     hoisted.collectionGroup.mockReturnValue({
       where: vi.fn().mockReturnThis(),
       orderBy: vi.fn().mockReturnThis(),
@@ -180,6 +196,14 @@ describe('retry-pending-service-disconnects', () => {
     await retryPendingServiceDisconnectsTestInternals.retryPendingDisconnectRoot(config, root);
     expect(hoisted.clearServiceDisconnectPending).not.toHaveBeenCalled();
     expect(hoisted.cleanupServiceConnectionForUser).not.toHaveBeenCalled();
+  });
+
+  it('runs OAuth-root reconciliation before provider-backed disconnect work', async () => {
+    await retryPendingServiceDisconnects({} as never);
+
+    expect(hoisted.reconcileExpiredServiceOAuthRoots).toHaveBeenCalledTimes(1);
+    expect(hoisted.reconcileExpiredServiceOAuthRoots.mock.invocationCallOrder[0])
+      .toBeLessThan(hoisted.collectionGroup.mock.invocationCallOrder[0]);
   });
 
   it('clears pending disconnect without deauth when entitlement is active again', async () => {

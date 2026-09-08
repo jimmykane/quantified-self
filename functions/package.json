@@ -68,6 +68,7 @@
     "backfill-existing-health": "node lib/functions/src/scripts/backfill-existing-health.js",
     "backfill-event-processing-entity": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-event-processing-entity.ts",
     "backfill-route-processing-entity": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/backfill-route-processing-entity.ts",
+    "audit-service-oauth-roots": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/audit-service-oauth-roots.ts",
     "replace-stripe-price": "ts-node -r ./src/scripts/load-local-env.ts src/scripts/replace-stripe-price.ts"
   },
   "engines": {

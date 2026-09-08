@@ -67,6 +67,8 @@ vi.mock('./health/writer', () => ({
 }));
 
 vi.mock('./service-token-store', () => ({
+  OAUTH_FLOW_CREATED_AT_FIELD: 'oauthFlowCreatedAt',
+  OAUTH_FLOW_EXPIRES_AT_FIELD: 'oauthFlowExpiresAt',
   OAUTH_FLOW_GENERATION_FIELD: 'oauthFlowGeneration',
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD: 'disconnectOperationGeneration',
   getServiceDisconnectOperationGeneration: (data: Record<string, unknown> | undefined) => {
@@ -852,9 +854,43 @@ describe('service-connection-meta', () => {
 
     expect(hoisted.metaSet).toHaveBeenCalledWith(
       expect.objectContaining({ path: hoisted.tokenRootRef.path }),
-      { oauthFlowGeneration: 'delete-sentinel' },
+      {
+        oauthFlowGeneration: 'delete-sentinel',
+        oauthFlowCreatedAt: 'delete-sentinel',
+        oauthFlowExpiresAt: 'delete-sentinel',
+      },
       { merge: true },
     );
+  });
+
+  it('does not promote an OAuth credential while its root remains disconnect pending', async () => {
+    hoisted.tokenRootGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        activeOAuthCredentialGeneration: 'credential-generation',
+        oauthFlowGeneration: 'oauth-flow-generation',
+        disconnectState: 'disconnect_pending',
+        disconnectGeneration: 'disconnect-generation',
+      }),
+    });
+
+    await expect(markServiceConnected(
+      'user-1',
+      ServiceNames.SuuntoApp,
+      null,
+      {
+        documentRef: hoisted.tokenRootRef as unknown as admin.firestore.DocumentReference,
+        fieldName: 'activeOAuthCredentialGeneration',
+        expectedGeneration: 'credential-generation',
+      },
+      {
+        documentRef: hoisted.tokenRootRef as unknown as admin.firestore.DocumentReference,
+        fieldName: 'oauthFlowGeneration',
+        expectedGeneration: 'oauth-flow-generation',
+      },
+    )).resolves.toBe(false);
+
+    expect(hoisted.metaSet).not.toHaveBeenCalled();
   });
 
   it('keeps the first opaque Wahoo refresh failure retryable without disabling routes', async () => {

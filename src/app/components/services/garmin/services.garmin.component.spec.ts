@@ -572,7 +572,10 @@ describe('ServicesGarminComponent', () => {
             };
             mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'token-1' }]));
             mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
-            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce(undefined);
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce({
+                connected: true,
+                outcome: 'connected',
+            });
 
             await component.ngOnChanges();
             await new Promise(resolve => setTimeout(resolve, 0));
@@ -598,6 +601,32 @@ describe('ServicesGarminComponent', () => {
             expect(component.isConnecting).toBe(false);
         });
 
+        it('ngOnChanges should reject a legacy empty completion response instead of showing success', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            component.user = { uid: 'u1' } as any;
+            queryParams = {
+                serviceName: component.serviceName,
+                connect: '1',
+                state: 'state-token',
+                code: 'auth-code'
+            };
+            mockUserService.getServiceToken.mockReturnValueOnce(of([]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce(undefined as any);
+
+            await component.ngOnChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Could not connect due to Garmin Connect did not confirm that the connection was saved.',
+                undefined,
+                { duration: 10000 }
+            );
+            expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('connected_to_service', expect.anything());
+            expect(component.forceConnected).toBe(false);
+        });
+
         it('ngOnChanges should auto-connect from an OAuth callback without the legacy connect parameter', async () => {
             const user = { uid: 'u1' } as any;
             component.user = user;
@@ -608,7 +637,10 @@ describe('ServicesGarminComponent', () => {
             };
             mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'token-1' }]));
             mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
-            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce(undefined);
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce({
+                connected: true,
+                outcome: 'connected',
+            });
 
             await component.ngOnChanges();
             await new Promise(resolve => setTimeout(resolve, 0));
@@ -624,11 +656,96 @@ describe('ServicesGarminComponent', () => {
             expect(component.forceConnected).toBe(true);
         });
 
+        it('ngOnChanges should expose a missing OAuth callback parameter', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            component.user = { uid: 'u1' } as any;
+            queryParams = {
+                serviceName: component.serviceName,
+                connect: '1',
+                state: 'state-token'
+            };
+            mockUserService.getServiceToken.mockReturnValueOnce(of([]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
+
+            await component.ngOnChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockUserService.requestAndSetCurrentUserGarminAPIAccessToken).not.toHaveBeenCalled();
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Could not connect due to Garmin Connect authorization callback is missing state or code.',
+                undefined,
+                { duration: 10000 }
+            );
+            expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('connected_to_service', expect.anything());
+            expect(component.forceConnected).toBe(false);
+        });
+
+        it('ngOnChanges should report disconnect recovery without claiming a connection', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            component.user = { uid: 'u1' } as any;
+            queryParams = {
+                serviceName: component.serviceName,
+                connect: '1',
+                state: 'state-token',
+                code: 'auth-code'
+            };
+            const connectionStateEmitSpy = vi.spyOn(component.connectionStateChanged, 'emit');
+            mockUserService.getServiceToken.mockReturnValueOnce(of([{ accessToken: 'stale-token' }]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce({
+                connected: false,
+                outcome: 'disconnect_recovery_completed',
+            });
+
+            await component.ngOnChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'The previous Garmin Connect connection was removed. A Pro subscription is required to connect again.',
+                undefined,
+                { duration: 10000 }
+            );
+            expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('connected_to_service', expect.anything());
+            expect(component.forceConnected).toBe(false);
+            expect(connectionStateEmitSpy).toHaveBeenLastCalledWith(false);
+        });
+
+        it('ngOnChanges should expose a pending disconnect recovery as an error', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+            component.user = { uid: 'u1' } as any;
+            queryParams = {
+                serviceName: component.serviceName,
+                connect: '1',
+                state: 'state-token',
+                code: 'auth-code'
+            };
+            mockUserService.getServiceToken.mockReturnValueOnce(of([]));
+            mockUserService.getUserMetaForService.mockReturnValueOnce(of({ didLastHistoryImport: 0 }));
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockResolvedValueOnce({
+                connected: false,
+                outcome: 'disconnect_recovery_pending',
+            });
+
+            await component.ngOnChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'The previous Garmin Connect connection could not be fully removed yet. Please try again later.',
+                undefined,
+                { duration: 10000 }
+            );
+            expect(mockAnalyticsService.logEvent).not.toHaveBeenCalledWith('connected_to_service', expect.anything());
+            expect(component.forceConnected).toBe(false);
+        });
+
         it('ngOnChanges should map 502 during auto-connect to partner unavailable message', async () => {
             const snackBar = TestBed.inject(MatSnackBar);
             const snackBarSpy = vi.spyOn(snackBar, 'open');
             const user = { uid: 'u1' } as any;
-            const error502 = { status: 502, message: 'Bad Gateway' };
+            const error502 = { code: 'functions/unavailable', message: 'Bad Gateway' };
             component.user = user;
             queryParams = {
                 serviceName: component.serviceName,
@@ -665,7 +782,7 @@ describe('ServicesGarminComponent', () => {
             const snackBar = TestBed.inject(MatSnackBar);
             const snackBarSpy = vi.spyOn(snackBar, 'open');
             const user = { uid: 'u1' } as any;
-            const error403 = { status: 403, error: 'Pro subscription required', message: 'Forbidden' };
+            const error403 = { code: 'functions/permission-denied', message: 'Pro subscription required' };
             component.user = user;
             queryParams = {
                 serviceName: component.serviceName,

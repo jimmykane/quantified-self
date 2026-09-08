@@ -88,12 +88,9 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     super(http, fileService, eventService, authService, userService, route, windowService, snackBar);
   }
 
-  async requestAndSetToken() {
-    const state = this.route.snapshot.queryParamMap.get('state');
-    const code = this.route.snapshot.queryParamMap.get('code');
-    if (state && code) {
-      await this.userService.requestAndSetCurrentUserGarminAPIAccessToken(state, code);
-    }
+  async requestAndSetToken(params = this.route.snapshot.queryParamMap) {
+    const { state, code } = this.getOAuthCallbackParameters(params);
+    return this.userService.requestAndSetCurrentUserGarminAPIAccessToken(state, code);
   }
 
   isConnectedToService(): boolean {
