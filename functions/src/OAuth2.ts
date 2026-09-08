@@ -1034,6 +1034,10 @@ export async function deauthorizeServiceForUser(
           deferOperationalCleanup: true,
           tokenResolver: (doc) => getTokenData(doc, serviceName, false, {
             recoverTerminalAuthFailure: false,
+            // The explicit episode owns this credential even when it took over
+            // a subscription-pending root. Ordinary sync still cannot use it;
+            // the operation-generation guard below remains mandatory.
+            allowDisconnectPendingTokenUse: true,
             expectedDisconnectOperationGeneration:
               disconnectLifecycleGuard.disconnectOperationGeneration || undefined,
           }),

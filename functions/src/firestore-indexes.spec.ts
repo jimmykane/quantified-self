@@ -37,7 +37,10 @@ describe('firestore indexes', () => {
         const config = loadFirestoreIndexes();
         expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'serviceDisconnectCleanup', fieldPath: '*', indexes: [] });
         expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'serviceDisconnectCleanup', fieldPath: 'nextAttemptAt', indexes: [
-            { order: 'ASCENDING', queryScope: 'COLLECTION_GROUP' },
+            { order: 'ASCENDING', queryScope: 'COLLECTION' },
+        ] });
+        expect(config.fieldOverrides).toContainEqual({ collectionGroup: 'serviceDisconnectCleanup', fieldPath: 'userID', indexes: [
+            { order: 'ASCENDING', queryScope: 'COLLECTION' },
         ] });
     });
     it('indexes private note overlap without indexing free text', () => {

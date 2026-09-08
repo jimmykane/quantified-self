@@ -1577,7 +1577,12 @@
     {
       "collectionGroup": "serviceDisconnectCleanup",
       "fieldPath": "nextAttemptAt",
-      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }]
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
+    },
+    {
+      "collectionGroup": "serviceDisconnectCleanup",
+      "fieldPath": "userID",
+      "indexes": [{ "order": "ASCENDING", "queryScope": "COLLECTION" }]
     },
     { "collectionGroup": "timelineNotes", "fieldPath": "title", "indexes": [] },
     { "collectionGroup": "timelineNotes", "fieldPath": "details", "indexes": [] },

@@ -15,12 +15,14 @@ import { getServiceDisconnectLifecycleGuardFromRootData, ServiceDisconnectLifecy
 import { getUserDeletionGuardStateInTransaction } from './shared/user-deletion-guard';
 import { buildQueueCleanupTombstoneData, getQueueCleanupTombstoneDocumentRef, QUEUE_CLEANUP_TOMBSTONE_REASONS } from './queue/cleanup-tombstone';
 
-// Server-only descendants of users: ordinary recursive account deletion owns these too.
+// Server-only leaves outside users: account deletion must not erase the last
+// provider lookup identity before deferred operational cleanup has completed.
 export const SERVICE_DISCONNECT_CLEANUP_COLLECTION = 'serviceDisconnectCleanup';
 const PAGE_SIZE = 25;
 const LEASE_MS = 5 * 60_000;
 
 interface CleanupTask {
+  userID: string;
   config: ProviderOperationalCleanupConfig;
   lifecycle: ServiceDisconnectLifecycleGuard;
   cutoffAt: Timestamp;
@@ -40,13 +42,13 @@ export function stageServiceDisconnectCleanup(
   const config = getProviderOperationalCleanupConfig(serviceName, tokenData);
   if (!config) return;
   const id = createHash('sha256').update(JSON.stringify([
-    serviceName, lifecycle.disconnectOperationGeneration, config.providerUserId,
+    userID, serviceName, lifecycle.disconnectOperationGeneration, config.providerUserId,
   ])).digest('hex');
-  const ref = admin.firestore().collection('users').doc(userID).collection(SERVICE_DISCONNECT_CLEANUP_COLLECTION).doc(id);
+  const ref = admin.firestore().collection(SERVICE_DISCONNECT_CLEANUP_COLLECTION).doc(id);
   // The caller has checked deletion, lifecycle and the credential version in this
   // transaction. No credentials, callback URLs, OAuth state or PKCE are copied.
   transaction.set(ref, {
-    config, lifecycle, cutoffAt: FieldValue.serverTimestamp(),
+    userID, config, lifecycle, cutoffAt: FieldValue.serverTimestamp(),
     nextAttemptAt: Date.now(), queryIndex: 0, cursor: null,
   });
 }
@@ -72,14 +74,21 @@ async function assertCleanupCurrent(
   task: CleanupTask,
   lease: string,
 ): Promise<void> {
-  const uid = taskRef.parent.parent!.id;
+  const uid = task.userID;
   const [deletion, currentTask, root] = await Promise.all([
     getUserDeletionGuardStateInTransaction(db, transaction, uid),
     transaction.get(taskRef),
     transaction.get(getServiceTokenRootDocumentRef(uid, task.config.serviceName)),
   ]);
-  if (deletion.shouldSkip || currentTask.data()?.lease !== lease || !sameLifecycle(root, task)) {
+  if (currentTask.data()?.lease !== lease || (!deletion.shouldSkip && !sameLifecycle(root, task))) {
     throw new CleanupSuperseded();
+  }
+  if (deletion.shouldSkip) {
+    // Cleanup-only work may delete old operational data after account deletion,
+    // but must wait for credential cleanup. Never recreate user-owned state or
+    // skip provider-only rows just because this user's credentials remain.
+    const tokens = await transaction.get(getServiceTokenRootDocumentRef(uid, task.config.serviceName).collection('tokens').limit(1));
+    if (!tokens.empty) throw new CleanupSuperseded();
   }
 }
 
@@ -92,7 +101,7 @@ async function deleteOperationalTree(
   query: OperationalCleanupQuery,
   candidate: admin.firestore.QueryDocumentSnapshot,
 ): Promise<void> {
-  const uid = taskRef.parent.parent!.id;
+  const uid = task.userID;
   const data = candidate.data();
   const owner = getExplicitFirebaseUidAssociation(query.collectionName, data);
   if ((owner && owner !== uid) || !query.matches(data) || candidate.createTime.valueOf() > task.cutoffAt.valueOf()) return;
@@ -147,17 +156,22 @@ export async function processServiceDisconnectCleanup(ref: admin.firestore.Docum
   const db = admin.firestore();
   const lease = randomUUID();
   const task = await db.runTransaction(async transaction => {
-    const [snapshot, deletion] = await Promise.all([
-      transaction.get(ref), getUserDeletionGuardStateInTransaction(db, transaction, ref.parent.parent!.id),
-    ]);
+    const snapshot = await transaction.get(ref);
     if (!snapshot.exists) return null;
-    if (deletion.shouldSkip) {
-      // These task documents are leaves by design; no writer creates descendants.
-      transaction.delete(ref);
-      return null;
-    }
     const data = snapshot.data() as CleanupTask;
     if (data.nextAttemptAt > Date.now()) return null;
+    const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, data.userID);
+    if (deletion.shouldSkip) {
+      const tokens = await transaction.get(getServiceTokenRootDocumentRef(data.userID, data.config.serviceName).collection('tokens').limit(1));
+      if (!tokens.empty) {
+        // Retain this existing cleanup-only record until account credential
+        // cleanup completes. Postponing it lets other due tasks make progress.
+        transaction.update(ref, { nextAttemptAt: Date.now() + LEASE_MS });
+        return null;
+      }
+    }
+    // This updates only an existing cleanup reservation, including during
+    // account deletion. No user descendants or new cleanup intents are written.
     transaction.update(ref, { lease, nextAttemptAt: Date.now() + LEASE_MS });
     return data;
   });
@@ -194,11 +208,12 @@ export async function processServiceDisconnectCleanup(ref: admin.firestore.Docum
     // retain the page cursor and lease delay, so the scheduler retries it forever.
     await db.runTransaction(async transaction => {
       const [snapshot, root, deletion] = await Promise.all([
-        transaction.get(ref), transaction.get(getServiceTokenRootDocumentRef(ref.parent.parent!.id, task.config.serviceName)),
-        getUserDeletionGuardStateInTransaction(db, transaction, ref.parent.parent!.id),
+        transaction.get(ref), transaction.get(getServiceTokenRootDocumentRef(task.userID, task.config.serviceName)),
+        getUserDeletionGuardStateInTransaction(db, transaction, task.userID),
       ]);
       if (snapshot.data()?.lease !== lease) return;
-      if (deletion.shouldSkip || !sameLifecycle(root, task)) transaction.delete(ref); // Leaf task.
+      // Account deletion does not supersede the remaining cleanup obligation.
+      if (!deletion.shouldSkip && !sameLifecycle(root, task)) transaction.delete(ref); // Leaf task.
     });
     logger.warn('[ExplicitDisconnectCleanup] Page deferred or superseded.', {
       serviceName: task.config.serviceName,
@@ -208,10 +223,18 @@ export async function processServiceDisconnectCleanup(ref: admin.firestore.Docum
 }
 
 export async function retryServiceDisconnectCleanup(): Promise<void> {
-  const page = await admin.firestore().collectionGroup(SERVICE_DISCONNECT_CLEANUP_COLLECTION)
+  const page = await admin.firestore().collection(SERVICE_DISCONNECT_CLEANUP_COLLECTION)
     .where('nextAttemptAt', '<=', Date.now()).orderBy('nextAttemptAt').limit(10).get();
   await Promise.all(page.docs.map(async doc => {
     try { await processServiceDisconnectCleanup(doc.ref); }
     catch { logger.error('[ExplicitDisconnectCleanup] Could not claim or checkpoint cleanup.'); }
   }));
+}
+
+/** Account deletion uses the same bounded reconciler; active leases and further
+ * pages remain durable for the scheduler instead of being blindly purged. */
+export async function cleanupServiceDisconnectTasksForUser(userID: string): Promise<void> {
+  const page = await admin.firestore().collection(SERVICE_DISCONNECT_CLEANUP_COLLECTION)
+    .where('userID', '==', userID).limit(10).get();
+  await Promise.all(page.docs.map(doc => processServiceDisconnectCleanup(doc.ref)));
 }

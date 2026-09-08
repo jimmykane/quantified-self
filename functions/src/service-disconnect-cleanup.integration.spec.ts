@@ -10,16 +10,17 @@ import { ROUTE_DELIVERY_SYNC_ROUTES } from '../../shared/route-delivery-sync-rou
 // Run with npm run test:disconnect. Never use ADC or production Firestore.
 vi.unmock('firebase-admin');
 vi.unmock('@sports-alliance/sports-lib');
-vi.mock('./tokens', () => ({ getTokenData: vi.fn(async doc => doc.data()) }));
+vi.unmock('./tokens');
 vi.mock('./request-helper', () => ({ get: vi.fn(async () => ({})), post: vi.fn(async () => ({})), delete: vi.fn(async () => ({})) }));
 vi.mock('firebase-functions/logger', () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
 import * as providerRequests from './request-helper';
 import * as connectionMeta from './service-connection-meta';
+import { getTokenData } from './tokens';
 import { deauthorizeServiceForUser, getServiceOAuth2CodeRedirectAndSaveStateToUser, retryInterruptedExplicitDisconnects } from './OAuth2';
 import { getServiceTokenRootDocumentRef } from './service-token-store';
 import { clearServiceDisconnectPending } from './service-disconnect-pending';
-import { processServiceDisconnectCleanup, retryServiceDisconnectCleanup, SERVICE_DISCONNECT_CLEANUP_COLLECTION } from './service-disconnect-cleanup';
+import { cleanupServiceDisconnectTasksForUser, processServiceDisconnectCleanup, retryServiceDisconnectCleanup, SERVICE_DISCONNECT_CLEANUP_COLLECTION } from './service-disconnect-cleanup';
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
 describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulator)', () => {
@@ -31,7 +32,7 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
   const token = () => root().collection('tokens').doc(providerID);
   const settings = () => db.doc(`users/${uid}/config/settings`);
   const meta = () => db.doc(`users/${uid}/meta/${service}`);
-  const tasks = () => db.collection(`users/${uid}/${SERVICE_DISCONNECT_CLEANUP_COLLECTION}`);
+  const tasks = () => db.collection(SERVICE_DISCONNECT_CLEANUP_COLLECTION).where('userID', '==', uid);
   const queue = () => db.collection('suuntoAppWorkoutQueue');
 
   beforeAll(() => {
@@ -116,6 +117,24 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     expect(JSON.stringify(task)).not.toMatch(/test-access|test-refresh|accessToken|refreshToken|codeVerifier/);
   });
 
+  it('finishes explicit recovery of a subscription-pending connection without enabling ordinary token use', async () => {
+    await root().update({ disconnectState: 'disconnect_pending', disconnectGeneration: 'subscription-episode' });
+    await expect(getTokenData(await token().get(), service)).rejects.toMatchObject({
+      name: 'TokenUseSkippedForPendingDisconnectError',
+    });
+    failCredentialDelete();
+    const revoke = vi.spyOn(providerRequests, 'get');
+    await expect(deauthorizeServiceForUser(uid, service)).rejects.toThrow();
+    expect(revoke).toHaveBeenCalled();
+    vi.restoreAllMocks();
+    await expireLease();
+    await retryInterruptedExplicitDisconnects();
+    expect((await root().get()).exists).toBe(false);
+    expect((await token().get()).exists).toBe(false);
+    expect((await tasks().get()).size).toBe(1);
+    await expectRoutesDisabled();
+  });
+
   it('keeps a retryable intent after token deletion and before metadata finalization', async () => {
     const oldWork = queue().doc(`old-${uid}`);
     await oldWork.set({ userName: providerID, firebaseUserID: uid });
@@ -178,12 +197,15 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     await taskRef.update({ lease: 'lost-worker', nextAttemptAt: Date.now() + 60_000 });
     await processServiceDisconnectCleanup(taskRef);
     expect((await taskRef.get()).data()!.lease).toBe('lost-worker');
+    await db.doc(`userDeletionTombstones/${uid}`).set({ requestedAt: Date.now() });
+    await cleanupServiceDisconnectTasksForUser(uid);
+    expect((await taskRef.get()).data()!.lease).toBe('lost-worker');
     await taskRef.update({ nextAttemptAt: 0 });
     await retryServiceDisconnectCleanup();
     expect((await taskRef.get()).exists).toBe(false);
   });
 
-  it('skips shared provider-only rows and other owners without blocking owned cleanup', async () => {
+  it.each([false, true])('skips shared provider-only rows and other owners without blocking owned cleanup (deleting: %s)', async deleting => {
     const shared = queue().doc(`a-${uid}`);
     const other = queue().doc(`b-${uid}`);
     const owned = queue().doc(`c-${uid}`);
@@ -194,6 +216,10 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
       .set({ userName: providerID, serviceName: service });
     await deauthorizeServiceForUser(uid, service);
     const ref = (await tasks().get()).docs[0].ref;
+    if (deleting) {
+      await db.doc(`userDeletionTombstones/${uid}`).set({ requestedAt: Date.now() });
+      await db.recursiveDelete(db.doc(`users/${uid}`));
+    }
     await processServiceDisconnectCleanup(ref);
     expect((await shared.get()).exists).toBe(true);
     expect((await other.get()).exists).toBe(true);
@@ -240,7 +266,7 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     await expectRoutesDisabled();
   });
 
-  it('rejects account deletion before intent creation and retires already-created tasks without writing descendants', async () => {
+  it('rejects account deletion before intent creation and completes existing empty cleanup without writing user descendants', async () => {
     await db.doc(`userDeletionTombstones/${uid}`).set({ requestedAt: Date.now() });
     await expect(deauthorizeServiceForUser(uid, service)).rejects.toThrow();
     expect((await tasks().get()).empty).toBe(true);
@@ -251,6 +277,66 @@ describe.skipIf(!emulatorHost)('explicit disconnect durability (Firestore emulat
     await db.doc(`userDeletionTombstones/${uid}`).set({ requestedAt: Date.now() });
     await db.doc(`users/${uid}`).delete();
     await processServiceDisconnectCleanup(ref);
+    expect((await ref.get()).exists).toBe(false);
+    expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+  });
+
+  it('preserves provider-only cleanup through recursive account deletion and a transient failure', async () => {
+    const work = queue().doc(`deleted-account-${uid}`);
+    const nested = work.collection('payload').doc('part');
+    await work.set({ userName: providerID });
+    await nested.set({ test: true });
+    await deauthorizeServiceForUser(uid, service);
+    const ref = (await tasks().get()).docs[0].ref;
+    await db.doc(`userDeletionTombstones/${uid}`).set({ requestedAt: Date.now() });
+    // Models Delete User Data winning the race with the separate Auth cleanup.
+    await db.recursiveDelete(db.doc(`users/${uid}`));
+    expect((await ref.get()).exists).toBe(true);
+    vi.spyOn(db, 'recursiveDelete').mockRejectedValueOnce(new Error('retry cleanup'));
+    await cleanupServiceDisconnectTasksForUser(uid);
+    expect((await ref.get()).exists).toBe(true);
+    expect((await work.get()).exists).toBe(true);
+    await ref.update({ nextAttemptAt: 0 });
+    await retryServiceDisconnectCleanup();
+    expect((await nested.get()).exists).toBe(false);
+    expect((await work.get()).exists).toBe(false);
+    expect((await ref.get()).exists).toBe(false);
+    expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
+  });
+
+  it('retains deleted-account cleanup until remaining credentials are removed', async () => {
+    const work = queue().doc(`wait-for-credentials-${uid}`);
+    await work.set({ userName: providerID });
+    await deauthorizeServiceForUser(uid, service);
+    const ref = (await tasks().get()).docs[0].ref;
+    // A retained connection from another episode is now owned by account
+    // deletion; the disconnect task must not skip its provider-only queues.
+    await root().set({ activeOAuthCredentialGeneration: 'later-episode' });
+    await token().set({ serviceName: service, userName: providerID });
+    await db.doc(`userDeletionTombstones/${uid}`).set({ requestedAt: Date.now() });
+    await cleanupServiceDisconnectTasksForUser(uid);
+    expect((await ref.get()).data()!.nextAttemptAt).toBeGreaterThan(Date.now());
+    expect((await work.get()).exists).toBe(true);
+    await db.recursiveDelete(root());
+    await ref.update({ nextAttemptAt: 0 });
+    await cleanupServiceDisconnectTasksForUser(uid);
+    expect((await work.get()).exists).toBe(false);
+    expect((await ref.get()).exists).toBe(false);
+  });
+
+  it('continues cleanup if account deletion begins after a worker claimed it', async () => {
+    const work = queue().doc(`deletion-race-${uid}`);
+    await work.set({ userName: providerID, firebaseUserID: uid });
+    await deauthorizeServiceForUser(uid, service);
+    const ref = (await tasks().get()).docs[0].ref;
+    const recursive = db.recursiveDelete.bind(db);
+    vi.spyOn(db, 'recursiveDelete').mockImplementationOnce(async (target, writer) => {
+      await db.doc(`userDeletionTombstones/${uid}`).set({ requestedAt: Date.now() });
+      await recursive(db.doc(`users/${uid}`));
+      return recursive(target, writer);
+    });
+    await processServiceDisconnectCleanup(ref);
+    expect((await work.get()).exists).toBe(false);
     expect((await ref.get()).exists).toBe(false);
     expect((await db.doc(`users/${uid}`).get()).exists).toBe(false);
   });

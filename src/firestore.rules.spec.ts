@@ -609,11 +609,11 @@ describe('Firestore Security Rules', () => {
         });
 
         describe('Server-owned disconnect cleanup intents', () => {
-            const path = `users/${userId}/serviceDisconnectCleanup/opaque-episode-account`;
+            const path = 'serviceDisconnectCleanup/opaque-episode-account';
 
             beforeEach(async () => {
                 await testEnv.withSecurityRulesDisabled(async context => {
-                    await context.firestore().doc(path).set({ config: { providerUserId: 'private-test-provider' }, nextAttemptAt: 0 });
+                    await context.firestore().doc(path).set({ userID: userId, config: { providerUserId: 'private-test-provider' }, nextAttemptAt: 0 });
                 });
             });
 
