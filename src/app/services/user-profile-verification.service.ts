@@ -48,9 +48,18 @@ export class UserProfileVerificationService {
   }
 
   needsVerification(profile: AppUserInterface | null): boolean {
-    return !profile || !REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES.every(name =>
+    if (!profile) {
+      return true;
+    }
+    const termsAccepted = REQUIRED_POLICY_CONSENT_FORM_CONTROL_NAMES.every(name =>
       profile[name.replace(/^accept/, 'accepted') as keyof AppUserInterface] === true
     );
+    // Onboarding also depends on completion/subscription history. A missing
+    // root document can lose that history while the legal document survives.
+    const hasCompletedSetup = profile.onboardingCompleted === true
+      || profile.hasSubscribedOnce === true
+      || AppUserUtilities.hasPaidAccessUser(profile, profile.admin === true);
+    return !termsAccepted || !hasCompletedSetup;
   }
 
   verifyIfIncomplete(userID: string, profile: AppUserInterface | null): Promise<AppUserInterface | null> {

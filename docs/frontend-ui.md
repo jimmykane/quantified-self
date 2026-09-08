@@ -60,8 +60,11 @@ and refreshes credentials without signing out, clearing persistence, or writing 
 an account switch cancels the old profile load and ends its recovery attempt.
 
 The full Firestore SDK can return an incorrect persisted `NoDocument` result even through `getDocFromServer()`.
-Before publishing a profile with missing required agreements (including a wholly missing profile),
+Before publishing a profile with missing required agreements or onboarding history (including a wholly missing profile),
 `UserProfileVerificationService` checks the four profile documents through a lazily loaded Firestore Lite client.
+The completeness check covers the onboarding guard's required policies plus completed onboarding, subscription
+history, or existing paid/admin/grace-period access. This also protects free accounts when only the root document
+appears missing and the legal document still exists. Server-confirmed unfinished setup continues to onboarding.
 That client uses the same Firebase app's Auth and App Check providers, but does not use the watch/persistence cache.
 Both readers share the same profile merge function. Failures remain recovery states; only verified missing data may
 produce a new onboarding profile. Generation checks prevent an older asynchronous claim merge from reopening the

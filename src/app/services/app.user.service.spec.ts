@@ -758,7 +758,7 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         await vi.waitFor(() => expect(service.profileReadState().status).toBe('error'));
         TestBed.flushEffects();
-        (docData as any).mockReturnValue(of({ acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true }));
+        (docData as any).mockReturnValue(of({ acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true }));
 
         const recovery = service.retryProfileRead();
         expect(service.retryProfileRead()).toBe(recovery);
@@ -797,7 +797,7 @@ describe('AppUserService', () => {
         const emitted: AppUserInterface[] = [];
         const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
         await vi.waitFor(() => expect(read).toHaveBeenCalled());
-        const complete = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true } as AppUserInterface;
+        const complete = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true } as AppUserInterface;
         profiles.next(complete);
         profiles.next(null);
         resolveClaims({ claims: {} });
@@ -825,7 +825,7 @@ describe('AppUserService', () => {
             service = TestBed.inject(AppUserService);
             vi.spyOn(service, 'getUserByID').mockReturnValue(profiles);
             await vi.advanceTimersByTimeAsync(0);
-            const complete = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true } as AppUserInterface;
+            const complete = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true } as AppUserInterface;
             profiles.next(complete);
             const error = Object.assign(new Error('old token failure'), { code: 'auth/network-request-failed' });
             if (failureTiming === 'before') {
@@ -888,6 +888,32 @@ describe('AppUserService', () => {
         expect(setDoc).not.toHaveBeenCalled();
         expect(updateDoc).not.toHaveBeenCalled();
         expect(mockAuth.signOut).not.toHaveBeenCalled();
+        subscription.unsubscribe();
+    });
+
+    it('should verify a free account with missing onboarding history before publishing it', async () => {
+        const agreements = { acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true };
+        (docData as any)
+            .mockReturnValueOnce(of(undefined))
+            .mockReturnValueOnce(of(agreements))
+            .mockReturnValueOnce(of({ stripeRole: 'free' }))
+            .mockReturnValueOnce(of({}));
+        let resolveVerification!: (snapshot: { data: () => object }) => void;
+        verificationSDK.getDoc.mockReturnValue(new Promise(resolve => { resolveVerification = resolve; }));
+        TestBed.overrideProvider(UserProfileVerificationService, { useFactory: () => new UserProfileVerificationService() });
+        service = TestBed.inject(AppUserService);
+        const emitted: AppUserInterface[] = [];
+        const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
+        await vi.waitFor(() => expect(docData).toHaveBeenCalledTimes(4));
+        expect(emitted).toEqual([]);
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        await vi.waitFor(() => expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4));
+        resolveVerification({ data: () => ({ ...agreements, onboardingCompleted: true }) });
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].onboardingCompleted).toBe(true);
+        expect(setDoc).not.toHaveBeenCalled();
+        expect(updateDoc).not.toHaveBeenCalled();
         subscription.unsubscribe();
     });
 

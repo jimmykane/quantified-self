@@ -33,10 +33,39 @@ describe('UserProfileVerificationService', () => {
   });
 
   it('adds no reads for a complete profile', async () => {
-    const profile = { uid: 'u1', ...agreements } as AppUserInterface;
+    const profile = { uid: 'u1', ...agreements, onboardingCompleted: true } as AppUserInterface;
     expect(await service.verifyIfIncomplete('u1', profile)).toBe(profile);
     expect(sdk.getFirestore).not.toHaveBeenCalled();
     expect(sdk.getDoc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { hasSubscribedOnce: true },
+    { stripeRole: 'basic' },
+    { stripeRole: 'pro' },
+    { admin: true },
+    { isPro: true },
+    { gracePeriodUntil: new Date('2099-01-01') },
+  ])('adds no reads when agreements and existing access already complete onboarding: %j', async access => {
+    const profile = { uid: 'u1', ...agreements, ...access } as AppUserInterface;
+    expect(await service.verifyIfIncomplete('u1', profile)).toBe(profile);
+    expect(sdk.getDoc).not.toHaveBeenCalled();
+  });
+
+  it('verifies missing onboarding history even when the legal document is present', async () => {
+    const incomplete = { uid: 'u1', ...agreements, stripeRole: 'free' } as AppUserInterface;
+    const profile = await service.verifyIfIncomplete('u1', incomplete);
+    expect(profile?.onboardingCompleted).toBe(true);
+    expect(sdk.getDoc).toHaveBeenCalledTimes(4);
+  });
+
+  it('preserves server-confirmed unfinished onboarding after policies have been accepted', async () => {
+    const unfinished = { ...agreements, onboardingCompleted: false, hasSubscribedOnce: false };
+    sdk.getDoc.mockImplementation(async path => ({ data: () => path === 'users/u1' ? unfinished : undefined }));
+    const profile = await service.verifyIfIncomplete('u1', { uid: 'u1', ...unfinished } as AppUserInterface);
+    expect(profile?.onboardingCompleted).toBe(false);
+    expect(profile?.hasSubscribedOnce).toBe(false);
+    expect(sdk.getDoc).toHaveBeenCalledTimes(4);
   });
 
   it('recovers an incorrectly missing profile with one shared set of server reads', async () => {
