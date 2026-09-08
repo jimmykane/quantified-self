@@ -393,7 +393,7 @@ function categoryMetric(options: {
   semanticVariant: string;
   nativeMetric: string;
   nativeValue: string;
-  canonicalValue: string;
+  canonicalValue?: string;
   qualifiers?: Record<string, string | number | boolean | null>;
 }): HealthMetricEntry {
   return {
@@ -406,14 +406,16 @@ function categoryMetric(options: {
     recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
     quality: { status: HEALTH_QUALITY_STATUSES.Valid },
     coverage: { status: HEALTH_COVERAGE_STATUSES.Unknown },
-    normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+    normalizationStatus: options.canonicalValue === undefined
+      ? HEALTH_NORMALIZATION_STATUSES.NativeOnly
+      : HEALTH_NORMALIZATION_STATUSES.Canonical,
     native: {
       metric: options.nativeMetric,
       value: options.nativeValue,
       unit: 'category',
       qualifiers: options.qualifiers,
     },
-    canonical: {
+    canonical: options.canonicalValue === undefined ? undefined : {
       value: options.canonicalValue,
       unit: HEALTH_UNITS.Category,
     },
@@ -655,13 +657,16 @@ function mapDaily(
   }
   let averageStress: number | null;
   try {
-    averageStress = optionalNumber(interval.summary, 'averageStressLevel', -1, 100, true);
+    // Garmin also emits -2 for daily averages. Its meaning is not specified
+    // for this field in API 1.2.4; retain the code without inventing a score
+    // or borrowing the meaning of -2 from the separate Stress Details feed.
+    averageStress = optionalNumber(interval.summary, 'averageStressLevel', -2, 100, true);
   } catch (error) {
     if (!(error instanceof GarminHealthValidationError)) throw error;
     const rejectedValue = interval.summary.averageStressLevel;
     const reason = typeof rejectedValue !== 'number' ? 'invalid_type'
       : !Number.isFinite(rejectedValue) ? 'non_finite'
-        : rejectedValue < -1 || rejectedValue > 100 ? 'out_of_range'
+        : rejectedValue < -2 || rejectedValue > 100 ? 'out_of_range'
           : 'not_integer';
     throw new GarminHealthValidationError(error.message, stressValidationDiagnostic(
       'dailies', index, 'averageStressLevel', reason, rejectedValue,
@@ -685,7 +690,7 @@ function mapDaily(
         semanticVariant: 'daily_average_availability',
         nativeMetric: 'averageStressLevel',
         nativeValue: `${averageStress}`,
-        canonicalValue: 'not_enough_data',
+        canonicalValue: averageStress === -2 ? undefined : 'not_enough_data',
       }));
     }
   }
@@ -822,7 +827,7 @@ function mapStressDetails(
   );
   assertPointsWithinInterval(rawStressPoints, interval.durationSeconds, `${field}.timeOffsetStressLevelValues`);
   const unsupportedStressPoint = rawStressPoints.find(
-    point => point.value === 0 || (point.value < 0 && !STRESS_STATE_CODES[point.value]),
+    point => point.value < 0 && !STRESS_STATE_CODES[point.value],
   );
   if (unsupportedStressPoint) {
     throw new GarminHealthValidationError(
@@ -833,7 +838,9 @@ function mapStressDetails(
       ),
     );
   }
-  const stressPoints = rawStressPoints.filter(point => point.value > 0);
+  // The Stress Details table includes Rest < 26; zero is emitted by Garmin
+  // and is a numeric sample, unlike the explicitly negative state codes.
+  const stressPoints = rawStressPoints.filter(point => point.value >= 0);
   const statePoints = rawStressPoints.filter(point => point.value < 0);
   const bodyBatteryPoints = numericMap(
     interval.summary.timeOffsetBodyBatteryValues,

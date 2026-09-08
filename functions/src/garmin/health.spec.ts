@@ -168,6 +168,56 @@ describe('Garmin Health API summary mapping', () => {
     ]));
   });
 
+  it('retains a daily -2 code as native-only availability without losing other days or metrics', () => {
+    const interval = {
+      calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
+      durationInSeconds: 86_400,
+    };
+    const results = map('dailies', [
+      { ...interval, summaryId: 'unavailable-stress', averageStressLevel: -2, steps: 123 },
+      { ...interval, summaryId: 'measured-stress', startTimeInSeconds: 1_760_086_400,
+        calendarDate: '2025-10-10', averageStressLevel: 25 },
+    ]);
+    expect(results).toHaveLength(2);
+    expect(results[0].input.metrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metricId: HEALTH_METRIC_IDS.Steps, canonical: { value: 123, unit: HEALTH_UNITS.Count } }),
+      expect.objectContaining({
+        metricId: HEALTH_METRIC_IDS.StressState,
+        semanticVariant: 'daily_average_availability',
+        normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly,
+        native: expect.objectContaining({ metric: 'averageStressLevel', value: '-2' }),
+      }),
+    ]));
+    const state = results[0].input.metrics.find(metric => metric.metricId === HEALTH_METRIC_IDS.StressState);
+    expect(state).not.toHaveProperty('canonical.value');
+    expect(results[0].input.metrics.some(metric => metric.metricId === HEALTH_METRIC_IDS.StressLevel)).toBe(false);
+    expect(results[1].input.metrics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ metricId: HEALTH_METRIC_IDS.StressLevel, canonical: { value: 25, unit: HEALTH_UNITS.Score } }),
+    ]));
+  });
+
+  it('preserves zero stress samples alongside positive scores, state codes and Body Battery', () => {
+    const [result] = map('stressDetails', [{
+      summaryId: 'zero-stress', calendarDate: '2025-10-09',
+      startTimeInSeconds: 1_760_000_000, durationInSeconds: 540,
+      timeOffsetStressLevelValues: { 0: 0, 180: -2, 360: 25, 540: 0 },
+      timeOffsetBodyBatteryValues: { 0: 50 },
+    }]);
+    expect(result.input.sampleSeries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        seriesKey: 'stress_level_3_minute_average', offsetMs: [0, 360_000, 540_000],
+        nativeValues: [0, 25, 0], canonicalValues: [0, 25, 0],
+        normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+      }),
+      expect.objectContaining({
+        seriesKey: 'stress_measurement_state', offsetMs: [180_000],
+        nativeValues: ['-2'], canonicalValues: ['large_motion'],
+      }),
+      expect.objectContaining({ seriesKey: 'garmin_body_battery', nativeValues: [50] }),
+    ]));
+    expect(result.input.coverage).toMatchObject({ sampleCount: 4 });
+  });
+
   it('caps Body Battery activity events within the shared metric write budget', () => {
     const bodyBatteryActivityEvents = Array.from({ length: 256 }, (_, index) => ({
       eventType: 'ACTIVITY',
@@ -509,7 +559,7 @@ describe('Garmin Health API summary mapping', () => {
     const secret = 'https://example.invalid/callback?token=do-not-log';
 
     it.each([
-      [-2, 'out_of_range', 'number', -2, 'included'],
+      [-3, 'out_of_range', 'number', -3, 'included'],
       [101, 'out_of_range', 'number', 101, 'included'],
       [43.5, 'not_integer', 'number', 43.5, 'included'],
       [-1_000_000, 'out_of_range', 'number', -1_000_000, 'included'],
@@ -542,7 +592,7 @@ describe('Garmin Health API summary mapping', () => {
       expect(JSON.stringify(caught).length).toBeLessThan(600);
     });
 
-    it.each([0, -0.5, -4.5])('identifies the first unsupported Stress point (%s)', value => {
+    it.each([-0.5, -4.5])('identifies the first unsupported Stress point (%s)', value => {
       let caught: unknown;
       try {
         map('stressDetails', [
@@ -563,11 +613,11 @@ describe('Garmin Health API summary mapping', () => {
       expect(JSON.stringify(caught)).not.toContain(secret);
     });
 
-    it.each([undefined, null, -1, 0, 1, 100])('preserves accepted Daily values (%s)', value => {
+    it.each([undefined, null, -2, -1, 0, 1, 100])('preserves accepted Daily values (%s)', value => {
       expect(map('dailies', [{ ...interval, steps: 10, averageStressLevel: value }])).toHaveLength(1);
     });
 
-    it.each([-5, -4, -3, -2, -1, 1, 100])('preserves accepted Stress values (%s)', value => {
+    it.each([-5, -4, -3, -2, -1, 0, 1, 100])('preserves accepted Stress values (%s)', value => {
       expect(map('stressDetails', [{ ...interval, timeOffsetStressLevelValues: { 0: value } }])).toHaveLength(1);
     });
 
@@ -605,7 +655,7 @@ describe('Garmin Health API summary mapping', () => {
     }]],
     ['unsupported stress code', 'stressDetails', [{
       summaryId: 'stress-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
-      durationInSeconds: 60, timeOffsetStressLevelValues: { 0: 0 },
+      durationInSeconds: 60, timeOffsetStressLevelValues: { 0: -0.5 },
     }]],
     ['nonzero on-demand duration', 'pulseox', [{
       summaryId: 'pulse-1', calendarDate: '2025-10-09', startTimeInSeconds: 1_760_000_000,
