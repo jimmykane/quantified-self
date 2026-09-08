@@ -608,6 +608,27 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Server-owned disconnect cleanup intents', () => {
+            const path = 'serviceDisconnectCleanup/opaque-episode-account';
+
+            beforeEach(async () => {
+                await testEnv.withSecurityRulesDisabled(async context => {
+                    await context.firestore().doc(path).set({ userID: userId, config: { providerUserId: 'private-test-provider' }, nextAttemptAt: 0 });
+                });
+            });
+
+            it('denies owner, other-user and unauthenticated reads and all browser writes, including descendants', async () => {
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                for (const db of [owner, testEnv.authenticatedContext(otherId).firestore(), testEnv.unauthenticatedContext().firestore()]) {
+                    await assertFails(db.doc(path).get());
+                    await assertFails(db.doc(path).set({ nextAttemptAt: 0 }));
+                    await assertFails(db.doc(path).update({ nextAttemptAt: 0 }));
+                    await assertFails(db.doc(path).delete());
+                    await assertFails(db.doc(`${path}/children/forged`).set({ nextAttemptAt: 0 }));
+                }
+            });
+        });
+
         describe('Admin Subscription Gifts', () => {
             const operationPath = `users/${userId}/adminSubscriptionGifts/gift-operation`;
             const lockPath = `users/${userId}/adminSubscriptionGiftState/lock`;

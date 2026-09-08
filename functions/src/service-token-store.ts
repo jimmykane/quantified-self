@@ -81,6 +81,8 @@ export interface DeleteLocalServiceTokenOptions {
   /** Keep an empty root so a later guarded lifecycle transaction can still verify its generation. */
   preserveTokenRootWhenEmpty?: boolean;
   shouldDeleteInTransaction?: (transaction: admin.firestore.Transaction) => Promise<boolean>;
+  /** Write-only hook, after all reads: stage durable cleanup atomically with credential removal. */
+  onDeleteInTransaction?: (transaction: admin.firestore.Transaction) => void;
 }
 
 export function getServiceTokenRootDocumentRef(
@@ -148,6 +150,7 @@ export async function deleteLocalServiceToken(
       && remainingTokenCount === 0
       && hasPendingOAuthFlowContext(tokenRootSnapshot);
 
+    options.onDeleteInTransaction?.(transaction);
     transaction.delete(tokenDocRef);
     if (suuntoBindingRef
       && parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot?.data())?.userID === userID) {

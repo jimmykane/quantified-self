@@ -26,6 +26,7 @@ const {
     markQueueItemDeletedForUserCleanupMock,
     cleanupMcpOAuthStateForUserMock,
     cleanupRejectedRouteOriginalFilesForUserMock,
+    cleanupServiceDisconnectTasksForUserMock,
 } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -160,6 +161,7 @@ const {
         markQueueItemDeletedForUserCleanupMock: vi.fn().mockResolvedValue(true),
         cleanupMcpOAuthStateForUserMock: vi.fn().mockResolvedValue(undefined),
         cleanupRejectedRouteOriginalFilesForUserMock: vi.fn().mockResolvedValue(undefined),
+        cleanupServiceDisconnectTasksForUserMock: vi.fn().mockResolvedValue(undefined),
     };
 });
 
@@ -203,6 +205,10 @@ vi.mock('../mcp/oauth.service', () => ({
 
 vi.mock('../routes/rejected-original-cleanup', () => ({
     cleanupRejectedRouteOriginalFilesForUser: cleanupRejectedRouteOriginalFilesForUserMock,
+}));
+
+vi.mock('../service-disconnect-cleanup', () => ({
+    cleanupServiceDisconnectTasksForUser: cleanupServiceDisconnectTasksForUserMock,
 }));
 
 
@@ -311,6 +317,7 @@ describe('cleanupUserAccounts', () => {
         markQueueItemDeletedForUserCleanupMock.mockReset().mockResolvedValue(true);
         cleanupMcpOAuthStateForUserMock.mockReset().mockResolvedValue(undefined);
         cleanupRejectedRouteOriginalFilesForUserMock.mockReset().mockResolvedValue(undefined);
+        cleanupServiceDisconnectTasksForUserMock.mockReset().mockResolvedValue(undefined);
         transactionDeleteMock.mockReset();
         runTransactionMock.mockReset().mockImplementation(async (handler: (transaction: {
             get: (ref: { get?: () => Promise<unknown> }) => Promise<unknown>;
@@ -358,6 +365,7 @@ describe('cleanupUserAccounts', () => {
         );
         expect(cleanupMcpOAuthStateForUserMock).toHaveBeenCalledWith('testUser123');
         expect(cleanupRejectedRouteOriginalFilesForUserMock).toHaveBeenCalledWith('testUser123');
+        expect(cleanupServiceDisconnectTasksForUserMock).toHaveBeenCalledWith('testUser123');
         expect(cleanupServiceConnectionForUserMock).toHaveBeenCalledWith(
             'testUser123',
             ServiceNames.COROSAPI,

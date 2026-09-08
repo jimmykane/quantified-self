@@ -28,6 +28,8 @@ import {
   recordServiceDisconnectRetryFailure,
 } from '../service-disconnect-pending';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { retryInterruptedExplicitDisconnects } from '../OAuth2';
+import { retryServiceDisconnectCleanup } from '../service-disconnect-cleanup';
 
 interface PendingDisconnectCollectionConfig {
   serviceName: ServiceNames;
@@ -316,7 +318,7 @@ async function clearPendingDisconnectRootIfEntitled(
   rootSnapshot: admin.firestore.QueryDocumentSnapshot,
 ): Promise<boolean> {
   const rootData = rootSnapshot.data() as PendingServiceDisconnectRootData;
-  if (!isServiceDisconnectPendingData(rootData)) {
+  if (!isServiceDisconnectPendingData(rootData) || rootData.disconnectOperationGeneration) {
     return false;
   }
 
@@ -377,7 +379,7 @@ async function retryPendingDisconnectRoot(
   const userID = rootSnapshot.id;
   const rootData = rootSnapshot.data() as PendingServiceDisconnectRootData;
 
-  if (!isServiceDisconnectPendingData(rootData)) {
+  if (!isServiceDisconnectPendingData(rootData) || rootData.disconnectOperationGeneration) {
     return;
   }
 
@@ -591,6 +593,9 @@ export const retryPendingServiceDisconnects = onSchedule({
   memory: '512MiB',
 }, async () => {
   const now = Timestamp.now();
+  await retryServiceDisconnectCleanup().catch(() => {
+    logger.error('[ExplicitDisconnectCleanup] Could not scan pending cleanup; next schedule will retry.');
+  });
 
   // Repair already-connected accounts first. Pending-disconnect scans can
   // involve provider I/O, so putting these bounded pages first prevents a
@@ -615,6 +620,8 @@ export const retryPendingServiceDisconnects = onSchedule({
   logger.info('[RetryPendingServiceDisconnects] Repaired bounded pending-disconnect queue releases.', {
     repairedCount: repairedPendingDisconnectQueueReleaseCount,
   });
+
+  await retryInterruptedExplicitDisconnects();
 
   for (const config of PENDING_DISCONNECT_COLLECTIONS) {
     const restoredEntitlementClearedCount = await clearPendingDisconnectsForRestoredEntitlements(config);

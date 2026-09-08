@@ -29,6 +29,8 @@ import {
   SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD,
 } from './service-token-store';
 import { cleanupProviderOperationalDocsForServiceToken } from './service-operational-cleanup';
+import { stageServiceDisconnectCleanup } from './service-disconnect-cleanup';
+import { getUserDeletionGuardStateInTransaction } from './shared/user-deletion-guard';
 import {
   doesSuuntoHealthWebhookBindingMatch,
   getSuuntoHealthWebhookAccountBindingRef,
@@ -199,6 +201,8 @@ interface CleanupServiceConnectionOptions {
   disconnectLifecycleGuard?: ServiceDisconnectLifecycleGuard;
   /** Explicit disconnect captures tokens atomically with its lifecycle fence. */
   initialTokenQuerySnapshot?: admin.firestore.QuerySnapshot;
+  /** Explicit disconnect persists queue cleanup with token deletion and runs it asynchronously. */
+  deferOperationalCleanup?: boolean;
 }
 
 interface CleanupServiceTokenResolution {
@@ -1308,6 +1312,8 @@ export async function cleanupServiceConnectionForUser(
         ...(needsDisconnectLifecycleGuard ? {
           preserveTokenRootWhenEmpty: true,
           shouldDeleteInTransaction: async (transaction: admin.firestore.Transaction) => {
+            if (options.deferOperationalCleanup
+              && (await getUserDeletionGuardStateInTransaction(admin.firestore(), transaction, userID)).shouldSkip) return false;
             const [lifecycleCurrent, currentTokenSnapshot] = await Promise.all([
               isServiceDisconnectLifecycleGuardCurrent(userDocRef, disconnectLifecycleGuard, transaction),
               transaction.get(tokenQueryDocumentSnapshot.ref),
@@ -1329,6 +1335,12 @@ export async function cleanupServiceConnectionForUser(
             );
           },
         } : {}),
+        ...(options.deferOperationalCleanup && tokenDataForOperationalCleanup ? {
+          onDeleteInTransaction: (transaction: admin.firestore.Transaction) => stageServiceDisconnectCleanup(
+            transaction, userID, serviceName, tokenDataForOperationalCleanup,
+            disconnectLifecycleGuard,
+          ),
+        } : {}),
       });
       if (deleteResult.skippedByCondition) {
         outcome.skippedByCondition = true;
@@ -1338,7 +1350,7 @@ export async function cleanupServiceConnectionForUser(
       knownNoTokensRemain = needsDisconnectLifecycleGuard
         ? deleteResult.remainingTokenCount === 0
         : deleteResult.tokenRootDeleted;
-      if (tokenDataForOperationalCleanup) {
+      if (tokenDataForOperationalCleanup && !options.deferOperationalCleanup) {
         try {
           await cleanupProviderOperationalDocsForServiceToken(
             userID,
