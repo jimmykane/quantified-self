@@ -161,3 +161,41 @@
         min-height: 280px;
     }
 }
+
+.history-display-controls {
+    margin-bottom: 1rem;
+}
+
+.history-scale-control,
+.series-controls,
+.series-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.history-scale-control,
+.series-controls {
+    flex-wrap: wrap;
+}
+
+.history-display-controls p {
+    margin: 0.5rem 0 0;
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.82rem;
+}
+
+.series-controls {
+    margin-top: 0.5rem;
+}
+
+.series-controls mat-chip-listbox {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.series-marker {
+    flex: 0 0 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+}
