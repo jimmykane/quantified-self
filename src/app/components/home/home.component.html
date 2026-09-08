@@ -71,14 +71,15 @@
         summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync."
       >
         <div class="integration-capability-details">
+          <div data-nosnippet>
           <app-provider-data-flow-matrix
-            data-nosnippet
             caption="Supported provider paths"
             [rows]="providerDataFlowRows"
             [interactive]="false"
             [compact]="true"
             [showRouteState]="false">
           </app-provider-data-flow-matrix>
+          </div>
           <p>
             <strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.
           </p>
@@ -122,7 +123,6 @@
       >
         <app-public-feature-preview
           class="training-preview-data"
-          data-nosnippet
           previewKey="training-snapshot"
         ></app-public-feature-preview>
       </app-compact-feature-row>
@@ -136,7 +136,7 @@
         title="Charts Behind Every Signal"
         summary="See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and sleep views available in Training."
       >
-        <app-public-feature-preview data-nosnippet previewKey="training-signals"></app-public-feature-preview>
+        <app-public-feature-preview previewKey="training-signals"></app-public-feature-preview>
       </app-compact-feature-row>
 
       <!-- Feature 3: Dashboard Manager -->
@@ -146,7 +146,7 @@
         title="Build the Dashboard You Need"
         summary="Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters; maps add style and marker-clustering controls."
       >
-        <app-public-feature-preview data-nosnippet previewKey="dashboard"></app-public-feature-preview>
+        <app-public-feature-preview previewKey="dashboard"></app-public-feature-preview>
       </app-compact-feature-row>
 
       <!-- Feature 4: Deep Analysis -->
@@ -156,7 +156,7 @@
         title="Analyze Every Workout"
         summary="Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. Inspect intensity zones, grade-colored elevation, inverse depth, aerobic durability, and cadence versus power. Switch between distance, duration, or time where supported, then select a range for stats or zoom in."
       >
-        <app-public-feature-preview data-nosnippet previewKey="workout-analysis"></app-public-feature-preview>
+        <app-public-feature-preview previewKey="workout-analysis"></app-public-feature-preview>
       </app-compact-feature-row>
     </div>
 
@@ -176,7 +176,7 @@
       @for (row of healthFeature.rows; track row.preview; let last = $last) {
         <app-compact-feature-row class="animate-on-scroll"
           [icon]="row.icon" [title]="row.title" [summary]="row.copy" [showDivider]="!last">
-          <app-public-feature-preview data-nosnippet [previewKey]="row.preview"></app-public-feature-preview>
+          <app-public-feature-preview [previewKey]="row.preview"></app-public-feature-preview>
         </app-compact-feature-row>
       }
     </div>
@@ -219,7 +219,6 @@
 
     <app-public-feature-preview
       class="ai-insights-examples animate-on-scroll"
-      data-nosnippet
       previewKey="assistant-example"
     ></app-public-feature-preview>
 
@@ -245,7 +244,7 @@
           routerLink="/features/mcp-server"
           >Connect ChatGPT or Claude</a
         >
-        <app-public-feature-preview data-nosnippet previewKey="mcp-flow"></app-public-feature-preview>
+        <app-public-feature-preview previewKey="mcp-flow"></app-public-feature-preview>
       </app-compact-feature-row>
     </div>
   </section>
@@ -263,11 +262,10 @@
       </div>
       <app-public-feature-preview
         class="footprint-map-stage"
-        data-nosnippet
         previewKey="activity-map"
       ></app-public-feature-preview>
-      <p class="footprint-map-caption" data-nosnippet>
-        Real activity traces · open-water swimming, trail running, and mountain biking.
+      <p class="footprint-map-caption">
+        <span data-nosnippet>Real activity traces · open-water swimming, trail running, and mountain biking.</span>
       </p>
       <a class="footprint-cta" mat-stroked-button routerLink="/features/activity-map">
         Explore Activity Map
@@ -294,7 +292,6 @@
 
     <app-public-feature-preview
       class="analysis-grid animate-on-scroll"
-      data-nosnippet
       previewKey="reviewer-benchmark"
     ></app-public-feature-preview>
   </section>

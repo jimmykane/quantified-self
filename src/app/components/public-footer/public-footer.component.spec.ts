@@ -30,6 +30,7 @@ describe('PublicFooterComponent', () => {
     expect(text).toContain('Wahoo integration');
     expect(footer?.querySelector('a[href="/features/activity-calendar"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/features/training-dashboard"]')).toBeTruthy();
+    expect(footer?.querySelector('a[href="/features/health"]')?.textContent).toBe('Health');
     expect(footer?.querySelector('a[href="/features/activity-map"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/features/mcp-server"]')).toBeTruthy();
     expect(footer?.querySelector('a[href="/integrations/wahoo"]')).toBeTruthy();

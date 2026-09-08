@@ -7,6 +7,7 @@ import { Subject, of } from 'rxjs';
 import { DOCUMENT } from '@angular/common';
 import { PLATFORM_ID } from '@angular/core';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { HOME_SEO_JSON_LD } from '../shared/home-seo';
 
 describe('SeoService', () => {
     let service: SeoService;
@@ -130,6 +131,7 @@ describe('SeoService', () => {
         expect(mockScript.setAttribute).toHaveBeenCalledWith('type', 'application/ld+json');
         expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
         expect(mockScript.textContent).toContain('"@type":"SoftwareApplication"');
+        expect(JSON.parse(mockScript.textContent)).toEqual(HOME_SEO_JSON_LD);
         expect(mockScript.textContent).toContain('in one dashboard');
         expect(mockScript.textContent).not.toMatch(/\bprivate\b/i);
         expect(mockScript.textContent).toContain('Week, Month, and Year activity calendar with duration-scaled activity groups');

@@ -2,6 +2,14 @@ import type { PublicFeaturePreviewKey } from './public-feature-preview.types';
 
 /** Shared public copy and preview selection for home and the Health feature page. */
 export const HEALTH_FEATURE_CONTENT = {
+  seo: {
+    description: 'Track sleep, HRV and heart rate. Log blood pressure, weight and other measurements, and add timeline notes for travel, sickness and stress.',
+    featureList: [
+      'Sleep, heart rate, and HRV trends with source-separated history',
+      'Manual blood pressure, weight, body composition, blood oxygen, and VO₂ max logging',
+      'Timeline notes for travel, sickness, stress, and time away',
+    ],
+  },
   title: 'Your Health, Beyond Training.',
   intro: 'Follow sleep, heart rate, HRV, and body measurements over time. Bring supported Garmin, Suunto, and COROS health data together, compare each source, and add your own measurements.',
   rows: [

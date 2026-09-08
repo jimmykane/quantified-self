@@ -232,7 +232,7 @@ describe('HomeComponent', () => {
         expect(providerMatrix.componentInstance.rows()).toBe(component.providerDataFlowRows);
         expect(providerMatrix.componentInstance.compact()).toBe(true);
         expect(providerMatrix.componentInstance.interactive()).toBe(false);
-        expect(providerMatrix.nativeElement.hasAttribute('data-nosnippet')).toBe(true);
+        expect(providerMatrix.nativeElement.closest('div[data-nosnippet]')).toBeTruthy();
         expect(providerMatrix.nativeElement.querySelector('.provider-data-flow-matrix__mobile')).toBeNull();
         expect(providerMatrix.nativeElement.querySelectorAll('button')).toHaveLength(0);
         expect(text).toContain('Upload Your Own Files');
@@ -267,7 +267,7 @@ describe('HomeComponent', () => {
         expect(trainingPreview).toBeTruthy();
         expect(trainingPreview.classList).toContain('compact-feature-row-host--without-divider');
         expect(performanceCards[0].classList).not.toContain('compact-feature-row-host--without-divider');
-        expect(trainingPreview.querySelector('.training-preview-data[data-nosnippet]')).toBeTruthy();
+        expect(trainingPreview.querySelector('.training-preview-data > div[data-nosnippet]')).toBeTruthy();
         expect(signalPreviews.length).toBe(0);
         expect(previewKeys).toContain('training-snapshot');
         expect(previewKeys).toContain('training-signals');
@@ -346,7 +346,7 @@ describe('HomeComponent', () => {
             'activity-map',
             'reviewer-benchmark',
         ]);
-        expect(previews.every(preview => preview.nativeElement.hasAttribute('data-nosnippet'))).toBe(true);
+        expect(previews.every(preview => preview.nativeElement.querySelector(':scope > div[data-nosnippet]'))).toBe(true);
     });
 
     it('should explain benchmark merge and hardware precision workflows', () => {
@@ -383,7 +383,7 @@ describe('HomeComponent', () => {
             .find(preview => preview.componentInstance.previewKey() === 'assistant-example');
 
         expect(assistantPreview).toBeTruthy();
-        expect(assistantPreview?.nativeElement.hasAttribute('data-nosnippet')).toBe(true);
+        expect(assistantPreview?.nativeElement.querySelector(':scope > div[data-nosnippet]')).toBeTruthy();
         expect(fixture.nativeElement.querySelector('app-typed-prompt-rotator')).toBeNull();
     });
 

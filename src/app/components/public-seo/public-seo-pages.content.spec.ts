@@ -12,6 +12,12 @@ describe('public-seo-pages.content', () => {
     const page = PUBLIC_SEO_PAGES.health;
     expect(page.h1).toBe(HEALTH_FEATURE_CONTENT.title);
     expect(page.intro).toBe(HEALTH_FEATURE_CONTENT.intro);
+    expect(page.description).toBe(HEALTH_FEATURE_CONTENT.seo.description);
+    const schema = PUBLIC_SEO_ROUTE_DATA.health.jsonLd;
+    expect(schema['description']).toBe(page.description);
+    const entities = schema['mainEntity'] as Record<string, unknown>[];
+    expect(entities.find(entity => entity['@type'] === 'SoftwareApplication')?.['featureList'])
+      .toEqual(expect.arrayContaining([...HEALTH_FEATURE_CONTENT.seo.featureList]));
     expect(page.sections.slice(0, 3)).toEqual(HEALTH_FEATURE_CONTENT.rows.map(row => ({
       eyebrow: 'Health history', title: row.title, copy: row.copy, preview: row.preview, items: [],
     })));
