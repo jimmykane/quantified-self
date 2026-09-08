@@ -25,6 +25,7 @@ describe('help.content', () => {
       expect(content).toContain('calendar buttons to pick dates');
       expect(content).toContain('Date ranges have start and end arrows');
       expect(content).toContain('ongoing shading stops at today');
+      expect(content).toContain('inside the shaded band to inspect your measurements');
     }
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;

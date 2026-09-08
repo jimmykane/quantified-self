@@ -97,7 +97,8 @@ describe('timeline chart overlays', () => {
     }));
     expect(tooltip.formatter()).toContain('overflow-wrap:anywhere');
     expect(tooltip.formatter()).not.toContain('<script>');
-    expect(overlay.markArea.data[0][0].tooltip).toBe(tooltip);
+    expect(overlay.markArea).toMatchObject({ silent: true, tooltip: { show: false }, emphasis: { disabled: true } });
+    expect(overlay.markArea.data[0][0].tooltip).toBeUndefined();
     expect(overlay.markLine.data[0].itemStyle.color).toBe(AppColors.Purple);
     expect(overlay.markArea.data[0][0].itemStyle.color).toBe(AppColors.Purple);
   });
@@ -219,6 +220,8 @@ describe('timeline chart overlays', () => {
     const chart = { on: vi.fn(), off: vi.fn(), getWidth: () => 320 };
     const context = { notes: [note], select: vi.fn(), reportRange: vi.fn() };
     const binding = new TimelineNotesChartBinding(); binding.set(context); binding.apply(chart as never, option);
+    chart.on.mock.calls[0][1]({ name: 'timeline-note-0-0', componentType: 'markArea' });
+    expect(context.select).not.toHaveBeenCalled();
     chart.on.mock.calls[0][1]({ name: 'timeline-note-0-0', componentType: 'markLine' });
     expect(context.select).toHaveBeenCalledWith([note]);
     binding.dispose(); expect(chart.off).toHaveBeenCalledOnce(); expect(context.reportRange).toHaveBeenLastCalledWith(binding, null);

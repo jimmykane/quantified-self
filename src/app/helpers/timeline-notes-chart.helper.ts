@@ -139,11 +139,14 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       if (showPeriod) markers.push({ name, xAxis: group.end, symbol: hasOpenEnd ? 'emptyCircle' : 'arrow',
         symbolRotate: hasOpenEnd ? 0 : 90, symbolSize: 10,
         lineStyle: { opacity: 0.45, color, type: 'dotted' }, itemStyle: { color }, label: { show: false }, tooltip });
-      if (group.hasPeriod) area.push([{ name, xAxis: start, itemStyle: { color, opacity: 0.055 }, tooltip }, { xAxis: group.end }]);
+      if (group.hasPeriod) area.push([{ name, xAxis: start, itemStyle: { color, opacity: 0.055 } }, { xAxis: group.end }]);
     });
     if (markers.length) overlays.push({ id: `timeline-note-overlay-${axisIndex}`, name: '', type: 'line', data: [],
       xAxisIndex: axisIndex, yAxisIndex: matchingSeries[0].yAxisIndex ?? 0, animation: false,
-      markLine: { silent: false, symbol: ['circle', 'none'], symbolSize: 8, data: markers }, markArea: { silent: false, label: { show: false }, data: area } });
+      markLine: { silent: false, symbol: ['circle', 'none'], symbolSize: 8, data: markers },
+      // Period fills must not intercept axis tooltips or taps intended for metric readings.
+      // Note tooltips and selection remain on the title and boundary markers.
+      markArea: { silent: true, tooltip: { show: false }, emphasis: { disabled: true }, label: { show: false }, data: area } });
   });
   return { option: overlays.length ? { ...option, series: [...originalSeries, ...overlays] } as Option : option, range, groups };
 }
@@ -156,7 +159,7 @@ export class TimelineNotesChartBinding {
   private groups = new Map<string, readonly TimelineNote[]>();
   private rangeKey = '';
   private readonly click = (event: { name?: string; componentType?: string }): void => {
-    if (event.componentType !== 'markLine' && event.componentType !== 'markArea') return;
+    if (event.componentType !== 'markLine') return;
     const notes = this.groups.get(event.name ?? '');
     if (notes) { this.chart?.dispatchAction?.({ type: 'hideTip' }); this.context?.select(notes); }
   };

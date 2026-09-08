@@ -74,6 +74,9 @@ Markers and period bands use the selected color; text retains its theme contrast
 markers instead of blending colors; same-color groups keep that color. Each note retains its category and actual dates
 in the escaped tooltip and manager. Date ranges have inward-facing native ECharts arrows at the start and inclusive end,
 joined by the existing subtle period band, with the title shown only at the start. Both boundaries open the same note/group.
+Period fills are non-interactive (`markArea.silent`) with tooltips and emphasis disabled, so hovering/tapping anywhere
+inside the band retains the chart's metric tooltip. Note tooltips and selection live on the title and boundary markers;
+the binding ignores area clicks. Keep this boundary covered by real-renderer pointer tests, not only option assertions.
 Ongoing periods use an open end marker at today in the note's zone; boundaries clipped by the visible window also use open
 markers, avoiding a false start/end. Single-day notes and periods collapsed into one weekly bucket retain one dot marker.
 Single markers display the note title as plain, single-line text, with native ECharts
