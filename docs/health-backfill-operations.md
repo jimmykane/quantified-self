@@ -147,6 +147,8 @@ existing Sleep/Health queue. Stop issuing new batches if failures or queue lag g
 
 ## Verification
 
+Suunto Health retry logs classify the original exception before replacing its message for durable retry storage. Inspect `failureStage`, `failureCategory`, `errorName`, and bounded `processingElapsedMs`; recognized request failures additionally retain validated `providerStatusCode` or an allowlisted `transportCode`, and recognized RPC failures retain numeric `rpcStatusCode` (1–16). RPC codes are not proof of an upstream HTTP failure. Feed request/mapping, token, lifecycle, record-write, checkpoint and sync-state stages identify the failing operation without logging user/account identities, URLs, credentials, response bodies, raw exception messages, stacks or causes in diagnostic fields. Unrecognized values stay `unclassified`/`UnknownError`; absence of an upstream status must not be reported as a Suunto HTTP 500. These diagnostics do not change retry, continuation, write or deletion semantics.
+
 Suunto `response_item_limit` is a mapper cardinality failure, not a provider HTTP 500. The worker adaptively narrows oversized windows while preserving complete local days and all existing parser limits. If the error persists at its minimum window or a pull/result budget is exhausted, pause admission and investigate; repeated retries are not proof of recovery. A locally prepared worker fix does not change production until separately approved and deployed. Existing pending jobs can retry on the new worker; a job already in the DLQ needs separately authorized targeted recovery, not a receipt reset or blind re-import.
 
 Targeted suites cover parsing, ranges, opaque identities, dry-run non-mutation,

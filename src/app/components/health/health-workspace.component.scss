@@ -8,8 +8,7 @@
 }
 
 .health-header-actions,
-.health-window-navigation,
-.health-provider-filters {
+.health-window-navigation {
   align-items: center;
   display: flex;
 }
@@ -55,9 +54,8 @@
 }
 
 .health-explorer {
-  --qs-glass-panel-radius: 14px;
-
-  padding: 0.75rem;
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  padding-top: 0.75rem;
 }
 
 .health-explorer-layout {
@@ -136,13 +134,58 @@
   min-width: 0;
 }
 
+.health-range-menu-button {
+  display: none;
+}
+
 .health-detail-header {
-  align-items: flex-start;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.1rem 0.5rem;
   margin-bottom: 0.5rem;
 }
+
+.health-detail-window {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.health-detail-window p { min-width: 0; }
+
+.health-sources-button { flex: 0 0 auto; }
+
+.health-sources-button-content,
+.health-range-menu-content {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.health-sources-button-content mat-icon,
+.health-range-menu-content mat-icon {
+  flex: 0 0 18px;
+  font-size: 18px;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.health-sources-dot {
+  border-radius: 50%;
+  flex: none;
+  height: 7px;
+  width: 7px;
+}
+
+.health-sources-dot[data-tone='delayed'] { background: var(--mat-sys-tertiary); }
+.health-sources-dot[data-tone='error'] { background: var(--mat-sys-error); }
 
 .health-detail-controls {
   align-items: center;
@@ -163,9 +206,12 @@
 }
 
 .health-add-measurement {
-  --mat-button-filled-container-height: 36px;
-
+  flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.health-add-measurement-label-compact {
+  display: none;
 }
 
 .health-add-measurement-content {
@@ -195,7 +241,8 @@
   gap: 0;
 }
 
-.health-window-navigation > button {
+.health-window-navigation > .health-window-older,
+.health-window-navigation > .health-window-newer {
   --mat-icon-button-state-layer-size: 40px;
   --mat-icon-button-touch-target-size: 40px;
 
@@ -231,44 +278,6 @@
   min-width: 0;
 }
 
-.health-provider-filters {
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.health-provider-filter {
-  --mat-button-outlined-container-height: 36px;
-  --mat-button-outlined-container-shape: 999px;
-  --mat-button-outlined-label-text-weight: 600;
-  --mat-button-outlined-outline-color: var(--mat-sys-outline-variant);
-
-  background: var(--mat-sys-surface-container-low);
-  color: var(--mat-sys-on-surface);
-  min-width: 0;
-  padding-inline: 0.75rem;
-}
-
-.health-provider-filter-selected {
-  --mat-button-outlined-outline-color: var(--mat-sys-primary);
-
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
-}
-
-.health-provider-filter-content {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-  white-space: nowrap;
-}
-.health-provider-filter-content > mat-icon {
-  font-size: 18px;
-  height: 18px;
-  margin: 0;
-  width: 18px;
-}
-
 .health-notice {
   align-items: flex-start;
   background: var(--mat-sys-surface-container);
@@ -300,7 +309,7 @@
   gap: 0.75rem;
   justify-content: center;
   min-height: 200px;
-  padding: 1rem;
+  padding-block: 1rem;
   text-align: left;
 }
 
@@ -340,77 +349,7 @@
   box-sizing: border-box;
   height: 360px;
   min-width: 0;
-  padding: 0.35rem;
-}
-
-.health-sync-footer,
-.health-sync-list,
-.health-sync-item,
-.health-sync-state {
-  align-items: center;
-  display: flex;
-}
-
-.health-sync-footer {
-  border-top: 1px solid var(--mat-sys-outline-variant);
-  gap: 0.75rem;
-  padding-top: 0.65rem;
-}
-
-.health-sync-footer > a {
-  margin-left: auto;
-}
-
-.health-sync-list {
-  flex: 1;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-  list-style: none;
-  margin: 0;
-  min-width: 0;
   padding: 0;
-}
-
-.health-sync-item,
-.health-sync-state {
-  color: var(--mat-sys-on-surface-variant);
-  font: var(--mat-sys-body-small);
-  gap: 0.35rem;
-}
-
-.health-sync-item {
-  flex-wrap: wrap;
-}
-
-.health-sync-dot {
-  background: var(--mat-sys-outline);
-  border-radius: 50%;
-  flex: none;
-  height: 8px;
-  width: 8px;
-}
-
-.health-sync-dot[data-tone='current'] {
-  background: var(--qs-theme-success);
-}
-
-.health-sync-dot[data-tone='delayed'] {
-  background: var(--mat-sys-tertiary);
-}
-
-.health-sync-dot[data-tone='stale'],
-.health-sync-dot[data-tone='error'] {
-  background: var(--mat-sys-error);
-}
-
-.health-sync-provider {
-  color: var(--mat-sys-on-surface);
-  font: var(--mat-sys-label-large);
-}
-
-.health-sync-status,
-.health-sync-update {
-  font: var(--mat-sys-label-medium);
 }
 
 @media (max-width: 980px) {
@@ -455,19 +394,38 @@
     margin-inline: 0;
   }
 
-  .health-section-heading,
-  .health-detail-header {
+  .health-section-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .health-detail-header {
+    gap: 0.1rem 0.25rem;
+  }
+
+  .health-detail-header h2 {
+    font: var(--mat-sys-title-medium);
+    font-weight: 600;
+  }
+
+  .health-detail-heading {
+    flex: 1;
   }
 
   .health-detail-controls {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: center;
   }
 
   .health-add-measurement {
-    align-self: flex-start;
+    --mat-button-text-container-height: 44px;
+  }
+
+  .health-add-measurement-label {
+    display: none;
+  }
+
+  .health-add-measurement-label-compact {
+    display: inline;
   }
 
   .health-section-heading > p {
@@ -475,12 +433,11 @@
   }
 
   .health-window-navigation {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
-    width: 100%;
+    display: flex;
   }
 
-  .health-window-navigation > button {
+  .health-window-navigation > .health-window-older,
+  .health-window-navigation > .health-window-newer {
     --mat-icon-button-state-layer-size: 44px;
     --mat-icon-button-touch-target-size: 44px;
 
@@ -488,81 +445,23 @@
     width: 44px;
   }
 
-  .health-window-older {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .health-window-newer {
-    grid-column: 3;
-    grid-row: 1;
-  }
-
   .health-range-save-status {
     justify-content: flex-start;
     margin-top: -0.15rem;
   }
 
-  .health-range-selector {
-    --mat-button-toggle-height: 40px;
+  .health-range-selector { display: none; }
 
-    display: flex;
-    grid-column: 2;
-    grid-row: 1;
-    min-width: 0;
-    width: 100%;
-  }
+  .health-range-menu-button {
+    --mat-button-text-container-height: 44px;
 
-  .health-range-selector mat-button-toggle {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  // Material has no public token for horizontal label padding. This scoped
-  // density exception keeps all five ranges legible beside 44px touch targets.
-  :host ::ng-deep .health-range-selector .mat-button-toggle-button,
-  :host ::ng-deep .health-range-selector .mat-button-toggle-label-content {
-    min-width: 0;
-    width: 100%;
-  }
-
-  :host ::ng-deep .health-range-selector .mat-button-toggle-label-content {
-    box-sizing: border-box;
-    padding-inline: 4px;
-  }
-
-  .health-provider-filters {
-    // Wrapping keeps every source visible without a nested scroll area. Leave
-    // room between rows for Material's 48px touch targets around 44px buttons.
-    column-gap: 0.375rem;
-    row-gap: 0.5rem;
-  }
-
-  .health-provider-filter {
-    --mat-button-outlined-container-height: 44px;
-
-    flex: 0 0 auto;
-    padding-inline: 0.5rem;
+    display: inline-flex;
+    min-width: 56px;
+    padding-inline: 0.25rem;
   }
 
   .health-sleep-chart {
     height: 330px;
-  }
-
-  .health-sync-footer {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 0.45rem;
-  }
-
-  .health-sync-list {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .health-sync-update {
-    margin-left: auto;
-    text-align: right;
   }
 
 }

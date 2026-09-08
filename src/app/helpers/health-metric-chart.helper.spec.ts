@@ -83,6 +83,27 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 }
 
 describe('Health metric chart helpers', () => {
+  it.each([1, 14, 30, 90, 365])('keeps %i-day date axes collision-safe without changing readings or the selected window', days => {
+    const start = Date.UTC(2026, 5, 11);
+    const end = start + days * DAY_MS - 1;
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.HeartRate,
+      points: [{ timestampMs: end, calendarDate: new Date(end).toISOString().slice(0, 10), value: 80, qualityCode: null }],
+    })], start, end)[0];
+    for (const width of [280, 360, 640, 1000]) {
+      const option = buildHealthMetricEChartsOption(model, start, end,
+        buildDashboardEChartsStyleTokens(false, width), width < 600) as {
+        xAxis: { type: string; min: number; max: number; splitNumber: number; axisLabel: { hideOverlap: boolean } };
+        series: Array<{ data: unknown }>;
+      };
+      expect(option.xAxis).toMatchObject({
+        type: 'time', min: start, max: end, splitNumber: width < 680 ? 3 : 6,
+        axisLabel: { hideOverlap: true },
+      });
+      expect(option.series[0].data).toBe(model.data);
+    }
+  });
+
   it('inserts null ECharts data across gaps instead of connecting missing periods', () => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
     expect(model.data.filter(([, value]) => value === null)).toHaveLength(1);
@@ -108,26 +129,28 @@ describe('Health metric chart helpers', () => {
     expect(option.tooltip.formatter({ value: [0, 52] })).toContain('52.00 ml/kg/min');
   });
 
-  it('keeps compact Health charts focused on the trend without duplicate axes', () => {
+  it.each([280, 320, 480])('keeps compact Health value scales visible without expanding the grid (%i px)', width => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
     const option = buildHealthMetricEChartsOption(
       model,
       0,
       DAY_MS * 13,
-      buildDashboardEChartsStyleTokens(false, 320),
+      buildDashboardEChartsStyleTokens(false, width),
       false,
       null,
       true,
     ) as {
       grid: { left: number; right: number };
       xAxis: { show: boolean };
-      yAxis: { show: boolean };
+      yAxis: { show: boolean; axisLabel: { hideOverlap: boolean; formatter: (value: number) => string } };
       series: Array<{ showSymbol: boolean }>;
     };
 
-    expect(option.grid).toMatchObject({ left: 2, right: 2 });
+    expect(option.grid).toMatchObject({ left: 2, right: 2, outerBoundsContain: 'axisLabel' });
     expect(option.xAxis.show).toBe(false);
-    expect(option.yAxis.show).toBe(false);
+    expect(option.yAxis).toMatchObject({ show: true, splitNumber: 3, axisLabel: { hideOverlap: true } });
+    expect(option.yAxis.axisLabel.formatter(50)).toBe('50');
+    expect(model.displayUnit).toBe('bpm');
     expect(option.series).toHaveLength(1);
     expect(option.series[0].showSymbol).toBe(false);
 
@@ -146,7 +169,7 @@ describe('Health metric chart helpers', () => {
     expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
   });
 
-  it('colors each HRV point from its point-in-time personal-range status', () => {
+  it.each([false, true])('plots each HRV range and color at its own date (compact: %s)', compact => {
     const hrvSeries = series({
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,
       unit: 'millisecond',
@@ -162,20 +185,20 @@ describe('Health metric chart helpers', () => {
       DAY_MS,
       buildDashboardEChartsStyleTokens(false, 320),
       false,
-      null,
-      true,
+      compact ? normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }) : null,
+      compact,
       {
-        normalRange: { min: 30, max: 44 },
         normalRangeColor: AppDataColors.Altitude,
         statusColor: AppDataColors.Stress,
         pointStatuses: [
-          { timestampMs: 0, color: AppDataColors.Altitude, label: 'Within personal range' },
-          { timestampMs: DAY_MS, color: AppDataColors.Stress, label: 'Outside personal range' },
+          { timestampMs: 0, color: AppDataColors.Altitude, label: 'Within personal range', normalRange: { min: 30, max: 44 } },
+          { timestampMs: DAY_MS, color: AppDataColors.Stress, label: 'Outside personal range', normalRange: { min: 35, max: 50 } },
         ],
       },
     ) as {
       yAxis: { min: number; max: number };
       series: Array<{
+        id?: string;
         data: Array<[number, number | null]>;
         showSymbol: boolean;
         z?: number;
@@ -188,7 +211,7 @@ describe('Health metric chart helpers', () => {
     };
 
     expect(option.yAxis.min).toBeLessThanOrEqual(30);
-    expect(option.yAxis.max).toBeGreaterThanOrEqual(46);
+    expect(option.yAxis.max).toBeGreaterThanOrEqual(50);
     expect(option.series[0].data).toEqual([
       [0, 40],
       [DAY_MS, 46],
@@ -204,8 +227,14 @@ describe('Health metric chart helpers', () => {
       lineStyle: { color: AppDataColors.Stress, width: 1.5 },
       silent: true,
     });
-    expect(option.series[0].markArea).toMatchObject({
-      itemStyle: { color: AppDataColors.Altitude, opacity: 0.1 },
+    expect(option.series[0].markArea).toBeUndefined();
+    expect(option.series.find(item => item.id === 'hrv-personal-range-lower')).toMatchObject({
+      data: [[0, 30], [DAY_MS, 35]], silent: true, connectNulls: false,
+    });
+    expect(option.series.find(item => item.id === 'hrv-personal-range-band')).toMatchObject({
+      data: [[0, 14], [DAY_MS, 15]],
+      areaStyle: { color: AppDataColors.Altitude, opacity: 0.1 },
+      silent: true, connectNulls: false, z: 0,
     });
     expect(option.series[0].markPoint).toMatchObject({
       itemStyle: { color: AppDataColors.Stress },
@@ -213,6 +242,8 @@ describe('Health metric chart helpers', () => {
     });
     expect(option.tooltip.formatter({ value: [0, 40] }))
       .toContain('Personal range: Within personal range');
+    expect(option.tooltip.formatter({ value: [0, 40] })).toContain('30 ms–44 ms');
+    expect(option.tooltip.formatter({ value: [DAY_MS, 46] })).toContain('35 ms–50 ms');
     expect(option.tooltip.formatter({ value: [DAY_MS, 46] }))
       .toContain(`background:${AppDataColors.Stress}`);
   });
@@ -237,25 +268,40 @@ describe('Health metric chart helpers', () => {
       null,
       true,
       {
-        normalRange: { min: 30, max: 44 },
         normalRangeColor: AppDataColors.Altitude,
         statusColor: AppDataColors.Stress,
         pointStatuses: [
-          { timestampMs: 0, color: AppDataColors.Altitude, label: 'Within personal range' },
-          { timestampMs: DAY_MS, color: AppDataColors.Altitude, label: 'Within personal range' },
-          { timestampMs: DAY_MS * 8, color: AppDataColors.Stress, label: 'Outside personal range' },
+          { timestampMs: 0, color: AppDataColors.Altitude, label: 'Within personal range', normalRange: { min: 30, max: 44 } },
+          { timestampMs: DAY_MS, color: AppDataColors.Altitude, label: 'Within personal range', normalRange: { min: 32, max: 46 } },
+          { timestampMs: DAY_MS * 8, color: AppColors.MediumGray, label: 'Building personal range', normalRange: null },
         ],
       },
     ) as {
-      series: Array<{ data: Array<[number, number | null]> }>;
+      series: Array<{ id?: string; data: Array<[number, number | null]> }>;
     };
 
-    expect(option.series).toHaveLength(2);
+    expect(option.series).toHaveLength(4);
     expect(option.series[0].data).toContainEqual([DAY_MS * 4 + DAY_MS / 2, null]);
     expect(option.series[1].data).toEqual([[0, 40], [DAY_MS, 42]]);
+    expect(option.series.find(item => item.id === 'hrv-personal-range-lower')?.data)
+      .toEqual([[0, 30], [DAY_MS, 32], [DAY_MS * 4 + DAY_MS / 2, null], [DAY_MS * 8, null]]);
+    expect(option.series.find(item => item.id === 'hrv-personal-range-band')?.data)
+      .toEqual([[0, 14], [DAY_MS, 14], [DAY_MS * 4 + DAY_MS / 2, null], [DAY_MS * 8, null]]);
   });
 
-  it('uses the selected Sports Lib unit conversion consistently across a chart', () => {
+  it('does not fabricate a band when the point-in-time baseline is unavailable', () => {
+    const model = buildHealthChartModels([series({ metricId: HEALTH_METRIC_IDS.HeartRateVariability })], 0, DAY_MS * 13)[0];
+    const option = buildHealthMetricEChartsOption(model, 0, DAY_MS * 13,
+      buildDashboardEChartsStyleTokens(false, 320), false, null, false, {
+        normalRangeColor: AppDataColors.Altitude, statusColor: AppColors.MediumGray,
+        pointStatuses: model.displayedPoints.map(point => ({ timestampMs: point.timestampMs,
+          color: AppColors.MediumGray, label: 'Building personal range', normalRange: null })),
+      }) as { series: Array<{ id?: string; markArea?: unknown }> };
+    expect(option.series.some(item => item.id?.startsWith('hrv-personal-range'))).toBe(false);
+    expect(option.series.every(item => !item.markArea)).toBe(true);
+  });
+
+  it.each([false, true])('uses the selected Sports Lib unit conversion consistently across a chart (compact: %s)', compact => {
     const unitSettings = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     const distanceSeries = series({
       metricId: HEALTH_METRIC_IDS.Distance,
@@ -270,13 +316,15 @@ describe('Health metric chart helpers', () => {
       buildDashboardEChartsStyleTokens(false, 640),
       false,
       unitSettings,
+      compact,
     ) as {
       tooltip: { formatter: (params: { value?: unknown }) => string };
-      yAxis: { axisLabel: { formatter: (value: number) => string } };
+      yAxis: { show: boolean; axisLabel: { formatter: (value: number) => string } };
     };
 
     expect(model.ariaLabel).toContain('Latest 6.22 mi');
     expect(model.displayUnit).toBe('mi');
+    expect(option.yAxis.show).toBe(true);
     expect(option.tooltip.formatter({ value: [0, 10_000] })).toContain('6.22 mi');
     expect(option.yAxis.axisLabel.formatter(10_000)).toBe('6.22');
   });
@@ -355,7 +403,7 @@ describe('Health metric chart helpers', () => {
     expect(emptyModel.yMaxLabel).toBe('100%');
   });
 
-  it('creates an ECharts stepped categorical series without coercing categories to numbers', () => {
+  it.each([false, true])('keeps categorical axis labels without coercing categories to numbers (compact: %s)', compact => {
     const model = buildHealthChartModels([series({
       chartKind: 'step',
       valueType: HEALTH_VALUE_TYPES.Category,
@@ -373,9 +421,11 @@ describe('Health metric chart helpers', () => {
       DAY_MS,
       buildDashboardEChartsStyleTokens(false, 640),
       false,
+      null,
+      compact,
     ) as any;
     expect(option.series[0]).toMatchObject({ type: 'line', step: 'end', connectNulls: false });
-    expect(option.yAxis).toMatchObject({ type: 'category', data: ['rest', 'high'] });
+    expect(option.yAxis).toMatchObject({ show: true, type: 'category', data: ['rest', 'high'] });
   });
 
   it('uses the established app data colors for matching Health metrics', () => {

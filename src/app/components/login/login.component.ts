@@ -14,6 +14,7 @@ import { AccountLinkingDialogComponent } from './account-linking-dialog/account-
 import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventService } from '../../services/app.event.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { EMAIL_LINK_RETURN_URL_STORAGE_KEY, sanitizeLocalAuthRedirectUrl } from '../../authentication/auth-redirect-url';
 
 
@@ -33,6 +34,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   private postLoginNavigationInFlight = false;
   private hasCompletedPostLoginNavigation = false;
   private isCompletingEmailLinkSignIn = false;
+  private readonly haptics = inject(AppHapticsService);
   private static readonly nonReportableAuthenticationErrorCodes = new Set([
     'auth/account-exists-with-different-credential',
     'auth/cancelled-popup-request',
@@ -434,13 +436,20 @@ export class LoginComponent implements OnInit, OnDestroy {
 
     this.isProfileRecoveryInProgress = true;
     this.isLoading = true;
+    this.haptics.selection();
     try {
-      await this.authService.signOut();
+      if (await this.userService.retryProfileRead()) {
+        this.haptics.success();
+      } else {
+        this.haptics.error();
+      }
     } catch (error) {
-      this.logger.error('Failed to reset the session after a profile read error', error);
-      this.snackBar.open('Could not reset your session. Please reload the page and try again.', 'Close', {
+      this.haptics.error();
+      this.logger.error('Failed to retry the account profile read', error);
+      this.snackBar.open('Could not load your account. Check your connection and try again.', 'Close', {
         duration: 5000,
       });
+    } finally {
       this.isLoading = false;
       this.isProfileRecoveryInProgress = false;
     }

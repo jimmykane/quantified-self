@@ -267,7 +267,7 @@ describe('SideNavComponent', () => {
         expect(trainingItem?.nativeElement.textContent).not.toContain('Beta');
     });
 
-    it.each(['free', 'basic', 'pro'])('links a signed-in %s user to Health immediately after Dashboard', stripeRole => {
+    it.each(['free', 'basic', 'pro'])('orders signed-in %s navigation as Dashboard, Calendar, Training, Health', stripeRole => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
             stripeRole,
@@ -277,14 +277,17 @@ describe('SideNavComponent', () => {
 
         fixture.detectChanges();
         const navigationItems = fixture.debugElement.queryAll(By.css('mat-list-item'));
-        const dashboardItem = navigationItems.find(item => item.nativeElement.textContent.includes('Dashboard'));
         const healthItem = navigationItems.find(item => item.nativeElement.textContent.includes('Health'));
 
         expect(healthItem).toBeTruthy();
         expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
         expect(healthItem?.nativeElement.textContent).toContain('BETA');
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeTruthy();
-        expect(navigationItems.indexOf(healthItem!)).toBe(navigationItems.indexOf(dashboardItem!) + 1);
+        expect(navigationItems.slice(0, 7).map(item => item.nativeElement.getAttribute('routerlink')))
+            .toEqual(['/dashboard', '/calendar', '/training', '/health', '/routes', '/mytracks', '/tools/compare']);
+        healthItem!.triggerEventHandler('click');
+        expect(mockSideNavService.close).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
     it('removes Health navigation when the user signs out', () => {
@@ -352,9 +355,9 @@ describe('SideNavComponent', () => {
         const dashboardIndex = navigationItems.indexOf(dashboardItem!);
         expect([
             navigationItems.indexOf(dashboardItem!),
-            navigationItems.indexOf(healthItem!),
             navigationItems.indexOf(calendarItem!),
             navigationItems.indexOf(trainingItem!),
+            navigationItems.indexOf(healthItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
             navigationItems.indexOf(compareFilesItem!),

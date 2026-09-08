@@ -21,8 +21,8 @@ import {
 import type { PublicSeoPageKey } from './components/public-seo/public-seo-pages.paths';
 import { lazyRouteResolver } from './resolvers/lazy-route.resolver';
 import { PublicLayoutComponent } from './components/public-layout/public-layout.component';
+import { HOME_SEO_DESCRIPTION, HOME_SEO_JSON_LD } from './shared/home-seo';
 
-const HOME_SEO_DESCRIPTION = 'Connect Garmin, Suunto, COROS, and Wahoo in one training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.';
 const SEO_RESOLVED_KEYS = ['title', 'description', 'jsonLd'] as const;
 const PUBLIC_SEO_RESOLVED_KEYS = [...SEO_RESOLVED_KEYS, 'publicSeoPage'] as const;
 
@@ -704,30 +704,7 @@ const topLevelRoutes: Routes = [
       title: 'Training Dashboard',
       animation: 'Home',
       description: HOME_SEO_DESCRIPTION,
-      jsonLd: {
-        "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "Quantified Self",
-        "applicationCategory": "HealthApplication",
-        "operatingSystem": "Web",
-        "description": HOME_SEO_DESCRIPTION,
-        "featureList": [
-          "Week, Month, and Year activity calendar with duration-scaled activity groups",
-          "Curated training analysis for readiness, load, intensity, durability, sleep context, and best builds",
-          "Automatic Garmin to Suunto activity sync",
-          "Automatic COROS to Suunto activity sync",
-          "Automatic Wahoo to Suunto activity sync",
-          "Activity and route delivery to Wahoo",
-          "Read-only MCP access for compatible clients",
-          "Sync past activities to Suunto by date"
-        ],
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        },
-        "url": "https://quantified-self.io/"
-      }
+      jsonLd: HOME_SEO_JSON_LD,
     },
     pathMatch: 'full'
   },

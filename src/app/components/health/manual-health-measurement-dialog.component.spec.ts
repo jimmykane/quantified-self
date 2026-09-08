@@ -1,4 +1,6 @@
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { By } from '@angular/platform-browser';
+import { MatSelect } from '@angular/material/select';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,17 +11,20 @@ import { MANUAL_HEALTH_METRIC_IDS, MANUAL_HEALTH_VALUE_MAXIMUMS } from '@shared/
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import { getDefaultUserUnitSettings } from '@shared/unit-aware-display';
 import { APP_STORAGE } from '../../services/storage/app.storage.token';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import {
   ManualHealthMeasurementDialogComponent,
   type ManualHealthMeasurementDialogData,
 } from './manual-health-measurement-dialog.component';
 
 describe('ManualHealthMeasurementDialogComponent', () => {
+  let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let dialogRef: { close: ReturnType<typeof vi.fn> };
   let storage: Storage;
   let fixture: ComponentFixture<ManualHealthMeasurementDialogComponent>;
 
   beforeEach(() => {
+    haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     dialogRef = { close: vi.fn() };
     storage = {
       getItem: vi.fn().mockReturnValue(null),
@@ -38,11 +43,33 @@ describe('ManualHealthMeasurementDialogComponent', () => {
         { provide: MAT_DIALOG_DATA, useValue: data },
         { provide: MatDialogRef, useValue: dialogRef },
         { provide: APP_STORAGE, useValue: storage },
+        { provide: AppHapticsService, useValue: haptics },
       ],
     }).compileComponents();
     fixture = TestBed.createComponent(ManualHealthMeasurementDialogComponent);
     return fixture.componentInstance;
   }
+
+  it('keeps draft hydration silent and acknowledges selectors and cancel without claiming a save', async () => {
+    const component = await create({ metricId: HEALTH_METRIC_IDS.BodyWeight, unitSettings: null });
+    fixture.detectChanges();
+    component.form.patchValue({ canonicalValue: 72 });
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.selectMetric(HEALTH_METRIC_IDS.BodyWeight);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const select = fixture.debugElement.query(By.directive(MatSelect));
+    select.triggerEventHandler('openedChange', true);
+    select.triggerEventHandler('openedChange', false);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    select.triggerEventHandler('selectionChange', { value: HEALTH_METRIC_IDS.Vo2Max });
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    fixture.detectChanges();
+    fixture.debugElement.queryAll(By.directive(MatSelect))[1].triggerEventHandler('selectionChange', { value: 'running' });
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    component.close();
+    expect(haptics.selection).toHaveBeenCalledTimes(4);
+    expect(haptics.success).not.toHaveBeenCalled();
+  });
 
   it('submits a canonical Weight measurement with the observed local offset', async () => {
     const component = await create({ metricId: HEALTH_METRIC_IDS.BodyWeight, unitSettings: null });
@@ -60,6 +87,8 @@ describe('ManualHealthMeasurementDialogComponent', () => {
       timezoneOffsetSeconds: expect.any(Number),
     }));
     expect(dialogRef.close.mock.calls[0][0]).not.toHaveProperty('vo2Context');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
   });
 
   it.each(MANUAL_HEALTH_METRIC_IDS)('disables saving invalid %s values in the rendered form', async metricId => {
@@ -73,6 +102,7 @@ describe('ManualHealthMeasurementDialogComponent', () => {
       expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(true);
       component.submit();
       expect(dialogRef.close).not.toHaveBeenCalled();
+      expect(haptics.error).toHaveBeenCalled();
     }
     component.form.controls.canonicalValue.setValue(25.5);
     fixture.detectChanges();

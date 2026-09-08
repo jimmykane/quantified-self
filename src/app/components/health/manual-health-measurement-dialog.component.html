@@ -4,7 +4,7 @@
   <form id="manual-health-measurement-form" class="manual-health-form" [formGroup]="form" (ngSubmit)="submit()">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Measurement</mat-label>
-      <mat-select [value]="selectedMetric()" [disabled]="!!data.existing" (selectionChange)="selectMetric($event.value)">
+      <mat-select [value]="selectedMetric()" [disabled]="!!data.existing" (openedChange)="$event && haptics.selection()" (selectionChange)="selectMetric($event.value)">
         @for (option of metricOptions; track option.id) {
           <mat-option [value]="option.id">{{ option.label }}</mat-option>
         }
@@ -55,12 +55,12 @@
     <div class="manual-health-time-fields">
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Date</mat-label>
-        <input matInput type="date" formControlName="observedDate" min="2000-01-01" [max]="todayDate" required>
+        <input matInput type="date" formControlName="observedDate" min="2000-01-01" [max]="todayDate" (change)="haptics.selection()" required>
         <mat-error>Enter the measurement date.</mat-error>
       </mat-form-field>
       <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>Time</mat-label>
-        <input matInput type="time" formControlName="observedTime" required>
+        <input matInput type="time" formControlName="observedTime" (change)="haptics.selection()" required>
         <mat-error>Enter the measurement time.</mat-error>
       </mat-form-field>
     </div>
@@ -69,7 +69,7 @@
       <div class="manual-health-vo2-fields">
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Context</mat-label>
-          <mat-select formControlName="vo2Context" required>
+          <mat-select formControlName="vo2Context" (openedChange)="$event && haptics.selection()" (selectionChange)="haptics.selection()" required>
             @for (context of vo2Contexts; track context) {
               <mat-option [value]="context">{{ contextLabel(context) }}</mat-option>
             }
@@ -77,7 +77,7 @@
         </mat-form-field>
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Method</mat-label>
-          <mat-select formControlName="vo2Method" required>
+          <mat-select formControlName="vo2Method" (openedChange)="$event && haptics.selection()" (selectionChange)="haptics.selection()" required>
             @for (method of vo2Methods; track method) {
               <mat-option [value]="method">{{ methodLabel(method) }}</mat-option>
             }

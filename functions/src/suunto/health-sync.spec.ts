@@ -37,7 +37,8 @@ vi.mock('../config', () => ({
   config: { suuntoapp: { subscription_key: 'test-subscription-key' } },
 }));
 
-vi.mock('../request-helper', () => ({
+vi.mock('../request-helper', async importOriginal => ({
+  ...await importOriginal<typeof import('../request-helper')>(),
   get: hoisted.requestGet,
 }));
 
@@ -72,16 +73,36 @@ vi.mock('./health-webhook-binding-lifecycle', async importOriginal => ({
 }));
 
 import {
+  getSuuntoHealthRequestTelemetry,
+  getSuuntoHealthFailureTelemetry,
   processSuuntoHealthQueueItem,
   sanitizeSuuntoHealthErrorForTelemetry,
   suuntoHealthSyncTestInternals,
   SuuntoHealthRequestError,
 } from './health-sync';
-import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError } from './health';
+import { SuuntoHealthValidationError, SuuntoHealthResponseLimitError, SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS } from './health';
+import { ResponseBodyTooLargeError } from '../request-helper';
 import type { SuuntoWebhookWriteLifecycleGuards } from './health-webhook-binding-lifecycle';
 
 const START_MS = Date.parse('2026-08-26T00:00:00.000Z');
 const END_MS = Date.parse('2026-08-27T00:00:00.000Z');
+
+async function drainWindows(item: SleepSyncQueueItemInterface) {
+  const snapshot = tokenSnapshot();
+  const records = new Map<string, Awaited<ReturnType<typeof processSuuntoHealthQueueItem>>['healthResults'][number]>();
+  const attemptCounts: number[] = [];
+  for (let attempts = 0; attempts < 57; attempts++) {
+    const before = hoisted.requestGet.mock.calls.length;
+    const result = await processSuuntoHealthQueueItem(item, snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+    attemptCounts.push(hoisted.requestGet.mock.calls.length - before);
+    for (const record of result.healthResults) records.set(record.input.sourceRecordKey, record);
+    if (!result.continuation) return { healthResults: [...records.values()], attemptCounts };
+    expect(result.continuation.nextStartMs).toBeGreaterThan(item.suuntoHealthProgress?.nextStartMs ?? item.rangeStartMs!);
+    item = { ...item, suuntoHealthProgress: { ...result.continuation,
+      recordsWritten: 0, recordsUnchanged: 0, recordsStale: 0, lastObservedAtMs: 0 } };
+  }
+  throw Error('Continuation did not finish');
+}
 
 function tokenProjection(accessToken: string): Record<string, unknown> {
   return {
@@ -167,6 +188,60 @@ function queueItem(): SleepSyncQueueItemInterface {
 }
 
 describe('Suunto Health provider sync', () => {
+  it.each([10, 14, 4])('retains RPC code %s without error messages, account paths or credentials', code => {
+    const error = Object.assign(new Error('private-account/private-token/private-health'), {
+      code, details: 'private-details', cause: new Error('private-cause'),
+    });
+    expect(getSuuntoHealthFailureTelemetry(error, 'health_write', 42)).toEqual({
+      errorCode: 'suunto_health_processing_failed', errorName: 'Error', failureCategory: 'rpc_error',
+      failureStage: 'health_write', processingElapsedMs: 42, rpcStatusCode: code,
+    });
+    expect(sanitizeSuuntoHealthErrorForTelemetry(error).message).toBe('Suunto Health processing failed.');
+  });
+
+  it('distinguishes provider HTTP, response limits, transport and validation failures', () => {
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(500), 'activity_request', 17))
+      .toMatchObject({ errorCode: 'suunto_health_request_failed', providerStatusCode: 500, failureCategory: 'provider_http_error' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(undefined, true), 'activity_request', 17))
+      .toMatchObject({ failureCategory: 'response_byte_limit' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(undefined, false, 'ETIMEDOUT'), 'statistics_request', 17))
+      .toMatchObject({ transportCode: 'ETIMEDOUT', failureCategory: 'transport_error' });
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthValidationError('private-field must be a string.'), 'activity_mapping', 17))
+      .toMatchObject({ failureCategory: 'validation_error', validationCode: 'expected_string' });
+  });
+
+  it('bounds diagnostic fields and does not trust arbitrary names, codes, causes or throwing accessors', () => {
+    for (const error of [Object.assign(new Error('private-message'), { name: 'private-name', code: 'private-code' }),
+      { get name() { throw new Error('private-getter'); } }, null]) {
+      const output = getSuuntoHealthFailureTelemetry(error, 'unknown', Infinity);
+      expect(output).toMatchObject({ errorName: 'UnknownError', processingElapsedMs: 0 });
+      expect(JSON.stringify(output)).not.toContain('private');
+    }
+    expect(getSuuntoHealthFailureTelemetry(new TypeError('private'), 'health_write', -1))
+      .toMatchObject({ errorName: 'TypeError', processingElapsedMs: 0 });
+    expect(getSuuntoHealthFailureTelemetry(new Error(), 'unknown', 9_999_999).processingElapsedMs).toBe(1_800_000);
+    expect(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(700, false, 'private-token'), 'unknown', 1))
+      .not.toHaveProperty('providerStatusCode');
+    expect(JSON.stringify(getSuuntoHealthFailureTelemetry(new SuuntoHealthRequestError(700, false, 'private-token'), 'unknown', 1)))
+      .not.toContain('private');
+  });
+
+  it.each([0, 1, 2])('reports the failing feed %s and preserves an allowlisted transport code', async index => {
+    const stages: string[] = [];
+    hoisted.requestGet.mockReset();
+    for (let i = 0; i < index; i++) hoisted.requestGet.mockResolvedValueOnce([]);
+    hoisted.requestGet.mockRejectedValueOnce(Object.assign(new Error('private-url-and-body'), { code: 'ECONNRESET' }));
+    const snapshot = tokenSnapshot();
+    let caught: unknown;
+    try {
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot), undefined,
+        stage => stages.push(stage));
+    } catch (error) { caught = error; }
+    expect(stages.at(-1)).toBe(['activity_request', 'statistics_request', 'recovery_request'][index]);
+    expect(getSuuntoHealthRequestTelemetry(caught)).toMatchObject({ transportCode: 'ECONNRESET' });
+    expect(JSON.stringify(caught)).not.toContain('private');
+  });
+
   it('reports only an allowlisted validation code without provider field detail', () => {
     const telemetryError = sanitizeSuuntoHealthErrorForTelemetry(
       new SuuntoHealthValidationError('activity[42].entryData.HR is outside the supported numeric range.'),
@@ -179,6 +254,19 @@ describe('Suunto Health provider sync', () => {
     expect(sanitizeSuuntoHealthErrorForTelemetry(
       new SuuntoHealthValidationError('private-provider-detail'),
     ).message).toBe('Suunto Health response validation failed [unclassified_validation].');
+  });
+
+  it('exposes only a validated HTTP status for a Suunto provider request error', () => {
+    expect(getSuuntoHealthRequestTelemetry(new SuuntoHealthRequestError(429))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+      providerStatusCode: 429,
+    });
+    expect(getSuuntoHealthRequestTelemetry(new SuuntoHealthRequestError(700))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+    });
+    expect(getSuuntoHealthRequestTelemetry(new Error('provider body must not be logged'))).toBeNull();
   });
 
   beforeEach(() => {
@@ -300,25 +388,27 @@ describe('Suunto Health provider sync', () => {
   });
 
   it.each([
-    ['activity', 0], ['recovery', 0], ['activity', 2], ['recovery', -5],
-  ] as const)('refetches dense %s ranges at offset %s without losing full-day samples', async (feed, offset) => {
+    ['activity', 0, 'samples'], ['recovery', 0, 'samples'],
+    ['activity', 2, 'samples'], ['recovery', -5, 'samples'],
+    ['activity', 0, 'bytes'], ['recovery', 0, 'bytes'],
+    ['activity', 2, 'bytes'], ['recovery', -5, 'bytes'],
+  ] as const)('refetches dense %s ranges at offset %s limited by %s without losing full-day samples', async (feed, offset, limit) => {
     const dayMs = 86_400_000;
     hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
       const request = new URL(url);
       if (!request.pathname.endsWith(`/${feed}`)) return [];
       const from = Number(request.searchParams.get('from'));
       const to = Number(request.searchParams.get('to'));
+      if (limit === 'bytes' && to - from + 1 > 6 * dayMs) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
       return Array.from({ length: Math.floor((to - from + 1) / 60_000) }, (_, index) => ({
         timestamp: new Date(from + index * 60_000 + offset * 3_600_000).toISOString()
           .replace('Z', `${offset < 0 ? '-' : '+'}${String(Math.abs(offset)).padStart(2, '0')}:00`),
         entryData: feed === 'activity' ? { HR: 60 } : { Balance: 0.5, StressState: 2 },
       }));
     });
-    const snapshot = tokenSnapshot();
-    const result = await processSuuntoHealthQueueItem(
-      { ...queueItem(), rangeEndMs: START_MS + 7 * dayMs }, snapshot, 'staged-user',
-      currentAuthorityGuards(snapshot),
-    );
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 7 * dayMs });
     expect(result.healthResults).toHaveLength(offset === 0 ? 7 : 8);
     for (const record of result.healthResults) {
       expect(record.input.sampleSeries[0].nativeValues).toHaveLength(1440);
@@ -328,37 +418,44 @@ describe('Suunto Health provider sync', () => {
       new URL(options.url).pathname.endsWith(`/${feed}`));
     expect(feedCalls).toHaveLength(3); // rejected parent, then two bounded children
     expect(hoisted.requestGet).toHaveBeenCalledTimes(feed === 'activity' ? 7 : 9);
+    for (const [options] of hoisted.requestGet.mock.calls) {
+      expect(options.maxResponseBytes).toBe(4 * 1024 * 1024);
+    }
   });
 
-  it('narrows daily-statistic sample-count failures and retains both sides', async () => {
+  it.each(['samples', 'bytes'])('narrows daily-statistic %s failures and retains both sides', async limit => {
     const dayMs = 86_400_000;
     hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
       const request = new URL(url);
       if (!request.pathname.endsWith('/daily-activity-statistics')) return [];
       const start = Date.parse(request.searchParams.get('startdate')!);
       const end = Date.parse(request.searchParams.get('enddate')!);
+      if (limit === 'bytes' && end - start > 6 * dayMs) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
       const samples = end - start > 6 * dayMs ? Array(65).fill(null)
         : Array.from({ length: 9 }, (_, i) => ({
           TimeISO8601: new Date(START_MS + (i - 1) * dayMs).toISOString(), Value: i,
         }));
       return [{ Name: 'stepcount', Aggregation: 'sum', Sources: [{ Name: 'watch', Samples: samples }] }];
     });
-    const snapshot = tokenSnapshot();
-    const result = await processSuuntoHealthQueueItem(
-      { ...queueItem(), rangeEndMs: START_MS + 7 * dayMs }, snapshot, 'staged-user',
-      currentAuthorityGuards(snapshot),
-    );
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 7 * dayMs });
     expect(result.healthResults).toHaveLength(7);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(8);
   });
 
-  it('fails closed at the minimum target instead of truncating an oversized response', async () => {
-    hoisted.requestGet.mockReset().mockResolvedValue(Array(10_001).fill(null));
+  it.each(['samples', 'bytes'])('fails closed at the minimum target instead of truncating an oversized %s response', async limit => {
+    hoisted.requestGet.mockReset();
+    if (limit === 'bytes') {
+      hoisted.requestGet.mockRejectedValue(new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1));
+    } else {
+      hoisted.requestGet.mockResolvedValue(Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null));
+    }
     const snapshot = tokenSnapshot();
     await expect(processSuuntoHealthQueueItem(
       { ...queueItem(), rangeEndMs: START_MS + 4 * 86_400_000 }, snapshot, 'staged-user',
       currentAuthorityGuards(snapshot),
-    )).rejects.toBeInstanceOf(SuuntoHealthResponseLimitError);
+    )).rejects.toBeInstanceOf(limit === 'bytes' ? SuuntoHealthRequestError : SuuntoHealthResponseLimitError);
     expect(hoisted.requestGet).toHaveBeenCalledTimes(3); // 4d -> 2d -> 1d
   });
 
@@ -372,11 +469,15 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['deletion', 'reconnect'])('rechecks %s before an adaptive child request', async change => {
+  it.each([
+    ['deletion', 'samples'], ['reconnect', 'samples'],
+    ['deletion', 'bytes'], ['reconnect', 'bytes'],
+  ])('rechecks %s before an adaptive child request after a %s limit', async (change, limit) => {
     hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
       if (change === 'deletion') hoisted.shouldSkipQueueWorkForDeletedUser.mockResolvedValue(true);
       else hoisted.connectionStateGeneration = 'connection-generation-2';
-      return Array(10_001).fill(null);
+      if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      return Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null);
     });
     const snapshot = tokenSnapshot();
     await expect(processSuuntoHealthQueueItem(
@@ -387,12 +488,13 @@ describe('Suunto Health provider sync', () => {
     expect(hoisted.requestGet).toHaveBeenCalledTimes(1);
   });
 
-  it('bounds adaptive pull time before making further requests', async () => {
+  it.each(['samples', 'bytes'])('bounds adaptive pull time after %s limits before making further requests', async limit => {
     const now = Date.now();
     const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
     hoisted.requestGet.mockReset().mockImplementationOnce(async () => {
       clock.mockReturnValue(now + 4 * 60_000);
-      return Array(10_001).fill(null);
+      if (limit === 'bytes') throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      return Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null);
     });
     try {
       const snapshot = tokenSnapshot();
@@ -406,19 +508,33 @@ describe('Suunto Health provider sync', () => {
     }
   });
 
-  it('limits the total adaptive HTTP attempts without returning partial success', async () => {
+  it.each(['samples', 'bytes'])('completes a dense 28-day range exceeding 64 total pulls using bounded %s continuations', async limit => {
     hoisted.requestGet.mockReset().mockImplementation(async ({ url }: { url: string }) => {
       const request = new URL(url);
       if (!request.pathname.endsWith('/recovery')) return [];
       const span = Number(request.searchParams.get('to')) + 1 - Number(request.searchParams.get('from'));
-      return span > 4 * 86_400_000 ? Array(10_001).fill(null) : [];
+      if (limit === 'bytes' && span > 4 * 86_400_000) {
+        throw new ResponseBodyTooLargeError(4 * 1024 * 1024, 4 * 1024 * 1024 + 1);
+      }
+      return span > 4 * 86_400_000 ? Array(SUUNTO_HEALTH_MAX_RAW_SAMPLE_ROWS + 1).fill(null) : [];
     });
+    const result = await drainWindows({ ...queueItem(), rangeEndMs: START_MS + 28 * 86_400_000 });
+    expect(hoisted.requestGet.mock.calls.length).toBeGreaterThan(64);
+    expect(Math.max(...result.attemptCounts)).toBeLessThanOrEqual(18);
+    expect(result.attemptCounts.slice(1).every(count => count === 3)).toBe(true);
+  });
+
+  it('rejects malformed or reconnected continuation authority before provider I/O', async () => {
     const snapshot = tokenSnapshot();
-    await expect(processSuuntoHealthQueueItem(
-      { ...queueItem(), rangeEndMs: START_MS + 28 * 86_400_000 }, snapshot, 'staged-user',
-      currentAuthorityGuards(snapshot),
-    )).rejects.toThrow('Suunto Health pull budget exceeded.');
-    expect(hoisted.requestGet).toHaveBeenCalledTimes(64);
+    const item = { ...queueItem(), rangeEndMs: START_MS + 7 * 86_400_000,
+      suuntoHealthProgress: { nextStartMs: END_MS, targetWindowMs: 86_400_000, authorityDigest: 'f'.repeat(64),
+        recordsWritten: 1, recordsUnchanged: 0, recordsStale: 0, lastObservedAtMs: 0 } };
+    await expect(processSuuntoHealthQueueItem(item, snapshot, 'staged-user', currentAuthorityGuards(snapshot)))
+      .rejects.toMatchObject({ name: 'SuuntoHealthAccountValidationError' });
+    await expect(processSuuntoHealthQueueItem({ ...item,
+      suuntoHealthProgress: { ...item.suuntoHealthProgress, nextStartMs: START_MS },
+    }, snapshot, 'staged-user', currentAuthorityGuards(snapshot))).rejects.toThrow('Invalid Suunto Health progress');
+    expect(hoisted.requestGet).not.toHaveBeenCalled();
   });
 
   it('fails closed when accumulated result bytes exceed the memory budget', async () => {
@@ -566,6 +682,35 @@ describe('Suunto Health provider sync', () => {
       message: 'Suunto Health request failed.',
       providerStatusCode: undefined,
     }));
+  });
+
+  it.each([false, true])('logs the response byte limit without leaking payloads after refresh=%s', async refresh => {
+    const providerError = Object.assign(new ResponseBodyTooLargeError(4 * 1024 * 1024, 5 * 1024 * 1024), {
+      body: 'private-health-data',
+      url: 'https://example.invalid?token=private-token',
+      headers: { Authorization: 'private-credential' },
+    });
+    hoisted.requestGet.mockReset();
+    if (refresh) {
+      hoisted.requestGet.mockRejectedValueOnce({ statusCode: 401 });
+    }
+    hoisted.requestGet.mockRejectedValueOnce(providerError);
+    const snapshot = tokenSnapshot();
+    let caught: unknown;
+    try {
+      await processSuuntoHealthQueueItem(queueItem(), snapshot, 'staged-user', currentAuthorityGuards(snapshot));
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(SuuntoHealthRequestError);
+    expect(getSuuntoHealthRequestTelemetry(sanitizeSuuntoHealthErrorForTelemetry(caught))).toEqual({
+      errorName: 'SuuntoHealthRequestError',
+      errorCode: 'suunto_health_request_failed',
+      failureCategory: 'response_byte_limit',
+    });
+    expect(JSON.stringify(caught)).not.toContain('private-');
+    expect(hoisted.requestGet).toHaveBeenCalledTimes(refresh ? 2 : 1);
   });
 
   it('checks the deletion guard before every provider request', async () => {

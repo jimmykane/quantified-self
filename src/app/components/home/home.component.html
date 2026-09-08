@@ -55,15 +55,15 @@
     </div>
 
     <div class="compact-row-stack integration-followup-list">
-      <app-compact-feature-row
+      <app-compact-row
         class="integration-capability animate-on-scroll"
         icon="history"
         iconTone="secondary"
         title="Sync Your History"
         summary="Connect Garmin, Suunto, COROS, and Wahoo. New activities arrive automatically, and you can import the activity history already stored with each provider."
-      ></app-compact-feature-row>
+      ></app-compact-row>
 
-      <app-compact-feature-row
+      <app-compact-row
         class="integration-capability animate-on-scroll"
         icon="published_with_changes"
         iconTone="secondary"
@@ -71,14 +71,15 @@
         summary="Choose automatic delivery between supported providers. You can also send past activities by date range without enabling future sync."
       >
         <div class="integration-capability-details">
+          <div data-nosnippet>
           <app-provider-data-flow-matrix
-            data-nosnippet
             caption="Supported provider paths"
             [rows]="providerDataFlowRows"
             [interactive]="false"
             [compact]="true"
             [showRouteState]="false">
           </app-provider-data-flow-matrix>
+          </div>
           <p>
             <strong>Activity paths:</strong> Automatically deliver new workouts or backfill past activities by date range.
           </p>
@@ -87,15 +88,15 @@
             can also be sent manually to Garmin, Suunto, COROS, or Wahoo.
           </p>
         </div>
-      </app-compact-feature-row>
+      </app-compact-row>
 
-      <app-compact-feature-row
+      <app-compact-row
         class="integration-capability animate-on-scroll"
         icon="upload_file"
         title="Upload Your Own Files"
         [showDivider]="false"
         summary="Import FIT, TCX, GPX, JSON, and SML activity files into Quantified Self. You can also send FIT activities directly to Suunto, COROS, or Wahoo for one-off transfers."
-      ></app-compact-feature-row>
+      ></app-compact-row>
     </div>
 
     <a mat-stroked-button class="integrations-cta" routerLink="/integrations">
@@ -112,7 +113,7 @@
     </p>
 
     <div class="compact-row-stack training-preview-stack">
-      <app-compact-feature-row
+      <app-compact-row
         class="training-preview-row animate-on-scroll"
         icon="monitor_heart"
         iconTone="secondary"
@@ -122,42 +123,41 @@
       >
         <app-public-feature-preview
           class="training-preview-data"
-          data-nosnippet
           previewKey="training-snapshot"
         ></app-public-feature-preview>
-      </app-compact-feature-row>
+      </app-compact-row>
     </div>
 
     <div class="compact-row-stack features-grid">
       <!-- Feature 1: Derived Curated Charts -->
-      <app-compact-feature-row
+      <app-compact-row
         class="feature-card animate-on-scroll"
         icon="query_stats"
         title="Charts Behind Every Signal"
         summary="See how Form, freshness, intensity, efficiency, and power change over time, with readiness, recovery, and sleep views available in Training."
       >
-        <app-public-feature-preview data-nosnippet previewKey="training-signals"></app-public-feature-preview>
-      </app-compact-feature-row>
+        <app-public-feature-preview previewKey="training-signals"></app-public-feature-preview>
+      </app-compact-row>
 
       <!-- Feature 3: Dashboard Manager -->
-      <app-compact-feature-row
+      <app-compact-row
         class="feature-card animate-on-scroll"
         icon="dashboard_customize"
         title="Build the Dashboard You Need"
         summary="Start from a preset or arrange Curated, KPI, Custom, and Map tiles yourself. Each tile keeps its own filters; maps add style and marker-clustering controls."
       >
-        <app-public-feature-preview data-nosnippet previewKey="dashboard"></app-public-feature-preview>
-      </app-compact-feature-row>
+        <app-public-feature-preview previewKey="dashboard"></app-public-feature-preview>
+      </app-compact-row>
 
       <!-- Feature 4: Deep Analysis -->
-      <app-compact-feature-row
+      <app-compact-row
         class="feature-card animate-on-scroll"
         icon="layers"
         title="Analyze Every Workout"
         summary="Compare heart rate, power, altitude, depth, pace, and more in synchronized charts. Inspect intensity zones, grade-colored elevation, inverse depth, aerobic durability, and cadence versus power. Switch between distance, duration, or time where supported, then select a range for stats or zoom in."
       >
-        <app-public-feature-preview data-nosnippet previewKey="workout-analysis"></app-public-feature-preview>
-      </app-compact-feature-row>
+        <app-public-feature-preview previewKey="workout-analysis"></app-public-feature-preview>
+      </app-compact-row>
     </div>
 
     <div class="section-actions training-actions animate-on-scroll">
@@ -174,10 +174,10 @@
     <p class="section-subtitle animate-on-scroll">{{ healthFeature.intro }}</p>
     <div class="compact-row-stack">
       @for (row of healthFeature.rows; track row.preview; let last = $last) {
-        <app-compact-feature-row class="animate-on-scroll"
+        <app-compact-row class="animate-on-scroll"
           [icon]="row.icon" [title]="row.title" [summary]="row.copy" [showDivider]="!last">
-          <app-public-feature-preview data-nosnippet [previewKey]="row.preview"></app-public-feature-preview>
-        </app-compact-feature-row>
+          <app-public-feature-preview [previewKey]="row.preview"></app-public-feature-preview>
+        </app-compact-row>
       }
     </div>
     <div class="section-actions animate-on-scroll">
@@ -195,31 +195,30 @@
     </div>
 
     <div class="compact-row-stack features-grid">
-      <app-compact-feature-row
+      <app-compact-row
         class="feature-card animate-on-scroll"
         icon="chat"
         title="Ask in Your Own Words"
         summary="Start with today, a trend, or a recent workout. Ask follow-up questions without starting over."
-      ></app-compact-feature-row>
+      ></app-compact-row>
 
-      <app-compact-feature-row
+      <app-compact-row
         class="feature-card animate-on-scroll"
         icon="hub"
         title="Bring Your Data Together"
         summary="The Assistant draws from sleep, recovery, training, measurements, and activities when your question needs the broader context."
-      ></app-compact-feature-row>
+      ></app-compact-row>
 
-      <app-compact-feature-row
+      <app-compact-row
         class="feature-card animate-on-scroll"
         icon="fact_check"
         title="Check the Evidence"
         summary="Each answer shows the data behind it, so you can see exactly what supports it."
-      ></app-compact-feature-row>
+      ></app-compact-row>
     </div>
 
     <app-public-feature-preview
       class="ai-insights-examples animate-on-scroll"
-      data-nosnippet
       previewKey="assistant-example"
     ></app-public-feature-preview>
 
@@ -232,7 +231,7 @@
     <p class="ai-insights-cta-note animate-on-scroll">Your data, current evidence, conversational answers.</p>
 
     <div class="compact-row-stack mcp-access-stack">
-      <app-compact-feature-row
+      <app-compact-row
         class="mcp-access-row animate-on-scroll"
         icon="devices"
         title="Analyze with ChatGPT or Claude"
@@ -240,13 +239,13 @@
         summary="Connect ChatGPT or Claude through read-only MCP. Ask them to analyze your training, review your season, plan your next workout, or draft a longer training-plan proposal grounded in your load, fatigue, readiness, sleep, measurements, workout charts, and routes. You choose the data; neither tool can add workouts or change your account. Location access remains separate."
       >
         <a
-          compactFeatureRowAction
+          compactRowAction
           mat-stroked-button
           routerLink="/features/mcp-server"
           >Connect ChatGPT or Claude</a
         >
-        <app-public-feature-preview data-nosnippet previewKey="mcp-flow"></app-public-feature-preview>
-      </app-compact-feature-row>
+        <app-public-feature-preview previewKey="mcp-flow"></app-public-feature-preview>
+      </app-compact-row>
     </div>
   </section>
 
@@ -263,11 +262,10 @@
       </div>
       <app-public-feature-preview
         class="footprint-map-stage"
-        data-nosnippet
         previewKey="activity-map"
       ></app-public-feature-preview>
-      <p class="footprint-map-caption" data-nosnippet>
-        Real activity traces · open-water swimming, trail running, and mountain biking.
+      <p class="footprint-map-caption">
+        <span data-nosnippet>Real activity traces · open-water swimming, trail running, and mountain biking.</span>
       </p>
       <a class="footprint-cta" mat-stroked-button routerLink="/features/activity-map">
         Explore Activity Map
@@ -294,7 +292,6 @@
 
     <app-public-feature-preview
       class="analysis-grid animate-on-scroll"
-      data-nosnippet
       previewKey="reviewer-benchmark"
     ></app-public-feature-preview>
   </section>

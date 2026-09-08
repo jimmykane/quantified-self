@@ -58,7 +58,7 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
 
   it('shares four compact benchmark rows and their evidence previews', () => {
     const text = fixture.nativeElement.textContent as string;
-    expect(fixture.nativeElement.querySelectorAll('app-compact-feature-row')).toHaveLength(4);
+    expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(4);
     expect(text).toContain('Benchmark Merge Workflow');
     expect(text).toContain('Multi-Device Chart Comparison');
     expect(text).toContain('GNSS Trace Comparison');
@@ -84,7 +84,7 @@ describe('ReviewerBenchmarkPreviewComponent', () => {
   });
 
   it('leads with the chart comparison before explaining the merge workflow', () => {
-    const titles = Array.from(fixture.nativeElement.querySelectorAll('.compact-feature-row__title'))
+    const titles = Array.from(fixture.nativeElement.querySelectorAll('.compact-row__title'))
       .map((title: Element) => title.textContent?.trim());
 
     expect(titles[0]).toBe('Multi-Device Chart Comparison');

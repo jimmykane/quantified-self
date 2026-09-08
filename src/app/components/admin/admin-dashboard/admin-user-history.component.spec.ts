@@ -3,6 +3,7 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminDashboardHistoryPoint, AdminDashboardHistoryResponse } from '../../../services/admin.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -11,6 +12,7 @@ import { AdminUserHistoryComponent } from './admin-user-history.component';
 describe('AdminUserHistoryComponent', () => {
     let fixture: ComponentFixture<AdminUserHistoryComponent>;
     let component: AdminUserHistoryComponent;
+    const haptics = { selection: vi.fn() };
     let restoreDateNow: () => void;
     let loader: {
         init: ReturnType<typeof vi.fn>;
@@ -22,6 +24,7 @@ describe('AdminUserHistoryComponent', () => {
     };
 
     beforeEach(async () => {
+        haptics.selection.mockClear();
         const dateNowSpy = vi.spyOn(Date, 'now')
             .mockReturnValue(Date.parse('2026-08-27T12:00:00.000Z'));
         restoreDateNow = () => dateNowSpy.mockRestore();
@@ -41,6 +44,7 @@ describe('AdminUserHistoryComponent', () => {
         await TestBed.configureTestingModule({
             imports: [AdminUserHistoryComponent],
             providers: [
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: AppThemeService, useValue: { getAppTheme: () => of(AppThemes.Normal) } },
                 { provide: EChartsLoaderService, useValue: loader },
                 { provide: LoggerService, useValue: { error: vi.fn() } },
@@ -89,6 +93,7 @@ describe('AdminUserHistoryComponent', () => {
                 symbol?: string;
                 lineStyle?: { type?: string };
                 areaStyle?: { opacity?: number };
+                stack?: string;
             }>;
         });
         const activityOption = options.find(option => option.series?.some(series => series.name === 'Active 24h'));
@@ -109,7 +114,13 @@ describe('AdminUserHistoryComponent', () => {
         expect(activePlanOption?.series?.map(series => series.name)).toEqual(['Free', 'Basic', 'Pro']);
 
         const userMixOption = options.find(option => option.series?.some(series => series.name === 'Onboarding complete'));
-        expect(new Set(userMixOption?.series?.slice(0, 3).map(series => series.areaStyle?.opacity)).size).toBe(3);
+        expect(userMixOption?.series).toHaveLength(4);
+        options.flatMap(option => option.series ?? []).forEach(series => {
+            expect(series.stack).toBeUndefined();
+            expect(series.areaStyle).toBeUndefined();
+        });
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect((fixture.nativeElement as HTMLElement).querySelectorAll('mat-chip-listbox')).toHaveLength(4);
     });
 
     it('switches the active-plan rolling window locally', async () => {
@@ -194,6 +205,137 @@ describe('AdminUserHistoryComponent', () => {
         expect(component.historyView().availablePoints).toBe(30);
     });
 
+    it('fits the visible series, formats exact counts, and keeps tooltip selections in sync', async () => {
+        const data = history(40);
+        data.snapshots.forEach((snapshot, index) => {
+            snapshot.users = {
+                total: 2100 + index,
+                free: 1980 + index,
+                basic: 10,
+                pro: 110,
+                onboardingCompleted: 1960 + index,
+            };
+        });
+        fixture.componentRef.setInput('history', data);
+        await renderCharts();
+
+        component.selectSeries('userMix', ['Free']);
+        await renderCharts();
+        const selected = latestOption('Onboarding complete');
+        expect(selected.yAxis.min).toBeGreaterThan(1900);
+        expect(selected.yAxis.min).toBeLessThan(1980);
+        expect(selected.yAxis.max).toBeGreaterThan(2019);
+        expect(selected.yAxis.max - selected.yAxis.min).toBeLessThan(100);
+        expect(selected.yAxis.axisLabel.formatter(1980)).toBe('1,980');
+        expect(selected.yAxis.axisLabel.formatter(2000)).toBe('2,000');
+        expect(selected.legend).toMatchObject({
+            show: false,
+            selected: { Free: true, Basic: false, Pro: false, 'Onboarding complete': false },
+        });
+        const tooltip = selected.tooltip.formatter([{ axisValue: data.endDate }]);
+        expect(tooltip).toContain('Free');
+        expect(tooltip).not.toContain('Onboarding complete');
+        expect(tooltip).not.toContain('Basic');
+        expect(tooltip).not.toContain('Pro');
+
+        component.selectDays(30);
+        component.selectActivePlanWindow('last24Hours');
+        await renderCharts();
+        expect(latestOption('Onboarding complete').legend.selected).toEqual(selected.legend.selected);
+        expect(latestOption('Onboarding complete').series[0].data).toHaveLength(30);
+
+        component.selectScale('zero');
+        await renderCharts();
+        expect(latestOption('Onboarding complete').yAxis.min).toBe(0);
+        expect(latestOption('Onboarding complete').legend.selected).toEqual(selected.legend.selected);
+    });
+
+    it('lets the Material chips filter and restore series without hiding the last one', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        await renderCharts();
+        const picker = (fixture.nativeElement as HTMLElement)
+            .querySelector('mat-chip-listbox[aria-label="authentication activity series"]')!;
+        const option = (label: string) => Array.from(picker.querySelectorAll<HTMLElement>('[role="option"]'))
+            .find(element => element.textContent?.includes(label))!;
+
+        option('Active 7d').click();
+        await renderCharts();
+        option('Active 30d').click();
+        await renderCharts();
+
+        expect(component.seriesControls().activity.selected).toEqual(['Active 24h']);
+        expect(option('Active 24h').getAttribute('aria-disabled')).toBe('true');
+        expect(option('Active 24h').getAttribute('aria-selected')).toBe('true');
+        expect(latestOption('Active 24h').legend.selected)
+            .toEqual({ 'Active 24h': true, 'Active 7d': false, 'Active 30d': false });
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+
+        const reset = (fixture.nativeElement as HTMLElement)
+            .querySelector<HTMLButtonElement>('button[aria-label="Show all authentication activity series"]')!;
+        expect(reset.disabled).toBe(false);
+        reset.click();
+        await renderCharts();
+        expect(component.seriesControls().activity.selected).toHaveLength(3);
+        expect(reset.disabled).toBe(true);
+        expect(haptics.selection).toHaveBeenCalledTimes(3);
+    });
+
+    it('keeps initialization, invalid selections, and unchanged selections silent', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        await renderCharts();
+        const calls = loader.setOption.mock.calls.length;
+        component.selectDays(90);
+        component.selectDays(0 as never);
+        component.selectActivePlanWindow('last30Days');
+        component.selectActivePlanWindow('invalid' as never);
+        component.selectScale('auto');
+        component.selectScale('invalid' as never);
+        component.selectSeries('activity', ['Active 30d', 'Active 24h', 'Active 7d']);
+        component.selectSeries('activity', []);
+        component.selectSeries('activity', ['unknown']);
+        await fixture.whenStable();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(loader.setOption.mock.calls).toHaveLength(calls);
+
+        component.selectDays(30);
+        component.selectActivePlanWindow('last7Days');
+        component.selectScale('zero');
+        component.selectSeries('activity', ['Active 7d']);
+        await renderCharts();
+        expect(haptics.selection).toHaveBeenCalledTimes(4);
+    });
+
+    it('restores available cadence series when the selected unknown series leaves the range', async () => {
+        const data = history(40);
+        data.snapshots[0].subscriptionCadence.pro.unknown = 1;
+        fixture.componentRef.setInput('history', data);
+        await renderCharts();
+        component.selectSeries('cadence', ['Pro unknown']);
+        await renderCharts();
+        expect(component.seriesControls().cadence.selected).toEqual(['Pro unknown']);
+
+        component.selectDays(30);
+        await renderCharts();
+        expect(component.seriesControls().cadence.allSelected).toBe(true);
+        expect(component.seriesControls().cadence.selected).toHaveLength(4);
+        expect(latestOption('Pro monthly').series.map(series => series.name)).not.toContain('Pro unknown');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('preserves collection gaps when fitting a single series', async () => {
+        const data = history(9);
+        data.snapshots.splice(4, 1);
+        fixture.componentRef.setInput('history', data);
+        component.selectSeries('activity', ['Active 30d']);
+        await renderCharts();
+        const option = latestOption('Active 30d');
+        expect(option.yAxis.min).toBeGreaterThan(0);
+        option.series.forEach(series => {
+            expect(series.data[4]).toBeNull();
+            expect(series.connectNulls).toBe(false);
+        });
+    });
+
     it('disposes every initialized chart host', async () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
@@ -205,6 +347,23 @@ describe('AdminUserHistoryComponent', () => {
 
         expect(loader.dispose.mock.calls.length - disposeCallsBeforeDestroy).toBe(4);
     });
+
+    async function renderCharts(): Promise<void> {
+        const previous = loader.setOption.mock.calls.length;
+        fixture.detectChanges();
+        await fixture.whenStable();
+        // Chart-host initialization runs outside Angular's stability tracking.
+        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(previous + 4));
+    }
+
+    function latestOption(name: string) {
+        return loader.setOption.mock.calls.map(call => call[1] as {
+            legend: { show: boolean; selected: Record<string, boolean> };
+            yAxis: { min: number; max: number; axisLabel: { formatter: (value: number) => string } };
+            tooltip: { formatter: (params: unknown) => string };
+            series: Array<{ name: string; data: Array<number | null>; connectNulls: boolean }>;
+        }).filter(option => option.series.some(series => series.name === name)).at(-1)!;
+    }
 });
 
 function history(count: number): AdminDashboardHistoryResponse {

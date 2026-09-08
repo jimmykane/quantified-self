@@ -1,4 +1,5 @@
-<mat-expansion-panel class="health-source-table-panel mat-elevation-z0">
+<mat-expansion-panel class="health-source-table-panel mat-elevation-z0"
+  (opened)="haptics.selection()" (closed)="haptics.selection()">
   <mat-expansion-panel-header>
     <mat-panel-title class="health-source-table-title">Source observations</mat-panel-title>
   </mat-expansion-panel-header>

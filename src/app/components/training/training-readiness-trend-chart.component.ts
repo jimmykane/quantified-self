@@ -1,3 +1,4 @@
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -46,6 +47,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
   @Input() points: readonly TrainingReadinessTrendPointViewModel[] = [];
   @Input() ariaLabel = 'Readiness scores over 14 days.';
   @Input() darkTheme = false;
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
@@ -65,7 +67,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (this.viewInitialized && (changes.points || changes.darkTheme)) {
+    if (this.viewInitialized && (changes.points || changes.darkTheme || changes.timelineNotes)) {
       void this.refresh();
     }
   }
@@ -87,6 +89,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
       return;
     }
     this.chartHost.hideTooltip();
+    this.chartHost.setTimelineNotes(this.timelineNotes);
     this.chartHost.setOption(this.buildOption(), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }

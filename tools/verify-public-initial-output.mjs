@@ -275,6 +275,14 @@ function assertPrerenderedDocuments() {
     if (!documentRef.querySelector('footer.public-footer')) {
       throw new Error(`Prerendered route ${route} is missing the public footer.`);
     }
+    if (!documentRef.querySelector('footer.public-footer a[href="/features/health"]')) {
+      throw new Error(`Prerendered route ${route} is missing the public Health footer link.`);
+    }
+    for (const preview of documentRef.querySelectorAll('app-public-feature-preview')) {
+      if (!preview.querySelector(':scope > div[data-nosnippet]')) {
+        throw new Error(`Prerendered route ${route} is missing a native snippet exclusion around a public preview.`);
+      }
+    }
 
     const jsonLdScripts = [...documentRef.querySelectorAll('script[type="application/ld+json"]')];
     if (jsonLdScripts.length === 0) {

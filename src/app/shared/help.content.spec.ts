@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
+import { searchHelpSections } from '../helpers/help-search.helper';
+import { CONNECTED_SERVICES_POLICY_SECTION } from './policies.content';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 import {
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
@@ -12,6 +14,25 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains private notes in both workspaces and makes their context searchable', () => {
+    for (const id of ['health', 'training-analysis']) {
+      const content = HELP_SECTIONS.find(section => section.id === id)?.content;
+      expect(content).toContain('## Timeline notes');
+      expect(content).toContain('ongoing notes must already have started');
+      expect(content).toContain('Notes never change your measurements, readiness, or forecasts');
+      expect(content).toContain('notes appear on the Highlights trend charts');
+      expect(content).toContain('Choose a **Color**');
+      expect(content).toContain('calendar buttons to pick dates');
+      expect(content).toContain('Date ranges have start and end arrows');
+      expect(content).toContain('ongoing shading stops at today');
+      expect(content).toContain('inside the shaded band to inspect your measurements');
+    }
+    expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
+    const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
+    expect(calendar).toContain('a note icon marks days');
+    expect(calendar).toContain('Show on charts and calendar');
+    expect(CONNECTED_SERVICES_POLICY_SECTION.content.join(' ')).toContain('content-free deletion receipt');
+  });
   it('documents the supported activity catalog without overpromising source data', () => {
     const supportedActivitiesSection = HELP_SECTIONS.find(section => section.id === 'supported-activities');
 
@@ -75,6 +96,11 @@ describe('help.content', () => {
     const healthSection = HELP_SECTIONS.find(section => section.id === 'health');
 
     expect(healthSection?.title).toBe('Health');
+    expect(healthSection?.content).toContain('**Sources** beside the Health title');
+    expect(healthSection?.content).toContain('filter Highlights and every metric');
+    expect(healthSection?.content).toContain('compact range dropdown between the older/newer arrows');
+    expect(healthSection?.content).toContain('a source with no readings does not silently switch');
+    expect(healthSection?.content).not.toContain('**View options**');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
@@ -97,6 +123,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('source-specific 14-day trend');
     expect(healthSection?.content).toContain('at least three observations');
     expect(healthSection?.content).toContain('60-day personal range');
+    expect(healthSection?.content).toContain('Range on this date');
+    expect(healthSection?.content).toContain('Dates without enough baseline history stay unshaded');
     expect(healthSection?.content).toContain('Until 14 nights exist');
     expect(healthSection?.content).toContain('seven-day average with at least three recent nights');
     expect(healthSection?.content).toContain('within, outside, or far outside');
@@ -113,12 +141,16 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
+    expect(healthSection?.content).toContain('**Choose a Highlight source.**');
+    expect(healthSection?.content).toContain('remembered separately for each highlight in your account settings');
+    expect(healthSection?.content).toContain('without overwriting your saved choice');
+    expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
     expect(healthSection?.content).toContain('Detailed sample streams load for 1d, 14-day, and 30-day windows');
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
-    expect(healthSection?.content).toContain('source footer shows each provider\'s recency');
+    expect(healthSection?.content).toContain('**Sources** sheet shows each provider\'s recency');
     expect(healthSection?.content).toContain('Connectivity** for connection and import management');
     expect(healthSection?.content).not.toContain('**Import history**');
     expect(healthSection?.content).toContain('Connectivity');
@@ -793,6 +825,13 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('marked **PRO**');
     expect(serviceConnectionsSection?.content).toContain('MCP is marked **FREE**');
     expect(serviceConnectionsSection?.content).toContain('can always be disconnected');
+    expect(serviceConnectionsSection?.content).toContain('When a disconnect begins, automatic activity and saved-route delivery');
+    expect(serviceConnectionsSection?.content).toContain('you do not need to keep the page open');
+    expect(serviceConnectionsSection?.content).toContain('Health history, and Sleep sessions stay in your account');
+    expect(serviceConnectionsSection?.content).toContain('shows a successful connection only after the server confirms');
+    expect(serviceConnectionsSection?.content).toContain('shows an error and you can start the connection again');
+    expect(serviceConnectionsSection?.content).toContain('instead of showing it as connected');
+    expect(serviceConnectionsSection?.content).toContain('partial cleanup remains visible as pending');
     expect(serviceConnectionsSection?.content).toContain('an automated subscription check disconnects');
     expect(serviceConnectionsSection?.content).toContain('Services opens each provider on a compact connection overview');
     expect(serviceConnectionsSection?.content).toContain('Choose an action');

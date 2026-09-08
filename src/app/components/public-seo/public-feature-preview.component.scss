@@ -5,9 +5,12 @@
 }
 
 :host,
-:host > * {
+:host > *,
+.preview-content > * {
   box-sizing: border-box;
 }
+
+.preview-content { min-width: 0; }
 
 .preview-placeholder,
 .map-stage {

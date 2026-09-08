@@ -21,6 +21,9 @@ import { PageHeaderComponent } from './page-header.component';
         <button pageHeaderLeading type="button">Open calendar</button>
       }
       <button pageHeaderActions type="button">Action</button>
+      @if (showTitleActions) {
+        <button pageHeaderTitleActions type="button">Sources</button>
+      }
     </app-page-header>
   `,
 })
@@ -34,6 +37,7 @@ class PageHeaderHostComponent {
   leadingIcon: string | null = null;
   leadingAction = false;
   showProjectedLeading = true;
+  showTitleActions = false;
 }
 
 describe('PageHeaderComponent', () => {
@@ -43,6 +47,17 @@ describe('PageHeaderComponent', () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  it('projects optional title actions beside the heading without moving the main actions', async () => {
+    const fixture = await createFixture();
+    expect(fixture.nativeElement.querySelector('[pageHeaderTitleActions]')).toBeNull();
+    fixture.componentInstance.showTitleActions = true;
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.qs-page-header__title-row [pageHeaderTitleActions]')?.textContent)
+      .toBe('Sources');
+    expect(fixture.nativeElement.querySelector('.qs-page-header__actions [pageHeaderActions]')?.textContent)
+      .toBe('Action');
+  });
 
   it('renders a route heading with contextual copy and projected controls', async () => {
     const fixture = await createFixture();

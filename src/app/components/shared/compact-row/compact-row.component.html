@@ -1,0 +1,35 @@
+<article
+  class="compact-row"
+  [class.compact-row--stacked]="layout() === 'stacked'"
+  [class.compact-row--columns]="layout() === 'columns'"
+  [class.compact-row--compact]="density() === 'compact'"
+  [attr.aria-labelledby]="titleId()"
+  [class.compact-row--without-icon]="!icon()"
+  [class.compact-row--primary]="iconTone() === 'primary'"
+  [class.compact-row--secondary]="iconTone() === 'secondary'"
+  [class.compact-row--tertiary]="iconTone() === 'tertiary'"
+  [class.compact-row--neutral]="iconTone() === 'neutral'"
+>
+  @if (icon(); as iconName) {
+    <div class="compact-row__icon" data-nosnippet>
+      <mat-icon aria-hidden="true">{{ iconName }}</mat-icon>
+    </div>
+  }
+
+  @switch (headingLevel()) {
+    @case (2) { <h2 class="compact-row__title" [attr.id]="titleId()">{{ title() }}</h2> }
+    @case (4) { <h4 class="compact-row__title" [attr.id]="titleId()">{{ title() }}</h4> }
+    @default { <h3 class="compact-row__title" [attr.id]="titleId()">{{ title() }}</h3> }
+  }
+
+  <div class="compact-row__body">
+    @if (summary(); as summaryText) {
+      <p class="compact-row__summary">{{ summaryText }}</p>
+    }
+    <ng-content></ng-content>
+  </div>
+
+  <div class="compact-row__action">
+    <ng-content select="[compactRowAction]"></ng-content>
+  </div>
+</article>

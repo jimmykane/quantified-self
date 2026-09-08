@@ -444,7 +444,7 @@ describe('AppRoutingModule routes', () => {
         path: PUBLIC_FEATURE_PATHS.health,
         title: 'Sleep, HRV and Health Trends Across Your Devices',
         h1: 'Your Health, Beyond Training.',
-        descriptionText: 'supported Garmin, Suunto and COROS sources',
+        descriptionText: 'add timeline notes for travel, sickness and stress',
       },
       {
         path: PUBLIC_FEATURE_PATHS.mcpServer,
@@ -588,7 +588,10 @@ describe('AppRoutingModule routes', () => {
       title: 'Training Dashboard',
       animation: 'Home',
     });
-    expect(homeRoute?.data?.['description']).toBe('Connect Garmin, Suunto, COROS, and Wahoo in one training dashboard. Analyze readiness, training load, sleep, routes, and performance trends.');
+    expect(homeRoute?.data?.['description']).toBe('Connect Garmin, Suunto, COROS and Wahoo. Analyze training, sleep and HRV in one dashboard; log blood pressure and weight, and add timeline notes.');
+    expect(homeRoute?.data?.['jsonLd']?.['description']).toBe(homeRoute?.data?.['description']);
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Manual blood pressure, weight, body composition, blood oxygen, and VO₂ max logging');
+    expect(homeRoute?.data?.['jsonLd']?.['featureList']).toContain('Timeline notes for travel, sickness, stress, and time away');
     expect(homeRoute?.data?.['keywords']).toBeUndefined();
     expect(homeRoute?.data?.['jsonLd']).toMatchObject({
       '@context': 'https://schema.org',

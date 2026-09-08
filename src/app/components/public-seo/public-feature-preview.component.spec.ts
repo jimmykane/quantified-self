@@ -1,4 +1,4 @@
-import { ComponentFixture, DeferBlockBehavior, TestBed } from '@angular/core/testing';
+import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -41,6 +41,15 @@ describe('PublicFeaturePreviewComponent', () => {
 
     expect(placeholder).toBeTruthy();
     expect(placeholder?.getAttribute('aria-hidden')).toBe('true');
+    expect(placeholder?.closest('div[data-nosnippet]')).toBeTruthy();
     expect(element.querySelector('app-health-preview')).toBeNull();
+  });
+
+  it('keeps hydrated previews inside the same native snippet exclusion', async () => {
+    const element = renderPlaceholder('mcp-flow');
+    const wrapper = element.querySelector('div[data-nosnippet]');
+    const blocks = await fixture.getDeferBlocks();
+    await blocks[0].render(DeferBlockState.Complete);
+    expect(element.querySelector('app-mcp-read-only-flow-preview')?.closest('div[data-nosnippet]')).toBe(wrapper);
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EChartsHostController } from './echarts-host-controller';
+import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome } from './dashboard-echarts-style.helper';
 
 type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
@@ -281,6 +282,24 @@ describe('EChartsHostController', () => {
 
     expect(didHide).toBe(true);
     expect(chartMock.dispatchAction).toHaveBeenCalledWith({ type: 'hideTip' });
+  });
+
+  it.each(['light', 'dark'])('styles note tooltips with the initialized %s theme and chart width', async (theme) => {
+    const loader = buildLoaderMock();
+    const chart = { ...chartMock, on: vi.fn(), off: vi.fn(), getWidth: () => 320 };
+    loader.init.mockResolvedValue(chart);
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    await controller.init(document.createElement('div'), theme);
+    controller.setTimelineNotes({
+      notes: [{ id: 'a'.repeat(64), category: 'travel', title: 'Trip', startDate: '2026-09-02', endDate: '2026-09-04',
+        timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }], select: vi.fn(), reportRange: vi.fn(),
+    });
+    controller.setOption({ xAxis: { type: 'time', min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 10) },
+      yAxis: {}, series: [{ type: 'line', data: [] }] });
+    const rendered = loader.setOption.mock.calls[0][1] as any;
+    expect(rendered.series[1].markLine.data[0].tooltip).toMatchObject(
+      buildDashboardEChartsTooltipChrome(buildDashboardEChartsStyleTokens(theme === 'dark', 320)));
+    controller.dispose();
   });
 
   it('should resize from resize observer callback using raf throttling', async () => {

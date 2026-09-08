@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, type Signal } from '@angular/core';
+import { TIMELINE_NOTE_LABELS, timelineNoteDates, type TimelineNote } from '@shared/timeline-notes';
+import { TIMELINE_NOTE_ICONS, timelineNoteColor } from '../../../helpers/timeline-note-appearance.helper';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import type { EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -27,6 +29,8 @@ export interface CalendarDayDetailsData {
   locale?: string;
   unitSettings?: UserUnitSettingsInterface | null;
   summariesSettings?: SummaryStatsSettingsLike | null;
+  timelineNotes?: Signal<readonly TimelineNote[]>;
+  activities?: Signal<{ status: 'loading' | 'ready' | 'error'; day: ActivityCalendarDayViewModel }>;
 }
 
 interface CalendarDayEventRow {
@@ -65,8 +69,18 @@ export class CalendarDayDetailsComponent {
     year: 'numeric',
   });
   readonly title = this.titleFormatter.format(this.data.day.date);
-  readonly eventRows = this.data.day.events.map(event => this.buildEventRow(event));
-  readonly familyVolumeRows = this.buildFamilyVolumeRows();
+  readonly activityState = computed(() => this.data.activities?.() ?? { status: 'ready', day: this.data.day });
+  readonly day = computed(() => this.activityState().day);
+  readonly eventRows = computed(() => this.day().events.map(event => this.buildEventRow(event)));
+  readonly familyVolumeRows = computed(() => this.buildFamilyVolumeRows());
+  readonly noteRows = computed(() => (this.data.timelineNotes?.() ?? []).map(note => ({
+    note, category: TIMELINE_NOTE_LABELS[note.category], dates: timelineNoteDates(note),
+    icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
+  })));
+
+  selectNote(noteId: string): void {
+    if (this.noteRows().some(row => row.note.id === noteId)) this.bottomSheetRef.dismiss(noteId);
+  }
 
   dismiss(): void {
     this.bottomSheetRef.dismiss();
@@ -82,12 +96,12 @@ export class CalendarDayDetailsComponent {
 
   private buildFamilyVolumeRows(): ActivityCalendarFamilyVolumeRow[] {
     const rows = buildActivityCalendarFamilyVolumeRows(
-      buildActivityCalendarPeriodSummary(this.data.day.events, this.data.summariesSettings),
+      buildActivityCalendarPeriodSummary(this.day().events, this.data.summariesSettings),
       this.data.unitSettings,
       this.data.locale,
     );
     return rows.map((row) => {
-      const familyEvents = this.eventRows.filter(event => event.familyId === row.id);
+      const familyEvents = this.eventRows().filter(event => event.familyId === row.id);
       return {
         ...row,
         route: familyEvents.length === 1 ? familyEvents[0].route : null,

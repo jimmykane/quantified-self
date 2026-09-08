@@ -8,13 +8,18 @@ import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
 import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
-import { of, firstValueFrom, take, from, filter, Observable, Subject, throwError } from 'rxjs';
+import { of, firstValueFrom, take, from, filter, Observable, Subject, BehaviorSubject, throwError } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPotentialStamina, DataPower, DataSpeed, DataStamina, ServiceNames } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
 import { getAppCanonicalChartDataTypes } from '../helpers/app-chart-data-types.helper';
+import { AppCheckReadinessService } from './app-check-readiness.service';
+import { UserProfileVerificationService } from './user-profile-verification.service';
+
+const verificationSDK = vi.hoisted(() => ({ getFirestore: vi.fn(), doc: vi.fn(), getDoc: vi.fn() }));
+vi.mock('firebase/firestore/lite', () => verificationSDK);
 
 vi.mock('app/firebase/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
@@ -45,6 +50,8 @@ describe('AppUserService', () => {
     let service: AppUserService;
     let mockAuth: any;
     let mockFunctionsService: any;
+    let mockAppCheck: any;
+    let mockVerification: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -80,6 +87,12 @@ describe('AppUserService', () => {
         mockFunctionsService = {
             call: vi.fn().mockResolvedValue({ success: true })
         };
+        mockAppCheck = { isConfigured: vi.fn().mockReturnValue(true), getToken: vi.fn().mockResolvedValue('app-check-token') };
+        mockVerification = {
+            invalidatePendingRead: vi.fn(),
+            needsVerification: vi.fn().mockImplementation(UserProfileVerificationService.prototype.needsVerification),
+            verifyIfIncomplete: vi.fn().mockImplementation((_uid, profile) => Promise.resolve(profile)),
+        };
 
         TestBed.configureTestingModule({
             providers: [
@@ -87,6 +100,8 @@ describe('AppUserService', () => {
                 { provide: Auth, useValue: mockAuth },
                 { provide: Firestore, useValue: {} },
                 { provide: AppFunctionsService, useValue: mockFunctionsService },
+                { provide: AppCheckReadinessService, useValue: mockAppCheck },
+                { provide: UserProfileVerificationService, useValue: mockVerification },
                 { provide: HttpClient, useValue: {} },
                 { provide: AppEventService, useValue: { getUserEvents: vi.fn().mockReturnValue(of([])) } },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost' } }
@@ -207,6 +222,7 @@ describe('AppUserService', () => {
             const recoveredUser = await recoveredUserPromise;
 
             expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(mockAppCheck.getToken).toHaveBeenCalledWith(true);
             expect(recoveredUser.email).toBe('authoritative@example.com');
             expect(recoveredUser.acceptedPrivacyPolicy).toBe(true);
             expect(recoveredUser.acceptedDataPolicy).toBe(true);
@@ -447,7 +463,6 @@ describe('AppUserService', () => {
 
             await vi.advanceTimersByTimeAsync(1);
 
-            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
             expect(emittedEmails).toEqual(['stale-profile@example.com']);
             expect(service.hasIncompleteProfileReads('u1')).toBe(true);
             expect(service.profileReadState()).toEqual(expect.objectContaining({
@@ -456,6 +471,8 @@ describe('AppUserService', () => {
             }));
 
             await vi.advanceTimersByTimeAsync(750);
+            expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+            expect(emittedEmails).toEqual(['stale-profile@example.com']);
             recoveredProfileSubscriber.next({
                 uid: 'u1',
                 email: 'recovered-profile@example.com',
@@ -589,7 +606,7 @@ describe('AppUserService', () => {
         service = TestBed.inject(AppUserService);
         const mergedUser = await firstValueFrom(service.user$.pipe(filter((user): user is AppUserInterface => !!user), take(1)));
 
-        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith();
+        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(false);
         expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
         expect(mergedUser.acceptedPrivacyPolicy).toBe(true);
         expect(mergedUser.acceptedDataPolicy).toBe(true);
@@ -664,6 +681,240 @@ describe('AppUserService', () => {
             profileExists: false,
         });
         expect(service.hasIncompleteProfileReads('u1')).toBe(false);
+        expect(mockVerification.verifyIfIncomplete).toHaveBeenCalledWith('u1', null);
+    });
+
+    it('should recover incorrect missing snapshots before publishing any onboarding user', async () => {
+        (docData as any).mockReturnValue(of(undefined));
+        let confirm!: (profile: AppUserInterface) => void;
+        mockVerification.verifyIfIncomplete.mockReturnValue(new Promise(resolve => { confirm = resolve; }));
+        service = TestBed.inject(AppUserService);
+        const emitted: AppUserInterface[] = [];
+        const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
+        await vi.waitFor(() => expect(mockVerification.verifyIfIncomplete).toHaveBeenCalledTimes(1));
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        expect(emitted).toEqual([]);
+
+        confirm({ uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true } as AppUserInterface);
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].onboardingCompleted).toBe(true);
+        expect(emitted[0].acceptedTos).toBe(true);
+        expect(setDoc).not.toHaveBeenCalled();
+        expect(updateDoc).not.toHaveBeenCalled();
+        subscription.unsubscribe();
+    });
+
+    it('should never treat failed independent verification as a new account', async () => {
+        vi.useFakeTimers();
+        try {
+            (docData as any).mockReturnValue(of(undefined));
+            mockVerification.verifyIfIncomplete.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));
+            service = TestBed.inject(AppUserService);
+            const emitted: AppUserInterface[] = [];
+            const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
+            await vi.runAllTimersAsync();
+            expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: 'unavailable' });
+            expect(mockVerification.verifyIfIncomplete).toHaveBeenCalledTimes(5);
+            expect(emitted).toEqual([]);
+            expect(mockAuth.signOut).not.toHaveBeenCalled();
+            subscription.unsubscribe();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should not repeat verification for identical incomplete listener snapshots', async () => {
+        const snapshots = new BehaviorSubject(undefined);
+        (docData as any).mockReturnValue(snapshots);
+        mockVerification.verifyIfIncomplete.mockResolvedValue({ uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true });
+        service = TestBed.inject(AppUserService);
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        snapshots.next(undefined);
+        snapshots.next(undefined);
+        await Promise.resolve();
+        expect(mockVerification.verifyIfIncomplete).toHaveBeenCalledTimes(1);
+        expect(docData).toHaveBeenCalledTimes(4);
+    });
+
+    it('should retry App Check failures without starting Firestore reads or signing out', async () => {
+        vi.useFakeTimers();
+        try {
+            mockAppCheck.getToken.mockRejectedValue(Object.assign(new Error('App Check rejected'), { code: 'appCheck/fetch-status-error' }));
+            service = TestBed.inject(AppUserService);
+            await vi.runAllTimersAsync();
+            expect(mockAppCheck.getToken).toHaveBeenCalledTimes(5);
+            expect(mockAppCheck.getToken).toHaveBeenCalledWith(true);
+            expect(docData).not.toHaveBeenCalled();
+            expect(service.profileReadState()).toEqual({ status: 'error', uid: 'u1', code: 'appCheck/fetch-status-error' });
+            expect(mockAuth.signOut).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('should restart a failed profile stream with refreshed credentials and coalesce manual retries', async () => {
+        (docData as any).mockReturnValue(throwError(() => Object.assign(new Error('failed'), { code: 'internal' })));
+        service = TestBed.inject(AppUserService);
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('error'));
+        TestBed.flushEffects();
+        (docData as any).mockReturnValue(of({ acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true }));
+
+        const recovery = service.retryProfileRead();
+        expect(service.retryProfileRead()).toBe(recovery);
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        TestBed.flushEffects();
+        expect(await recovery).toBe(true);
+        expect(mockAppCheck.getToken).toHaveBeenCalledWith(true);
+        expect(mockAuth.currentUser.getIdToken).toHaveBeenCalledWith(true);
+        expect(mockAuth.signOut).not.toHaveBeenCalled();
+        expect(mockVerification.verifyIfIncomplete).not.toHaveBeenCalled();
+    });
+
+    it('should finish a manual recovery as unsuccessful when the account signs out', async () => {
+        const firebaseUser = mockAuth.currentUser;
+        const authChanges = new BehaviorSubject(firebaseUser);
+        (authState as any).mockReturnValue(authChanges);
+        (docData as any).mockReturnValue(new Observable(() => undefined));
+        service = TestBed.inject(AppUserService);
+        const recovery = service.retryProfileRead();
+        mockAuth.currentUser = null;
+        authChanges.next(null);
+        expect(await recovery).toBe(false);
+        expect(service.profileReadState().status).toBe('signed-out');
+    });
+
+    it('should discard a stale claim merge while a newer profile verification is pending', async () => {
+        const profiles = new Subject<AppUserInterface | null>();
+        let resolveClaims!: (result: { claims: object }) => void;
+        mockAuth.currentUser.getIdTokenResult
+            .mockResolvedValueOnce({ claims: {} }) // Constructor logging context.
+            .mockReturnValueOnce(new Promise(resolve => { resolveClaims = resolve; }));
+        let confirm!: (profile: AppUserInterface) => void;
+        mockVerification.verifyIfIncomplete.mockReturnValue(new Promise(resolve => { confirm = resolve; }));
+        service = TestBed.inject(AppUserService);
+        const read = vi.spyOn(service, 'getUserByID').mockReturnValue(profiles);
+        const emitted: AppUserInterface[] = [];
+        const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
+        await vi.waitFor(() => expect(read).toHaveBeenCalled());
+        const complete = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true } as AppUserInterface;
+        profiles.next(complete);
+        profiles.next(null);
+        resolveClaims({ claims: {} });
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        expect(emitted).toEqual([]);
+        confirm({ ...complete, onboardingCompleted: true });
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].onboardingCompleted).toBe(true);
+        subscription.unsubscribe();
+    });
+
+    it.each(['before', 'after'])('should stop claim retries when the failure arrives %s a newer verification starts', async (failureTiming) => {
+        vi.useFakeTimers();
+        try {
+            const profiles = new Subject<AppUserInterface | null>();
+            let rejectClaims!: (error: Error) => void;
+            mockAuth.currentUser.getIdTokenResult
+                .mockResolvedValueOnce({ claims: {} }) // Constructor logging context.
+                .mockReturnValueOnce(new Promise((_resolve, reject) => { rejectClaims = reject; }));
+            let confirm!: (profile: AppUserInterface) => void;
+            mockVerification.verifyIfIncomplete.mockReturnValue(new Promise(resolve => { confirm = resolve; }));
+            service = TestBed.inject(AppUserService);
+            vi.spyOn(service, 'getUserByID').mockReturnValue(profiles);
+            await vi.advanceTimersByTimeAsync(0);
+            const complete = { uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true } as AppUserInterface;
+            profiles.next(complete);
+            const error = Object.assign(new Error('old token failure'), { code: 'auth/network-request-failed' });
+            if (failureTiming === 'before') {
+                rejectClaims(error);
+                await vi.advanceTimersByTimeAsync(0);
+            }
+            profiles.next(null);
+            if (failureTiming === 'after') {
+                rejectClaims(error);
+            }
+            await vi.advanceTimersByTimeAsync(750);
+
+            expect(service.profileReadState()).toEqual({ status: 'loading', uid: 'u1' });
+            expect(mockAuth.currentUser.getIdTokenResult).toHaveBeenCalledTimes(2);
+            confirm({ ...complete, onboardingCompleted: true });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(service.profileReadState().status).toBe('ready');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it.each(['complete snapshot', 'manual retry'])('should discard old missing verification across a %s', async (recoveryTrigger) => {
+        const profiles = new Subject<AppUserInterface | null>();
+        const complete = {
+            uid: 'u1', acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true, onboardingCompleted: true,
+        } as AppUserInterface;
+        let resolveOld!: (snapshot: { data: () => undefined }) => void;
+        verificationSDK.getDoc.mockReturnValue(new Promise(resolve => { resolveOld = resolve; }));
+        verificationSDK.doc.mockImplementation((_firestore, path) => path);
+        TestBed.overrideProvider(UserProfileVerificationService, { useFactory: () => new UserProfileVerificationService() });
+        service = TestBed.inject(AppUserService);
+        const read = vi.spyOn(service, 'getUserByID').mockReturnValue(profiles);
+        const emitted: AppUserInterface[] = [];
+        const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
+        await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+        profiles.next(null);
+        await vi.waitFor(() => expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4));
+
+        let recovery: Promise<boolean> | undefined;
+        if (recoveryTrigger === 'complete snapshot') {
+            profiles.next(complete);
+            await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        } else {
+            recovery = service.retryProfileRead();
+            await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+        }
+
+        verificationSDK.getDoc.mockResolvedValue({ data: () => complete });
+        profiles.next(null);
+        resolveOld({ data: () => undefined });
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        TestBed.flushEffects();
+        if (recovery) {
+            expect(await recovery).toBe(true);
+        }
+        expect(emitted.length).toBeGreaterThan(0);
+        expect(emitted.every(profile => profile.onboardingCompleted === true)).toBe(true);
+        expect(verificationSDK.getDoc).toHaveBeenCalledTimes(8);
+        expect(setDoc).not.toHaveBeenCalled();
+        expect(updateDoc).not.toHaveBeenCalled();
+        expect(mockAuth.signOut).not.toHaveBeenCalled();
+        subscription.unsubscribe();
+    });
+
+    it('should verify a free account with missing onboarding history before publishing it', async () => {
+        const agreements = { acceptedPrivacyPolicy: true, acceptedDataPolicy: true, acceptedTos: true };
+        (docData as any)
+            .mockReturnValueOnce(of(undefined))
+            .mockReturnValueOnce(of(agreements))
+            .mockReturnValueOnce(of({ stripeRole: 'free' }))
+            .mockReturnValueOnce(of({}));
+        let resolveVerification!: (snapshot: { data: () => object }) => void;
+        verificationSDK.getDoc.mockReturnValue(new Promise(resolve => { resolveVerification = resolve; }));
+        TestBed.overrideProvider(UserProfileVerificationService, { useFactory: () => new UserProfileVerificationService() });
+        service = TestBed.inject(AppUserService);
+        const emitted: AppUserInterface[] = [];
+        const subscription = service.user$.pipe(filter((profile): profile is AppUserInterface => !!profile)).subscribe(profile => emitted.push(profile));
+        await vi.waitFor(() => expect(docData).toHaveBeenCalledTimes(4));
+        expect(emitted).toEqual([]);
+        expect(service.hasIncompleteProfileReads('u1')).toBe(true);
+        await vi.waitFor(() => expect(verificationSDK.getDoc).toHaveBeenCalledTimes(4));
+        resolveVerification({ data: () => ({ ...agreements, onboardingCompleted: true }) });
+        await vi.waitFor(() => expect(service.profileReadState().status).toBe('ready'));
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].onboardingCompleted).toBe(true);
+        expect(setDoc).not.toHaveBeenCalled();
+        expect(updateDoc).not.toHaveBeenCalled();
+        subscription.unsubscribe();
     });
 
     it('should preserve legal and system data when the legacy main profile document is missing', async () => {
@@ -2498,8 +2749,13 @@ describe('AppUserService', () => {
         });
 
         describe('requestAndSetCurrentUserWahooAPIAccessToken', () => {
-            it('should call cloud function', async () => {
-                await service.requestAndSetCurrentUserWahooAPIAccessToken('state', 'code');
+            it('should return the backend completion result', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: { connected: true, outcome: 'connected' },
+                });
+
+                await expect(service.requestAndSetCurrentUserWahooAPIAccessToken('state', 'code'))
+                    .resolves.toEqual({ connected: true, outcome: 'connected' });
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetWahooAPIAccessToken', {
                     state: 'state',
@@ -2510,8 +2766,13 @@ describe('AppUserService', () => {
         });
 
         describe('requestAndSetCurrentUserCOROSAPIAccessToken', () => {
-            it('should call cloud function', async () => {
-                await service.requestAndSetCurrentUserCOROSAPIAccessToken('state', 'code');
+            it('should return the backend completion result', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: { connected: true, outcome: 'connected' },
+                });
+
+                await expect(service.requestAndSetCurrentUserCOROSAPIAccessToken('state', 'code'))
+                    .resolves.toEqual({ connected: true, outcome: 'connected' });
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetCOROSAPIAccessToken', {
                     state: 'state',
@@ -2551,8 +2812,13 @@ describe('AppUserService', () => {
         });
 
         describe('requestAndSetCurrentUserSuuntoAppAccessToken', () => {
-            it('should call cloud function', async () => {
-                await service.requestAndSetCurrentUserSuuntoAppAccessToken('state', 'code');
+            it('should return the backend completion result', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: { connected: true, outcome: 'connected' },
+                });
+
+                await expect(service.requestAndSetCurrentUserSuuntoAppAccessToken('state', 'code'))
+                    .resolves.toEqual({ connected: true, outcome: 'connected' });
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetSuuntoAPIAccessToken', {
                     state: 'state',
@@ -2563,8 +2829,13 @@ describe('AppUserService', () => {
         });
 
         describe('requestAndSetCurrentUserGarminAPIAccessToken', () => {
-            it('should call cloud function', async () => {
-                await service.requestAndSetCurrentUserGarminAPIAccessToken('state', 'code');
+            it('should return the backend completion result', async () => {
+                mockFunctionsService.call.mockResolvedValueOnce({
+                    data: { connected: true, outcome: 'connected' },
+                });
+
+                await expect(service.requestAndSetCurrentUserGarminAPIAccessToken('state', 'code'))
+                    .resolves.toEqual({ connected: true, outcome: 'connected' });
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetGarminAPIAccessToken', {
                     state: 'state',

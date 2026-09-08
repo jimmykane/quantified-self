@@ -5,8 +5,43 @@ import { buildActivityCalendarViewModel } from '../../../helpers/activity-calend
 import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityCalendarGridComponent } from './activity-calendar-grid.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import type { TimelineNote } from '@shared/timeline-notes';
+import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
 
 describe('ActivityCalendarGridComponent', () => {
+  it.each(['week', 'month', 'year'] as const)('makes note-only days accessible in %s view without activity markers', async view => {
+    const fixture = await renderGrid(view, false, []);
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'vacation', title: 'Vacation', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(0);
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('.activity-calendar-day-button') as HTMLButtonElement;
+    expect(button.getAttribute('aria-label')).toContain('1 Timeline note');
+    expect(button.querySelector('.activity-calendar-note-indicator')?.textContent).toBe('beach_access');
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(1);
+    expect(button.querySelector('.activity-calendar-marker')).toBeNull();
+    const selected = vi.fn(); fixture.componentInstance.daySelected.subscribe(selected);
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).not.toHaveBeenCalled();
+    button.click();
+    expect(selected).toHaveBeenCalledOnce();
+    expect(selected.mock.calls[0][0].eventCount).toBe(0);
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('timelineNotesByDate', new Map()); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(0);
+  });
+  it('shows the selected color/category, keeping mixed-note days neutral and grouped', async () => {
+    const fixture = await renderGrid('month', false, []);
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', color: 'purple', title: 'Trip', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.detectChanges();
+    const icon = () => fixture.nativeElement.querySelector('.activity-calendar-note-indicator') as HTMLElement;
+    expect(icon().textContent).toBe('flight');
+    expect(icon().style.color).toBe('rgb(158, 108, 236)');
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note, { ...note, id: 'b'.repeat(64), color: 'blue' }]));
+    fixture.detectChanges();
+    expect(icon().textContent).toBe('event_note');
+    expect(icon().style.color).toBe('');
+  });
   it('renders activity days as buttons and emits the selected day', async () => {
     const fixture = await renderGrid('month', false, [
       createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),

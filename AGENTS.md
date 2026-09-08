@@ -11,10 +11,26 @@ Always-on rules:
 - `.agent/rules/verify-changes-with-tests.md`
 - `.agent/rules/firestore-write-sanitization.md` for any frontend/functions write path that persists event or activity data
 - Never patch or directly modify files under `node_modules/`.
+- Do not default to new backend functions for CRUD. Prefer direct, owner-scoped Firestore SDK access with Security Rules
+  and client transactions/batches when those can safely and reasonably enforce the required invariants. Client-side
+  validation alone is not a security boundary; preserve authorization, validation, concurrency, retry, and account-deletion
+  guarantees regardless of where the operation runs. Sensitive data, revision checks, or safe retries alone do not
+  automatically justify a callable.
+- Before adding a callable or HTTP function, inspect existing paths and explain the concrete server-side requirement and
+  why Rules/client transactions or an existing backend path are insufficient. Valid reasons include server-held secrets,
+  privileged/cross-account operations, verified provider callbacks, background work, or invariants Rules cannot reasonably
+  enforce. When backend work is justified, reuse existing domain helpers; do not introduce generic CRUD endpoints or
+  speculative infrastructure. This guidance does not authorize refactoring existing write paths outside the requested scope.
 - Use prefixed commit subjects: `feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`.
 - Pick the dominant intent; do not create unprefixed commit subjects.
 - When asked to commit, use unsigned commits by default (`git commit --no-gpg-sign`) unless the user explicitly asks for a signed commit.
-- After completing implementation changes, create an unsigned commit by default, staging only files changed for the current task with explicit paths. Do not push unless the user explicitly asks.
+- After completing implementation changes, create an unsigned commit by default, staging only files changed for the current task with explicit paths.
+- When working in a worktree whose branch already has an open PR, completing requested fixes or changes includes pushing
+  the verified commits to that same PR branch and updating its description/verification notes as needed. Do not stop at
+  a local commit or ask for another push request. Verify the PR head matches the local commit before reporting completion.
+  This is standing authorization for that feature branch and its existing PR only: do not push the base branch, force-push,
+  merge, or deploy without separate explicit authorization. An explicit instruction not to push overrides this workflow.
+  Outside this existing-PR workflow, do not push unless the user explicitly asks.
 - Whenever creating a GitHub issue or epic for this repository, add it to the `Quantified Self IO` GitHub Project
   (`jimmykane` user project 2) in the same task and verify project membership before reporting completion. Add newly
   created subissues as project items too; preserve existing project status and do not infer a status change unless the
@@ -52,7 +68,7 @@ Always-on rules:
 - When adding a new provider/service integration, add or update a focused public `/integrations/<provider>` page when it has a clear product or search purpose. Keep integration routes intentional, and update route metadata, sitemap/robots, internal links, help content, and tests alongside the page.
 - When adding or materially changing a provider/service integration, update `docs/provider-integration-guide.md` in the same change. Keep its provider matrix, implementation checklist, lifecycle guidance, operational coverage, and pitfalls accurate.
 - For read-only Sentry queries in this repository, source `$HOME/.config/sentry/personal.env` only for the Sentry API command. Infer the organization and project from the `sentry:upload-sourcemaps` script in `package.json`; never print the token or profile contents.
-- Never deploy, publish, push, or otherwise mutate production/cloud infrastructure unless the user gives explicit approval for that specific action in the current conversation. Requests to implement, fix, commit, push code, prepare a deployment, continue, or "go" do not authorize a deployment. Prepare and verify changes locally, then report the exact manual command or ask for separate explicit deployment approval.
+- Never deploy, publish releases, or otherwise mutate production/cloud infrastructure unless the user gives explicit approval for that specific action in the current conversation. The existing-PR workflow above authorizes Git branch/PR updates only. Requests to implement, fix, commit, push code, prepare a deployment, continue, or "go" do not authorize a deployment. Prepare and verify changes locally, then report the exact manual command or ask for separate explicit deployment approval.
 - Never delete, purge, or disable any Firebase data or resource without separate explicit approval that identifies the exact target and scope. This includes Firestore documents or collections, Authentication users, Storage objects, Functions, Hosting releases, Extensions, scheduled jobs, task queues, configuration, and secrets. Prior approval for a deployment or a different deletion does not carry over; read-only inspection is allowed.
 
 Layer entry points:

@@ -28,6 +28,17 @@
   gap: 2px;
 }
 
+.qs-page-header__title-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
+.qs-page-header__title-actions:empty {
+  display: none;
+}
+
 .qs-page-header__eyebrow,
 .qs-page-header__subtitle,
 .qs-page-header__title {

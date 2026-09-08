@@ -31,6 +31,8 @@ export const FUNCTIONS_MANIFEST = {
     queryActivityHealthRange: { name: 'queryActivityHealthRange', region: 'europe-west2' },
     saveManualHealthMeasurement: { name: 'saveManualHealthMeasurement', region: 'europe-west2' },
     deleteManualHealthMeasurement: { name: 'deleteManualHealthMeasurement', region: 'europe-west2' },
+    saveTimelineNote: { name: 'saveTimelineNote', region: 'europe-west2' },
+    deleteTimelineNote: { name: 'deleteTimelineNote', region: 'europe-west2' },
 
     // COROS Functions
     getCOROSAPIAuthRequestTokenRedirectURI: { name: 'getCOROSAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },

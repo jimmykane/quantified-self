@@ -314,6 +314,16 @@ service cloud.firestore {
           allow read, write: if false;
         }
 
+        // Private calendar context. Permanent leaves; all mutations use guarded callables.
+        match /timelineNotes/{noteID} {
+          allow get: if isOwner();
+          allow list: if isOwner() && request.query.limit != null && request.query.limit <= 65;
+          allow write: if false;
+        }
+        match /timelineNoteDeletions/{document=**} {
+          allow read, write: if false;
+        }
+
         // Unified health source records are private owner-readable, server-written data.
         // List reads must carry the public page limit plus one look-ahead document.
         match /healthSourceRecords/{sourceRecordID} {

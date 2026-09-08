@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
 import { PublicFeaturePreviewComponent } from '../public-seo/public-feature-preview.component';
-import { CompactFeatureRowComponent } from '../shared/compact-feature-row/compact-feature-row.component';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import {
   COMPARISON_ANALYSIS_ITEMS,
   COMPARISON_FAQ_ITEMS,
@@ -22,7 +22,7 @@ import {
     MatIconModule,
     ServiceSourceIconComponent,
     PublicFeaturePreviewComponent,
-    CompactFeatureRowComponent,
+    CompactRowComponent,
   ],
   templateUrl: './workout-data-comparison-page.component.html',
   styleUrls: ['./workout-data-comparison-page.component.scss'],

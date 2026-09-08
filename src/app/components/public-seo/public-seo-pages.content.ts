@@ -56,6 +56,7 @@ export interface PublicSeoPage {
   closingCopy: string;
   closingActions: readonly PublicSeoAction[];
   howToSteps?: readonly string[];
+  featureList?: readonly string[];
 }
 
 export interface PublicSeoRouteData {
@@ -90,7 +91,8 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
   health: {
     key: 'health', path: PUBLIC_FEATURE_PATHS.health, eyebrow: 'Health · Beta',
     title: 'Sleep, HRV and Health Trends Across Your Devices',
-    description: 'Explore sleep, heart rate, HRV and body measurements from supported Garmin, Suunto and COROS sources. Track personal trends and add your own readings.',
+    description: HEALTH_FEATURE_CONTENT.seo.description,
+    featureList: HEALTH_FEATURE_CONTENT.seo.featureList,
     h1: HEALTH_FEATURE_CONTENT.title,
     intro: HEALTH_FEATURE_CONTENT.intro,
     chips: ['Sleep stages', 'Resting heart rate', 'HRV personal range', 'Body measurements', 'Manual readings'],
@@ -1731,6 +1733,7 @@ function buildJsonLd(page: PublicSeoPage): Record<string, unknown> {
       applicationCategory: 'HealthApplication',
       operatingSystem: 'Web',
       featureList: [
+        ...(page.featureList ?? []),
         ...page.sections.flatMap(section => section.items.map(item => item.title)),
         ...page.chips,
       ],

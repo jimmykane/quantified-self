@@ -56,7 +56,13 @@ export const APP_HEALTH_WORKSPACE_METRICS: readonly AppHealthWorkspaceMetric[] =
 export interface AppHealthWorkspaceSettingsInterface {
     metric?: AppHealthWorkspaceMetric;
     range?: AppHealthWorkspaceRange;
+    /** Display-only source choices, independent of explorer filters and metric calculations. */
+    highlightSources?: AppHealthHighlightSources;
 }
+
+export const APP_HEALTH_HIGHLIGHT_IDS = ['sleep', 'heart_rate', 'heart_rate_variability'] as const;
+export type AppHealthHighlightId = typeof APP_HEALTH_HIGHLIGHT_IDS[number];
+export type AppHealthHighlightSources = Partial<Record<AppHealthHighlightId, string>>;
 
 export interface AppDashboardSleepTrendSettingsInterface {
     range?: AppDashboardSleepTrendRange;
@@ -203,6 +209,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     dashboardActionPrompts?: AppDashboardActionPrompts;
     trainingWorkspace?: TrainingWorkspacePreferences;
     healthWorkspace?: AppHealthWorkspaceSettingsInterface;
+    timelineNotes?: { showOnCharts?: boolean };
 }
 
 export interface TrainingWorkspacePreferences {

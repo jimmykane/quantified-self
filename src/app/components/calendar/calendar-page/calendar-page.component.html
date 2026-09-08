@@ -1,6 +1,7 @@
 <main class="calendar-page qs-workspace-page" aria-labelledby="calendar-page-title">
   <app-page-header class="calendar-page-header" title="Calendar" titleId="calendar-page-title"
     leadingIcon="calendar_month">
+    <app-timeline-notes-workspace pageHeaderActions [visibleRange]="timelineNoteRange()"></app-timeline-notes-workspace>
     <mat-button-toggle-group pageHeaderActions class="calendar-view-toggle" aria-label="Calendar view"
       hideSingleSelectionIndicator [value]="routeState().view"
       (change)="selectView($event.value)">
@@ -68,11 +69,11 @@
       <span>Retry</span>
     </button>
   </section>
-  } @else {
-    @if (!isLoading() && !hasEvents()) {
+  }
+    @if (!hasError() && !isLoading() && !hasEvents()) {
     <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
-    <app-activity-calendar-grid [model]="calendarModel()" (daySelected)="openDay($event)">
+    <app-activity-calendar-grid [model]="calendarModel()" [timelineNotesByDate]="notesByDate()" (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
 
     @if (!isLoading() && familyVolumeRows().length) {
@@ -94,7 +95,6 @@
       <app-activity-calendar-volume-list [rows]="familyVolumeRows()"></app-activity-calendar-volume-list>
     </section>
     }
-  }
 
   @if (currentUser(); as user) {
   <app-activity-range-table-section [user]="user" [range]="primaryActivityRange()" heading="Activities"

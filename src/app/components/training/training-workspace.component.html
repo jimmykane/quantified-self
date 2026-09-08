@@ -22,6 +22,7 @@
       </div>
     }
     <div pageHeaderActions class="training-page-actions">
+      <app-timeline-notes-workspace #timelineNotes />
       @if (derivedMetricsRouteStatus?.showRetry) {
         <button
           mat-stroked-button
@@ -292,6 +293,7 @@
               </header>
               @if (trainingReadiness.historyPoints.length) {
                 <app-training-readiness-trend-chart
+                  [timelineNotes]="timelineNotes.context()"
                   [points]="trainingReadiness.historyPoints"
                   [ariaLabel]="trainingReadiness.historyAriaLabel"
                   [darkTheme]="isDarkTheme()"
@@ -611,7 +613,7 @@
       <div class="training-load-grid">
         @if (derivedState.formStatus === 'ready' || derivedState.formPoints?.length) {
           <article class="training-chart-panel training-chart-panel-wide qs-glass-card-panel">
-            <app-form-chart [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="loadTrajectoryInfoTooltip" timelineWindow="m"></app-form-chart>
+            <app-form-chart [timelineNotes]="timelineNotes.context()" [data]="derivedState.formPoints" [formStatus]="derivedState.formStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="loadTrajectoryInfoTooltip" timelineWindow="m"></app-form-chart>
           </article>
         } @else {
           <article class="training-chart-state training-chart-state-form qs-glass-card-panel" role="status">
@@ -625,7 +627,7 @@
         }
         @if (derivedState.freshnessForecastStatus === 'ready' || derivedState.freshnessForecast?.points?.length) {
           <article class="training-chart-panel qs-glass-card-panel">
-            <app-freshness-forecast-chart [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="freshnessForecastInfoTooltip"></app-freshness-forecast-chart>
+            <app-freshness-forecast-chart [timelineNotes]="timelineNotes.context()" [forecast]="derivedState.freshnessForecast" [status]="derivedState.freshnessForecastStatus" [darkTheme]="isDarkTheme()" [infoTooltip]="freshnessForecastInfoTooltip"></app-freshness-forecast-chart>
           </article>
         } @else {
           <article class="training-chart-state training-chart-state-forecast qs-glass-card-panel" role="status">
@@ -847,6 +849,7 @@
               <section class="training-power-systems-trend">
                 <header><strong>{{ trend.label }}</strong><span>{{ trend.unit }}</span></header>
                 <app-training-power-systems-trend-chart
+                  [timelineNotes]="timelineNotes.context()"
                   [trend]="trend"
                   [darkTheme]="isDarkTheme()">
                 </app-training-power-systems-trend-chart>
@@ -935,6 +938,7 @@
           @if (derivedState.trainingSwimPerformanceStatus === 'ready' || derivedState.trainingSwimPerformance) {
             <article class="training-chart-panel training-swim-performance-panel qs-glass-card-panel">
               <app-training-swim-performance-chart
+                [timelineNotes]="timelineNotes.context()"
                 [performance]="derivedState.trainingSwimPerformance"
                 [status]="derivedState.trainingSwimPerformanceStatus"
                 [darkTheme]="isDarkTheme()"
@@ -1010,6 +1014,7 @@
                           <p class="training-empty-state">No comparable durability metric for this context.</p>
                         }
                         <app-training-durability-trajectory-chart
+                          [timelineNotes]="timelineNotes.context()"
                           [trajectory]="context.trajectory"
                           [status]="derivedState.trainingDurabilityStatus"
                           [darkTheme]="isDarkTheme()"
@@ -1157,6 +1162,7 @@
               </div>
               @if (weightSeries.chartPoints.length) {
                 <app-training-body-weight-trend-chart
+                  [timelineNotes]="timelineNotes.context()"
                   [points]="weightSeries.chartPoints"
                   [ariaLabel]="weightSeries.chartAriaLabel"
                   [darkTheme]="isDarkTheme()"

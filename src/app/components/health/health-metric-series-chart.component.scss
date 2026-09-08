@@ -8,16 +8,15 @@
   width: 100%;
 }
 
-.health-metric-series-chart-compact {
-  height: 62px;
-}
-
 @media (max-width: 640px) {
   .health-metric-series-chart {
     height: 210px;
   }
+}
 
-  .health-metric-series-chart-compact {
-    height: 62px;
-  }
+// Highlights show one source at a time. Keep the plot readable without
+// expanding its surrounding card or reverting to stacked tiny sparklines.
+// After the mobile rule so both highlight layouts share the same height.
+.health-metric-series-chart-compact {
+  height: 112px;
 }

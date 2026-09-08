@@ -1,4 +1,5 @@
 import type { EChartsType } from 'echarts/core';
+import { TimelineNotesChartBinding, type TimelineNoteChartContext, type TimelineNoteAxisHints } from './timeline-notes-chart.helper';
 import { EChartsLoaderService } from '../services/echarts-loader.service';
 import type { EChartsMobileTapFeedbackOptions } from './echarts-tooltip-interaction.helper';
 
@@ -45,6 +46,10 @@ export interface EChartsHostControllerConfig {
 }
 
 export class EChartsHostController {
+  private readonly timelineNotes = new TimelineNotesChartBinding();
+  public setTimelineNotes(context: TimelineNoteChartContext | null, hints: TimelineNoteAxisHints = {}): void {
+    this.timelineNotes.set(context, hints);
+  }
   private chart: EChartsType | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private resizeFrameId: number | null = null;
@@ -131,7 +136,7 @@ export class EChartsHostController {
     if (!this.chart) {
       return false;
     }
-    this.config.eChartsLoader.setOption(this.chart, option, settings);
+    this.config.eChartsLoader.setOption(this.chart, this.timelineNotes.apply(this.chart, option, this.currentTheme === 'dark'), settings);
     return true;
   }
 
@@ -163,6 +168,7 @@ export class EChartsHostController {
   }
 
   public dispose(): void {
+    this.timelineNotes.dispose();
     this.lifecycleVersion += 1;
 
     if (this.resizeObserver) {

@@ -194,7 +194,7 @@ describe('onSubscriptionUpdated', () => {
         activeSubscriptionData = [];
         deletionMarkerSequence = [];
         mockIsServiceDisconnectPendingForUser.mockResolvedValue(false);
-        mockClearServiceDisconnectPending.mockResolvedValue(undefined);
+        mockClearServiceDisconnectPending.mockResolvedValue('cleared');
 
         docSpy = vi.fn((path: string) => ({
             get: vi.fn(() => Promise.resolve(getDocSnapshot(path))),

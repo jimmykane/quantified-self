@@ -28,6 +28,9 @@ import {
   recordServiceDisconnectRetryFailure,
 } from '../service-disconnect-pending';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { retryInterruptedExplicitDisconnects } from '../OAuth2';
+import { retryServiceDisconnectCleanup } from '../service-disconnect-cleanup';
+import { reconcileExpiredServiceOAuthRoots } from '../service-oauth-root-reconciliation';
 
 interface PendingDisconnectCollectionConfig {
   serviceName: ServiceNames;
@@ -316,7 +319,7 @@ async function clearPendingDisconnectRootIfEntitled(
   rootSnapshot: admin.firestore.QueryDocumentSnapshot,
 ): Promise<boolean> {
   const rootData = rootSnapshot.data() as PendingServiceDisconnectRootData;
-  if (!isServiceDisconnectPendingData(rootData)) {
+  if (!isServiceDisconnectPendingData(rootData) || rootData.disconnectOperationGeneration) {
     return false;
   }
 
@@ -325,7 +328,10 @@ async function clearPendingDisconnectRootIfEntitled(
     return false;
   }
 
-  await clearServiceDisconnectPending(userID, config.serviceName);
+  const clearResult = await clearServiceDisconnectPending(userID, config.serviceName);
+  if (clearResult !== 'cleared' && clearResult !== 'no_pending') {
+    return false;
+  }
   logger.info('[RetryPendingServiceDisconnects] Cleared pending disconnect because entitlement is active again.', {
     userID,
     serviceName: config.serviceName,
@@ -377,12 +383,15 @@ async function retryPendingDisconnectRoot(
   const userID = rootSnapshot.id;
   const rootData = rootSnapshot.data() as PendingServiceDisconnectRootData;
 
-  if (!isServiceDisconnectPendingData(rootData)) {
+  if (!isServiceDisconnectPendingData(rootData) || rootData.disconnectOperationGeneration) {
     return;
   }
 
   if (await shouldKeepConnectionForCurrentEntitlement(userID)) {
-    await clearServiceDisconnectPending(userID, config.serviceName);
+    const clearResult = await clearServiceDisconnectPending(userID, config.serviceName);
+    if (clearResult !== 'cleared' && clearResult !== 'no_pending') {
+      return;
+    }
     logger.info('[RetryPendingServiceDisconnects] Cleared pending disconnect because entitlement is active again.', {
       userID,
       serviceName: config.serviceName,
@@ -591,6 +600,29 @@ export const retryPendingServiceDisconnects = onSchedule({
   memory: '512MiB',
 }, async () => {
   const now = Timestamp.now();
+  await retryServiceDisconnectCleanup().catch(() => {
+    logger.error('[ExplicitDisconnectCleanup] Could not scan pending cleanup; next schedule will retry.');
+  });
+
+  // Reserve the beginning of the invocation for bounded Firestore-only OAuth
+  // cleanup. Provider disconnect I/O can consume the remaining execution
+  // budget, but must not repeatedly starve expired-state reconciliation.
+  try {
+    const oauthRootReconciliation = await reconcileExpiredServiceOAuthRoots(
+      admin.firestore(),
+      now.toMillis(),
+    );
+    logger.info('[RetryPendingServiceDisconnects] Reconciled expired OAuth roots and disconnect fences.', {
+      rootsScanned: oauthRootReconciliation.rootsScanned,
+      cleaned: oauthRootReconciliation.cleaned,
+      failed: oauthRootReconciliation.failed,
+      byOutcome: oauthRootReconciliation.byOutcome,
+    });
+  } catch {
+    logger.error('[RetryPendingServiceDisconnects] OAuth root reconciliation scan failed.', {
+      reason: 'oauth_root_reconciliation_scan_failed',
+    });
+  }
 
   // Repair already-connected accounts first. Pending-disconnect scans can
   // involve provider I/O, so putting these bounded pages first prevents a
@@ -615,6 +647,8 @@ export const retryPendingServiceDisconnects = onSchedule({
   logger.info('[RetryPendingServiceDisconnects] Repaired bounded pending-disconnect queue releases.', {
     repairedCount: repairedPendingDisconnectQueueReleaseCount,
   });
+
+  await retryInterruptedExplicitDisconnects();
 
   for (const config of PENDING_DISCONNECT_COLLECTIONS) {
     const restoredEntitlementClearedCount = await clearPendingDisconnectsForRestoredEntitlements(config);

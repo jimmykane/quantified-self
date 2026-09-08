@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
+import { Component, LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { readFileSync } from 'node:fs';
@@ -29,6 +29,9 @@ import { PageHeaderComponent } from '../shared/page-header/page-header.component
 import { MetricIndicatorComponent } from '../shared/metric-indicator/metric-indicator.component';
 import { TrainingSummaryCardsComponent } from '../shared/training-summary/training-summary-cards.component';
 import { TrainingMetricGridComponent } from '../shared/training-summary/training-metric-grid.component';
+
+@Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
+class TimelineNotesWorkspaceStubComponent { context = () => null; }
 
 function createSleepService(sessions: readonly SleepSession[] = []) {
   return {
@@ -125,6 +128,7 @@ describe('TrainingWorkspaceComponent', () => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
       imports: [
+        TimelineNotesWorkspaceStubComponent,
         MatMenuModule,
         MatTooltipModule,
         PageHeaderComponent,

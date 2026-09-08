@@ -8,8 +8,13 @@ import {
 } from './suunto/health-webhook-binding';
 
 export const OAUTH_FLOW_GENERATION_FIELD = 'oauthFlowGeneration';
+export const OAUTH_FLOW_CREATED_AT_FIELD = 'oauthFlowCreatedAt';
+export const OAUTH_FLOW_EXPIRES_AT_FIELD = 'oauthFlowExpiresAt';
 export const SERVICE_DISCONNECT_OPERATION_GENERATION_FIELD = 'disconnectOperationGeneration';
 export const SERVICE_DISCONNECT_OPERATION_LEASE_EXPIRES_AT_FIELD = 'disconnectOperationLeaseExpiresAt';
+
+/** OAuth browser round trips must complete within this server-owned window. */
+export const OAUTH_FLOW_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Explicit disconnects fence OAuth and token use while provider cleanup is in
@@ -81,6 +86,8 @@ export interface DeleteLocalServiceTokenOptions {
   /** Keep an empty root so a later guarded lifecycle transaction can still verify its generation. */
   preserveTokenRootWhenEmpty?: boolean;
   shouldDeleteInTransaction?: (transaction: admin.firestore.Transaction) => Promise<boolean>;
+  /** Write-only hook, after all reads: stage durable cleanup atomically with credential removal. */
+  onDeleteInTransaction?: (transaction: admin.firestore.Transaction) => void;
 }
 
 export function getServiceTokenRootDocumentRef(
@@ -148,6 +155,7 @@ export async function deleteLocalServiceToken(
       && remainingTokenCount === 0
       && hasPendingOAuthFlowContext(tokenRootSnapshot);
 
+    options.onDeleteInTransaction?.(transaction);
     transaction.delete(tokenDocRef);
     if (suuntoBindingRef
       && parseSuuntoHealthWebhookAccountBinding(suuntoBindingSnapshot?.data())?.userID === userID) {

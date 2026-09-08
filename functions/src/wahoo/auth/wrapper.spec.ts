@@ -91,11 +91,15 @@ import {
   getWahooAPIConnectionAccount,
   requestAndSetWahooAPIAccessToken,
 } from './wrapper';
+import * as logger from 'firebase-functions/logger';
 
 describe('Wahoo Auth Wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue(undefined);
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue({
+      connected: true,
+      outcome: 'connected',
+    });
     mocks.disconnectServiceForUser.mockReset().mockResolvedValue(undefined);
     mocks.getServiceConnectionMeta.mockResolvedValue(null);
     mocks.getActiveWahooTokenSnapshot.mockRejectedValue(new Error('No Wahoo account'));
@@ -138,7 +142,10 @@ describe('Wahoo Auth Wrapper', () => {
         code: 'oauth-code',
         redirectUri: 'https://localhost/callback',
       },
-    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).resolves.toBeUndefined();
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).resolves.toEqual({
+      connected: true,
+      outcome: 'connected',
+    });
 
     expect(mocks.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
       'user-1',
@@ -185,6 +192,33 @@ describe('Wahoo Auth Wrapper', () => {
       code: 'permission-denied',
       message: 'Wahoo rejected the authorization request.',
     });
+  });
+
+  it('does not log provider-echoed authorization secrets after exchange failure', async () => {
+    mocks.getAndSetServiceOAuth2AccessTokenForUser.mockRejectedValue(
+      Object.assign(new Error('authorization code secret-authorization-code was rejected'), {
+        statusCode: 400,
+        error_description: 'secret-authorization-code',
+      }),
+    );
+
+    await expect(requestAndSetWahooAPIAccessToken({
+      auth: { uid: 'user-1' },
+      app: { appId: 'app-1' },
+      data: {
+        state: 'oauth-state',
+        code: 'secret-authorization-code',
+        redirectUri: 'https://localhost/callback',
+      },
+    } as Parameters<typeof requestAndSetWahooAPIAccessToken>[0])).rejects.toMatchObject({
+      code: 'internal',
+    });
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'Wahoo authorization code flow failed',
+      { statusCode: 400 },
+    );
+    expect(JSON.stringify(vi.mocked(logger.error).mock.calls)).not.toContain('secret-authorization-code');
   });
 
   it('returns only the pinned Wahoo account ID for an authenticated user', async () => {

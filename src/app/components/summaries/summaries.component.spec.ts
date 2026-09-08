@@ -555,6 +555,12 @@ describe('SummariesComponent', () => {
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
     expect(sectionHeadings).toEqual(['Activity Overview', 'Routes & Maps']);
+    const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
+    expect(sectionTitleBlocks).toHaveLength(2);
+    sectionTitleBlocks.forEach(block => {
+      expect(block.querySelector(':scope > mat-icon')?.getAttribute('aria-hidden')).toBe('true');
+      expect(block.querySelector(':scope > .dashboard-section-title-copy > h2')).not.toBeNull();
+    });
     const boards = nativeElement.querySelectorAll('app-dashboard-tile-board');
     expect(boards).toHaveLength(2);
     const board = boards[0] as HTMLElement | null;
@@ -625,6 +631,21 @@ describe('SummariesComponent', () => {
 
     expect(styles).toContain('.dashboard-section-header.dashboard-main-section-header h2');
     expect(styles).toContain('font-size: 1rem;');
+  });
+
+  it('keeps section icons beside their titles at every breakpoint without shrinking the icons', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'), 'utf8');
+    const titleRowRules = [...styles.matchAll(/\.dashboard-section-title-block\s*\{([^}]+)\}/g)];
+
+    expect(titleRowRules).toHaveLength(1);
+    expect(titleRowRules[0][1]).toContain('display: flex;');
+    expect(titleRowRules[0][1]).toContain('align-items: center;');
+    expect(titleRowRules[0][1]).toContain('flex-direction: row;');
+    expect(titleRowRules[0][1]).toContain('flex-wrap: nowrap;');
+    expect(titleRowRules[0][1]).toContain('gap: 0.5rem;');
+    expect(titleRowRules[0][1]).toContain('min-width: 0;');
+    expect(styles.match(/\.dashboard-section-title-block > mat-icon\s*\{([^}]+)\}/)?.[1])
+      .toContain('flex: 0 0 auto;');
   });
 
   it('keeps narrow derived-status actions compact and accessibly named', () => {

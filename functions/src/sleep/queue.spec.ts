@@ -4,6 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QueueResult } from '../queue-utils';
 import { SleepSyncQueueItemInterface } from '../queue/queue-item.interface';
 import { buildHealthBackfillJobs } from '../scripts/health-backfill-plan';
+import { getTokenCredentialSnapshot } from '../token-refresh-coordinator';
 
 const hoisted = vi.hoisted(() => ({
     docGet: vi.fn(),
@@ -47,6 +48,7 @@ const hoisted = vi.hoisted(() => ({
     releaseSleepQueueRevision: vi.fn(),
     captureSuuntoHealthWriteLifecycleGuards: vi.fn(),
     processSuuntoHealthQueueItem: vi.fn(),
+    getSuuntoHealthFailureTelemetry: vi.fn(() => null),
     captureActiveSuuntoWebhookWriteLifecycleGuards: vi.fn(),
     captureCurrentSuuntoWebhookWriteLifecycleGuards: vi.fn(),
     ensureSuuntoWebhookAccountBindingForProviderVerifiedToken: vi.fn(),
@@ -287,6 +289,7 @@ vi.mock('../service-connection-meta', () => ({
 vi.mock('../suunto/health-sync', () => ({
     captureSuuntoHealthWriteLifecycleGuards: hoisted.captureSuuntoHealthWriteLifecycleGuards,
     processSuuntoHealthQueueItem: hoisted.processSuuntoHealthQueueItem,
+    getSuuntoHealthFailureTelemetry: hoisted.getSuuntoHealthFailureTelemetry,
     sanitizeSuuntoHealthErrorForTelemetry: vi.fn(() => new Error('Suunto Health processing failed.')),
     suuntoCredentialFromSnapshot: vi.fn(() => ({
         accessToken: 'suunto-access-token',
@@ -5120,7 +5123,12 @@ describe('sleep queue', () => {
             healthUserID,
             expect.objectContaining({ sourceRecordType: 'suunto_247_activity' }),
             expect.any(Number),
-            lifecycleGuards,
+            expect.objectContaining({ ...lifecycleGuards, additionalRequiredDocumentFieldValues:
+                expect.arrayContaining([...lifecycleGuards.additionalRequiredDocumentFieldValues,
+                    expect.objectContaining({ expectedFields: expect.objectContaining({
+                        processed: false, userID: healthUserID, processingOwner: expect.any(String),
+                    }) }),
+                ]) }),
         );
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith(
             healthUserID,
@@ -5132,7 +5140,8 @@ describe('sleep queue', () => {
                 lastErrorCode: null,
             }),
             expect.any(Number),
-            lifecycleGuards,
+            expect.objectContaining({ ...lifecycleGuards, additionalRequiredDocumentFieldValues:
+                expect.arrayContaining(lifecycleGuards.additionalRequiredDocumentFieldValues) }),
         );
         expect(hoisted.upsertSleepSessions).not.toHaveBeenCalled();
         expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
@@ -5142,6 +5151,74 @@ describe('sleep queue', () => {
             healthRecordsWritten: 1,
         }));
     });
+
+    it.each(['success', 'enqueue_failure', 'marker_failure', 'write_failure', 'checkpoint_failure'])(
+        'durably hands off Suunto windows and resumes safely after %s', async failure => {
+            const start = Date.parse('2026-08-01T00:00:00Z');
+            const day = 86_400_000;
+            const tokenData = { serviceName: ServiceNames.SuuntoApp, userName: 'suunto-user-1',
+                accessToken: 'suunto-access-token', tokenCredentialGeneration: 'generation' };
+            const tokenRef = { path: 'token', parent: { parent: { id: 'test-user-uid' } },
+                get: async () => ({ exists: true, data: () => tokenData }) };
+            const guards = { requiredExistingDocumentRef: tokenRef,
+                requiredExistingTokenCredential: getTokenCredentialSnapshot(tokenData),
+                requiredDocumentFieldValues: { documentRef: { path: 'binding',
+                    get: async () => ({ exists: true, data: () => ({ generation: 'one' }) }) },
+                expectedFields: { generation: 'one' } }, additionalRequiredDocumentFieldValues: [] };
+            hoisted.tokenRootGet.mockResolvedValue({ docs: [{ id: 'suunto-user-1', ref: tokenRef,
+                data: () => tokenData }], empty: false });
+            hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(guards);
+            hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(guards);
+            const continuation = { nextStartMs: start + day, targetWindowMs: day, authorityDigest: 'a'.repeat(64) };
+            hoisted.processSuuntoHealthQueueItem.mockResolvedValue({ lifecycleGuards: guards, continuation,
+                healthResults: [{ input: { sourceRecordType: 'suunto_247_activity', sourceRecordKey: 'opaque' },
+                    observedAtMs: start + 3_600_000 }] });
+            const state: Record<string, unknown> = { id: 'suunto-continuation', dateCreated: 1_700_000_000_000,
+                queueRevision: 'original', type: 'suunto_health_poll', provider: 'SuuntoApp',
+                providerUserId: 'suunto-user-1', userID: 'test-user-uid', healthTrigger: 'backfill',
+                rangeStartMs: start, rangeEndMs: start + 2 * day, processed: false, retryCount: 7,
+                dispatchedToCloudTask: 1_700_000_000_500 };
+            const update = vi.fn(async (data: Record<string, unknown>) => { Object.assign(state, data); });
+            const ref = { path: 'sleepSyncQueue/suunto-continuation', parent: { id: 'sleepSyncQueue' }, update,
+                get: async () => ({ exists: true, data: () => ({ ...state }) }) } as unknown as admin.firestore.DocumentReference;
+            hoisted.claimSleepQueueRevision.mockImplementation(async (_item, _user, owner) => {
+                state.processingOwner = owner;
+                state.processingRevision = `revision:${state.queueRevision}`;
+                return 'claimed';
+            });
+            if (failure === 'enqueue_failure') hoisted.enqueueSleepSyncTask.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'marker_failure') hoisted.markQueueItemDispatchedIfUserActive.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'write_failure') hoisted.replaceHealthSourceRecord.mockRejectedValueOnce(Error('unavailable'));
+            if (failure === 'checkpoint_failure') hoisted.transactionUpdate.mockImplementationOnce(() => { throw Error('unavailable'); });
+
+            const result = await processSleepSyncQueueItem({ ...state, ref } as unknown as SleepSyncQueueItemInterface);
+            if (failure === 'write_failure' || failure === 'checkpoint_failure') {
+                expect(state.suuntoHealthProgress).toBeUndefined();
+                expect(state.queueRevision).toBe('original');
+                expect(hoisted.enqueueSleepSyncTask).not.toHaveBeenCalled();
+                expect(state.processed).toBe(false);
+                return;
+            }
+            expect(result).toBe(QueueResult.Deferred);
+            expect(state).toMatchObject({ processed: false, retryCount: 0,
+                suuntoHealthProgress: { ...continuation, recordsWritten: 1, lastObservedAtMs: start + 3_600_000 } });
+            expect(state.queueRevision).not.toBe('original');
+            expect(hoisted.updateHealthSyncState).not.toHaveBeenCalled();
+            expect(hoisted.enqueueSleepSyncTask).toHaveBeenCalledWith('suunto-continuation', state.dateCreated,
+                undefined, { queueRevision: state.queueRevision, queueDateCreated: state.dateCreated });
+            // The next task (or dispatcher recovery) reads the durable cursor.
+            hoisted.processSuuntoHealthQueueItem.mockResolvedValueOnce({ lifecycleGuards: guards,
+                continuation: null, healthResults: [] });
+            const final = await processSleepSyncQueueItem({ ...state, ref } as unknown as SleepSyncQueueItemInterface);
+            expect(final).toBe(QueueResult.Processed);
+            expect(hoisted.processSuuntoHealthQueueItem).toHaveBeenLastCalledWith(
+                expect.objectContaining({ suuntoHealthProgress: expect.objectContaining(continuation) }),
+                expect.anything(), 'test-user-uid', expect.anything(), expect.any(Function), expect.any(Function));
+            expect(state).toMatchObject({ processed: true, resultStatus: 'success', healthRecordsWritten: 1 });
+            expect(hoisted.updateHealthSyncState).toHaveBeenCalledWith('test-user-uid', 'SuuntoApp',
+                expect.objectContaining({ lastObservedAtMs: start + 3_600_000 }), expect.any(Number), expect.anything());
+        },
+    );
 
     it('rebases a credential-only rotation before recording a Suunto Health failure', async () => {
         const healthUserID = 'suunto-health-user';
@@ -5181,7 +5258,16 @@ describe('sleep queue', () => {
         hoisted.tokenRootGet.mockResolvedValue({ docs: [tokenSnapshot], empty: false });
         hoisted.captureActiveSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(initialGuards);
         hoisted.captureCurrentSuuntoWebhookWriteLifecycleGuards.mockResolvedValue(rotatedGuards);
-        hoisted.processSuuntoHealthQueueItem.mockRejectedValueOnce(new Error('provider unavailable'));
+        const originalError = new Error('private-provider-error');
+        hoisted.processSuuntoHealthQueueItem.mockImplementationOnce(async (_item, _token, _uid, _guards, _onGuards, onStage) => {
+            onStage('statistics_request');
+            throw originalError;
+        });
+        hoisted.getSuuntoHealthFailureTelemetry.mockReturnValueOnce({
+            errorName: 'SuuntoHealthRequestError',
+            errorCode: 'suunto_health_request_failed',
+            providerStatusCode: 429,
+        });
         hoisted.updateHealthSyncState
             .mockResolvedValueOnce(false)
             .mockResolvedValueOnce(true);
@@ -5204,6 +5290,9 @@ describe('sleep queue', () => {
         });
 
         expect(result).toBe(QueueResult.RetryIncremented);
+        expect(hoisted.getSuuntoHealthFailureTelemetry).toHaveBeenCalledWith(
+            originalError, 'statistics_request', expect.any(Number),
+        );
         expect(hoisted.updateHealthSyncState).toHaveBeenCalledTimes(2);
         expect(hoisted.updateHealthSyncState).toHaveBeenNthCalledWith(
             1,
@@ -5231,6 +5320,14 @@ describe('sleep queue', () => {
             retryCount: 1,
             dispatchedToCloudTask: null,
         }));
+        expect(hoisted.loggerError).toHaveBeenCalledWith(
+            expect.stringContaining('Queue item suunto-health-failure-after-credential-rotation failed'),
+            {
+                errorName: 'SuuntoHealthRequestError',
+                errorCode: 'suunto_health_request_failed',
+                providerStatusCode: 429,
+            },
+        );
     });
 
     it('skips a failed Suunto Health item when rebasing finds changed account authority', async () => {

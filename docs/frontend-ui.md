@@ -20,6 +20,8 @@ provides:
 - `pageHeaderLeading` for an existing icon action. Set `leadingAction` to preserve its Material touch target while
   keeping the title visually compact. Do not combine `leadingIcon` and `pageHeaderLeading` on the same header.
 - `pageHeaderContext` for projected, domain-specific status content that replaces the eyebrow without adding a banner.
+- `pageHeaderTitleActions` for a compact workspace-wide control that must stay beside the title at every breakpoint,
+  such as Health Sources. Keep this slot small; normal route actions belong in `pageHeaderActions`.
 - `pageHeaderActions` for existing Material controls. Route actions move to a dedicated full-width row below 800 px;
   compact headers retain their inline action layout.
 
@@ -49,7 +51,55 @@ Give each primary route title a stable `titleId` and reference it from the route
 `aria-labelledby`. Keep a title status concise and expose failures with the supplied warning status or an equivalent
 projected `role="alert"` state.
 
+## Account profile recovery
+
+Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
+server snapshots; permission or App Check failures refresh both credentials with the existing bounded retry/backoff.
+The recovery panel on `/login` explains that the user is still signed in. Its Retry action restarts the profile stream
+and refreshes credentials without signing out, clearing persistence, or writing account data. Actual Auth sign-out or
+an account switch cancels the old profile load and ends its recovery attempt.
+
+The full Firestore SDK can return an incorrect persisted `NoDocument` result even through `getDocFromServer()`.
+Before publishing a profile with missing required agreements or onboarding history (including a wholly missing profile),
+`UserProfileVerificationService` checks the four profile documents through a lazily loaded Firestore Lite client.
+The completeness check covers the onboarding guard's required policies plus completed onboarding, subscription
+history, or existing paid/admin/grace-period access. This also protects free accounts when only the root document
+appears missing and the legal document still exists. Server-confirmed unfinished setup continues to onboarding.
+That client uses the same Firebase app's Auth and App Check providers, but does not use the watch/persistence cache.
+Both readers share the same profile merge function. Failures remain recovery states; only verified missing data may
+produce a new onboarding profile. Generation checks prevent an older asynchronous claim merge from reopening the
+profile gate or continuing token retries during verification or a profile retry.
+
+Complete profile snapshots add no Firestore reads. Incomplete snapshots require at most four additional document
+reads per verification attempt; concurrent checks for the same snapshot and Auth session share one bounded request,
+and identical listener snapshots do not repeat verification. Changed snapshots, a complete listener result, or a
+restarted profile load invalidate the old shared result. Transient failures use the existing bounded retry budget.
+The fallback does not clear or repair the broader SDK cache. An already completed account that recovers while on `/onboarding` leaves that route
+without rewriting its completion flag or repeating completion analytics. The recovery behaviour applies to local,
+beta, and production builds; only the App Check debug provider is development-specific.
+
 ## Surface elevation
+
+### Shared compact rows
+
+`CompactRowComponent` (`app-compact-row`) in `src/app/components/shared/compact-row/` is the flat content-row
+primitive shared by Home, public feature pages, benchmark previews, and Health. It replaces the feature-specific
+`CompactFeatureRowComponent` name; existing callers use the same component rather than a compatibility wrapper.
+
+The default `layout="columns"` and `density="comfortable"` preserve the public feature presentation: optional icon,
+heading, content, and action. `layout="stacked"` keeps an optional action beside the heading and gives content the
+full row width at every breakpoint. `density="compact"` uses smaller icon/header spacing and Material text roles;
+Health uses this combination for Highlights and source-separated charts. The primitive adds no card background,
+rounded container, shadow, or nested content padding. `showDivider` controls the bottom divider.
+
+`title`, optional `titleId`, and `headingLevel` (2, 3, or 4) own heading semantics; `summary`, `icon`, and `iconTone`
+provide optional context. Default projected content can contain existing charts, tables, or metric displays.
+`compactRowAction` projects a Material control into the action slot. The row is presentational: consumers retain
+their existing Sports Lib formatting, data loading, accessible chart descriptions, and single haptic action owner.
+
+Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces.
+
+### Bounded surfaces
 
 Use `.qs-glass-card-panel` for shared content surfaces that are not already represented by an ordinary Material card.
 Both that primitive and default Material cards are intentionally flat through `--qs-card-shadow: none`; their border is

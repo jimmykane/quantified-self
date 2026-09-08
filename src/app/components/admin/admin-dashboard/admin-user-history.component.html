@@ -43,6 +43,39 @@
     </span>
 </div>
 
+<div class="history-display-controls">
+    <div class="history-scale-control">
+        <span>Y-axis</span>
+        <mat-button-toggle-group aria-label="User history Y-axis scale"
+            [value]="selectedScale()" (change)="selectScale($event.value)">
+            <mat-button-toggle value="auto">Auto</mat-button-toggle>
+            <mat-button-toggle value="zero">From zero</mat-button-toggle>
+        </mat-button-toggle-group>
+    </div>
+    <p>Each line shows its own user count. Select the series below each chart to compare them.
+        Auto fits the Y-axis to the visible series; From zero keeps a zero baseline.</p>
+</div>
+
+<ng-template #seriesPicker let-key="key" let-label="label">
+    @let control = seriesControls()[key];
+    <div class="series-controls">
+        <mat-chip-listbox [multiple]="true" [attr.aria-label]="label"
+            [value]="control.selected" (change)="selectSeries(key, $event.value)">
+            @for (choice of control.choices; track choice.name) {
+            <mat-chip-option [value]="choice.name"
+                [disabled]="control.selected.length === 1 && control.selected.includes(choice.name)">
+                <span class="series-label">
+                    <span class="series-marker" [style.background-color]="choice.color" aria-hidden="true"></span>
+                    {{ choice.name }}
+                </span>
+            </mat-chip-option>
+            }
+        </mat-chip-listbox>
+        <button mat-button [disabled]="control.allSelected" (click)="selectSeries(key, control.names)"
+            [attr.aria-label]="'Show all ' + label">Show all</button>
+    </div>
+</ng-template>
+
 <div class="history-chart-grid">
     <mat-card class="history-chart-card history-chart-wide">
         <div class="chart-heading">
@@ -53,6 +86,8 @@
         </div>
         <div #authChart class="history-chart" role="img"
             aria-label="Line chart of active accounts in rolling 24-hour, 7-day, and 30-day windows"></div>
+        <ng-container [ngTemplateOutlet]="seriesPicker"
+            [ngTemplateOutletContext]="{ key: 'activity', label: 'authentication activity series' }"></ng-container>
     </mat-card>
 
     <mat-card class="history-chart-card history-chart-wide">
@@ -80,7 +115,9 @@
         </div>
         } @else {
         <div #activePlanChart class="history-chart" role="img"
-            aria-label="Stacked area chart of active Free, Basic, and Pro users in the selected rolling window"></div>
+            aria-label="Line chart of active Free, Basic, and Pro users in the selected rolling window"></div>
+        <ng-container [ngTemplateOutlet]="seriesPicker"
+            [ngTemplateOutletContext]="{ key: 'activePlans', label: 'active plan series' }"></ng-container>
         }
     </mat-card>
 
@@ -92,7 +129,9 @@
             </div>
         </div>
         <div #userMixChart class="history-chart" role="img"
-            aria-label="Stacked area chart of Free, Basic, and Pro users with onboarding completion"></div>
+            aria-label="Line chart of Free, Basic, and Pro users with onboarding completion"></div>
+        <ng-container [ngTemplateOutlet]="seriesPicker"
+            [ngTemplateOutletContext]="{ key: 'userMix', label: 'user and plan series' }"></ng-container>
     </mat-card>
 
     <mat-card class="history-chart-card">
@@ -103,7 +142,9 @@
             </div>
         </div>
         <div #cadenceChart class="history-chart" role="img"
-            aria-label="Stacked area chart of Pro and Basic monthly, yearly, and unclassified paid users"></div>
+            aria-label="Line chart of Pro and Basic monthly, yearly, and unclassified paid users"></div>
+        <ng-container [ngTemplateOutlet]="seriesPicker"
+            [ngTemplateOutletContext]="{ key: 'cadence', label: 'subscription cadence series' }"></ng-container>
     </mat-card>
 </div>
 }

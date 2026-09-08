@@ -234,6 +234,19 @@
   }
 }
 
+.dashboard-section-title-block {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.dashboard-section-title-block > mat-icon {
+  flex: 0 0 auto;
+}
+
 .dashboard-section-title-copy {
   display: grid;
   gap: 0.1rem;
