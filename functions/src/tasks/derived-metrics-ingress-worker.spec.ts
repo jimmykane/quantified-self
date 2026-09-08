@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DERIVED_METRIC_KINDS } from '../../../shared/derived-metrics';
 
+const taskDispatchRegistration = vi.hoisted(() => ({
+    options: [] as unknown[],
+}));
+
 vi.mock('firebase-functions/v2/tasks', () => ({
-    onTaskDispatched: (_opts: unknown, handler: any) => handler,
+    onTaskDispatched: (opts: unknown, handler: any) => {
+        taskDispatchRegistration.options.push(opts);
+        return handler;
+    },
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -54,6 +61,14 @@ describe('processDerivedMetricsIngressTask', () => {
             generation: 12,
             metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
         });
+    });
+
+    it('retains memory headroom for derived-metric ingress tasks', () => {
+        expect(taskDispatchRegistration.options).toContainEqual(expect.objectContaining({
+            memory: '512MiB',
+            timeoutSeconds: 120,
+            region: 'europe-west2',
+        }));
     });
 
     it('marks derived metrics dirty with event mutation increment', async () => {

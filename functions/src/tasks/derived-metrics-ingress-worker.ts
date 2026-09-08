@@ -14,7 +14,7 @@ interface DerivedMetricsIngressTaskPayload {
 
 export const processDerivedMetricsIngressTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
-    memory: '256MiB',
+    memory: '512MiB',
     timeoutSeconds: 120,
     region: FUNCTIONS_MANIFEST.ensureDerivedMetrics.region,
 }, async (request) => {

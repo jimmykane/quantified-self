@@ -575,6 +575,10 @@ snapshots even when no new Firestore write arrives.
 
 ### Worker lifecycle
 
+`processDerivedMetricsIngressTask` runs with 512 MiB of memory and a 120-second timeout to provide headroom above
+the previous 256 MiB limit. It marks requested metric kinds dirty and queues a generation; it does not perform
+full-history builds. Its retry policy and default per-instance concurrency remain unchanged.
+
 `ensureDerivedMetrics` runs with 512 MiB of memory, a 120-second timeout, and at most 100 instances. It performs the
 authenticated freshness check, reads the coordinator and requested snapshot metadata, validates the narrowly scoped
 payload contracts, and queues only the metric kinds that need rebuilding. Full-history derived calculations remain in
