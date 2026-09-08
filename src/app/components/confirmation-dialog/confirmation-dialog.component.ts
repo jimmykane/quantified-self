@@ -59,6 +59,7 @@ export class ConfirmationDialogComponent {
   }
 
   onCancel(): void {
+    this._hapticsService.selection();
     this.respond(false);
   }
 

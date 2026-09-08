@@ -48,6 +48,25 @@ describe('ConfirmationDialogComponent', () => {
     expect(component.confirmColor).toBe('primary');
   });
 
+  it('should not trigger haptics when the dialog opens', () => {
+    expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.warning).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.error).not.toHaveBeenCalled();
+  });
+
+  it('should keep the connection when cancel is clicked with one selection feedback', () => {
+    const cancelButton: HTMLButtonElement = fixture.nativeElement.querySelector('button[mat-stroked-button]');
+    cancelButton.click();
+
+    expect(dialogRefMock.close).toHaveBeenCalledExactlyOnceWith(false);
+    expect(bottomSheetRefMock.dismiss).toHaveBeenCalledExactlyOnceWith(false);
+    expect(hapticsServiceMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsServiceMock.warning).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.success).not.toHaveBeenCalled();
+    expect(hapticsServiceMock.error).not.toHaveBeenCalled();
+  });
+
   it('should use custom dialog data values', async () => {
     await TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
