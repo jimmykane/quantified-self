@@ -72,7 +72,11 @@ new access-control boundary; all notes remain private owner-readable records.
 they do not alter measurement series, axis bounds, legends, metric tooltips, gaps, reference bands or forecasts.
 Markers and period bands use the selected color; text retains its theme contrast. Mixed-color overlaps group into neutral
 markers instead of blending colors; same-color groups keep that color. Each note retains its category and actual dates
-in the escaped tooltip and manager. Single markers display the note title as plain, single-line text, with native ECharts
+in the escaped tooltip and manager. Date ranges have inward-facing native ECharts arrows at the start and inclusive end,
+joined by the existing subtle period band, with the title shown only at the start. Both boundaries open the same note/group.
+Ongoing periods use an open end marker at today in the note's zone; boundaries clipped by the visible window also use open
+markers, avoiding a false start/end. Single-day notes and periods collapsed into one weekly bucket retain one dot marker.
+Single markers display the note title as plain, single-line text, with native ECharts
 ellipsis for long titles (100px in compact charts, 160px otherwise). Compact charts stagger adjacent labels onto two rows
 without adding chart padding. A formatter callback prevents title text from being
 interpreted as ECharts template placeholders. The full title remains in the escaped tooltip and editor. Grouped markers

@@ -105,8 +105,10 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
         existing.hasPeriod ||= hasPeriod;
       } else positions.set(start, { end, notes: [...group.notes], hasPeriod });
     });
+    let groupIndex = 0;
     positions.forEach((group, start) => {
-      const name = `timeline-note-${axisIndex}-${markers.length}`;
+      const index = groupIndex++;
+      const name = `timeline-note-${axisIndex}-${index}`;
       groups.set(name, group.notes);
       const tooltip = {
         ...buildDashboardEChartsTooltipChrome(style),
@@ -121,13 +123,22 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       const labelColor = (option.textStyle as { color?: string } | undefined)?.color ?? axis.axisLabel?.color;
       const color = timelineNoteGroupColor(group.notes) ?? labelColor;
       const label = group.notes.length > 1 ? `${group.notes.length} notes` : group.notes[0].title.replace(/\s+/g, ' ');
-      markers.push({ name, xAxis: start, symbol: ['circle', 'none'], symbolSize: 8,
-        lineStyle: { opacity: 0.2, color, type: 'dotted' }, itemStyle: { color },
+      // A period collapsed into one weekly bucket still needs only one selectable marker.
+      const showPeriod = group.hasPeriod && start < group.end;
+      const startsBeforeWindow = group.notes.some(note => note.startDate < projected.range.startDate);
+      const hasOpenEnd = group.notes.some(note => note.endDate === null || note.endDate > projected.range.endDate);
+      markers.push({ name, xAxis: start,
+        symbol: showPeriod ? startsBeforeWindow ? 'emptyCircle' : 'arrow' : 'circle',
+        symbolRotate: showPeriod && !startsBeforeWindow ? -90 : 0, symbolSize: showPeriod ? 10 : 8,
+        lineStyle: { opacity: showPeriod ? 0.45 : 0.2, color, type: 'dotted' }, itemStyle: { color },
         label: { show: true, position: 'insideStartTop', rotate: 0, opacity: 1,
           // A callback keeps literal title text such as {b} out of ECharts' template interpolation.
           formatter: () => label, width: style.isCompactLayout ? 100 : 160, overflow: 'truncate', ellipsis: '…',
-          offset: [0, style.isCompactLayout && markers.length % 2 ? -14 : 0],
+          offset: [0, style.isCompactLayout && index % 2 ? -14 : 0],
           color: labelColor, fontSize: 11 }, tooltip });
+      if (showPeriod) markers.push({ name, xAxis: group.end, symbol: hasOpenEnd ? 'emptyCircle' : 'arrow',
+        symbolRotate: hasOpenEnd ? 0 : 90, symbolSize: 10,
+        lineStyle: { opacity: 0.45, color, type: 'dotted' }, itemStyle: { color }, label: { show: false }, tooltip });
       if (group.hasPeriod) area.push([{ name, xAxis: start, itemStyle: { color, opacity: 0.055 }, tooltip }, { xAxis: group.end }]);
     });
     if (markers.length) overlays.push({ id: `timeline-note-overlay-${axisIndex}`, name: '', type: 'line', data: [],

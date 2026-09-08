@@ -8,6 +8,60 @@ const note: TimelineNote = { id: 'a'.repeat(64), category: 'sickness', title: '<
 const option = { xAxis: { type: 'time', min: date('2026-09-01'), max: date('2026-09-10') }, yAxis: { min: 0 },
   series: [{ name: 'HR', type: 'line', data: [[date('2026-09-01'), 65], [date('2026-09-03'), null]], markArea: { data: [[{ yAxis: 60 }, { yAxis: 70 }]] } }] };
 describe('timeline chart overlays', () => {
+  it('brackets a period at its start and inclusive end without duplicating its title', () => {
+    const result = addTimelineNotesToChart(option, [note]);
+    const overlay = result.option.series[1];
+    const [start, end] = overlay.markLine.data;
+    expect(overlay.markLine.data).toHaveLength(2);
+    expect(start).toMatchObject({ xAxis: date(note.startDate), symbol: 'arrow', symbolRotate: -90 });
+    expect(end).toMatchObject({ xAxis: date('2026-09-05') - 1, symbol: 'arrow', symbolRotate: 90, label: { show: false } });
+    expect(end.name).toBe(start.name);
+    expect(end.tooltip).toBe(start.tooltip);
+    expect(result.groups.get(end.name)).toEqual([note]);
+    expect(overlay.markArea.data[0].map(boundary => boundary.xAxis)).toEqual([start.xAxis, end.xAxis]);
+    expect(result.option.xAxis).toBe(option.xAxis);
+    expect(result.option.series[0]).toBe(option.series[0]);
+  });
+  it('keeps single days as one marker without a period band', () => {
+    const single = { ...note, endDate: note.startDate };
+    const overlay = addTimelineNotesToChart(option, [single]).option.series[1];
+    expect(overlay.markLine.data).toHaveLength(1);
+    expect(overlay.markLine.data[0].symbol).toBe('circle');
+    expect(overlay.markArea.data).toEqual([]);
+  });
+  it('shows an open ongoing end at today in the captured zone, not in the forecast', () => {
+    const ongoing = { ...note, endDate: null, timeZone: 'Pacific/Honolulu' };
+    const overlay = addTimelineNotesToChart(option, [ongoing], {}, date('2026-09-06')).option.series[1];
+    const end = overlay.markLine.data[1];
+    expect(end).toMatchObject({ xAxis: date('2026-09-06') - 1, symbol: 'emptyCircle', symbolRotate: 0 });
+    expect(end.tooltip.formatter()).toContain('ongoing');
+    expect(overlay.markArea.data[0][1].xAxis).toBe(end.xAxis);
+  });
+  it('uses open boundary markers when a period continues outside the visible window', () => {
+    const spanning = { ...note, startDate: '2026-08-20', endDate: '2026-09-20' };
+    const markers = addTimelineNotesToChart(option, [spanning]).option.series[1].markLine.data;
+    expect(markers.map(marker => marker.symbol)).toEqual(['emptyCircle', 'emptyCircle']);
+    expect(markers.map(marker => marker.xAxis)).toEqual([option.xAxis.min, option.xAxis.max]);
+    expect(markers[1].tooltip.formatter()).toContain('2026-08-20 – 2026-09-20');
+  });
+  it('keeps compact title rows alternating when earlier notes have end markers', () => {
+    const second = { ...note, id: 'b', startDate: '2026-09-06', endDate: '2026-09-08' };
+    const result = addTimelineNotesToChart(option, [note, second], {}, date('2026-09-10'), buildDashboardEChartsStyleTokens(false, 320));
+    const markers = result.option.series[1].markLine.data;
+    expect(markers.filter(marker => marker.label.show).map(marker => marker.label.offset)).toEqual([[0, 0], [0, -14]]);
+    expect(markers.map(marker => marker.name)).toEqual(['timeline-note-0-0', 'timeline-note-0-0', 'timeline-note-0-1', 'timeline-note-0-1']);
+  });
+  it('opens the same group from either period boundary through the existing selection handler', () => {
+    const chart = { on: vi.fn(), off: vi.fn(), getWidth: () => 320, dispatchAction: vi.fn() };
+    const context = { notes: [note, { ...note, id: 'b' }], select: vi.fn(), reportRange: vi.fn() };
+    const binding = new TimelineNotesChartBinding();
+    binding.set(context);
+    const markers = binding.apply(chart as never, option).series[1].markLine.data;
+    for (const marker of markers) chart.on.mock.calls[0][1]({ name: marker.name, componentType: 'markLine' });
+    expect(context.select.mock.calls).toEqual([[context.notes], [context.notes]]);
+    expect(chart.dispatchAction).toHaveBeenCalledTimes(2);
+    binding.dispose();
+  });
   it.each(['2026-09-02', '2026-09-04'])('labels single-day and period markers with the note title (end: %s)', endDate => {
     const named = { ...note, title: 'Vacation with family', endDate };
     const result = addTimelineNotesToChart(option, [named]);
@@ -119,6 +173,8 @@ describe('timeline chart overlays', () => {
   });
   it('maps partial-week notes to weekly categories but keeps actual note dates in tooltips', () => {
     const result = addTimelineNotesToChart({ xAxis: { type: 'category', data: [date('2026-08-31'), date('2026-09-07')] }, series: [{ data: [1, 2] }] }, [note], { bucketDays: 7 });
+    expect(result.option.series[1].markLine.data).toHaveLength(1);
+    expect(result.option.series[1].markLine.data[0].symbol).toBe('circle');
     expect(result.option.series[1].markLine.data[0].xAxis).toBe(0);
     expect(result.option.series[1].markLine.data[0].tooltip.formatter()).toContain('2026-09-02 – 2026-09-04');
   });
@@ -146,9 +202,9 @@ describe('timeline chart overlays', () => {
       series: [{ data: [[date('2026-08-31'), 1], [date('2026-09-07'), 2]] }] };
     const result = addTimelineNotesToChart(source, [first, second, period], { bucketDays: 7 });
     const overlay = result.option.series[1];
-    expect(overlay.markLine.data).toHaveLength(2);
-    expect(result.groups.get(overlay.markLine.data[1].name)).toEqual([first, second]);
-    expect(overlay.markLine.data[1].xAxis).toBe(date('2026-09-07'));
+    expect(overlay.markLine.data).toHaveLength(3);
+    expect(result.groups.get(overlay.markLine.data[2].name)).toEqual([first, second]);
+    expect(overlay.markLine.data[2].xAxis).toBe(date('2026-09-07'));
     expect(overlay.markArea.data).toHaveLength(1);
     expect(result.option.series[0]).toBe(source.series[0]);
   });
