@@ -88,6 +88,9 @@ describe('Garmin Ping batch Firestore dispatcher', () => {
         expect(registeredTriggerOptions).toEqual(expect.objectContaining({
             document: 'sleepSyncQueue/{queueItemId}',
             region: 'europe-west2',
+            memory: '512MiB',
+            maxInstances: 100,
+            concurrency: 10,
             retry: true,
         }));
         expect(dispatchGarminPingBatchOnWrite).toBeTypeOf('function');
