@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Firestore } from 'firebase-admin/firestore';
-import { decodeTimelineNote, timelineToday, timelineNoteOverlaps, validateTimelineFields } from '../../../shared/timeline-notes';
+import { decodeTimelineNote, isTimelineNoteVisible, timelineToday, timelineNoteOverlaps, validateTimelineFields } from '../../../shared/timeline-notes';
 const mocks = vi.hoisted(() => ({ guard: vi.fn() }));
 vi.mock('../shared/user-deletion-guard', () => ({ getUserDeletionGuardStateInTransaction: mocks.guard }));
 import { deleteTimelineNote, saveTimelineNote, validateSaveTimelineNote } from './mutations';
@@ -19,6 +19,70 @@ function database() {
 }
 describe('Timeline notes', () => {
   beforeEach(() => mocks.guard.mockResolvedValue({ shouldSkip: false }));
+  it.each([null, 1, 'RED', '#ff0000', 'url(secret)', {}, []])('rejects unsupported colors %j', color => {
+    expect(() => validateSaveTimelineNote({ ...create, color }, now)).toThrow();
+  });
+  it('saves and resets colors with safe retries and preserves them for older clients', async () => {
+    const fake = database();
+    const note = await saveTimelineNote('owner', { ...create, color: 'purple' }, fake.deps);
+    expect(note.color).toBe('purple');
+    expect(decodeTimelineNote(note.id, note)?.color).toBe('purple');
+    expect(decodeTimelineNote(note.id, { ...note, color: 'url(secret)' })).toBeNull();
+    expect(await saveTimelineNote('owner', { ...create, color: 'purple' }, fake.deps)).toEqual(note);
+    await expect(saveTimelineNote('owner', { ...create, color: 'blue' }, fake.deps)).rejects.toThrow();
+    const update = { ...fields, mode: 'update', noteId: note.id, expectedRevision: 1, endDate: '2026-09-07' };
+    const edited = await saveTimelineNote('owner', update, fake.deps);
+    expect(edited).toMatchObject({ color: 'purple', revision: 2 });
+    expect(await saveTimelineNote('owner', update, fake.deps)).toEqual(edited);
+    const reset = { ...update, expectedRevision: 2, color: 'default' };
+    const resetNote = await saveTimelineNote('owner', reset, fake.deps);
+    expect(resetNote).toMatchObject({ color: 'default', revision: 3 });
+    expect(await saveTimelineNote('owner', reset, fake.deps)).toEqual(resetNote);
+    await expect(saveTimelineNote('owner', { ...reset, color: 'red' }, fake.deps)).rejects.toThrow();
+  });
+  it('treats omitted/default colors equally without changing legacy notes', async () => {
+    const fake = database();
+    const note = await saveTimelineNote('owner', create, fake.deps);
+    expect(note.color).toBeUndefined();
+    expect(await saveTimelineNote('owner', { ...create, color: 'default' }, fake.deps)).toEqual(note);
+  });
+  it.each([null, 0, 1, 'false', [], {}])('rejects non-boolean per-note visibility %j', showOnCharts => {
+    expect(() => validateSaveTimelineNote({ ...create, showOnCharts }, now)).toThrow();
+  });
+  it('keeps legacy notes visible and decodes explicit visibility without coercion', async () => {
+    const fake = database();
+    const note = await saveTimelineNote('owner', create, fake.deps);
+    expect(isTimelineNoteVisible(decodeTimelineNote(note.id, note)!)).toBe(true);
+    expect(isTimelineNoteVisible(decodeTimelineNote(note.id, { ...note, showOnCharts: false })!)).toBe(false);
+    expect(decodeTimelineNote(note.id, { ...note, showOnCharts: 'false' })).toBeNull();
+    // Adding an explicit true to an identical legacy create retry is not a different draft.
+    expect(await saveTimelineNote('owner', { ...create, showOnCharts: true }, fake.deps)).toEqual(note);
+  });
+  it('saves visibility with safe retries, revision conflicts, and deletion guards', async () => {
+    const fake = database();
+    const note = await saveTimelineNote('owner', { ...create, showOnCharts: false }, fake.deps);
+    expect(note.showOnCharts).toBe(false);
+    expect(await saveTimelineNote('owner', { ...create, showOnCharts: false }, fake.deps)).toEqual(note);
+    await expect(saveTimelineNote('owner', create, fake.deps)).rejects.toThrow();
+    const show = { ...fields, mode: 'update', noteId: note.id, expectedRevision: 1, showOnCharts: true };
+    const shown = await saveTimelineNote('owner', show, fake.deps);
+    expect(shown).toMatchObject({ showOnCharts: true, revision: 2 });
+    expect(await saveTimelineNote('owner', show, fake.deps)).toEqual(shown);
+    await expect(saveTimelineNote('owner', { ...show, showOnCharts: false }, fake.deps)).rejects.toThrow();
+    fake.tx.set.mockClear();
+    mocks.guard.mockResolvedValue({ shouldSkip: true });
+    await expect(saveTimelineNote('owner', { ...show, expectedRevision: 2, showOnCharts: false }, fake.deps)).rejects.toThrow();
+    expect(fake.tx.set).not.toHaveBeenCalled();
+  });
+  it('preserves a hidden note when an older client edits or ends it without the visibility field', async () => {
+    const fake = database();
+    const note = await saveTimelineNote('owner', { ...create, showOnCharts: false }, fake.deps);
+    const request = { ...fields, mode: 'update', noteId: note.id, expectedRevision: 1, endDate: '2026-09-07' };
+    const edited = await saveTimelineNote('owner', request, fake.deps);
+    expect(edited).toMatchObject({ showOnCharts: false, endDate: '2026-09-07', revision: 2 });
+    expect(await saveTimelineNote('owner', request, fake.deps)).toEqual(edited);
+    expect(fake.stored.get(`users/owner/timelineNotes/${note.id}`)).toMatchObject({ showOnCharts: false });
+  });
   it('accepts leap dates, future bounded notes, and fixed calendar dates across travel/DST', () => {
     expect(validateTimelineFields({ ...fields, startDate: '2024-02-29', endDate: '2024-03-31' }, now).startDate).toBe('2024-02-29');
     expect(validateTimelineFields({ ...fields, startDate: '2027-01-01', endDate: '2027-01-01' }, now).endDate).toBe('2027-01-01');

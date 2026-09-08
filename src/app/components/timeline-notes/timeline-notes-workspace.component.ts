@@ -5,7 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
-import type { TimelineNote, TimelineNoteRange, TimelineNotesLoad } from '@shared/timeline-notes';
+import { isTimelineNoteVisible, type TimelineNote, type TimelineNoteRange, type TimelineNotesLoad } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -61,13 +61,17 @@ export class TimelineNotesWorkspaceComponent {
   readonly context = computed<TimelineNoteChartContext>(() => {
     const owner = this.service.uid();
     return {
-      notes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.notes() : [],
+      notes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.notes().filter(isTimelineNoteVisible) : [],
       // ECharts callbacks run outside Angular; entering here lets Material own dialog/focus lifecycle.
       select: notes => this.zone.run(() => {
-        if (!notes.length || !owner || !this.service.isOwner(owner)) return;
+        if (!notes.length || !owner || !this.service.isOwner(owner) || !this.service.showOnCharts() || owner !== this.loadedOwner()) return;
+        // A queued marker click must not reopen a note that was hidden or removed since it rendered.
+        const ids = new Set(notes.map(note => note.id));
+        const selected = this.notes().filter(note => ids.has(note.id) && isTimelineNoteVisible(note));
+        if (!selected.length) return;
         // Note markers are not metric-series clicks; this accepted action owns their feedback.
         this.haptics.selection();
-        this.open(notes);
+        this.open(selected);
       }),
       reportRange: this.reportRange,
     };

@@ -21,7 +21,7 @@ import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './cale
 
 describe('CalendarDayDetailsComponent', () => {
   it('shows plain-text notes with actual dates, supports note-only days, and clears stale selections', async () => {
-    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: '<b>Trip</b>', startDate: '2026-08-01', endDate: null, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', color: 'purple', title: '<b>Trip</b>', startDate: '2026-08-01', endDate: null, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
     const notes = signal<readonly TimelineNote[]>([note]);
     const fixture = await renderDayDetails([], { timelineNotes: notes });
     expect(fixture.nativeElement.querySelector('#calendar-day-notes-title')?.textContent).toBe('Timeline notes');
@@ -29,6 +29,8 @@ describe('CalendarDayDetailsComponent', () => {
     const button = fixture.nativeElement.querySelector('mat-action-list button') as HTMLButtonElement;
     expect(button.textContent).toContain('<b>Trip</b>');
     expect(button.textContent).toContain('Travel');
+    expect(button.querySelector('mat-icon')?.textContent).toBe('flight');
+    expect((button.querySelector('mat-icon') as HTMLElement).style.color).toBe('rgb(158, 108, 236)');
     expect([...button.querySelectorAll('[matListItemLine]')].map(line => line.textContent?.trim()))
       .toEqual(['Travel', '2026-08-01 – ongoing']);
     expect(button.querySelector('b')).toBeNull();

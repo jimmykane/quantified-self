@@ -12,6 +12,13 @@ characters, ISO calendar `startDate`, nullable inclusive `endDate`, captured IAN
 server-generated `createdAtMs`/`updatedAtMs`. Equal dates mean one day; null end means ongoing. Past and planned bounded
 dates are allowed; ongoing periods must already have started. Editing preserves the captured zone and calendar labels.
 “End today” uses that zone. Ongoing overlays stop today and never extend into a forecast.
+Optional `showOnCharts` controls each note's chart and Calendar visibility; missing means true for existing notes.
+New editor saves include the boolean. The existing save transaction validates it and includes it in revision/retry
+comparisons; older-client updates that omit it preserve the stored choice. Omitted and explicit true are equivalent for
+legacy create retries. No migration, new endpoint, index, or Security Rules change is needed.
+Optional `color` is an allowlisted presentation key (`default`, `blue`, `purple`, `pink`, `orange`, `red`, `green`),
+not arbitrary CSS. Missing and `default` keep legacy appearance. The same save transaction checks color in retries,
+preserves it when older clients omit it, and accepts explicit `default` to reset it. No category/icon is inferred from color.
 
 `saveTimelineNote` and `deleteTimelineNote` require Authentication, App Check, and an originating UID matching the
 authenticated account. They use the shared transactional account-deletion guard, explicit input allowlists and strict
@@ -42,12 +49,29 @@ and returning to the workspace. Notes failing to load never block metric renderi
 notes. The global preference is `settings.appSettings.timelineNotes.showOnCharts`, default true. The Material manager
 supports create/edit, confirmed delete, End today, retries and explicit conflict reload while preserving unsaved drafts.
 Failed history-page requests retry that same page; failed visibility saves restore the persisted checkbox state.
+The global toggle remains the master switch. A note appears only when it and the global setting are enabled; switching
+the global toggle off/on never rewrites individual choices. The editor's **Show this note on charts and calendar**
+checkbox is a draft saved with **Save**, not an immediate write. Failed saves retain it and conflict reload restores the
+latest stored choice. The manager lists hidden notes with a **Hidden** label, even while global visibility is off.
+Category options and note lists use Material category icons. The editor's named color selector uses the existing app
+palette, with text labels so color is never the only identifier. Both are draft changes until Save. Material datepicker
+inputs reuse the app's Dayjs adapter and localized formats; the note-scoped adapter strictly rejects invalid typed dates
+instead of silently rolling them forward. Date-only values use a UTC calendar carrier so even a date skipped by the
+browser's zone remains editable; persistence still uses fixed date labels, not converted timestamps. The calendar's
+today indicator, ongoing-date limit, and End today all follow the note's captured zone. End dates are inclusive and
+cannot precede the start; ongoing starts cannot be in the future. An unfinished range end is retained as draft input
+but disabled outside range mode so its validation cannot block saving a single-day or ongoing note.
+Range paging still loads/counts hidden records within the existing caps; filtering happens before workspace projection,
+with the chart/Calendar helpers also excluding hidden notes from groups, tooltips, counts, and day details. A queued
+marker selection is checked against current visibility before opening. Hidden is a display choice, not deletion or a
+new access-control boundary; all notes remain private owner-readable records.
 
 ## Chart boundary
 
 `TimelineNotesChartBinding` and `addTimelineNotesToChart` append empty ECharts marker series with markLine/markArea;
 they do not alter measurement series, axis bounds, legends, metric tooltips, gaps, reference bands or forecasts.
-Overlaps group into neutral markers instead of blending category colors; each note retains its category and actual dates
+Markers and period bands use the selected color; text retains its theme contrast. Mixed-color overlaps group into neutral
+markers instead of blending colors; same-color groups keep that color. Each note retains its category and actual dates
 in the escaped tooltip and manager. Single markers open the editor; grouped markers open the matching list. The header
 manager provides the keyboard-accessible alternative to click/tap, without requiring hover.
 Distinct dates projected onto the same weekly bucket or clipped endpoint share one selectable marker, preserving access
@@ -71,7 +95,9 @@ per note in its captured zone. No activity or metric document, totals, or durati
 Calendar refreshes its current-day clock on window focus and tab visibility, so returning after midnight updates ongoing
 note cutoffs alongside the notes reload without extending them into future dates.
 
-An `event_note` indicator and accessible count mark note days, even without activities. Selecting a day opens its
+A category icon in the selected color marks a single-note day, even without activities. Multiple notes share an
+`event_note` indicator (neutral for mixed colors) and accessible count. The day sheet shows each note's own icon/color.
+Selecting a day opens its
 existing Material sheet, with a plain-text notes list above activities. Selecting a note dismisses the sheet and opens
 the shared note editor. Sheet notes stay reactive to loading/edits, visibility, and account changes; delayed selections
 are checked against the current owner and notes before opening. Note and activity failures remain independent.
@@ -84,3 +110,6 @@ and workspace suites, full frontend/Functions suites, `npm run test:rules`, Func
 Use only emulator-backed fixture accounts for browser mutations; verify desktop/mobile, keyboard navigation, themes,
 range navigation, visibility, marker taps and create/edit/delete/End today. Deploying rules/indexes and the two callables
 requires separate approval. No migration, backfill or scheduler is required.
+For per-note visibility and color, release the updated existing `saveTimelineNote` callable before the frontend; the old
+callable rejects the new fields. `deleteTimelineNote`, Rules, and indexes do not need a deployment for these additions.
+Already-open older frontends need a refresh to display the choices, but their edits preserve them on the server.

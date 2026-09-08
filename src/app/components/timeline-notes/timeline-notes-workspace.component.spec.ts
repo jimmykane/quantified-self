@@ -101,6 +101,7 @@ describe('Timeline notes workspace ownership', () => {
     expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('provides one feedback for an accepted note marker, not empty or stale-account selections', async () => {
+    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
     await flush();
     const context = component.context();
     expect(haptics.selection).not.toHaveBeenCalled();
@@ -114,6 +115,32 @@ describe('Timeline notes workspace ownership', () => {
     context.select([note]);
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(dialogs.open).toHaveBeenCalledOnce();
+  });
+  it('combines global and individual visibility without losing choices or accepting stale hidden markers', async () => {
+    const hidden = { ...note, id: 'b'.repeat(64), showOnCharts: false };
+    service.loadRange.mockResolvedValue({ notes: [note, hidden], incomplete: 'records' });
+    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    await flush();
+    const context = component.context();
+    expect(context.notes).toEqual([note]);
+    expect(component.incomplete()).toBe('records');
+    context.select([hidden]);
+    expect(dialogs.open).not.toHaveBeenCalled();
+    service.showOnCharts.set(false);
+    context.select([note]);
+    await flush();
+    expect(component.context().notes).toEqual([]);
+    service.showOnCharts.set(true); await flush();
+    expect(component.context().notes).toEqual([note]);
+    service.loadRange.mockResolvedValue({ notes: [{ ...note, showOnCharts: false }, hidden], incomplete: null });
+    component.refresh(); await flush();
+    expect(component.context().notes).toEqual([]);
+    context.select([note]);
+    expect(dialogs.open).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    // The manager remains available even when no notes are plotted.
+    component.open();
+    expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: undefined } }));
   });
   it('ignores stale ranges and clears private state on account switch', async () => {
     let resolve!: (value: unknown) => void;

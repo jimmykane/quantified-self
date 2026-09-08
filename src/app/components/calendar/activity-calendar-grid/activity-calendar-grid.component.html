@@ -33,7 +33,7 @@
             (click)="selectDay(day)">
             <span class="activity-calendar-day-number"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span></span>
             @if (dayNotes) {
-            <mat-icon class="activity-calendar-note-indicator" aria-hidden="true">event_note</mat-icon>
+            <mat-icon class="activity-calendar-note-indicator" [style.color]="dayNotes.color" aria-hidden="true">{{ dayNotes.icon }}</mat-icon>
             }
             <span class="activity-calendar-marker-stage"
               [class.activity-calendar-marker-stage--concentric]="compact || model.view === 'year'">

@@ -17,7 +17,7 @@ describe('ActivityCalendarGridComponent', () => {
     fixture.detectChanges();
     const button = fixture.nativeElement.querySelector('.activity-calendar-day-button') as HTMLButtonElement;
     expect(button.getAttribute('aria-label')).toContain('1 Timeline note');
-    expect(button.querySelector('.activity-calendar-note-indicator')?.textContent).toBe('event_note');
+    expect(button.querySelector('.activity-calendar-note-indicator')?.textContent).toBe('beach_access');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(1);
     expect(button.querySelector('.activity-calendar-marker')).toBeNull();
     const selected = vi.fn(); fixture.componentInstance.daySelected.subscribe(selected);
@@ -28,6 +28,19 @@ describe('ActivityCalendarGridComponent', () => {
     expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
     fixture.componentRef.setInput('timelineNotesByDate', new Map()); fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(0);
+  });
+  it('shows the selected color/category, keeping mixed-note days neutral and grouped', async () => {
+    const fixture = await renderGrid('month', false, []);
+    const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', color: 'purple', title: 'Trip', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
+    fixture.detectChanges();
+    const icon = () => fixture.nativeElement.querySelector('.activity-calendar-note-indicator') as HTMLElement;
+    expect(icon().textContent).toBe('flight');
+    expect(icon().style.color).toBe('rgb(158, 108, 236)');
+    fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note, { ...note, id: 'b'.repeat(64), color: 'blue' }]));
+    fixture.detectChanges();
+    expect(icon().textContent).toBe('event_note');
+    expect(icon().style.color).toBe('');
   });
   it('renders activity days as buttons and emits the selected day', async () => {
     const fixture = await renderGrid('month', false, [

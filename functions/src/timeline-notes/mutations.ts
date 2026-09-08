@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import {
   TIMELINE_NOTES_COLLECTION, TIMELINE_NOTE_DELETIONS_COLLECTION, TimelineNoteValidationError,
-  validateTimelineFields, decodeTimelineNote,
+  validateTimelineFields, decodeTimelineNote, isTimelineNoteVisible,
   type TimelineNote, type SaveTimelineNoteRequest, type DeleteTimelineNoteRequest,
 } from '../../../shared/timeline-notes';
 import { generateIDFromParts } from '../shared/id-generator';
@@ -12,7 +12,7 @@ export class TimelineNoteUnavailableError extends Error {}
 export class TimelineNoteNotFoundError extends Error {}
 export interface TimelineNoteDependencies { db: admin.firestore.Firestore; now: () => number }
 const defaults = (): TimelineNoteDependencies => ({ db: admin.firestore(), now: Date.now });
-const FIELD_KEYS = ['category', 'title', 'details', 'startDate', 'endDate', 'timeZone'];
+const FIELD_KEYS = ['category', 'title', 'details', 'startDate', 'endDate', 'timeZone', 'showOnCharts', 'color'];
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TimelineNoteValidationError('Invalid note request.');
@@ -65,7 +65,17 @@ export async function saveTimelineNote(uid: string, value: unknown, deps = defau
     const current = snapshot.exists ? decodeTimelineNote(id, snapshot.data()) : null;
     if (snapshot.exists && !current) throw new TimelineNoteConflictError();
     const fields = validateTimelineFields(request as unknown as Record<string, unknown>, deps.now());
-    const sameFields = current && FIELD_KEYS.every(key => (current as unknown as Record<string, unknown>)[key] === (fields as unknown as Record<string, unknown>)[key]);
+    // Older clients cannot express per-note visibility. Preserve it on edits, including End today.
+    if (request.mode === 'update' && fields.showOnCharts === undefined && current?.showOnCharts !== undefined) {
+      fields.showOnCharts = current.showOnCharts;
+    }
+    if (request.mode === 'update' && fields.color === undefined && current?.color !== undefined) {
+      fields.color = current.color;
+    }
+    const sameFields = current && FIELD_KEYS.every(key => key === 'showOnCharts'
+      ? isTimelineNoteVisible(current) === isTimelineNoteVisible(fields)
+      : key === 'color' ? (current.color ?? 'default') === (fields.color ?? 'default')
+      : (current as unknown as Record<string, unknown>)[key] === (fields as unknown as Record<string, unknown>)[key]);
     if (request.mode === 'create' && current) {
       if (!sameFields) throw new TimelineNoteConflictError();
       return current;

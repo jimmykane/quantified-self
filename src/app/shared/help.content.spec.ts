@@ -21,6 +21,8 @@ describe('help.content', () => {
       expect(content).toContain('ongoing notes must already have started');
       expect(content).toContain('Notes never change your measurements, readiness, or forecasts');
       expect(content).toContain('notes appear on the Highlights trend charts');
+      expect(content).toContain('Choose a **Color**');
+      expect(content).toContain('calendar buttons to pick dates');
     }
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;

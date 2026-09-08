@@ -1,9 +1,12 @@
-import { timelineNoteEnd, type TimelineNote, type TimelineNoteRange } from '@shared/timeline-notes';
+import { isTimelineNoteVisible, timelineNoteEnd, type TimelineNote, type TimelineNoteRange } from '@shared/timeline-notes';
 import type { ActivityCalendarDayViewModel, ActivityCalendarViewModel } from './activity-calendar.helper';
+import { TIMELINE_NOTE_ICONS, timelineNoteGroupColor } from './timeline-note-appearance.helper';
 
 export interface CalendarDayTimelineNotes {
   notes: readonly TimelineNote[];
   ariaLabel: string;
+  icon: string;
+  color: string | null;
 }
 
 function visibleDays(model: ActivityCalendarViewModel): ActivityCalendarDayViewModel[] {
@@ -24,6 +27,7 @@ export function calendarTimelineNotesByDate(
   nowMs = Date.now(),
 ): ReadonlyMap<string, CalendarDayTimelineNotes> {
   const periods = [...new Map(notes.map(note => [note.id, note])).values()]
+    .filter(isTimelineNoteVisible)
     .sort((a, b) => b.startDate.localeCompare(a.startDate) || a.id.localeCompare(b.id))
     .map(note => ({ note, endDate: timelineNoteEnd(note, nowMs) }));
   const result = new Map<string, CalendarDayTimelineNotes>();
@@ -32,6 +36,8 @@ export function calendarTimelineNotesByDate(
       .map(({ note }) => note);
     if (matching.length) result.set(day.dateKey, {
       notes: matching,
+      icon: matching.length === 1 ? TIMELINE_NOTE_ICONS[matching[0].category] : 'event_note',
+      color: timelineNoteGroupColor(matching),
       ariaLabel: `${day.ariaLabel}. ${matching.length} Timeline ${matching.length === 1 ? 'note' : 'notes'}.`,
     });
   }

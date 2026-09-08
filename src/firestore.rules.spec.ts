@@ -56,7 +56,7 @@ describe('Firestore Security Rules', () => {
         });
         it('allows only bounded owner reads and rejects browser writes, receipts and descendants', async () => {
             await testEnv.withSecurityRulesDisabled(async context => {
-                await context.firestore().doc('users/owner/timelineNotes/note').set({ startDate: '2026-09-01', endDate: null });
+                await context.firestore().doc('users/owner/timelineNotes/note').set({ startDate: '2026-09-01', endDate: null, showOnCharts: false });
             });
             const owner = testEnv.authenticatedContext('owner').firestore();
             const other = testEnv.authenticatedContext('other').firestore();
@@ -69,6 +69,7 @@ describe('Firestore Security Rules', () => {
             await assertFails(other.collection(path).limit(64).get());
             await assertFails(guest.doc(`${path}/note`).get());
             await assertFails(owner.doc(`${path}/note`).set({ title: 'client' }));
+            await assertFails(owner.doc(`${path}/note`).update({ showOnCharts: true }));
             await assertFails(owner.doc(`${path}/note`).delete());
             await assertFails(owner.doc(`${path}/note/children/x`).set({}));
             await assertFails(owner.doc('users/owner/timelineNoteDeletions/note').get());

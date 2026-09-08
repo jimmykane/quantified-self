@@ -13,6 +13,12 @@ const range = { startDate: '2026-09-01', endDate: '2026-09-30' };
 const data = { category: 'vacation', title: 'Away', startDate: '2026-08-01', endDate: '2026-09-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 const row = (i: number) => ({ id: i.toString(16).padStart(64, '0'), data });
 describe('bounded timeline pages', () => {
+  it('retains hidden records for the manager and counts them toward the same bounded load', async () => {
+    const hidden = { ...row(1), data: { ...data, showOnCharts: false } };
+    const result = await loadTimelineNotePages(range, async ongoing => ({ rows: ongoing ? [] : [hidden, row(2)], cursor: null }), () => true);
+    expect(result.notes).toHaveLength(2);
+    expect(result.notes[0]).toMatchObject({ showOnCharts: false });
+  });
   it('merges closed and ongoing pages and preserves earlier overlap', async () => {
     const read = vi.fn(async (ongoing, cursor) => ({ rows: ongoing ? [] : cursor ? [row(65)] : Array.from({ length: 65 }, (_, i) => row(i)), cursor: 64 }));
     const result = await loadTimelineNotePages(range, read, () => true);
@@ -73,5 +79,15 @@ describe('AppTimelineNotesService', () => {
     functions.call.mockResolvedValueOnce({ data: { ...data, id: row(1).id } });
     await service.save('owner', { ...data, category: 'vacation', mode: 'create', clientMutationId: 'id' });
     expect(spy).toHaveBeenCalledOnce();
+  });
+  it('keeps hidden notes in paginated management and forwards per-note visibility through the existing save', async () => {
+    const hidden = { ...data, showOnCharts: false };
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs: [{ id: row(1).id, data: () => hidden }], size: 1 } as never);
+    expect((await service.list('owner')).notes[0]).toMatchObject({ showOnCharts: false });
+    functions.call.mockResolvedValueOnce({ data: { ...hidden, id: row(1).id } });
+    const request = { ...hidden, category: 'vacation' as const, mode: 'update' as const, noteId: row(1).id, expectedRevision: 1 };
+    expect(await service.save('owner', request)).toMatchObject({ showOnCharts: false });
+    expect(functions.call).toHaveBeenCalledWith('saveTimelineNote', { ...request, expectedUserID: 'owner' });
+    expect(users.updateUserProperties).not.toHaveBeenCalled();
   });
 });

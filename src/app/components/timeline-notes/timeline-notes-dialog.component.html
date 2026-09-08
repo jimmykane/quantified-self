@@ -13,11 +13,12 @@
       <button mat-flat-button type="button" appHapticTap [disabled]="busy()" (click)="edit(null)"><span class="note-action"><mat-icon>add</mat-icon><span>Add note</span></span></button>
       <mat-checkbox [checked]="service.showOnCharts()" [disabled]="busy()" (change)="toggleVisibility($event.checked, $event.source)">Show on charts and calendar</mat-checkbox>
     </div>
-    <p class="note-hint">Private context across Health, Sleep, Training, and Calendar. Notes do not change your measurements or scores.</p>
+    <p class="note-hint">Private context across Health, Sleep, Training, and Calendar. Individually hidden notes stay hidden when this is on. Notes do not change your measurements or scores.</p>
     <ul class="note-list" aria-label="Timeline notes">
       @for (row of rows(); track row.note.id) {
         <li><button mat-button type="button" appHapticTap class="note-row" [disabled]="busy()" (click)="edit(row.note)">
-          <span class="note-row-content"><strong>{{ row.note.title }}</strong><span>{{ row.category }} · {{ row.dates }}</span></span>
+          <mat-icon [style.color]="row.color" aria-hidden="true">{{ row.icon }}</mat-icon>
+          <span class="note-row-content"><strong>{{ row.note.title }}</strong><span>{{ row.category }} · {{ row.dates }}@if (row.hidden) { · Hidden }</span></span>
         </button></li>
       } @empty { @if (!busy() && !error()) { <li>No notes yet. Add context such as a vacation or a period of sickness.</li> } }
     </ul>
@@ -27,18 +28,41 @@
     </div>
   } @else {
     <form id="timeline-note-form" [formGroup]="form" (ngSubmit)="save()" class="note-form">
-      <mat-form-field appearance="outline"><mat-label>Category</mat-label><mat-select formControlName="category" (openedChange)="$event && haptics.selection()" (selectionChange)="categoryChanged($event.value); haptics.selection()">
-        @for (option of options; track option.id) { <mat-option [value]="option.id">{{ option.label }}</mat-option> }
-      </mat-select></mat-form-field>
+      <div class="note-appearance">
+        <mat-form-field appearance="outline"><mat-label>Category</mat-label><mat-select formControlName="category" (openedChange)="$event && haptics.selection()" (selectionChange)="categoryChanged($event.value); haptics.selection()">
+          <mat-select-trigger><span class="note-option"><mat-icon [style.color]="selectedColor.color" aria-hidden="true">{{ selectedCategory.icon }}</mat-icon><span>{{ selectedCategory.label }}</span></span></mat-select-trigger>
+          @for (option of options; track option.id) { <mat-option [value]="option.id"><mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>{{ option.label }}</mat-option> }
+        </mat-select></mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Color</mat-label><mat-select formControlName="color" (openedChange)="$event && haptics.selection()" (selectionChange)="haptics.selection()">
+          <mat-select-trigger><span class="note-option"><mat-icon [style.color]="selectedColor.color" aria-hidden="true">circle</mat-icon><span>{{ selectedColor.label }}</span></span></mat-select-trigger>
+          @for (option of colorOptions; track option.id) { <mat-option [value]="option.id"><mat-icon [style.color]="option.color" aria-hidden="true">circle</mat-icon>{{ option.label }}</mat-option> }
+        </mat-select></mat-form-field>
+      </div>
       <mat-form-field appearance="outline"><mat-label>Title</mat-label><input matInput formControlName="title" [maxlength]="limits.title" required></mat-form-field>
       <mat-form-field appearance="outline"><mat-label>When</mat-label><mat-select [disabled]="busy()" [value]="mode()" (openedChange)="$event && haptics.selection()" (selectionChange)="mode.set($event.value); haptics.selection()">
         <mat-option value="single">Single day</mat-option><mat-option value="range">Date range</mat-option><mat-option value="ongoing">Ongoing</mat-option>
       </mat-select></mat-form-field>
       <div class="note-dates">
-        <mat-form-field appearance="outline"><mat-label>{{ mode() === 'single' ? 'Date' : 'Start date' }}</mat-label><input matInput type="date" formControlName="startDate" (change)="haptics.selection()" required></mat-form-field>
-        @if (mode() === 'range') { <mat-form-field appearance="outline"><mat-label>End date (inclusive)</mat-label><input matInput type="date" formControlName="endDate" (change)="haptics.selection()" required></mat-form-field> }
+        <mat-form-field appearance="outline"><mat-label>{{ mode() === 'single' ? 'Date' : 'Start date' }}</mat-label>
+          <input matInput [matDatepicker]="startPicker" formControlName="startDate" [max]="mode() === 'ongoing' ? today : null" (dateChange)="dateChanged('startDate', $event.value)" required>
+          <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
+          <mat-datepicker #startPicker (opened)="haptics.selection()"></mat-datepicker>
+          <mat-error>{{ mode() === 'ongoing' ? 'Choose a valid date on or before today.' : 'Choose a valid date.' }}</mat-error>
+        </mat-form-field>
+        @if (mode() === 'range') {
+          <mat-form-field appearance="outline"><mat-label>End date (inclusive)</mat-label>
+            <input matInput [matDatepicker]="endPicker" formControlName="endDate" [min]="form.controls.startDate.value" (dateChange)="dateChanged('endDate', $event.value)" required>
+            <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+            <mat-datepicker #endPicker (opened)="haptics.selection()"></mat-datepicker>
+            <mat-error>Choose a valid date on or after the start.</mat-error>
+          </mat-form-field>
+        }
       </div>
       <mat-form-field appearance="outline"><mat-label>Details (optional)</mat-label><textarea matInput formControlName="details" rows="3" [maxlength]="limits.details"></textarea></mat-form-field>
+      <div class="note-visibility">
+        <mat-checkbox formControlName="showOnCharts" (change)="haptics.selection()" aria-describedby="note-visibility-hint">Show this note on charts and calendar</mat-checkbox>
+        <p id="note-visibility-hint" class="note-hint">Hidden notes stay in this manager.@if (!service.showOnCharts()) { All notes are currently hidden by the global setting. This choice applies when you turn it back on. }</p>
+      </div>
       <p class="note-hint">Calendar dates stay the same when you travel. Details are private and shown as plain text.</p>
     </form>
   }

@@ -9,6 +9,16 @@ const model = (view: 'week' | 'month' | 'year' = 'month') => buildActivityCalend
 });
 
 describe('calendar Timeline note projection', () => {
+  it('excludes hidden notes from dates, accessible counts and day details in every view', () => {
+    const hidden = { ...note, id: 'b'.repeat(64), showOnCharts: false };
+    for (const view of ['week', 'month', 'year'] as const) {
+      const calendar = model(view);
+      expect(calendarTimelineNotesByDate(calendar, [hidden]).size).toBe(0);
+      const day = calendarTimelineNotesByDate(calendar, [note, hidden]).get('2024-02-29')!;
+      expect(day.notes).toEqual([note]);
+      expect(day.ariaLabel).toContain('1 Timeline note');
+    }
+  });
   it('covers the exact visible date labels, including adjacent month days but not hidden year cells', () => {
     for (const view of ['week', 'month', 'year'] as const) {
       const calendar = model(view);
