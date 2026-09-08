@@ -310,6 +310,62 @@ describe('UploadActivitiesComponent', () => {
     expect(hapticsServiceMock.selection).not.toHaveBeenCalled();
   });
 
+  it('shows the route action after a mixed failure batch finishes, not while files are still uploading', async () => {
+    await component.ngOnInit();
+    mockFileReaderResult(new ArrayBuffer(20));
+    const routeError = new UploadError('Use route upload', 400, 'route_file_in_activity_upload');
+    let rejectSecond!: (error: UploadError) => void;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(routeError)
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectSecond = reject; }));
+    const action = new Subject<void>();
+    snackBarMock.open.mockReturnValue({ onAction: () => action });
+    const pending = component.getFiles({
+      stopPropagation: vi.fn(), preventDefault: vi.fn(),
+      target: { files: [new File(['route'], 'course.fit'), new File(['bad'], 'bad.fit')], value: 'file' },
+    });
+    await vi.waitFor(() => expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledTimes(2));
+    expect(snackBarMock.open).not.toHaveBeenCalledWith(expect.any(String), 'Upload as route', expect.anything());
+    rejectSecond(new UploadError('Could not parse file', 400, 'invalid_upload'));
+    await pending;
+    expect(snackBarMock.open).toHaveBeenLastCalledWith(
+      expect.stringContaining('select the file there'), 'Upload as route', { duration: 10000 },
+    );
+    action.next();
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledExactlyOnceWith(['/routes']);
+    const actionCount = snackBarMock.open.mock.calls.filter(([, label]) => label === 'Upload as route').length;
+    await component.getFiles({
+      stopPropagation: vi.fn(), preventDefault: vi.fn(),
+      target: { files: [new File(['fit'], 'workout.fit')], value: 'file' },
+    });
+    expect(snackBarMock.open.mock.calls.filter(([, label]) => label === 'Upload as route')).toHaveLength(actionCount);
+  });
+
+  it('waits for overlapping upload batches before showing the route action', async () => {
+    mockFileReaderResult(new ArrayBuffer(20));
+    let rejectFirst!: (error: UploadError) => void;
+    let resolveSecond!: (result: { eventId: string }) => void;
+    fitUploadServiceMock.uploadActivityFile
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+      .mockImplementationOnce(() => new Promise(resolve => { resolveSecond = resolve; }));
+    const action = new Subject<void>();
+    snackBarMock.open.mockReturnValue({ onAction: () => action });
+    const fileEvent = (name: string) => ({
+      stopPropagation: vi.fn(), preventDefault: vi.fn(),
+      target: { files: [new File(['fit'], name)], value: 'file' },
+    });
+    const first = component.getFiles(fileEvent('course.fit'));
+    const second = component.getFiles(fileEvent('workout.fit'));
+    await vi.waitFor(() => expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledTimes(2));
+    rejectFirst(new UploadError('Use route upload', 400, 'route_file_in_activity_upload'));
+    await first;
+    expect(snackBarMock.open).not.toHaveBeenCalledWith(expect.any(String), 'Upload as route', expect.anything());
+    resolveSecond({ eventId: 'workout' });
+    await second;
+    expect(snackBarMock.open).toHaveBeenLastCalledWith(
+      expect.stringContaining('select the file there'), 'Upload as route', { duration: 10000 },
+    );
+  });
+
   it('should upload fit files through AppFitUploadService', async () => {
     component.user = { uid: 'u1' } as any;
     mockFileReaderResult(new Uint8Array([1, 2, 3]).buffer);

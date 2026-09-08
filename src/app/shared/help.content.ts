@@ -734,7 +734,7 @@ Saved routes open from **Routes** with the details action. Route details parse t
 
 ## Common upload issues
 
-- A route/course is not a recorded workout. When activity upload detects one, **Upload as route** opens **Routes**; select the original file there. The rejected file is not automatically uploaded or converted.
+- A route/course is not a recorded workout. When activity upload detects one, **Upload as route** appears after active upload batches finish and opens **Routes**; select the original file there. The rejected file is not automatically uploaded or converted.
 - Your session may have expired. Sign in again and retry.
 - You may have reached your current plan's activity or route limit.
 - The file may be invalid, unsupported, or unreadable by the importer.
@@ -812,6 +812,8 @@ Suunto tools currently include:
 - uploading GPX or FIT routes to Suunto.
 
 Suunto FIT activity uploads in Services show each file's upload status, duplicate detection, failure message, and retry control. A pending upload stays **Processing**, with delayed automatic status checks against the same upload job rather than another file upload. After eight automatic checks, checks pause and **Check status again** lets you request another status check without declaring the upload failed. Closing the uploader stops its automatic checks; upload rows are not retained across reloads. If Suunto has already issued an upload job when a temporary error occurs, retrying the same row checks that job instead of uploading the FIT again. A pending or ambiguous job is never replaced automatically. An explicit processing failure that requires a restart stops status checks; **Retry upload** then starts a fresh attempt. Otherwise, to deliberately start a fresh upload, clear the upload list and choose the FIT file again. Large upload batches are processed one file at a time with short pauses between provider upload calls.
+
+Closing the Suunto uploader or clearing its list removes its local progress notifications. This does not cancel an upload that Suunto may still be processing.
 
 While your Suunto account is connected, Quantified Self also imports new and updated Suunto routes into **Routes** automatically. Services includes an **Import existing routes** action for first-time imports or after reconnecting. The **Routes** page can also show a one-time prompt to import existing Suunto routes.
 

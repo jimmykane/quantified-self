@@ -50,6 +50,8 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
   private accountDeletionSignOut: { userID: string; promise: Promise<void> } | null = null;
+  private pendingRouteActionUserID: string | null = null;
+  private activeUploadBatches = 0;
 
   constructor() {
     super();
@@ -135,6 +137,21 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
     return { bytes: compressed, extension: `${extension}.gz` };
   }
 
+  override async getFiles(event: Parameters<UploadAbstractDirective['getFiles']>[0]): Promise<void> {
+    this.activeUploadBatches++;
+    try {
+      await super.getFiles(event);
+    } finally {
+      this.activeUploadBatches--;
+      this.isUploading = this.activeUploadBatches > 0;
+      if (!this.isUploading) {
+        const routeActionUserID = this.pendingRouteActionUserID;
+        this.pendingRouteActionUserID = null;
+        if (routeActionUserID) this.showRouteUploadAction(routeActionUserID);
+      }
+    }
+  }
+
   processAndUploadFile(file: FileInterface): Promise<{ eventId: string }> {
     const extension = file.extension.toLowerCase().trim();
     this.analyticsService.logEvent('upload_file', { method: extension });
@@ -177,16 +194,10 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
           }
 
           if (error instanceof UploadError && error.status === 400 && error.code === 'route_file_in_activity_upload') {
-            this.snackBar.open(
-              'This file contains a route, not a workout. Open Routes and select the file there.',
-              'Upload as route', { duration: 10000 },
-            ).onAction().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-              if (!uploadUserID || this.authService.currentUser?.uid !== uploadUserID) return;
-              this.hapticsService.selection();
-              void this.router.navigate(['/routes']);
-            });
-            // Preserve the actionable message instead of replacing it with the
-            // abstract uploader's generic batch-failure snackbar.
+            // Present the action after the whole batch, so later failures do
+            // not replace it and navigation cannot interrupt remaining files.
+            if (this.activeUploadBatches > 0) this.pendingRouteActionUserID = uploadUserID;
+            else this.showRouteUploadAction(uploadUserID);
             reject(markUploadErrorUserActionHandled(error));
             return;
           }
@@ -204,6 +215,18 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
       };
 
       fileReader.readAsArrayBuffer(file.file);
+    });
+  }
+
+  private showRouteUploadAction(uploadUserID: string | null): void {
+    if (this.destroyRef.destroyed || !uploadUserID || this.authService.currentUser?.uid !== uploadUserID) return;
+    this.snackBar.open(
+      'This file contains a route, not a workout. Open Routes and select the file there.',
+      'Upload as route', { duration: 10000 },
+    ).onAction().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      if (this.activeUploadBatches > 0 || this.authService.currentUser?.uid !== uploadUserID) return;
+      this.hapticsService.selection();
+      void this.router.navigate(['/routes']);
     });
   }
 

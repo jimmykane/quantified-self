@@ -29,7 +29,8 @@ describe('UploadActivitiesToServiceComponent', () => {
         addJob: vi.fn(),
         updateJob: vi.fn(),
         completeJob: vi.fn(),
-        failJob: vi.fn()
+        failJob: vi.fn(),
+        removeJob: vi.fn(),
     };
     const mockRouter = {};
     const mockLogger = { error: vi.fn(), info: vi.fn() };
@@ -71,6 +72,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         mockProcessingService.updateJob.mockReset();
         mockProcessingService.completeJob.mockReset();
         mockProcessingService.failJob.mockReset();
+        mockProcessingService.removeJob.mockReset();
         mockFunctionsService.call.mockReset();
         mockProcessingService.addJob.mockReturnValue('job-id');
         mockFunctionsService.call.mockResolvedValue({ data: { status: 'OK' } });
@@ -186,6 +188,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         resolve({ data: { status: 'success' } });
         await pending;
         expect(mockProcessingService.completeJob).not.toHaveBeenCalled();
+        expect(mockProcessingService.removeJob).toHaveBeenCalledWith(row.jobId);
         expect(mockHaptics.success).not.toHaveBeenCalled();
         await component.refreshUpload(row);
         expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
@@ -212,6 +215,38 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(mockProcessingService.failJob).not.toHaveBeenCalled();
         expect(mockSnackBar.open).not.toHaveBeenCalled();
         expect(mockHaptics.success).not.toHaveBeenCalled();
+        expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+    });
+
+    it.each(['clear', 'destroy', 'provider-change'] as const)('removes only owned active progress jobs on %s', action => {
+        const row = suuntoProcessingRow();
+        component.uploadRows.set([row, { ...row, id: 'completed-row', jobId: 'completed-job', status: 'success' }]);
+        if (action === 'clear') component.clearRows();
+        else if (action === 'destroy') component.ngOnDestroy();
+        else component.serviceName = ServiceNames.WahooAPI;
+        expect(mockProcessingService.removeJob).toHaveBeenCalledExactlyOnceWith(row.jobId);
+        expect(mockProcessingService.completeJob).not.toHaveBeenCalled();
+        expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+    });
+
+    it('removes the abandoned progress job when a scheduled poll finds a different account', async () => {
+        const row = suuntoProcessingRow();
+        component.uploadRows.set([row]);
+        mockAuth.currentUser.uid = 'different-user';
+        await component.refreshUpload(row, true);
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        expect(mockProcessingService.removeJob).toHaveBeenCalledExactlyOnceWith(row.jobId);
+        Object.values(mockHaptics).forEach(mock => expect(mock).not.toHaveBeenCalled());
+    });
+
+    it('does not restore stale rows or in-flight status controls when switching providers back', async () => {
+        const row = { ...suuntoProcessingRow(), statusCheckInProgress: true };
+        component.uploadRows.set([row]);
+        component.serviceName = ServiceNames.WahooAPI;
+        component.serviceName = ServiceNames.SuuntoApp;
+        expect(component.uploadRows()).toEqual([]);
+        await component.refreshUpload(row);
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
     });
 
     it('does not send a file after the signed-in account changes while reading it', async () => {

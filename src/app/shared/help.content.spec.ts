@@ -892,6 +892,7 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain(`**Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**`);
     expect(uploadsSection?.content).toContain(`**Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
     expect(uploadsSection?.content).toContain("You may have reached your current plan's activity or route limit.");
+    expect(uploadsSection?.content).toContain('**Upload as route** appears after active upload batches finish');
     expect(uploadsSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(uploadsSection?.content).toContain('Saved routes open from **Routes** with the details action.');
     expect(uploadsSection?.content).toContain('waypoints and turn instructions');
@@ -944,6 +945,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('A pending or ambiguous job is never replaced automatically');
     expect(serviceConnectionsSection?.content).toContain('After eight automatic checks');
     expect(serviceConnectionsSection?.content).toContain('**Check status again**');
+    expect(serviceConnectionsSection?.content).toContain('removes its local progress notifications');
+    expect(serviceConnectionsSection?.content).toContain('This does not cancel an upload that Suunto may still be processing');
     expect(serviceConnectionsSection?.content).toContain('An explicit processing failure that requires a restart stops status checks');
     expect(serviceConnectionsSection?.content).toContain('clear the upload list and choose the FIT file again');
     expect(serviceConnectionsSection?.content).toContain('retry control');

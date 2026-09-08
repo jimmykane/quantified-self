@@ -98,10 +98,13 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private _serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
   @Input() set serviceName(value: ServiceNames) {
-    if (this._serviceName !== value) {
+    const serviceName = value || ServiceNames.SuuntoApp;
+    if (this._serviceName !== serviceName) {
       this.clearAllWahooStatusPolls();
+      this.removeActiveUploadJobs();
+      this.uploadRows.set([]);
     }
-    this._serviceName = value || ServiceNames.SuuntoApp;
+    this._serviceName = serviceName;
     this.destinationName = getProviderDisplayName(this._serviceName, 'destination');
     this.callableFunction = this._serviceName === ServiceNames.COROSAPI
       ? 'importActivityToCOROSAPI'
@@ -172,6 +175,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   ngOnDestroy(): void {
     this.isDestroyed = true;
     this.clearAllWahooStatusPolls();
+    this.removeActiveUploadJobs();
   }
 
   async getFiles(event: any): Promise<void> {
@@ -225,12 +229,15 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   }
 
   async refreshUpload(row: ServiceUploadRow, automatic = false): Promise<void> {
-    if (this.isDestroyed
-      || row.status !== 'processing'
+    if (!this.isCurrentUploadRow(row)) {
+      this.clearWahooStatusPoll(row.id);
+      if (row.jobId) this.processingService.removeJob(row.jobId);
+      return;
+    }
+    if (row.status !== 'processing'
       || !row.uploadId
       || !this.usesAsynchronousStatusPolling
       || (this.serviceName !== ServiceNames.WahooAPI && !row.providerUserId)
-      || !this.isCurrentUploadRow(row)
       || this.wahooStatusChecksInProgress.has(row.id)) {
       return;
     }
@@ -288,7 +295,11 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       if (!automatic) this.hapticsService.error();
     } finally {
       this.wahooStatusChecksInProgress.delete(row.id);
-      this.updateRow(row.id, { statusCheckInProgress: false });
+      if (!this.isCurrentUploadRow(row) || serviceName !== this.serviceName || ownerUid !== this.auth.currentUser?.uid) {
+        if (row.jobId) this.processingService.removeJob(row.jobId);
+      } else {
+        this.updateRow(row.id, { statusCheckInProgress: false });
+      }
     }
   }
 
@@ -299,7 +310,18 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
 
     this.hapticsService.selection();
     this.clearAllWahooStatusPolls();
+    this.removeActiveUploadJobs();
     this.uploadRows.set([]);
+  }
+
+  private removeActiveUploadJobs(): void {
+    // These jobs only represent this view's monitoring. Removing a badge does
+    // not cancel, fail, or confirm a provider upload that may still be running.
+    for (const row of this.uploadRows()) {
+      if (row.jobId && ['queued', 'uploading', 'processing'].includes(row.status)) {
+        this.processingService.removeJob(row.jobId);
+      }
+    }
   }
 
   async processAndUploadFile(
@@ -489,6 +511,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
       });
       this.processingService.failJob(jobId, message);
       return true;
+    } finally {
+      if (!this.isCurrentUploadRow(row)) this.processingService.removeJob(jobId);
     }
   }
 
