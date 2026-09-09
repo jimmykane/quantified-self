@@ -14,7 +14,7 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    sufficient, and use focused skills independently when the user requests separate summaries without a comparison.
    For an unqualified recovery or readiness question, clarify whether the user means Training, sleep, or a comparison
    between them before choosing a workflow.
-2. Discover the relevant measurement, metric, sleep, activity, or route capabilities before concluding that data are
+2. Discover the relevant measurement, Health, metric, sleep, activity, or route capabilities before concluding that data are
    unavailable. For a sleep-vital comparison, prefer the one-call sleep trend capability so coverage and grouped values
    share one bounded read rather than searching activity metrics or inferring from Training readiness. Preserve that an
    individual blood-oxygen value is a session maximum while a grouped trend averages session maxima, and that grouped
@@ -48,10 +48,16 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 - Map each domain to its grant: Training and aggregate metrics use `metrics:read`, body measurements use
   `measurements:read`, sleep uses `sleep:read`, individual activities use `activity-details:read`, and saved routes use
   `routes:read`. Selected per-activity metrics also need `metrics:read`.
+- All-day Health uses `health:read`, with an additional `measurements:read` grant for identity-free body composition.
+  Health sample times are UTC while their calendar dates retain the provider's day. Keep returned provider/account
+  series separate; local account ordinals are not stable across calls. Do not blend all-day HRV with Sleep-owned HRV.
+  Empty Health summaries can coexist with sample-only data. Honor incomplete scans and representative downsampling.
+  Use each returned Sports Lib display value with its display unit. For Health math, use the series' unit and
+  normalization status: native Garmin Body Battery points are not a canonical percentage or comparable to resources.
 - Request activity or route locations only when they materially affect the comparison. Activity coordinates require
   `activity-location:read`; route coordinates require `route-location:read`. One never grants the other.
-- Do not expose or speculate about internal identifiers, source files, provider or device provenance, or other fields
-  outside the public tool results.
+- Do not expose or speculate about internal identifiers, source files, device provenance, or fields outside the public
+  tool results. Use only explicitly returned provider labels; Health body-composition buckets remain identity-free.
 - Distinguish recorded measurements, aggregated activity metrics, normalized sleep data, and Training-derived
   snapshots.
 - A daily report is a limited current-context projection: its latest completed sleep, aggregate HRV/heart-rate values,

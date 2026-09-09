@@ -478,7 +478,7 @@ test('rejects missing bundled skill files before generating account-bound files'
   });
 });
 
-test('requires exactly the registered six bundled skill directories', async () => {
+test('requires exactly the registered bundled skill directories', async () => {
   const missingRoot = await makeRepositoryFixture();
   await rm(
     join(
@@ -1043,6 +1043,7 @@ test('bundled skills cover focused workflows without copying the live tool catal
   const expectedMarkers = new Map([
     ['analyze-quantified-self', /Cross-Domain Workflow/],
     ['analyze-quantified-self-activity', /server, not the model/],
+    ['analyze-quantified-self-health', /recorded Health metrics/],
     ['analyze-quantified-self-measurements', /first-class recorded measurements/],
     ['analyze-quantified-self-sleep', /normalized sleep summaries/],
     ['analyze-quantified-self-training', /live metric catalog/],
