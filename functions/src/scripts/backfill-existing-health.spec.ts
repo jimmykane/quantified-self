@@ -337,6 +337,46 @@ describe('existing-user Health backfill runner', () => {
     expect(await execute({ maxPending: 1 })).toMatchObject({ jobsSubmitted: 0, incomplete: true, skipped: { queue_backpressure: 1 } });
     expect(db.writes).toEqual([]);
   });
+  it('overrides only the approved cooldown, preserving it and deterministic resume', async () => {
+    connect('garmin');
+    const until = now + 60 * 86_400_000;
+    const statePath = 'users/owner/sleepSyncState/GarminAPI';
+    db.rows.set(statePath, { nextBackfillAllowedAtMs: until, lastSuccessfulSyncAtMs: 123 });
+    const scoped: BackfillOptions = { ...options, uid: 'owner', providers: ['garmin'], overrideCooldownUntilMs: until };
+    expect(await runExistingHealthBackfill(scoped, deps)).toMatchObject({ jobsPlanned: 1, jobsSubmitted: 0 });
+    expect(db.writes).toEqual([]);
+    expect(await execute({ ...scoped, execute: true })).toMatchObject({ jobsSubmitted: 1, failed: 0 });
+    expect(db.rows.get(statePath)).toMatchObject({ nextBackfillAllowedAtMs: until, lastSuccessfulSyncAtMs: 123 });
+    expect([...db.rows.values()].some(row => row.overriddenCooldownUntilMs === until)).toBe(true);
+    expect(await execute({ ...scoped, execute: true })).toMatchObject({ jobsSubmitted: 0, observed: { pending: 1 } });
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+  it('rejects bulk or malformed programmatic cooldown exceptions before reading', async () => {
+    await expect(execute({ overrideCooldownUntilMs: now + 1000 })).rejects.toThrow();
+    await expect(execute({ uid: 'owner', overrideCooldownUntilMs: now + 1000 })).rejects.toThrow();
+    await expect(execute({ uid: 'owner', providers: ['garmin'], overrideCooldownUntilMs: NaN })).rejects.toThrow();
+    expect(db.projections).toEqual([]);
+  });
+  it.each(['mismatch', 'changed', 'pending', 'lease', 'deletion', 'disconnect', 'pro', 'permissions', 'backpressure'])('keeps %s safeguards with a cooldown exception', async scenario => {
+    connect('garmin');
+    const until = now + 1000;
+    const statePath = 'users/owner/sleepSyncState/GarminAPI';
+    db.rows.set(statePath, { nextBackfillAllowedAtMs: scenario === 'mismatch' ? until + 1 : until });
+    if (scenario === 'changed') db.beforeTransaction = () => { db.rows.get(statePath)!.nextBackfillAllowedAtMs = until + 1; };
+    if (scenario === 'pending') db.rows.set('sleepSyncQueue/other', { userID: 'owner', provider: PROVIDERS.garmin, type: 'garmin_health_backfill', processed: false });
+    if (scenario === 'lease') db.rows.set(`${statePath}/${CHECKPOINT_COLLECTION}/control`, { leaseUntilMs: now + 1000 });
+    if (scenario === 'deletion') db.beforeTransaction = () => { db.rows.set('userDeletionTombstones/owner', {}); };
+    if (scenario === 'disconnect') db.beforeTransaction = () => { db.rows.get('garminAPITokens/owner')!.disconnectState = 'disconnecting'; };
+    if (scenario === 'pro') roles.owner = {};
+    if (scenario === 'permissions') db.rows.get('garminAPITokens/owner/tokens/provider-account')!.permissions = [];
+    if (scenario === 'backpressure') db.rows.set('sleepSyncQueue/unrelated', { processed: false });
+    const reason = ({ mismatch: 'history_cooldown', changed: 'history_cooldown', pending: 'other_history_work_pending',
+      lease: 'another_script_running', deletion: 'connection_changed', disconnect: 'connection_changed', pro: 'pro_required',
+      permissions: 'health_history_permission_missing', backpressure: 'queue_backpressure' })[scenario];
+    expect(await execute({ uid: 'owner', providers: ['garmin'], overrideCooldownUntilMs: until, maxPending: 1 }))
+      .toMatchObject({ jobsSubmitted: 0, skipped: { [reason!]: 1 } });
+    expect(enqueue).not.toHaveBeenCalled();
+  });
   it('bounds owners and only queries the selected owner when requested', async () => {
     connect('garmin', 'one'); connect('garmin', 'two');
     expect(await execute({ maxUsers: 1 })).toMatchObject({ jobsSubmitted: 1, incomplete: true });

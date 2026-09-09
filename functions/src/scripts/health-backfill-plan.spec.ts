@@ -20,6 +20,17 @@ describe('existing-user Health backfill planning', () => {
     expect(parseBackfillOptions([...args, '--execute', '--confirm-all-users'], now).execute).toBe(true);
     expect(parseBackfillOptions([...args, '--execute', '--uid=owner'], now).uid).toBe('owner');
   });
+  it('accepts a cooldown exception only for one owner/provider and an exact timestamp', () => {
+    const base = ['--project=test-project', '--provider=garmin', '--end=2026-09-06'];
+    const flag = '--override-cooldown-until=2026-10-07T11:43:17.638Z';
+    expect(parseBackfillOptions([...base, '--uid=owner', flag], now).overrideCooldownUntilMs)
+      .toBe(Date.parse('2026-10-07T11:43:17.638Z'));
+    expect(() => parseBackfillOptions([...base, flag], now)).toThrow();
+    expect(() => parseBackfillOptions([...args, '--uid=owner', flag], now)).toThrow();
+    for (const value of ['invalid', '2026-10-07', '2026-02-30T00:00:00.000Z']) {
+      expect(() => parseBackfillOptions([...base, '--uid=owner', `--override-cooldown-until=${value}`], now)).toThrow();
+    }
+  });
   it.each(['2026-02-30', '2026-09-07', '2026-09-08'])('rejects invalid or incomplete end days %s', end => {
     expect(() => parseBackfillOptions(['--project=test-project', '--provider=garmin', `--end=${end}`], now)).toThrow();
   });

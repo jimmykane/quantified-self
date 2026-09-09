@@ -49,6 +49,7 @@ interface Plan {
   startMs: number;
   endMs: number;
   jobs: BackfillJob[];
+  overrideCooldownUntilMs?: number;
 }
 export interface BackfillSummary {
   dryRun: boolean;
@@ -178,7 +179,13 @@ async function makePlan(deps: BackfillDependencies, options: BackfillOptions, co
   if (!Number.isSafeInteger(startMs) || startMs < options.startMs) throw new Skip('invalid_checkpoint');
   const jobs = buildHealthBackfillJobs(connection.provider, connection.uid, connection.account, startMs, options.endMs, campaign);
   if (!jobs.length) throw new Skip('outside_provider_history');
-  return { connection, campaign, run, control, startMs, endMs: options.endMs, jobs };
+  return { connection, campaign, run, control, startMs, endMs: options.endMs, jobs,
+    overrideCooldownUntilMs: options.overrideCooldownUntilMs };
+}
+
+function cooldownOverrideMatches(plan: Plan, state: Record<string, unknown>): boolean {
+  return plan.overrideCooldownUntilMs !== undefined
+    && plan.overrideCooldownUntilMs === state.nextBackfillAllowedAtMs;
 }
 
 async function checkExistingWork(deps: BackfillDependencies, plan: Plan): Promise<void> {
@@ -192,7 +199,8 @@ async function checkExistingWork(deps: BackfillDependencies, plan: Plan): Promis
   const control = controlSnapshot.data() || {};
   const state = stateSnapshot.data() || {};
   const ownsCooldown = control.campaign === plan.campaign && control.cooldownUntilMs === state.nextBackfillAllowedAtMs;
-  if (Number(state.nextBackfillAllowedAtMs) > deps.now() && !ownsCooldown) throw new Skip('history_cooldown');
+  if (Number(state.nextBackfillAllowedAtMs) > deps.now() && !ownsCooldown
+    && !cooldownOverrideMatches(plan, state)) throw new Skip('history_cooldown');
   if (Number(control.leaseUntilMs) > deps.now()) throw new Skip('another_script_running');
   const ownIds = new Set(plan.jobs.map(job => job.queueId));
   if (queue.docs.some(doc => {
@@ -223,7 +231,8 @@ export async function claimPlan(deps: BackfillDependencies, plan: Plan, owner: s
     const state = stateSnapshot.data() || {};
     if (Number(control.leaseUntilMs) > deps.now()) throw new Skip('another_script_running');
     if (Number(state.nextBackfillAllowedAtMs) > deps.now()
-      && !(control.campaign === plan.campaign && control.cooldownUntilMs === state.nextBackfillAllowedAtMs)) throw new Skip('history_cooldown');
+      && !(control.campaign === plan.campaign && control.cooldownUntilMs === state.nextBackfillAllowedAtMs)
+      && !cooldownOverrideMatches(plan, state)) throw new Skip('history_cooldown');
     if (runSnapshot.exists && runSnapshot.data()?.lifecycle !== plan.connection.lifecycle) throw new Skip('checkpoint_connection_changed');
     const cooldownUntilMs = Math.max(Number(state.nextBackfillAllowedAtMs) || 0,
       deps.now() + getSleepBackfillCooldownMs(plan.connection.provider)!);
@@ -231,6 +240,7 @@ export async function claimPlan(deps: BackfillDependencies, plan: Plan, owner: s
     if (!runSnapshot.exists) tx.create(plan.run, {
       campaign: plan.campaign, lifecycle: plan.connection.lifecycle, startMs: plan.startMs, endMs: plan.endMs,
       jobsTotal: plan.jobs.length, createdAtMs: deps.now(),
+      ...(cooldownOverrideMatches(plan, state) ? { overriddenCooldownUntilMs: plan.overrideCooldownUntilMs } : {}),
     });
     // Preserve existing success/error timestamps and do not claim historical coverage.
     tx.set(plan.connection.state, { nextBackfillAllowedAtMs: cooldownUntilMs }, { merge: true });
@@ -313,6 +323,11 @@ async function pendingCount(deps: BackfillDependencies): Promise<number> {
 }
 
 export async function runExistingHealthBackfill(options: BackfillOptions, deps: BackfillDependencies): Promise<BackfillSummary> {
+  // Enforce the same narrow scope for imported callers, not only CLI parsing.
+  if (options.overrideCooldownUntilMs !== undefined && (!options.uid || options.providers.length !== 1
+    || !Number.isSafeInteger(options.overrideCooldownUntilMs) || options.overrideCooldownUntilMs <= 0)) {
+    throw new Error('A cooldown override requires one owner, one provider, and an exact observed timestamp.');
+  }
   const summary: BackfillSummary = {
     dryRun: !options.execute, project: options.project,
     start: new Date(options.startMs).toISOString(), end: new Date(options.endMs).toISOString(),
@@ -421,6 +436,7 @@ Dry run by default. --end is an inclusive, completed UTC day; repeat exactly the
 --max-jobs N          At most N new queue jobs per invocation (default 25, max 250).
 --max-pending N       Pause admission at this shared queue depth (default 100, max 1000).
 --scan-limit N        Token metadata records per provider (default 1000, max 10000).
+--override-cooldown-until ISO  Explicit operator approval for one --uid/provider's exact observed cooldown.
 Preserves Pro checks. Workers validate credentials and permissions; dry runs never refresh tokens.
 Garmin success means requests finished, NOT all callbacks received. Expired/unobserved jobs remain unknown.
 Read docs/health-backfill-operations.md before execution. No automatic connection backfill is installed.`;

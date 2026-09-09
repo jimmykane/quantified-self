@@ -74,7 +74,7 @@ multiple bulk commands in parallel.
 
 Append `--execute` to the exact dry-run command. Bulk execution also requires
 `--confirm-all-users`; a single-owner `--uid` command does not. There is no force
-override for Pro eligibility, cooldowns, deletion, missing permissions, or a changed
+override for Pro eligibility, deletion, missing permissions, or a changed
 connection. Provider permissions are checked from server-owned metadata where
 available and verified by the worker when using the credential. Stale metadata can
 still result in a worker authorization failure; a dry run is not a live token test.
@@ -83,8 +83,18 @@ The CLI checks for other pending history work, respects the normal provider hist
 cooldown, and claims a per-owner/provider lease before writing. Accounts from one
 Suunto owner may be processed on successive invocations while earlier account jobs
 are pending. A campaign can resume through its own cooldown but cannot override a
-new history request's cooldown. It never waits inside an OAuth callback or imports
+new history request's cooldown by default. It never waits inside an OAuth callback or imports
 anything automatically after a connection.
+
+After separate, explicit operator approval, `--override-cooldown-until` accepts the
+exact observed `nextBackfillAllowedAtMs` as a UTC ISO timestamp (including milliseconds).
+This exception requires `--uid` and a single provider; use the same approved campaign
+range in dry run and execute. It bypasses only that matching application cooldown,
+checked again inside the lease transaction. A changed future cooldown still blocks.
+It does not bypass other pending history, leases, eligibility, permissions, deletion,
+connection fences, duplicate receipts, or provider pacing/rate limits. The cooldown
+is never cleared or shortened, and a new run receipt records the overridden timestamp.
+This is a local operator CLI option, not a browser or deployed Function capability.
 
 Submission checkpoints live at:
 

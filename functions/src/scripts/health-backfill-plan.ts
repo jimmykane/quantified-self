@@ -31,6 +31,8 @@ export interface BackfillOptions {
   maxJobs: number;
   maxPending: number;
   scanLimit: number;
+  /** Operator-only exception for the exact observed cooldown of one owner/provider. */
+  overrideCooldownUntilMs?: number;
 }
 
 export function digest(parts: unknown[]): string {
@@ -49,7 +51,7 @@ function date(value: string | undefined, name: string): number {
 /** Explicit end date makes a repeated command the same campaign, not another import. */
 export function parseBackfillOptions(argv: string[], nowMs = Date.now()): BackfillOptions {
   const flags = new Set(['--execute', '--confirm-all-users']);
-  const values = new Set(['--project', '--provider', '--start', '--end', '--uid', '--max-users', '--max-jobs', '--max-pending', '--scan-limit']);
+  const values = new Set(['--project', '--provider', '--start', '--end', '--uid', '--max-users', '--max-jobs', '--max-pending', '--scan-limit', '--override-cooldown-until']);
   const args = new Map<string, string>();
   for (let i = 0; i < argv.length; i++) {
     const [key, ...rest] = argv[i].split('=');
@@ -69,6 +71,13 @@ export function parseBackfillOptions(argv: string[], nowMs = Date.now()): Backfi
   if (!provider || !['all', ...Object.keys(PROVIDERS)].includes(provider)) throw new Error('--provider requires garmin, suunto, coros, or all.');
   const uid = args.get('--uid');
   if (uid && (uid.length > 128 || uid.includes('/') || containsASCIIControlCharacter(uid) || uid.trim() !== uid)) throw new Error('Invalid --uid.');
+  const cooldown = args.get('--override-cooldown-until');
+  const overrideCooldownUntilMs = cooldown === undefined ? undefined : Date.parse(cooldown);
+  if (cooldown !== undefined && (!uid || provider === 'all'
+    || !Number.isSafeInteger(overrideCooldownUntilMs) || overrideCooldownUntilMs! <= 0
+    || new Date(overrideCooldownUntilMs!).toISOString() !== cooldown)) {
+    throw new Error('--override-cooldown-until requires one --uid, one provider, and an exact UTC ISO timestamp.');
+  }
   const execute = args.has('--execute');
   if (execute && !uid && !args.has('--confirm-all-users')) throw new Error('Bulk execution requires --confirm-all-users. Run a dry run first.');
   const startMs = args.has('--start') ? date(args.get('--start'), '--start') : Date.parse(SLEEP_BACKFILL_START_DATE_ISO);
@@ -90,6 +99,7 @@ export function parseBackfillOptions(argv: string[], nowMs = Date.now()): Backfi
     maxJobs: integer('--max-jobs', 25, 250),
     maxPending: integer('--max-pending', 100, 1000),
     scanLimit: integer('--scan-limit', 1000, 10_000),
+    ...(overrideCooldownUntilMs !== undefined ? { overrideCooldownUntilMs } : {}),
   };
 }
 
