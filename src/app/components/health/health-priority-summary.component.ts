@@ -131,7 +131,12 @@ export class HealthPrioritySummaryComponent {
             this.unitSettings(),
           )
           : '—',
-        contextText: card.chartWindow
+        contextText: card.id === 'heart_rate' && latestPoint
+          ? `Last recorded ${new Intl.DateTimeFormat(undefined, {
+            hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+          }).format(latestPoint.timestampMs)} · ${model.series.semanticVariant === 'activity_interval_average'
+            ? 'Interval averages' : '15-second samples'}`
+          : card.chartWindow
           ? `${isSleepHrvSemanticVariant(model.series.semanticVariant) ? 'Sleep HRV' : card.label} · ${card.chartWindow.label}`
           : model.series.semanticLabel,
         personalRangeStatus,

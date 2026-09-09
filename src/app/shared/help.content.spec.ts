@@ -147,6 +147,9 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('**Choose a Highlight source.**');
+    expect(healthSection?.content).toContain('**Today’s heart rate**');
+    expect(healthSection?.content).toContain('whole highlight is hidden when none do');
+    expect(healthSection?.content).toContain('not a live sensor feed');
     expect(healthSection?.content).toContain('remembered separately for each highlight in your account settings');
     expect(healthSection?.content).toContain('without overwriting your saved choice');
     expect(healthSection?.content).not.toContain('or saves a preferred source');

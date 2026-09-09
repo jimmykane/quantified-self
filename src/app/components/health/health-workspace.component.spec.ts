@@ -27,6 +27,7 @@ import {
   HealthMetricId,
   HealthProvider,
   HealthSourceRecord,
+  HealthSampleChunk,
   HealthSyncState,
   getHealthMetricDefinition,
 } from '@shared/health';
@@ -203,16 +204,36 @@ function manualSourceRecord(
   };
 }
 
-function rangeLoad(metricId: HealthMetricId, empty = false): HealthWorkspaceRangeLoad {
+function rangeLoad(metricId: HealthMetricId, empty = false, allDayHeartRate = true): HealthWorkspaceRangeLoad {
   const records = empty ? [] : [
     sourceRecord(metricId, HEALTH_PROVIDERS.GarminAPI, metricId === HEALTH_METRIC_IDS.HeartRateVariability ? 55 : 52, 'garmin'),
-    sourceRecord(metricId, HEALTH_PROVIDERS.COROSAPI, metricId === HEALTH_METRIC_IDS.HeartRateVariability ? 61 : 58, 'coros'),
+    sourceRecord(metricId, metricId === HEALTH_METRIC_IDS.HeartRate && allDayHeartRate ? HEALTH_PROVIDERS.SuuntoApp : HEALTH_PROVIDERS.COROSAPI,
+      metricId === HEALTH_METRIC_IDS.HeartRateVariability ? 61 : 58, 'coros'),
   ];
-  const result = projectLoadedHealthRange(records, [], {
+  const chunks: HealthSampleChunk[] = metricId === HEALTH_METRIC_IDS.HeartRate && allDayHeartRate ? records.map((record, index) => {
+    const id = `chunk-${index}`;
+    record.sampleChunkIds = [id];
+    const value = index ? 58 : 52;
+    return {
+      schemaVersion: HEALTH_SCHEMA_VERSION, id, userID: 'user-1', parentSourceRecordId: record.id,
+      provider: record.source.provider, accountKey: record.source.accountKey, metricId, valueType: 'number',
+      aggregation: index ? 'average' : 'representative_sample',
+      semanticVariant: index ? 'activity_interval_average' : 'daily_15_second',
+      origin: HEALTH_VALUE_ORIGINS.Recorded, recordingMethod: HEALTH_RECORDING_METHODS.Device,
+      normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+      nativeMetric: 'heartRate', nativeUnit: 'bpm', canonicalUnit: 'bpm',
+      calendarDate: todayDate, startTimeMs: todayStartMs, endTimeMs: todayStartMs + (index + 1) * 60_000,
+      seriesKey: id, chunkIndex: 0, offsetMs: [0, (index + 1) * 60_000],
+      nativeValues: [value - 2, value], canonicalValues: [value - 2, value],
+      revision: record.source.revision, coverage: record.coverage,
+      receivedAtMs: record.source.receivedAtMs, createdAtMs: todayStartMs, updatedAtMs: todayStartMs,
+    };
+  }) : [];
+  const result = projectLoadedHealthRange(records, chunks, {
     startDate: new Date(todayStartMs - (29 * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10),
     endDate: todayDate,
     metricIds: [metricId],
-    includeSamples: false,
+    includeSamples: chunks.length > 0,
   }, { sourceRecordsComplete: true, samplesComplete: true });
   return {
     result,
@@ -570,7 +591,7 @@ describe('HealthWorkspaceComponent', () => {
       range: '30d',
       endDate: todayDate,
     });
-    expect(component.priorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate', 'HRV']);
+    expect(component.priorityCards().map(card => card.label)).toEqual(['Sleep', 'Today’s heart rate', 'HRV']);
     const prioritySection = (fixture.nativeElement as HTMLElement).querySelector('.health-priority-section');
     expect(prioritySection?.textContent).toContain('Highlights');
     expect(prioritySection?.textContent).not.toContain('Last 30 days');
@@ -768,7 +789,7 @@ describe('HealthWorkspaceComponent', () => {
   it('opens highlight metrics without styling the highlight as selected', async () => {
     await createComponent();
     const host = fixture.nativeElement as HTMLElement;
-    const openHeartRate = host.querySelector<HTMLButtonElement>('[aria-label="Open Heart rate"]');
+    const openHeartRate = host.querySelector<HTMLButtonElement>('[aria-label="Open Today’s heart rate"]');
 
     openHeartRate?.click();
     fixture.detectChanges();
@@ -789,12 +810,12 @@ describe('HealthWorkspaceComponent', () => {
       sleepSessions: [sleepSession({ vitals: { averageHeartRateBpm: 52 } })],
     });
 
-    expect(component.visiblePriorityCards().map(card => card.label)).toEqual(['Sleep', 'Heart rate']);
+    expect(component.visiblePriorityCards().map(card => card.label)).toEqual(['Sleep', 'Today’s heart rate']);
     const cards = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('.health-priority-card'),
     );
     expect(cards).toHaveLength(2);
-    expect(cards.map(card => card.querySelector('h3')?.textContent?.trim())).toEqual(['Sleep', 'Heart rate']);
+    expect(cards.map(card => card.querySelector('h3')?.textContent?.trim())).toEqual(['Sleep', 'Today’s heart rate']);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.classList)
       .toContain('health-priority-grid-double');
   });
@@ -1000,7 +1021,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(host.textContent).not.toContain('Sleep overview');
     expect(host.textContent).not.toContain('Resting heart rate');
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.HeartRate);
-    expect((host.querySelector('[aria-label="Open Heart rate"]') as HTMLButtonElement).disabled).toBe(false);
+    expect((host.querySelector('[aria-label="Open Today’s heart rate"]') as HTMLButtonElement).disabled).toBe(false);
     expect(host.querySelector('[aria-label="Open Sleep"]')).toBeNull();
     expect(host.querySelector('[aria-label="Open HRV"]')).toBeNull();
   });
@@ -1138,6 +1159,78 @@ describe('HealthWorkspaceComponent', () => {
     expect(priorityCalls(HEALTH_METRIC_IDS.HeartRateVariability)).toHaveLength(1);
   });
 
+  it('shows today’s recorded HR and its latest time independently of the explorer range', async () => {
+    await createComponent(undefined, '1y');
+    const summary = fixture.debugElement.query(By.directive(HealthPrioritySummaryComponent)).componentInstance as HealthPrioritySummaryComponent;
+    const heart = summary.renderedCards().find(card => card.id === 'heart_rate')!;
+    const window = component.priorityHeartRateWindow;
+    expect(window.dayCount).toBe(1);
+    expect(heart.chartModels.every(chart => chart.startTimeMs === window.startTimeMs && chart.endTimeMs === window.endTimeMs)).toBe(true);
+    expect(loadMetricRange).toHaveBeenCalledWith('user-1', {
+      metricId: HEALTH_METRIC_IDS.HeartRate, includeSamples: true,
+      startDate: new Date(todayStartMs - 86_400_000).toISOString().slice(0, 10),
+      endDate: new Date(todayStartMs + 86_400_000).toISOString().slice(0, 10),
+    });
+    const chart = heart.sources[heart.selectedSourceIndex].chart!;
+    const latestTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+      .format(todayStartMs + 120_000);
+    expect(chart.latestValueText).toBe('58 bpm');
+    expect(chart.contextText).toBe(`Last recorded ${latestTime} · Interval averages`);
+    expect(component.priorityWindow.dayCount).toBe(30);
+    expect(component.priorityHrvWindow.label).toBe('14-day trend');
+    expect(component.selectedRange()).toBe('1y');
+  });
+
+  it('hides today’s HR without eligible samples, including empty, failed, and filtered sources', async () => {
+    await createComponent();
+    const host = fixture.nativeElement as HTMLElement;
+    component.toggleProvider(HEALTH_PROVIDERS.COROSAPI);
+    fixture.detectChanges();
+    expect(host.querySelector('#health-priority-card-heart_rate')).toBeNull();
+    component.showAllProviders();
+    component.priorityHeartRateLoad.set(rangeLoad(HEALTH_METRIC_IDS.HeartRate, false, false));
+    fixture.detectChanges();
+    expect(host.querySelector('#health-priority-card-heart_rate')).toBeNull();
+    expect(host.querySelector('#health-priority-card-sleep')).not.toBeNull();
+    component.priorityHeartRateLoad.set(null);
+    component.priorityHeartRateStatus.set('error');
+    fixture.detectChanges();
+    expect(host.querySelector('#health-priority-card-heart_rate')).toBeNull();
+    component.priorityHeartRateStatus.set('ready');
+    component.priorityHeartRateLoad.set(rangeLoad(HEALTH_METRIC_IDS.HeartRate, true));
+    fixture.detectChanges();
+    expect(host.querySelector('#health-priority-card-heart_rate')).toBeNull();
+  });
+
+  it('falls back without overwriting a saved source when only another source has today’s readings', async () => {
+    await createComponent();
+    const summary = fixture.debugElement.query(By.directive(HealthPrioritySummaryComponent)).componentInstance as HealthPrioritySummaryComponent;
+    const heart = () => summary.renderedCards().find(card => card.id === 'heart_rate');
+    const key = heart()!.sources[1].key;
+    hydrateHighlightSources({ heart_rate: key });
+    const original = component.priorityHeartRateLoad()!;
+    const previousDay = (load: HealthWorkspaceRangeLoad, provider?: HealthProvider) => ({ ...load,
+      result: { ...load.result, sampleChunks: load.result.sampleChunks.map(chunk => provider && chunk.provider !== provider
+        ? chunk : { ...chunk, startTimeMs: component.priorityHeartRateWindow.startTimeMs - 86_400_000,
+          endTimeMs: component.priorityHeartRateWindow.startTimeMs - 1 }) },
+    });
+    component.priorityHeartRateLoad.set(previousDay(original, HEALTH_PROVIDERS.GarminAPI));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(heart()!.sources).toHaveLength(1);
+    expect(heart()!.sources[0].label).toBe('Suunto');
+    expect(component.preferredHighlightSources().heart_rate).toBe(key);
+    component.priorityHeartRateLoad.set(previousDay(original));
+    fixture.detectChanges();
+    expect(heart()).toBeUndefined();
+    component.priorityHeartRateLoad.set(original);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(heart()!.sources[heart()!.selectedSourceIndex].key).toBe(key);
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('switches one highlight chart using Material tabs, keeps both readings, and saves only accepted selections', async () => {
     await createComponent();
     const heart = fixture.nativeElement.querySelector('[aria-labelledby="health-priority-card-heart_rate"]') as HTMLElement;
@@ -1204,7 +1297,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
     expect(haptics.selection).not.toHaveBeenCalled();
 
-    component.toggleProvider(HEALTH_PROVIDERS.COROSAPI);
+    component.toggleProvider(HEALTH_PROVIDERS.SuuntoApp);
     fixture.detectChanges();
     await fixture.whenStable();
     expect(heart().sources).toHaveLength(1);
@@ -1234,8 +1327,10 @@ describe('HealthWorkspaceComponent', () => {
     await fixture.whenStable();
     component.priorityHeartRateLoad.update(load => {
       if (!load) return load;
-      return { ...load, result: { ...load.result, observations: load.result.observations.map(item => ({
-        ...item, endTimeMs: item.provider === HEALTH_PROVIDERS.GarminAPI ? todayStartMs + 60_000 : todayStartMs,
+      return { ...load, result: { ...load.result, sampleChunks: load.result.sampleChunks.map(item => ({
+        ...item,
+        endTimeMs: todayStartMs + (item.provider === HEALTH_PROVIDERS.GarminAPI ? 180_000 : 120_000),
+        offsetMs: [0, item.provider === HEALTH_PROVIDERS.GarminAPI ? 180_000 : 120_000],
       })) } };
     });
     fixture.detectChanges();
@@ -2280,7 +2375,7 @@ describe('HealthWorkspaceComponent', () => {
   it('explains a missing sample-only source even when another provider has visible summaries', async () => {
     await createComponent();
     loadMetricRange.mockImplementation((_uid: string, request: { metricId: HealthMetricId }) => Promise.resolve({
-      ...rangeLoad(request.metricId),
+      ...rangeLoad(request.metricId, false, false),
       providers: [HEALTH_PROVIDERS.GarminAPI, HEALTH_PROVIDERS.COROSAPI, HEALTH_PROVIDERS.SuuntoApp],
       sampleBackedProviders: [HEALTH_PROVIDERS.SuuntoApp],
     }));

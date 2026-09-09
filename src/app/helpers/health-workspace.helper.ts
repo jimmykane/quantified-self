@@ -754,6 +754,25 @@ export function selectHealthPriorityTrendSeries(
       || compareText(left.sourceLabel, right.sourceLabel));
 }
 
+/** Recorded all-day HR only: never substitute Sleep, HRV-associated HR, or daily summaries. */
+export function selectTodayHeartRateHighlightSeries(
+  result: HealthRangeResult | null | undefined,
+  window: Pick<HealthWorkspaceWindow, 'startTimeMs' | 'endTimeMs'>,
+  unitSettings: UserUnitSettingsInterface | null = null,
+): HealthWorkspaceSeries[] {
+  if (!result) return [];
+  const sampleChunks = result.sampleChunks.filter(chunk =>
+    chunk.metricId === HEALTH_METRIC_IDS.HeartRate
+    && chunk.normalizationStatus === HEALTH_NORMALIZATION_STATUSES.Canonical
+    && chunk.origin === HEALTH_VALUE_ORIGINS.Recorded
+    && chunk.recordingMethod === HEALTH_RECORDING_METHODS.Device
+    && ((chunk.provider === HEALTH_PROVIDERS.GarminAPI
+      && chunk.semanticVariant === 'daily_15_second' && chunk.aggregation === 'representative_sample')
+      || (chunk.provider === HEALTH_PROVIDERS.SuuntoApp
+        && chunk.semanticVariant === 'activity_interval_average' && chunk.aggregation === 'average')));
+  return selectHealthPriorityTrendSeries({ ...result, observations: [], sampleChunks }, [], unitSettings, window);
+}
+
 /**
  * Builds a source-specific HRV status inspired by Suunto's personal-range UI.
  * The provider's proprietary range calculation is not public, so Health uses a
