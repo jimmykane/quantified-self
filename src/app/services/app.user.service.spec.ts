@@ -10,7 +10,7 @@ import { AppUserInterface } from '../models/app-user.interface';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import { of, firstValueFrom, take, from, filter, Observable, Subject, BehaviorSubject, throwError } from 'rxjs';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPotentialStamina, DataPower, DataSpeed, DataStamina, ServiceNames } from '@sports-alliance/sports-lib';
+import { DataAltitude, DataCadence, DataGradeAdjustedSpeed, DataHeartRate, DataPace, DataPotentialStamina, DataPower, DataSpeed, DataStamina, ServiceNames, User } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
@@ -1796,6 +1796,21 @@ describe('AppUserService', () => {
                 [ServiceNames.WahooAPI]: false,
             });
         });
+
+        it.each(['connected', 'reconnect_required', 'disconnect_pending'] as const)(
+            'watchActivityServiceConnectionState exposes Wahoo only when its state is connected (%s)', async connectionState => {
+                const user = new User('wahoo-route-user');
+                vi.spyOn(service, 'getServiceToken').mockImplementation((_user, serviceName) => of(
+                    serviceName === ServiceNames.WahooAPI ? [{ providerUserId: 'wahoo-user' }] : [],
+                ));
+                vi.spyOn(service, 'getUserMetaForService').mockImplementation((_user, serviceName) => of(
+                    serviceName === ServiceNames.WahooAPI ? { connectionState } : undefined,
+                ));
+
+                const result = await firstValueFrom(service.watchActivityServiceConnectionState(user));
+                expect(result[ServiceNames.WahooAPI]).toBe(connectionState === 'connected');
+            },
+        );
 
         it('watchHasAnyActivityServiceConnection should emit false when activity service token streams are empty', async () => {
             const user = { uid: 'u7' } as any;
