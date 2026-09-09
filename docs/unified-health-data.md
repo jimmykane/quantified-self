@@ -324,7 +324,8 @@ Sports Lib display formatting, chart calculations, and data-loading behavior are
 [`frontend-ui.md`](./frontend-ui.md#shared-compact-rows) for the shared presentation API.
 
 Highlight trend charts retain a visible, Sports Lib-formatted Y-axis and gridlines within their compact height.
-Only the date axis is hidden; ECharts reserves label space and suppresses overlapping Y-axis labels.
+Their X-axis shows recorded-local time for one-day windows and dates for longer windows, using a compact tick target.
+ECharts reserves label space and suppresses overlapping labels on both axes without increasing the chart height.
 
 ### Public Health previews
 

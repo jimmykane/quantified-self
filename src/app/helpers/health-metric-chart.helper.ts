@@ -221,11 +221,11 @@ export function buildHealthMetricEChartsOption(
     },
     xAxis: {
       type: 'time',
-      show: !compact,
+      show: true,
       min: startTimeMs,
       max: endTimeMs,
       boundaryGap: false,
-      splitNumber: style.isCompactLayout ? 3 : 6,
+      splitNumber: compact || style.isCompactLayout ? 3 : 6,
       axisTick: { show: false },
       axisLine: { lineStyle: { color: style.axisColor } },
       splitLine: { show: false },

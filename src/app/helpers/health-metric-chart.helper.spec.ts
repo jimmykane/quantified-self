@@ -129,7 +129,7 @@ describe('Health metric chart helpers', () => {
     expect(option.tooltip.formatter({ value: [0, 52] })).toContain('52.00 ml/kg/min');
   });
 
-  it.each([280, 320, 480])('keeps compact Health value scales visible without expanding the grid (%i px)', width => {
+  it.each([280, 320, 480, 1000])('keeps compact Health axes visible without expanding the grid (%i px)', width => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
     const option = buildHealthMetricEChartsOption(
       model,
@@ -147,7 +147,7 @@ describe('Health metric chart helpers', () => {
     };
 
     expect(option.grid).toMatchObject({ left: 2, right: 2, outerBoundsContain: 'axisLabel' });
-    expect(option.xAxis.show).toBe(false);
+    expect(option.xAxis).toMatchObject({ show: true, splitNumber: 3, axisLabel: { hideOverlap: true } });
     expect(option.yAxis).toMatchObject({ show: true, splitNumber: 3, axisLabel: { hideOverlap: true } });
     expect(option.yAxis.axisLabel.formatter(50)).toBe('50');
     expect(model.displayUnit).toBe('bpm');
@@ -167,6 +167,30 @@ describe('Health metric chart helpers', () => {
       true,
     ) as { series: Array<{ showSymbol: boolean; symbolSize: number }> };
     expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
+  });
+
+  it.each([
+    { days: 1, metricId: HEALTH_METRIC_IDS.HeartRate, unit: 'bpm' },
+    { days: 14, metricId: HEALTH_METRIC_IDS.HeartRateVariability, unit: 'millisecond' },
+  ])('shows recorded-local $days-day time/date labels in Health highlights', ({ days, metricId, unit }) => {
+    const start = Date.parse('2026-09-06T21:00:00.000Z');
+    const end = start + days * DAY_MS - 1;
+    const model = buildHealthChartModels([series({
+      metricId,
+      unit,
+      points: [{ timestampMs: start, calendarDate: '2026-09-07', timezoneOffsetSeconds: 10800, value: 50, qualityCode: null }],
+    })], start, end)[0];
+    const option = buildHealthMetricEChartsOption(model, start, end,
+      buildDashboardEChartsStyleTokens(false, 320), true, null, true) as {
+      xAxis: { axisLabel: { formatter: (value: number) => string } };
+    };
+    const formatter = new Intl.DateTimeFormat(undefined, days === 1
+      ? { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }
+      : { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+    expect(option.xAxis).toMatchObject({ show: true, min: start, max: end });
+    expect(option.xAxis.axisLabel.formatter(start))
+      .toBe(formatter.format(new Date('2026-09-07T00:00:00.000Z')));
   });
 
   it.each([false, true])('plots each HRV range and color at its own date (compact: %s)', compact => {
