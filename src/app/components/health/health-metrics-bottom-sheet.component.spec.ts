@@ -28,6 +28,8 @@ describe('HealthMetricsBottomSheetComponent', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelectorAll('button[mat-list-item]')).toHaveLength(3);
     expect(host.querySelector('[aria-pressed="true"]')?.textContent).toContain('Resting heart rate');
+    expect(host.querySelectorAll('[cdkFocusInitial]')).toHaveLength(1);
+    expect(host.querySelector('[cdkFocusInitial]')).toBe(host.querySelector('[aria-pressed="true"]'));
     expect(host.textContent).toContain('Sleep overview');
     expect(host.textContent).toContain('Cardiovascular');
     expect(host.textContent).not.toContain('Steps');
@@ -44,6 +46,8 @@ describe('HealthMetricsBottomSheetComponent', () => {
     showSleep.set(false);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('button[mat-list-item]')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('[cdkFocusInitial]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('button[aria-label="Close metric picker"]')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('No imported Health metrics yet');
     component.select('sleep'); component.select(HEALTH_METRIC_IDS.BodyWeight);
     expect(dismiss).not.toHaveBeenCalled();

@@ -7,7 +7,7 @@
   <div class="bottom-sheet-content">
     <mat-action-list aria-label="Available Health metrics">
       @if (data.showSleep()) {
-        <button mat-list-item type="button" [activated]="data.selected === 'sleep'" [attr.aria-pressed]="data.selected === 'sleep'" (click)="select('sleep')">
+        <button mat-list-item type="button" [activated]="data.selected === 'sleep'" [attr.cdkFocusInitial]="data.selected === 'sleep' ? '' : null" [attr.aria-pressed]="data.selected === 'sleep'" (click)="select('sleep')">
           <mat-icon matListItemIcon aria-hidden="true">{{ healthMetricIcon('sleep') }}</mat-icon>
           <span matListItemTitle>Sleep overview</span>
           @if (data.selected === 'sleep') { <mat-icon matListItemMeta aria-hidden="true">check</mat-icon> }
@@ -16,7 +16,7 @@
       @for (group of data.groups(); track group.id) {
         <h3 matSubheader>{{ group.label }}</h3>
         @for (metric of group.metrics; track metric.id) {
-          <button mat-list-item type="button" [activated]="data.selected === metric.id" [attr.aria-pressed]="data.selected === metric.id" (click)="select(metric.id)">
+          <button mat-list-item type="button" [activated]="data.selected === metric.id" [attr.cdkFocusInitial]="data.selected === metric.id ? '' : null" [attr.aria-pressed]="data.selected === metric.id" (click)="select(metric.id)">
             <mat-icon matListItemIcon aria-hidden="true">{{ healthMetricIcon(metric.id) }}</mat-icon>
             <span matListItemTitle>{{ metric.label }}</span>
             @if (data.selected === metric.id) { <mat-icon matListItemMeta aria-hidden="true">check</mat-icon> }

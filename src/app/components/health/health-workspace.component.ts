@@ -1171,7 +1171,7 @@ export class HealthWorkspaceComponent {
     const ref = this.bottomSheet.open<HealthMetricsBottomSheetComponent, HealthMetricsData, HealthWorkspaceMetricSelection>(
       HealthMetricsBottomSheetComponent,
       { data: { groups: this.metricCatalogGroups, showSleep: this.showSleepMetric, selected: requested.metric },
-        ariaLabel: 'Choose Health metric', autoFocus: 'button[aria-pressed="true"]', restoreFocus: true },
+        ariaLabel: 'Choose Health metric', autoFocus: 'first-tabbable', restoreFocus: true },
     );
     this.metricPickerRef = ref;
     this.metricPickerOpen.set(true);

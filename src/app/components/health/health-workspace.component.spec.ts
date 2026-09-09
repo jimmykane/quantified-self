@@ -583,7 +583,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(openBottomSheet).toHaveBeenCalledOnce();
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(openBottomSheet).toHaveBeenCalledWith(HealthMetricsBottomSheetComponent, expect.objectContaining({
-      restoreFocus: true, data: expect.objectContaining({ selected: component.selectedMetric() }),
+      autoFocus: 'first-tabbable', restoreFocus: true, data: expect.objectContaining({ selected: component.selectedMetric() }),
     }));
     metricsDismissed.next('sleep');
     fixture.detectChanges(); await fixture.whenStable();
