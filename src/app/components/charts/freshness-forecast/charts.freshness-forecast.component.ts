@@ -183,6 +183,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       ...points.map(point => point.formSameDay),
       ...points.map(point => point.formSameDay ?? point.formPriorDay),
     ]);
+    const includesZero = valueAxis.min <= 0 && valueAxis.max >= 0;
 
     return {
       animation: false,
@@ -192,11 +193,14 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       grid: {
-        left: 6,
-        right: 6,
+        // The forecast plots CTL, ATL, and Form on one shared numeric scale.
+        // Reserve a fixed label gutter so the scale remains legible in compact tiles.
+        left: style.isCompactLayout ? 34 : 38,
+        right: style.isCompactLayout ? 10 : 12,
         top: 8,
         bottom: 22,
-        containLabel: false,
+        outerBoundsMode: 'same',
+        outerBoundsContain: 'axisLabel',
       },
       tooltip: {
         show: true,
@@ -242,7 +246,11 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
           lineStyle: { color: style.gridColor },
         },
         axisLabel: {
-          show: false,
+          show: true,
+          color: style.textColor,
+          fontSize: style.axisFontSize,
+          hideOverlap: true,
+          formatter: (value: number) => this.formatValue(value),
         },
       },
       series: [
@@ -278,6 +286,19 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
             width: 1.2,
             color: '#4caf50',
           },
+          markLine: includesZero
+            ? {
+              symbol: 'none',
+              silent: true,
+              label: { show: false },
+              lineStyle: {
+                width: 1,
+                type: 'dashed',
+                color: style.axisColor,
+              },
+              data: [{ yAxis: 0 }],
+            }
+            : undefined,
         },
         {
           name: 'Form (forecast)',
