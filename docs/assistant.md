@@ -81,6 +81,33 @@ existing location stream when an activity map is relevant.
 External MCP clients remain the path for separately approved saved-route location and geometry access. Saved-route names
 are included in summaries and can themselves contain user- or provider-assigned place information.
 
+## Optional Timeline notes context
+
+**Examples & data access** includes an independent, default-off **Timeline notes** Material toggle. It discloses full
+private titles/details, including notes hidden from charts and potentially sensitive health or personal text. Changing
+either notes or location access replaces the active chat generation while preserving the other choice. **New chat**
+resets both. Missing `timelineNotesEnabled` in older clients, stored chats, responses or pending requests means disabled.
+No contract version or generic permission framework is added.
+
+The server stores the boolean with its active conversation. Enabling requires the existing reset path; a chat request
+cannot grant itself notes access. Requests and replay fingerprints bind enabled access, and `beginTurn` rejects a
+mismatched generation or setting. The runtime uses the server-owned state and rechecks the active generation and notes
+permission before and after each private notes tool call. Completion retains the existing generation/lease fence.
+The frontend validates response agreement, ignores account-switched responses, and never retries an originating
+account's call as a newly signed-in user. Pending recovery preserves the independent access choices.
+
+Only `query_timeline_notes` and `timeline-notes:read` are added when enabled. Existing grants/tools—including the absence
+of all-day Health and route locations—are unchanged. Notes may be consulted for direct questions or relevant Sleep,
+Training and measurement analysis, not automatically for every answer. Text remains untrusted user-reported context,
+not model instructions, diagnoses, causal proof or authorization. The existing metric/readiness/briefing contracts and
+calculations are unchanged; no note chart overlays are added to Assistant visuals.
+
+Deterministic evidence stores compact note titles, categories and actual dates, not full details or raw tool responses.
+Answers can quote relevant details under the same seven-day conversation retention. Logs, analytics and errors must
+not contain private note text. Deployment, registered MCP app rescan/contract promotion, and local plugin sync remain
+separate approved release steps. Future Training plan read/write grants and explicit proposal approval are tracked in
+[#690](https://github.com/jimmykane/quantified-self/issues/690), independently of this notes permission.
+
 ## Deterministic visual answers
 
 An answer may store at most one chart and one map. Gemini normally decides whether a visual would materially clarify
@@ -255,6 +282,7 @@ There is one active document at `users/{uid}/assistantConversations/active`:
 - `createdAt`, `updatedAt`, and `expireAt` timestamps;
 - an opaque conversation generation ID;
 - one `coordinate_free` or `precise_activity` location-access mode for the generation;
+- one independent `timelineNotesEnabled` flag (missing means false);
 - one four-minute pending-turn lease to serialize requests.
 
 Each browser send also carries a client-generated opaque request ID. That ID becomes the stored user-message ID. On
@@ -267,7 +295,7 @@ different text is rejected. Documents from before this field existed derive rece
 in memory and persist them on the next write.
 
 While a send outcome is ambiguous, the page keeps a versioned, account-bound, bounded resumption record in tab-scoped
-session storage: the Firebase UID, question, opaque request ID, IANA timezone, location-access mode, original conversation generation when
+session storage: the Firebase UID, question, opaque request ID, IANA timezone, location-access mode, notes-access flag, original conversation generation when
 present, and submission time. A record is discarded without rendering or resubmission if the signed-in UID changes. This
 lets a refreshed page render the pending question immediately. If the refresh cancelled the HTTP request before the
 server registered its turn, the page resubmits the same question with the same request ID; server idempotency prevents a

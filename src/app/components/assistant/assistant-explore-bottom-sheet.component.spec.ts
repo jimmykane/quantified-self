@@ -77,6 +77,17 @@ describe('AssistantExploreBottomSheetComponent', () => {
     });
   });
 
+  it('starts with notes off, describes the full-text disclosure and ignores unchanged choices', () => {
+    expect(component.data.timelineNotesEnabled ?? false).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('full private note titles and details');
+    expect(fixture.nativeElement.textContent).toContain('hidden from charts');
+    expect(fixture.nativeElement.textContent).toContain('New chat turns both off');
+    component.setTimelineNotes(false);
+    expect(bottomSheetRef.dismiss).not.toHaveBeenCalled();
+    component.setTimelineNotes(true);
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledWith({ kind: 'timeline_notes', enabled: true });
+  });
+
   it('closes without a prompt when dismissed explicitly', () => {
     component.close();
 

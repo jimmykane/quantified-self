@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "86c4d38c124aab079a5c2ab6f1b505ac114cf7fb3855c10ba4f84c906502f710",
+  "candidateSha256": "540d60767548ac9cdd3084ebb66b6cae350289ae257aa031c9f4f1104ee2ae61",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add opt-in read-only Health discovery and bounded source-separated trends with fixed provider semantics and Garmin stress availability states, preserving the pending daily report, safe activity/nearby-search replacements, multi-metric queries, Training discovery, activity overviews, all-history ISO-time rankings, jump-superlative/recent-jump routing, sleep-vital routing, and RS256 private_key_jwt authentication alongside public PKCE clients.",
+  "summary": "Add opt-in full-text Timeline notes reads and consent-aware routing, preserving pending Health discovery/trends with provider semantics and Garmin stress availability, daily reports, safe activity/nearby-search replacements, multi-metric queries, Training discovery, activity overviews, all-history ISO-time rankings, jump-superlative/recent-jump and sleep-vital routing, and RS256 private_key_jwt alongside public PKCE.",
   "rescanRequired": true
 }

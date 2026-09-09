@@ -1113,7 +1113,7 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
 
     expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent, {
-      data: { locationAccess: 'coordinate_free' },
+      data: { locationAccess: 'coordinate_free', timelineNotesEnabled: false },
     });
     expect(component.promptControl.value).toBe(routeExample.prompt);
     openSpy.mockRestore();
@@ -1135,6 +1135,7 @@ describe('AssistantPageComponent', () => {
     await vi.waitFor(() => {
       expect(assistantService.resetConversation).toHaveBeenCalledWith(
         'precise_activity',
+        false,
       );
     });
     fixture.detectChanges();
@@ -1257,12 +1258,137 @@ describe('AssistantPageComponent', () => {
   it('starts a new server-owned conversation', async () => {
     component.conversation.set(chatResponse.conversation);
     component.locationAccess.set('precise_activity');
+    component.timelineNotesEnabled.set(true);
 
     await component.resetConversation();
 
-    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free');
+    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free', false);
     expect(component.messages()).toEqual([]);
     expect(component.locationAccess()).toBe('coordinate_free');
+    expect(component.timelineNotesEnabled()).toBe(false);
+  });
+
+  it('changes notes in a fresh chat without changing locations, preserves drafts and owns haptics once', async () => {
+    component.locationAccess.set('precise_activity');
+    component.promptControl.setValue('Compare sleep and my notes.');
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({
+      afterDismissed: () => of({ kind: 'timeline_notes', enabled: true }),
+    } as never);
+    component.openExploreSheet();
+    await vi.waitFor(() => expect(component.timelineNotesEnabled()).toBe(true));
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('precise_activity', true);
+    expect(component.locationAccess()).toBe('precise_activity');
+    expect(component.promptControl.value).toBe('Compare sleep and my notes.');
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    expect(hapticsService.success).toHaveBeenCalledTimes(1);
+    component.openExploreSheet();
+    expect(assistantService.resetConversation).toHaveBeenCalledTimes(1);
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1);
+    open.mockReturnValue({ afterDismissed: () => of({ kind: 'location_access', locationAccess: 'coordinate_free' }) } as never);
+    component.openExploreSheet();
+    await vi.waitFor(() => expect(component.locationAccess()).toBe('coordinate_free'));
+    expect(component.timelineNotesEnabled()).toBe(true);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true);
+    open.mockRestore();
+  });
+
+  it('does not change notes consent after a failed reset', async () => {
+    assistantService.resetConversation.mockRejectedValueOnce(new Error('Unavailable'));
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'timeline_notes', enabled: true }) } as never);
+    component.promptControl.setValue('Keep my draft');
+    component.openExploreSheet();
+    await vi.waitFor(() => expect(component.errorMessage()).toBe('Friendly error'));
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.promptControl.value).toBe('Keep my draft');
+    expect(hapticsService.error).toHaveBeenCalledTimes(1);
+    expect(hapticsService.success).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('does not resume a saved notes-enabled request in a notes-disabled chat', async () => {
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: chatResponse.conversation,
+      pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: false });
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify({ storageVersion: 2,
+      uid: 'assistant-user', requestId: 'notes-request-00001', message: 'Read my private notes', timeZone: 'UTC',
+      locationAccess: 'coordinate_free', timelineNotesEnabled: true, submittedAtMs: Date.now(),
+      conversationId: chatResponse.conversation.conversationId }));
+    await component.ngOnInit();
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(component.promptControl.value).toBe('Read my private notes');
+  });
+
+  it('preserves a notes-enabled retry until the server confirms its permission and generation', async () => {
+    const remembered = { storageVersion: 2, uid: 'assistant-user', requestId: 'notes-retry-00001',
+      message: 'Read my private notes', timeZone: 'UTC', locationAccess: 'coordinate_free',
+      timelineNotesEnabled: true, submittedAtMs: Date.now(), conversationId: chatResponse.conversation.conversationId };
+    sessionStorage.setItem('quantified-self.assistant.pending-request-id', JSON.stringify(remembered));
+    assistantService.getConversationState.mockRejectedValueOnce(new Error('offline'));
+    await component.ngOnInit();
+    expect(component.conversationLoadError()).toBe('Friendly error');
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(assistantService.sendMessage).not.toHaveBeenCalled();
+    expect(JSON.parse(sessionStorage.getItem('quantified-self.assistant.pending-request-id')!)).toEqual(remembered);
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: chatResponse.conversation,
+      pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: true });
+    await component.retryConversationLoad();
+    await fixture.whenStable();
+    expect(assistantService.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: remembered.requestId, timelineNotesEnabled: true, conversationId: remembered.conversationId,
+    }));
+  });
+
+  it.each(['success', 'failure'])('discards an old account send %s without reconciling its question into a new account', async outcome => {
+    component.timelineNotesEnabled.set(true);
+    component.promptControl.setValue('Private note question');
+    let finish!: () => void;
+    assistantService.sendMessage.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      finish = () => outcome === 'success' ? resolve(chatResponse) : reject(new Error('account changed'));
+    }));
+    const sending = component.sendMessage();
+    const readsBefore = assistantService.getConversationState.mock.calls.length;
+    auth.currentUser = { uid: 'another-account' };
+    finish();
+    await sending;
+    expect(assistantService.getConversationState).toHaveBeenCalledTimes(readsBefore);
+    expect(component.messages()).toEqual([]);
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.promptControl.value).toBe('');
+    expect(component.sending()).toBe(false);
+  });
+
+  it('does not apply a notes-access reset from a previous account', async () => {
+    await component.ngOnInit();
+    let finish!: (value: typeof chatResponse.conversation) => void;
+    assistantService.resetConversation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'timeline_notes', enabled: true }) } as never);
+    component.openExploreSheet();
+    auth.currentUser = { uid: 'another-account' };
+    finish(chatResponse.conversation);
+    await fixture.whenStable();
+    expect(component.conversation()).toBeNull();
+    expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.resetting()).toBe(false);
+    open.mockRestore();
+  });
+
+  it('does not clear a newly loaded account when an old send completes', async () => {
+    component.promptControl.setValue('Old private question');
+    let finish!: (value: AssistantChatResponse) => void;
+    assistantService.sendMessage.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const sending = component.sendMessage();
+    auth.currentUser = { uid: 'another-account' };
+    const replacement = { ...chatResponse.conversation, conversationId: 'new-account-conversation', messages: [] };
+    assistantService.getConversationState.mockResolvedValueOnce({ conversation: replacement,
+      pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: true });
+    await component.ngOnInit();
+    finish(chatResponse);
+    await sending;
+    expect(component.conversation()).toEqual(replacement);
+    expect(component.timelineNotesEnabled()).toBe(true);
   });
 
   it('does not send after the current Assistant allowance is exhausted', async () => {

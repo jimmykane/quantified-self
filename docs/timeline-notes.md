@@ -31,8 +31,23 @@ following revision. Deletion writes a content-free `{deleted: true}` receipt at
 Browser reads are owner-only and bounded to 65 documents (64 plus lookahead). Browser writes, note descendants and
 receipt reads/writes are denied. Notes are permanent leaves. The existing Delete User Data extension's recursive
 `users/{UID}` cleanup removes notes and receipts. Provider disconnection retains them. No note text enters logs,
-analytics events, public projections, provider syncing, MCP, or the Assistant. Details use Angular text interpolation;
+analytics events, public projections, or provider syncing. Details use Angular text interpolation;
 chart tooltips HTML-escape titles. This version does not change a measurement or Training/readiness calculation.
+
+## Explicit read-only AI access
+
+The existing MCP endpoint exposes full titles/details, category, fixed dates and captured timezone through
+`query_timeline_notes` only with the independent `timeline-notes:read` grant. Consent starts unchecked and existing
+connections must reauthorize. Chart-hidden notes are included; color/visibility, IDs, revisions, audit timestamps and
+deletion receipts are not returned. External clients receive full private text and may retain received copies after
+revocation. The [MCP guide](mcp-server.md#timeline-notes) defines overlap, frozen ongoing cutoffs, ordering, bounds and
+encrypted continuation. No additional notes storage, index, migration or Cloud Function is needed.
+
+The built-in [Assistant](assistant.md#optional-timeline-notes-context) uses the same tool through a separate default-off,
+server-owned per-chat choice. Changing it starts a fresh chat and preserves the independent location choice; New chat
+turns both off. Relevant answers may quote notes under the existing conversation retention policy. Text is context,
+not instructions, a verified diagnosis, causal proof or authorization for writes. Notes do not alter calculations or
+add Assistant chart overlays. Provider disconnect retains them and account cleanup still removes notes and receipts.
 
 ## Loading and UI
 

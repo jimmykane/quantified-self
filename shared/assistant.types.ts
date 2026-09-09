@@ -156,6 +156,8 @@ export interface AssistantConversation {
 }
 
 export interface AssistantChatRequest {
+  /** Missing on older clients means disabled. Enabling requires a fresh server-owned chat. */
+  timelineNotesEnabled?: boolean;
   requestId: string;
   message: string;
   timeZone: string;
@@ -164,6 +166,7 @@ export interface AssistantChatRequest {
 }
 
 export interface AssistantChatResponse {
+  timelineNotesEnabled?: boolean;
   conversation: AssistantConversation;
   quota: AssistantQuotaStatus;
   pendingRequestId: string | null;
@@ -172,15 +175,18 @@ export interface AssistantChatResponse {
 export type GetAssistantConversationRequest = Record<string, never>;
 
 export interface GetAssistantConversationResponse {
+  timelineNotesEnabled?: boolean;
   conversation: AssistantConversation | null;
   pendingRequestId: string | null;
   locationAccess: AssistantLocationAccess;
 }
 
 export interface ResetAssistantConversationRequest {
+  timelineNotesEnabled?: boolean;
   locationAccess: AssistantLocationAccess;
 }
 
 export interface ResetAssistantConversationResponse {
+  timelineNotesEnabled?: boolean;
   conversation: AssistantConversation;
 }

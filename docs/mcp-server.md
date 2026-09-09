@@ -7,6 +7,9 @@ authenticated user's persisted numeric activity metrics, explicitly approved rec
 snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
 without granting browser or Firestore access.
 
+Separately authorized Timeline notes can also supply full private user-reported context. They are never inferred from
+metric or Sleep access and never become calculation inputs or write authority.
+
 The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
 stateless Streamable HTTP transport with bounded POST/JSON responses; standalone GET/SSE and DELETE sessions are not
 supported. The HTTP, OAuth, projection, and metric-catalog implementation lives under `functions/src/mcp/`.
@@ -269,6 +272,7 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `health:read` for source-separated recorded Health summaries and bounded normalized sample trends; body composition
   additionally requires `measurements:read`, while Weight and normalized Sleep keep their existing contracts;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
+- `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
 - `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
   selected metrics, and on-demand chart series;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
@@ -490,6 +494,7 @@ The analytics and map entries follow the
 | `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
+| `query_timeline_notes` | `timeline-notes:read` | Full private user-reported context overlapping inclusive calendar dates, including chart-hidden notes; bounded full-text continuation |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
@@ -553,7 +558,7 @@ response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVI
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 34 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls all 35 tools, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -1250,6 +1255,44 @@ Existing clients must reconnect to grant Health access; old tokens cannot acquir
 The pending record retains earlier unpromoted changes, and this implementation never edits the registered baseline.
 
 ## Bounds and operational controls
+
+### Timeline notes
+
+`timeline-notes.service.ts` reads the owner's existing `timelineNotes` collection only after checking its independent
+scope. The external consent checkbox starts unchecked, including for a notes-only authorization request. Existing grants
+cannot gain this scope through refresh; the owner must reauthorize. External clients receive full private text, which
+may contain sensitive health or personal information. Revocation cannot erase copies already received.
+
+`query_timeline_notes({startDate,endDate,limit?,cursor?})` accepts inclusive fixed calendar labels spanning at most 366
+days, defaults to 32 notes, and permits 1–64. It reuses the collection-scoped `endDate ASC, startDate ASC, __name__ ASC`
+index: closed periods first (`endDate >= startDate` of the window), then ongoing periods (`endDate == null`), both with
+`startDate <= endDate` of the window. This is index order, not newest-first. Periods may begin before the requested
+window; bounded future notes are included. An ongoing period overlaps only through today in its captured timezone.
+First-page evaluation time is frozen in the cursor, so crossing midnight or changing the client's timezone while paging
+does not move the ongoing cutoff. It is not a Firestore snapshot: concurrent note edits can change subsequent pages.
+
+Output includes only category, title, nullable full details, actual start/end dates, captured `timeZone`, and
+`effectiveEndDate`. IDs, audit fields, revision, deletion receipts, visibility and color are excluded. Hidden notes are
+included because chart visibility is presentation, not authorization. Title/details remain unindexed.
+
+Each call reads 64-record pages, with caps of 512 scanned records, 2 MiB selected input and 128 KiB serialized output.
+`recordsScanned` counts fetched records (including fetched lookahead), `skippedRecords` counts consumed invalid or
+non-overlapping records, and `scanComplete`, `limitsReached`, and `nextCursor` distinguish completion from bounds.
+Output limits stop between notes without truncating details. The encrypted, authenticated cursor contains the last
+consumed index position, phase, window and evaluation time, is bound to owner and connection, and is at most 16 KiB.
+The next unreturned note is not consumed. Repeat the date window with the cursor; limit may change. Account deletion is
+checked before reading and before releasing a result. Failures and logs never include note content or identity.
+
+The built-in Assistant grants this same tool only to a notes-enabled server-owned conversation, with generation checks
+before and after private reads. Notes are consulted for relevant questions, not every request. Their text is untrusted
+user-reported context, never instructions, verified diagnoses, causal proof or permission to act. Metric, Sleep,
+readiness and briefing outputs remain unchanged. See [Assistant](assistant.md) and [Timeline notes](timeline-notes.md).
+
+No new Function, storage, index, migration or write tool is introduced. Release the changed existing MCP/Assistant
+backend paths and consent UI before enabling access. Then separately approve the registered-app rescan, verify the live
+digest before contract promotion, and sync the changed local plugin. Preserve every earlier pending contract change.
+
+### Other domains
 
 - Event and sleep date ranges are at most 366 days.
 - Body-measurement ranges are at most 366 days and return only day/week/month buckets. They share the event query's

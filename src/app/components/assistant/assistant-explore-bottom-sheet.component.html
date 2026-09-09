@@ -51,6 +51,16 @@
       </mat-slide-toggle>
     </section>
 
+    <section class="assistant-notes-access" aria-labelledby="assistant-timeline-notes-access">
+      <h3 id="assistant-timeline-notes-access">Timeline notes</h3>
+      <p id="assistant-timeline-notes-disclosure">Allow Gemini to read full private note titles and details when relevant, including notes hidden from charts. Notes may contain sensitive health or personal information.</p>
+      <p>Off by default. Changing access starts a new chat and keeps your location choice. New chat turns both off. Answers may quote relevant details in your saved conversation.</p>
+      <mat-slide-toggle [checked]="data.timelineNotesEnabled === true"
+        aria-label="Timeline notes access — changing this starts a new chat"
+        aria-describedby="assistant-timeline-notes-disclosure"
+        (change)="setTimelineNotes($event.checked)">Timeline notes</mat-slide-toggle>
+    </section>
+
     <section class="assistant-mcp-link" aria-labelledby="assistant-mcp-link">
       <h3 id="assistant-mcp-link">Use your preferred AI client</h3>
       <p>Connect ChatGPT or another compatible client through MCP without using your Assistant allowance.</p>

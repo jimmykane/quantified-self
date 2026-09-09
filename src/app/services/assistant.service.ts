@@ -68,6 +68,9 @@ export class AssistantService {
           validation.data,
         );
       }
+      if ((validation.data.timelineNotesEnabled === true) !== (request.timelineNotesEnabled === true)) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting changed.');
+      }
       return {
         ...validation.data,
         conversation: normalizeAssistantConversationEvidence(validation.data.conversation),
@@ -96,6 +99,10 @@ export class AssistantService {
         response.data as Partial<GetAssistantConversationResponse>
       ).locationAccess;
       const locationAccess = rawLocationAccess ?? 'coordinate_free';
+      const timelineNotesEnabled = response.data.timelineNotesEnabled ?? false;
+      if (typeof timelineNotesEnabled !== 'boolean') {
+        throw new AssistantError('INTERNAL', 'The saved Assistant data-access setting is invalid.');
+      }
       if (pendingRequestId !== null
         && !isValidAssistantRequestId(pendingRequestId)) {
         throw new AssistantError(
@@ -112,7 +119,8 @@ export class AssistantService {
         );
       }
       if (response.data.conversation === null) {
-        return { conversation: null, pendingRequestId, locationAccess };
+        return { conversation: null, pendingRequestId, locationAccess,
+          ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}) };
       }
       const validation = validateAssistantConversation(response.data.conversation);
       if (validation.ok === false) {
@@ -126,6 +134,7 @@ export class AssistantService {
         conversation: normalizeAssistantConversationEvidence(validation.data),
         pendingRequestId,
         locationAccess,
+        ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
       };
     } catch (error) {
       if (error instanceof AssistantError) {
@@ -137,6 +146,7 @@ export class AssistantService {
 
   async resetConversation(
     locationAccess: AssistantLocationAccess = 'coordinate_free',
+    timelineNotesEnabled = false,
   ): Promise<AssistantConversation> {
     try {
       const response = await this.callWithAuthenticationRetry<
@@ -144,8 +154,11 @@ export class AssistantService {
         ResetAssistantConversationResponse
       >(
         'resetAssistantConversation',
-        { locationAccess },
+        { locationAccess, ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}) },
       );
+      if ((response.data.timelineNotesEnabled ?? false) !== timelineNotesEnabled) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting was not confirmed.');
+      }
       const validation = validateAssistantConversation(response.data.conversation);
       if (validation.ok === false) {
         throw new AssistantError(
@@ -224,9 +237,20 @@ export class AssistantService {
     functionKey: FunctionName,
     data?: RequestData,
   ): Promise<{ data: ResponseData }> {
-    const invoke = () => data === undefined
-      ? this.functionsService.call<RequestData, ResponseData>(functionKey)
-      : this.functionsService.call<RequestData, ResponseData>(functionKey, data);
+    const originatingUid = this.auth.currentUser?.uid;
+    const assertAccount = () => {
+      if (!originatingUid || this.auth.currentUser?.uid !== originatingUid) {
+        throw new AssistantError('UNAUTHENTICATED', 'The signed-in account changed.');
+      }
+    };
+    const invoke = async () => {
+      assertAccount();
+      const result = data === undefined
+        ? await this.functionsService.call<RequestData, ResponseData>(functionKey)
+        : await this.functionsService.call<RequestData, ResponseData>(functionKey, data);
+      assertAccount();
+      return result;
+    };
 
     try {
       return await invoke();
@@ -236,7 +260,7 @@ export class AssistantService {
       }
 
       const currentUser = this.auth.currentUser;
-      if (!currentUser) {
+      if (!currentUser || currentUser.uid !== originatingUid) {
         throw error;
       }
 

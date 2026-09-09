@@ -12,6 +12,7 @@ import { LoggerService } from '../../services/logger.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 
 type McpScope =
+  | 'timeline-notes:read'
   | 'health:read'
   | 'metrics:read'
   | 'measurements:read'
@@ -35,6 +36,10 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   title: string;
   description: string;
 }> = {
+  'timeline-notes:read': {
+    title: 'Timeline notes',
+    description: 'Read full private note titles and details, categories, dates and captured time zones, including notes hidden from charts. This text may contain sensitive health or personal information. Off by default; existing connections must reauthorize. Revoking access cannot erase copies already received by the client. No notes or Training plans can be changed.',
+  },
   'health:read': {
     title: 'Health metrics',
     description: 'Read recorded all-day heart rate, HRV, stress, resources, movement, energy, blood pressure and other Health metrics. Includes provider names, local account numbers, calendar dates and bounded sample trends with exact UTC times. Garmin Body Battery keeps its labelled Garmin points scale. Body composition also needs Body measurements permission and excludes source identity and exact times. Raw provider payloads, device details, account IDs and Sleep sessions are excluded. No measurements can be added, edited or deleted.',
@@ -134,7 +139,7 @@ export class McpAuthorizationComponent implements OnInit {
         McpAuthorizationRequest
       >('getMcpAuthorizationRequest', { requestId });
       this.request.set(result.data);
-      this.selectedScopes.set([...result.data.scopes]);
+      this.selectedScopes.set(result.data.scopes.filter(scope => scope !== 'timeline-notes:read'));
     } catch (error) {
       this.logger.error('[McpAuthorizationComponent] Failed to load authorization request', error);
       this.error.set('This authorization request is invalid, expired, or no longer available.');

@@ -74,6 +74,8 @@ export interface AssistantCallableDependencies {
     prompt: string;
     timeZone: string;
     locationAccess: AssistantLocationAccess;
+    timelineNotesEnabled?: boolean;
+    assertTimelineNotesAccess?: () => Promise<void>;
     history: AssistantMessage[];
     onBillableAttempt: () => Promise<void>;
   }) => Promise<AssistantRuntimeResult>;
@@ -207,6 +209,12 @@ function parseAssistantLocationAccess(value: unknown): AssistantLocationAccess {
   return value;
 }
 
+function parseTimelineNotesEnabled(value: unknown): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== 'boolean') throw new HttpsError('invalid-argument', 'timelineNotesEnabled must be a boolean.');
+  return value;
+}
+
 function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
   const data = asRecord(value);
   if (!isValidAssistantRequestId(data.requestId)) {
@@ -258,6 +266,7 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
     message,
     timeZone,
     locationAccess: parseAssistantLocationAccess(data.locationAccess),
+    timelineNotesEnabled: parseTimelineNotesEnabled(data.timelineNotesEnabled),
     ...(conversationId
       ? { conversationId }
       : {}),
@@ -302,6 +311,7 @@ function assertRequestFingerprintMatchesInput(
     input.requestId,
     input.message,
     input.locationAccess,
+    input.timelineNotesEnabled,
   )) {
     throw new HttpsError(
       'invalid-argument',
@@ -382,6 +392,7 @@ async function buildExistingRequestResponse(
     : await dependencies.getQuotaStatus(uid);
   return {
     conversation: requestState.conversation,
+    ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
     quota,
     pendingRequestId: requestState.kind === 'pending'
       ? input.requestId
@@ -425,6 +436,7 @@ export async function runAssistantChat(
       input.requestId,
       input.message,
       input.locationAccess,
+      input.timelineNotesEnabled,
     );
     const existingRequest = await dependencies.conversationStore.findRequestState(
       uid,
@@ -473,6 +485,7 @@ export async function runAssistantChat(
       input.requestId,
       requestFingerprint,
       input.locationAccess,
+      input.timelineNotesEnabled,
     );
     if (turnStart.kind === 'replayed') {
       assertRequestFingerprintMatchesInput(turnStart, input);
@@ -480,6 +493,7 @@ export async function runAssistantChat(
       reservation = null;
       return {
         conversation: turnStart.conversation,
+        ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         quota,
         pendingRequestId: null,
       };
@@ -490,17 +504,30 @@ export async function runAssistantChat(
       reservation = null;
       return {
         conversation: turnStart.conversation,
+        ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         quota,
         pendingRequestId: input.requestId,
       };
     }
     begunTurn = turnStart;
+    const notesConversationId = begunTurn.conversationId;
+    const timelineNotesEnabled = begunTurn.timelineNotesEnabled === true;
+    if (timelineNotesEnabled !== (input.timelineNotesEnabled === true)) {
+      throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    }
     const result = await answerWithGroundedRetry(dependencies.answer, {
       uid,
       appBaseUrl: resolveAssistantAppBaseUrl(context),
       prompt: input.message,
       timeZone: input.timeZone,
       locationAccess: input.locationAccess,
+      timelineNotesEnabled,
+      ...(timelineNotesEnabled ? { assertTimelineNotesAccess: async () => {
+        const current = await dependencies.conversationStore.getActiveConversationState(uid);
+        if (current.conversation?.conversationId !== notesConversationId || current.timelineNotesEnabled !== true) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+        }
+      } } : {}),
       history: begunTurn.history,
       onBillableAttempt: finalizeQuotaForBillableAttempt,
     }, () => finalizeQuotaPromise === null || finalizedQuota !== null);
@@ -536,6 +563,7 @@ export async function runAssistantChat(
     return {
       conversation,
       quota: finalizedQuota,
+      ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
       pendingRequestId: null,
     };
   } catch (error) {
@@ -601,9 +629,11 @@ export async function runResetAssistantConversation(
   const uid = requireAuthenticatedUid(context);
   const data = asRecord(value) as Partial<ResetAssistantConversationRequest>;
   const locationAccess = parseAssistantLocationAccess(data.locationAccess);
+  const timelineNotesEnabled = parseTimelineNotesEnabled(data.timelineNotesEnabled);
   try {
     return {
-      conversation: await conversationStore.resetConversation(uid, locationAccess),
+      conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled),
+      ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
     };
   } catch (error) {
     throw mapAssistantError(error);

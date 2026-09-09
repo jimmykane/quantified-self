@@ -333,7 +333,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/activity-calendar`)).toBe('2026-08-04');
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/ai-insights`)).toBe('2026-09-02');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-09-08');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/features/mcp-server`)).toBe('2026-09-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations`)).toBe('2026-09-02');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/garmin`)).toBe('2026-08-03');
     expect(sitemapLastmodForUrl(`${siteOrigin}/integrations/suunto`)).toBe('2026-08-03');
@@ -352,9 +352,9 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapLastmodForUrl(`${siteOrigin}/features/fit-gpx-tcx-file-analyzer`)).toBe('2026-09-02');
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/workout-file-comparison`);
     expect(sitemapXml).not.toContain(`${siteOrigin}/features/sports-watch-benchmark`);
-    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-08-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-08-26');
-    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-08-26');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/help`)).toBe('2026-09-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/policies`)).toBe('2026-09-09');
+    expect(sitemapLastmodForUrl(`${siteOrigin}/privacy`)).toBe('2026-09-09');
     expect(sitemapLastmodForUrl(`${siteOrigin}/terms`)).toBe('2026-08-05');
   });
 

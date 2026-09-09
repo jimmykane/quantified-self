@@ -22,6 +22,16 @@ describe('Policy consent fields', () => {
 });
 
 describe('Built-in Assistant policy', () => {
+  it('discloses separate optional notes consent, full text and retained client copies', () => {
+    const assistant = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_AI_AND_PROCESSORS_FRAGMENT)?.content.join(' ') ?? '';
+    const external = CONNECTED_SERVICES_POLICY_SECTION.topics
+      .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
+    expect(assistant).toContain('Timeline notes');
+    expect(assistant).toContain('full private');
+    expect(external).toContain('Timeline notes permission');
+    expect(external).toContain('copies');
+  });
   it('documents the bounded MCP-backed Gemini context, exclusions, and retention', () => {
     const topic = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(candidate => candidate.id === POLICIES_AI_AND_PROCESSORS_FRAGMENT);

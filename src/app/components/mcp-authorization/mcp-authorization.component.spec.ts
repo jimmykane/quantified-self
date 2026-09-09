@@ -120,6 +120,29 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('finish setup in ChatGPT on the web from a desktop');
   });
 
+  it('requires an explicit unchecked-by-default selection even for a notes-only request', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'notes-request', scopes: ['timeline-notes:read'],
+      clientName: 'Notes client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual([]);
+    expect(component.scopeOptions()[0]).toMatchObject({ title: 'Timeline notes', selected: false, disabled: false });
+    expect(fixture.nativeElement.textContent).toContain('sensitive health or personal information');
+    expect(fixture.nativeElement.textContent).toContain('cannot erase copies');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    await component.approve();
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    component.toggleScope('timeline-notes:read', { checked: true } as never);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'notes-request', approved: true, grantedScopes: ['timeline-notes:read'],
+    });
+  });
+
   it('stacks the full-width authorization actions with the primary action first', async () => {
     const fixture = TestBed.createComponent(McpAuthorizationComponent);
     fixture.detectChanges();
