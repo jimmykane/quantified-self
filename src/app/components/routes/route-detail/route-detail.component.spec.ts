@@ -1,14 +1,19 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { By } from '@angular/platform-browser';
+import { MatMenuTrigger } from '@angular/material/menu';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { DataDistance, RouteFileInterface, RouteInterface, User, AppThemes, ServiceNames } from '@sports-alliance/sports-lib';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FirestoreRouteJSON } from '@shared/app-route.interface';
 import { RouteResolverData } from '../../../resolvers/route.resolver';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
@@ -31,6 +36,9 @@ vi.mock('@shared/coros-rollout', () => ({
 
 describe('RouteDetailComponent', () => {
   let component: RouteDetailComponent;
+  let fixture: ComponentFixture<RouteDetailComponent>;
+  let resolvedRouteData$: BehaviorSubject<{ route: RouteResolverData }>;
+  let hapticsMock: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let routeServiceMock: any;
   let routeReprocessServiceMock: any;
   let processingServiceMock: any;
@@ -74,6 +82,7 @@ describe('RouteDetailComponent', () => {
   };
 
   beforeEach(async () => {
+    hapticsMock = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     garminRouteSendContext$ = new BehaviorSubject({
       connected: false,
       reconnectRequired: false,
@@ -112,6 +121,7 @@ describe('RouteDetailComponent', () => {
       sourceFile: routeDocument.originalFiles![0],
       user: new User('user-1'),
     };
+    resolvedRouteData$ = new BehaviorSubject({ route: resolvedData });
     routeServiceMock = {
       getOriginalRouteFiles: vi.fn((route: FirestoreRouteJSON) => route.originalFiles || []),
       downloadFile: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
@@ -177,7 +187,7 @@ describe('RouteDetailComponent', () => {
       }),
     };
     userServiceMock = {
-      hasProAccessSignal: vi.fn().mockReturnValue(true),
+      hasProAccessSignal: signal(true),
       watchSuuntoRouteCatchUpPromptContext: vi.fn().mockReturnValue(of({
         connectionView: {
           connected: true,
@@ -217,9 +227,10 @@ describe('RouteDetailComponent', () => {
     };
 
     TestBed.configureTestingModule({
-      imports: [RouteDetailComponent],
+      imports: [RouteDetailComponent, NoopAnimationsModule],
       providers: [
-        { provide: ActivatedRoute, useValue: { data: of({ route: resolvedData }) } },
+        { provide: ActivatedRoute, useValue: { data: resolvedRouteData$ } },
+        { provide: AppHapticsService, useValue: hapticsMock },
         { provide: AppRouteService, useValue: routeServiceMock },
         { provide: AppRouteReprocessService, useValue: routeReprocessServiceMock },
         { provide: AppProcessingService, useValue: processingServiceMock },
@@ -236,11 +247,14 @@ describe('RouteDetailComponent', () => {
         { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
       ],
     });
-    TestBed.overrideComponent(RouteDetailComponent, {
-      set: { template: '' },
-    });
+    const template = readFileSync(resolve(process.cwd(), 'src/app/components/routes/route-detail/route-detail.component.html'), 'utf8');
+    // Render the real actions and status without unrelated map/chart hydration.
+    const actions = template.slice(template.indexOf('<div summary-actions'), template.indexOf('</app-summary-primary-info>'));
+    const status = template.slice(template.indexOf('<div class="route-send-status"'), template.indexOf('</section>', template.indexOf('<div class="route-send-status"')));
+    TestBed.overrideComponent(RouteDetailComponent, { set: { template: actions + status } });
     await TestBed.compileComponents();
-    component = TestBed.createComponent(RouteDetailComponent).componentInstance;
+    fixture = TestBed.createComponent(RouteDetailComponent);
+    component = fixture.componentInstance;
     (component as any).dialog = dialogMock;
     (component as any).snackBar = snackBarMock;
     (component as any).router = routerMock;
@@ -510,6 +524,221 @@ describe('RouteDetailComponent', () => {
     expect(component.exportingGPX()).toBe(false);
   });
 
+  function connectAllDestinations(): void {
+    activityServiceConnectionState$.next({
+      [ServiceNames.SuuntoApp]: true,
+      [ServiceNames.GarminAPI]: true,
+      [ServiceNames.COROSAPI]: true,
+      [ServiceNames.WahooAPI]: true,
+    });
+    garminRouteSendContext$.next({
+      connected: true,
+      reconnectRequired: false,
+      missingPermissions: [],
+      providerUserId: 'garmin-user-1',
+      providerStates: [{ providerUserId: 'garmin-user-1', permissionsLoaded: true, missingPermissions: [] }],
+      serviceMeta: null,
+    });
+  }
+
+  function successfulSend(destinationServiceName: ServiceNames) {
+    return {
+      destinationServiceName, status: 'success', routeCount: 1, successCount: 1,
+      failureCount: 0, skippedCount: 0,
+      results: [{ routeId: 'route-1', destinationServiceName, status: 'success' }],
+    };
+  }
+
+  it('lists eligible providers in the same order and stays silent during initialization', () => {
+    expect(component.routeSendActions().map(action => action.label)).toEqual(['Suunto']);
+    connectAllDestinations();
+    expect(component.routeSendActions().map(action => action.label)).toEqual(['Suunto', 'COROS', 'Garmin', 'Wahoo']);
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    expect(hapticsMock.success).not.toHaveBeenCalled();
+    expect(hapticsMock.error).not.toHaveBeenCalled();
+  });
+
+  it.each(['disconnected', 'non-pro', 'non-owner', 'no-originals'])(
+    'hides and rejects Wahoo sends for %s routes/accounts', async reason => {
+      connectAllDestinations();
+      if (reason === 'disconnected') {
+        // The shared watcher returns false for reconnect-required and pending disconnects too.
+        activityServiceConnectionState$.next({ [ServiceNames.WahooAPI]: false });
+      } else if (reason === 'non-pro') {
+        userServiceMock.hasProAccessSignal.set(false);
+      } else if (reason === 'non-owner') {
+        component.user.set(new User('another-user'));
+      } else {
+        component.routeDocument.set({ ...routeDocument, originalFiles: [] });
+      }
+      expect(component.routeSendActions().some(action => action.serviceName === ServiceNames.WahooAPI)).toBe(false);
+      await component.sendRouteToService(ServiceNames.WahooAPI);
+      expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
+      expect(hapticsMock.selection).not.toHaveBeenCalled();
+    },
+  );
+
+  it('hides all provider actions when entitlement is lost', async () => {
+    connectAllDestinations();
+    userServiceMock.hasProAccessSignal.set(false);
+    expect(component.routeSendActions()).toEqual([]);
+    expect(component.hasSendableRouteDestination()).toBe(false);
+    fixture.detectChanges();
+    fixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger).openMenu();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.querySelector('[role="menu"]')?.textContent).not.toContain('Send to');
+  });
+
+  it.each([ServiceNames.SuuntoApp, ServiceNames.COROSAPI, ServiceNames.GarminAPI, ServiceNames.WahooAPI])(
+    'locks %s delivery, announces progress and reports completion through the shared interaction', async destination => {
+      connectAllDestinations();
+      let finish!: (value: ReturnType<typeof successfulSend>) => void;
+      routeSendServiceMock.sendRoutesToService.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+      const sending = component.sendRouteToService(destination);
+      expect(component.sendingToService()).toBe(true);
+      expect(component.routeSendStatus()).toContain('Sending route to ');
+      expect(component.routeSendStatus()).not.toContain('queued');
+      expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+      expect(hapticsMock.success).not.toHaveBeenCalled();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain(component.routeSendStatus());
+      expect(fixture.nativeElement.querySelector('mat-spinner')).toBeTruthy();
+      await component.sendRouteToService(destination);
+      await component.sendRouteToService(ServiceNames.WahooAPI);
+      expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledTimes(1);
+      expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], destination);
+      finish(successfulSend(destination));
+      await sending;
+      fixture.detectChanges();
+      expect(component.sendingToService()).toBe(false);
+      expect(fixture.nativeElement.querySelector('mat-spinner')).toBeNull();
+      expect(component.routeSendStatus()).toContain('Route sent to ');
+      expect(hapticsMock.success).toHaveBeenCalledTimes(1);
+      expect(hapticsMock.error).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['DESTINATION_PERMISSION_REQUIRED', 'Reconnect Wahoo and allow route access before sending routes.'],
+    ['DESTINATION_AUTH_REQUIRED', 'Connect Wahoo again before sending routes.'],
+    ['ACCOUNT_DELETION_IN_PROGRESS', 'Account is being deleted or no longer exists.'],
+    ['PROVIDER_ERROR', 'Wahoo could not accept this route. Please retry.'],
+  ])('shows actionable Wahoo %s responses and releases the send lock', async (reason, message) => {
+    connectAllDestinations();
+    routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+      ...successfulSend(ServiceNames.WahooAPI), status: 'failure', successCount: 0, failureCount: 1,
+      results: [{ routeId: 'route-1', destinationServiceName: ServiceNames.WahooAPI, status: 'failure', reason, message }],
+    });
+    await component.sendRouteToService(ServiceNames.WahooAPI);
+    expect(component.routeSendStatus()).toBe(message);
+    expect(snackBarMock.open).toHaveBeenLastCalledWith(message, undefined, { duration: 3500 });
+    expect(component.sendingToService()).toBe(false);
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    expect(hapticsMock.success).not.toHaveBeenCalled();
+  });
+
+  it('reports a thrown Wahoo failure and permits an explicit retry', async () => {
+    connectAllDestinations();
+    routeSendServiceMock.sendRoutesToService.mockRejectedValueOnce(new Error('Connection interrupted. Please retry.'));
+    await component.sendRouteToService(ServiceNames.WahooAPI);
+    expect(component.routeSendStatus()).toBe('Connection interrupted. Please retry.');
+    expect(component.sendingToService()).toBe(false);
+    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce(successfulSend(ServiceNames.WahooAPI));
+    await component.sendRouteToService(ServiceNames.WahooAPI);
+    expect(component.routeSendStatus()).toBe('Route sent to Wahoo.');
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledTimes(2);
+  });
+
+  it('blocks duplicates throughout Suunto copy confirmation and rechecks eligibility before dispatch', async () => {
+    component.routeDocument.set({ ...routeDocument, syncedDestinationServiceNames: [ServiceNames.SuuntoApp] });
+    const confirmed$ = new Subject<boolean>();
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => confirmed$ });
+    const sending = component.sendRouteToSuunto();
+    await component.sendRouteToSuunto();
+    expect(dialogMock.open).toHaveBeenCalledTimes(1);
+    expect(component.sendingToService()).toBe(true);
+    expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
+    userServiceMock.hasProAccessSignal.set(false);
+    confirmed$.next(true);
+    await sending;
+    expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
+    expect(component.sendingToService()).toBe(false);
+    expect(component.routeSendStatus()).toBe('');
+    expect(hapticsMock.success).not.toHaveBeenCalled();
+    expect(hapticsMock.error).not.toHaveBeenCalled();
+  });
+
+  it('does not show the previous route delivery result after navigating to another route', async () => {
+    connectAllDestinations();
+    let finish!: (value: ReturnType<typeof successfulSend>) => void;
+    routeSendServiceMock.sendRoutesToService.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const sending = component.sendRouteToService(ServiceNames.WahooAPI);
+    resolvedRouteData$.next({ route: {
+      ...resolvedRouteData$.value.route,
+      routeDocument: { ...routeDocument, id: 'route-2', name: 'Another route' },
+    } });
+    expect(component.routeSendStatus()).toBe('');
+    finish(successfulSend(ServiceNames.WahooAPI));
+    await sending;
+    expect(component.routeSendStatus()).toBe('');
+    expect(component.sendingToService()).toBe(false);
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.WahooAPI);
+  });
+
+  it('uses Material keyboard navigation and restores focus on submenu dismissal', async () => {
+    connectAllDestinations();
+    fixture.detectChanges();
+    const actionsTrigger = fixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
+    actionsTrigger.openMenu();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const sendTo = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(button => button.textContent?.trim().endsWith('Send to'))!;
+    sendTo.focus();
+    sendTo.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', keyCode: 39, bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const menus = document.querySelectorAll<HTMLElement>('[role="menu"]');
+    expect(menus.length).toBe(2);
+    const menu = menus[1];
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement?.textContent).toContain('Send to Wahoo');
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(sendTo);
+    expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
+  });
+
+  it('renders accessible provider labels and dispatches Wahoo from the Material submenu', async () => {
+    connectAllDestinations();
+    routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce(successfulSend(ServiceNames.WahooAPI));
+    fixture.detectChanges();
+    const actionsTrigger = fixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
+    actionsTrigger.openMenu();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const sendTo = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(button => button.textContent?.trim().endsWith('Send to'))!;
+    expect(sendTo).toBeTruthy();
+    sendTo.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const providerButtons = [...document.querySelectorAll<HTMLButtonElement>('[role="menu"]')].at(-1)!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+    expect([...providerButtons].map(button => button.querySelector('span')?.textContent?.trim())).toEqual([
+      'Send to Suunto', 'Send to COROS', 'Send to Garmin', 'Send to Wahoo',
+    ]);
+    const wahoo = providerButtons[3];
+    expect(wahoo.disabled).toBe(false);
+    wahoo.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.WahooAPI);
+    expect(component.routeSendStatus()).toBe('Route sent to Wahoo.');
+  });
+
   it('sends the owner route to Suunto from the detail page action', async () => {
     await component.sendRouteToSuunto();
 
@@ -538,7 +767,7 @@ describe('RouteDetailComponent', () => {
       }],
     });
 
-    expect(component.suuntoRouteSendMenuLabel()).toBe('Send updated copy to Suunto');
+    expect(component.routeSendActions().find(action => action.serviceName === ServiceNames.SuuntoApp)?.copy).toBe(true);
   });
 
   it('confirms before resending a detail route that was already sent to Suunto', async () => {
@@ -677,7 +906,7 @@ describe('RouteDetailComponent', () => {
     expect(component.canSendRoutesToCOROS()).toBe(true);
   });
 
-  it('disables Garmin resend when the original Garmin delivery account is not currently sendable', async () => {
+  it('hides Garmin resend when the original Garmin delivery account is not currently sendable', async () => {
     component.routeDocument.set({
       ...routeDocument,
       syncedDestinationServiceNames: [ServiceNames.GarminAPI],
@@ -701,8 +930,7 @@ describe('RouteDetailComponent', () => {
     });
 
     expect(component.canSendRouteToGarmin()).toBe(false);
-    expect(component.garminRouteSendDisabledReason()).toBe('Reconnect the Garmin account previously used for this route before sending it again.');
-    expect(component.garminRouteSendMenuLabel()).toBe('Garmin (reconnect original account)');
+    expect(component.routeSendActions().some(action => action.serviceName === ServiceNames.GarminAPI)).toBe(false);
   });
 
   it('shows reconnect guidance when route-detail Suunto send returns an auth-required response', async () => {
@@ -846,11 +1074,10 @@ describe('RouteDetailComponent', () => {
     expect(template).toContain('Export GPX');
     expect(template).toContain('(click)="exportRouteAsGPX()"');
     expect(template).toContain('(click)="reprocessRouteFromOriginalFile()"');
-    expect(template).toContain('<span>Send to</span>');
-    expect(template).toContain('(click)="sendRouteToSuunto()"');
-    expect(template).toContain('(click)="sendRouteToGarmin()"');
-    expect(template).toContain('(click)="sendRouteToCOROS()"');
-    expect(template).toContain('@if (isCOROSRouteUploadAvailableForUser() && (canSendRouteToCOROS() || canSendRoutesToCOROS()))');
+    expect(template).toContain('@for (action of routeSendActions(); track action.serviceName)');
+    expect(template).toContain('(click)="sendRouteToService(action.serviceName)"');
+    expect(template).toContain('role="status" aria-live="polite" aria-atomic="true"');
+    expect(template).toContain('Send to {{ action.label }}');
     expect(template).toContain('class="route-chip route-chip--segment"');
     expect(template).toContain('class="segment-table route-data-table"');
     expect(template).toContain('class="segment-visibility-control"');

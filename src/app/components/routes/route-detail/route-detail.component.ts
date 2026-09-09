@@ -14,6 +14,7 @@ import { FirestoreRouteJSON, OriginalRouteFileMetaData } from '@shared/app-route
 import { SharedModule } from '../../../modules/shared.module';
 import { RouteResolverData } from '../../../resolvers/route.resolver';
 import { buildSuuntoServiceConnectionViewModel, SuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppOriginalFileDownloadService } from '../../../services/app.original-file-download.service';
@@ -40,12 +41,9 @@ import { isCOROSRouteUploadUIDAllowlisted } from '@shared/coros-rollout';
 import {
   canSendRouteToConnectedGarminAccount,
   canSendRouteToConnectedSuuntoAccounts,
-  getGarminRouteSendMenuLabel,
-  getGarminRouteSendDisabledReason,
   getRouteServiceDisplayName,
   getRouteSourceSummaryLabel,
   getRouteSyncedDestinationLabels,
-  getSuuntoRouteSendMenuLabel,
   hasRouteDeliveryForService,
 } from '../../../helpers/route-provenance.helper';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../../confirmation-dialog/confirmation-dialog.component';
@@ -86,6 +84,7 @@ export class RouteDetailComponent {
   private userService = inject(AppUserService);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private themeService = inject(AppThemeService);
+  private haptics = inject(AppHapticsService);
 
   readonly routeDocument = signal<FirestoreRouteJSON | null>(null);
   readonly routeFile = signal<RouteFileInterface | null>(null);
@@ -98,6 +97,8 @@ export class RouteDetailComponent {
   readonly deleting = signal(false);
   readonly reprocessing = signal(false);
   readonly sendingToService = signal(false);
+  readonly routeSendStatus = signal('');
+  readonly isWahooRouteDeliveryConnected = signal(false);
   readonly connectedSuuntoProviderUserIds = signal<string[]>([]);
   readonly isCOROSRouteDeliveryConnected = signal(false);
   readonly garminRouteSendContext = signal<GarminRouteSendContext>({
@@ -208,32 +209,45 @@ export class RouteDetailComponent {
       && this.routeService.getOriginalRouteFiles(routeDocument).length > 0
       && canSendRouteToConnectedGarminAccount(routeDocument, this.garminRouteSendContext());
   });
-  readonly canSendRouteToCOROS = computed(() => {
+  readonly canSendRouteWithOriginals = computed(() => {
     const routeDocument = this.routeDocument();
     return !!routeDocument
       && this.canManageRoute()
       && this.routeService.getOriginalRouteFiles(routeDocument).length > 0;
   });
-  readonly garminRouteSendDisabledReason = computed(() => {
-    const routeDocument = this.routeDocument();
-    if (!routeDocument || !this.canManageRoute() || this.routeService.getOriginalRouteFiles(routeDocument).length === 0) {
-      return null;
-    }
-
-    return getGarminRouteSendDisabledReason(routeDocument, this.garminRouteSendContext());
-  });
-  readonly garminRouteSendMenuLabel = computed(() => {
-    return getGarminRouteSendMenuLabel(this.garminRouteSendDisabledReason());
-  });
-  readonly suuntoRouteSendMenuLabel = computed(() => {
-    return getSuuntoRouteSendMenuLabel(this.routeDocument());
-  });
-  readonly hasSendableRouteDestination = computed(() => (
-    this.canSendRouteToSuunto()
-    || this.canSendRouteToGarmin()
-    || (this.isCOROSRouteUploadAvailableForUser() && this.canSendRouteToCOROS())
-    || !!this.garminRouteSendDisabledReason()
-  ));
+  readonly canSendRouteToCOROS = this.canSendRouteWithOriginals;
+  // One ordered set of destination capabilities drives both rendering and dispatch.
+  // Keep the order aligned with the saved-route list. Unknown Wahoo scopes remain
+  // server-validated through the existing callable's actionable failure contract.
+  readonly routeSendActions = computed(() => [
+    {
+      serviceName: ServiceNames.SuuntoApp,
+      label: 'Suunto',
+      copy: hasRouteDeliveryForService(this.routeDocument(), ServiceNames.SuuntoApp),
+      eligible: this.canSendRoutesToSuunto() && this.canSendRouteToSuunto(),
+    },
+    {
+      serviceName: ServiceNames.COROSAPI,
+      label: 'COROS',
+      copy: false,
+      eligible: this.canSendRoutesToCOROS() && this.canSendRouteToCOROS(),
+    },
+    {
+      serviceName: ServiceNames.GarminAPI,
+      label: 'Garmin',
+      copy: false,
+      eligible: this.canSendRoutesToGarmin() && this.canSendRouteToGarmin(),
+    },
+    {
+      serviceName: ServiceNames.WahooAPI,
+      label: 'Wahoo',
+      copy: false,
+      eligible: this.userService.hasProAccessSignal()
+        && this.isWahooRouteDeliveryConnected()
+        && this.canSendRouteWithOriginals(),
+    },
+  ].filter(action => action.eligible));
+  readonly hasSendableRouteDestination = computed(() => this.routeSendActions().length > 0);
   readonly canReprocessRoute = computed(() => {
     const routeDocument = this.routeDocument();
     return !!routeDocument
@@ -275,6 +289,7 @@ export class RouteDetailComponent {
       )
       .subscribe(connectionState => {
         this.isCOROSRouteDeliveryConnected.set(connectionState[ServiceNames.COROSAPI] === true);
+        this.isWahooRouteDeliveryConnected.set(connectionState[ServiceNames.WahooAPI] === true);
       });
   }
 
@@ -519,24 +534,32 @@ export class RouteDetailComponent {
       || this.exportingGPX()
       || this.reprocessing()
       || this.deleting()
-      || !this.canSendRoutesToDestination(destinationServiceName)
-      || !this.canSendRouteToDestination(destinationServiceName)
+      || !this.routeSendActions().some(action => action.serviceName === destinationServiceName)
     ) {
       return;
     }
 
-    if (
-      destinationServiceName === ServiceNames.SuuntoApp
-      && !(await this.confirmSuuntoCopySendIfNeeded(routeDocument))
-    ) {
-      return;
-    }
+    // Lock before opening a copy confirmation: a second keyboard/click activation
+    // must not open another dialog or race the same provider request.
+    this.sendingToService.set(true);
+    this.haptics.selection();
     const forceSuuntoCopy = destinationServiceName === ServiceNames.SuuntoApp
       && hasRouteDeliveryForService(routeDocument, ServiceNames.SuuntoApp);
-
-    this.sendingToService.set(true);
-    this.snackBar.open(`Sending route to ${destinationLabel}...`, undefined, { duration: 2000 });
+    this.setRouteSendStatus(routeID, forceSuuntoCopy ? 'Confirm sending an updated route copy to Suunto.' : '');
     try {
+      if (forceSuuntoCopy && !(await this.confirmSuuntoCopySendIfNeeded(routeDocument))) {
+        this.setRouteSendStatus(routeID, '');
+        return;
+      }
+      // Connection, entitlement, ownership or the viewed route may change while
+      // confirmation is open. The server independently enforces these guards.
+      if (this.routeDocument()?.id !== routeID
+        || !this.routeSendActions().some(action => action.serviceName === destinationServiceName)) {
+        this.setRouteSendStatus(routeID, '');
+        return;
+      }
+      this.setRouteSendStatus(routeID, `Sending route to ${destinationLabel}...`);
+      this.snackBar.open(`Sending route to ${destinationLabel}...`, undefined, { duration: 2000 });
       const result = forceSuuntoCopy
         ? await this.routeSendService.sendRoutesToService([routeID], destinationServiceName, { forceCopy: true })
         : await this.routeSendService.sendRoutesToService([routeID], destinationServiceName);
@@ -550,11 +573,16 @@ export class RouteDetailComponent {
         source: 'route_detail',
         destinationService: destinationServiceName,
       });
-      this.snackBar.open(
-        result.successCount > 0 ? this.getRouteSendSuccessMessage(routeDocument, destinationServiceName) : getRouteSendResponseMessage(result),
-        undefined,
-        { duration: result.successCount > 0 ? 2500 : 3500 },
-      );
+      const message = result.successCount > 0
+        ? this.getRouteSendSuccessMessage(routeDocument, destinationServiceName)
+        : getRouteSendResponseMessage(result);
+      this.setRouteSendStatus(routeID, message);
+      if (result.successCount > 0) {
+        this.haptics.success();
+      } else {
+        this.haptics.error();
+      }
+      this.snackBar.open(message, undefined, { duration: result.successCount > 0 ? 2500 : 3500 });
     } catch (error) {
       this.analyticsService.logSavedRouteAction('send_service_route', {
         status: 'failure',
@@ -567,7 +595,10 @@ export class RouteDetailComponent {
         routeID,
         destinationServiceName,
       }, error);
-      this.snackBar.open(getRouteSendErrorMessage(error, destinationServiceName), undefined, { duration: 4000 });
+      const message = getRouteSendErrorMessage(error, destinationServiceName);
+      this.setRouteSendStatus(routeID, message);
+      this.haptics.error();
+      this.snackBar.open(message, undefined, { duration: 4000 });
     } finally {
       this.sendingToService.set(false);
     }
@@ -715,6 +746,9 @@ export class RouteDetailComponent {
       return;
     }
 
+    if (this.routeDocument()?.id !== data.routeDocument.id) {
+      this.routeSendStatus.set('');
+    }
     this.routeDocument.set(data.routeDocument);
     this.routeFile.set(data.routeFile);
     this.sourceFile.set(data.sourceFile);
@@ -727,6 +761,12 @@ export class RouteDetailComponent {
       fileType: this.getPrimaryRouteFileType(data.routeDocument),
       fileCount: this.routeService.getOriginalRouteFiles(data.routeDocument).length,
     });
+  }
+
+  private setRouteSendStatus(routeID: string, message: string): void {
+    if (this.routeDocument()?.id === routeID) {
+      this.routeSendStatus.set(message);
+    }
   }
 
   private updateCurrentRouteName(routeID: string, name: string): void {
@@ -808,29 +848,4 @@ export class RouteDetailComponent {
     return sanitized || 'route';
   }
 
-  private canSendRoutesToDestination(destinationServiceName: ServiceNames): boolean {
-    switch (destinationServiceName) {
-      case ServiceNames.SuuntoApp:
-        return this.canSendRoutesToSuunto();
-      case ServiceNames.GarminAPI:
-        return this.canSendRoutesToGarmin();
-      case ServiceNames.COROSAPI:
-        return this.canSendRoutesToCOROS();
-      default:
-        return false;
-    }
-  }
-
-  private canSendRouteToDestination(destinationServiceName: ServiceNames): boolean {
-    switch (destinationServiceName) {
-      case ServiceNames.SuuntoApp:
-        return this.canSendRouteToSuunto();
-      case ServiceNames.GarminAPI:
-        return this.canSendRouteToGarmin();
-      case ServiceNames.COROSAPI:
-        return this.canSendRouteToCOROS();
-      default:
-        return false;
-    }
-  }
 }
