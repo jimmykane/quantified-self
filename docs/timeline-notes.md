@@ -17,7 +17,8 @@ New editor saves include the boolean. The existing save transaction validates it
 comparisons; older-client updates that omit it preserve the stored choice. Omitted and explicit true are equivalent for
 legacy create retries. No migration, new endpoint, index, or Security Rules change is needed.
 Optional `color` is an allowlisted presentation key (`default`, `blue`, `purple`, `pink`, `orange`, `red`, `green`),
-not arbitrary CSS. Missing and `default` keep legacy appearance. The same save transaction checks color in retries,
+not arbitrary CSS. Missing and `default` use the shared neutral gray (`AppColors.DarkGray`) in charts, Calendar, and the
+note editor/list. Mixed-color group markers use that same neutral; labels retain theme-aware text contrast. The same save transaction checks color in retries,
 preserves it when older clients omit it, and accepts explicit `default` to reset it. No category/icon is inferred from color.
 
 `saveTimelineNote` and `deleteTimelineNote` require Authentication, App Check, and an originating UID matching the
@@ -110,7 +111,7 @@ A category icon in the selected color marks a single-note day, even without acti
 `event_note` indicator (neutral for mixed colors) and accessible count. The day sheet shows each note's own icon/color.
 A slim leading edge makes note days visible in Week, Month, and Year. It contains a separate segment for each distinct
 note color, preserving mixed-color overlaps without blending them or replacing activity-circle colors. The default
-color follows the existing theme-primary note indicator. The edge is decorative and never intercepts day selection,
+color is the shared neutral gray used by chart note markers, not theme-primary blue. The edge is decorative and never intercepts day selection,
 changes cell sizing, or reveals note titles in the grid; hidden notes contribute no segment.
 Selecting a day opens its
 existing Material sheet, with a plain-text notes list above activities. Selecting a note dismisses the sheet and opens

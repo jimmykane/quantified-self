@@ -6,8 +6,8 @@ export interface CalendarDayTimelineNotes {
   notes: readonly TimelineNote[];
   ariaLabel: string;
   icon: string;
-  color: string | null;
-  accentColors: readonly (string | null)[];
+  color: string;
+  accentColors: readonly string[];
 }
 
 function visibleDays(model: ActivityCalendarViewModel): ActivityCalendarDayViewModel[] {

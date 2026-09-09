@@ -123,7 +123,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
         })).join(''),
       };
       const labelColor = (option.textStyle as { color?: string } | undefined)?.color ?? axis.axisLabel?.color;
-      const color = timelineNoteGroupColor(group.notes) ?? labelColor;
+      const color = timelineNoteGroupColor(group.notes);
       const label = group.notes.length > 1 ? `${group.notes.length} notes` : group.notes[0].title.replace(/\s+/g, ' ');
       // A period collapsed into one weekly bucket still needs only one selectable marker.
       const showPeriod = group.hasPeriod && start < group.end;

@@ -21,7 +21,8 @@ describe('ActivityCalendarGridComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(1);
     expect(button.querySelector('.activity-calendar-note-colors')?.getAttribute('aria-hidden')).toBe('true');
     expect(button.querySelectorAll('.activity-calendar-note-color')).toHaveLength(1);
-    expect((button.querySelector('.activity-calendar-note-color') as HTMLElement).style.backgroundColor).toBe('');
+    expect((button.querySelector('.activity-calendar-note-color') as HTMLElement).style.backgroundColor).toBe('rgb(125, 125, 125)');
+    expect((button.querySelector('.activity-calendar-note-indicator') as HTMLElement).style.color).toBe('rgb(125, 125, 125)');
     expect(button.querySelector('.activity-calendar-marker')).toBeNull();
     const selected = vi.fn(); fixture.componentInstance.daySelected.subscribe(selected);
     expect(fixture.componentRef.injector.get(AppHapticsService).selection).not.toHaveBeenCalled();
@@ -51,7 +52,7 @@ describe('ActivityCalendarGridComponent', () => {
     fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note, { ...note, id: 'b'.repeat(64), color: 'blue' }]));
     fixture.detectChanges();
     expect(icon().textContent).toBe('event_note');
-    expect(icon().style.color).toBe('');
+    expect(icon().style.color).toBe('rgb(125, 125, 125)');
     expect(colors()).toEqual(['rgb(158, 108, 236)', 'rgb(22, 180, 234)']);
     expect(activityMarker.getAttribute('style')).toBe(originalMarkerStyle);
   });

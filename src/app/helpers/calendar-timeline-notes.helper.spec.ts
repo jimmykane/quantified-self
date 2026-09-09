@@ -3,6 +3,7 @@ import type { TimelineNote } from '@shared/timeline-notes';
 import { buildActivityCalendarViewModel } from './activity-calendar.helper';
 import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from './calendar-timeline-notes.helper';
 import { AppColors } from '../services/color/app.colors';
+import { TIMELINE_NOTE_DEFAULT_COLOR } from './timeline-note-appearance.helper';
 
 const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: '<b>Private context</b>', startDate: '2024-02-28', endDate: '2024-03-01', timeZone: 'Pacific/Honolulu', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 const model = (view: 'week' | 'month' | 'year' = 'month') => buildActivityCalendarViewModel([], {
@@ -17,7 +18,8 @@ describe('calendar Timeline note projection', () => {
       expect(calendarTimelineNotesByDate(calendar, [hidden]).size).toBe(0);
       const day = calendarTimelineNotesByDate(calendar, [note, hidden]).get('2024-02-29')!;
       expect(day.notes).toEqual([note]);
-      expect(day.accentColors).toEqual([null]);
+      expect(day.accentColors).toEqual([TIMELINE_NOTE_DEFAULT_COLOR]);
+      expect(day.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
       expect(day.ariaLabel).toContain('1 Timeline note');
     }
   });
@@ -32,7 +34,7 @@ describe('calendar Timeline note projection', () => {
     expect([...days.keys()]).toEqual(['2024-02-28', '2024-02-29', '2024-03-01']);
     for (const day of days.values()) {
       expect(day.accentColors).toEqual([AppColors.Purple, AppColors.Green]);
-      expect(day.color).toBeNull();
+      expect(day.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
       expect(day.notes).toHaveLength(3);
       expect(day.ariaLabel).toContain('3 Timeline notes');
     }

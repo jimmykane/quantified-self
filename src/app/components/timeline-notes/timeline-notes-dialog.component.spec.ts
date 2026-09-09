@@ -63,6 +63,10 @@ describe('Timeline notes editor', () => {
     expect(service.save).toHaveBeenLastCalledWith('owner', expect.objectContaining({ color: 'blue', timeZone: note.timeZone }));
     fixture.componentInstance.edit(null);
     expect(fixture.componentInstance.form.controls.color.value).toBe('default');
+    fixture.detectChanges();
+    const defaultIcons = [...fixture.nativeElement.querySelectorAll('mat-select-trigger mat-icon')] as HTMLElement[];
+    expect(defaultIcons).toHaveLength(2);
+    expect(defaultIcons.every(icon => icon.style.color === 'rgb(125, 125, 125)')).toBe(true);
   });
   it('uses Material date inputs, rejects impossible dates, and saves inclusive labels in the captured zone', async () => {
     const fixture = TestBed.createComponent(TimelineNotesDialogComponent);

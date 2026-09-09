@@ -3,6 +3,7 @@ import { addTimelineNotesToChart, groupTimelineNotes, TimelineNotesChartBinding 
 import type { TimelineNote } from '@shared/timeline-notes';
 import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome, renderDashboardEChartsTooltipCard } from './dashboard-echarts-style.helper';
 import { AppColors } from '../services/color/app.colors';
+import { TIMELINE_NOTE_DEFAULT_COLOR } from './timeline-note-appearance.helper';
 const date = (day: string) => Date.parse(`${day}T00:00:00Z`);
 const note: TimelineNote = { id: 'a'.repeat(64), category: 'sickness', title: '<script>private</script>', startDate: '2026-09-02', endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 const option = { xAxis: { type: 'time', min: date('2026-09-01'), max: date('2026-09-10') }, yAxis: { min: 0 },
@@ -166,10 +167,25 @@ describe('timeline chart overlays', () => {
     expect(overlay.markArea.data[0][0].itemStyle.color).toBe(AppColors.Purple);
     expect(overlay.markLine.data[0].label.color).toBe('#222222');
     const mixed = addTimelineNotesToChart(source, [colored, { ...note, id: 'b', color: 'blue' }]);
-    expect(mixed.option.series[1].markLine.data[0].itemStyle.color).toBe('#222222');
+    expect(mixed.option.series[1].markLine.data[0].itemStyle.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
     expect(mixed.option.series[0]).toBe(source.series[0]);
     const hidden = addTimelineNotesToChart(source, [colored, { ...note, id: 'b', color: 'blue', showOnCharts: false }]);
     expect(hidden.option.series[1].markLine.data[0].itemStyle.color).toBe(AppColors.Purple);
+  });
+  it.each([false, true])('uses the shared default colour independently of chart text (dark: %s)', darkTheme => {
+    const style = buildDashboardEChartsStyleTokens(darkTheme, 320);
+    const source = { ...option, textStyle: { color: style.textColor } };
+    for (const defaultNote of [note, { ...note, color: 'default' as const }]) {
+      const result = addTimelineNotesToChart(source, [defaultNote], {}, date('2026-09-10'), style);
+      const overlay = result.option.series[1];
+      for (const marker of overlay.markLine.data) {
+        expect(marker.itemStyle.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
+        expect(marker.lineStyle.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
+      }
+      expect(overlay.markArea.data[0][0].itemStyle.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
+      expect(overlay.markLine.data[0].label.color).toBe(style.textColor);
+      expect(result.option.series[0]).toBe(source.series[0]);
+    }
   });
   it('excludes hidden notes from markers, bands, group counts and tooltips without changing readings', () => {
     const hidden = { ...note, id: 'b'.repeat(64), title: 'Hidden private note', showOnCharts: false };

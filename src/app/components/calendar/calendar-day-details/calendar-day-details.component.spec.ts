@@ -37,6 +37,8 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('#calendar-day-activities-title')).toBeNull();
     button.click();
     expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledExactlyOnceWith(note.id);
+    notes.set([{ ...note, color: 'default' }]); fixture.detectChanges();
+    expect((button.querySelector('mat-icon') as HTMLElement).style.color).toBe('rgb(125, 125, 125)');
     notes.set([]); fixture.detectChanges();
     fixture.componentInstance.selectNote(note.id);
     expect(TestBed.inject(MatBottomSheetRef).dismiss).toHaveBeenCalledOnce();
