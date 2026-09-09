@@ -5,8 +5,10 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
 import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, of, throwError } from 'rxjs';
+import type { WorkoutStructureV1 } from '@shared/planned-workout';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
 import { ActivityCalendarTileComponent } from './activity-calendar-tile.component';
 
 describe('ActivityCalendarTileComponent', () => {
@@ -16,6 +18,7 @@ describe('ActivityCalendarTileComponent', () => {
   };
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
+  let watchSchedule: ReturnType<typeof vi.fn>;
   let dayDetailsNavigation: {
     restorationFor: ReturnType<typeof vi.fn>;
     consumeRestoration: ReturnType<typeof vi.fn>;
@@ -23,6 +26,7 @@ describe('ActivityCalendarTileComponent', () => {
 
   beforeEach(async () => {
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
+    watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
     openBottomSheet = vi.fn();
     dayDetailsNavigation = {
       restorationFor: vi.fn().mockReturnValue(null),
@@ -33,6 +37,7 @@ describe('ActivityCalendarTileComponent', () => {
       providers: [
         provideRouter([]),
         { provide: ActivityCalendarService, useValue: { watchEvents } },
+        { provide: TrainingPlansService, useValue: { watchSchedule } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
       ],
     }).compileComponents();
@@ -72,6 +77,31 @@ describe('ActivityCalendarTileComponent', () => {
     }));
   });
 
+  it('shows active-plan and standalone workouts and passes them to empty-day details', async () => {
+    const plannedDate = currentLocalDate(2);
+    watchSchedule.mockReturnValue(of(scheduleForDate(plannedDate)));
+    watchEvents.mockReturnValue(of([]));
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const componentBottomSheet = (fixture.componentInstance as unknown as {
+      bottomSheet: MatBottomSheet;
+    }).bottomSheet;
+    const componentOpen = vi.spyOn(componentBottomSheet, 'open').mockImplementation(openBottomSheet);
+    const day = fixture.componentInstance.calendarModel().months[0].days
+      .find(candidate => candidate.dateKey === plannedDate)!;
+
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+    fixture.componentInstance.openDay(day);
+
+    const plannedWorkouts = (componentOpen.mock.calls[0][1] as {
+      data: { plannedWorkouts: Array<{ workout: { id: string } }> };
+    }).data.plannedWorkouts;
+    expect(plannedWorkouts.map(entry => entry.workout.id)).toEqual(['active-workout', 'standalone-workout']);
+  });
+
   it('pages the compact month picker without rendering the tile heading', async () => {
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
@@ -95,6 +125,7 @@ describe('ActivityCalendarTileComponent', () => {
 
   it('shows a retry action when the month query fails', async () => {
     watchEvents.mockReturnValue(throwError(() => new Error('offline')));
+    watchSchedule.mockReturnValue(of(scheduleForDate(currentLocalDate(2))));
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
     fixture.detectChanges();
@@ -102,6 +133,9 @@ describe('ActivityCalendarTileComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Calendar unavailable');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).not.toContain('No completed activities this month');
   });
 
   it('shows the empty state when query results only belong to an adjacent month', async () => {
@@ -113,8 +147,8 @@ describe('ActivityCalendarTileComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('No activities this month');
-    expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('No completed activities this month');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-day-button')).toBeTruthy();
   });
 
   it('refreshes the today marker without re-querying during the same month', () => {
@@ -213,6 +247,91 @@ describe('ActivityCalendarTileComponent', () => {
     expect(gridRule).toContain('overflow: hidden;');
   });
 });
+
+function emptySchedule(): CurrentTrainingScheduleV1 {
+  return {
+    state: { schemaVersion: 1, activePlanId: null, revision: 0, currentWorkoutCount: 0, updatedAtMs: 0 },
+    plans: [],
+    workouts: [],
+  };
+}
+
+function scheduleForDate(localDate: string): CurrentTrainingScheduleV1 {
+  const rangeStart = currentLocalDate(1);
+  const rangeEnd = currentLocalDate(28);
+  const structure = {
+    version: 1 as const,
+    sport: ActivityTypes.Running,
+    nodes: [{
+      kind: 'step' as const,
+      id: 'steady',
+      purpose: 'work' as const,
+      ending: { kind: 'time' as const, seconds: 1800 },
+      targets: [],
+    }],
+  };
+  return {
+    state: { schemaVersion: 1, activePlanId: 'active-plan', revision: 1, currentWorkoutCount: 3, updatedAtMs: 1 },
+    plans: [
+      {
+        schemaVersion: 1,
+        id: 'active-plan',
+        name: 'Active build',
+        lifecycle: 'active',
+        startLocalDate: rangeStart,
+        endLocalDate: rangeEnd,
+        revision: 1,
+        lastCheckpointRevision: 1,
+        workoutCount: 1,
+        createdAtMs: 1,
+        updatedAtMs: 1,
+      },
+      {
+        schemaVersion: 1,
+        id: 'inactive-plan',
+        name: 'Paused build',
+        lifecycle: 'paused',
+        startLocalDate: rangeStart,
+        endLocalDate: rangeEnd,
+        revision: 1,
+        lastCheckpointRevision: 1,
+        workoutCount: 1,
+        createdAtMs: 2,
+        updatedAtMs: 2,
+      },
+    ],
+    workouts: [
+      plannedWorkout('active-workout', 'active-plan', localDate, structure),
+      plannedWorkout('standalone-workout', null, localDate, structure),
+      plannedWorkout('inactive-workout', 'inactive-plan', localDate, structure),
+    ],
+  };
+}
+
+function plannedWorkout(
+  id: string,
+  planId: string | null,
+  localDate: string,
+  structure: WorkoutStructureV1,
+) {
+  return {
+    schemaVersion: 1 as const,
+    id,
+    planId,
+    localDate,
+    lifecycle: 'planned' as const,
+    title: id,
+    structure,
+    revision: 1,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
+}
+
+function currentLocalDate(day: number): string {
+  const now = new Date();
+  return [now.getFullYear(), `${now.getMonth() + 1}`.padStart(2, '0'), `${day}`.padStart(2, '0')].join('-');
+}
 
 function createEvent(startDate?: Date, eventId = 'event-1'): EventInterface {
   const now = new Date();

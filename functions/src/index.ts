@@ -196,6 +196,13 @@ export {
   deleteManualHealthMeasurementCallable as deleteManualHealthMeasurement,
 } from './health/manual-callable';
 export { setTrainingBuildBenchmark } from './derived-metrics/set-training-build-benchmark';
+export { mutateTrainingSchedule } from './training-plans/mutate-training-schedule';
+export {
+  getTrainingScheduleHistory,
+  previewTrainingScheduleRestore,
+} from './training-plans/history-callables';
+export { restoreTrainingScheduleRevision } from './training-plans/restore-callable';
+export { deleteTrainingPlan } from './training-plans/delete-training-plan-callable';
 export {
   onDashboardDerivedMetricsActivityWrite,
   onDashboardDerivedMetricsEventWrite,

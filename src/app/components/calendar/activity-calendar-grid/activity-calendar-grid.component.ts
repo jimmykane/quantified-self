@@ -6,6 +6,7 @@ import type {
 import { SharedModule } from '../../../modules/shared.module';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import type { CalendarDayTimelineNotes } from '../../../helpers/calendar-timeline-notes.helper';
+import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 @Component({
   selector: 'app-activity-calendar-grid',
@@ -21,13 +22,11 @@ export class ActivityCalendarGridComponent {
   @Input() hideOutsideDays = false;
   // Private notes are opt-in; dashboard/shared calendar instances do not fetch or receive them.
   @Input() timelineNotesByDate: ReadonlyMap<string, CalendarDayTimelineNotes> = new Map();
+  @Input() plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {};
   @Output() daySelected = new EventEmitter<ActivityCalendarDayViewModel>();
   private readonly hapticsService = inject(AppHapticsService);
 
   selectDay(day: ActivityCalendarDayViewModel): void {
-    if (!day.eventCount && !this.timelineNotesByDate.has(day.dateKey)) {
-      return;
-    }
     this.hapticsService.selection();
     this.daySelected.emit(day);
   }
