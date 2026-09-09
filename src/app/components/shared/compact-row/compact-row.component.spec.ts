@@ -77,6 +77,8 @@ describe('CompactRowComponent', () => {
     const row = fixture.debugElement.query(By.directive(CompactRowComponent)).componentInstance as CompactRowComponent;
     expect(row.layout()).toBe('columns');
     expect(row.density()).toBe('comfortable');
+    expect(row.fillHeight()).toBe(false);
+    expect(fixture.nativeElement.querySelector('app-compact-row').classList).not.toContain('compact-row-host--fill-height');
     expect(fixture.nativeElement.querySelector('article').classList).toContain('compact-row--columns');
     expect(fixture.nativeElement.querySelector('h3')?.textContent).toBe('Shared row');
     expect(fixture.nativeElement.querySelector('h3')?.hasAttribute('id')).toBe(false);
@@ -100,5 +102,19 @@ describe('CompactRowComponent', () => {
     expect(article.querySelector('.compact-row__icon')).toBeNull();
     expect(article.querySelector('.compact-row__summary')).toBeNull();
     expect(article.querySelector('.compact-row__body [compactRowAction]')).toBeNull();
+  });
+
+  it('fills available height only when a stacked row explicitly opts in', () => {
+    const compactFixture = TestBed.createComponent(CompactRowComponent);
+    compactFixture.componentRef.setInput('title', 'Chart');
+    compactFixture.componentRef.setInput('fillHeight', true);
+    compactFixture.detectChanges();
+    expect(compactFixture.nativeElement.classList).not.toContain('compact-row-host--fill-height');
+    compactFixture.componentRef.setInput('layout', 'stacked');
+    compactFixture.detectChanges();
+    expect(compactFixture.nativeElement.classList).toContain('compact-row-host--fill-height');
+    compactFixture.componentRef.setInput('fillHeight', false);
+    compactFixture.detectChanges();
+    expect(compactFixture.nativeElement.classList).not.toContain('compact-row-host--fill-height');
   });
 });

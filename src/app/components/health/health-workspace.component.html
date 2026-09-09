@@ -348,6 +348,7 @@
           </section>
         } @else {
           <app-health-metric-chart
+            [fillHeight]="true"
             [timelineNotes]="timelineNotes.context()"
             [series]="metricView().series"
             [startTimeMs]="selectedWindow().startTimeMs"

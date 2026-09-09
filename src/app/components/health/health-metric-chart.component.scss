@@ -13,6 +13,20 @@
   min-width: 0;
 }
 
+// Only the desktop workspace opts in; previews and mobile stay content-sized.
+@media (min-width: 981px) {
+  :host(.health-metric-chart-fill-height) {
+    display: grid;
+
+    app-health-metric-series-chart {
+      --health-metric-series-chart-height: 100%;
+
+      flex: 1;
+      min-height: 190px;
+    }
+  }
+}
+
 .health-chart-panel-native {
   border-bottom-style: dashed;
 }

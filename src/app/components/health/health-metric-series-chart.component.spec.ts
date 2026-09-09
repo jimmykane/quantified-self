@@ -55,7 +55,8 @@ describe('HealthMetricSeriesChartComponent', () => {
   it('gives Highlights a readable plot height on both breakpoints without enlarging full charts', () => {
     const styles = readFileSync(resolve(process.cwd(),
       'src/app/components/health/health-metric-series-chart.component.scss'), 'utf8');
-    expect(styles).toMatch(/\.health-metric-series-chart\s*\{\s*height:\s*190px/);
+    expect(styles).toContain('height: var(--health-metric-series-chart-height, 190px);');
+    expect(styles).toContain('contain: size;');
     expect(styles).toMatch(/@media[^}]+height:\s*210px/);
     expect(styles.match(/\.health-metric-series-chart-compact\s*\{/g)).toHaveLength(1);
     expect(styles).toMatch(/\.health-metric-series-chart-compact\s*\{\s*height:\s*112px/);

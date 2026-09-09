@@ -8,6 +8,24 @@
   border-bottom: 0;
 }
 
+// Opt-in for stacked chart rows inside a stretching workspace column.
+// Other compact rows retain their content-sized layout.
+:host(.compact-row-host--fill-height) {
+  display: flex;
+  flex-direction: column;
+
+  .compact-row {
+    flex: 1;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .compact-row__body {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 .compact-row {
   display: grid;
   grid-template-columns: 48px minmax(180px, 240px) minmax(0, 1fr) auto;

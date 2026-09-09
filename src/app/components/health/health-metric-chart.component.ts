@@ -21,6 +21,7 @@ import { HEALTH_METRIC_IDS } from '@shared/health';
   imports: [CompactRowComponent, MatChipsModule, HealthMetricSeriesChartComponent],
   templateUrl: './health-metric-chart.component.html',
   styleUrls: ['./health-metric-chart.component.scss'],
+  host: { '[class.health-metric-chart-fill-height]': 'fillHeight()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HealthMetricChartComponent {
@@ -28,6 +29,7 @@ export class HealthMetricChartComponent {
   readonly startTimeMs = input.required<number>();
   readonly endTimeMs = input.required<number>();
   readonly darkTheme = input(false);
+  readonly fillHeight = input(false);
   readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
   readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
   readonly chartStatuses = input<Readonly<Record<string, HealthHrvPersonalRangeStatus>>>({});

@@ -109,6 +109,7 @@ class ServiceSourceIconStubComponent {
   `,
 })
 class HealthMetricChartStubComponent {
+  @Input() fillHeight = false;
   @Input() timelineNotes = null;
   @Input() series: readonly HealthWorkspaceSeries[] = [];
   @Input() startTimeMs = 0;
@@ -596,6 +597,7 @@ describe('HealthWorkspaceComponent', () => {
     expect(prioritySection?.textContent).toContain('Highlights');
     expect(prioritySection?.textContent).not.toContain('Last 30 days');
     expect((fixture.nativeElement as HTMLElement).querySelector('#health-detail-title')?.textContent).toContain('Resting heart rate');
+    expect(fixture.debugElement.query(By.directive(HealthMetricChartStubComponent)).componentInstance.fillHeight).toBe(true);
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-priority-grid')?.tagName).toBe('DIV');
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card app-compact-row')).toHaveLength(2);
     expect((fixture.nativeElement as HTMLElement).querySelectorAll('.health-priority-card')).toHaveLength(2);

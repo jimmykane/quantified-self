@@ -13,6 +13,7 @@ export type CompactRowTone =
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '[class.compact-row-host--without-divider]': '!showDivider()',
+    '[class.compact-row-host--fill-height]': 'fillHeight() && layout() === "stacked"',
   },
 })
 export class CompactRowComponent {
@@ -23,6 +24,7 @@ export class CompactRowComponent {
   readonly icon = input<string | null>(null);
   readonly iconTone = input<CompactRowTone>('primary');
   readonly showDivider = input(true);
+  readonly fillHeight = input(false);
   readonly layout = input<'columns' | 'stacked'>('columns');
   readonly density = input<'comfortable' | 'compact'>('comfortable');
 }

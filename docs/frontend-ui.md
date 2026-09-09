@@ -92,6 +92,12 @@ full row width at every breakpoint. `density="compact"` uses smaller icon/header
 Health uses this combination for Highlights and source-separated charts. The primitive adds no card background,
 rounded container, shadow, or nested content padding. `showDivider` controls the bottom divider.
 
+For stacked chart rows, `[fillHeight]="true"` opts into stretching the row body within its allocated height; it is
+ignored for column layouts and defaults to false. The Health metric explorer uses this on desktop to fill the space
+beside the metric list, with a minimum plot height for multi-row grids. Mobile, Highlights, and public previews
+retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
+extra padding is needed.
+
 `title`, optional `titleId`, and `headingLevel` (2, 3, or 4) own heading semantics; `summary`, `icon`, and `iconTone`
 provide optional context. Default projected content can contain existing charts, tables, or metric displays.
 `compactRowAction` projects a Material control into the action slot. The row is presentational: consumers retain

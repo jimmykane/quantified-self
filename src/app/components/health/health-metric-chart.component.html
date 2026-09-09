@@ -6,6 +6,7 @@
       [title]="chart.title"
       [summary]="chart.summary"
       layout="stacked" density="compact"
+      [fillHeight]="fillHeight()"
       [class.health-chart-panel-native]="model.series.nativeOnly">
         @if (model.series.nativeOnly || model.series.hasConflict) {
           <mat-chip-set compactRowAction class="health-chart-status" aria-label="Series status">
