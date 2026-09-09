@@ -108,6 +108,10 @@ note cutoffs alongside the notes reload without extending them into future dates
 
 A category icon in the selected color marks a single-note day, even without activities. Multiple notes share an
 `event_note` indicator (neutral for mixed colors) and accessible count. The day sheet shows each note's own icon/color.
+A slim leading edge makes note days visible in Week, Month, and Year. It contains a separate segment for each distinct
+note color, preserving mixed-color overlaps without blending them or replacing activity-circle colors. The default
+color follows the existing theme-primary note indicator. The edge is decorative and never intercepts day selection,
+changes cell sizing, or reveals note titles in the grid; hidden notes contribute no segment.
 Selecting a day opens its
 existing Material sheet, with a plain-text notes list above activities. Selecting a note dismisses the sheet and opens
 the shared note editor. Sheet notes stay reactive to loading/edits, visibility, and account changes; delayed selections

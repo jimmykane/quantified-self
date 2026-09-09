@@ -132,6 +132,25 @@
   cursor: pointer;
 }
 
+.activity-calendar-note-colors {
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-start: 2px;
+  display: flex;
+  width: 3px;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.activity-calendar-note-color {
+  flex: 1;
+  min-height: 0;
+  background: var(--mat-sys-primary);
+}
+
 .activity-calendar-note-indicator {
   position: absolute;
   top: 3px;

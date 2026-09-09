@@ -30,6 +30,9 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
     expect(calendar).toContain('a note icon marks days');
+    expect(calendar).toContain("A slim colored edge uses your note's selected color");
+    expect(calendar).toContain('overlapping notes keep their different colors as separate segments');
+    expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
     expect(CONNECTED_SERVICES_POLICY_SECTION.content.join(' ')).toContain('content-free deletion receipt');
   });

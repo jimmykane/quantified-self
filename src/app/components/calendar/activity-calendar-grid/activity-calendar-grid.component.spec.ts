@@ -19,6 +19,9 @@ describe('ActivityCalendarGridComponent', () => {
     expect(button.getAttribute('aria-label')).toContain('1 Timeline note');
     expect(button.querySelector('.activity-calendar-note-indicator')?.textContent).toBe('beach_access');
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-note-indicator')).toHaveLength(1);
+    expect(button.querySelector('.activity-calendar-note-colors')?.getAttribute('aria-hidden')).toBe('true');
+    expect(button.querySelectorAll('.activity-calendar-note-color')).toHaveLength(1);
+    expect((button.querySelector('.activity-calendar-note-color') as HTMLElement).style.backgroundColor).toBe('');
     expect(button.querySelector('.activity-calendar-marker')).toBeNull();
     const selected = vi.fn(); fixture.componentInstance.daySelected.subscribe(selected);
     expect(fixture.componentRef.injector.get(AppHapticsService).selection).not.toHaveBeenCalled();
@@ -28,19 +31,29 @@ describe('ActivityCalendarGridComponent', () => {
     expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
     fixture.componentRef.setInput('timelineNotesByDate', new Map()); fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('.activity-calendar-note-colors')).toBeNull();
   });
-  it('shows the selected color/category, keeping mixed-note days neutral and grouped', async () => {
-    const fixture = await renderGrid('month', false, []);
+  it.each(['week', 'month', 'year'] as const)('shows every note colour on %s days without recolouring activity markers', async view => {
+    const fixture = await renderGrid(view, false, [
+      createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
+    ]);
+    const activityMarker = fixture.nativeElement.querySelector('.activity-calendar-marker') as HTMLElement;
+    const originalMarkerStyle = activityMarker.getAttribute('style');
     const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', color: 'purple', title: 'Trip', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
     fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note]));
     fixture.detectChanges();
     const icon = () => fixture.nativeElement.querySelector('.activity-calendar-note-indicator') as HTMLElement;
     expect(icon().textContent).toBe('flight');
     expect(icon().style.color).toBe('rgb(158, 108, 236)');
+    const colors = () => [...fixture.nativeElement.querySelectorAll('.activity-calendar-note-color')]
+      .map((element: HTMLElement) => element.style.backgroundColor);
+    expect(colors()).toEqual(['rgb(158, 108, 236)']);
     fixture.componentRef.setInput('timelineNotesByDate', calendarTimelineNotesByDate(fixture.componentInstance.model, [note, { ...note, id: 'b'.repeat(64), color: 'blue' }]));
     fixture.detectChanges();
     expect(icon().textContent).toBe('event_note');
     expect(icon().style.color).toBe('');
+    expect(colors()).toEqual(['rgb(158, 108, 236)', 'rgb(22, 180, 234)']);
+    expect(activityMarker.getAttribute('style')).toBe(originalMarkerStyle);
   });
   it('renders activity days as buttons and emits the selected day', async () => {
     const fixture = await renderGrid('month', false, [

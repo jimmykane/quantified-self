@@ -42,7 +42,9 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 - At most three groups are drawn in a day cell; an overflow count represents additional groups.
 - Week and Month layouts separate markers when space allows. Compact tiles, narrow layouts, and Year view use concentric markers.
 - Date cells do not use Material tooltips. This preserves native touch scrolling; their accessible names contain the date, activity count, duration, and group summary.
-- Note days add an `event_note` indicator and accessible note count, separate from activity circles. Their day sheet lists
+- Note days add a category icon (or grouped `event_note` indicator), an accessible note count, and a slim colored edge,
+  separate from activity circles. The edge retains a segment for each distinct note color when notes overlap, with
+  the existing theme-primary fallback for Default. It does not change cell sizing or activity marker colors. Their day sheet lists
   note titles, categories, and actual dates above activities; selecting a note opens the shared editor. Inclusive periods,
   future bounded dates, and ongoing periods through today in their captured zone are supported without changing totals.
   Window focus and returning to a visible tab refresh the current-day clock, including ongoing note cutoffs after midnight.
