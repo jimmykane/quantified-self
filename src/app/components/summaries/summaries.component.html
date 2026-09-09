@@ -71,6 +71,8 @@
         [total]="4" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"></app-metric-indicator>
       @if (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null) {
       <small class="dashboard-readiness-imported-recovery">Recovery left · {{ dashboardTodayReadiness.recoveryText }} remaining · until {{ dashboardTodayReadiness.recoveryFinishTimeMs | date:'shortTime' }} · separate from score</small>
+      <app-metric-indicator class="dashboard-readiness-recovery-indicator" label="Recovery remaining"
+        [value]="dashboardTodayReadiness.recoveryRemainingPercent" [max]="100" tone="recover" [compact]="true"></app-metric-indicator>
       }
     </div>
     <dl>

@@ -81,6 +81,12 @@
   padding-top: 0.45rem;
 }
 
+.dashboard-readiness-recovery-indicator {
+  display: block;
+  margin-top: 0.35rem;
+  max-width: 240px;
+}
+
 .dashboard-readiness-score-indicator { margin: 0.45rem 0 0.35rem; max-width: 240px; }
 .dashboard-current-state-row dl app-metric-indicator { margin: 0.35rem 0; }
 

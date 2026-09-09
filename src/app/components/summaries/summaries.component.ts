@@ -58,6 +58,7 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import type { DashboardFormPoint } from '../../helpers/dashboard-form.helper';
 import {
   RECOVERY_NOW_REFRESH_INTERVAL_MS,
+  resolveActiveRecoveryTotalSeconds,
   resolveRecoveryFinishTimeMs,
   resolveRemainingRecoverySeconds,
   type DashboardRecoveryNowContext,
@@ -210,6 +211,7 @@ interface DashboardTodayReadinessViewModel {
   overnightHeartRateDeviationPercent: number | null;
   overnightHeartRateTone: DashboardTodayReadinessTone;
   recoveryText: string;
+  recoveryRemainingPercent: number | null;
   recoveryFinishTimeMs: number | null;
 }
 
@@ -237,6 +239,7 @@ function createEmptyDashboardTodayReadinessViewModel(): DashboardTodayReadinessV
     overnightHeartRateDeviationPercent: null,
     overnightHeartRateTone: 'neutral',
     recoveryText: '--',
+    recoveryRemainingPercent: null,
     recoveryFinishTimeMs: null,
   };
 }
@@ -1740,12 +1743,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
       nowMs,
     });
-    const recoveryText = formatSleepDuration(resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext, nowMs));
+    const recoveryRemainingSeconds = resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext, nowMs);
+    const activeRecoveryTotalSeconds = resolveActiveRecoveryTotalSeconds(this.derivedRecoveryNowContext, nowMs);
+    const recoveryRemainingPercent = recoveryRemainingSeconds !== null
+      && activeRecoveryTotalSeconds !== null
+      && activeRecoveryTotalSeconds > 0
+      ? (recoveryRemainingSeconds / activeRecoveryTotalSeconds) * 100
+      : null;
+    const recoveryText = formatSleepDuration(recoveryRemainingSeconds);
     const recoveryFinishTimeMs = resolveRecoveryFinishTimeMs(this.derivedRecoveryNowContext, nowMs);
     if (!context) {
       return {
         ...createEmptyDashboardTodayReadinessViewModel(),
         recoveryText,
+        recoveryRemainingPercent,
         recoveryFinishTimeMs,
       };
     }
@@ -1769,6 +1780,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         : (context.overnightHeartRateRatio - 1) * 100,
       overnightHeartRateTone: this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true),
       recoveryText,
+      recoveryRemainingPercent,
       recoveryFinishTimeMs,
     };
   }

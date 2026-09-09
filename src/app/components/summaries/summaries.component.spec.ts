@@ -1039,6 +1039,8 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-readiness-method')?.textContent).toContain('Freshness stays TSS-only');
     expect(nativeElement.querySelector('.dashboard-readiness-imported-recovery')?.textContent)
       .toContain('Recovery left · 2h 00m remaining · until');
+    expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator .metric-indicator-track')
+      ?.getAttribute('aria-label')).toBe('Recovery remaining: 100 of 100');
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBe(nowMs + (2 * 3_600_000));
     expect(nativeElement.querySelector('.dashboard-readiness-imported-recovery')?.textContent)
       .not.toContain('Imported recovery estimate');
@@ -1054,13 +1056,30 @@ describe('SummariesComponent', () => {
     expect(sleep?.querySelector('small')?.textContent?.trim()).toBe('Today');
 
     (component as any).derivedRecoveryNowContext = {
+      totalSeconds: 7_200,
+      endTimeMs: nowMs - 3_600_000,
+    };
+    component.dashboardTodayReadiness = (component as any).buildDashboardTodayReadiness();
+
+    (component as any).changeDetector.markForCheck();
+    fixture.detectChanges();
+
+    expect(component.dashboardTodayReadiness.recoveryText).toBe('1h 00m');
+    expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator .metric-indicator-track')
+      ?.getAttribute('aria-label')).toBe('Recovery remaining: 50 of 100');
+
+    (component as any).derivedRecoveryNowContext = {
       totalSeconds: 3_600,
       endTimeMs: nowMs - (2 * 3_600_000),
     };
     component.dashboardTodayReadiness = (component as any).buildDashboardTodayReadiness();
 
+    (component as any).changeDetector.markForCheck();
+    fixture.detectChanges();
+
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBeNull();
     expect(component.dashboardTodayReadiness.recoveryText).toBe('--');
+    expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
   });
 
   it('shows the same TSS-only training state as Training above Today readiness', () => {
