@@ -56,6 +56,38 @@ describe('plan schedule calendar', () => {
     expect(month.days.filter(day => day.inRange)).toHaveLength(32);
   });
 
+  it('keeps same-day previews in the detail list order, independent of creation time and input order', () => {
+    const entries = [{ ...workout('c'), createdAtMs: 1 }, { ...workout('a'), createdAtMs: 3 },
+      { ...workout('b'), createdAtMs: 2 }];
+    const day = buildPlanScheduleMonth(plan, entries, options.today, options).days.find(item => item.selected)!;
+    expect(day.entries.map(entry => entry.id)).toEqual(['a', 'b', 'c']);
+    expect(day.visibleEntries.map(entry => entry.id)).toEqual(['a', 'b']);
+    expect(day.overflowCount).toBe(1);
+    expect(entries.map(entry => entry.id)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('navigates every month of a full-year plan in both directions with exact boundary workouts', () => {
+    const year = { id: 'plan', startLocalDate: '2026-09-09', endLocalDate: '2027-09-09' };
+    const dates = [year.startLocalDate, '2026-12-31', '2027-01-01', year.endLocalDate];
+    const entries = dates.map(localDate => ({ ...workout(localDate), localDate }));
+    const selections = [year.startLocalDate, '2026-10-01', '2026-11-01', '2026-12-01',
+      '2027-01-01', '2027-02-01', '2027-03-01', '2027-04-01', '2027-05-01', '2027-06-01',
+      '2027-07-01', '2027-08-01', '2027-09-01'];
+    selections.forEach((selection, index) => {
+      const month = buildPlanScheduleMonth(year, entries, selection, options);
+      expect(month.previousDate).toBe(selections[index - 1] ?? null);
+      expect(month.nextDate).toBe(selections[index + 1] ?? null);
+      expect(month.days.length).toBeLessThanOrEqual(42);
+      expect(month.days.length % 7).toBe(0);
+      expect(new Set(month.days.map(day => day.localDate)).size).toBe(month.days.length);
+      expect(month.days.find(day => day.selected)?.localDate).toBe(selection);
+      for (const day of month.days) {
+        expect(day.inRange).toBe(day.localDate >= year.startLocalDate && day.localDate <= year.endLocalDate);
+        expect(day.entries.map(entry => entry.localDate)).toEqual(dates.filter(date => date === day.localDate));
+      }
+    });
+  });
+
   it('handles a single-day plan and a 366-day cross-year plan without unbounded rendering', () => {
     const single = buildPlanScheduleMonth({ ...plan, endLocalDate: plan.startLocalDate }, [], plan.startLocalDate, options);
     expect(single.days.filter(day => day.inRange)).toHaveLength(1);

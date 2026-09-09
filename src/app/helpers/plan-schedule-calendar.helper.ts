@@ -34,7 +34,8 @@ export function buildPlanScheduleMonth(
     const date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
     const localDate = formatActivityCalendarDateParam(date);
     const inRange = localDate >= plan.startLocalDate && localDate <= plan.endLocalDate;
-    const entries = (byDate.get(localDate) ?? []).sort((a, b) => a.createdAtMs - b.createdAtMs || a.id.localeCompare(b.id));
+    // Match the schedule service's date/ID order used by the selected-day detail rows.
+    const entries = (byDate.get(localDate) ?? []).sort((a, b) => a.id.localeCompare(b.id));
     const skippedCount = entries.filter(workout => workout.lifecycle === 'skipped').length;
     const boundary = localDate === plan.startLocalDate && localDate === plan.endLocalDate ? 'Plan starts and ends'
       : localDate === plan.startLocalDate ? 'Plan starts' : localDate === plan.endLocalDate ? 'Plan ends' : null;

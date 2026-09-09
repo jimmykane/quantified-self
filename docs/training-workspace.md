@@ -295,8 +295,10 @@ workout's destination date and scope. Calendar-originated query parameters retai
 
 Desktop places the date grid beside one selected day's compact workout rows. Grid cells show up to two independently
 editable workout titles with full accessible labels/tooltips and an overflow action; the day's detail list shows every
-workout. On narrow containers the grid shows counts, with day details below it. Selecting an empty day shows a neutral
-empty state rather than assuming rest, and the single **Add workout** action opens the existing editor with that date
+workout. Same-day previews and detail rows share the schedule service's stable workout-ID order, independent of creation
+time, so expanding overflow does not reorder the workouts. On narrow containers the grid shows counts, with day details
+below it. Selecting an empty day shows a neutral empty state rather than assuming rest, and the single **Add workout**
+action opens the existing editor with that date
 and plan prefilled. Dates support native keyboard activation plus arrow-key and Page Up/Down navigation, keeping focus
 and selection together. The date-cell button/ripple pattern follows Activity Calendar; a Material datepicker cannot
 contain separate accessible workout-edit actions without overriding its internals. Standalone retains its compact list.
@@ -1930,6 +1932,12 @@ git diff --check
 ```
 
 ### Browser QA matrix
+
+For `/training/plans`, create synthetic paused plans with multiple workouts across weeks, months, and December/January,
+including a maximum 366-day range. Check forward/backward navigation through every month, exact inclusive boundaries,
+empty days, three or more same-day workouts, long titles, overflow-to-detail order, mobile editing/skip actions, and
+reload persistence at desktop and narrow-mobile widths. Keep the existing active plan unchanged and provider delivery
+disabled; test-data deletion requires its own explicit approval.
 
 Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. Cover:
 
