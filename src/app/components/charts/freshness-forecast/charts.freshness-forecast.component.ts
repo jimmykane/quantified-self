@@ -194,9 +194,10 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       },
       grid: {
         // The forecast plots CTL, ATL, and Form on one shared numeric scale.
-        // Reserve a fixed label gutter so the scale remains legible in compact tiles.
-        left: style.isCompactLayout ? 34 : 38,
-        right: style.isCompactLayout ? 10 : 12,
+        // Let ECharts reserve only the label space it needs, rather than
+        // taking a fixed wide gutter from already-compact tiles.
+        left: 6,
+        right: 6,
         top: 8,
         bottom: 22,
         outerBoundsMode: 'same',

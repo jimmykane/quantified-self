@@ -131,7 +131,7 @@ describe('ChartsFreshnessForecastComponent', () => {
     const option = optionCandidate as Record<string, any>;
 
     expect(option.grid).toMatchObject({
-      left: 38,
+      left: 6,
       outerBoundsMode: 'same',
       outerBoundsContain: 'axisLabel',
     });
@@ -140,7 +140,7 @@ describe('ChartsFreshnessForecastComponent', () => {
     expect(option.series[2].markLine).toMatchObject({ data: [{ yAxis: 0 }] });
   });
 
-  it('keeps the y-axis label gutter compact on narrow chart tiles', async () => {
+  it('keeps the plot bounds compact on narrow chart tiles', async () => {
     Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', {
       configurable: true,
       value: 320,
@@ -170,7 +170,7 @@ describe('ChartsFreshnessForecastComponent', () => {
     const optionCandidate = setOptionCall[1] || setOptionCall[0];
     const option = optionCandidate as Record<string, any>;
 
-    expect(option.grid).toMatchObject({ left: 34, right: 10 });
+    expect(option.grid).toMatchObject({ left: 6, right: 6 });
     expect(option.yAxis.axisLabel).toMatchObject({ show: true, fontSize: 11 });
   });
 
