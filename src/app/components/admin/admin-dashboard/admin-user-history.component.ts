@@ -32,7 +32,7 @@ import type {
 } from '../../../services/admin.service';
 import { buildAdminHistoryAxisBounds, type AdminHistoryScale } from '../../../helpers/admin-history-axis.helper';
 import { adminHistoryMetrics, type HistoryChartKey } from '../../../helpers/admin-history-series.helper';
-import { adminHistoryPercentage, formatAdminHistoryPercentage, formatAdminHistoryRatio, type AdminHistoryDisplayMode, type AdminHistoryPlanBasis } from '../../../helpers/admin-history-percentage.helper';
+import { adminHistoryPercentage, formatAdminHistoryPercentage, formatAdminHistoryTooltipValue, type AdminHistoryDisplayMode, type AdminHistoryPlanBasis } from '../../../helpers/admin-history-percentage.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
@@ -217,7 +217,8 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     selectActivePlanBasis(basis: AdminHistoryPlanBasis): void {
-        if ((basis !== 'withinPlan' && basis !== 'activeShare') || this.selectedActivePlanBasis() === basis) {
+        if (this.selectedMode() !== 'percentage'
+            || (basis !== 'withinPlan' && basis !== 'activeShare') || this.selectedActivePlanBasis() === basis) {
             return;
         }
         this.selectedActivePlanBasis.set(basis);
@@ -350,11 +351,13 @@ export class AdminUserHistoryComponent implements OnDestroy {
                         subtitle: key === 'activePlans' ? this.activePlanWindowLabel(this.selectedActivePlanWindow()) : undefined,
                         rows: this.visibleTooltipRows(key, metrics.map(metric => ({
                             label: metric.name,
-                            value: metric.count(snapshot) === undefined ? 'Unavailable'
-                                : formatAdminHistoryRatio(metric.count(snapshot)!, metric.denominator(snapshot), metric.population),
+                            ...formatAdminHistoryTooltipValue(
+                                metric.count(snapshot), metric.denominator(snapshot), metric.population, this.selectedMode(),
+                            ),
                             markerColor: metric.color,
                         }))),
                         rowColumnCount: 1,
+                        stackHeader: true,
                     });
                 },
             },
@@ -422,10 +425,22 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     private chartStyle(reference: ElementRef<HTMLDivElement> | undefined) {
-        return buildDashboardEChartsStyleTokens(
+        const style = buildDashboardEChartsStyleTokens(
             this.isDark,
             reference?.nativeElement.clientWidth ?? 0,
         );
+        return {
+            ...style,
+            tooltipTypography: {
+                ...style.tooltipTypography,
+                labelFontSize: 14,
+                valueFontSize: 16,
+                titleFontSize: 14,
+                textLineHeight: 1.35,
+                metricGapPx: 10,
+                maxWidthPx: Math.min(320, reference?.nativeElement.clientWidth || 320),
+            },
+        };
     }
 
     private visibleTooltipRows(

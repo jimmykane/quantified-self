@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { adminHistoryPercentage, formatAdminHistoryRatio } from './admin-history-percentage.helper';
+import { adminHistoryPercentage, formatAdminHistoryTooltipValue } from './admin-history-percentage.helper';
 import { buildAdminHistoryAxisBounds } from './admin-history-axis.helper';
 
 describe('admin history percentages', () => {
     it('retains precision and labels the actual population', () => {
         expect(adminHistoryPercentage(1, 3)).toBeCloseTo(33.333333);
-        expect(formatAdminHistoryRatio(1, 3, 'eligible Pro accounts')).toBe('33.3% · 1 of 3 eligible Pro accounts');
+        expect(formatAdminHistoryTooltipValue(1, 3, 'eligible Pro accounts', 'percentage')).toEqual({
+            value: '33.3%', detail: '1 of 3 eligible Pro accounts',
+        });
+        expect(formatAdminHistoryTooltipValue(1, 3, 'eligible Pro accounts', 'count')).toEqual({
+            value: '1 user', detail: '33.3% of 3 eligible Pro accounts',
+        });
         expect(adminHistoryPercentage(0, 3)).toBe(0);
     });
 
@@ -16,8 +21,22 @@ describe('admin history percentages', () => {
     );
 
     it('keeps empty and legacy populations visibly unavailable', () => {
-        expect(formatAdminHistoryRatio(0, 0, 'users')).toBe('0 users · percentage unavailable (0 users)');
-        expect(formatAdminHistoryRatio(5, null, 'eligible accounts')).toBe('5 users · percentage unavailable');
+        expect(formatAdminHistoryTooltipValue(0, 0, 'users', 'percentage')).toEqual({
+            value: 'Unavailable', detail: '0 users · Percentage unavailable (0 users)',
+        });
+        expect(formatAdminHistoryTooltipValue(5, null, 'eligible accounts', 'count')).toEqual({
+            value: '5 users', detail: 'Percentage unavailable (eligible accounts unavailable)',
+        });
+        expect(formatAdminHistoryTooltipValue(undefined, 5, 'users', 'count')).toEqual({ value: 'Unavailable' });
+    });
+
+    it('keeps large counts readable and zero active counts distinct from missing populations', () => {
+        expect(formatAdminHistoryTooltipValue(1234, 2468, 'active accounts', 'count')).toEqual({
+            value: '1,234 users', detail: '50% of 2,468 active accounts',
+        });
+        expect(formatAdminHistoryTooltipValue(0, 10, 'eligible Pro accounts', 'percentage')).toEqual({
+            value: '0%', detail: '0 of 10 eligible Pro accounts',
+        });
     });
 
     it('fits fractional percentages without going outside 0–100', () => {

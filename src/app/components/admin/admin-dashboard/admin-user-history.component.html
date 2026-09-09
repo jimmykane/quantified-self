@@ -104,7 +104,14 @@
             <div>
                 <h4>Active users by plan</h4>
                 <p>Free, Basic, and Pro accounts in the selected rolling activity window.
-                    {{ selectedActivePlanBasis() === 'withinPlan' ? 'Percentages use eligible accounts within each plan.' : 'Percentages use all active accounts in this window.' }}</p>
+                    @if (selectedMode() === 'percentage') {
+                        {{ selectedActivePlanBasis() === 'withinPlan'
+                            ? 'Each line shows what percentage of that plan’s eligible accounts are active (for example, active Pro ÷ eligible Pro).'
+                            : 'Each line shows that plan’s share of all active accounts (for example, active Pro ÷ all active). The three shares add to 100%.' }}
+                    } @else {
+                        Showing user counts. Select Percentage above to compare activity within each plan or shares of all active users.
+                    }
+                </p>
             </div>
             <mat-button-toggle-group
                 aria-label="Active user plan history window"
@@ -115,6 +122,7 @@
                 }
             </mat-button-toggle-group>
         </div>
+        @if (selectedMode() === 'percentage') {
         <div class="history-scale-control plan-basis-control">
             <span>Percentage basis</span>
             <mat-button-toggle-group aria-label="Active plan percentage basis"
@@ -123,6 +131,7 @@
                 <mat-button-toggle value="activeShare">Share of active users</mat-button-toggle>
             </mat-button-toggle-group>
         </div>
+        }
         @if (activePlanHistoryPoints() < minimumPoints) {
         <div class="chart-collection-state" role="status">
             <mat-icon>hourglass_top</mat-icon>

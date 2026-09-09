@@ -417,11 +417,39 @@ describe('AdminUserHistoryComponent', () => {
         await renderCharts();
         expect(latestOption('Onboarding complete').series[0].data[2]).toBeNull();
         expect(latestOption('Onboarding complete').series[0].data[4]).toBeNull();
-        expect(latestOption('Onboarding complete').tooltip.formatter([{ axisValue: data.snapshots[2].date }])).toContain('percentage unavailable');
+        expect(latestOption('Onboarding complete').tooltip.formatter([{ axisValue: data.snapshots[2].date }])).toContain('Percentage unavailable');
         const active = loader.setOption.mock.calls.map(call => call[1] as { series: Array<{ id: string; data: Array<number | null>; connectNulls: boolean }> })
             .filter(option => option.series.some(series => series.id === 'active-plan-pro')).at(-1)!;
         expect(active.series[2].data[1]).toBeNull();
         expect(active.series[2].connectNulls).toBe(false);
+    });
+
+    it('exposes the plan basis only for percentages and preserves it through count mode', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        await renderCharts();
+        const basisControl = () => (fixture.nativeElement as HTMLElement).querySelector('[aria-label="Active plan percentage basis"]');
+        expect(basisControl()).toBeNull();
+        component.selectActivePlanBasis('activeShare');
+        expect(component.selectedActivePlanBasis()).toBe('withinPlan');
+        expect(haptics.selection).not.toHaveBeenCalled();
+
+        const percentageButton = (fixture.nativeElement as HTMLElement).querySelector('mat-button-toggle[value="percentage"] button') as HTMLButtonElement;
+        percentageButton.click();
+        await renderCharts();
+        expect(basisControl()).not.toBeNull();
+        const shareButton = basisControl()!.querySelector('mat-button-toggle[value="activeShare"] button') as HTMLButtonElement;
+        shareButton.click();
+        await renderCharts();
+        expect(component.selectedActivePlanBasis()).toBe('activeShare');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+
+        component.selectMode('count');
+        await renderCharts();
+        expect(basisControl()).toBeNull();
+        component.selectMode('percentage');
+        await renderCharts();
+        expect(basisControl()).not.toBeNull();
+        expect(component.selectedActivePlanBasis()).toBe('activeShare');
     });
 
     it('keeps repeated and invalid display choices silent', async () => {

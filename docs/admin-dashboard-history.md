@@ -62,12 +62,12 @@ TTL configuration is infrastructure state. Local emulator startup and Functions 
 The Admin Dashboard requests 365 days once per refresh and switches among 30-, 90-, and 365-day views locally. A **Count / Percentage** selector applies to five independent, unstacked line charts, with Count as the initial view:
 
 1. **Authentication activity:** rolling 24-hour, 7-day, and 30-day counts divided by that day's eligible accounts. These windows overlap and are never stacked.
-2. **Active users by plan:** Free, Basic, and Pro in the selected rolling window. **Within each plan** divides each plan's active count by its eligible accounts; **Share of active users** divides by all active accounts in that same window. The basis also controls percentages in count-mode tooltips.
+2. **Active users by plan:** Free, Basic, and Pro in the selected rolling window. In Percentage mode, **Within each plan** divides each plan's active count by its eligible accounts; **Share of active users** divides by all active accounts in that same window. The basis selector is hidden in Count mode because it cannot change the plotted counts. The last chosen basis is retained for count-mode tooltip percentages and when returning to Percentage mode.
 3. **User and plan mix:** Free, Basic, and Pro counts divided by total user documents.
 4. **Onboarding completion:** completed onboarding divided by total users, shown separately because it overlaps the plan categories.
 5. **Paid subscription cadence:** monthly, yearly, and unknown counts divided by the corresponding Basic or Pro total, including unknown cadence. Unknown series appear only when present in the selected range. The chart retains daily trajectories so changes can be compared over time.
 
-Every tooltip includes the count, percentage (up to one decimal), and explicit population. Missing or zero denominators produce unavailable percentages, never invented zero rates. Chart values retain calculation precision. Hiding a series changes the visible scale and tooltip rows only; it never changes denominators. **Auto** fits the visible series with percentage bounds inside 0–100; **From zero** uses a zero count baseline, and becomes **0–100%** in percentage mode.
+Every tooltip includes the count, percentage (up to one decimal), and explicit population. The selected value is emphasized, with the population and complementary value on a separate wrapping line. Missing or zero denominators produce unavailable percentages, never invented zero rates. Chart values retain calculation precision. Hiding a series changes the visible scale and tooltip rows only; it never changes denominators. **Auto** fits the visible series with percentage bounds inside 0–100; **From zero** uses a zero count baseline, and becomes **0–100%** in percentage mode.
 
 Admin-only help lives beside the display controls and in each chart description. The public help page covers member features.
 

@@ -17,10 +17,27 @@ export function formatAdminHistoryPercentage(value: number): string {
     return `${percentageFormat.format(value)}%`;
 }
 
-export function formatAdminHistoryRatio(count: number, total: number | null | undefined, population: string): string {
+export function formatAdminHistoryTooltipValue(
+    count: number | undefined,
+    total: number | null | undefined,
+    population: string,
+    mode: AdminHistoryDisplayMode,
+): { value: string; detail?: string } {
+    if (count === undefined) {
+        return { value: 'Unavailable' };
+    }
+    const users = `${countFormat.format(count)} ${count === 1 ? 'user' : 'users'}`;
     const percentage = adminHistoryPercentage(count, total);
     if (percentage === null) {
-        return `${countFormat.format(count)} users · percentage unavailable${total === 0 ? ` (0 ${population})` : ''}`;
+        const reason = total === 0 ? `0 ${population}` : `${population} unavailable`;
+        return {
+            value: mode === 'count' ? users : 'Unavailable',
+            detail: `${mode === 'percentage' ? `${users} · ` : ''}Percentage unavailable (${reason})`,
+        };
     }
-    return `${formatAdminHistoryPercentage(percentage)} · ${countFormat.format(count)} of ${countFormat.format(total!)} ${population}`;
+    const formattedPercentage = formatAdminHistoryPercentage(percentage);
+    return {
+        value: mode === 'percentage' ? formattedPercentage : users,
+        detail: `${mode === 'percentage' ? countFormat.format(count) : formattedPercentage} of ${countFormat.format(total!)} ${population}`,
+    };
 }

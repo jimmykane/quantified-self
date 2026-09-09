@@ -90,6 +90,24 @@ describe('buildDashboardEChartsStyleTokens', () => {
     expect(html).not.toContain('<strong>');
   });
 
+  it('separates and escapes wrapping row details while keeping the complete accessible label', () => {
+    const html = renderDashboardEChartsTooltipCard(buildDashboardEChartsStyleTokens(false, 320), {
+      rows: [{ label: 'Pro <monthly>', value: '50%', detail: '1 of 2 eligible Pro accounts <script>', markerColor: '#42a5f5' }],
+    });
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    expect(html).toContain('width:min(240px, calc(100vw - 32px))');
+    const row = container.querySelector('[aria-label]')!;
+    expect(row.getAttribute('aria-label')).toBe('Pro <monthly>: 50% · 1 of 2 eligible Pro accounts <script>');
+    expect(row.children).toHaveLength(2);
+    expect(row.children[0].textContent).toBe('Pro <monthly>:50%');
+    const detail = row.children[1] as HTMLElement;
+    expect(detail.textContent).toBe('1 of 2 eligible Pro accounts <script>');
+    expect(detail.style.whiteSpace).toBe('normal');
+    expect(detail.style.overflowWrap).toBe('anywhere');
+    expect(container.querySelector('script')).toBeNull();
+  });
+
   it('should render an explicitly bounded two-column metric layout', () => {
     const tokens = buildDashboardEChartsStyleTokens(false, 390);
 
