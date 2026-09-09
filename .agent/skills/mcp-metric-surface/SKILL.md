@@ -23,6 +23,13 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   Preserve identity-free date buckets; never expose exact source timestamps, event/activity identity, names, labels,
   provider/device metadata, or source provenance. Update consent, Help, Policies, the public MCP page, and focused
   catalog/query tests in the same change.
+- **Recorded Health metric:** extend only the explicit public allowlist in `functions/src/mcp/health.service.ts`.
+  Preserve `health:read`, the additional Body measurements grant and identity-free date buckets for body composition,
+  and the separate Weight/Sleep contracts. Keep sample parent-revision checks, source-separated semantics, Sports Lib
+  display/unit preferences, read/output bounds, and strict negative leakage fixtures. Never resolve Sleep references
+  through Health permission or infer permission for new sensitive metric families from a shared catalog addition.
+  Native exceptions require an exact provider/metric/unit/semantic allowlist and explicit native-labelled output;
+  Garmin Body Battery points must never be relabelled as a canonical percentage.
 - **Training-derived kind:** register it in `shared/derived-metrics.ts`, preserve the normal snapshot build lifecycle, and
   expose only a ready server-side snapshot. Add its exact identity-free payload schema to
   `functions/src/mcp/derived-output-schemas.ts`; the exhaustive map must fail compilation until the new kind is covered.
@@ -45,7 +52,7 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   links, or extensions. Exact route bounds, preview geometry, nearby search, and waypoint coordinates require dependent
   `route-location:read` in addition to `routes:read`.
 - **Local plugin or bundled workflow skill:** keep `plugins/quantified-self/plugin.template.json`, the repo-local
-  marketplace, branding, the three manifest-level starter prompts, and all six focused/cross-domain workflow skills
+  marketplace, branding, the three manifest-level starter prompts, and all seven focused/cross-domain workflow skills
   aligned with the public MCP surface. Review the affected single-domain skill and the cross-domain skill whenever a
   domain changes. Do not duplicate complete tool names or metric IDs in a skill; make it discover authoritative runtime
   tools and catalogs. Keep each skill's `agents/openai.yaml` prompt, one hosted MCP dependency, and implicit-invocation

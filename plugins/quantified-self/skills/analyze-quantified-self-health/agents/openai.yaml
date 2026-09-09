@@ -1,0 +1,13 @@
+interface:
+  display_name: "Analyze Health metrics"
+  short_description: "Explore recorded all-day Health metric trends"
+  default_prompt: "Use $analyze-quantified-self-health to show my recent stress and body energy trends, keeping each source separate."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "quantified-self"
+      description: "Read-only Quantified Self recorded Health metrics"
+      transport: "streamable_http"
+      url: "https://quantified-self.io/mcp"
+policy:
+  allow_implicit_invocation: true

@@ -266,6 +266,17 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.SleepRead]);
   });
 
+  it('requires Health permission and additionally gates body composition before dispatch', () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'list_health_metrics' } }))
+      .toEqual([MCP_OAUTH_SCOPES.HealthRead]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'query_health_metric', arguments: { metricId: 'heart_rate' },
+    } })).toEqual([MCP_OAUTH_SCOPES.HealthRead]);
+    expect(requiredScopesForRequest({ method: 'tools/call', params: {
+      name: 'query_health_metric', arguments: { metricId: 'body_fat' },
+    } })).toEqual([MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.MeasurementsRead]);
+  });
+
   it('requires both metrics and sleep scopes for readiness and daily reports', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
@@ -508,6 +519,9 @@ describe('MCP HTTP scope enforcement', () => {
       'query_metric',
       'query_metrics',
       'query_sleep_summary',
+    ]);
+    await expect(listToolNames([MCP_OAUTH_SCOPES.HealthRead])).resolves.toEqual([
+      'list_activity_types', 'list_health_metrics', 'query_health_metric',
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
       'get_activity_chart_data',
@@ -1144,8 +1158,8 @@ describe('MCP HTTP scope enforcement', () => {
       expect(client.getServerVersion()).toEqual({
         name: 'quantified-self',
         title: 'Quantified Self',
-        version: '1.3.0',
-        description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
+        version: '1.4.0',
+        description: 'Read-only activity and Health metrics, body measurements, Training snapshots, and sleep-session summaries.',
         websiteUrl: 'https://beta.quantified-self.io',
         icons: [
           {

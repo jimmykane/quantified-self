@@ -114,7 +114,11 @@ describe('PublicSeoPageComponent', () => {
 
     expect(text).toContain('Connect ChatGPT or Claude to your training data');
     expect(text).toContain('Training and measurement trends');
-    expect(text).toContain('training metrics, measurements, workout details');
+    expect(text).toContain('training metrics, Health metrics, measurements, workout details');
+    expect(text).toContain('Recorded Health metrics');
+    expect(text).toContain('separate Health permission');
+    expect(text).toContain('Body Battery keeps its Garmin points scale');
+    expect(text).toContain('cannot create, edit, delete, or backfill Health measurements');
     expect(text).toContain('body-weight history');
     expect(text).toContain('Sleep, readiness, and daily context');
     expect(text).toContain('Saved routes and optional locations');
@@ -123,7 +127,7 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('plan your next workout');
     expect(text).toContain('No settings or data writes');
     expect(text).toContain('External clients have their own privacy and retention practices');
-    expect(mcpFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(8);
+    expect(mcpFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(9);
     expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(5);
     expect(hrefs).toContain('/login');
     expect(hrefs).toContain('/help#data-and-privacy');

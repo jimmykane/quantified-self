@@ -154,6 +154,10 @@ describe('MCP client access policy', () => {
     expect(content).toContain('activity data, route data, account identifiers');
     expect(content).toContain('Original files');
     expect(content).toContain('full-resolution recordings');
+    expect(content).toContain('Health metrics permission');
+    expect(content).toContain('Body composition additionally requires Body measurements');
+    expect(content).toContain('existing grants are not expanded automatically');
+    expect(content).toContain('UTC sample times and provider names');
     expect(content).toContain('raw sleep-stage intervals');
     expect(content).toContain('one-call sleep trend');
     expect(content).toContain('preferred daily report');

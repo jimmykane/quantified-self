@@ -12,6 +12,11 @@ describe('MCP callable input validation', () => {
     });
   });
 
+  it('accepts explicit Health consent without implicitly adding Body measurements or Sleep', () => {
+    expect(parseMcpAuthorizationDecision({ approved: true, grantedScopes: ['health:read'] }))
+      .toEqual({ approved: true, grantedScopes: ['health:read'] });
+  });
+
   it.each([
     {},
     { approved: 'true' },

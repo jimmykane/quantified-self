@@ -12,6 +12,9 @@ snapshots.
 
 1. Discover the available measurement types, canonical units, supported aggregations, date limits, and optional current
    snapshot before concluding that a measurement is unavailable.
+   Weight keeps its existing measurement-history capability. For other body composition, discover the Health catalog;
+   those reads need both Health and Body measurements grants and summary mode. They return identity-free calendar-day
+   buckets of individual recorded values, not provider-labelled series or an already-aggregated median trend.
 2. Establish the requested period, IANA timezone, interval, and aggregation. Prefer a median trend for repeated noisy
    weigh-ins unless the user asks for latest, average, minimum, or maximum values. When the interval is unspecified,
    use daily buckets through 31 days, weekly buckets through 180 days, and monthly buckets for longer supported ranges,
@@ -31,3 +34,5 @@ snapshots.
 
 - Lead with the direction and magnitude of the measurement trend, then show the period and supporting buckets.
 - Label every value with its returned canonical unit and state any aggregation or coverage limitation.
+- Where display fields are supplied, use the Sports Lib display value and unit together; canonical numbers remain in
+  their separately declared canonical units. Do not mix a converted unit with an unconverted number.

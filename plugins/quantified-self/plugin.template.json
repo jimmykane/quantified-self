@@ -1,7 +1,7 @@
 {
   "name": "quantified-self",
   "version": "0.2.0",
-  "description": "Analyze authorized Quantified Self data with focused activity, measurement, training, sleep, and route workflows.",
+  "description": "Analyze authorized Quantified Self data with focused Health, activity, measurement, training, sleep, and route workflows.",
   "author": {
     "name": "Dimitrios Kanellopoulos",
     "email": "privacy@quantified-self.io",
@@ -22,7 +22,7 @@
   "interface": {
     "displayName": "Quantified Self",
     "shortDescription": "Analyze your fitness, health, sleep, and routes.",
-    "longDescription": "Connect your authorized Quantified Self data for focused read-only workflows covering cross-domain trends, training, sleep, body measurements, activity performance, charts, and saved routes.",
+    "longDescription": "Connect your authorized Quantified Self data for focused read-only workflows covering recorded all-day Health, cross-domain trends, training, sleep, body measurements, activity performance, charts, and saved routes.",
     "developerName": "Quantified Self",
     "category": "Lifestyle",
     "capabilities": [

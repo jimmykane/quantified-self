@@ -572,6 +572,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
             copy: 'Review load, readiness, intensity, durability, sport-specific evidence, and body-weight history across the period you ask about.',
           },
           {
+            icon: 'monitor_heart',
+            title: 'Recorded Health metrics',
+            copy: 'Explore all-day heart rate, HRV, stress, Body Battery or resources, movement, energy and blood pressure with separate Health permission. Sources stay separate; Body Battery keeps its Garmin points scale. Bounded sample trends include UTC times. Body composition also needs Body measurements access. Reconnect an existing client to grant Health access.',
+          },
+          {
             icon: 'directions_run',
             title: 'Workout details and charts',
             copy: 'Find recent activities, compare recorded metrics, and inspect workout summaries, laps, swim lengths, MTB jumps, and chart-ready data.',
@@ -597,12 +602,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Approve training metrics, measurements, workout details, sleep, routes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
+            copy: 'Approve training metrics, Health metrics, measurements, workout details, sleep, routes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
           },
           {
             icon: 'lock',
             title: 'No settings or data writes',
-            copy: 'MCP clients cannot create, edit, or delete activities, routes, sleep records, dashboard settings, or Training state. Revocation blocks future access.',
+            copy: 'MCP clients cannot create, edit, delete, or backfill Health measurements, activities, routes, sleep records, dashboard settings, or Training state. Revocation blocks future access.',
           },
           {
             icon: 'shield',
