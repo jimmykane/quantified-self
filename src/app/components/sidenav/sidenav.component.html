@@ -59,10 +59,12 @@
     </mat-list-item>
 
     @if (hasTrainingPlanningNavigationAccess()) {
-      <mat-list-item class="sidenav-subitem" routerLinkActive="active" routerLink="/training/plans" (click)="closeSideNav()">
-        <mat-icon>event_note</mat-icon>
-        <span>Plans</span>
-      </mat-list-item>
+      <div class="sidenav-subitem-guide" routerLinkActive="sidenav-subitem-guide-active">
+        <mat-list-item class="sidenav-subitem" routerLinkActive="active" routerLink="/training/plans" (click)="closeSideNav()">
+          <mat-icon>event_note</mat-icon>
+          <span>Plans</span>
+        </mat-list-item>
+      </div>
     }
   </div>
 

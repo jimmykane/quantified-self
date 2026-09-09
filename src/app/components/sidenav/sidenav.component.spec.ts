@@ -327,12 +327,14 @@ describe('SideNavComponent', () => {
         fixture.detectChanges();
         expect(plansItem.classList.contains('active')).toBe(true);
         expect(trainingItem.classList.contains('active')).toBe(false);
+        expect(plansItem.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(true);
 
         await router.navigateByUrl('/training?tab=load#trends');
         await fixture.whenStable();
         fixture.detectChanges();
         expect(trainingItem.classList.contains('active')).toBe(true);
         expect(plansItem.classList.contains('active')).toBe(false);
+        expect(plansItem.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(false);
     });
 
     it('shows Plans beneath the direct Training link for the staged user and closes on selection', () => {
@@ -350,8 +352,10 @@ describe('SideNavComponent', () => {
         expect(plansItem).toBeTruthy();
         expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/training/plans');
         const trainingGroup = fixture.nativeElement.querySelector('[role="group"][aria-label="Training"]');
-        expect(plansItem?.nativeElement.parentElement).toBe(trainingGroup);
-        expect(plansItem?.nativeElement.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
+        const guide = plansItem?.nativeElement.parentElement;
+        expect(guide?.classList.contains('sidenav-subitem-guide')).toBe(true);
+        expect(guide?.parentElement).toBe(trainingGroup);
+        expect(guide?.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
         plansItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();

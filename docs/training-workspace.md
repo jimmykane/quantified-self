@@ -375,8 +375,8 @@ return entry when available and otherwise replaces a direct deep link with its s
 Route changes may replace a draft, but live schedule and unit-setting updates do not. A pending save captures the owner
 and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. Training
 Planning is not live yet: `/plans` and the former query-parameter editor shapes are not registered and have no
-compatibility redirects. The sidebar entry remains indented beneath Training and UID-gated for presentation only;
-direct owner-scoped access is unchanged.
+compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail and remains UID-gated for
+presentation only; direct owner-scoped access is unchanged.
 
 ### Provider proof status
 
