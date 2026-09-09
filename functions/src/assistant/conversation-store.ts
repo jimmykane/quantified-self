@@ -130,6 +130,7 @@ export interface AssistantConversationStore {
     uid: string,
     locationAccess?: AssistantLocationAccess,
     timelineNotesEnabled?: boolean,
+    expectedConversationId?: string | null,
   ) => Promise<AssistantConversation>;
 }
 
@@ -714,6 +715,7 @@ export function createAssistantConversationStore(
       uid,
       locationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
       timelineNotesEnabled = false,
+      expectedConversationId,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -726,6 +728,16 @@ export function createAssistantConversationStore(
           uid,
           now.getTime(),
         );
+        const snapshot = await transaction.get(conversationRef);
+        const stored = snapshot.exists ? parseStoredConversation(snapshot.data(), now.getTime()) : null;
+        const currentId = stored && stored.expireAt.toMillis() > now.getTime() ? stored.conversationId : null;
+        if ((timelineNotesEnabled && expectedConversationId === undefined)
+          || (expectedConversationId !== undefined && currentId !== expectedConversationId)) {
+          throw new AssistantConversationStoreError(
+            'conversation_changed',
+            'The Assistant conversation changed. Reload before changing data access.',
+          );
+        }
         const conversation = createEmptyConversation(
           now,
           dependencies.createId,

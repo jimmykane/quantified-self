@@ -323,9 +323,24 @@ describe('Assistant callable', () => {
       .rejects.toMatchObject({ code: 'invalid-argument' });
     expect(dependencies.answer).not.toHaveBeenCalled();
     expect(dependencies.reserveQuota).not.toHaveBeenCalled();
-    await expect(runResetAssistantConversation({ locationAccess: 'precise_activity', timelineNotesEnabled: true }, context, store))
+    await expect(runResetAssistantConversation({ locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: null }, context, store))
       .resolves.toMatchObject({ timelineNotesEnabled: true });
-    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true);
+    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null);
+  });
+
+  it.each([undefined, '', ' ', 42, 'x'.repeat(121)])('rejects an unbound or malformed notes reset generation: %j', async conversationId => {
+    const { store } = createDependencies();
+    await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId }, context, store))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(store.resetConversation).not.toHaveBeenCalled();
+  });
+
+  it('passes the expected notes generation to the transaction and reports stale consent safely', async () => {
+    const { store } = createDependencies();
+    vi.mocked(store.resetConversation).mockRejectedValue(new AssistantConversationStoreError('conversation_changed', 'Changed'));
+    await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId: 'old-chat' }, context, store))
+      .rejects.toMatchObject({ code: 'aborted' });
+    expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat');
   });
 
   it('persists bounded server-owned visuals with the assistant message', async () => {
@@ -976,6 +991,7 @@ describe('Assistant callable', () => {
       'user-1',
       'precise_activity',
       false,
+      undefined,
     );
   });
 

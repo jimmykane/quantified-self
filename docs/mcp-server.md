@@ -553,7 +553,7 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 34-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 35-tool `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 

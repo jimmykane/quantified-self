@@ -182,6 +182,8 @@ export interface GetAssistantConversationResponse {
 }
 
 export interface ResetAssistantConversationRequest {
+  /** Expected active generation; null asserts there is no unexpired conversation. Missing is legacy, notes-off only. */
+  conversationId?: string | null;
   timelineNotesEnabled?: boolean;
   locationAccess: AssistantLocationAccess;
 }

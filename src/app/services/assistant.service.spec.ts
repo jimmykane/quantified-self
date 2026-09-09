@@ -92,8 +92,8 @@ describe('AssistantService', () => {
     await expect(service.sendMessage(request)).resolves.toMatchObject({ timelineNotesEnabled: true });
     await expect(service.sendMessage({ ...request, timelineNotesEnabled: false })).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
     await expect(service.getConversationState()).resolves.toMatchObject({ timelineNotesEnabled: true });
-    await expect(service.resetConversation('precise_activity', true)).resolves.toEqual(response.conversation);
-    expect(functionsService.call).toHaveBeenLastCalledWith('resetAssistantConversation', { locationAccess: 'precise_activity', timelineNotesEnabled: true });
+    await expect(service.resetConversation('precise_activity', true, 'expected-chat')).resolves.toEqual(response.conversation);
+    expect(functionsService.call).toHaveBeenLastCalledWith('resetAssistantConversation', { locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: 'expected-chat' });
     functionsService.call.mockResolvedValue({ data: { ...response, timelineNotesEnabled: 'true' } });
     await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
     await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'INTERNAL' });
@@ -189,7 +189,7 @@ describe('AssistantService', () => {
     expect(functionsService.call).toHaveBeenNthCalledWith(
       2,
       'resetAssistantConversation',
-      { locationAccess: 'coordinate_free' },
+      { locationAccess: 'coordinate_free', conversationId: null },
     );
   });
 
@@ -361,7 +361,7 @@ describe('AssistantService', () => {
       .toEqual(response.conversation);
     expect(functionsService.call).toHaveBeenLastCalledWith(
       'resetAssistantConversation',
-      { locationAccess: 'precise_activity' },
+      { locationAccess: 'precise_activity', conversationId: null },
     );
   });
 });

@@ -95,6 +95,12 @@ mismatched generation or setting. The runtime uses the server-owned state and re
 permission before and after each private notes tool call. Completion retains the existing generation/lease fence.
 The frontend validates response agreement, ignores account-switched responses, and never retries an originating
 account's call as a newly signed-in user. Pending recovery preserves the independent access choices.
+Permission resets carry the expected conversation ID (`null` means no unexpired conversation), checked in the same
+transaction as the replacement. Stale tabs and delayed retries cannot restore notes access through an unrelated location
+change. Legacy resets may omit the expectation only with notes disabled. A conflict reloads the server's choices without
+automatically retrying the reset or discarding the draft. The composer is read-only during a reset; sheet results bind
+to their opening account and generation. Account loads clear old messages, pending questions and permissions before
+waiting for the replacement state, and old completions cannot clear a newer account's view.
 
 Only `query_timeline_notes` and `timeline-notes:read` are added when enabled. Existing grants/tools—including the absence
 of all-day Health and route locations—are unchanged. Notes may be consulted for direct questions or relevant Sleep,

@@ -186,10 +186,10 @@
           <form class="composer" (submit)="handleComposerSubmit($event)">
             <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
-              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending() || resetting()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
             <button mat-icon-button class="composer-submit" type="submit"
-              [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
+              [disabled]="sending() || resetting() || quotaPreventsSend() || promptControl.invalid"
               [attr.aria-label]="sending() ? 'Sending message' : 'Send message'">
               <span class="composer-submit-content">
                 @if (sending()) {

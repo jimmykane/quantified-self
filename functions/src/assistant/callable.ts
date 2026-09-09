@@ -630,9 +630,15 @@ export async function runResetAssistantConversation(
   const data = asRecord(value) as Partial<ResetAssistantConversationRequest>;
   const locationAccess = parseAssistantLocationAccess(data.locationAccess);
   const timelineNotesEnabled = parseTimelineNotesEnabled(data.timelineNotesEnabled);
+  const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : data.conversationId;
+  if ((conversationId !== undefined && conversationId !== null
+    && (typeof conversationId !== 'string' || !conversationId || conversationId.length > 120))
+    || (timelineNotesEnabled && conversationId === undefined)) {
+    throw new HttpsError('invalid-argument', 'Provide the current conversationId or null before enabling Timeline notes.');
+  }
   try {
     return {
-      conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled),
+      conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled, conversationId),
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
     };
   } catch (error) {

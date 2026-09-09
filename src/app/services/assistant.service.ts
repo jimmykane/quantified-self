@@ -147,6 +147,7 @@ export class AssistantService {
   async resetConversation(
     locationAccess: AssistantLocationAccess = 'coordinate_free',
     timelineNotesEnabled = false,
+    conversationId: string | null = null,
   ): Promise<AssistantConversation> {
     try {
       const response = await this.callWithAuthenticationRetry<
@@ -154,7 +155,7 @@ export class AssistantService {
         ResetAssistantConversationResponse
       >(
         'resetAssistantConversation',
-        { locationAccess, ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}) },
+        { locationAccess, conversationId, ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}) },
       );
       if ((response.data.timelineNotesEnabled ?? false) !== timelineNotesEnabled) {
         throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting was not confirmed.');
