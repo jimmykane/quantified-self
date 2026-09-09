@@ -2,6 +2,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import { buildPlannedWorkoutCalendarOverlay } from './planned-workout-calendar.helper';
+import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from './training-plan-appearance.helper';
 
 const STRUCTURE = {
   version: 1 as const,
@@ -46,6 +47,23 @@ const PLAN: TrainingPlanV1 = {
 };
 
 describe('planned workout calendar overlay', () => {
+  it('derives plan colors live, keeps standalone neutral, and reserves a marker for both scopes', () => {
+    const entries = [workout('standalone'), { ...workout('standalone'), id: 'standalone-2' }, workout('tempo', 'skipped')];
+    const colored = { ...PLAN, color: 'purple' as const };
+    const day = buildPlannedWorkoutCalendarOverlay(entries, [colored])['2026-09-02'];
+    expect(day.visibleEntries.map(entry => entry.workout.id)).toEqual(['standalone', 'tempo']);
+    expect(day.visibleEntries.map(entry => entry.color)).toEqual([STANDALONE_WORKOUT_COLOR, trainingPlanAppearance(colored).color]);
+    expect(day.overflowCount).toBe(1);
+    expect(day.entries.find(entry => entry.workout.id === 'tempo')?.workout.lifecycle).toBe('skipped');
+    const recolored = buildPlannedWorkoutCalendarOverlay(entries, [{ ...colored, color: 'green' }])['2026-09-02'];
+    expect(recolored.visibleEntries[1].color).toBe(trainingPlanAppearance({ color: 'green' }).color);
+    expect(recolored.entries.map(entry => entry.workout)).toEqual(day.entries.map(entry => entry.workout));
+    const detached = buildPlannedWorkoutCalendarOverlay([{ ...workout('tempo'), planId: null }], [colored]);
+    expect(detached['2026-09-02'].entries[0].color).toBe(STANDALONE_WORKOUT_COLOR);
+    expect(buildPlannedWorkoutCalendarOverlay([workout('tempo')], [PLAN])['2026-09-02'].entries[0].color)
+      .toBe(trainingPlanAppearance(PLAN).color);
+  });
+
   it('groups plan and standalone workouts separately from deleted history', () => {
     const overlay = buildPlannedWorkoutCalendarOverlay([
       workout('tempo'),

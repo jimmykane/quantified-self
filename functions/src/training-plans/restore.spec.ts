@@ -116,6 +116,19 @@ describe('parseRestoreTrainingScheduleRevisionRequest', () => {
 });
 
 describe('applyPlanRevisionRestore', () => {
+    it.each(['blue', undefined] as const)('restores a saved or pre-color plan revision (%s)', color => {
+        const currentPlan = plan({ color: 'purple' });
+        const currentWorkout = workout();
+        const desiredPlan = plan({ ...(color ? { color } : {}), revision: 2 });
+        const result = applyPlanRevisionRestore(snapshot([currentPlan], [currentWorkout]), {
+            plan: desiredPlan, workouts: new Map([[currentWorkout.id, currentWorkout]]),
+        }, planRequest(), NOW_MS);
+        expect(result.applied.after.plans.get(currentPlan.id)?.color).toBe(color);
+        expect(result.applied.after.plans.get(currentPlan.id)?.revision).toBe(5);
+        expect(result.applied.changedWorkoutIds).toEqual([]);
+        if (!color) expect(result.applied.after.plans.get(currentPlan.id)).not.toHaveProperty('color');
+    });
+
     it('creates a new checkpoint revision and restores same-plan workout state', () => {
         const currentPlan = plan();
         const currentWorkout = workout();

@@ -97,6 +97,25 @@ describe('applyTrainingScheduleMutation', () => {
         initial = snapshot();
     });
 
+    it('revisions only the chosen plan when changing its color, including stale-revision rejection', () => {
+        const current = plan();
+        const scheduled = workout({ planId: current.id });
+        const source = snapshot([current, plan({ id: 'other' })], [scheduled], current.id);
+        const change = request({ kind: 'set-plan-color', planId: current.id, color: 'purple' }, [
+            { scope: 'plan', id: current.id, revision: current.revision },
+        ]);
+        const result = applyTrainingScheduleMutation(source, change, NOW_MS);
+        expect(result.after.plans.get(current.id)).toMatchObject({ color: 'purple', revision: 4 });
+        expect(result.after.plans.get('other')).toEqual(source.plans.get('other'));
+        expect(result.after.workouts).toEqual(source.workouts);
+        expect(result.after.state).toMatchObject({ activePlanId: current.id, currentWorkoutCount: 1, revision: 8 });
+        expect(result.changedWorkoutIds).toEqual([]);
+        expect(source.plans.get(current.id)).not.toHaveProperty('color');
+        expect(() => applyTrainingScheduleMutation(result.after, { ...change,
+            expectedRevisions: [{ scope: 'state', id: 'current', revision: 8 },
+                { scope: 'plan', id: current.id, revision: 3 }] }, NOW_MS + 1)).toThrow('changed from revision');
+    });
+
     it('creates a standalone workout without a plan', () => {
         const result = applyTrainingScheduleMutation(initial, request({
             kind: 'create-workout',

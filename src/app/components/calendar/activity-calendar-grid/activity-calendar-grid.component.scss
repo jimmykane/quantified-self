@@ -266,8 +266,8 @@
   gap: 1px;
   padding: 1px 3px;
   border-radius: var(--mat-sys-corner-extra-small);
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-small);
 }
 
@@ -301,22 +301,38 @@
 
 .activity-calendar--year .planned-workout-markers,
 .activity-calendar--compact .planned-workout-markers {
-  top: 0;
-  right: 0;
-  bottom: auto;
+  // Small cells reserve their right edge for planning, below the note icon and opposite note colors.
+  top: 18px;
+  right: 2px;
+  bottom: 3px;
+  width: 3px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   padding: 0;
   background: transparent;
 }
 
 .activity-calendar--year .planned-workout-markers mat-icon,
 .activity-calendar--compact .planned-workout-markers mat-icon {
-  width: 10px;
-  height: 10px;
-  font-size: 10px;
+  box-sizing: border-box;
+  width: 3px;
+  height: auto;
+  min-height: 0;
+  flex: 1;
+  border-inline-end: 3px solid currentColor;
+  font-size: 0;
+  line-height: 0;
 }
 
-.activity-calendar--year .planned-workout-markers mat-icon:nth-of-type(n + 2),
-.activity-calendar--compact .planned-workout-markers mat-icon:nth-of-type(n + 2) {
+.activity-calendar--year .planned-workout-markers .planned-workout-marker--skipped,
+.activity-calendar--compact .planned-workout-markers .planned-workout-marker--skipped {
+  border-inline-end-style: dashed;
+}
+
+.activity-calendar--year .planned-workout-markers > span,
+.activity-calendar--compact .planned-workout-markers > span {
+  // Full counts remain in the date's accessible name and day details; do not cover recorded markers.
   display: none;
 }
 

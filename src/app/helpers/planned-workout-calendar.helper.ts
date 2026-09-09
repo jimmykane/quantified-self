@@ -1,8 +1,10 @@
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
+import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from './training-plan-appearance.helper';
 
 export interface PlannedWorkoutCalendarEntry {
   workout: ScheduledWorkoutV1;
   planName: string | null;
+  color?: string;
 }
 
 export interface PlannedWorkoutCalendarDayOverlay {
@@ -20,7 +22,7 @@ export function buildPlannedWorkoutCalendarOverlay(
   plans: readonly TrainingPlanV1[] = [],
   activePlanId?: string | null,
 ): PlannedWorkoutCalendarOverlay {
-  const planNames = new Map(plans.map(plan => [plan.id, plan.name]));
+  const plansById = new Map(plans.map(plan => [plan.id, plan]));
   const activePlanIds = activePlanId === undefined
     ? new Set(plans.filter(plan => plan.lifecycle === 'active').map(plan => plan.id))
     : new Set(activePlanId ? [activePlanId] : []);
@@ -34,7 +36,8 @@ export function buildPlannedWorkoutCalendarOverlay(
       const entries = grouped.get(workout.localDate) ?? [];
       entries.push({
         workout,
-        planName: workout.planId ? planNames.get(workout.planId) ?? 'Plan workout' : null,
+        planName: workout.planId ? plansById.get(workout.planId)?.name ?? 'Plan workout' : null,
+        color: workout.planId ? trainingPlanAppearance(plansById.get(workout.planId)).color : STANDALONE_WORKOUT_COLOR,
       });
       grouped.set(workout.localDate, entries);
     });
@@ -47,13 +50,19 @@ export function buildPlannedWorkoutCalendarOverlay(
     ));
     const skippedCount = sorted.filter(entry => entry.workout.lifecycle === 'skipped').length;
     const plannedCount = sorted.length - skippedCount;
+    // Reserve a marker for each visible scope so standalone workouts cannot hide the active plan's color.
+    const visibleEntries = sorted.slice(0, 2);
+    const otherScope = sorted.find(entry => entry.workout.planId !== visibleEntries[0]?.workout.planId);
+    if (otherScope && visibleEntries.every(entry => entry.workout.planId === visibleEntries[0].workout.planId)) {
+      visibleEntries[1] = otherScope;
+    }
     const parts = [
       plannedCount ? `${plannedCount} planned workout${plannedCount === 1 ? '' : 's'}` : '',
       skippedCount ? `${skippedCount} skipped workout${skippedCount === 1 ? '' : 's'}` : '',
     ].filter(Boolean);
     return [date, {
       entries: sorted,
-      visibleEntries: sorted.slice(0, 2),
+      visibleEntries,
       overflowCount: Math.max(0, sorted.length - 2),
       hasSkipped: skippedCount > 0,
       ariaLabel: parts.join(', '),

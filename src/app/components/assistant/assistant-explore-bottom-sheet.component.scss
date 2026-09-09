@@ -16,10 +16,16 @@
 }
 
 .assistant-explore-intro,
+.assistant-notes-access p,
 .assistant-mcp-link p {
   margin: 0;
   color: var(--mat-sys-on-surface-variant);
   line-height: 1.5;
+}
+
+.assistant-notes-access {
+  display: grid;
+  gap: 8px;
 }
 
 h3 {

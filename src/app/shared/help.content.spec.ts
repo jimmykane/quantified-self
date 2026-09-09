@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join(' ');
+    expect(content).toContain('**Timeline notes** is an independent read-only permission');
+    expect(content).toContain('full private');
+    expect(content).toContain('hidden from charts');
+    expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
+      .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
+  });
   it('explains private notes in both workspaces and makes their context searchable', () => {
     for (const id of ['health', 'training-analysis']) {
       const content = HELP_SECTIONS.find(section => section.id === id)?.content;
@@ -438,6 +446,10 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
     expect(planningSection?.content).toContain('calendar cues, not rest-day recommendations');
+    expect(planningSection?.content).toContain('**Plan actions -> Plan color**');
+    expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
+    expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
+      .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');

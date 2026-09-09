@@ -116,6 +116,81 @@ function requireStartedTurn(turn: AssistantTurnStart): BegunAssistantTurn {
 }
 
 describe('Assistant conversation store', () => {
+  it('cannot restore notes consent from a stale tab or delayed reset retry', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00Z'), createId: () => `notes-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }),
+    });
+    const enabled = await store.resetConversation('owner', 'coordinate_free', true, null);
+    const disabled = await store.resetConversation('owner', 'coordinate_free', false, enabled.conversationId);
+    await expect(store.resetConversation('owner', 'precise_activity', true, enabled.conversationId))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+    await expect(store.resetConversation('owner', 'coordinate_free', true, null))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+    await expect(store.resetConversation('owner', 'coordinate_free', true))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+    expect(await store.getActiveConversationState('owner')).toMatchObject({
+      conversation: { conversationId: disabled.conversationId }, locationAccess: 'coordinate_free',
+    });
+    expect((await store.getActiveConversationState('owner')).timelineNotesEnabled).not.toBe(true);
+  });
+
+  it('accepts an explicit empty expectation for an expired chat, but not its stale generation', async () => {
+    const harness = createFirestoreHarness();
+    let now = new Date('2026-08-03T12:00:00Z');
+    let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => now, createId: () => `notes-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }),
+    });
+    const previous = await store.resetConversation('owner');
+    now = new Date('2026-08-11T12:00:00Z');
+    await expect(store.resetConversation('owner', 'coordinate_free', true, previous.conversationId))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+    await expect(store.resetConversation('owner', 'coordinate_free', true, null)).resolves.toBeDefined();
+    expect((await store.getActiveConversationState('owner')).timelineNotesEnabled).toBe(true);
+  });
+
+  it('keeps notes access server-owned, independent, retry-bound and fenced by the chat generation', async () => {
+    const harness = createFirestoreHarness();
+    let sequence = 0;
+    const store = createAssistantConversationStore({ db: () => harness.db as never,
+      now: () => new Date('2026-08-03T12:00:00Z'), createId: () => `notes-${++sequence}`,
+      getDeletionGuard: async () => ({ userExists: true, deletionInProgress: false, shouldSkip: false }),
+    });
+    const request = 'notes-request-00001';
+    const fingerprint = createAssistantRequestFingerprint(request, 'Context?', 'precise_activity', true);
+    expect(fingerprint).not.toBe(createAssistantRequestFingerprint(request, 'Context?', 'precise_activity'));
+    expect(createAssistantRequestFingerprint(request, 'Context?', 'coordinate_free', false))
+      .toBe(createAssistantRequestFingerprint(request, 'Context?'));
+    await expect(store.beginTurn('owner', undefined, request, fingerprint, 'precise_activity', true))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+    const chat = await store.resetConversation('owner', 'precise_activity', true, null);
+    expect(await store.getActiveConversationState('owner')).toMatchObject({
+      timelineNotesEnabled: true, locationAccess: 'precise_activity', conversation: { conversationId: chat.conversationId },
+    });
+    await expect(store.beginTurn('owner', chat.conversationId, request, fingerprint, 'precise_activity'))
+      .rejects.toMatchObject({ code: 'conversation_changed' });
+    const begun = requireStartedTurn(await store.beginTurn('owner', chat.conversationId, request, fingerprint, 'precise_activity', true));
+    expect(begun.timelineNotesEnabled).toBe(true);
+    await store.completeTurn('owner', begun, message(request, 'user', 'Context?'), message('answer', 'assistant', 'Reported context.'));
+    expect(await store.findRequestState('owner', chat.conversationId, request, fingerprint)).toMatchObject({ kind: 'replayed' });
+    // The lookup returns the authoritative receipt; the callable rejects mismatched request fingerprints.
+    expect(await store.findRequestState('owner', chat.conversationId, request,
+      createAssistantRequestFingerprint(request, 'Context?', 'precise_activity'))).toMatchObject({ requestFingerprint: fingerprint });
+    const next = requireStartedTurn(await store.beginTurn('owner', chat.conversationId, undefined, undefined, 'precise_activity', true));
+    const reset = await store.resetConversation('owner', 'precise_activity', false);
+    expect(reset.conversationId).not.toBe(chat.conversationId);
+    expect((await store.getActiveConversationState('owner')).timelineNotesEnabled ?? false).toBe(false);
+    expect((await store.getActiveConversationState('owner')).locationAccess).toBe('precise_activity');
+    await expect(store.completeTurn('owner', next, message('user', 'user', 'Question'), message('answer', 'assistant', 'Stale context')))
+      .rejects.toMatchObject({ code: 'turn_lost' });
+    await store.resetConversation('owner');
+    expect((await store.getActiveConversationState('owner')).locationAccess).toBe('coordinate_free');
+    expect((await store.getActiveConversationState('another-owner')).timelineNotesEnabled ?? false).toBe(false);
+  });
   it('serializes turns and persists only a bounded completed history', async () => {
     const harness = createFirestoreHarness();
     let sequence = 0;

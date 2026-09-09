@@ -1,4 +1,6 @@
 import * as admin from 'firebase-admin';
+import { firestoreTimelineNotesReads, queryMcpTimelineNotes, McpTimelineNotesError,
+  McpTimelineNotesInput, McpTimelineNotesReads } from './timeline-notes.service';
 import {
   firestoreHealthReads, getMcpHealthCatalog, queryMcpHealth,
   McpHealthError, McpHealthInput, McpHealthReadDependencies,
@@ -342,6 +344,7 @@ interface ResolvedRouteListQuery {
 type ActivityDetailKind = 'laps' | 'jumps' | 'swim_lengths';
 type RouteDocumentKind = 'geometry' | 'source';
 type OpaqueValueKind =
+  | 'timeline_notes_cursor'
   | 'activity_ref'
   | 'route_ref'
   | 'activity_cursor'
@@ -434,6 +437,7 @@ interface ActivityChartContextDocuments {
 }
 
 export interface McpDataServiceDependencies {
+  timelineNotesReads?: McpTimelineNotesReads;
   healthReads?: McpHealthReadDependencies;
   now: () => number;
   fetchMetricDiscoveryDocuments: (
@@ -5949,6 +5953,21 @@ export function createMcpDataService(
 
     async listHealthMetrics() {
       return getMcpHealthCatalog();
+    },
+
+    async queryTimelineNotes(input: McpTimelineNotesInput) {
+      const reads = dependencies.timelineNotesReads
+        ?? (dependencies === defaultDependencies ? firestoreTimelineNotesReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Timeline notes reads are unavailable.');
+      try {
+        return await queryMcpTimelineNotes(input, reads, {
+          encode: (value, uid, connectionId) => encodeOpaqueValue('timeline_notes_cursor', value, uid, connectionId),
+          decode: (value, uid, connectionId) => decodeOpaqueValue('timeline_notes_cursor', value, uid, connectionId, 'pagination cursor'),
+        }, dependencies.now());
+      } catch (error) {
+        if (error instanceof McpTimelineNotesError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'Timeline notes could not be read safely. Try again later.');
+      }
     },
 
     async queryHealthMetric(input: McpHealthInput) {

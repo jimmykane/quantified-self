@@ -445,6 +445,12 @@ function createFixtureDataService(
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
   const service = {
+    queryTimelineNotes: vi.fn().mockResolvedValue({
+      startDate: '2026-07-01', endDate: '2026-07-02',
+      notes: [{ category: 'sickness', title: 'Reported context', details: 'Full text including personal context.',
+        startDate: '2026-06-30', endDate: null, timeZone: 'Europe/Helsinki', effectiveEndDate: '2026-07-02' }],
+      recordsScanned: 1, skippedRecords: 0, scanComplete: true, limitsReached: [], nextCursor: null,
+    }),
     listHealthMetrics: vi.fn().mockResolvedValue(getMcpHealthCatalog()),
     queryHealthMetric: vi.fn().mockResolvedValue({
       metric: getMcpHealthCatalog().metrics.find(metric => metric.id === 'heart_rate'),
@@ -1158,6 +1164,7 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   list_health_metrics: {},
   query_health_metric: { metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02' },
   list_measurement_types: {},
@@ -1726,10 +1733,12 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     );
     expect(tools.every(tool => Boolean(tool.outputSchema))).toBe(true);
     const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric'].includes(tool.name));
+    const noteTools = tools.filter(tool => tool.name === 'query_timeline_notes');
+    expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
     // Keep the existing frozen surface's budget; account separately for the two
     // additive Health contracts so schema growth remains bounded and visible.
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
-    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !healthTools.includes(tool))), 'utf8'))
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !healthTools.includes(tool) && !noteTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -1883,6 +1892,34 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       expect(result).not.toHaveProperty('structuredContent');
       expect(JSON.stringify(result)).not.toMatch(/1788220800001|private-category-canary|endTimeMs|observedAtMs/);
     }
+  });
+
+  it('binds full notes to the bearer grant and rejects private neighboring fields', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TimelineNotesRead]);
+    connections.push(connection);
+    const fixture = await service.queryTimelineNotes({ uid: 'fixture', connectionId: 'fixture', scopes: [],
+      startDate: '2026-07-01', endDate: '2026-07-02' });
+    await connection.client.callTool({ name: 'query_timeline_notes', arguments: {
+      ...successfulToolArguments.query_timeline_notes, uid: 'attacker', connectionId: 'attacker', scopes: [],
+    } });
+    expect(service.queryTimelineNotes).toHaveBeenLastCalledWith(expect.objectContaining({
+      uid: 'user-1', scopes: [MCP_OAUTH_SCOPES.TimelineNotesRead], limit: 32,
+    }));
+    for (const field of ['id', 'revision', 'createdAtMs', 'updatedAtMs', 'color', 'showOnCharts', 'receipt', 'providerAccountId']) {
+      service.queryTimelineNotes = vi.fn().mockResolvedValue({ ...fixture,
+        notes: [{ ...fixture.notes[0], [field]: 'private-note-secret' }],
+      });
+      const result = await connection.client.callTool({ name: 'query_timeline_notes', arguments: successfulToolArguments.query_timeline_notes });
+      expect(result.isError, field).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-note-secret');
+    }
+    service.queryTimelineNotes = vi.fn().mockResolvedValue({ ...fixture, notes: [], scanComplete: false,
+      recordsScanned: 512, skippedRecords: 512, limitsReached: ['records'], nextCursor: 'opaque-cursor' });
+    const page = await connection.client.callTool({ name: 'query_timeline_notes', arguments: successfulToolArguments.query_timeline_notes });
+    expect(page.isError).not.toBe(true);
+    expect(page.structuredContent).toMatchObject({ scanComplete: false, nextCursor: 'opaque-cursor' });
   });
 
   it('binds Health reads to bearer identity and grants rather than client-supplied arguments', async () => {

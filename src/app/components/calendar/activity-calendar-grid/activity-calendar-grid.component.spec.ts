@@ -80,20 +80,22 @@ describe('ActivityCalendarGridComponent', () => {
     expect(buttons).toHaveLength(42);
   });
 
-  it('renders planned and skipped workout markers without changing activity markers', async () => {
+  it.each([
+    ['week', false], ['month', false], ['month', true], ['year', false],
+  ] as const)('renders both plan colors in %s view (compact: %s) without changing activity markers', async (view, compact) => {
     const plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {
       '2026-08-03': {
         entries: [],
         visibleEntries: [
-          { workout: createWorkout('tempo', 'planned'), planName: 'Autumn build' },
-          { workout: createWorkout('rest', 'skipped'), planName: null },
+          { workout: createWorkout('tempo', 'planned'), planName: 'Autumn build', color: 'purple' },
+          { workout: createWorkout('rest', 'skipped'), planName: null, color: 'gray' },
         ],
         overflowCount: 1,
         hasSkipped: true,
         ariaLabel: '2 planned workouts, 1 skipped workout',
       },
     };
-    const fixture = await renderGrid('month', false, [
+    const fixture = await renderGrid(view, compact, [
       createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
     ], DaysOfTheWeek.Monday, plannedWorkoutsByDate);
     const plannedMarkers = fixture.nativeElement.querySelector('.planned-workout-markers');
@@ -103,6 +105,8 @@ describe('ActivityCalendarGridComponent', () => {
     expect([...plannedMarkers.querySelectorAll('mat-icon')].map((icon: Element) => icon.textContent?.trim()))
       .toEqual(['event_note', 'event_busy']);
     expect(plannedMarkers.textContent).toContain('+1');
+    expect([...plannedMarkers.querySelectorAll('mat-icon')].map((icon: HTMLElement) => icon.style.color)).toEqual(['purple', 'gray']);
+    expect(plannedMarkers.querySelector('.planned-workout-marker--skipped')?.textContent).toBe('event_busy');
     expect(activityMarkers).toHaveLength(1);
     expect(fixture.nativeElement.querySelector('[aria-label*="2 planned workouts, 1 skipped workout"]'))
       .toBeTruthy();
@@ -132,6 +136,17 @@ describe('ActivityCalendarGridComponent', () => {
     expect(markers[0].style.getPropertyValue('--calendar-marker-diameter')).toMatch(/px$/);
     expect(fixture.nativeElement.querySelector('.activity-calendar-month')?.classList)
       .not.toContain('qs-glass-card-panel');
+  });
+
+  it('uses a separate right-edge color rail in compact cells without covering date, note, or activity icons', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'), 'utf8');
+    const rail = styles.match(/\.activity-calendar--compact \.planned-workout-markers\s*\{([^}]*)\}/)?.[1];
+    expect(rail).toContain('top: 18px;');
+    expect(rail).toContain('right: 2px;');
+    expect(rail).toContain('bottom: 3px;');
+    expect(rail).toContain('flex-direction: column;');
+    expect(styles).toContain('border-inline-end: 3px solid currentColor;');
+    expect(styles).toContain('border-inline-end-style: dashed;');
   });
 
   it('renders twelve glass month panels in yearly mode', async () => {

@@ -72,6 +72,7 @@ describe('CalendarDayDetailsComponent', () => {
     const fixture = await renderDayDetails([], { plannedWorkouts: [{
       workout: createPlannedWorkout(),
       planName: 'Autumn build',
+      color: 'purple',
     }] });
     const actions = [...fixture.nativeElement.querySelectorAll('.calendar-day-plan-actions a')] as HTMLAnchorElement[];
 
@@ -80,6 +81,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
+    expect((fixture.nativeElement.querySelector('.calendar-day-planned-item') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
     expect(actions.map(action => action.getAttribute('href'))).toEqual([
       '/training/plans?date=2026-08-03',
       '/training/plans?date=2026-08-03&scope=standalone',

@@ -298,6 +298,31 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject({ code: 'temporarily_unavailable', message: 'Health data could not be read safely. Try again later.' });
   });
 
+  it('encrypts notes cursors and binds them to the owner, connection, dates, and phase', async () => {
+    const documents = [1, 2].map(index => ({ id: String(index).padStart(64, '0'), data: {
+      category: 'other', title: 'Private context', startDate: '2026-07-01', endDate: '2026-07-02',
+      timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1,
+    } }));
+    dependencies.timelineNotesReads = { activeOwner: vi.fn().mockResolvedValue(true),
+      fetchPage: vi.fn(async (_uid, _range, phase, _size, position) => phase === 'ongoing' ? []
+        : documents.slice(position ? documents.findIndex(doc => doc.id === position.id) + 1 : 0)),
+    };
+    const service = createMcpDataService(dependencies);
+    const input = { uid: 'owner', connectionId: 'connection', scopes: ['timeline-notes:read'],
+      startDate: '2026-07-01', endDate: '2026-07-02', limit: 1 };
+    const first = await service.queryTimelineNotes(input);
+    const cursor = first.nextCursor!;
+    expect(Buffer.from(cursor, 'base64url').toString()).not.toMatch(/Private|2026|000000|closed/);
+    expect((await service.queryTimelineNotes({ ...input, cursor })).scanComplete).toBe(true);
+    for (const change of [{ uid: 'other' }, { connectionId: 'other' }, { endDate: '2026-07-03' },
+      { cursor: `${cursor.slice(0, 10)}${cursor[10] === 'A' ? 'B' : 'A'}${cursor.slice(11)}` }]) {
+      await expect(service.queryTimelineNotes({ ...input, cursor, ...change })).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+    vi.mocked(dependencies.timelineNotesReads.fetchPage).mockRejectedValue(new Error('private note text and owner identity'));
+    await expect(service.queryTimelineNotes(input)).rejects.toMatchObject({ code: 'temporarily_unavailable',
+      message: 'Timeline notes could not be read safely. Try again later.' });
+  });
+
   it('restricts route source reads to the owning route path and project bucket', () => {
     expect(resolveMcpRouteSourcePath(
       'user-1',

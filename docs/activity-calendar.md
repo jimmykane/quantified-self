@@ -48,6 +48,15 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 - At most three groups are drawn in a day cell; an overflow count represents additional groups.
 - Week and Month layouts separate markers when space allows. Compact tiles, narrow layouts, and Year view use concentric markers.
 - Planned and skipped-workout icons are independent from the duration-scaled activity markers. Their count does not change marker size or overflow.
+- Planned icons use the associated plan's saved color (or theme primary for Default/legacy plans); standalone icons use
+  the theme's neutral foreground. Day-details planned rows repeat the accent on their leading edge. Colors resolve from
+  live plan records through `training-plan-appearance.helper.ts`, so recoloring a plan or moving a workout changes all
+  calendar surfaces without rewriting workouts. Configure colors in **Plans -> Plan actions -> Plan color** or when
+  creating a plan. Only named palette values are stored; activity circles, Timeline note colors, and weekend shading
+  are unchanged. Week/Month show up to two planned icons and an overflow count; when standalone and active-plan workouts
+  share a day, one marker represents each scope. Compact/Year use slim right-edge color segments instead, below any note
+  icon and opposite the note-color edge; skipped markers are dashed. Visual overflow counts are omitted in these small
+  cells to avoid covering activities, but complete counts remain in accessible date names and day details.
 - Date cells do not use Material tooltips. This preserves native touch scrolling; their accessible names contain the date, activity, planned-workout, and visible note counts, duration, and group summary.
 - Note days add a category icon (or grouped `event_note` indicator), an accessible note count, and a slim colored edge,
   separate from activity circles. The edge retains a segment for each distinct note color when notes overlap, with

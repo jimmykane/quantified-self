@@ -171,7 +171,7 @@ describe('Assistant MCP session', () => {
     );
 
     try {
-      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES);
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes'));
       expect(session.tools.map(tool => tool.name)).toContain(
         'search_activities_near_location',
       );
@@ -224,6 +224,24 @@ describe('Assistant MCP session', () => {
     } finally {
       await session.close();
     }
+  });
+
+  it.each(['coordinate_free', 'precise_activity'] as const)('adds notes independently in a %s chat, without granting Health or route locations', async locationAccess => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, locationAccess, true);
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('query_timeline_notes');
+      expect(capturedAuth!.scopes).toContain(MCP_OAUTH_SCOPES.TimelineNotesRead);
+      expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.HealthRead);
+      expect(capturedAuth!.scopes).not.toContain(MCP_OAUTH_SCOPES.RouteLocationRead);
+      expect(capturedAuth!.scopes.includes(MCP_OAUTH_SCOPES.ActivityLocationRead)).toBe(locationAccess === 'precise_activity');
+      await expect(session.callTool('query_timeline_notes', {})).resolves.toMatchObject({ structuredContent: { source: 'query_timeline_notes' } });
+    } finally { await session.close(); }
+    const disabled = await createAssistantMcpSession('owner', 'https://quantified-self.io', { createServer: createTestServer }, locationAccess);
+    try { await expect(disabled.callTool('query_timeline_notes', {})).rejects.toThrow('not available'); }
+    finally { await disabled.close(); }
   });
 
   it('fails closed when a required internal tool is missing', async () => {

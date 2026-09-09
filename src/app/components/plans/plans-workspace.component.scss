@@ -2,6 +2,16 @@
   display: block;
 }
 
+.plan-color-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plan-color-label > mat-icon { flex: 0 0 18px; width: 18px; height: 18px; font-size: 18px; }
+.plan-color-label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .button-content {
   display: flex;
   align-items: center;
@@ -64,6 +74,8 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
+
+.plan-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .plan-deletion-card mat-card-content {
   padding-top: 16px;
