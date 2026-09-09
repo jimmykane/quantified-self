@@ -43,11 +43,12 @@ describe('MCP Health Firestore adapter', () => {
       const docs = Array.from({ length: Math.min(32, count - offset) }, (_, i) => {
         const raw = {
           userID: 'fixture-owner', schemaVersion: 1, kind: 'daily_summary', calendarDate: '2026-09-01',
+          endTimeMs: Date.parse('2026-09-01T00:00:00Z') + (count - offset - i) * 60_000,
           source: { provider: 'SuuntoApp', accountKey: 'private-account', revision, sourceRecordKey: 'private-source' },
           coverage: { status: 'complete' }, sampleChunkIds: [],
           metrics: [{ kind: 'value', metricId: 'heart_rate', aggregation: 'average', semanticVariant: 'daily_average',
             origin: 'provider_summary', recordingMethod: 'provider_calculated', valueType: 'number',
-            normalizationStatus: 'canonical', canonical: { value: 60, unit: 'bpm' },
+            normalizationStatus: 'canonical', canonical: { value: count - offset - i + 50, unit: 'bpm' },
             native: { metric: 'private-native', value: 60 } }],
           device: { displayName: 'private-device' },
         };
@@ -66,10 +67,15 @@ describe('MCP Health Firestore adapter', () => {
     expect(where).toHaveBeenCalledWith('metricIds', 'array-contains', 'heart_rate');
     expect(select.mock.calls[0]).toContain('calendarDate');
     expect(select.mock.calls[0]).toContain('source.revision');
+    expect(select.mock.calls[0]).toContain('endTimeMs');
     expect(select.mock.calls[0]).not.toContain('source');
     expect(docGet.mock.instances[0].path).toBe('users/fixture-owner');
     expect(write).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toMatch(/fixture-owner|private-/);
+    expect(result.series[0]?.points.map(point => point.value) ?? [])
+      .toEqual(Array.from({ length: count }, (_, i) => i + 51));
+    expect(result.series[0]?.points.every(point => point.timeMs === null) ?? true).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('endTimeMs');
   });
 
   it('constructs a bounded metric-first sample query with SDK snapshot pagination', async () => {

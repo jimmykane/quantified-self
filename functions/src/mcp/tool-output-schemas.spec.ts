@@ -1862,6 +1862,29 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }
   }, 30_000);
 
+  it('rejects private Health ordering fields and arbitrary categorical values at the output boundary', async () => {
+    const dataService = createFixtureDataService();
+    const fixture = await dataService.queryHealthMetric({
+      uid: 'user-1', metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02',
+      mode: 'summaries', maxPoints: 200, measurementsAllowed: false,
+    });
+    const connection = await connectFixtureServer(dataService, [MCP_OAUTH_SCOPES.HealthRead]);
+    connections.push(connection);
+    for (const privatePoint of [
+      { endTimeMs: 1_788_220_800_001 }, { observedAtMs: 1_788_220_800_001 }, { value: 'private-category-canary' },
+    ]) {
+      dataService.queryHealthMetric = vi.fn().mockResolvedValue({
+        ...fixture, series: [{ ...fixture.series[0], points: [{ ...fixture.series[0].points[0], ...privatePoint }] }],
+      });
+      const result = await connection.client.callTool({
+        name: 'query_health_metric', arguments: successfulToolArguments.query_health_metric,
+      });
+      expect(result.isError).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toMatch(/1788220800001|private-category-canary|endTimeMs|observedAtMs/);
+    }
+  });
+
   it('binds Health reads to bearer identity and grants rather than client-supplied arguments', async () => {
     const dataService = createFixtureDataService();
     const connection = await connectFixtureServer(dataService, [MCP_OAUTH_SCOPES.HealthRead]);

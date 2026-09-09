@@ -48,6 +48,7 @@ const bodyBatteryVariant = z.strictObject({
 });
 const scalar = z.union([z.number(), z.enum([
   'relaxing', 'active', 'passive', 'stressful', 'rest', 'activity', 'unmeasurable', 'unknown',
+  'off_wrist', 'large_motion', 'not_enough_data', 'recovering_from_exercise', 'unidentified', 'stressful_awake',
 ])]);
 const aggregation = z.enum([
   'total', 'average', 'minimum', 'maximum', 'latest', 'sample', 'measurement',
@@ -63,6 +64,11 @@ const semanticVariant = z.enum([
   'recovery_balance', 'recovery_state', 'three_minute', 'daily_15_second',
   'garmin_body_battery', 'overnight_5_minute_rmssd', 'all_day', 'health_snapshot',
   'health_snapshot_rmssd', 'health_snapshot_sdrr', 'sleep_window_deviation', 'other',
+  'running', 'cycling', 'overnight_rmssd', 'overnight_5_minute_high_rmssd',
+  'algorithm_unspecified', 'enhanced', 'legacy', 'on_demand_exact', 'continuous_average',
+  'stressful', 'rest', 'activity', 'low', 'medium', 'high',
+  'daily_average_availability', 'daily_qualifier', 'measurement_state',
+  'activity_interval_consumption', 'provider_daily_total', 'provider_daily_average',
 ]);
 const descriptor = z.strictObject({
   id: z.enum(MCP_HEALTH_METRIC_IDS),
@@ -159,7 +165,7 @@ export const firestoreHealthReads: McpHealthReadDependencies = {
       .orderBy('calendarDate').orderBy(FieldPath.documentId()).limit(limit)
       .select(...(sourceRecords
         ? ['schemaVersion', 'userID', 'kind', 'calendarDate', 'source.provider', 'source.accountKey',
-          'source.revision', 'metrics', 'sampleChunkIds', 'coverage']
+          'source.revision', 'metrics', 'sampleChunkIds', 'coverage', 'endTimeMs']
         : ['schemaVersion', 'userID', 'parentSourceRecordId', 'provider', 'accountKey', 'metricId',
           'calendarDate', 'startTimeMs', 'endTimeMs', 'aggregation', 'semanticVariant', 'origin',
           'recordingMethod', 'normalizationStatus', 'canonicalUnit', 'offsetMs', 'canonicalValues',
@@ -257,6 +263,9 @@ export async function queryMcpHealth(input: McpHealthInput, reads: McpHealthRead
   const accountNumbers = new Map<string, number>();
   type Series = McpHealthResult['series'][number] & { days: Map<string, string> };
   const series = new Map<string, Series>();
+  // Sort summaries by observation time, not opaque document ID. Keep these
+  // private instants outside the public points (summary timeMs stays null).
+  const observationTimes = new WeakMap<z.infer<typeof point>, number>();
   const measurementDays = new Map<string, McpHealthResult['measurementDays'][number]>();
   type Reading = { value: z.infer<typeof scalar>; display: z.infer<typeof display> };
   // Repeated intraday values share conversion work only within this owner/metric
@@ -285,7 +294,7 @@ export async function queryMcpHealth(input: McpHealthInput, reads: McpHealthRead
   };
   function addReading(value: unknown, entry: HealthMetricEntry | HealthSampleChunk,
     record: { provider: unknown; accountKey: unknown; calendarDate: string; coverage?: { status: string } },
-    timeMs: number | null) {
+    timeMs: number | null, observedAtMs = timeMs) {
     const nativeBattery = isBodyBattery(entry, record.provider);
     const reading = prepareReading(value, nativeBattery);
     if (!reading) { result.excludedValues++; return; }
@@ -319,7 +328,9 @@ export async function queryMcpHealth(input: McpHealthInput, reads: McpHealthRead
         recordedDays: 0, partialDays: 0, unknownDays: 0, points: [], days: new Map() };
       series.set(key, target);
     }
-    target.points.push({ date: record.calendarDate, timeMs, value: canonical, display: displayValue });
+    const readingPoint = { date: record.calendarDate, timeMs, value: canonical, display: displayValue };
+    target.points.push(readingPoint);
+    observationTimes.set(readingPoint, Number.isSafeInteger(observedAtMs) ? observedAtMs! : 0);
     const status = record.coverage?.status ?? 'unknown';
     const previous = target.days.get(record.calendarDate);
     target.days.set(record.calendarDate, previous === 'partial' || status === 'partial' ? 'partial'
@@ -362,7 +373,7 @@ export async function queryMcpHealth(input: McpHealthInput, reads: McpHealthRead
               || (bodyMeasurement && (record.kind !== 'point_measurement' || entry.aggregation !== 'measurement'
                 || entry.semanticVariant !== 'point'))) { result.excludedValues++; continue; }
             addReading(nativeBattery ? entry.native.value : entry.canonical!.value, entry, { ...record.source, calendarDate: record.calendarDate,
-              coverage: entry.coverage ?? record.coverage }, null);
+              coverage: entry.coverage ?? record.coverage }, null, record.endTimeMs);
           }
         } else {
           const chunk = doc.data as unknown as HealthSampleChunk;
@@ -399,7 +410,8 @@ export async function queryMcpHealth(input: McpHealthInput, reads: McpHealthRead
   await load('healthSourceRecords');
   if (input.mode === 'samples' && result.complete) await load('healthSampleChunks');
   for (const target of series.values()) {
-    target.points.sort((a, b) => a.date.localeCompare(b.date) || (a.timeMs ?? 0) - (b.timeMs ?? 0));
+    target.points.sort((a, b) => a.date.localeCompare(b.date)
+      || observationTimes.get(a)! - observationTimes.get(b)!);
     target.readingCount = target.points.length;
     target.downsampled = target.points.length > input.maxPoints;
     if (target.downsampled) {

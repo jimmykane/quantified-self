@@ -94,6 +94,47 @@ describe('read-only MCP Health projection', () => {
     expect(JSON.stringify(result)).not.toContain('private-');
     expect(result.series[0].points[0]).toMatchObject({ value: 60, timeMs: null, display: { unit: 'bpm' } });
   });
+  it.each([
+    ['vo2_max', ['running', 'cycling']],
+    ['heart_rate_variability', ['overnight_rmssd', 'overnight_5_minute_high_rmssd']],
+    ['fitness_age', ['algorithm_unspecified', 'enhanced', 'legacy']],
+    ['blood_oxygen_saturation', ['on_demand_exact', 'continuous_average']],
+    ['stress_duration', ['stressful', 'rest', 'activity', 'low', 'medium', 'high']],
+    ['stress_state', ['daily_average_availability', 'daily_qualifier', 'measurement_state']],
+    ['total_energy', ['activity_interval_consumption', 'provider_daily_total', 'provider_daily_average']],
+  ] as const)('preserves known %s semantics in both summary and sample series', async (metricId, variants) => {
+    const definition = HEALTH_METRIC_CATALOG[metricId];
+    const value = definition.valueType === 'category' ? 'relaxing' : 20;
+    for (const mode of ['summaries', 'samples'] as const) {
+      const chunks = variants.map((semanticVariant, i) => chunk(`chunk-${i}`, {
+        metricId, semanticVariant, canonicalUnit: definition.canonicalUnit,
+        offsetMs: [0], canonicalValues: [value],
+      }));
+      const result = await queryMcpHealth({ ...input, metricId, mode }, reads([
+        record('record-1', { sampleChunkIds: chunks.map(item => item.id), metrics: variants.map(semanticVariant => entry({
+          metricId, semanticVariant, valueType: definition.valueType,
+          canonical: { value, unit: definition.canonicalUnit },
+        })) }),
+      ], chunks));
+      expect(result.series.map(series => series.semanticVariant)).toEqual(variants);
+      expect(result.excludedValues).toBe(0);
+    }
+  });
+  it.each([200, 2])('orders same-day summaries before downsampling across pages (maxPoints=%i)', async maxPoints => {
+    // Opaque document ID order is the reverse of observation order, across a page boundary.
+    const startTimeMs = Date.parse('2026-09-01T00:00:00Z');
+    const records = Array.from({ length: 35 }, (_, i) => record(`record-${i}`, {
+      startTimeMs, endTimeMs: startTimeMs + (35 - i) * 60_000,
+      metrics: [entry({ canonical: { value: 95 - i, unit: 'bpm' } })],
+    }));
+    const result = await queryMcpHealth({ ...input, maxPoints }, reads(records));
+    const points = result.series[0].points;
+    expect(points.map(point => point.value)).toEqual(maxPoints === 2 ? [61, 95]
+      : Array.from({ length: 35 }, (_, i) => 61 + i));
+    expect(result.series[0].readingCount).toBe(35);
+    expect(points.every(point => point.timeMs === null)).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/startTimeMs|endTimeMs|observedAtMs/);
+  });
   it.each([null, undefined, NaN, Infinity, '60', false])('does not coerce missing or invalid values: %s', async value => {
     const result = await queryMcpHealth(input, reads([record('r', {
       metrics: [entry({ canonical: { value, unit: 'bpm' } })],
@@ -195,6 +236,17 @@ describe('read-only MCP Health projection', () => {
     ]));
     expect(result.series[0].points.map(point => point.value)).toEqual(['relaxing', 'stressful']);
     expect(result.excludedValues).toBe(1);
+  });
+  it('preserves fixed Garmin stress availability states and excludes arbitrary qualifiers', async () => {
+    const states = ['off_wrist', 'large_motion', 'not_enough_data', 'recovering_from_exercise', 'unidentified', 'stressful_awake'];
+    const values = [...states, 'private-canary'];
+    const result = await queryMcpHealth({ ...input, metricId: 'stress_state', mode: 'samples' }, reads([record()], [
+      chunk('chunk-1', { metricId: 'stress_state', semanticVariant: 'measurement_state', canonicalUnit: 'category',
+        offsetMs: values.map((_, i) => i * 60_000), canonicalValues: values }),
+    ]));
+    expect(result.series[0]?.points.map(point => point.value)).toEqual(states);
+    expect(result.excludedValues).toBe(1);
+    expect(JSON.stringify(result)).not.toContain('private-');
   });
   it('isolates the explicitly allowed native Garmin Body Battery scale from canonical resources', async () => {
     const source = { provider: 'GarminAPI', accountKey: 'private-account', revision };

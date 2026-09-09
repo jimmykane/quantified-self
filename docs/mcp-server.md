@@ -1194,12 +1194,17 @@ When under the requested point bound, every normalized point can be returned. Th
 chunk documents, and representative output is not an exhaustive extrema or time-in-state calculation.
 
 Dates retain the provider's calendar day; there is no rebucketing into a caller-selected timezone. Summary points have
-`timeMs: null`; sample points have explicit UTC epoch milliseconds. Do not interpret the provider calendar date as UTC
+`timeMs: null`; their private source-record end times order same-day observations before representative downsampling,
+including across database pages. Those timestamps are never serialized. Sample points have explicit UTC epoch
+milliseconds. Do not interpret the provider calendar date as UTC
 midnight or silently merge days across different source timezones. Each provider/account/aggregation/semantic variant/
 origin/recording-method combination stays separate. Provider names and response-local account/series ordinals are
 allowed; raw or opaque account keys, document/revision IDs, device data, native payloads and arbitrary strings are not.
+Known canonical semantics retain explicit fixed labels, including running/cycling VO₂ max, nightly HRV statistics,
+stress durations, fitness-age algorithms, Pulse Ox sampling modes, and Suunto interval/daily energy statistics.
 Unknown semantics use the fixed `other` label while remaining separate internally. Canonical categorical values use
-a fixed safe vocabulary. The one approved native variant is Garmin Body Battery: finite 0–100 values with its exact
+a fixed safe vocabulary, including Garmin's off-wrist/motion/insufficient-data/recovery availability states; these are
+not numeric stress readings. Arbitrary provider qualifiers remain excluded. The one approved native variant is Garmin Body Battery: finite 0–100 values with its exact
 provider/metric/unit/semantic allowlist, labelled `native_only` and `garmin_body_battery_points`. It is never converted
 to a percentage or combined with canonical resources. The catalog advertises this exception in `nativeVariants`.
 Other native-only/non-comparable values and Sleep references are counted and excluded. Empty
