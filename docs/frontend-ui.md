@@ -40,6 +40,13 @@ alongside the route-specific class; do not add another outer width, margin, or p
 Settings intentionally retains its centered 760 px form column, including its aligned fixed save action, rather than
 stretching a form workflow across the workspace width.
 
+## Sidebar navigation
+
+Training remains a direct link to `/training`. Plans is an indented subitem immediately below it in a labelled Training
+group, without an expansion control. Only the Plans entry uses the Training Planning navigation UID allowlist;
+other signed-in users retain the direct Training link. This presentation hierarchy does not change `/plans`, Calendar
+entry points, or owner-scoped planning access. Each link keeps its own active state and existing close/haptic action.
+
 ## Material and accessibility
 
 Use Angular Material controls for header actions: `mat-icon-button` for icon-only navigation, `mat-button` for secondary
