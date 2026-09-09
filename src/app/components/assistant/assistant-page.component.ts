@@ -102,6 +102,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   private pendingPollIntervalMs = ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS;
   private pendingRecoveryDeadlineMs = 0;
   private pendingRegistrationDeadlineMs = 0;
+  private pendingOwnerUid: string | null = null;
+  private viewOwnerUid: string | null = null;
   private destroyed = false;
 
   readonly maxMessageChars = ASSISTANT_MAX_MESSAGE_CHARS;
@@ -119,6 +121,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
   });
   readonly conversation = signal<AssistantConversation | null>(null);
   readonly locationAccess = signal<AssistantLocationAccess>('coordinate_free');
+  readonly timelineNotesEnabled = signal(false);
   readonly preciseActivityLocationsEnabled = computed(
     () => this.locationAccess() === 'precise_activity',
   );
@@ -180,27 +183,18 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.loadingConversation.set(true);
     this.conversationLoadError.set(null);
     const initializingUid = this.auth.currentUser?.uid;
+    if (this.viewOwnerUid !== (initializingUid ?? null)) this.clearAccountView();
+    this.viewOwnerUid = initializingUid ?? null;
     const rememberedRequest = this.readRememberedPendingRequest();
     let requestToResume: AssistantPendingRequest | null = null;
     const [conversationResult, quotaResult] = await Promise.allSettled([
       this.assistantService.getConversationState(),
       this.quotaService.loadQuotaStatus(),
     ]);
+    if (this.destroyed || this.viewOwnerUid !== (initializingUid ?? null)) return;
     if (!initializingUid || this.auth.currentUser?.uid !== initializingUid) {
-      this.cancelPendingResponsePoll();
       this.clearRememberedPendingRequest(rememberedRequest?.requestId);
-      this.conversation.set(null);
-      this.locationAccess.set('coordinate_free');
-      this.quota.set(null);
-      this.retryRequest.set(null);
-      this.pendingRequestId.set(null);
-      this.pendingUserMessage.set(null);
-      this.activeMapKey.set(null);
-      this.expandedMap.set(false);
-      this.promptControl.setValue('');
-      this.errorMessage.set(null);
-      this.conversationLoadError.set(null);
-      this.sending.set(false);
+      this.clearAccountView();
       this.loadingConversation.set(false);
       return;
     }
@@ -208,6 +202,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       const state = conversationResult.value;
       this.conversation.set(state.conversation);
       this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
+      this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
       if (rememberedRequest
         && this.hasCompletedRequest(state.conversation, rememberedRequest.requestId)) {
         this.clearRememberedPendingRequest(rememberedRequest.requestId);
@@ -237,7 +232,9 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       && this.isRetryablePendingStateError(conversationResult.reason)) {
       if (this.isResumablePendingRequest(rememberedRequest)
         && this.isFreshPendingRequest(rememberedRequest)) {
-        requestToResume = rememberedRequest;
+        // A remembered request is not authority for the conversation's permissions.
+        // Keep it intact until the server confirms the generation and access state.
+        this.conversationLoadError.set(this.assistantService.getErrorMessage(conversationResult.reason));
       } else if (this.isResumablePendingRequest(rememberedRequest)) {
         this.restoreExpiredPendingRequest(rememberedRequest);
       } else {
@@ -281,15 +278,24 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       || this.resetting()) {
       return;
     }
+    const openingUid = this.viewOwnerUid;
+    if (!this.canApplyAccountResult(openingUid)) return;
+    const openingConversationId = this.conversation()?.conversationId ?? null;
     this.bottomSheet.open(AssistantExploreBottomSheetComponent, {
-      data: { locationAccess: this.locationAccess() },
+      data: { locationAccess: this.locationAccess(), timelineNotesEnabled: this.timelineNotesEnabled() },
     })
       .afterDismissed()
       .subscribe((result: AssistantExploreBottomSheetResult | undefined) => {
+        if (!this.canApplyAccountResult(openingUid)) return;
+        if ((this.conversation()?.conversationId ?? null) !== openingConversationId) return;
         if (result?.kind === 'prompt') {
           this.useStarterPrompt(result.prompt);
         } else if (result?.kind === 'location_access') {
           void this.changeLocationAccess(result.locationAccess);
+        } else if (result?.kind === 'timeline_notes') {
+          if (result.enabled !== this.timelineNotesEnabled()) {
+            void this.replaceConversation(this.locationAccess(), true, result.enabled);
+          }
         }
       });
   }
@@ -338,6 +344,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (this.loadingConversation()
       || this.conversationLoadError()
       || this.sending()
+      || this.resetting()
       || this.quotaPreventsSend()
       || this.promptControl.invalid) {
       this.promptControl.markAsTouched();
@@ -347,15 +354,18 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (!text) {
       return;
     }
+    const currentUid = this.viewOwnerUid ?? '';
+    if (!this.canApplyAccountResult(currentUid)) return;
     this.hapticsService.selection();
     this.errorMessage.set(null);
     this.sending.set(true);
     const activeConversation = this.conversation();
     const hadConversationMessages = this.messages().length > 0;
     const retryRequest = this.retryRequest();
-    const currentUid = this.auth.currentUser?.uid ?? '';
     const request: AssistantPendingRequest = retryRequest?.message === text
       && retryRequest.uid === currentUid
+      && (retryRequest.timelineNotesEnabled === true) === this.timelineNotesEnabled()
+      && retryRequest.locationAccess === this.locationAccess()
       ? {
         ...retryRequest,
         ...(activeConversation?.conversationId
@@ -369,6 +379,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         requestId: globalThis.crypto.randomUUID(),
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         locationAccess: this.locationAccess(),
+        ...(this.timelineNotesEnabled() ? { timelineNotesEnabled: true } : {}),
         submittedAtMs: Date.now(),
         ...(activeConversation?.conversationId
           ? { conversationId: activeConversation.conversationId }
@@ -393,10 +404,12 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         message: text,
         timeZone: request.timeZone,
         locationAccess: request.locationAccess,
+        ...(request.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         ...(request.conversationId
           ? { conversationId: request.conversationId }
           : {}),
       });
+      if (!this.canApplyAccountResult(currentUid)) return;
       this.conversation.set(response.conversation);
       this.quota.set(response.quota);
       if (response.pendingRequestId === request.requestId) {
@@ -409,16 +422,20 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.hapticsService.success();
       }
     } catch (error) {
+      if (!this.canApplyAccountResult(currentUid)) return;
       let refreshedConversation: AssistantConversation | null | undefined;
       let refreshedPendingRequestId: string | null | undefined;
       try {
         const refreshedState = await this.assistantService.getConversationState();
+        if (!this.canApplyAccountResult(currentUid)) return;
         refreshedConversation = refreshedState.conversation;
         refreshedPendingRequestId = refreshedState.pendingRequestId;
         this.locationAccess.set(refreshedState.locationAccess ?? 'coordinate_free');
+        this.timelineNotesEnabled.set(refreshedState.timelineNotesEnabled === true);
       } catch {
         // Preserve the original send failure when reconciliation is unavailable.
       }
+      if (!this.canApplyAccountResult(currentUid)) return;
       if (refreshedConversation && this.isCompletedTurnRecovery(
         activeConversation,
         refreshedConversation,
@@ -463,13 +480,16 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         this.hapticsService.error();
       }
       try {
-        this.quota.set(await this.quotaService.loadQuotaStatus());
+        const quota = await this.quotaService.loadQuotaStatus();
+        if (!this.canApplyAccountResult(currentUid)) return;
+        this.quota.set(quota);
       } catch {
+        if (!this.canApplyAccountResult(currentUid)) return;
         // Do not present a potentially stale allowance after a failed attempt.
         this.quota.set(null);
       }
     } finally {
-      if (this.pendingRequestId() !== request.requestId) {
+      if (this.canApplyAccountResult(currentUid) && this.pendingRequestId() !== request.requestId) {
         this.pendingUserMessage.set(null);
         this.sending.set(false);
         if (this.isEmpty()) {
@@ -491,12 +511,13 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (locationAccess === this.locationAccess()) {
       return;
     }
-    await this.replaceConversation(locationAccess, true);
+    await this.replaceConversation(locationAccess, true, this.timelineNotesEnabled());
   }
 
   private async replaceConversation(
     locationAccess: AssistantLocationAccess,
     preservePrompt: boolean,
+    timelineNotesEnabled = false,
   ): Promise<void> {
     if (this.loadingConversation()
       || this.conversationLoadError()
@@ -505,11 +526,20 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       return;
     }
     const prompt = preservePrompt ? this.promptControl.value : '';
+    const currentUid = this.viewOwnerUid ?? '';
+    if (!this.canApplyAccountResult(currentUid)) return;
+    this.hapticsService.selection();
     this.resetting.set(true);
     this.errorMessage.set(null);
     try {
-      this.conversation.set(await this.assistantService.resetConversation(locationAccess));
+      const conversation = await this.assistantService.resetConversation(
+        locationAccess, timelineNotesEnabled, this.conversation()?.conversationId ?? null,
+      );
+      if (!this.canApplyAccountResult(currentUid)) return;
+      this.conversation.set(conversation);
       this.locationAccess.set(locationAccess);
+      this.timelineNotesEnabled.set(timelineNotesEnabled);
+      this.hapticsService.success();
       this.cancelPendingResponsePoll();
       this.pendingRequestId.set(null);
       this.clearRememberedPendingRequest();
@@ -519,9 +549,25 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.promptControl.setValue(prompt);
       this.scrollToPageStart();
     } catch (error) {
+      if (!this.canApplyAccountResult(currentUid)) return;
+      if (error instanceof AssistantError && error.code === 'CONVERSATION_CHANGED') {
+        try {
+          const state = await this.assistantService.getConversationState();
+          if (!this.canApplyAccountResult(currentUid)) return;
+          this.conversation.set(state.conversation);
+          this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
+          this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
+          this.retryRequest.set(null);
+          if (state.pendingRequestId) this.startPendingResponseRecovery(state.pendingRequestId);
+        } catch (refreshError) {
+          if (!this.canApplyAccountResult(currentUid)) return;
+          this.conversationLoadError.set(this.assistantService.getErrorMessage(refreshError));
+        }
+      }
       this.errorMessage.set(this.assistantService.getErrorMessage(error));
+      this.hapticsService.error();
     } finally {
-      this.resetting.set(false);
+      if (this.canApplyAccountResult(currentUid)) this.resetting.set(false);
     }
   }
 
@@ -571,6 +617,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     this.cancelPendingResponsePoll();
     this.rememberPendingRequestIdIfMissing(requestId);
     this.pendingRequestId.set(requestId);
+    this.pendingOwnerUid = this.auth.currentUser?.uid ?? null;
     this.pendingPollIntervalMs = ASSISTANT_PENDING_INITIAL_POLL_INTERVAL_MS;
     this.pendingRecoveryDeadlineMs = Date.now() + ASSISTANT_PENDING_RECOVERY_TIMEOUT_MS;
     this.pendingRegistrationDeadlineMs = awaitingServerRegistration
@@ -584,12 +631,17 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (this.destroyed || this.pendingRequestId() !== requestId) {
       return;
     }
+    const currentUid = this.pendingOwnerUid;
+    if (!this.canApplyAccountResult(currentUid)) return;
     try {
       const state = await this.assistantService.getConversationState();
+      if (!this.canApplyAccountResult(currentUid)) return;
       if (this.destroyed || this.pendingRequestId() !== requestId) {
         return;
       }
       this.conversation.set(state.conversation);
+      this.locationAccess.set(state.locationAccess ?? 'coordinate_free');
+      this.timelineNotesEnabled.set(state.timelineNotesEnabled === true);
       if (this.hasCompletedRequest(state.conversation, requestId)) {
         this.retryRequest.set(null);
         this.errorMessage.set(null);
@@ -611,6 +663,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         return;
       }
     } catch (error) {
+      if (!this.canApplyAccountResult(currentUid)) return;
       if (!this.isRetryablePendingStateError(error)) {
         this.errorMessage.set(this.assistantService.getErrorMessage(error));
         this.hapticsService.error();
@@ -637,6 +690,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (this.pendingRequestId() !== requestId) {
       return;
     }
+    const currentUid = this.pendingOwnerUid;
+    if (!this.canApplyAccountResult(currentUid)) return;
     const pendingText = this.pendingUserMessage()?.text;
     this.cancelPendingResponsePoll();
     this.pendingRequestId.set(null);
@@ -647,8 +702,11 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       this.promptControl.setValue(pendingText);
     }
     try {
-      this.quota.set(await this.quotaService.loadQuotaStatus());
+      const quota = await this.quotaService.loadQuotaStatus();
+      if (!this.canApplyAccountResult(currentUid)) return;
+      this.quota.set(quota);
     } catch {
+      if (!this.canApplyAccountResult(currentUid)) return;
       this.quota.set(null);
     }
     if (this.isEmpty()) {
@@ -663,6 +721,36 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       clearTimeout(this.pendingPollTimer);
       this.pendingPollTimer = null;
     }
+  }
+
+  private canApplyAccountResult(uid: string | null): boolean {
+    if (this.destroyed) return false;
+    // A later account load owns the view; an older completion must not clear it.
+    if (this.viewOwnerUid !== uid) return false;
+    if (uid && this.auth.currentUser?.uid === uid) return true;
+    this.clearAccountView();
+    return false;
+  }
+
+  private clearAccountView(): void {
+    this.cancelPendingResponsePoll();
+    const requestId = this.pendingRequestId() ?? this.retryRequest()?.requestId;
+    if (requestId) this.clearRememberedPendingRequest(requestId);
+    this.conversation.set(null);
+    this.locationAccess.set('coordinate_free');
+    this.timelineNotesEnabled.set(false);
+    this.quota.set(null);
+    this.retryRequest.set(null);
+    this.pendingRequestId.set(null);
+    this.pendingOwnerUid = null;
+    this.pendingUserMessage.set(null);
+    this.promptControl.setValue('');
+    this.activeMapKey.set(null);
+    this.expandedMap.set(false);
+    this.errorMessage.set(null);
+    this.conversationLoadError.set(null);
+    this.sending.set(false);
+    this.resetting.set(false);
   }
 
   private schedulePendingResponsePoll(requestId: string): void {
@@ -761,6 +849,10 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
       const locationAccess = isAssistantLocationAccess(data.locationAccess)
         ? data.locationAccess
         : 'coordinate_free';
+      if (data.timelineNotesEnabled !== undefined && typeof data.timelineNotesEnabled !== 'boolean') {
+        this.clearRememberedPendingRequest();
+        return null;
+      }
       const conversationId = typeof data.conversationId === 'string'
         ? data.conversationId.trim()
         : data.conversationId;
@@ -781,6 +873,7 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
         message,
         timeZone,
         locationAccess,
+        ...(data.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         submittedAtMs: Number(data.submittedAtMs),
         ...(conversationId ? { conversationId } : {}),
       };
@@ -824,6 +917,8 @@ export class AssistantPageComponent implements OnInit, OnDestroy {
     if (!this.isFreshPendingRequest(request)) {
       return false;
     }
+    if ((request.timelineNotesEnabled === true) !== this.timelineNotesEnabled()
+      || request.locationAccess !== this.locationAccess()) return false;
     if (request.conversationId) {
       return request.conversationId === conversation?.conversationId;
     }

@@ -47,6 +47,7 @@ export const ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES = [
 export const ASSISTANT_MCP_TOOL_NAMES = [
   ...ASSISTANT_BASE_MCP_TOOL_NAMES,
   ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
+  'query_timeline_notes',
 ] as const;
 
 export type AssistantMcpToolName = typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -264,11 +265,14 @@ export async function createAssistantMcpSession(
   publicBaseUrl: string,
   dependencies: AssistantMcpSessionDependencies = defaultDependencies,
   locationAccess: AssistantLocationAccess = 'coordinate_free',
+  timelineNotesEnabled = false,
 ): Promise<AssistantMcpSession> {
   const activityLocationEnabled = locationAccess === 'precise_activity';
-  const expectedToolNames: readonly AssistantMcpToolName[] = activityLocationEnabled
-    ? ASSISTANT_MCP_TOOL_NAMES
-    : ASSISTANT_BASE_MCP_TOOL_NAMES;
+  const expectedToolNames: readonly AssistantMcpToolName[] = [
+    ...ASSISTANT_BASE_MCP_TOOL_NAMES,
+    ...(activityLocationEnabled ? ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES : []),
+    ...(timelineNotesEnabled ? ['query_timeline_notes' as const] : []),
+  ];
   const auth: AuthenticatedMcpRequest = {
     uid,
     clientId: ASSISTANT_CLIENT_ID,
@@ -282,6 +286,7 @@ export async function createAssistantMcpSession(
         ? [MCP_OAUTH_SCOPES.ActivityLocationRead]
         : []),
       MCP_OAUTH_SCOPES.RoutesRead,
+      ...(timelineNotesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesRead] : []),
     ],
   };
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -322,7 +327,7 @@ export async function createAssistantMcpSession(
       instructions: client.getInstructions() || '',
       tools,
       callTool: async (name, args) => {
-        if (!isAssistantToolName(name)) {
+        if (!isAssistantToolName(name) || !expectedToolNames.includes(name)) {
           throw new Error('The requested tool is not available to the Assistant.');
         }
         let metricHistoryPages: Record<string, unknown>[] | null;

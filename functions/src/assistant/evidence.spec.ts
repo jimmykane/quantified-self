@@ -21,6 +21,17 @@ const evidenceTools = [
 ] satisfies AssistantMcpToolDefinition[];
 
 describe('Assistant evidence', () => {
+  it('keeps note evidence compact with actual dates and no raw details, identities or overlays', () => {
+    const evidence = buildAssistantEvidence({ name: 'query_timeline_notes', title: 'Timeline notes' }, {
+      notes: [{ title: 'Travel', category: 'travel', details: 'private-full-text', startDate: '2026-09-01', endDate: null,
+        effectiveEndDate: '2026-09-09', id: 'private-id', appUrl: 'https://quantified-self.io/user/private' }],
+      nextCursor: 'private-cursor', scanComplete: false,
+    });
+    expect(evidence.facts).toEqual([{ label: 'Travel', value: 'travel: 2026-09-01 – ongoing (through 2026-09-09)' }]);
+    expect(evidence.summary).toContain('More context may remain');
+    expect(evidence.links).toEqual([]);
+    expect(JSON.stringify(evidence)).not.toContain('private');
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
   });

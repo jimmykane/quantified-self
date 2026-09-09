@@ -46,15 +46,15 @@ const requestId = 'assistant-request-0001';
 describe('AssistantService', () => {
   const functionsService = { call: vi.fn() };
   const auth: {
-    currentUser: { getIdToken: ReturnType<typeof vi.fn> } | null;
+    currentUser: { uid: string; getIdToken: ReturnType<typeof vi.fn> } | null;
   } = {
-    currentUser: { getIdToken: vi.fn() },
+    currentUser: { uid: 'owner', getIdToken: vi.fn() },
   };
   let service: AssistantService;
 
   beforeEach(() => {
     functionsService.call.mockReset();
-    auth.currentUser = { getIdToken: vi.fn() };
+    auth.currentUser = { uid: 'owner', getIdToken: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
         AssistantService,
@@ -80,6 +80,39 @@ describe('AssistantService', () => {
       timeZone: 'Europe/Helsinki',
       locationAccess: 'coordinate_free',
     });
+  });
+
+  it('requires matching notes consent in replies and confirms it before enabling a reset chat', async () => {
+    const request = { requestId, message: 'Read my notes', timeZone: 'UTC', locationAccess: 'coordinate_free' as const,
+      timelineNotesEnabled: true };
+    functionsService.call.mockResolvedValue({ data: response });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.resetConversation('coordinate_free', true)).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    functionsService.call.mockResolvedValue({ data: { ...response, timelineNotesEnabled: true } });
+    await expect(service.sendMessage(request)).resolves.toMatchObject({ timelineNotesEnabled: true });
+    await expect(service.sendMessage({ ...request, timelineNotesEnabled: false })).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.getConversationState()).resolves.toMatchObject({ timelineNotesEnabled: true });
+    await expect(service.resetConversation('precise_activity', true, 'expected-chat')).resolves.toEqual(response.conversation);
+    expect(functionsService.call).toHaveBeenLastCalledWith('resetAssistantConversation', { locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: 'expected-chat' });
+    functionsService.call.mockResolvedValue({ data: { ...response, timelineNotesEnabled: 'true' } });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'INTERNAL' });
+  });
+
+  it('does not return an old account response or retry its request as a newly signed-in account', async () => {
+    functionsService.call.mockImplementationOnce(async () => {
+      auth.currentUser = { uid: 'other-owner', getIdToken: vi.fn() };
+      return { data: response };
+    });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    auth.currentUser = { uid: 'owner', getIdToken: vi.fn() };
+    functionsService.call.mockClear().mockImplementationOnce(async () => {
+      auth.currentUser = { uid: 'other-owner', getIdToken: vi.fn() };
+      throw { code: 'functions/unauthenticated' };
+    });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(functionsService.call).toHaveBeenCalledTimes(1);
+    expect(auth.currentUser.getIdToken).not.toHaveBeenCalled();
   });
 
   it('rejects malformed conversation payloads', async () => {
@@ -156,7 +189,7 @@ describe('AssistantService', () => {
     expect(functionsService.call).toHaveBeenNthCalledWith(
       2,
       'resetAssistantConversation',
-      { locationAccess: 'coordinate_free' },
+      { locationAccess: 'coordinate_free', conversationId: null },
     );
   });
 
@@ -182,7 +215,7 @@ describe('AssistantService', () => {
     await expect(service.getConversationState()).rejects.toMatchObject({
       code: 'UNAUTHENTICATED',
     });
-    expect(functionsService.call).toHaveBeenCalledOnce();
+    expect(functionsService.call).not.toHaveBeenCalled();
   });
 
   it('cleans legacy storage-unit suffixes from saved evidence labels', async () => {
@@ -328,7 +361,7 @@ describe('AssistantService', () => {
       .toEqual(response.conversation);
     expect(functionsService.call).toHaveBeenLastCalledWith(
       'resetAssistantConversation',
-      { locationAccess: 'precise_activity' },
+      { locationAccess: 'precise_activity', conversationId: null },
     );
   });
 });

@@ -231,6 +231,7 @@ describe('Assistant callable', () => {
       REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, 'How am I today?'),
       'coordinate_free',
+      false,
     );
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
@@ -282,11 +283,64 @@ describe('Assistant callable', () => {
         'precise_activity',
       ),
       'precise_activity',
+      false,
     );
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Where was my biggest jump?',
       locationAccess: 'precise_activity',
     }));
+  });
+
+  it('binds notes access to the server-owned chat and rechecks the generation around private reads', async () => {
+    const { dependencies, store, conversation } = createDependencies();
+    vi.mocked(store.beginTurn).mockResolvedValue({ kind: 'started', conversationId: 'conversation-1', turnId: 'turn-1',
+      history: [], locationAccess: 'coordinate_free', timelineNotesEnabled: true });
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({ conversation, pendingRequestId: REQUEST_ID,
+      locationAccess: 'coordinate_free', timelineNotesEnabled: true });
+    vi.mocked(dependencies.answer).mockImplementation(async input => {
+      expect(input.timelineNotesEnabled).toBe(true);
+      await input.assertTimelineNotesAccess!();
+      await input.onBillableAttempt();
+      return { answer: 'User-reported context.', evidence: [], toolNames: ['query_timeline_notes'], visuals: [] };
+    });
+    const request = { requestId: REQUEST_ID, message: 'What did my note say?', timeZone: 'UTC',
+      locationAccess: 'coordinate_free', timelineNotesEnabled: true, conversationId: 'conversation-1' };
+    expect(await runAssistantChat(request, context, dependencies)).toMatchObject({ timelineNotesEnabled: true });
+    expect(store.beginTurn).toHaveBeenCalledWith('user-1', 'conversation-1', REQUEST_ID,
+      createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true);
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({ conversation: { ...conversation, conversationId: 'new-chat' },
+      pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: false });
+    await expect(runAssistantChat(request, context, dependencies)).rejects.toMatchObject({ code: 'aborted' });
+  });
+
+  it('rejects a replay under a different notes permission and malformed consent before work', async () => {
+    const { dependencies, store, conversation } = createDependencies();
+    const request = { requestId: REQUEST_ID, message: 'Notes?', timeZone: 'UTC' };
+    vi.mocked(store.findRequestState).mockResolvedValue({ kind: 'replayed', conversation,
+      requestFingerprint: createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true) });
+    await expect(runAssistantChat(request, context, dependencies)).rejects.toMatchObject({ code: 'invalid-argument' });
+    await expect(runAssistantChat({ ...request, timelineNotesEnabled: 'yes' }, context, dependencies))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(dependencies.answer).not.toHaveBeenCalled();
+    expect(dependencies.reserveQuota).not.toHaveBeenCalled();
+    await expect(runResetAssistantConversation({ locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: null }, context, store))
+      .resolves.toMatchObject({ timelineNotesEnabled: true });
+    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null);
+  });
+
+  it.each([undefined, '', ' ', 42, 'x'.repeat(121)])('rejects an unbound or malformed notes reset generation: %j', async conversationId => {
+    const { store } = createDependencies();
+    await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId }, context, store))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(store.resetConversation).not.toHaveBeenCalled();
+  });
+
+  it('passes the expected notes generation to the transaction and reports stale consent safely', async () => {
+    const { store } = createDependencies();
+    vi.mocked(store.resetConversation).mockRejectedValue(new AssistantConversationStoreError('conversation_changed', 'Changed'));
+    await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId: 'old-chat' }, context, store))
+      .rejects.toMatchObject({ code: 'aborted' });
+    expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat');
   });
 
   it('persists bounded server-owned visuals with the assistant message', async () => {
@@ -936,6 +990,8 @@ describe('Assistant callable', () => {
     expect(store.resetConversation).toHaveBeenCalledWith(
       'user-1',
       'precise_activity',
+      false,
+      undefined,
     );
   });
 

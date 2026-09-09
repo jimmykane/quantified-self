@@ -169,6 +169,7 @@
         During authorization, you can approve any combination of these access categories:
       </p>
       <ul class="mcp-connections__authorization-list" aria-label="Available MCP permissions">
+        <li><mat-icon aria-hidden="true">edit_note</mat-icon>{{ scopeLabels['timeline-notes:read'] }}</li>
         <li><mat-icon aria-hidden="true">query_stats</mat-icon>{{ scopeLabels['metrics:read'] }}</li>
         <li><mat-icon aria-hidden="true">monitor_weight</mat-icon>{{ scopeLabels['measurements:read'] }}</li>
         <li><mat-icon aria-hidden="true">monitor_heart</mat-icon>{{ scopeLabels['health:read'] }}</li>
@@ -181,6 +182,11 @@
 
       <mat-divider></mat-divider>
 
+      <p>
+        Timeline notes is off by default and requires reauthorization. It includes full private text, even for notes
+        hidden from charts, and may contain sensitive health or personal information. Revoking access cannot erase
+        copies a client has already received. It never permits note or Training plan changes.
+      </p>
       <p>
         Health metrics is a separate permission: existing connections must reconnect to grant it. It includes
         source-separated summaries and bounded sample trends with dates and times, but no account IDs, device details,

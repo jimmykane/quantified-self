@@ -31,12 +31,14 @@ import {
 } from './derived-output-schemas';
 import { MCP_MEASUREMENT_TYPE_IDS } from './measurement-catalog';
 import { MCP_HEALTH_CATALOG_SCHEMA, MCP_HEALTH_QUERY_SCHEMA } from './health.service';
+import { MCP_TIMELINE_NOTES_SCHEMA } from './timeline-notes.service';
 import { MCP_SLEEP_VITAL_TYPES } from './sleep-vitals';
 import {
   MCP_TRAINING_METRIC_CATEGORIES,
 } from './training-metric-catalog';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
+  'query_timeline_notes',
   'list_health_metrics',
   'query_health_metric',
   'list_measurement_types',
@@ -1336,6 +1338,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
   const registry = {
     list_health_metrics: MCP_HEALTH_CATALOG_SCHEMA,
     query_health_metric: MCP_HEALTH_QUERY_SCHEMA,
+    query_timeline_notes: MCP_TIMELINE_NOTES_SCHEMA,
     list_measurement_types: z.strictObject({
       measurementTypes: z.array(measurementDescriptor),
     }),

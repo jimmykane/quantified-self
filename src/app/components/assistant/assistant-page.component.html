@@ -6,7 +6,7 @@
         <a mat-icon-button routerLink="/help" fragment="ai-insights" aria-label="Assistant help" matTooltip="Assistant help">
           <mat-icon>help_outline</mat-icon>
         </a>
-        <button mat-icon-button type="button" aria-label="Start a new coordinate-free chat" matTooltip="Start a new chat"
+        <button mat-icon-button type="button" aria-label="Start a new chat with locations and Timeline notes off" matTooltip="Start a new chat"
           [disabled]="loadingConversation() || !!conversationLoadError() || sending() || resetting()" (click)="resetConversation()">
           @if (resetting()) {
             <mat-spinner diameter="20"></mat-spinner>
@@ -186,10 +186,10 @@
           <form class="composer" (submit)="handleComposerSubmit($event)">
             <textarea class="composer-input qs-scrollbar" rows="1" aria-label="Ask about your data"
               cdkTextareaAutosize cdkAutosizeMinRows="1" cdkAutosizeMaxRows="5"
-              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending()"
+              [maxlength]="maxMessageChars" [formControl]="promptControl" [readonly]="sending() || resetting()"
               [placeholder]="composerPlaceholder" (keydown)="handleComposerKeydown($event)"></textarea>
             <button mat-icon-button class="composer-submit" type="submit"
-              [disabled]="sending() || quotaPreventsSend() || promptControl.invalid"
+              [disabled]="sending() || resetting() || quotaPreventsSend() || promptControl.invalid"
               [attr.aria-label]="sending() ? 'Sending message' : 'Send message'">
               <span class="composer-submit-content">
                 @if (sending()) {
