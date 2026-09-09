@@ -69,6 +69,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
     private onboardingChartRef?: ElementRef<HTMLDivElement>;
     private cadenceChartRef?: ElementRef<HTMLDivElement>;
     private isDark = false;
+    private destroyed = false;
 
     @Input()
     set history(value: AdminDashboardHistoryResponse | null) {
@@ -245,6 +246,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     ngOnDestroy(): void {
+        this.destroyed = true;
         this.destroy$.next();
         this.destroy$.complete();
         this.disposeCharts();
@@ -262,10 +264,17 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     private scheduleRender(): void {
+        if (this.destroyed) {
+            return;
+        }
         void Promise.resolve().then(() => this.renderCharts());
     }
 
     private async renderCharts(): Promise<void> {
+        // A display change can queue this work just before the workspace is closed.
+        if (this.destroyed) {
+            return;
+        }
         const view = this.historyView();
         if (this.loading || this.error || view.availablePoints < this.minimumPoints) {
             return;
@@ -290,7 +299,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
             return;
         }
         const chart = await host.init(reference.nativeElement, resolveEChartsThemeName(this.isDark));
-        if (!chart) {
+        if (!chart || this.destroyed) {
             return;
         }
         const option = buildOption();

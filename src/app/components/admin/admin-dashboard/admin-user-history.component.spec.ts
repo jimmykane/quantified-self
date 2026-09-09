@@ -438,6 +438,43 @@ describe('AdminUserHistoryComponent', () => {
         expect(haptics.selection).toHaveBeenCalledTimes(2);
     });
 
+    it('does not recreate chart hosts when destroyed after queueing a display change', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        await renderCharts();
+        loader.init.mockClear();
+        loader.setOption.mockClear();
+
+        component.selectMode('percentage');
+        fixture.destroy();
+        // Let queued renders and their initialization continuations finish.
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+        expect(loader.init).not.toHaveBeenCalled();
+        expect(loader.setOption).not.toHaveBeenCalled();
+    });
+
+    it('discards delayed chart initialization when the workspace closes', async () => {
+        const pendingInitializations: Array<() => void> = [];
+        const charts: Array<{ isDisposed: ReturnType<typeof vi.fn>; dispatchAction: ReturnType<typeof vi.fn> }> = [];
+        loader.init.mockImplementation(() => new Promise(resolve => {
+            const chart = { isDisposed: vi.fn(() => false), dispatchAction: vi.fn() };
+            charts.push(chart);
+            pendingInitializations.push(() => resolve(chart));
+        }));
+
+        fixture.componentRef.setInput('history', history(8));
+        component.selectMode('percentage');
+        fixture.detectChanges();
+        await vi.waitFor(() => expect(loader.init).toHaveBeenCalledTimes(5));
+        fixture.destroy();
+        pendingInitializations.forEach(resolve => resolve());
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+        expect(loader.setOption).not.toHaveBeenCalled();
+        expect(loader.init).toHaveBeenCalledTimes(5);
+        charts.forEach(chart => expect(loader.dispose).toHaveBeenCalledWith(chart));
+    });
+
     it('disposes every initialized chart host', async () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
