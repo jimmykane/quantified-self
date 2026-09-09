@@ -266,8 +266,15 @@ async function checkpointWrite(
       // between our preview and this transaction. A retry cannot extend it forever.
       fields = { ...fields, reservedAtMs: checkpoint.data()!.reservedAtMs };
     }
-    if (fields.observation === 'reserved' && plan.connection.name === 'garmin'
-      && !(await tx.get(deps.db.collection('sleepSyncQueue').doc(job.queueId))).exists) {
+    if (fields.observation === 'reserved' && plan.connection.name === 'garmin') {
+      // The preview can be stale by the time we own the lease. In particular,
+      // a failed worker removes its live row when moving it to the DLQ. Absence
+      // from the live queue alone must not reset progress or recreate that job.
+      const [queued, failed] = await Promise.all([
+        tx.get(deps.db.collection('sleepSyncQueue').doc(job.queueId)),
+        tx.get(deps.db.collection('failed_jobs').doc(job.queueId)),
+      ]);
+      if (queued.exists || failed.exists) throw new Skip('queue_already_submitted_or_terminal');
       // Match the existing worker's terminal-progress ownership contract. Publish
       // before queue creation so a fast worker cannot have progress overwritten.
       tx.set(plan.connection.state, {

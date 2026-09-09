@@ -278,6 +278,8 @@ guards. UI and operator scripts must use the same helper, not a shared fixed yea
 The Suunto callable caps admission at 512 windows and four concurrent queue writes,
 waits for started writes before reporting failure, and leaves provider requests to
 the existing workers. The operator CLI retains its smaller job/user/backpressure caps.
+Before publishing initial Garmin progress, its reservation transaction rechecks live
+and failed queue rows so a stale preview cannot reset or recreate already-submitted work.
 
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.

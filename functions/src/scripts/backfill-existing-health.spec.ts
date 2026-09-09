@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { BackfillDependencies, runExistingHealthBackfill } from './backfill-existing-health';
-import { BackfillOptions, CHECKPOINT_COLLECTION, digest, parseBackfillOptions, PROVIDERS } from './health-backfill-plan';
+import { BackfillOptions, buildHealthBackfillJobs, CHECKPOINT_COLLECTION, digest, parseBackfillOptions, PROVIDERS } from './health-backfill-plan';
 
 vi.mock('firebase-admin', () => ({ firestore: { FieldPath: { documentId: () => '__name__' } } }));
 const hooks = vi.hoisted(() => ({ bindingAllowed: true }));
@@ -269,6 +269,36 @@ describe('existing-user Health backfill runner', () => {
     });
     expect(await execute()).toMatchObject({ jobsSubmitted: 0, failed: 0 });
     expect(enqueue).toHaveBeenCalledTimes(2);
+  });
+  it.each(['pending', 'success', 'failed'])('preserves Garmin %s work that appears after the preview', async observation => {
+    connect('garmin');
+    // An ambiguous submission left a reservation. Its queue/worker result becomes
+    // visible after the retry's preview, but before the retry reserves again.
+    enqueue.mockRejectedValueOnce(new Error('ambiguous queue submission'));
+    expect(await execute()).toMatchObject({ jobsSubmitted: 0, failed: 1 });
+    enqueue.mockClear();
+    const statePath = `users/owner/sleepSyncState/${PROVIDERS.garmin}`;
+    const campaign = digest(['test-project', PROVIDERS.garmin, options.startMs, options.endMs]);
+    const job = buildHealthBackfillJobs(PROVIDERS.garmin, 'owner', 'provider-account', options.startMs, options.endMs, campaign)[0];
+    const progress = {
+      healthBackfillStatus: observation === 'pending' ? 'running' : observation === 'success' ? 'complete' : 'failed',
+      healthBackfillWindowsCompleted: observation === 'success' ? 10 : 9,
+      healthBackfillWindowsTotal: 10,
+    };
+    let injected = false;
+    db.beforeTransaction = () => {
+      if (injected) return;
+      injected = true;
+      db.rows.set(statePath, { ...db.rows.get(statePath), ...progress });
+      db.rows.set(`${observation === 'failed' ? 'failed_jobs' : 'sleepSyncQueue'}/${job.queueId}`, {
+        ...job.input, processed: observation !== 'pending', resultStatus: observation,
+      });
+    };
+    expect(await execute()).toMatchObject({ jobsSubmitted: 0, skipped: { queue_already_submitted_or_terminal: 1 } });
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(db.rows.get(statePath)).toMatchObject(progress);
+    expect(checkpointRows()).toHaveLength(1);
+    expect(checkpointRows()[0][1].observation).toBe('reserved');
   });
   it('respects Pro, missing permissions, inactive accounts, and verified Suunto bindings', async () => {
     connect('garmin', 'free'); roles.free = { stripeRole: 'free' };

@@ -58,6 +58,11 @@ available data. Rolling limits are not relative to the requested end date; a who
 expired range is skipped. On resume, an aging oldest window is clipped. Garmin's
 initial cursor, request count, and progress state are kept aligned with that clipped
 range before queue creation; existing queued cursors are not reset.
+Garmin reservation rechecks both the live queue and the failed-job row inside its
+transaction, so a job submitted or moved to the DLQ after preview is skipped without
+resetting its progress or recreating it. Campaigns created with the former implicit
+2016 boundary must be resumed with an explicit `--start 2016-01-01`; the new default
+2000 boundary identifies a different requested campaign.
 
 Optional limits:
 
