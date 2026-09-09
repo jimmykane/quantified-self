@@ -171,22 +171,23 @@
     } @else if (serviceName === serviceNames.GarminAPI) {
     <p>
       Imports Garmin sleep{{ isSleepAndHealthBackfill ? ' and available Health metrics' : '' }} from
-      {{ sleepBackfillStartDate | date:'mediumDate' }} to today. Records may appear gradually over the next few hours.
+      {{ sleepBackfillStartDate | date:'mediumDate':'UTC' }} to today (up to five years). Garmin may allow a shorter
+      range. Records may appear gradually over the next few hours.
     </p>
     } @else if (serviceName === serviceNames.COROSAPI) {
     <p>
-      Imports available COROS sleep and daily Health metrics from {{ sleepBackfillStartDate | date:'mediumDate' }} to
+      Imports available COROS sleep and daily Health metrics from {{ sleepBackfillStartDate | date:'mediumDate':'UTC' }} to
       today. COROS retains daily data for up to three months.
     </p>
     } @else if (isSleepAndHealthBackfill) {
     <p>
-      Imports Suunto sleep and available 24/7 Health metrics from {{ sleepBackfillStartDate | date:'mediumDate' }} to
-      today. Existing records are updated instead of duplicated.
+      Requests Suunto sleep and available 24/7 Health metrics from {{ sleepBackfillStartDate | date:'mediumDate':'UTC' }} to
+      today. Only history available from Suunto can be imported. Existing records are updated instead of duplicated.
     </p>
     } @else {
     <p>
-      Imports Suunto sleep from {{ sleepBackfillStartDate | date:'mediumDate' }} to today. Existing records are
-      updated instead of duplicated.
+      Requests Suunto sleep from {{ sleepBackfillStartDate | date:'mediumDate':'UTC' }} to today. Only history available
+      from Suunto can be imported. Existing records are updated instead of duplicated.
     </p>
     }
     <p class="sleep-backfill-note">

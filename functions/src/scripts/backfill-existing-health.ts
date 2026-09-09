@@ -8,6 +8,7 @@ import { getUserDeletionGuardState, getUserDeletionGuardStateInTransaction } fro
 import { doesOAuthCredentialGenerationAuthorizeToken } from '../token-refresh-coordinator';
 import { selectActiveCOROSTokenSnapshot, normalizeCOROSOpenId } from '../coros/account';
 import { containsASCIIControlCharacter } from '../coros/input-validation';
+import { countGarminHealthBackfillRequests } from '../garmin/health-backfill-range';
 import { captureCurrentSuuntoWebhookWriteLifecycleGuards } from '../suunto/health-webhook-binding-lifecycle';
 import { isSleepProviderEnabled, isSleepSyncUserAllowed } from '../sleep/provider-flags';
 import { isGarminHealthSyncEnabled } from '../garmin/health-flags';
@@ -265,13 +266,14 @@ async function checkpointWrite(
       // between our preview and this transaction. A retry cannot extend it forever.
       fields = { ...fields, reservedAtMs: checkpoint.data()!.reservedAtMs };
     }
-    if (!checkpoint.exists && fields.reservedAtMs && plan.connection.name === 'garmin') {
+    if (fields.observation === 'reserved' && plan.connection.name === 'garmin'
+      && !(await tx.get(deps.db.collection('sleepSyncQueue').doc(job.queueId))).exists) {
       // Match the existing worker's terminal-progress ownership contract. Publish
       // before queue creation so a fast worker cannot have progress overwritten.
       tx.set(plan.connection.state, {
         provider: plan.connection.provider,
         lastBackfillQueuedAtMs: plan.endMs,
-        lastBackfillStartMs: plan.startMs,
+        lastBackfillStartMs: job.input.rangeStartMs,
         lastBackfillEndMs: plan.endMs,
         lastBackfillQueueItems: 1,
         healthBackfillStatus: 'queued',
@@ -391,14 +393,21 @@ export async function runExistingHealthBackfill(options: BackfillOptions, deps: 
             await requirePro(deps, connection.uid);
             if (!owner) { owner = randomUUID(); await claimPlan(deps, plan, owner); }
             const reservedAtMs = result.checkpoint?.reservedAtMs ?? deps.now();
-            await checkpointWrite(deps, plan, owner, job, { reservedAtMs, effectiveStartMs, observation: 'reserved' });
+            const effectiveJob = { ...job, input: {
+              ...job.input, rangeStartMs: effectiveStartMs,
+              ...(connection.name === 'garmin' ? {
+                garminHealthBackfillNextStartMs: effectiveStartMs,
+                garminHealthBackfillWindowsTotal: countGarminHealthBackfillRequests(effectiveStartMs, job.input.rangeEndMs!),
+              } : {}),
+            } };
+            await checkpointWrite(deps, plan, owner, effectiveJob, { reservedAtMs, effectiveStartMs, observation: 'reserved' });
             const cooldown = (await plan.control.get()).data()?.cooldownUntilMs;
             // Count ambiguous writes against admission limits too. A rejected call
             // may already have committed and must not allow an unbounded batch.
             summary.jobsAttempted++;
             changedUsers.add(connection.uid);
             await deps.enqueue({
-              ...job.input, ...connection.queueFields, rangeStartMs: effectiveStartMs, preserveExisting: true,
+              ...effectiveJob.input, ...connection.queueFields, preserveExisting: true,
               requiredDocumentFieldValues: [
                 ...connection.guards,
                 { documentRef: plan.control, expectedFields: { campaign: plan.campaign, owner } },
@@ -428,7 +437,7 @@ export async function runExistingHealthBackfill(options: BackfillOptions, deps: 
 
 const HELP = `Usage: npm --prefix functions run backfill-existing-health -- --project PROJECT --provider garmin|suunto|coros|all --end YYYY-MM-DD [options]
 Dry run by default. --end is an inclusive, completed UTC day; repeat exactly the same range to resume.
---start YYYY-MM-DD     Defaults to the existing configured historical boundary; COROS is retention-clamped.
+--start YYYY-MM-DD     Defaults to 2000-01-01; Garmin is clamped to five years, COROS to three months.
 --uid UID             Restrict to one owner.
 --execute             Write checkpoints and enqueue jobs. No direct provider calls or Cloud Tasks dispatch.
 --confirm-all-users   Required with --execute unless --uid is supplied.

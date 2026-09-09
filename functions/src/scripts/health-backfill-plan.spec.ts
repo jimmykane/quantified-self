@@ -36,7 +36,8 @@ describe('existing-user Health backfill planning', () => {
   });
   it('rejects a reversed range and boundary expansion', () => {
     expect(() => parseBackfillOptions([...args, '--start=2026-09-07'], now)).toThrow();
-    expect(() => parseBackfillOptions([...args, '--start=2000-01-01'], now)).toThrow();
+    expect(() => parseBackfillOptions([...args, '--start=1999-12-31'], now)).toThrow();
+    expect(parseBackfillOptions([...args, '--start=2000-01-01'], now).startMs).toBe(Date.parse('2000-01-01'));
   });
   it('creates one resumable all-family Garmin cursor, not Sleep HTTP calls', async () => {
     const jobs = buildHealthBackfillJobs(SLEEP_PROVIDERS.GarminAPI, 'uid', 'account', 1000, 2000, 'campaign');
@@ -64,6 +65,21 @@ describe('existing-user Health backfill planning', () => {
     const jobs = buildHealthBackfillJobs(SLEEP_PROVIDERS.COROSAPI, 'uid', 'account', Date.parse('2026-07-01'), Date.parse('2026-09-01'), 'campaign');
     expect(jobs).toHaveLength(3);
     expect(jobs.every(j => j.input.type === 'coros_poll')).toBe(true);
+  });
+  it('clamps Garmin to five years from now, even for an older requested end date', () => {
+    const start = earliestBackfillStart(SLEEP_PROVIDERS.GarminAPI, Date.parse('2000-01-01'), now + 123);
+    expect(start).toBe(Date.parse('2021-09-07T10:00:01Z'));
+    expect(buildHealthBackfillJobs(SLEEP_PROVIDERS.GarminAPI, 'uid', 'account', start, Date.parse('2020-01-01'), 'campaign')).toEqual([]);
+    expect(earliestBackfillStart(SLEEP_PROVIDERS.GarminAPI, Date.parse('2026-01-01'), now)).toBe(Date.parse('2026-01-01'));
+  });
+  it('uses the 2000 Suunto boundary while retaining operator job and user caps', () => {
+    const options = parseBackfillOptions(args, now);
+    expect(options).toMatchObject({ startMs: Date.parse('2000-01-01'), maxJobs: 25, maxUsers: 5 });
+    expect(earliestBackfillStart(SLEEP_PROVIDERS.SuuntoApp, 0, now)).toBe(Date.parse('2000-01-01'));
+    const jobs = buildHealthBackfillJobs(SLEEP_PROVIDERS.SuuntoApp, 'uid', 'account', options.startMs, options.endMs, 'campaign');
+    expect(jobs.length).toBeLessThan(512);
+    expect(jobs.at(-1)?.input.rangeStartMs).toBe(Date.parse('2000-01-01'));
+    expect(jobs.every(j => j.input.rangeEndMs! - j.input.rangeStartMs! <= 28 * DAY_MS)).toBe(true);
   });
   it('does not equate processed or missing queue rows with success', () => {
     expect(observeBackfillJob(undefined, undefined, false, now)).toBe('new');

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     SLEEP_BACKFILL_COOLDOWN_MS,
-    SLEEP_BACKFILL_START_DATE_ISO,
+    getHealthBackfillStartMs,
     getCorosSleepBackfillStartMs,
     getSleepBackfillCooldownMs,
     getSleepBackfillWindowDays,
@@ -324,7 +324,7 @@ function seedCorosToken() {
 
 describe('backfillSuuntoAppSleep', () => {
     const nowMs = Date.parse('2026-04-30T12:00:00.000Z');
-    const startMs = Date.parse(SLEEP_BACKFILL_START_DATE_ISO);
+    const startMs = Date.parse('2000-01-01T00:00:00.000Z');
     const windowDays = getSleepBackfillWindowDays(SLEEP_PROVIDERS.SuuntoApp) || 0;
 
     beforeEach(() => {
@@ -353,9 +353,9 @@ describe('backfillSuuntoAppSleep', () => {
         vi.useRealTimers();
     });
 
-    it('queues Suunto Sleep and Health windows from the shared start date to now', async () => {
+    it('queues Suunto Sleep and Health windows from 2000 to now, recent windows first', async () => {
         seedSuuntoToken();
-        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
 
         const result = await backfillSuuntoAppSleep(createRequest());
 
@@ -363,7 +363,7 @@ describe('backfillSuuntoAppSleep', () => {
             queued: expectedWindows.length,
             sleepQueued: expectedWindows.length,
             healthQueued: expectedWindows.length,
-            startDate: SLEEP_BACKFILL_START_DATE_ISO,
+            startDate: new Date(startMs).toISOString(),
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + SLEEP_BACKFILL_COOLDOWN_MS,
         });
@@ -388,9 +388,10 @@ describe('backfillSuuntoAppSleep', () => {
             providerUserId: 'suunto-user-1',
             rangeStartMs: expectedWindows[0].startMs,
             rangeEndMs: expectedWindows[0].endMs,
+            dispatchImmediately: false,
             dedupeKey: `sleep-backfill:user-1:${expectedWindows[0].startMs}:${expectedWindows[0].endMs}`,
         });
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             type: 'suunto_health_poll',
             userID: 'user-1',
             providerUserId: 'suunto-user-1',
@@ -410,7 +411,7 @@ describe('backfillSuuntoAppSleep', () => {
     it('preserves Sleep-only backfill without a Health account cap when Health is disabled', async () => {
         seedSuuntoToken();
         hoisted.isSuuntoHealthSyncEnabled.mockReturnValue(false);
-        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
 
         const result = await backfillSuuntoAppSleep(createRequest());
 
@@ -424,10 +425,59 @@ describe('backfillSuuntoAppSleep', () => {
         expect(hoisted.addSleepSyncQueueItem.mock.calls.every(([item]) => item.type === 'suunto_poll')).toBe(true);
     });
 
+    it('bounds full-history queue admission to four concurrent writes and provider-sized windows', async () => {
+        seedSuuntoToken();
+        let active = 0;
+        let peak = 0;
+        hoisted.addSleepSyncQueueItem.mockImplementation(async () => {
+            active++;
+            peak = Math.max(peak, active);
+            await Promise.resolve();
+            await Promise.resolve();
+            active--;
+            return { id: 'queue-item' };
+        });
+        const result = await backfillSuuntoAppSleep(createRequest());
+        expect(peak).toBe(4);
+        expect(active).toBe(0);
+        expect(result.sleepQueued).toBeGreaterThan(300);
+        const sleepJobs = hoisted.addSleepSyncQueueItem.mock.calls.map(([job]) => job).filter(job => job.type === 'suunto_poll');
+        expect(sleepJobs[0].rangeEndMs).toBe(nowMs);
+        expect(sleepJobs.at(-1).rangeStartMs).toBe(startMs);
+        expect(sleepJobs.every(job => job.rangeEndMs - job.rangeStartMs <= 28 * 86_400_000)).toBe(true);
+        expect(sleepJobs.every((job, index) => index === 0 || job.rangeEndMs === sleepJobs[index - 1].rangeStartMs)).toBe(true);
+        expect(hoisted.addSleepSyncQueueItem.mock.calls.every(([job]) => job.dispatchImmediately === false)).toBe(true);
+    });
+
+    it('rejects a range above the admission cap before claiming cooldown or writing jobs', async () => {
+        seedSuuntoToken();
+        vi.setSystemTime(Date.parse('2100-01-01'));
+        await expect(backfillSuuntoAppSleep(createRequest())).rejects.toMatchObject({ code: 'resource-exhausted' });
+        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.addSleepSyncQueueItem).not.toHaveBeenCalled();
+    });
+
+    it('drains started writes on failure before clearing cooldown and starts no further batch', async () => {
+        seedSuuntoToken();
+        let release: () => void = () => {};
+        const blocked = new Promise<void>(resolve => { release = resolve; });
+        hoisted.addSleepSyncQueueItem.mockRejectedValueOnce(new Error('queue unavailable'))
+            .mockImplementation(async () => { await blocked; return { id: 'queue-item' }; });
+        const result = backfillSuuntoAppSleep(createRequest());
+        const rejection = expect(result).rejects.toMatchObject({ code: 'internal' });
+        await vi.waitFor(() => expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(4));
+        expect(hoisted.updateSleepSyncState).not.toHaveBeenCalled();
+        release();
+        await rejection;
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(4);
+        expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.SuuntoApp,
+            expect.objectContaining({ status: 'failed', nextBackfillAllowedAtMs: null }), expect.any(Number));
+    });
+
     it('queues paired Sleep and Health windows for every eligible Suunto account', async () => {
         seedSuuntoToken();
         const userID = 'suunto-health-user';
-        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
 
         const result = await backfillSuuntoAppSleep(createRequest({ auth: { uid: userID } }));
 
@@ -443,7 +493,7 @@ describe('backfillSuuntoAppSleep', () => {
             rangeStartMs: expectedWindows[0].startMs,
             rangeEndMs: expectedWindows[0].endMs,
         }));
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(2, {
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith({
             type: 'suunto_health_poll',
             provider: SLEEP_PROVIDERS.SuuntoApp,
             userID,
@@ -451,6 +501,7 @@ describe('backfillSuuntoAppSleep', () => {
             rangeStartMs: expectedWindows[0].startMs,
             rangeEndMs: expectedWindows[0].endMs,
             healthTrigger: 'backfill',
+            dispatchImmediately: false,
             dedupeKey: `health-backfill:${userID}:suunto-user-1:${expectedWindows[0].startMs}:${expectedWindows[0].endMs}`,
         });
     });
@@ -465,7 +516,7 @@ describe('backfillSuuntoAppSleep', () => {
             userName: tokenDoc.id === 'suunto-token-2' ? 'suunto-user-2' : 'suunto-user-1',
         }));
         const userID = 'suunto-health-user';
-        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
 
         const result = await backfillSuuntoAppSleep(createRequest({ auth: { uid: userID } }));
 
@@ -475,7 +526,7 @@ describe('backfillSuuntoAppSleep', () => {
             healthQueued: expectedWindows.length * 2,
         });
         expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(expectedWindows.length * 3);
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenNthCalledWith(3, expect.objectContaining({
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
             type: 'suunto_health_poll',
             providerUserId: 'suunto-user-2',
             rangeStartMs: expectedWindows[0].startMs,
@@ -490,7 +541,7 @@ describe('backfillSuuntoAppSleep', () => {
             userName: tokenDoc.id === 'suunto-token-2' ? 'a'.repeat(513) : 'suunto-user-1',
         }));
         const userID = 'suunto-health-user';
-        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+        const expectedWindows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
 
         const result = await backfillSuuntoAppSleep(createRequest({ auth: { uid: userID } }));
 
@@ -610,9 +661,7 @@ describe('backfillSuuntoAppSleep', () => {
 
     it('clears the claimed cooldown when queueing sleep backfill windows fails', async () => {
         seedSuuntoToken();
-        hoisted.addSleepSyncQueueItem
-            .mockResolvedValueOnce({ id: 'queue-item-1' })
-            .mockRejectedValueOnce(new Error('queue write failed'));
+        hoisted.addSleepSyncQueueItem.mockRejectedValue(new Error('queue write failed'));
 
         await expect(backfillSuuntoAppSleep(createRequest()))
             .rejects.toMatchObject({ code: 'internal' });
@@ -620,7 +669,7 @@ describe('backfillSuuntoAppSleep', () => {
         expect(hoisted.transactionSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             nextBackfillAllowedAtMs: nowMs + SLEEP_BACKFILL_COOLDOWN_MS,
         }), { merge: true });
-        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(2);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledTimes(4);
         expect(hoisted.updateSleepSyncState).toHaveBeenCalledWith('user-1', SLEEP_PROVIDERS.SuuntoApp, {
             status: 'failed',
             lastBackfillQueuedAtMs: null,
@@ -790,7 +839,7 @@ describe('backfillCorosAPISleep', () => {
 
 describe('backfillGarminAPIHealth', () => {
     const nowMs = Date.parse('2026-04-30T12:00:00.000Z');
-    const startMs = Date.parse(SLEEP_BACKFILL_START_DATE_ISO);
+    const startMs = Date.parse('2021-04-30T12:00:00.000Z');
     const windowDays = getSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI) || 0;
     const cooldownMs = getSleepBackfillCooldownMs(SLEEP_PROVIDERS.GarminAPI) || 0;
 
@@ -836,7 +885,7 @@ describe('backfillGarminAPIHealth', () => {
             queued: expectedWindows.length,
             sleepQueued: expectedWindows.length,
             healthQueued: 0,
-            startDate: SLEEP_BACKFILL_START_DATE_ISO,
+            startDate: new Date(startMs).toISOString(),
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + cooldownMs,
         });
@@ -883,7 +932,7 @@ describe('backfillGarminAPIHealth', () => {
             queued: expectedSleepWindows.length,
             sleepQueued: expectedSleepWindows.length,
             healthQueued: expectedHealthWindows,
-            startDate: SLEEP_BACKFILL_START_DATE_ISO,
+            startDate: new Date(startMs).toISOString(),
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + cooldownMs,
         });
@@ -924,6 +973,18 @@ describe('backfillGarminAPIHealth', () => {
             },
         );
         expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain('garmin-user-1');
+    });
+
+    it('rounds the rolling Garmin policy forward to whole seconds for both Sleep and Health', async () => {
+        seedGarminToken();
+        vi.setSystemTime(nowMs + 789);
+        const result = await backfillGarminAPIHealth(createRequest());
+        const expectedStartMs = Math.ceil(getHealthBackfillStartMs(SLEEP_PROVIDERS.GarminAPI, nowMs + 789) / 1000) * 1000;
+        expect(result.startDate).toBe(new Date(expectedStartMs).toISOString());
+        expect(hoisted.requestGet.mock.calls[0][0].url).toContain(`summaryStartTimeInSeconds=${expectedStartMs / 1000}&`);
+        expect(hoisted.addSleepSyncQueueItem).toHaveBeenCalledWith(expect.objectContaining({
+            rangeStartMs: expectedStartMs, rangeEndMs: nowMs, garminHealthBackfillNextStartMs: expectedStartMs,
+        }));
     });
 
     it('uses a later Garmin token when the first token is missing sleep backfill permissions', async () => {
@@ -1462,7 +1523,7 @@ describe('backfillGarminAPIHealth', () => {
             queued: expectedWindows.length,
             sleepQueued: expectedWindows.length,
             healthQueued: 0,
-            startDate: SLEEP_BACKFILL_START_DATE_ISO,
+            startDate: new Date(startMs).toISOString(),
             endDate: new Date(nowMs).toISOString(),
             nextAllowedAtMs: nowMs + cooldownMs,
         });

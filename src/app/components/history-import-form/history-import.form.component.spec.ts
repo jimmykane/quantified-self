@@ -66,7 +66,7 @@ describe('HistoryImportFormComponent', () => {
             getGarminHealthSyncAvailabilityForCurrentUser: vi.fn().mockResolvedValue(false),
             backfillSuuntoSleepForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 135,
-                startDate: '2016-01-01T00:00:00.000Z',
+                startDate: '2000-01-01T00:00:00.000Z',
                 endDate: '2026-04-30T12:00:00.000Z',
                 nextAllowedAtMs: 1_778_244_000_000,
             }),
@@ -80,7 +80,7 @@ describe('HistoryImportFormComponent', () => {
             }),
             backfillGarminHealthForCurrentUser: vi.fn().mockResolvedValue({
                 queued: 43,
-                startDate: '2016-01-01T00:00:00.000Z',
+                startDate: '2021-04-30T12:00:00.000Z',
                 endDate: '2026-04-30T12:00:00.000Z',
                 nextAllowedAtMs: 1_780_231_200_000,
             }),
@@ -146,6 +146,20 @@ describe('HistoryImportFormComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it.each([
+        [ServiceNames.GarminAPI, '2019-02-28T12:34:56.789Z'],
+        [ServiceNames.SuuntoApp, '2000-01-01T00:00:00.000Z'],
+        [ServiceNames.COROSAPI, '2023-11-29T12:34:56.789Z'],
+    ])('uses the same Health boundary as the backend for %s', (provider, expected) => {
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2024-02-29T12:34:56.789Z'));
+        try {
+            component.serviceName = provider;
+            expect(component.sleepBackfillStartDate?.toISOString()).toBe(expected);
+        } finally {
+            clock.mockRestore();
+        }
+    });
+
     it('should have correct processing capacity constant', () => {
         expect(component.processingCapacityPerDay).toBe(5000);
     });
@@ -162,7 +176,9 @@ describe('HistoryImportFormComponent', () => {
 
         const text = fixture.nativeElement.textContent;
         expect(text).toContain('Import Sleep history');
-        expect(text).toContain('Imports Suunto sleep');
+        expect(text).toContain('Requests Suunto sleep');
+        expect(text).toContain('Jan 1, 2000');
+        expect(text).toContain('Only history available from Suunto can be imported');
         expect(text).toContain('once every 7 days');
     });
 
@@ -180,7 +196,7 @@ describe('HistoryImportFormComponent', () => {
         const text = fixture.nativeElement.textContent;
         expect(text).toContain('Sleep & 24/7 Health history');
         expect(text).toContain('Import Sleep & 24/7 Health history');
-        expect(text).toContain('Imports Suunto sleep and available 24/7 Health metrics');
+        expect(text).toContain('Requests Suunto sleep and available 24/7 Health metrics');
     });
 
     it('keeps the Suunto action sleep-only when the current rollback signal is disabled', async () => {
@@ -400,7 +416,7 @@ describe('HistoryImportFormComponent', () => {
             queued: 270,
             sleepQueued: 135,
             healthQueued: 135,
-            startDate: '2016-01-01T00:00:00.000Z',
+            startDate: '2000-01-01T00:00:00.000Z',
             endDate: '2026-04-30T12:00:00.000Z',
             nextAllowedAtMs: 1_778_244_000_000,
         });
@@ -483,7 +499,7 @@ describe('HistoryImportFormComponent', () => {
             queued: 43,
             sleepQueued: 43,
             healthQueued: 1,
-            startDate: '2016-01-01T00:00:00.000Z',
+            startDate: '2021-04-30T12:00:00.000Z',
             endDate: '2026-04-30T12:00:00.000Z',
             nextAllowedAtMs: 1_780_231_200_000,
         });

@@ -267,6 +267,18 @@ For every new persistent write path:
 
 ### History imports
 
+Health/Sleep request boundaries are provider-specific and shared through
+`getHealthBackfillStartMs` in `shared/sleep-backfill.ts`: Garmin requests the latest
+rolling five calendar years, Suunto requests from January 1, 2000, and COROS retains
+its documented rolling three calendar months. Calendar subtraction clamps month-end
+and leap-day boundaries in UTC; Garmin admission rounds the start upward to whole
+seconds. These policies do not guarantee historical coverage. Preserve stricter
+provider-returned minima, per-request windows, pacing, cooldowns, and lifecycle/deletion
+guards. UI and operator scripts must use the same helper, not a shared fixed year.
+The Suunto callable caps admission at 512 windows and four concurrent queue writes,
+waits for started writes before reporting failure, and leaves provider requests to
+the existing workers. The operator CLI retains its smaller job/user/backpressure caps.
+
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.
 - Use a per-user lease so duplicate browser clicks, tabs, or retried callables cannot run overlapping history scans.

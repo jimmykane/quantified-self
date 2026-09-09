@@ -243,6 +243,33 @@ describe('existing-user Health backfill runner', () => {
     expect(await execute()).toMatchObject({ jobsSubmitted: 3, failed: 0 });
     expect(enqueue.mock.calls.at(-1)![0].rangeStartMs).toBe(Date.parse('2026-06-08T10:00:00Z'));
   });
+  it('clips Garmin history to five years and keeps its cursor and progress aligned on reservation retry', async () => {
+    connect('garmin');
+    options.startMs = Date.parse('2000-01-01');
+    const policyStart = Date.parse('2021-09-07T10:00:00Z');
+    // Inclusive endpoint: moving the start by two seconds drops a whole request window.
+    options.endMs = policyStart + 90 * 86_400_000;
+    enqueue.mockRejectedValueOnce(new Error('queue temporarily unavailable'));
+    expect(await execute()).toMatchObject({ jobsSubmitted: 0, failed: 1 });
+    const firstInput = enqueue.mock.calls[0][0];
+    expect(firstInput).toMatchObject({
+      rangeStartMs: policyStart, garminHealthBackfillNextStartMs: policyStart,
+      garminHealthBackfillWindowsTotal: 20,
+    });
+    deps.now = () => now + 2000;
+    expect(await execute()).toMatchObject({ jobsSubmitted: 1, failed: 0 });
+    const retryInput = enqueue.mock.calls[1][0];
+    expect(retryInput).toMatchObject({
+      rangeStartMs: policyStart + 2000, garminHealthBackfillNextStartMs: policyStart + 2000,
+      garminHealthBackfillWindowsTotal: 10,
+    });
+    expect(retryInput.dedupeKey).toBe(firstInput.dedupeKey);
+    expect(db.rows.get(`users/owner/sleepSyncState/${PROVIDERS.garmin}`)).toMatchObject({
+      lastBackfillStartMs: policyStart + 2000, healthBackfillWindowsTotal: 10,
+    });
+    expect(await execute()).toMatchObject({ jobsSubmitted: 0, failed: 0 });
+    expect(enqueue).toHaveBeenCalledTimes(2);
+  });
   it('respects Pro, missing permissions, inactive accounts, and verified Suunto bindings', async () => {
     connect('garmin', 'free'); roles.free = { stripeRole: 'free' };
     connect('garmin', 'missing-permission'); db.rows.get('garminAPITokens/missing-permission/tokens/provider-account')!.permissions = ['HEALTH_EXPORT'];

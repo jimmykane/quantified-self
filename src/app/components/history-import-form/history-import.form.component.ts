@@ -21,11 +21,10 @@ import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, GARMIN_HISTORY_IMPORT_LIMIT_YEARS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '@shared/history-import.constants';
 import {
-  getCorosSleepBackfillStartMs,
+  getHealthBackfillStartMs,
   GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
   getSleepBackfillCooldownDays,
   SLEEP_BACKFILL_COOLDOWN_DAYS,
-  SLEEP_BACKFILL_START_DATE_ISO,
   SleepBackfillQueueResponse,
 } from '@shared/sleep-backfill';
 import { SLEEP_PROVIDERS, SleepProvider, SleepSyncState } from '@shared/sleep';
@@ -379,10 +378,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     }
   }
 
-  get sleepBackfillStartDate(): Date {
-    return this.serviceName === ServiceNames.COROSAPI
-      ? new Date(getCorosSleepBackfillStartMs())
-      : new Date(SLEEP_BACKFILL_START_DATE_ISO);
+  get sleepBackfillStartDate(): Date | null {
+    const provider = this.sleepBackfillProvider;
+    return provider ? new Date(getHealthBackfillStartMs(provider)) : null;
   }
 
   get sleepBackfillCooldownDays(): number {

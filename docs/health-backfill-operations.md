@@ -13,8 +13,8 @@ providers, and range. Building the script and running `--help` do not contact Fi
 
 | Provider | Work submitted | Historical boundary |
 | --- | --- | --- |
-| Garmin | One durable `garmin_health_backfill` cursor for the ten existing Health families | Existing configured 2016 boundary, clipped by stored/provider minimums |
-| Suunto | `suunto_health_poll` jobs in at most 28-day windows, recent windows first | Existing configured 2016 boundary; provider availability still applies |
+| Garmin | One durable `garmin_health_backfill` cursor for the ten existing Health families | Latest rolling five calendar years at request time, clipped by stored/provider minimums |
+| Suunto | `suunto_health_poll` jobs in at most 28-day windows, recent windows first | Requests from January 1, 2000; only history available from Suunto can be returned |
 | COROS | `coros_poll` daily-data jobs, which import both Health and Sleep | Current three-month lookback, split using the existing inclusive date-range helper |
 
 Garmin and Suunto **Sleep-only** history is not requested by this script. The normal
@@ -50,9 +50,14 @@ opaque account/range digests. Runtime error objects are never serialized in repo
 
 `--end` is mandatory: it names an inclusive, fully completed UTC day. Use the same
 project, provider, start, and end dates for every retry of a campaign. Omitting
-`--start` uses the existing configured historical boundary; changing this boundary
-is outside the script's scope. COROS clamps against retention **at execution time**,
-not against the requested end date, and clips an aging oldest window on resume.
+`--start` uses January 1, 2000 as a stable requested campaign boundary. The shared
+`getHealthBackfillStartMs` policy narrows it separately for each provider: Garmin to
+five calendar years before **execution time**, Suunto to 2000, and COROS to three
+calendar months before execution time. These are request limits, not promises of
+available data. Rolling limits are not relative to the requested end date; a wholly
+expired range is skipped. On resume, an aging oldest window is clipped. Garmin's
+initial cursor, request count, and progress state are kept aligned with that clipped
+range before queue creation; existing queued cursors are not reset.
 
 Optional limits:
 

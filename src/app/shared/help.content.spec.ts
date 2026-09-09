@@ -1022,7 +1022,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('separate from workout FIT metrics and Sleep sessions');
     expect(serviceConnectionsSection?.content).toContain('raw webhook samples');
     expect(serviceConnectionsSection?.content).toContain('import the available last three months');
-    expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
+    expect(serviceConnectionsSection?.content).toContain('Jan 1, 2000');
+    expect(serviceConnectionsSection?.content).toContain('up to the latest rolling five years');
+    expect(serviceConnectionsSection?.content).toContain('Garmin may allow a shorter range');
+    expect(serviceConnectionsSection?.content).not.toContain('2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
