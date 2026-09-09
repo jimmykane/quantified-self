@@ -164,6 +164,37 @@ describe('ChartsSleepTrendComponent', () => {
     expect(option.xAxis.axisLabel.hideOverlap).toBe(false);
   });
 
+  it('thins the default 14-day sleep labels in a narrow desktop card', async () => {
+    const chartElement = fixture.nativeElement.querySelector('.sleep-chart') as HTMLDivElement;
+    Object.defineProperty(chartElement, 'clientWidth', { configurable: true, value: 440 });
+    const points = Array.from({ length: 14 }, (_, index) => buildSleepPoint({
+      id: `sleep-${index + 1}`,
+      sleepDate: `2026-04-${String(index + 1).padStart(2, '0')}`,
+      categoryLabel: `Apr ${index + 1}`,
+    }));
+    component.sleepTrend = {
+      points,
+      latestPoint: points[points.length - 1],
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => {
+      expect(mockLoader.setOption).toHaveBeenCalled();
+    });
+
+    const setOptionCall = mockLoader.setOption.mock.calls.at(-1) || [];
+    const optionCandidate = setOptionCall[1] || setOptionCall[0];
+    const option = optionCandidate as Record<string, any>;
+    const interval = option.xAxis.axisLabel.interval as (index: number) => boolean;
+    const visibleLabelCount = points.filter((_point, index) => interval(index)).length;
+
+    expect(option.xAxis.axisLabel.hideOverlap).toBe(true);
+    expect(interval(0)).toBe(true);
+    expect(interval(points.length - 1)).toBe(true);
+    expect(visibleLabelCount).toBeLessThanOrEqual(6);
+  });
+
   it('thins the default 14-day sleep labels on a mobile viewport', async () => {
     const originalMatchMedia = window.matchMedia;
     vi.useFakeTimers();

@@ -275,7 +275,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       }
       : { show: false };
     const showEveryDayLabel = this.sleepRange === DASHBOARD_SLEEP_TREND_DEFAULT_RANGE
-      && !isMobileTooltipViewport;
+      && !isMobileTooltipViewport
+      && !style.isCompactLayout;
     const xAxisLabelInterval = showEveryDayLabel ? 0 : this.buildXAxisLabelInterval(points, chartWidth);
     const xAxisLabelFormatter = this.buildXAxisLabelFormatter(points);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));

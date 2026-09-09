@@ -242,6 +242,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       viewBounds.minTime,
       viewBounds.maxTime,
       viewBounds.visiblePointCount,
+      chartStyle.isCompactLayout ? 4 : 7,
     );
     const hasSingleVisiblePoint = viewBounds.visiblePointCount <= 1;
 
@@ -272,6 +273,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       min: viewBounds.minTime,
       max: viewBounds.maxTime,
       minInterval: labelConfig.minIntervalMs,
+      interval: labelConfig.tickIntervalMs,
       splitNumber: labelConfig.splitNumber,
       axisPointer: {
         show: true,
@@ -292,6 +294,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       min: viewBounds.minTime,
       max: viewBounds.maxTime,
       minInterval: labelConfig.minIntervalMs,
+      interval: labelConfig.tickIntervalMs,
       splitNumber: labelConfig.splitNumber,
       axisPointer: {
         show: true,

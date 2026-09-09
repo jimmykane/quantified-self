@@ -213,6 +213,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
 
     const categories = weeks.map((week) => week.weekStartMs);
     const xAxisLabelMode = this.resolveXAxisLabelMode(weeks);
+    const xAxisLabelInterval = this.buildXAxisLabelInterval(weeks.length, style.isCompactLayout);
     return {
       animation: false,
       backgroundColor: 'transparent',
@@ -276,6 +277,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
+          interval: xAxisLabelInterval,
           margin: 3,
           formatter: (value: string | number) => this.formatXAxisLabel(value, xAxisLabelMode),
         },
@@ -401,6 +403,21 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
       return 'month-year';
     }
     return 'day-month';
+  }
+
+  private buildXAxisLabelInterval(
+    weekCount: number,
+    isCompactLayout: boolean,
+  ): 0 | ((index: number) => boolean) {
+    const normalizedWeekCount = Math.max(0, Math.floor(weekCount));
+    const maximumLabels = isCompactLayout ? 6 : 8;
+    if (normalizedWeekCount <= maximumLabels) {
+      return 0;
+    }
+
+    const lastIndex = normalizedWeekCount - 1;
+    const step = Math.max(1, Math.ceil(lastIndex / Math.max(1, maximumLabels - 1)));
+    return (index: number) => index === 0 || index === lastIndex || index % step === 0;
   }
 
   private formatXAxisLabel(value: string | number | null | undefined, mode: IntensityXAxisLabelMode): string {

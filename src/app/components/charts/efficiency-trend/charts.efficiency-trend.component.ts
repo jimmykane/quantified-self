@@ -192,6 +192,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     const values = points.map(point => point.value);
     const valueAxis = buildDashboardValueAxisConfig(values, { rangeMode: 'data' });
     const labelMode = this.resolveXAxisLabelMode(points);
+    const xAxisSplitNumber = style.isCompactLayout ? 4 : 7;
 
     return {
       animation: false,
@@ -229,6 +230,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       },
       xAxis: {
         type: 'time',
+        splitNumber: xAxisSplitNumber,
         axisPointer: {
           show: true,
           snap: true,

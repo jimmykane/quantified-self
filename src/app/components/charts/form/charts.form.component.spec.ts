@@ -203,6 +203,7 @@ describe('ChartsFormComponent', () => {
     expect(option.dataZoom).toBeUndefined();
     expect(option.toolbox).toBeUndefined();
     expect(option.xAxis[1].minInterval).toBe(7 * DAY_MS);
+    expect(option.xAxis[1].interval).toBe(7 * DAY_MS);
     expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
     expect(option.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
     expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
