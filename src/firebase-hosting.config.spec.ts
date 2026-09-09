@@ -204,6 +204,19 @@ function getCspDirective(policy: string, directiveName: string): string | undefi
 }
 
 describe('Firebase Hosting configuration', () => {
+  it('serves pre-release Plans at its Training URL without retaining /plans as a redirect, rewrite, or offline fallback', () => {
+    for (const hosting of firebaseConfig.hosting) {
+      const rewriteSources = (hosting.rewrites ?? []).map(rewrite => rewrite.source);
+      const redirectSources = (hosting.redirects ?? []).map(redirect => redirect.source);
+
+      expect(matchesAnyHostingSource(rewriteSources, '/training/plans')).toBe(true);
+      expect(matchesAnyHostingSource(rewriteSources, '/plans')).toBe(false);
+      expect(matchesAnyHostingSource(redirectSources, '/plans')).toBe(false);
+    }
+    expect(serviceWorkerConfig.navigationUrls).toContain('/training/plans');
+    expect(serviceWorkerConfig.navigationUrls).not.toContain('/plans');
+  });
+
   it('permanently redirects legacy comparison pages to the consolidated canonical page', () => {
     for (const target of firebaseConfig.hosting) {
       expect(target.redirects).toEqual(expectedComparisonRedirects);
@@ -351,7 +364,7 @@ describe('Firebase Hosting configuration', () => {
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/share/comparison/');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/routes</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/calendar</loc>');
-    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/plans</loc>');
+    expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training/plans</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/training</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/health</loc>');
     expect(sitemapXml).not.toContain('<loc>https://quantified-self.io/mcp</loc>');

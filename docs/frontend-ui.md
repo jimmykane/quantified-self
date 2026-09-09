@@ -42,10 +42,11 @@ stretching a form workflow across the workspace width.
 
 ## Sidebar navigation
 
-Training remains a direct link to `/training`. Plans is an indented subitem immediately below it in a labelled Training
-group, without an expansion control. Only the Plans entry uses the Training Planning navigation UID allowlist;
-other signed-in users retain the direct Training link. This presentation hierarchy does not change `/plans`, Calendar
-entry points, or owner-scoped planning access. Each link keeps its own active state and existing close/haptic action.
+Training remains a direct link to `/training`. Plans links to `/training/plans` as an indented subitem immediately below
+it in a labelled Training group, without an expansion control. Only the Plans entry uses the Training Planning navigation
+UID allowlist; other signed-in users retain the direct Training link. Calendar entry points and owner-scoped planning
+access remain available. Training matches only its exact path (ignoring query parameters and fragments), so Plans has an
+independent active state. Both links keep their existing close/haptic action.
 
 ## Material and accessibility
 

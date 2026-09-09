@@ -117,7 +117,7 @@ describe('planned-workout provider proof fixtures', () => {
             name: 'Fixture intervals',
             description: 'Redacted provider contract fixture.',
             owner: 'Quantified Self',
-            url: 'https://quantified-self.io/plans',
+            url: 'https://quantified-self.io/training/plans',
             localDate: '2026-09-03',
             sourceWorkoutId: 'fixture-workout-001',
             allowDegraded: false,
@@ -408,7 +408,7 @@ describe('planned-workout provider proof fixtures', () => {
         expect(() => serializeSuuntoGuideJsonV1(structure, {
             name: 'Cadence',
             owner: 'Quantified Self',
-            url: 'https://quantified-self.io/plans',
+            url: 'https://quantified-self.io/training/plans',
             localDate: '2026-09-03',
             sourceWorkoutId: 'cadence-workout',
             allowDegraded: false,
@@ -417,7 +417,7 @@ describe('planned-workout provider proof fixtures', () => {
         const approved = serializeSuuntoGuideJsonV1(structure, {
             name: 'Cadence',
             owner: 'Quantified Self',
-            url: 'https://quantified-self.io/plans',
+            url: 'https://quantified-self.io/training/plans',
             localDate: '2026-09-03',
             sourceWorkoutId: 'cadence-workout',
             allowDegraded: true,
@@ -442,7 +442,7 @@ describe('planned-workout provider proof fixtures', () => {
         const options = {
             name: 'Unicode guidance',
             owner: 'Quantified Self',
-            url: 'https://quantified-self.io/plans',
+            url: 'https://quantified-self.io/training/plans',
             localDate: '2026-09-03',
             sourceWorkoutId: 'unicode-workout',
         };
@@ -483,7 +483,7 @@ describe('planned-workout provider proof fixtures', () => {
         expect(() => serializeSuuntoGuideJsonV1(repetitions, {
             name: 'Repetitions',
             owner: 'Quantified Self',
-            url: 'https://quantified-self.io/plans',
+            url: 'https://quantified-self.io/training/plans',
             localDate: '2026-09-03',
             sourceWorkoutId: 'repetitions',
             allowDegraded: true,

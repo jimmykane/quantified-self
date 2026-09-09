@@ -10,7 +10,7 @@ This document is the implementation and maintenance guide for the Activity Calen
 - Private [Timeline notes](timeline-notes.md) mark their dates in all three full-calendar views, including note-only days.
   The shared header manager and **Show on charts and calendar** preference apply; dashboard tiles/popovers stay unchanged.
 - Every rendered date is selectable. Its Angular Material bottom sheet keeps planned workouts separate from completed activity totals and rows, provides active-plan/standalone creation actions, and links to a planned-workout editor or individual event as appropriate.
-- Standalone workouts and workouts from the active plan appear on the full Calendar, dashboard tile, and Dashboard Today mini-calendar. Inactive-plan workouts remain in `/plans`; skipped workouts remain visible with a distinct marker.
+- Standalone workouts and workouts from the active plan appear on the full Calendar, dashboard tile, and Dashboard Today mini-calendar. Inactive-plan workouts remain in `/training/plans`; skipped workouts remain visible with a distinct marker.
 - The public `/features/activity-calendar` route explains the feature without reading or exposing user activity data.
 
 ## Query and state model
@@ -89,8 +89,7 @@ Keep these interaction contracts:
 ## SEO and privacy
 
 - `/features/activity-calendar` is a prerendered public page included in the sitemap and public startup-route allowlist.
-- `/calendar` requires authentication, uses `noindex, follow`, is excluded from the sitemap, and is disallowed in `robots.txt`.
-- `/plans` has the same authenticated, client-rendered, `noindex` and sitemap/robots treatment. It is not a public product page.
+- `/calendar` and `/training/plans` require authentication, are client-rendered, and are excluded from the sitemap. They use `noindex, follow` route metadata and hosting `noindex` headers; `robots.txt` permits crawling so those directives can be read. Neither workspace is a public product page.
 - Public page metadata and structured data describe the feature only. They must never include activity values, account identifiers, or examples derived from a user's calendar.
 
 ## Test map

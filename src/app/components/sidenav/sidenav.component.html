@@ -51,13 +51,15 @@
   </mat-list-item>
 
   <div role="group" aria-label="Training">
-    <mat-list-item routerLinkActive="active" routerLink="/training" (click)="closeSideNav()">
+    <mat-list-item routerLinkActive="active"
+      [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
+      routerLink="/training" (click)="closeSideNav()">
       <mat-icon>monitoring</mat-icon>
       <span>Training</span>
     </mat-list-item>
 
     @if (hasTrainingPlanningNavigationAccess()) {
-      <mat-list-item class="sidenav-subitem" routerLinkActive="active" routerLink="/plans" (click)="closeSideNav()">
+      <mat-list-item class="sidenav-subitem" routerLinkActive="active" routerLink="/training/plans" (click)="closeSideNav()">
         <mat-icon>event_note</mat-icon>
         <span>Plans</span>
       </mat-list-item>

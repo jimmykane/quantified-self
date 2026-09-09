@@ -53,7 +53,7 @@
     "/dashboard",
     "/health",
     "/calendar",
-    "/plans",
+    "/training/plans",
     "/training",
     "/mytracks",
     "/routes",

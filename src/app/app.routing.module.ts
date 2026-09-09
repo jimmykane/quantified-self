@@ -567,7 +567,7 @@ const topLevelRoutes: Routes = [
     canMatch: [authGuard, onboardingGuard]
   },
   {
-    path: 'plans',
+    path: 'training/plans',
     loadComponent: () => import('./components/plans/plans-workspace.component')
       .then(module => module.PlansWorkspaceComponent),
     data: {

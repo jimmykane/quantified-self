@@ -1,7 +1,7 @@
 /**
  * Presentation-only rollout for the authenticated Training Planning navigation
  * entry. This is not an authorization boundary: owner-scoped APIs and the
- * `/plans` route remain available when opened directly. Broader rollout is
+ * `/training/plans` route remain available when opened directly. Broader rollout is
  * tracked by #655.
  */
 export const TRAINING_PLANNING_NAVIGATION_ALLOWED_UIDS: readonly string[] = [

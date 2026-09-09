@@ -76,13 +76,13 @@ describe('CalendarDayDetailsComponent', () => {
     const actions = [...fixture.nativeElement.querySelectorAll('.calendar-day-plan-actions a')] as HTMLAnchorElement[];
 
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.getAttribute('href'))
-      .toBe('/plans?workout=workout-1');
+      .toBe('/training/plans?workout=workout-1');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
     expect(actions.map(action => action.getAttribute('href'))).toEqual([
-      '/plans?date=2026-08-03',
-      '/plans?date=2026-08-03&scope=standalone',
+      '/training/plans?date=2026-08-03',
+      '/training/plans?date=2026-08-03&scope=standalone',
     ]);
     expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();

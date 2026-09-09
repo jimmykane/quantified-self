@@ -156,7 +156,7 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
 const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 
-- Open [Plans](/plans) to create a dated workout. Its sidebar entry sits beneath **Training**. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
+- Open [Plans](/training/plans) to create a dated workout. Its sidebar entry sits beneath **Training**. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
 - Manual planning is available without a provider connection. Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet; connecting a service does not send anything automatically.
 - The first editor supports Running and Cycling, date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Unsupported recipe features remain unavailable instead of being approximated.
 
@@ -172,7 +172,7 @@ const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 
 - Every visible date in the full Calendar, dashboard Activity Calendar tile, and Today mini-calendar can be selected, including an empty date.
 - **Add workout** uses the active plan when one exists and otherwise creates a standalone workout. **Add standalone** is always available as the explicit independent option.
-- Calendar overlays show standalone workouts and workouts from the active plan. Inactive-plan workouts remain in [Plans](/plans), while skipped workouts stay visible with a separate mark.
+- Calendar overlays show standalone workouts and workouts from the active plan. Inactive-plan workouts remain in [Plans](/training/plans), while skipped workouts stay visible with a separate mark.
 - Planned workouts and completed activities are separate. Plans never increase completed activity counts, duration, distance, elevation, activity-group bars, the activity table, or Training analysis.`;
 
 const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
@@ -188,7 +188,7 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 - A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.
 - Week and Month views separate activity-group circles when space allows. Narrow layouts, the dashboard tile, and Year view place multiple circles concentrically around the same center so a day stays readable in a compact cell.
 - Select any date, including an empty one, to open its details sheet. Planned workouts appear in their own section with links to edit them and actions to add a workout for that date. Completed totals and activity-group bars remain separate, followed by individual activities with their available distance and elevation metrics.
-- The calendar shows standalone workouts plus workouts from the active plan. Inactive-plan workouts remain in [Plans](/plans), and skipped workouts stay visible with a separate marker.
+- The calendar shows standalone workouts plus workouts from the active plan. Inactive-plan workouts remain in [Plans](/training/plans), and skipped workouts stay visible with a separate marker.
 - In the full Calendar, a note icon marks days with **Timeline notes**, even when there is no workout. A slim colored edge uses your note's selected color; overlapping notes keep their different colors as separate segments. Activity circles keep their own colors. Select the day to see its notes, then select a note to open or edit it. Date ranges include their end day; ongoing notes stop at today in their original time zone and refresh when you return to the tab. Notes never affect activity totals or circle sizes. Use **Timeline notes** in the header to manage them and **Show on charts and calendar** to show or hide them across workspaces. Dashboard calendar tiles and popovers do not show notes.
 - In day details, an activity group containing exactly one activity opens that activity directly, as does its individual activity row. Browser **Back** restores the same day's details sheet. Deleting an activity from its details page returns to the previous in-app page; the day sheet reopens when other activity remains on that day.
 - Calendar dates intentionally have no hover or touch tooltip. This keeps native vertical scrolling responsive on phones; day details remain available by selecting a date.
@@ -482,7 +482,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       { label: 'Login', icon: 'login', kind: 'route', target: '/login' },
       { label: 'Dashboard', icon: 'space_dashboard', kind: 'route', target: '/dashboard' },
       { label: 'Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
-      { label: 'Plans', icon: 'event_note', kind: 'route', target: '/plans' },
+      { label: 'Plans', icon: 'event_note', kind: 'route', target: '/training/plans' },
       { label: 'Training plans guide', icon: 'school', kind: 'route', target: '/help', fragment: 'training-plans' },
       { label: 'Health guide', icon: 'school', kind: 'route', target: '/help', fragment: 'health' },
       { label: 'Activity Calendar guide', icon: 'school', kind: 'route', target: '/help', fragment: 'activity-calendar' },
@@ -542,7 +542,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     summary: 'Create standalone workouts or organize dated Running and Cycling workouts into plans.',
     content: TRAINING_PLANS_HELP_CONTENT,
     links: [
-      { label: 'Open Plans', icon: 'event_note', kind: 'route', target: '/plans' },
+      { label: 'Open Plans', icon: 'event_note', kind: 'route', target: '/training/plans' },
       { label: 'Open Calendar', icon: 'calendar_month', kind: 'route', target: '/calendar' },
       { label: 'Training analysis guide', icon: 'monitoring', kind: 'route', target: '/help', fragment: 'training-analysis' },
     ],

@@ -178,7 +178,7 @@ describe('AppRoutingModule routes', () => {
   });
 
   it('keeps manual training plans authenticated, client-rendered, and noindexed', () => {
-    const plansRoute = routes.find(route => route.path === 'plans');
+    const plansRoute = routes.find(route => route.path === 'training/plans');
 
     expect(plansRoute).toBeTruthy();
     expect(plansRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
@@ -189,6 +189,8 @@ describe('AppRoutingModule routes', () => {
       robots: 'noindex, follow',
     });
     expect(plansRoute?.data?.['description']).toContain('standalone workouts');
+    expect(routes.indexOf(plansRoute!)).toBeLessThan(routes.findIndex(route => route.path === 'training'));
+    expect(routes.some(route => route.path === 'plans')).toBe(false);
   });
 
   it('should keep the private routes library authenticated and noindexed', () => {

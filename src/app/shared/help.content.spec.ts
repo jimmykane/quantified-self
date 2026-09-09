@@ -444,7 +444,7 @@ describe('help.content', () => {
       label: 'Open Plans',
       icon: 'event_note',
       kind: 'route',
-      target: '/plans',
+      target: '/training/plans',
     });
     expect(gettingStartedSection?.content).toContain('[Training plans guide](/help#training-plans)');
   });

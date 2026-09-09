@@ -210,7 +210,7 @@ Features hub, homepage link, Help link, sitemap, and `robots.txt` aligned when t
 
 ## Training Planning
 
-Training planning is a separate authored-workout workflow at authenticated `/plans`; it does not change the analytical
+Training planning is a separate authored-workout workflow at authenticated `/training/plans`; it does not change the analytical
 meaning of `/training`. Manual planning is available without a provider connection. A scheduled workout may belong to a
 plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is a future Pro action
 and must never be inferred from merely connecting a service.
@@ -271,17 +271,22 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 
 ### UI and calendar contract
 
-`/plans` provides Plans and Standalone views plus create, edit, copy, move/associate, skip, delete, permanent delete,
+`/training/plans` provides Plans and Standalone views plus create, edit, copy, move/associate, skip, delete, permanent delete,
 history/restore, activation, pause, archive, and date-shift actions. Calendar-originated creation defaults to the active
 plan when one exists and provides an explicit standalone action; without an active plan it defaults to standalone.
 
 The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
-workouts from the active plan. Inactive-plan workouts remain visible only in `/plans`; skipped workouts stay visible and
+workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and
 marked. Every rendered date is selectable, including empty dates. Day details keep **Planned workouts** and completed
 activities in separate sections. Planned workouts never enter recorded activity counts, durations, distance, elevation,
 group bars, activity tables, or Training-derived metrics.
 
-`/plans` is authenticated, client-rendered, `noindex, follow`, disallowed by `robots.txt`, and excluded from the sitemap.
+`/training/plans` is authenticated, client-rendered, and excluded from the sitemap. Its route metadata is `noindex, follow`
+and hosting also supplies `noindex` headers; `robots.txt` permits crawling so those directives can be read. It is a
+full-page route registered before the analytical `/training` route, not embedded in the analysis workspace. Training
+Planning is not live yet: `/plans` is not registered and has no compatibility redirect. Calendar and help links use
+`/training/plans`, preserving date, standalone-scope, and workout query parameters. The sidebar entry remains indented
+beneath Training and UID-gated for presentation only; direct owner-scoped access is unchanged.
 
 ### Provider proof status
 

@@ -13,6 +13,7 @@ import { of } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
+import { provideRouter, Router, RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
@@ -67,7 +68,9 @@ describe('SideNavComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [SideNavComponent],
+            imports: [RouterLink, RouterLinkActive],
             providers: [
+                provideRouter([{ path: '**', children: [] }]),
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppSideNavService, useValue: mockSideNavService },
@@ -288,7 +291,7 @@ describe('SideNavComponent', () => {
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeTruthy();
         expect(navigationItems.slice(0, 7).map(item => item.nativeElement.getAttribute('routerlink')))
             .toEqual(['/dashboard', '/calendar', '/training', '/health', '/routes', '/mytracks', '/tools/compare']);
-        healthItem!.triggerEventHandler('click');
+        healthItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
@@ -312,6 +315,26 @@ describe('SideNavComponent', () => {
         expect(healthItem).toBeUndefined();
     });
 
+    it('highlights Plans independently of Training while preserving query-driven Training navigation', async () => {
+        mockUserService.user = vi.fn().mockReturnValue({ uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID });
+        fixture.detectChanges();
+        const router = TestBed.inject(Router);
+        const trainingItem = fixture.nativeElement.querySelector('[routerlink="/training"]') as HTMLElement;
+        const plansItem = fixture.nativeElement.querySelector('[routerlink="/training/plans"]') as HTMLElement;
+
+        await router.navigateByUrl('/training/plans?date=2026-08-03&scope=standalone');
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(plansItem.classList.contains('active')).toBe(true);
+        expect(trainingItem.classList.contains('active')).toBe(false);
+
+        await router.navigateByUrl('/training?tab=load#trends');
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(trainingItem.classList.contains('active')).toBe(true);
+        expect(plansItem.classList.contains('active')).toBe(false);
+    });
+
     it('shows Plans beneath the direct Training link for the staged user and closes on selection', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
@@ -325,12 +348,12 @@ describe('SideNavComponent', () => {
             .find(item => item.nativeElement.textContent.includes('Plans'));
 
         expect(plansItem).toBeTruthy();
-        expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/plans');
+        expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/training/plans');
         const trainingGroup = fixture.nativeElement.querySelector('[role="group"][aria-label="Training"]');
         expect(plansItem?.nativeElement.parentElement).toBe(trainingGroup);
         expect(plansItem?.nativeElement.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
-        plansItem!.triggerEventHandler('click');
+        plansItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
@@ -516,7 +539,7 @@ describe('SideNavComponent', () => {
             ?? compareFilesItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/tools/compare');
         expect(compareFilesItem?.nativeElement.textContent).not.toContain('New');
-        compareFilesItem?.triggerEventHandler('click');
+        compareFilesItem?.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockAnalyticsService.logToolCompareEntry).toHaveBeenCalledWith('side_nav', false);
 
         mockUserService.user = vi.fn().mockReturnValue({
