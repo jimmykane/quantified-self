@@ -275,6 +275,27 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
 history/restore, activation, pause, archive, and date-shift actions. Calendar-originated creation defaults to the active
 plan when one exists and provides an explicit standalone action; without an active plan it defaults to standalone.
 
+The workspace presents one scope selector and one contextual **Add workout** action. The selected plan's name, lifecycle,
+and date range appear once; there is no separate overview strip or repeated plan/standalone heading. An account without
+plans sees one actionable empty state, not an empty plan selector and a second disabled workout section. Secondary plan
+and workout actions live in Material menus, while **Edit workout** remains directly available on each workout card.
+Skipped workouts keep an explicit state marker; normal planned workouts need no repeated badge.
+
+Creating a plan or editing a workout is a focused view: scope navigation, lists, and other editors are hidden until Save
+or Cancel. The title field receives focus on entry; focus returns to the contextual add action (or scope navigation) on
+exit. A successful workout save selects its destination scope, including standalone/plan transfers. Pending saves disable
+native inputs and Material selectors, retain the draft on failure, and use a stable icon/spinner content row. Save/Cancel
+stay in a sticky, safe-area-aware footer for long mobile editors. Fieldsets, grid children, and repeat rows allow shrinking
+without horizontal page overflow. Selection haptics belong to explicit UI actions; mutation success/error feedback follows
+the actual result, and hydration, typing, and unchanged choices stay silent. Phone emulation verifies layout and wiring,
+not physical vibration or a real mobile keyboard.
+
+A newly created plan remains selectable using the server-acknowledged record and revision until the independent live
+plan and state listeners catch up. This transient, user-scoped bridge prevents jumping back to a previously active plan
+or issuing the next mutation against the pre-creation revision; it does not replace the live schedule or persist a cache.
+Revision history uses wrapping semantic rows with Material restore buttons so operation and date details remain readable
+on phones rather than being truncated in single-line list slots. Failed history reads have an explicit Retry action.
+
 The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
 workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and
 marked. Every rendered date is selectable, including empty dates. Day details keep **Planned workouts** and completed

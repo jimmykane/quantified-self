@@ -4,8 +4,9 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import {
   TrainingPlansService,
@@ -24,6 +25,7 @@ describe('PlansWorkspaceComponent', () => {
   let restoreSchedule: ReturnType<typeof vi.fn>;
   let dialogOpen: ReturnType<typeof vi.fn>;
   let snackBarOpen: ReturnType<typeof vi.fn>;
+  let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     route = { snapshot: { queryParamMap: convertToParamMap({}) } };
@@ -42,12 +44,14 @@ describe('PlansWorkspaceComponent', () => {
     restoreSchedule = vi.fn();
     dialogOpen = vi.fn();
     snackBarOpen = vi.fn();
+    haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [PlansWorkspaceComponent],
       providers: [
         provideRouter([]),
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
+        { provide: AppHapticsService, useValue: haptics },
         {
           provide: TrainingPlansService,
           useValue: {
@@ -72,6 +76,140 @@ describe('PlansWorkspaceComponent', () => {
         },
       ],
     }).compileComponents();
+  });
+
+  it('has one contextual add action without overview or duplicate plan headings', async () => {
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('.plans-overview')).toBeNull();
+    expect([...fixture.nativeElement.querySelectorAll('h2')].map((el: HTMLElement) => el.textContent?.trim()))
+      .toEqual(['Workouts (1)']);
+    expect([...fixture.nativeElement.querySelectorAll('button')].filter((el: HTMLElement) => el.textContent?.includes('Add workout')))
+      .toHaveLength(1);
+    expect(fixture.nativeElement.textContent).not.toContain('Add here');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(haptics.success).not.toHaveBeenCalled();
+  });
+
+  it('keeps a newly created plan selected when the callable finishes before the live plan listener', async () => {
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live);
+    const createdPlan = { ...schedule.plans[0], id: 'workout-new', name: 'Next block', lifecycle: 'paused' as const, revision: 1, workoutCount: 0 };
+    const acknowledgedState = { ...schedule.state, revision: 5 };
+    mutate.mockResolvedValue({ state: acknowledgedState, plans: [createdPlan], workouts: [], removedPlanIds: [], permanentlyDeletedWorkoutIds: [] });
+    const fixture = await renderPlans();
+    fixture.componentInstance.beginPlanCreation();
+    fixture.componentInstance.updatePlanDraft('name', 'Next block');
+    fixture.componentInstance.updatePlanDraft('activate', false);
+    await fixture.componentInstance.createPlan();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedPlan()?.name).toBe('Next block');
+    live.next({ ...schedule, state: { ...schedule.state, revision: 5 } });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedPlanId()).toBe(createdPlan.id);
+    live.next({ ...schedule, state: acknowledgedState, plans: [...schedule.plans, createdPlan] });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.planOptions()).toHaveLength(2);
+    expect(fixture.componentInstance.selectedPlanId()).toBe(createdPlan.id);
+    live.next(schedule);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedPlanId()).toBe('active-plan');
+  });
+
+  it('shows a single useful empty state instead of an empty selector and disabled workout list', async () => {
+    schedule = { state: { ...schedule.state, activePlanId: null, currentWorkoutCount: 0 }, plans: [], workouts: [] };
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('mat-select')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.workout-list')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.plans-empty-state')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.plans-empty-state button')?.textContent).toContain('Create your first plan');
+  });
+
+  it('keeps standalone to one heading and one add action without plan creation controls', async () => {
+    const fixture = await renderPlans();
+    fixture.componentInstance.selectView('standalone');
+    fixture.detectChanges();
+    expect([...fixture.nativeElement.querySelectorAll('h2')].map((el: HTMLElement) => el.textContent?.trim()))
+      .toEqual(['Standalone workouts (1)']);
+    expect(fixture.nativeElement.textContent).not.toContain('New plan');
+    const add = fixture.nativeElement.querySelector('.workout-list-heading button') as HTMLButtonElement;
+    add.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.editor()?.destinationPlanId).toBeNull();
+  });
+
+  it('focuses the editor, hides competing actions, and restores focus without replacing a draft', async () => {
+    const fixture = await renderPlans();
+    (fixture.nativeElement.querySelector('.workout-list-heading button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const title = fixture.nativeElement.querySelector('input[maxlength="120"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(title);
+    expect(fixture.nativeElement.querySelector('.plans-view-navigation')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.plan-scope')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.workout-list')).toBeNull();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.updateEditorField('title', 'Draft to keep');
+    fixture.componentInstance.openNewWorkout(null);
+    fixture.componentInstance.selectView('standalone');
+    fixture.componentInstance.beginPlanCreation();
+    expect(fixture.componentInstance.editor()?.value.title).toBe('Draft to keep');
+    expect(fixture.componentInstance.showPlanForm()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    fixture.componentInstance.cancelEditor();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.workout-list-heading button'));
+  });
+
+  it('keeps fields and competing actions disabled during save, then shows the saved destination', async () => {
+    let finishMutation: () => void = () => undefined;
+    mutate.mockImplementation(request => new Promise(resolve => {
+      finishMutation = () => resolve({ mutationId: request.mutationId, state: schedule.state, plans: [], workouts: [] });
+    }));
+    const fixture = await renderPlans();
+    fixture.componentInstance.openNewWorkout(null);
+    fixture.componentInstance.updateEditorField('title', 'Standalone draft');
+    const pending = fixture.componentInstance.saveWorkout();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.editor-fields')?.disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector('input')?.matches(':disabled')).toBe(true);
+    expect(fixture.nativeElement.querySelector('mat-select')?.getAttribute('aria-disabled')).toBe('true');
+    expect(fixture.nativeElement.querySelector('.editor-save-actions .button-content mat-spinner')).toBeTruthy();
+    expect(haptics.success).not.toHaveBeenCalled();
+    finishMutation();
+    await pending;
+    expect(fixture.componentInstance.view()).toBe('standalone');
+    expect(fixture.componentInstance.editor()).toBeNull();
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a failed save editable and gives error feedback only after failure', async () => {
+    mutate.mockRejectedValue(new Error('Could not save'));
+    const fixture = await renderPlans();
+    fixture.componentInstance.openNewWorkout();
+    fixture.componentInstance.updateEditorField('title', 'Keep this draft');
+    await fixture.componentInstance.saveWorkout();
+    expect(fixture.componentInstance.editor()?.value.title).toBe('Keep this draft');
+    expect(fixture.componentInstance.busyAction()).toBeNull();
+    expect(haptics.success).not.toHaveBeenCalled();
+    expect(haptics.error).toHaveBeenCalledOnce();
+  });
+
+  it('does not vibrate for hydration, typing, or unchanged selections', async () => {
+    const fixture = await renderPlans();
+    fixture.componentInstance.selectView('plans');
+    fixture.componentInstance.selectPlan('active-plan');
+    fixture.componentInstance.openNewWorkout();
+    fixture.componentInstance.updateEditorField('title', 'Typing');
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.Running);
+    fixture.componentInstance.updateEditorDestination('active-plan');
+    fixture.componentInstance.updateStep(0, null, 'endingValue', 20);
+    fixture.componentInstance.updateStep(0, null, 'purpose', 'work');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentInstance.updateEditorField('sport', ActivityTypes.Cycling);
+    fixture.componentInstance.updateStep(0, null, 'purpose', 'warmup');
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
   it('defaults a calendar add request to the active plan', async () => {
@@ -284,6 +422,27 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.workoutRows()[0]?.historyScope).toEqual({
       kind: 'workout', id: 'standalone-workout',
     });
+  });
+
+  it('renders complete revision details outside single-line Material list slots and supports retry', async () => {
+    getHistory.mockRejectedValueOnce(new Error('deadline-exceeded')).mockResolvedValueOnce({
+      scope: { kind: 'workout', id: 'standalone-workout' },
+      entries: [{ revision: 3, operationKind: 'update-workout', createdAtMs: 1_789_000_000_000, mutationId: 'update', isCheckpoint: true }],
+      nextBeforeRevision: null,
+    });
+    const fixture = await renderPlans();
+    await fixture.componentInstance.openHistory({ kind: 'workout', id: 'standalone-workout' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.history-status')?.textContent).toContain('Could not load revision history');
+    expect(haptics.error).toHaveBeenCalledOnce();
+    (fixture.nativeElement.querySelector('.history-status button') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.history-entry h3')?.textContent).toContain('Revision 3 · update-workout');
+    expect(fixture.nativeElement.querySelector('.history-entry p')?.textContent).toContain('checkpoint');
+    expect(fixture.nativeElement.querySelector('.history-entry button .button-content')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.history-entry [matListItemMeta]')).toBeNull();
+    expect(haptics.selection).toHaveBeenCalledOnce();
   });
 
   it('does not reopen revision history after an in-flight request is closed', async () => {

@@ -1,11 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   LOCALE_ID,
+  afterRenderEffect,
   computed,
   effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
@@ -16,6 +19,7 @@ import { catchError, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import {
   TrainingPlansService,
   type CurrentTrainingScheduleV1,
@@ -66,7 +70,7 @@ interface WorkoutEditorSession {
 interface WorkoutRow {
   workout: ScheduledWorkoutV1;
   summary: string[];
-  planName: string;
+  actionBusy: boolean;
   historyScope: TrainingScheduleRevisionScope;
 }
 
@@ -106,6 +110,12 @@ export class PlansWorkspaceComponent {
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
   private readonly locale = inject(LOCALE_ID);
+  readonly haptics = inject(AppHapticsService);
+  private readonly workoutTitleInput = viewChild<ElementRef<HTMLInputElement>>('workoutTitleInput');
+  private readonly planNameInput = viewChild<ElementRef<HTMLInputElement>>('planNameInput');
+  private readonly addWorkoutButton = viewChild<unknown, ElementRef<HTMLButtonElement>>('addWorkoutButton', { read: ElementRef });
+  private readonly scopeNavigation = viewChild<ElementRef<HTMLElement>>('scopeNavigation');
+  private hadFocusedEditor = false;
   private requestedEditorOpened = false;
   private historyRequestSequence = 0;
   private nodeSequence = 1;
@@ -155,12 +165,24 @@ export class PlansWorkspaceComponent {
   readonly editor = signal<WorkoutEditorSession | null>(null);
   readonly busyAction = signal<string | null>(null);
   readonly historyPanel = signal<HistoryPanelState | null>(null);
+  readonly browsing = computed(() => !this.editor() && !this.showPlanForm());
+  private readonly acknowledgedPlan = signal<{
+    uid: string;
+    plan: TrainingPlanV1;
+    state: CurrentTrainingScheduleV1['state'];
+  } | null>(null);
 
-  readonly planOptions = computed(() => this.schedule().plans);
+  readonly planOptions = computed(() => {
+    const plans = this.schedule().plans;
+    const acknowledged = this.acknowledgedPlan();
+    return acknowledged?.uid === this.currentUser()?.uid && !plans.some(plan => plan.id === acknowledged.plan.id)
+      ? [...plans, acknowledged.plan]
+      : plans;
+  });
   readonly activePlan = computed(() => this.schedule().plans.find(plan => (
     plan.id === this.schedule().state.activePlanId
   )) ?? null);
-  readonly selectedPlan = computed(() => this.schedule().plans.find(plan => (
+  readonly selectedPlan = computed(() => this.planOptions().find(plan => (
     plan.id === this.selectedPlanId()
   )) ?? null);
   readonly selectedPlanActionBusy = computed(() => {
@@ -173,10 +195,8 @@ export class PlansWorkspaceComponent {
       `delete-plan-${planId}`,
     ].includes(action));
   });
-  readonly activePlanLabel = computed(() => this.activePlan()?.name ?? 'None');
   readonly workoutRows = computed<WorkoutRow[]>(() => {
     const selectedPlanId = this.view() === 'plans' ? this.selectedPlanId() : null;
-    const planNames = new Map(this.schedule().plans.map(plan => [plan.id, plan.name]));
     return this.schedule().workouts
       .filter(workout => this.view() === 'standalone'
         ? workout.planId === null
@@ -188,7 +208,7 @@ export class PlansWorkspaceComponent {
           this.currentUser()?.settings?.unitSettings ?? null,
           this.locale,
         ),
-        planName: workout.planId ? planNames.get(workout.planId) ?? 'Unknown plan' : 'Standalone',
+        actionBusy: ['copy', 'skip', 'delete', 'permanent'].some(action => this.busyAction() === `${action}-${workout.id}`),
         historyScope: workout.planId
           ? { kind: 'plan', id: workout.planId }
           : { kind: 'workout', id: workout.id },
@@ -196,20 +216,42 @@ export class PlansWorkspaceComponent {
   });
   readonly currentWorkoutRows = computed(() => this.workoutRows().filter(row => row.workout.lifecycle !== 'deleted'));
   readonly deletedWorkoutRows = computed(() => this.workoutRows().filter(row => row.workout.lifecycle === 'deleted'));
-  readonly selectedScopeLabel = computed(() => this.view() === 'standalone'
-    ? 'Standalone workouts'
-    : this.selectedPlan()?.name ?? 'Select a plan');
   readonly pageStatus = computed(() => {
     if (this.scheduleState().status === 'loading') return 'pending' as const;
     if (this.scheduleState().status === 'error') return 'warning' as const;
     return null;
   });
 
+  private readonly editorFocusEffect = afterRenderEffect(() => {
+    const input = this.workoutTitleInput()?.nativeElement ?? this.planNameInput()?.nativeElement;
+    if (input) {
+      input.focus();
+      this.hadFocusedEditor = true;
+    } else if (this.hadFocusedEditor) {
+      const returnTarget = this.addWorkoutButton()?.nativeElement ?? this.scopeNavigation()?.nativeElement;
+      if (returnTarget) {
+        returnTarget.focus();
+        this.hadFocusedEditor = false;
+      }
+    }
+  });
+
   private readonly selectionEffect = effect(() => {
-    const plans = this.schedule().plans;
+    const plans = this.planOptions();
     const selected = this.selectedPlanId();
     if (selected && plans.some(plan => plan.id === selected)) return;
     this.selectedPlanId.set(this.schedule().state.activePlanId ?? plans[0]?.id ?? null);
+  });
+
+  private readonly acknowledgedPlanEffect = effect(() => {
+    const acknowledged = this.acknowledgedPlan();
+    if (!acknowledged) return;
+    if (acknowledged.uid !== this.currentUser()?.uid || (
+      this.schedule().state.revision >= acknowledged.state.revision
+      && this.schedule().plans.some(plan => plan.id === acknowledged.plan.id)
+    )) {
+      this.acknowledgedPlan.set(null);
+    }
   });
 
   private readonly requestedEditorEffect = effect(() => {
@@ -246,19 +288,28 @@ export class PlansWorkspaceComponent {
   });
 
   selectView(view: PlansView): void {
+    if (view === this.view() || !this.browsing() || this.busyAction()) return;
+    this.haptics.selection();
     this.view.set(view);
     this.cancelEditor();
     this.closeHistory();
+    this.clearPlanActions();
   }
 
   selectPlan(planId: string): void {
+    if (planId === this.selectedPlanId() || !this.browsing() || this.busyAction()) return;
+    this.haptics.selection();
     this.selectedPlanId.set(planId);
     this.view.set('plans');
     this.cancelEditor();
     this.closeHistory();
+    this.clearPlanActions();
   }
 
   beginPlanCreation(): void {
+    if (!this.browsing() || this.busyAction()) return;
+    this.closeHistory();
+    this.clearPlanActions();
     this.planDraft.set(defaultPlanDraft());
     this.showPlanForm.set(true);
   }
@@ -268,10 +319,14 @@ export class PlansWorkspaceComponent {
   }
 
   updatePlanDraft<K extends keyof PlanDraft>(field: K, value: PlanDraft[K]): void {
+    if (this.busyAction() || this.planDraft()[field] === value) return;
+    if (field === 'activate') this.haptics.selection();
     this.planDraft.update(draft => ({ ...draft, [field]: value }));
   }
 
   async createPlan(): Promise<void> {
+    const uid = this.currentUser()?.uid;
+    if (!uid) return;
     const draft = this.planDraft();
     const planId = this.plansService.createEntityId('plan');
     const expected = this.expectedRevisions({
@@ -290,6 +345,10 @@ export class PlansWorkspaceComponent {
       },
     }, 'create-plan');
     if (!response) return;
+    // The callable and the independent Firestore listeners can arrive in either
+    // order. Keep the acknowledged plan selectable until its live record arrives.
+    const createdPlan = response.plans.find(plan => plan.id === planId);
+    if (createdPlan) this.acknowledgedPlan.set({ uid, plan: createdPlan, state: response.state });
     this.showPlanForm.set(false);
     this.selectedPlanId.set(planId);
     this.view.set('plans');
@@ -297,6 +356,7 @@ export class PlansWorkspaceComponent {
   }
 
   beginRename(plan: TrainingPlanV1): void {
+    this.clearPlanActions();
     this.renamingPlanId.set(plan.id);
     this.renameValue.set(plan.name);
   }
@@ -338,6 +398,7 @@ export class PlansWorkspaceComponent {
   }
 
   beginShift(plan: TrainingPlanV1): void {
+    this.clearPlanActions();
     this.shiftingPlanId.set(plan.id);
     this.shiftDays.set(1);
   }
@@ -362,6 +423,7 @@ export class PlansWorkspaceComponent {
   }
 
   beginPlanDeletion(plan: TrainingPlanV1): void {
+    this.clearPlanActions();
     this.deletingPlanId.set(plan.id);
     this.deleteDisposition.set('convert-to-standalone');
   }
@@ -390,6 +452,7 @@ export class PlansWorkspaceComponent {
         workoutDisposition: disposition,
         confirmPlanDeletion: true,
       });
+      this.haptics.success();
       this.deletingPlanId.set(null);
       this.snackBar.open('Training plan deleted.', 'Dismiss', { duration: 4000 });
     } catch (error) {
@@ -400,6 +463,9 @@ export class PlansWorkspaceComponent {
   }
 
   openNewWorkout(destinationPlanId?: string | null, localDate = todayLocalDate()): void {
+    if (!this.browsing() || this.busyAction()) return;
+    this.closeHistory();
+    this.clearPlanActions();
     const defaultDestination = destinationPlanId === undefined
       ? (this.view() === 'plans' ? this.selectedPlanId() : null)
       : destinationPlanId;
@@ -413,7 +479,10 @@ export class PlansWorkspaceComponent {
   }
 
   editWorkout(workout: ScheduledWorkoutV1): void {
+    if (!this.browsing() || this.busyAction()) return;
     try {
+      this.closeHistory();
+      this.clearPlanActions();
       this.editor.set({
         mode: 'edit',
         original: workout,
@@ -430,11 +499,21 @@ export class PlansWorkspaceComponent {
     this.editor.set(null);
   }
 
+  private clearPlanActions(): void {
+    this.renamingPlanId.set(null);
+    this.shiftingPlanId.set(null);
+    this.deletingPlanId.set(null);
+  }
+
   updateEditorField<K extends keyof ManualWorkoutEditorValue>(field: K, value: ManualWorkoutEditorValue[K]): void {
+    if (this.busyAction() || this.editor()?.value[field] === value) return;
+    if (field === 'sport') this.haptics.selection();
     this.editor.update(session => session ? { ...session, value: { ...session.value, [field]: value } } : null);
   }
 
   updateEditorDestination(planId: string | null): void {
+    if (this.busyAction() || this.editor()?.destinationPlanId === planId) return;
+    this.haptics.selection();
     this.editor.update(session => session ? { ...session, destinationPlanId: planId } : null);
   }
 
@@ -504,17 +583,24 @@ export class PlansWorkspaceComponent {
   }
 
   updateStep(nodeIndex: number, stepIndex: number | null, field: string, value: unknown): void {
+    if (this.busyAction()) return;
     this.editor.update(session => {
       if (!session) return null;
       const nodes = session.value.nodes.map((node, index) => {
         if (index !== nodeIndex) return node;
-        if (stepIndex === null && node.kind === 'step') return { ...node, [field]: value } as ManualWorkoutEditorStep;
+        const isSelection = ['purpose', 'endingKind', 'targetKind'].includes(field);
+        if (stepIndex === null && node.kind === 'step') {
+          if (isSelection && node[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
+          return { ...node, [field]: value } as ManualWorkoutEditorStep;
+        }
         if (stepIndex !== null && node.kind === 'repeat') {
           return {
             ...node,
-            steps: node.steps.map((step, candidate) => candidate === stepIndex
-              ? { ...step, [field]: value } as ManualWorkoutEditorStep
-              : step),
+            steps: node.steps.map((step, candidate) => {
+              if (candidate !== stepIndex) return step;
+              if (isSelection && step[field as keyof ManualWorkoutEditorStep] !== value) this.haptics.selection();
+              return { ...step, [field]: value } as ManualWorkoutEditorStep;
+            }),
           };
         }
         return node;
@@ -557,6 +643,7 @@ export class PlansWorkspaceComponent {
         },
       }, 'save-workout');
       if (!response) return;
+      this.selectSavedWorkoutScope(session.destinationPlanId);
       this.editor.set(null);
       this.snackBar.open('Workout added.', 'Dismiss', { duration: 3000 });
       return;
@@ -581,6 +668,7 @@ export class PlansWorkspaceComponent {
       },
     }, 'save-workout');
     if (!response) return;
+    this.selectSavedWorkoutScope(session.destinationPlanId);
     this.editor.set(null);
     this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });
   }
@@ -605,6 +693,11 @@ export class PlansWorkspaceComponent {
       },
     }, `copy-${workout.id}`);
     if (response) this.snackBar.open('Workout copied.', 'Dismiss', { duration: 3000 });
+  }
+
+  private selectSavedWorkoutScope(planId: string | null): void {
+    this.view.set(planId === null ? 'standalone' : 'plans');
+    this.selectedPlanId.set(planId);
   }
 
   async setWorkoutSkipped(workout: ScheduledWorkoutV1, skipped: boolean): Promise<void> {
@@ -679,6 +772,7 @@ export class PlansWorkspaceComponent {
       });
     } catch (error) {
       if (!this.isCurrentHistoryPanel(scope, requestSequence)) return;
+      this.haptics.error();
       this.historyPanel.set({
         scope,
         status: 'error',
@@ -751,6 +845,7 @@ export class PlansWorkspaceComponent {
         scope: panel.scope,
         targetRevision: entry.revision,
       });
+      this.haptics.success();
       this.closeHistory();
       const skipped = response.skippedWorkoutIds.length;
       this.snackBar.open(
@@ -771,7 +866,11 @@ export class PlansWorkspaceComponent {
     planRevisionOverrides?: ReadonlyMap<string, number>;
     workoutRevisionOverrides?: ReadonlyMap<string, number>;
   }): ExpectedTrainingScheduleRevision[] {
-    return expectedRevisionsFromSchedule(this.schedule(), options);
+    const schedule = this.schedule();
+    const acknowledged = this.acknowledgedPlan();
+    const state = acknowledged?.uid === this.currentUser()?.uid && acknowledged.state.revision > schedule.state.revision
+      ? acknowledged.state : schedule.state;
+    return expectedRevisionsFromSchedule({ ...schedule, state, plans: this.planOptions() }, options);
   }
 
   private isCurrentHistoryPanel(scope: TrainingScheduleRevisionScope, requestSequence: number): boolean {
@@ -786,17 +885,21 @@ export class PlansWorkspaceComponent {
   ): Promise<MutateTrainingScheduleResponseV1 | null> {
     this.busyAction.set(action);
     try {
-      return await this.plansService.mutate(request);
+      const response = await this.plansService.mutate(request);
+      this.haptics.success();
+      return response;
     } catch (error) {
       const message = errorMessage(error);
       if (/requires extending/i.test(message) && 'confirmPlanRangeExtension' in request.operation) {
         const confirmed = await this.confirm('Extend plan dates?', message, 'Extend and continue');
         if (confirmed) {
           try {
-            return await this.plansService.mutate({
+            const response = await this.plansService.mutate({
               ...request,
               operation: { ...request.operation, confirmPlanRangeExtension: true },
             } as MutateTrainingScheduleRequestV1);
+            this.haptics.success();
+            return response;
           } catch (retryError) {
             this.showError(retryError);
             return null;
@@ -824,6 +927,7 @@ export class PlansWorkspaceComponent {
   }
 
   private showError(error: unknown): void {
+    this.haptics.error();
     this.snackBar.open(errorMessage(error), 'Dismiss', { duration: 7000 });
   }
 
