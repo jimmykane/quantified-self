@@ -443,7 +443,7 @@
       <div [class.plan-schedule-layout]="view() === 'plans'">
       @if (view() === 'plans' && selectedPlan(); as plan) {
         <app-plan-schedule-calendar [plan]="plan" [workouts]="schedule().workouts"
-          [selectedDate]="planScheduleDate()!" [today]="today"
+          [selectedDate]="planScheduleDate()!" [today]="today()"
           [startOfWeek]="currentUser()?.settings?.unitSettings?.startOfTheWeek ?? null"
           [disabled]="busyAction() !== null" (dateSelected)="selectScheduleDate($event)"
           (workoutSelected)="editScheduledWorkout($event)"></app-plan-schedule-calendar>

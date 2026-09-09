@@ -291,7 +291,13 @@ marked; outside-range days are shaded and disabled, and wholly outside-range wee
 at the plan boundaries. Dates use local calendar arithmetic (including DST/leap years) and the user's week-start setting.
 Initial selection is today when within the range, otherwise the plan start. Explicit selection is account/plan-scoped,
 survives live refresh and editor cancellation, and resolves back inside the range when dates shift. Saving selects the
-workout's destination date and scope. Calendar-originated query parameters retain their existing editor behavior.
+workout's destination date and scope. Calendar-originated query parameters select the linked workout's scope/date or
+the requested add scope/date before opening the editor, so cancelling returns to that context rather than hiding the
+workout on today's date. Out-of-range add dates remain editor drafts until an explicitly confirmed range extension.
+The local-today marker refreshes each minute and immediately on window focus or mobile-tab visibility restoration.
+Clock refreshes are silent and never replace an explicitly selected date or an open editor draft. Standalone creation
+resolves its default date when Add is clicked, not when the workspace was first opened. The browser-only clock is
+disposed with the workspace and performs no schedule writes or provider requests.
 
 Desktop places the date grid beside one selected day's compact workout rows. Grid cells show up to two independently
 editable workout titles with full accessible labels/tooltips and an overflow action; the day's detail list shows every

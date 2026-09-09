@@ -173,6 +173,75 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.componentInstance.planScheduleDate()).toBe('2026-10-12');
   });
 
+  it('refreshes today on window focus without replacing an explicitly selected plan date', async () => {
+    const fixture = await renderPlans();
+    vi.setSystemTime(new Date(2026, 8, 10, 12));
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-current="date"]')?.getAttribute('data-plan-date')).toBe('2026-09-10');
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-10');
+    fixture.componentInstance.selectScheduleDate('2026-09-15');
+    vi.setSystemTime(new Date(2026, 8, 11, 12));
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-15');
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    fixture.componentInstance.selectView('standalone');
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.workout-list-heading button') as HTMLButtonElement).click();
+    expect(fixture.componentInstance.editor()?.value.localDate).toBe('2026-09-11');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('refreshes a resumed mobile tab without changing an open workout draft', async () => {
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    try {
+      const fixture = await renderPlans();
+      fixture.componentInstance.openNewWorkout('active-plan', '2026-09-15');
+      fixture.componentInstance.updateEditorField('title', 'Keep this draft');
+      vi.setSystemTime(new Date(2026, 8, 10, 12));
+      visibility.mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-09');
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-10');
+      expect(fixture.componentInstance.editor()?.value).toMatchObject({ localDate: '2026-09-15', title: 'Keep this draft' });
+      expect(haptics.selection).not.toHaveBeenCalled();
+      expect(mutate).not.toHaveBeenCalled();
+    } finally {
+      visibility.mockRestore();
+    }
+  });
+
+  it('updates an open calendar after local midnight and cleans up its clock on destruction', async () => {
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date(2026, 8, 9, 23, 59, 30));
+    const fixture = await renderPlans();
+    const refresh = vi.spyOn(fixture.componentInstance, 'refreshToday');
+    await vi.advanceTimersByTimeAsync(60_000);
+    fixture.detectChanges();
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('[aria-current="date"]')?.getAttribute('data-plan-date')).toBe('2026-09-10');
+    fixture.destroy();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('uses the click-time date for standalone adds even before the day clock refreshes', async () => {
+    const fixture = await renderPlans();
+    fixture.componentInstance.selectView('standalone');
+    fixture.detectChanges();
+    vi.setSystemTime(new Date(2026, 8, 10, 0, 0, 1));
+    (fixture.nativeElement.querySelector('.workout-list-heading button') as HTMLButtonElement).click();
+    expect(fixture.componentInstance.editor()?.value.localDate).toBe('2026-09-10');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   it.each([
     { preference: {}, expected: '1.61 Km' },
     { preference: { distanceUnits: DistanceUnits.Miles }, expected: '1.00 mi' },
@@ -363,6 +432,29 @@ describe('PlansWorkspaceComponent', () => {
       destinationPlanId: null,
       original: { id: 'standalone-workout' },
     });
+  });
+
+  it('returns to the linked workout date when cancelling the calendar-originated editor', async () => {
+    schedule.workouts[0].localDate = '2026-09-20';
+    route.snapshot.queryParamMap = convertToParamMap({ workout: 'plan-workout' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.cancelEditor();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-20');
+    expect(fixture.componentInstance.displayedWorkoutRows().map(row => row.workout.id)).toEqual(['plan-workout']);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('returns to the calendar add scope and date after cancellation (standalone: %s)', async standalone => {
+    route.snapshot.queryParamMap = convertToParamMap({ date: '2026-09-20', ...(standalone ? { scope: 'standalone' } : {}) });
+    const fixture = await renderPlans();
+    fixture.componentInstance.cancelEditor();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.view()).toBe(standalone ? 'standalone' : 'plans');
+    if (!standalone) expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-20');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('creates a standalone workout through the same revisioned mutation path', async () => {

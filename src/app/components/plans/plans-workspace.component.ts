@@ -1,8 +1,11 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
+  HostListener,
   LOCALE_ID,
+  afterNextRender,
   afterRenderEffect,
   computed,
   effect,
@@ -113,6 +116,7 @@ export class PlansWorkspaceComponent {
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
   private readonly locale = inject(LOCALE_ID);
+  private readonly destroyRef = inject(DestroyRef);
   readonly haptics = inject(AppHapticsService);
   private readonly workoutTitleInput = viewChild<ElementRef<HTMLInputElement>>('workoutTitleInput');
   private readonly planNameInput = viewChild<ElementRef<HTMLInputElement>>('planNameInput');
@@ -157,7 +161,11 @@ export class PlansWorkspaceComponent {
   readonly schedule = computed(() => this.scheduleState().schedule);
   readonly view = signal<PlansView>('plans');
   readonly selectedPlanId = signal<string | null>(null);
-  readonly today = todayLocalDate();
+  readonly today = signal(todayLocalDate());
+  private readonly todayClock = afterNextRender(() => {
+    const handle = globalThis.setInterval(() => this.refreshToday(), 60_000);
+    this.destroyRef.onDestroy(() => globalThis.clearInterval(handle));
+  });
   private readonly scheduleDateSelection = signal<{ uid: string; planId: string; localDate: string } | null>(null);
   readonly showPlanForm = signal(false);
   readonly planDraft = signal<PlanDraft>(defaultPlanDraft());
@@ -226,11 +234,12 @@ export class PlansWorkspaceComponent {
     const selection = this.scheduleDateSelection();
     return resolvePlanScheduleDate(plan,
       selection?.uid === this.currentUser()?.uid && selection?.planId === plan.id ? selection.localDate : null,
-      this.today);
+      this.today());
   });
   readonly displayedWorkoutRows = computed(() => this.view() === 'standalone' ? this.currentWorkoutRows()
     : this.currentWorkoutRows().filter(row => row.workout.localDate === this.planScheduleDate()));
-  readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? this.today : this.today);
+  // Standalone defaults resolve at the actual click, even just after midnight before the clock ticks.
+  readonly addWorkoutDate = computed(() => this.view() === 'plans' ? this.planScheduleDate() ?? undefined : undefined);
   readonly deletedWorkoutRows = computed(() => this.workoutRows().filter(row => row.workout.lifecycle === 'deleted'));
   readonly pageStatus = computed(() => {
     if (this.scheduleState().status === 'loading') return 'pending' as const;
@@ -279,8 +288,7 @@ export class PlansWorkspaceComponent {
       ));
       if (workout) {
         this.requestedEditorOpened = true;
-        this.view.set(workout.planId ? 'plans' : 'standalone');
-        this.selectedPlanId.set(workout.planId);
+        this.selectWorkoutScope(workout.planId, workout.localDate);
         this.editWorkout(workout);
         return;
       }
@@ -297,11 +305,23 @@ export class PlansWorkspaceComponent {
       const localDate = normalizeTrainingLocalDate(requestedDate);
       const standalone = this.route.snapshot.queryParamMap.get('scope') === 'standalone';
       this.requestedEditorOpened = true;
-      this.openNewWorkout(standalone ? null : this.schedule().state.activePlanId, localDate);
+      const planId = standalone ? null : this.schedule().state.activePlanId;
+      this.selectWorkoutScope(planId, localDate);
+      this.openNewWorkout(planId, localDate);
     } catch {
       this.requestedEditorOpened = true;
     }
   });
+
+  @HostListener('window:focus')
+  refreshToday(): void {
+    this.today.set(todayLocalDate());
+  }
+
+  @HostListener('document:visibilitychange')
+  refreshVisibleToday(): void {
+    if (document.visibilityState === 'visible') this.refreshToday();
+  }
 
   selectView(view: PlansView): void {
     if (view === this.view() || !this.browsing() || this.busyAction()) return;
@@ -671,7 +691,7 @@ export class PlansWorkspaceComponent {
         },
       }, 'save-workout');
       if (!response) return;
-      this.selectSavedWorkoutScope(session.destinationPlanId, session.value.localDate);
+      this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
       this.editor.set(null);
       this.snackBar.open('Workout added.', 'Dismiss', { duration: 3000 });
       return;
@@ -696,7 +716,7 @@ export class PlansWorkspaceComponent {
       },
     }, 'save-workout');
     if (!response) return;
-    this.selectSavedWorkoutScope(session.destinationPlanId, session.value.localDate);
+    this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
     this.editor.set(null);
     this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });
   }
@@ -723,7 +743,7 @@ export class PlansWorkspaceComponent {
     if (response) this.snackBar.open('Workout copied.', 'Dismiss', { duration: 3000 });
   }
 
-  private selectSavedWorkoutScope(planId: string | null, localDate: string): void {
+  private selectWorkoutScope(planId: string | null, localDate: string): void {
     this.view.set(planId === null ? 'standalone' : 'plans');
     this.selectedPlanId.set(planId);
     const uid = this.currentUser()?.uid;
