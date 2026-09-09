@@ -72,6 +72,38 @@ describe('PlanScheduleCalendarComponent', () => {
     expect(fixture.componentInstance.selectedDate()).toBe(plan.endLocalDate);
   });
 
+  it('marks the configured first day and actual weekends without changing selection or disabled/today states', async () => {
+    const fixture = await render();
+    expect(fixture.nativeElement.querySelector('.calendar-weekday--week-start')?.textContent).toBe('Mon');
+    for (const startOfWeek of [0, 6, 2, 1]) {
+      fixture.componentRef.setInput('startOfWeek', startOfWeek);
+      fixture.detectChanges();
+      const headings = [...fixture.nativeElement.querySelectorAll('.calendar-weekdays span')] as HTMLElement[];
+      expect(headings[0].classList).toContain('calendar-weekday--week-start');
+      expect(fixture.nativeElement.querySelectorAll('.calendar-weekday--week-start')).toHaveLength(1);
+      expect(headings.filter(heading => heading.classList.contains('calendar-weekday--weekend'))
+        .map(heading => heading.textContent).sort()).toEqual(['Sat', 'Sun']);
+      expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent)
+        .toContain(`Weeks start on ${fixture.componentInstance.month().weekStartLabel}. Saturday and Sunday are tinted.`);
+      const saturday = fixture.nativeElement.querySelector('[data-plan-date="2026-09-12"]') as HTMLButtonElement;
+      expect(saturday.parentElement?.classList).toContain('calendar-day--weekend');
+      expect(saturday.disabled).toBe(false);
+      expect(fixture.nativeElement.querySelector('[data-plan-date="2026-09-11"]')?.parentElement.classList)
+        .not.toContain('calendar-day--weekend');
+      expect(fixture.nativeElement.querySelector('[aria-current="date"]')?.getAttribute('data-plan-date')).toBe('2026-09-09');
+      expect(fixture.componentInstance.selectedDate()).toBe('2026-09-09');
+    }
+    expect(selection).not.toHaveBeenCalled();
+    (fixture.nativeElement.querySelector('[data-plan-date="2026-09-12"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day--selected')?.classList).toContain('calendar-day--weekend');
+    const outsideWeekend = fixture.nativeElement.querySelector('[data-plan-date="2026-10-10"]') as HTMLButtonElement;
+    expect(outsideWeekend.disabled).toBe(true);
+    expect(outsideWeekend.parentElement?.classList).toContain('calendar-day--weekend');
+    expect(outsideWeekend.parentElement?.classList).toContain('calendar-day--outside');
+    expect(selection).toHaveBeenCalledOnce();
+  });
+
   it('opens a workout without a nested button and disables navigation and edits during mutation', async () => {
     const fixture = await render();
     const edit = vi.fn();

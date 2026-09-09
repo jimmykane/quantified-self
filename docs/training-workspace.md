@@ -287,8 +287,14 @@ explicit state marker; normal planned workouts need no repeated badge.
 The selected plan uses **Plan schedule**, not a second all-activity Calendar. `PlanScheduleCalendarComponent` owns a
 bounded month grid of only that plan's current workouts, including skipped workouts and paused/archived plans. It does
 not fetch events, show completed totals, or include standalone/other-plan workouts. The plan's inclusive start/end are
-marked; outside-range days are shaded and disabled, and wholly outside-range weeks are omitted. Month navigation stops
-at the plan boundaries. Dates use local calendar arithmetic (including DST/leap years) and the user's week-start setting.
+marked; outside-range days have a neutral fill and are disabled, and wholly outside-range weeks are omitted. Month
+navigation stops at the plan boundaries. Dates use local calendar arithmetic (including DST/leap years) and the user's
+week-start setting.
+The weekday header marks the configured first day, and a visible hint names it. Saturday and Sunday have a subtle
+theme-primary tint and stronger weekday labels, matching Activity Calendar (with a lighter tint in compact layouts).
+Weekends follow each date's actual weekday, never fixed column positions; they remain ordinary schedulable dates, not
+inferred rest days. Outside-range and selected-date states override the weekend fill. Live week-start preference changes
+reorder the grid without changing the selected date, schedule, or workout counts.
 Initial selection is today when within the range, otherwise the plan start. Explicit selection is account/plan-scoped,
 survives live refresh and editor cancellation, and resolves back inside the range when dates shift. Saving selects the
 workout's destination date and scope. Calendar-originated query parameters select the linked workout's scope/date or
@@ -1942,8 +1948,10 @@ git diff --check
 For `/training/plans`, create synthetic paused plans with multiple workouts across weeks, months, and December/January,
 including a maximum 366-day range. Check forward/backward navigation through every month, exact inclusive boundaries,
 empty days, three or more same-day workouts, long titles, overflow-to-detail order, mobile editing/skip actions, and
-reload persistence at desktop and narrow-mobile widths. Keep the existing active plan unchanged and provider delivery
-disabled; test-data deletion requires its own explicit approval.
+reload persistence at desktop and narrow-mobile widths. Verify all seven week-start choices, weekday header order,
+Saturday/Sunday tint across month/year boundaries, and selected/today/outside-range states. Use component fixtures for
+alternate preferences rather than changing the signed-in account's settings solely for QA. Keep the existing active plan
+unchanged and provider delivery disabled; test-data deletion requires its own explicit approval.
 
 Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. Cover:
 

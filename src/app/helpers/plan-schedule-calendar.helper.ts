@@ -43,6 +43,8 @@ export function buildPlanScheduleMonth(
       localDate,
       dayNumber: date.getDate(),
       weekday: weekdayFormatter.format(date),
+      dayOfWeek: date.getDay(),
+      isWeekend: date.getDay() === 0 || date.getDay() === 6,
       inRange,
       inMonth: date.getMonth() === anchor.getMonth(),
       isToday: localDate === options.today,
@@ -61,7 +63,13 @@ export function buildPlanScheduleMonth(
   const previousMonth = formatActivityCalendarDateParam(new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1));
   return {
     label: new Intl.DateTimeFormat(options.locale, { month: 'long', year: 'numeric' }).format(anchor),
-    weekdays: days.slice(0, 7).map(day => day.weekday),
+    weekStartLabel: new Intl.DateTimeFormat(options.locale, { weekday: 'long' }).format(gridStart),
+    weekdays: days.slice(0, 7).map((day, index) => ({
+      label: day.weekday,
+      dayOfWeek: day.dayOfWeek,
+      isWeekend: day.isWeekend,
+      isWeekStart: index === 0,
+    })),
     // Keep the boundary weeks for context, but never reserve whole weeks outside the plan.
     days: days.filter((_, index) => days.slice(Math.floor(index / 7) * 7, Math.floor(index / 7) * 7 + 7).some(day => day.inRange)),
     previousDate: monthKey > plan.startLocalDate.slice(0, 7)

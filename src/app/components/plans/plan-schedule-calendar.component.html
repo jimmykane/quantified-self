@@ -17,12 +17,16 @@
     </div>
   </div>
   <div class="calendar-weekdays" aria-hidden="true">
-    @for (weekday of month().weekdays; track $index) { <span>{{ weekday }}</span> }
+    @for (weekday of month().weekdays; track weekday.dayOfWeek) {
+      <span [class.calendar-weekday--weekend]="weekday.isWeekend"
+        [class.calendar-weekday--week-start]="weekday.isWeekStart">{{ weekday.label }}</span>
+    }
   </div>
   <div class="calendar-days" role="group" [attr.aria-label]="month().label">
     @for (day of month().days; track day.localDate) {
       <div class="calendar-day" [class.calendar-day--outside]="!day.inRange" [class.calendar-day--empty]="!day.entries.length"
-        [class.calendar-day--adjacent]="!day.inMonth" [class.calendar-day--selected]="day.selected">
+        [class.calendar-day--adjacent]="!day.inMonth" [class.calendar-day--selected]="day.selected"
+        [class.calendar-day--weekend]="day.isWeekend">
         <!-- Like Activity Calendar, date cells use native buttons with Material ripple. A datepicker
              cannot host separate, accessible workout edit actions without overriding Material internals. -->
         <button class="calendar-date" type="button" matRipple [attr.data-plan-date]="day.localDate"
@@ -58,5 +62,6 @@
       </div>
     }
   </div>
-  <p class="calendar-hint">Select a day to see or add workouts. Shaded dates are outside this plan.</p>
+  <p class="calendar-hint">Weeks start on {{ month().weekStartLabel }}. Saturday and Sunday are tinted.
+    Select a day to see or add workouts; dates outside this plan are unavailable.</p>
 </section>

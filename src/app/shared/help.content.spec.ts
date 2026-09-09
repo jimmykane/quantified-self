@@ -434,6 +434,10 @@ describe('help.content', () => {
 
     expect(planningSection?.content).toContain('You do not need to create a plan first');
     expect(planningSection?.content).toContain('Manual planning is available without a provider connection');
+    expect(planningSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
+    expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
+    expect(planningSection?.content).toContain('calendar cues, not rest-day recommendations');
     expect(planningSection?.content).toContain('Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');

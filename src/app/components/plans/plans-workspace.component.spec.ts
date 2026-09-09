@@ -119,6 +119,22 @@ describe('PlansWorkspaceComponent', () => {
     expect(rows[1].nativeElement.querySelector('mat-chip')?.textContent).toContain('Skipped');
   });
 
+  it('reacts to the account week-start setting without moving the selected date or writing the schedule', async () => {
+    const currentUser = signal({ ...user, settings: { unitSettings: { startOfTheWeek: 0 } } });
+    TestBed.overrideProvider(AppUserService, { useValue: { user: currentUser, user$: of(user) } });
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('.calendar-weekday--week-start')?.textContent).toBe('Sun');
+    expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent).toContain('Weeks start on Sunday.');
+    currentUser.set({ ...user, settings: { unitSettings: { startOfTheWeek: 6 } } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-weekday--week-start')?.textContent).toBe('Sat');
+    expect(fixture.nativeElement.querySelector('.calendar-hint')?.textContent).toContain('Weeks start on Saturday.');
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-09');
+    expect(fixture.nativeElement.querySelector('[aria-pressed="true"]')?.getAttribute('data-plan-date')).toBe('2026-09-09');
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
   it('shows only the selected day and prefills that date and plan when adding to an empty day', async () => {
     const fixture = await renderPlans();
     const day = fixture.nativeElement.querySelector('[data-plan-date="2026-09-10"]') as HTMLButtonElement;

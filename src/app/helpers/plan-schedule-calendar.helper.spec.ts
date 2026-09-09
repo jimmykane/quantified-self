@@ -22,7 +22,8 @@ describe('plan schedule calendar', () => {
     const month = buildPlanScheduleMonth(plan, [], options.today, options);
     expect(month.days).toHaveLength(35);
     expect(month.label).toBe('September 2026');
-    expect(month.weekdays).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+    expect(month.weekdays.map(day => day.label)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+    expect(month.weekStartLabel).toBe('Monday');
     expect(month.previousDate).toBeNull();
     expect(month.nextDate).toBe('2026-10-01');
     expect(month.days.find(day => day.localDate === plan.startLocalDate)).toMatchObject({ boundary: 'Plan starts', inRange: true });
@@ -49,11 +50,37 @@ describe('plan schedule calendar', () => {
   it('respects Sunday preferences and local dates across DST and leap years', () => {
     const leap = { id: 'plan', startLocalDate: '2024-02-29', endLocalDate: '2024-03-31' };
     const month = buildPlanScheduleMonth(leap, [], '2024-03-15', { ...options, startOfWeek: 0 });
-    expect(month.weekdays[0]).toBe('Sun');
+    expect(month.weekdays[0].label).toBe('Sun');
     expect(month.days[0].localDate).toBe('2024-02-25');
     expect(new Set(month.days.map(day => day.localDate)).size).toBe(42);
     expect(month.days.some(day => day.localDate === '2024-02-29')).toBe(true);
     expect(month.days.filter(day => day.inRange)).toHaveLength(32);
+  });
+
+  it.each([0, 1, 2, 3, 4, 5, 6])('aligns headers and actual weekends across a year boundary for week start %s', startOfWeek => {
+    const year = { id: 'plan', startLocalDate: '2026-12-21', endLocalDate: '2027-01-17' };
+    const labels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    for (const date of ['2026-12-31', '2027-01-01']) {
+      const month = buildPlanScheduleMonth(year, [], date, { ...options, startOfWeek });
+      expect(month.weekStartLabel).toBe(labels[startOfWeek]);
+      expect(month.weekdays.map(day => day.dayOfWeek)).toEqual(Array.from({ length: 7 }, (_, index) => (startOfWeek + index) % 7));
+      expect(month.weekdays.map(day => day.isWeekStart)).toEqual([true, false, false, false, false, false, false]);
+      expect(month.weekdays.filter(day => day.isWeekend).map(day => day.label).sort()).toEqual(['Sat', 'Sun']);
+      month.days.forEach((day, index) => {
+        const weekday = month.weekdays[index % 7];
+        expect(day.weekday).toBe(weekday.label);
+        expect(day.isWeekend).toBe(weekday.isWeekend);
+      });
+      expect(month.days.find(day => day.localDate === '2027-01-01')?.isWeekend).toBe(false);
+      expect(month.days.find(day => day.localDate === '2027-01-02')?.isWeekend).toBe(true);
+      expect(month.days.find(day => day.localDate === '2027-01-03')?.isWeekend).toBe(true);
+    }
+  });
+
+  it.each([undefined, null, -1, 7, 0.5, NaN])('falls back to Monday for absent or invalid week start %s', startOfWeek => {
+    const month = buildPlanScheduleMonth(plan, [], options.today, { ...options, startOfWeek });
+    expect(month.weekStartLabel).toBe('Monday');
+    expect(month.weekdays[0]).toMatchObject({ dayOfWeek: 1, isWeekStart: true, isWeekend: false });
   });
 
   it('keeps same-day previews in the detail list order, independent of creation time and input order', () => {

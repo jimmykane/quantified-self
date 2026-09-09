@@ -4,6 +4,10 @@
   container-type: inline-size;
 }
 
+.plan-calendar {
+  --plan-calendar-weekend-tint: 4%;
+}
+
 .calendar-navigation,
 .calendar-navigation-actions {
   display: flex;
@@ -32,9 +36,36 @@
 
 .calendar-weekdays {
   text-align: center;
-  padding-block: 8px;
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-label-medium);
+}
+
+.calendar-weekdays span {
+  position: relative;
+  min-width: 0;
+  padding-block: 8px;
+}
+
+.calendar-weekday--weekend {
+  color: var(--mat-sys-on-surface);
+  font-weight: 600;
+}
+
+.calendar-weekday--week-start {
+  color: var(--mat-sys-primary);
+  font-weight: 600;
+}
+
+.calendar-weekday--week-start::after {
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--mat-sys-primary);
+  content: '';
+  transform: translateX(-50%);
 }
 
 .calendar-day {
@@ -50,6 +81,11 @@
 
 .calendar-day:nth-child(7n) {
   border-inline-end: 0;
+}
+
+// Match Activity Calendar's quiet weekend cue; range and selection states take precedence.
+.calendar-day--weekend {
+  background: color-mix(in srgb, var(--mat-sys-primary) var(--plan-calendar-weekend-tint), transparent);
 }
 
 .calendar-day--outside {
@@ -156,6 +192,7 @@
 }
 
 @container (max-width: 540px) {
+  .plan-calendar { --plan-calendar-weekend-tint: 2%; }
   .calendar-day { min-height: 52px; }
   .calendar-date { flex-direction: column; align-items: center; justify-content: flex-start; padding: 8px 2px; }
   .calendar-workouts { display: none; }
