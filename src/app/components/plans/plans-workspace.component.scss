@@ -86,9 +86,33 @@
 }
 
 .workout-list-heading h2,
+.plan-schedule-heading h2,
 .workout-nodes-heading h2 {
   margin: 0;
   font: var(--mat-sys-title-large);
+}
+
+.plan-schedule-heading { margin-bottom: 16px; }
+
+.plan-schedule-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.workout-day-details { min-width: 0; }
+
+.plan-schedule-layout .workout-day-details {
+  border-inline-start: 1px solid var(--mat-sys-outline-variant);
+  padding-inline-start: 24px;
+}
+
+.plan-schedule-layout .workout-list-heading { margin-top: 0; }
+
+.workout-list-heading h3 {
+  margin: 0;
+  font: var(--mat-sys-title-medium);
 }
 
 .workout-list-heading p,
@@ -361,6 +385,14 @@ mat-card-actions button,
 }
 
 @media (max-width: 900px) {
+  .plan-schedule-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+
+  .plan-schedule-layout .workout-day-details {
+    border-inline-start: 0;
+    padding-inline-start: 0;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+    padding-top: 20px;
+  }
   .plan-form-grid,
   .workout-editor-basics,
   .step-fields {

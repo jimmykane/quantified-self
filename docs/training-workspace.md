@@ -284,6 +284,25 @@ compact mode, matching Health. Each labelled row retains its sport, date, unit-a
 dividers separate consecutive workouts without card borders or a multi-column card grid. Skipped workouts keep an
 explicit state marker; normal planned workouts need no repeated badge.
 
+The selected plan uses **Plan schedule**, not a second all-activity Calendar. `PlanScheduleCalendarComponent` owns a
+bounded month grid of only that plan's current workouts, including skipped workouts and paused/archived plans. It does
+not fetch events, show completed totals, or include standalone/other-plan workouts. The plan's inclusive start/end are
+marked; outside-range days are shaded and disabled, and wholly outside-range weeks are omitted. Month navigation stops
+at the plan boundaries. Dates use local calendar arithmetic (including DST/leap years) and the user's week-start setting.
+Initial selection is today when within the range, otherwise the plan start. Explicit selection is account/plan-scoped,
+survives live refresh and editor cancellation, and resolves back inside the range when dates shift. Saving selects the
+workout's destination date and scope. Calendar-originated query parameters retain their existing editor behavior.
+
+Desktop places the date grid beside one selected day's compact workout rows. Grid cells show up to two independently
+editable workout titles with full accessible labels/tooltips and an overflow action; the day's detail list shows every
+workout. On narrow containers the grid shows counts, with day details below it. Selecting an empty day shows a neutral
+empty state rather than assuming rest, and the single **Add workout** action opens the existing editor with that date
+and plan prefilled. Dates support native keyboard activation plus arrow-key and Page Up/Down navigation, keeping focus
+and selection together. The date-cell button/ripple pattern follows Activity Calendar; a Material datepicker cannot
+contain separate accessible workout-edit actions without overriding its internals. Standalone retains its compact list.
+The **Main Calendar** link identifies the separate all-activity destination. No drag/drop, write API, provider sync,
+completed-activity matching, or new metric is introduced by this presentation change.
+
 Creating a plan or editing a workout is a focused view: scope navigation, lists, and other editors are hidden until Save
 or Cancel. The title field receives focus on entry; focus returns to the contextual add action (or scope navigation) on
 exit. A successful workout save selects its destination scope, including standalone/plan transfers. Pending saves disable

@@ -9,7 +9,7 @@
     <div pageHeaderActions class="plans-header-actions">
       <a mat-button routerLink="/calendar" appHapticTap>
         <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        <span>Calendar</span>
+        <span>Main Calendar</span>
       </a>
     </div>
     }
@@ -155,7 +155,7 @@
             </mat-chip-set>
             <span>{{ plan.startLocalDate | date:'mediumDate' }} – {{ plan.endLocalDate | date:'mediumDate' }}</span>
             @if (plan.lifecycle !== 'active') {
-              <span>Workouts are hidden from Calendar until this plan is active.</span>
+              <span>Visible here. Hidden from the main Calendar until this plan is active.</span>
             }
           </div>
 
@@ -435,34 +435,52 @@
 
     @if (browsing() && (view() === 'standalone' || selectedPlan())) {
     <section class="workout-list" aria-labelledby="workouts-title">
+      @if (view() === 'plans') {
+        <div class="plan-schedule-heading">
+          <h2 id="workouts-title">Plan schedule <span class="workout-count">({{ currentWorkoutRows().length }} {{ currentWorkoutRows().length === 1 ? 'workout' : 'workouts' }})</span></h2>
+        </div>
+      }
+      <div [class.plan-schedule-layout]="view() === 'plans'">
+      @if (view() === 'plans' && selectedPlan(); as plan) {
+        <app-plan-schedule-calendar [plan]="plan" [workouts]="schedule().workouts"
+          [selectedDate]="planScheduleDate()!" [today]="today"
+          [startOfWeek]="currentUser()?.settings?.unitSettings?.startOfTheWeek ?? null"
+          [disabled]="busyAction() !== null" (dateSelected)="selectScheduleDate($event)"
+          (workoutSelected)="editScheduledWorkout($event)"></app-plan-schedule-calendar>
+      }
+      <div class="workout-day-details">
       <div class="workout-list-heading">
         <div>
-          <h2 id="workouts-title">{{ view() === 'standalone' ? 'Standalone workouts' : 'Workouts' }} <span class="workout-count">({{ currentWorkoutRows().length }})</span></h2>
           @if (view() === 'standalone') {
+            <h2 id="workouts-title">Standalone workouts <span class="workout-count">({{ currentWorkoutRows().length }})</span></h2>
             <p>On your calendar, without a plan. You can attach them later.</p>
+          } @else {
+            <h3 id="selected-plan-day" aria-live="polite">{{ planScheduleDate() | date:'EEEE, MMM d' }}</h3>
+            <p>{{ displayedWorkoutRows().length }} {{ displayedWorkoutRows().length === 1 ? 'workout' : 'workouts' }}</p>
           }
         </div>
         <button appHapticTap #addWorkoutButton mat-flat-button type="button"
-          (click)="openNewWorkout(view() === 'plans' ? selectedPlanId() : null)"
+          (click)="openNewWorkout(view() === 'plans' ? selectedPlanId() : null, addWorkoutDate())"
           [disabled]="busyAction() !== null || (view() === 'plans' && !selectedPlanId())">
           <mat-icon aria-hidden="true">add</mat-icon><span>Add workout</span>
         </button>
       </div>
 
-      @if (currentWorkoutRows().length === 0) {
+      @if (displayedWorkoutRows().length === 0) {
         <div class="workout-empty-state" role="status">
           <mat-icon aria-hidden="true">event_available</mat-icon>
-          <span>{{ view() === 'standalone' ? 'No standalone workouts yet.' : 'No workouts in this plan yet.' }}</span>
+          <span>{{ view() === 'standalone' ? 'No standalone workouts yet.' : 'Nothing scheduled. Leave this day open, or add a workout.' }}</span>
         </div>
       } @else {
         <div class="workout-rows">
-          @for (row of currentWorkoutRows(); track row.workout.id; let lastWorkout = $last) {
+          @for (row of displayedWorkoutRows(); track row.workout.id; let lastWorkout = $last) {
             <app-compact-row class="workout-row" layout="stacked" density="compact"
-              [title]="row.workout.title" [titleId]="'scheduled-workout-' + row.workout.id" [showDivider]="!lastWorkout">
+              [title]="row.workout.title" [titleId]="'scheduled-workout-' + row.workout.id"
+              [headingLevel]="view() === 'plans' ? 4 : 3" [showDivider]="!lastWorkout">
               <div class="workout-row-meta">
                 <app-activity-type-icon [activityType]="row.workout.structure.sport" size="18px"
                   aria-hidden="true"></app-activity-type-icon>
-                <span>{{ row.workout.structure.sport }} · {{ row.workout.localDate | date:'mediumDate' }}</span>
+                <span>{{ row.workout.structure.sport }}@if (view() === 'standalone') { · {{ row.workout.localDate | date:'mediumDate' }} }</span>
                 @if (row.workout.lifecycle === 'skipped') {
                 <mat-chip-set aria-label="Workout state">
                   <mat-chip>Skipped</mat-chip>
@@ -507,6 +525,8 @@
           }
         </div>
       }
+      </div>
+      </div>
     </section>
     }
 

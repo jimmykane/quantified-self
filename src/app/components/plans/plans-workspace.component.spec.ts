@@ -31,6 +31,8 @@ describe('PlansWorkspaceComponent', () => {
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 9, 12));
     route = { snapshot: { queryParamMap: convertToParamMap({}) } };
     schedule = populatedSchedule();
     watchSchedule = vi.fn().mockImplementation(() => of(schedule));
@@ -81,11 +83,13 @@ describe('PlansWorkspaceComponent', () => {
     }).compileComponents();
   });
 
+  afterEach(() => vi.useRealTimers());
+
   it('has one contextual add action without overview or duplicate plan headings', async () => {
     const fixture = await renderPlans();
     expect(fixture.nativeElement.querySelector('.plans-overview')).toBeNull();
     expect([...fixture.nativeElement.querySelectorAll('h2')].map((el: HTMLElement) => el.textContent?.trim()))
-      .toEqual(['Workouts (1)']);
+      .toEqual(['Plan schedule (1 workout)']);
     expect([...fixture.nativeElement.querySelectorAll('button')].filter((el: HTMLElement) => el.textContent?.includes('Add workout')))
       .toHaveLength(1);
     expect(fixture.nativeElement.textContent).not.toContain('Add here');
@@ -94,7 +98,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('uses shared compact rows with labelled headings, actions, and dividers between workouts', async () => {
-    schedule.workouts.push({ ...schedule.workouts[0], id: 'recovery', title: 'Recovery', localDate: '2026-09-10', lifecycle: 'skipped' });
+    schedule.workouts.push({ ...schedule.workouts[0], id: 'recovery', title: 'Recovery', lifecycle: 'skipped' });
     schedule.state.currentWorkoutCount = 3;
     schedule.plans[0].workoutCount = 2;
     const fixture = await renderPlans();
@@ -113,6 +117,60 @@ describe('PlansWorkspaceComponent', () => {
     }
     expect(fixture.nativeElement.querySelector('.workout-list mat-card')).toBeNull();
     expect(rows[1].nativeElement.querySelector('mat-chip')?.textContent).toContain('Skipped');
+  });
+
+  it('shows only the selected day and prefills that date and plan when adding to an empty day', async () => {
+    const fixture = await renderPlans();
+    const day = fixture.nativeElement.querySelector('[data-plan-date="2026-09-10"]') as HTMLButtonElement;
+    day.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.displayedWorkoutRows()).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.workout-empty-state')?.textContent).toContain('Nothing scheduled');
+    expect(fixture.nativeElement.querySelectorAll('.workout-row')).toHaveLength(0);
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    (fixture.nativeElement.querySelector('.workout-list-heading button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editor()).toMatchObject({ destinationPlanId: 'active-plan', value: { localDate: '2026-09-10' } });
+    fixture.componentInstance.cancelEditor();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-10');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('renders a future paused plan and its skipped workout independently from active and standalone workouts', async () => {
+    schedule.plans.push({ ...schedule.plans[0], id: 'paused', lifecycle: 'paused', startLocalDate: '2026-12-03', endLocalDate: '2026-12-20' });
+    schedule.workouts.push({ ...schedule.workouts[0], id: 'paused-workout', planId: 'paused', localDate: '2026-12-03', lifecycle: 'skipped', title: 'Paused run' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.selectPlan('paused');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-12-03');
+    expect(fixture.nativeElement.querySelector('.calendar-navigation h3')?.textContent).toBe('December 2026');
+    expect(fixture.nativeElement.querySelector('.workout-row')?.textContent).toContain('Paused run');
+    expect(fixture.nativeElement.querySelector('.workout-row mat-chip')?.textContent).toContain('Skipped');
+    expect(fixture.nativeElement.querySelector('.workout-list')?.textContent).not.toContain('Plan run');
+    expect(fixture.nativeElement.querySelector('.workout-list')?.textContent).not.toContain('Standalone run');
+    fixture.componentInstance.selectView('standalone');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-plan-schedule-calendar')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.workout-row')?.textContent).toContain('Standalone run');
+  });
+
+  it('preserves selection during live refresh, clamps it after shifting the range, and selects a saved workout date', async () => {
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live);
+    const fixture = await renderPlans();
+    fixture.componentInstance.selectScheduleDate('2026-09-15');
+    live.next({ ...schedule, plans: [{ ...schedule.plans[0], revision: 3 }] });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-15');
+    live.next({ ...schedule, plans: [{ ...schedule.plans[0], startLocalDate: '2026-10-01', endLocalDate: '2026-10-31' }] });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-10-01');
+    fixture.componentInstance.openNewWorkout('active-plan', '2026-10-12');
+    fixture.componentInstance.updateEditorField('title', 'New workout');
+    await fixture.componentInstance.saveWorkout();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-10-12');
   });
 
   it.each([

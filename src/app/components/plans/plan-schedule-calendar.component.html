@@ -1,0 +1,62 @@
+<section class="plan-calendar" aria-label="Selected plan date grid">
+  <div class="calendar-navigation">
+    <h3 aria-live="polite">{{ month().label }}</h3>
+    <div class="calendar-navigation-actions">
+      @if (month().todayInRange) {
+        <button mat-icon-button type="button" aria-label="Today" matTooltip="Today" (click)="selectDate(today())"
+          [disabled]="disabled() || selectedDate() === today()"><mat-icon aria-hidden="true">today</mat-icon></button>
+      }
+      <button mat-icon-button type="button" aria-label="Previous plan month" matTooltip="Previous month"
+        [disabled]="disabled() || !month().previousDate" (click)="selectDate(month().previousDate)">
+        <mat-icon aria-hidden="true">chevron_left</mat-icon>
+      </button>
+      <button mat-icon-button type="button" aria-label="Next plan month" matTooltip="Next month"
+        [disabled]="disabled() || !month().nextDate" (click)="selectDate(month().nextDate)">
+        <mat-icon aria-hidden="true">chevron_right</mat-icon>
+      </button>
+    </div>
+  </div>
+  <div class="calendar-weekdays" aria-hidden="true">
+    @for (weekday of month().weekdays; track $index) { <span>{{ weekday }}</span> }
+  </div>
+  <div class="calendar-days" role="group" [attr.aria-label]="month().label">
+    @for (day of month().days; track day.localDate) {
+      <div class="calendar-day" [class.calendar-day--outside]="!day.inRange" [class.calendar-day--empty]="!day.entries.length"
+        [class.calendar-day--adjacent]="!day.inMonth" [class.calendar-day--selected]="day.selected">
+        <!-- Like Activity Calendar, date cells use native buttons with Material ripple. A datepicker
+             cannot host separate, accessible workout edit actions without overriding Material internals. -->
+        <button class="calendar-date" type="button" matRipple [attr.data-plan-date]="day.localDate"
+          [disabled]="disabled() || !day.inRange" [attr.aria-label]="day.ariaLabel"
+          [attr.aria-pressed]="day.selected" [attr.aria-current]="day.isToday ? 'date' : null"
+          (click)="selectDate(day.localDate)" (keydown)="onDayKeydown($event, day.localDate)">
+          <span class="calendar-day-number">{{ day.dayNumber }}</span>
+          @if (day.inRange && day.entries.length) {
+            <span class="calendar-day-count" aria-hidden="true">
+              <mat-icon>event_note</mat-icon>{{ day.entries.length }}
+            </span>
+          }
+        </button>
+        @if (day.inRange) {
+          @if (day.boundary) { <span class="calendar-boundary">{{ day.boundaryLabel }}</span> }
+          <div class="calendar-workouts">
+            @for (workout of day.visibleEntries; track workout.id) {
+              <button mat-button type="button" class="calendar-workout" [disabled]="disabled()"
+                [class.calendar-workout--skipped]="workout.lifecycle === 'skipped'"
+                [attr.aria-label]="'Edit ' + workout.title + (workout.lifecycle === 'skipped' ? ', skipped' : '')"
+                [matTooltip]="workout.title + (workout.lifecycle === 'skipped' ? ' · Skipped' : '')"
+                (click)="editWorkout(workout)">
+                <span class="calendar-workout-title">{{ workout.lifecycle === 'skipped' ? 'Skipped · ' : '' }}{{ workout.title }}</span>
+              </button>
+            }
+            @if (day.overflowCount) {
+              <button mat-button type="button" [disabled]="disabled()"
+                [attr.aria-label]="'Show all ' + day.entries.length + ' workouts on ' + day.localDate"
+                (click)="selectDate(day.localDate)">+{{ day.overflowCount }} more</button>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+  <p class="calendar-hint">Select a day to see or add workouts. Shaded dates are outside this plan.</p>
+</section>
