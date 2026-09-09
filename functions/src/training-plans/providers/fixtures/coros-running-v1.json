@@ -1,0 +1,83 @@
+{
+  "AthleteId": 24680,
+  "StartDate": "2026-09-03",
+  "EndDate": "2026-09-03",
+  "Workouts": [
+    {
+      "Description": "Redacted provider contract fixture.",
+      "LastModifiedDate": "2026-09-02T12:00:00.000",
+      "Title": "Fixture intervals",
+      "Id": 1191908854,
+      "WorkoutDay": "2026-09-03",
+      "WorkoutType": "run",
+      "Structure": [
+        {
+          "Type": "Step",
+          "IntensityClass": "WarmUp",
+          "Name": "Warm up",
+          "Description": "Easy warm up",
+          "Ftp": 0,
+          "ThresholdHr": 0,
+          "ThresholdSpeed": 0,
+          "Length": { "Unit": "Second", "Value": 600 },
+          "IntensityTarget": {
+            "Unit": "RangeOfThresholdHr",
+            "MinValue": 130,
+            "MaxValue": 145
+          }
+        },
+        {
+          "Type": "Repetition",
+          "Length": { "Unit": "Repetition", "Value": 3 },
+          "Steps": [
+            {
+              "Type": "Step",
+              "IntensityClass": "Active",
+              "Name": "Work",
+              "Description": "Fast 400",
+              "Ftp": 0,
+              "ThresholdHr": 0,
+              "ThresholdSpeed": 0,
+              "Length": { "Unit": "Meter", "Value": 400 },
+              "IntensityTarget": {
+                "Unit": "RangeOfThresholdSpeed",
+                "MinValue": 4.3,
+                "MaxValue": 4.55
+              }
+            },
+            {
+              "Type": "Step",
+              "IntensityClass": "Rest",
+              "Name": "Recovery",
+              "Description": "Jog easy",
+              "Ftp": 0,
+              "ThresholdHr": 0,
+              "ThresholdSpeed": 0,
+              "Length": { "Unit": "Second", "Value": 60 },
+              "IntensityTarget": {
+                "Unit": "RangeOfThresholdHr",
+                "MinValue": 110,
+                "MaxValue": 130
+              }
+            }
+          ]
+        },
+        {
+          "Type": "Step",
+          "IntensityClass": "CoolDown",
+          "Name": "Cool down",
+          "Description": "Relax",
+          "Ftp": 0,
+          "ThresholdHr": 0,
+          "ThresholdSpeed": 0,
+          "Length": { "Unit": "Second", "Value": 300 },
+          "IntensityTarget": {
+            "Unit": "RangeOfCandence",
+            "MinValue": 80,
+            "MaxValue": 90
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "type": "sequence",
+  "name": "Fixture intervals",
+  "description": "Redacted provider contract fixture.",
+  "shortDescription": "Fixture intervals",
+  "owner": "Quantified Self",
+  "url": "https://quantified-self.io/plans",
+  "activities": [1],
+  "usage": "workout",
+  "localDate": "2026-09-03",
+  "externalId": "qs-suunto-9FY_Ylbw0yViEKcPFAx4RKg3Hm9mnnFTRTE37sW_HYg",
+  "steps": [
+    {
+      "id": "qs-suunto-Wwd4-55rgq5haBzZEQg02b_tyv7_YA-8ejjONM6owkU",
+      "type": "fields",
+      "title": "Warm up",
+      "fields": [
+        { "type": "stepDurationCountdown", "value": 600, "title": "Remaining" },
+        { "type": "targetHeartRate", "min": 130, "max": 145, "title": "Target HR" },
+        { "type": "text", "value": "Easy warm up" }
+      ],
+      "transitions": [
+        { "condition": { "type": "stepDuration", "value": 600 } }
+      ]
+    },
+    {
+      "id": "qs-suunto-QOEl3Sis2am5LJuYjjrO_FpvHYCx-4ifBXnd4OaFPR4",
+      "type": "repeat",
+      "times": 3,
+      "steps": [
+        {
+          "id": "qs-suunto-1JegEtu7HBcXo2h_f8x8n_rQRjiarq7THcULNA8ceAQ",
+          "type": "fields",
+          "title": "Work",
+          "fields": [
+            { "type": "stepDistanceCountdown", "value": 400, "title": "Remaining" },
+            { "type": "targetPace", "min": 4.3, "max": 4.55, "title": "Tgt pace" },
+            { "type": "text", "value": "Fast 400" }
+          ],
+          "transitions": [
+            { "condition": { "type": "stepDistance", "value": 400 } }
+          ]
+        },
+        {
+          "id": "qs-suunto-FO7CjCYL0dGFE2Y04aTmFTaX_JkSP_JL_hikp9hWKP8",
+          "type": "fields",
+          "title": "Recovery",
+          "fields": [
+            { "type": "stepDurationCountdown", "value": 60, "title": "Remaining" },
+            { "type": "targetHeartRate", "min": 110, "max": 130, "title": "Target HR" },
+            { "type": "text", "value": "Jog easy" }
+          ],
+          "transitions": [
+            { "condition": { "type": "stepDuration", "value": 60 } }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "qs-suunto-e-IgQ0-6lE7Fh6C1hRNE5S-WcJ9XS7I7vcSNoGvlKGo",
+      "type": "fields",
+      "title": "Cool down",
+      "fields": [
+        { "type": "stepDurationCountdown", "value": 300, "title": "Remaining" },
+        { "type": "targetCadence", "min": 1.3333333333333333, "max": 1.5, "title": "Tgt cadence" },
+        { "type": "text", "value": "Relax" }
+      ],
+      "transitions": [
+        { "condition": { "type": "stepDuration", "value": 300 } }
+      ]
+    }
+  ]
+}
