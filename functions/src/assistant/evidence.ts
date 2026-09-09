@@ -314,6 +314,16 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
+  if (tool.name === 'query_timeline_notes') {
+    const notes = Array.isArray(structuredContent.notes) ? structuredContent.notes.filter(isRecord) : [];
+    // Persist compact context and dates, never raw tool results or the full private details field.
+    return { toolName: tool.name, title: 'Timeline notes',
+      summary: `${notes.length} user-reported note${notes.length === 1 ? '' : 's'} in this page.${structuredContent.scanComplete === false ? ' More context may remain.' : ''}`,
+      facts: notes.slice(0, MAX_FACTS).map(note => ({ label: truncate(String(note.title), 80),
+        value: truncate(`${note.category}: ${note.startDate} – ${note.endDate ?? `ongoing (through ${note.effectiveEndDate})`}`, 160),
+      })), links: [],
+    };
+  }
   const facts = tool.name === 'rank_activities_by_metric'
     ? buildRankingFacts(structuredContent) || []
     : [];

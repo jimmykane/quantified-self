@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
+    const content = HELP_SECTIONS.map(section => section.content).join(' ');
+    expect(content).toContain('**Timeline notes** is an independent read-only permission');
+    expect(content).toContain('full private');
+    expect(content).toContain('hidden from charts');
+    expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
+      .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
+  });
   it('explains private notes in both workspaces and makes their context searchable', () => {
     for (const id of ['health', 'training-analysis']) {
       const content = HELP_SECTIONS.find(section => section.id === id)?.content;

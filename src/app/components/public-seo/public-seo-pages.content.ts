@@ -551,7 +551,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     eyebrow: 'MCP Server',
     title: 'Read-only MCP Server for Training Data',
-    description: 'Connect ChatGPT, Claude, or another MCP client to the training, activity, sleep, measurement, and route data you approve.',
+    description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, and optional Timeline notes.',
     h1: 'Connect ChatGPT or Claude to your training data',
     intro: 'Use the read-only Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze your training, review your season, or plan your next workout using only the data categories you approve.',
     chips: ['MCP server', 'ChatGPT', 'Claude', 'Read-only', 'Training', 'Sleep', 'Activities', 'Routes'],
@@ -602,7 +602,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Approve training metrics, Health metrics, measurements, workout details, sleep, routes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
+            copy: 'Approve training metrics, Health metrics, measurements, workout details, sleep, routes, Timeline notes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
           },
           {
             icon: 'lock',
@@ -630,6 +630,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         question: 'Can I use the MCP server with ChatGPT or Claude?',
         answer: 'Yes. Add https://quantified-self.io/mcp as a custom MCP connection in a compatible ChatGPT or Claude client, sign in to Quantified Self, and approve the read-only permissions you want to grant. External clients have their own privacy and retention practices.',
+      },
+      {
+        question: 'Can an MCP client read my Timeline notes?',
+        answer: 'Only with separate Timeline notes permission, which starts unchecked and requires reauthorization for existing clients. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',

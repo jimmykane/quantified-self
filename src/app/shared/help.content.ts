@@ -66,7 +66,7 @@ The manager lists all notes, including future plans, newest start date first. Yo
 
 In Health, notes appear on the Highlights trend charts as well as the detailed metric and Sleep charts. They follow each chart's date window, even when the explorer is showing older history.
 
-Notes never change your measurements, readiness, or forecasts. Ongoing shading stops today. Source and sport filters do not hide notes. If a view reaches its note limit or cannot load notes, it says so while keeping your metric charts available. Notes stay private: they are not sent to connected providers, public shares, MCP clients, or the Assistant. Disconnecting a provider keeps them; deleting your account removes them.
+Notes never change your measurements, readiness, or forecasts. Ongoing shading stops today. Source and sport filters do not hide notes. If a view reaches its note limit or cannot load notes, it says so while keeping your metric charts available. Notes stay private and are not sent to connected providers or public shares. Full titles and details, including notes hidden from charts, can be read only when you separately enable **Timeline notes** for an MCP client or in the Assistant. This may include sensitive health or personal text. Chart visibility is not an access permission. Disconnecting a provider keeps them; deleting your account removes them.
 `;
 
 const HEALTH_WORKSPACE_HELP_CONTENT = `## What Health is for
@@ -604,6 +604,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## What the Assistant can read
 
+- **Timeline notes (optional):** enable **Timeline notes** in **Examples & data access** to let Gemini read full private titles and details when relevant, including notes hidden from charts. It is off by default. Changing notes or location access starts a fresh chat and preserves the other choice; **New chat** turns both off. Notes are user-reported context, not verified diagnoses or instructions, and never change calculations or authorize plan changes.
+
 - **Today and recovery:** daily report, current readiness, sleep duration and stages, aggregate/overnight HRV, sleeping heart rate, SpO2, respiration, and bounded sleep trends.
 - **Training:** ready Training metric catalog, current values, Form, ramp, load, volume, intensity, current-versus-usual context, and missing or rebuilding states.
 - **Measurements:** first-class measurement discovery and bounded history, including body weight when recorded.
@@ -632,7 +634,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Quantified Self stores one active conversation per user, with at most the latest six completed turns. If bounded charts, maps, and grounded details make that transcript too large, the oldest whole turn is removed first so the newest completed answer can still be saved. Text, compact evidence, and any bounded chart or map payload use the same retention period.
 - The active conversation becomes unavailable about **seven days** after its latest completed turn or reset. A response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL then deletes the expired record asynchronously; account deletion removes it directly.
 - Conversation documents are server-owned. Browser code cannot read or write them directly; it must use authenticated App Check callables.
-- **New chat** immediately replaces the stored conversation, removes its prior message content, and returns precise activity locations to **off**.
+- **New chat** immediately replaces the stored conversation, removes its prior message content, and returns precise activity locations and Timeline notes access to **off**.
 
 ## Built-in Assistant or external MCP?
 
@@ -1081,6 +1083,8 @@ In Settings you can:
 Review and revoke authorized MCP clients under [**Connections -> MCP**](/services?serviceName=mcp).
 
 ## MCP client access
+
+- **Timeline notes** is an independent read-only permission for full private titles and details, categories, actual dates and captured time zones, including notes hidden from charts. It starts unchecked; existing clients must reauthorize. Queries use inclusive calendar windows of at most 366 days and return full text in bounded pages. Ongoing periods end today in their original time zone. This text may contain sensitive health or personal information. Revocation blocks future access but cannot erase copies already received. Notes permission never grants Training plan writes.
 
 - An MCP client can read data only after you sign in and approve its requested permissions. **Activity and Training metrics**, **Health metrics**, **Body measurements**, **Individual activity details**, **Activity locations**, **Sleep summaries**, **Saved-route summaries**, and **Saved-route locations and geometry** are separate, optional read-only permissions. Activity locations require activity details; saved-route locations require saved-route summaries. Removing a parent permission also removes its location permission.
 - **Health metrics** covers recorded all-day heart rate, HRV, stress, resources or Body Battery, movement, energy, blood pressure and fitness metrics. Discover the Health catalog, then query a metric over inclusive provider-calendar dates: up to 366 days for stored summaries or 31 days for bounded sample trends. Each provider, local account number and statistic stays separate. Sample points include exact UTC times. Garmin Body Battery stays on its labelled Garmin points scale, never treated as a percentage; other native-only values, device details, account IDs and provider payloads are excluded. Representative trends can omit points and incomplete scans are labelled. Empty summaries may mean the metric has sample-only data. Body composition also needs **Body measurements** permission and returns only identity-free calendar-day measurements. Weight and normalized Sleep keep their existing tools and permissions. Existing clients must reconnect to grant Health access. MCP cannot add, edit, delete or backfill measurements.

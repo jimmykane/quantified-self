@@ -117,7 +117,7 @@ describe('MCP Function protocol compatibility', () => {
     } });
     const tools = await post(modernRequest('tools/list'));
     const listing = await tools.json() as { result: { tools: Array<{ name: string; execution?: unknown }> } };
-    expect(listing.result.tools).toHaveLength(34);
+    expect(listing.result.tools).toHaveLength(35);
     expect(listing.result.tools.every(tool => tool.execution === undefined)).toBe(true);
     const call = await post(modernRequest('tools/call', { name: 'list_activity_types', arguments: {} }));
     expect(call.status).toBe(200);
@@ -225,6 +225,12 @@ describe('MCP Function protocol compatibility', () => {
   });
 
   it('rejects ungranted Health and body-composition reads before transport dispatch', async () => {
+    authenticateBearer.mockResolvedValueOnce({ scopes: [MCP_OAUTH_SCOPES.SleepRead] });
+    const notesDenied = await post(modernRequest('tools/call', { name: 'query_timeline_notes', arguments: {
+      startDate: '2026-09-01', endDate: '2026-09-02',
+    } }));
+    expect(notesDenied.status).toBe(403);
+    expect(notesDenied.headers.get('www-authenticate')).toContain('timeline-notes:read');
     authenticateBearer.mockResolvedValueOnce({ scopes: [MCP_OAUTH_SCOPES.MetricsRead] });
     const healthDenied = await post(modernRequest('tools/call', { name: 'list_health_metrics', arguments: {} }));
     expect(healthDenied.status).toBe(403);

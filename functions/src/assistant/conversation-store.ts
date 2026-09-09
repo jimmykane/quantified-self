@@ -32,6 +32,7 @@ interface AssistantPendingTurn {
 }
 
 export interface AssistantActiveConversationState {
+  timelineNotesEnabled?: boolean;
   conversation: AssistantConversation | null;
   pendingRequestId: string | null;
   locationAccess: AssistantLocationAccess;
@@ -44,6 +45,7 @@ interface AssistantReplayReceipt {
 }
 
 interface StoredAssistantConversation {
+  timelineNotesEnabled: boolean;
   version: typeof ASSISTANT_CONVERSATION_VERSION;
   conversationId: string;
   messages: AssistantMessage[];
@@ -56,6 +58,7 @@ interface StoredAssistantConversation {
 }
 
 export interface BegunAssistantTurn {
+  timelineNotesEnabled?: boolean;
   kind: 'started';
   conversationId: string;
   turnId: string;
@@ -114,6 +117,7 @@ export interface AssistantConversationStore {
     requestId?: string,
     requestFingerprint?: string,
     locationAccess?: AssistantLocationAccess,
+    timelineNotesEnabled?: boolean,
   ) => Promise<AssistantTurnStart>;
   completeTurn: (
     uid: string,
@@ -125,6 +129,8 @@ export interface AssistantConversationStore {
   resetConversation: (
     uid: string,
     locationAccess?: AssistantLocationAccess,
+    timelineNotesEnabled?: boolean,
+    expectedConversationId?: string | null,
   ) => Promise<AssistantConversation>;
 }
 
@@ -146,6 +152,7 @@ export function createAssistantRequestFingerprint(
   requestId: string,
   requestText: string,
   locationAccess: AssistantLocationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
+  timelineNotesEnabled = false,
 ): string {
   const fingerprint = createHash('sha256')
     .update(requestId)
@@ -156,6 +163,7 @@ export function createAssistantRequestFingerprint(
   if (locationAccess !== ASSISTANT_DEFAULT_LOCATION_ACCESS) {
     fingerprint.update('\0').update(locationAccess);
   }
+  if (timelineNotesEnabled) fingerprint.update('\0timeline-notes:read');
   return fingerprint.digest('hex');
 }
 
@@ -172,6 +180,7 @@ function normalizeReplayReceipts(
   value: unknown,
   messages: AssistantMessage[],
   locationAccess: AssistantLocationAccess,
+  timelineNotesEnabled: boolean,
 ): AssistantReplayReceipt[] {
   const receiptsByRequestId = new Map<string, AssistantReplayReceipt>();
   if (Array.isArray(value)) {
@@ -213,6 +222,7 @@ function normalizeReplayReceipts(
         message.id,
         message.text,
         locationAccess,
+        timelineNotesEnabled,
       ),
       completedAtMs,
     });
@@ -286,11 +296,13 @@ function parseStoredConversation(
     updatedAt: data.updatedAt as Timestamp,
     expireAt: data.expireAt as Timestamp,
     locationAccess,
+    timelineNotesEnabled: data.timelineNotesEnabled === true,
     pendingTurn,
     replayReceipts: normalizeReplayReceipts(
       data.replayReceipts,
       messages,
       locationAccess,
+      data.timelineNotesEnabled === true,
     ),
   };
 }
@@ -310,6 +322,7 @@ function createEmptyConversation(
   now: Date,
   createId: () => string,
   locationAccess: AssistantLocationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
+  timelineNotesEnabled = false,
 ): StoredAssistantConversation {
   const timestamp = Timestamp.fromDate(now);
   return {
@@ -320,6 +333,7 @@ function createEmptyConversation(
     updatedAt: timestamp,
     expireAt: Timestamp.fromMillis(now.getTime() + ASSISTANT_CONVERSATION_RETENTION_MS),
     locationAccess,
+    timelineNotesEnabled,
     pendingTurn: null,
     replayReceipts: [],
   };
@@ -462,6 +476,7 @@ export function createAssistantConversationStore(
           ? conversation.pendingTurn.requestId
           : null,
         locationAccess: conversation.locationAccess,
+        ...(conversation.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
       };
     });
   };
@@ -517,6 +532,7 @@ export function createAssistantConversationStore(
       requestId,
       requestFingerprint,
       locationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
+      timelineNotesEnabled = false,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -540,7 +556,8 @@ export function createAssistantConversationStore(
             'The active Assistant conversation changed. Reload it before sending another message.',
           );
         }
-        if (conversation.locationAccess !== locationAccess) {
+        if (conversation.locationAccess !== locationAccess
+          || conversation.timelineNotesEnabled !== timelineNotesEnabled) {
           throw new AssistantConversationStoreError(
             'conversation_changed',
             'The Assistant data-access setting changed. Reload before sending another message.',
@@ -590,6 +607,7 @@ export function createAssistantConversationStore(
           turnId,
           history: [...updatedConversation.messages],
           locationAccess: updatedConversation.locationAccess,
+          ...(updatedConversation.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         };
       });
     },
@@ -633,6 +651,7 @@ export function createAssistantConversationStore(
               userMessage.id,
               userMessage.text,
               begunTurn.locationAccess,
+              begunTurn.timelineNotesEnabled === true,
             ),
             completedAtMs: nowMs,
           },
@@ -695,6 +714,8 @@ export function createAssistantConversationStore(
     resetConversation: async (
       uid,
       locationAccess = ASSISTANT_DEFAULT_LOCATION_ACCESS,
+      timelineNotesEnabled = false,
+      expectedConversationId,
     ) => {
       const db = dependencies.db();
       const conversationRef = getConversationRef(db, uid);
@@ -707,10 +728,21 @@ export function createAssistantConversationStore(
           uid,
           now.getTime(),
         );
+        const snapshot = await transaction.get(conversationRef);
+        const stored = snapshot.exists ? parseStoredConversation(snapshot.data(), now.getTime()) : null;
+        const currentId = stored && stored.expireAt.toMillis() > now.getTime() ? stored.conversationId : null;
+        if ((timelineNotesEnabled && expectedConversationId === undefined)
+          || (expectedConversationId !== undefined && currentId !== expectedConversationId)) {
+          throw new AssistantConversationStoreError(
+            'conversation_changed',
+            'The Assistant conversation changed. Reload before changing data access.',
+          );
+        }
         const conversation = createEmptyConversation(
           now,
           dependencies.createId,
           locationAccess,
+          timelineNotesEnabled,
         );
         transaction.set(conversationRef, conversation);
         return toPublicConversation(conversation);

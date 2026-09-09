@@ -315,8 +315,11 @@ export function validateAssistantChatResponse(
   if (!isRecord(value)) {
     return { ok: false, reason: 'response_not_object' };
   }
-  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId'])) {
+  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled'])) {
     return { ok: false, reason: 'unexpected_response_fields' };
+  }
+  if (value.timelineNotesEnabled !== undefined && typeof value.timelineNotesEnabled !== 'boolean') {
+    return { ok: false, reason: 'invalid_timeline_notes_access' };
   }
   const conversation = validateAssistantConversation(value.conversation);
   if (conversation.ok === false) {

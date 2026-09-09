@@ -8,10 +8,12 @@ import type { AssistantLocationAccess } from '@shared/assistant.types';
 import { SharedModule } from '../../modules/shared.module';
 
 export interface AssistantExploreBottomSheetData {
+  timelineNotesEnabled?: boolean;
   locationAccess: AssistantLocationAccess;
 }
 
 export type AssistantExploreBottomSheetResult =
+  | { kind: 'timeline_notes'; enabled: boolean }
   | { kind: 'prompt'; prompt: string }
   | { kind: 'location_access'; locationAccess: AssistantLocationAccess };
 
@@ -43,6 +45,11 @@ export class AssistantExploreBottomSheetComponent {
       kind: 'location_access',
       locationAccess: enabled ? 'precise_activity' : 'coordinate_free',
     });
+  }
+
+  setTimelineNotes(enabled: boolean): void {
+    if (enabled === (this.data.timelineNotesEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'timeline_notes', enabled });
   }
 
   close(): void {
