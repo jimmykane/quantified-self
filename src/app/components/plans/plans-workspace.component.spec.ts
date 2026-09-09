@@ -3,6 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSelect } from '@angular/material/select';
+import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -16,6 +18,7 @@ import {
 } from '../../services/training-plans.service';
 import { PlansWorkspaceComponent } from './plans-workspace.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
+import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 
 describe('PlansWorkspaceComponent', () => {
   const user = { uid: 'user-1', settings: { unitSettings: {} } };
@@ -312,6 +315,75 @@ describe('PlansWorkspaceComponent', () => {
     live.next(schedule);
     fixture.detectChanges();
     expect(fixture.componentInstance.selectedPlanId()).toBe('active-plan');
+  });
+
+  it('offers named colors on creation, retains a failed draft, and saves only the selected palette key', async () => {
+    const fixture = await renderPlans();
+    fixture.componentInstance.beginPlanCreation();
+    fixture.detectChanges();
+    const select = fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect;
+    expect(select.options.map(option => option.value)).toEqual(TRAINING_PLAN_COLOR_OPTIONS.map(option => option.id));
+    expect(select.value).toBe('default');
+    const colorField = fixture.debugElement.queryAll(By.directive(MatFormField))
+      .find(field => field.nativeElement.textContent.includes('Plan color'))!;
+    expect((colorField.componentInstance as MatFormField).subscriptSizing).toBe('dynamic');
+    fixture.componentInstance.updatePlanDraft('name', 'Purple build');
+    fixture.componentInstance.updatePlanDraft('color', 'purple');
+    fixture.componentInstance.updatePlanDraft('color', 'purple');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    mutate.mockRejectedValueOnce(new Error('Offline'));
+    await fixture.componentInstance.createPlan();
+    expect(fixture.componentInstance.planDraft().color).toBe('purple');
+    expect(fixture.componentInstance.showPlanForm()).toBe(true);
+    expect(haptics.error).toHaveBeenCalledOnce();
+    await fixture.componentInstance.createPlan();
+    expect(mutate).toHaveBeenLastCalledWith(expect.objectContaining({ operation: expect.objectContaining({ kind: 'create-plan', color: 'purple' }) }));
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('revision-checks color changes, disables pending controls, and recolors from the live plan', async () => {
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live);
+    let resolveMutation!: (value: unknown) => void;
+    mutate.mockImplementationOnce(() => new Promise(resolve => { resolveMutation = resolve; }));
+    const fixture = await renderPlans();
+    const plan = fixture.componentInstance.selectedPlan()!;
+    await fixture.componentInstance.setPlanColor(plan, 'default');
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const pending = fixture.componentInstance.setPlanColor(plan, 'purple');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedPlanActionBusy()).toBe(true);
+    expect(fixture.nativeElement.querySelector('[aria-label="Updating plan"] mat-spinner')).toBeTruthy();
+    expect((fixture.debugElement.query(By.directive(MatSelect)).componentInstance as MatSelect).disabled).toBe(true);
+    await fixture.componentInstance.setPlanColor(plan, 'green');
+    expect(mutate).toHaveBeenCalledOnce();
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRevisions: expect.arrayContaining([{ scope: 'plan', id: plan.id, revision: plan.revision }]),
+      operation: { kind: 'set-plan-color', planId: plan.id, color: 'purple' },
+    }));
+    expect(haptics.success).not.toHaveBeenCalled();
+    resolveMutation({ plans: [{ ...plan, color: 'purple' }] });
+    await pending;
+    live.next({ ...schedule, plans: [{ ...plan, color: 'purple', revision: plan.revision + 1 }] });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selectedPlanAppearance()).toEqual(trainingPlanAppearance({ color: 'purple' }));
+    expect((fixture.nativeElement.querySelector('.plan-calendar') as HTMLElement).style.getPropertyValue('--plan-calendar-color'))
+      .toBe(trainingPlanAppearance({ color: 'purple' }).color);
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-09');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(haptics.success).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the saved plan color when changing it fails', async () => {
+    schedule.plans[0].color = 'purple';
+    mutate.mockRejectedValueOnce(new Error('Changed elsewhere'));
+    const fixture = await renderPlans();
+    await fixture.componentInstance.setPlanColor(fixture.componentInstance.selectedPlan()!, 'green');
+    expect(fixture.componentInstance.selectedPlanAppearance().id).toBe('purple');
+    expect(fixture.componentInstance.busyAction()).toBeNull();
+    expect(haptics.error).toHaveBeenCalledOnce();
+    expect(haptics.success).not.toHaveBeenCalled();
   });
 
   it('shows a single useful empty state instead of an empty selector and disabled workout list', async () => {

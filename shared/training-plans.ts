@@ -25,6 +25,9 @@ const LOCAL_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 export const TRAINING_PLAN_LIFECYCLES = ['active', 'paused', 'archived'] as const;
 export type TrainingPlanLifecycle = typeof TRAINING_PLAN_LIFECYCLES[number];
 
+export const TRAINING_PLAN_COLORS = ['default', 'blue', 'purple', 'pink', 'orange', 'red', 'green'] as const;
+export type TrainingPlanColor = typeof TRAINING_PLAN_COLORS[number];
+
 export const SCHEDULED_WORKOUT_LIFECYCLES = ['planned', 'skipped', 'deleted'] as const;
 export type ScheduledWorkoutLifecycle = typeof SCHEDULED_WORKOUT_LIFECYCLES[number];
 
@@ -40,6 +43,8 @@ export interface TrainingPlanV1 {
   schemaVersion: typeof TRAINING_PLAN_SCHEMA_VERSION;
   id: string;
   name: string;
+  /** QS presentation only; omitted/default uses the theme color. Never part of the workout recipe. */
+  color?: TrainingPlanColor;
   lifecycle: TrainingPlanLifecycle;
   startLocalDate: string;
   endLocalDate: string;
@@ -78,6 +83,7 @@ export interface CreateTrainingPlanMutationV1 {
   kind: 'create-plan';
   planId: string;
   name: string;
+  color?: TrainingPlanColor;
   startLocalDate: string;
   endLocalDate: string;
   activate: boolean;
@@ -87,6 +93,12 @@ export interface RenameTrainingPlanMutationV1 {
   kind: 'rename-plan';
   planId: string;
   name: string;
+}
+
+export interface SetTrainingPlanColorMutationV1 {
+  kind: 'set-plan-color';
+  planId: string;
+  color: TrainingPlanColor;
 }
 
 export interface SetTrainingPlanLifecycleMutationV1 {
@@ -158,6 +170,7 @@ export interface PermanentlyDeleteScheduledWorkoutMutationV1 {
 export type TrainingScheduleMutationOperationV1 =
   | CreateTrainingPlanMutationV1
   | RenameTrainingPlanMutationV1
+  | SetTrainingPlanColorMutationV1
   | SetTrainingPlanLifecycleMutationV1
   | ShiftTrainingPlanMutationV1
   | CreateScheduledWorkoutMutationV1
@@ -407,7 +420,7 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
   const record = asRecord(value, '$');
   rejectUnknownFields(record, [
     'schemaVersion', 'id', 'name', 'lifecycle', 'startLocalDate', 'endLocalDate',
-    'revision', 'lastCheckpointRevision', 'workoutCount', 'createdAtMs', 'updatedAtMs',
+    'revision', 'lastCheckpointRevision', 'workoutCount', 'createdAtMs', 'updatedAtMs', 'color',
   ], '$');
   if (record.schemaVersion !== TRAINING_PLAN_SCHEMA_VERSION) {
     throw new TrainingPlanContractError('$.schemaVersion', 'Unsupported training-plan version.');
@@ -424,6 +437,7 @@ export function parseTrainingPlanV1(value: unknown): TrainingPlanV1 {
     schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
     id: readEntityId(record.id, '$.id'),
     name: readString(record.name, '$.name', 120),
+    ...(record.color === undefined ? {} : { color: readLifecycle(record.color, TRAINING_PLAN_COLORS, '$.color') }),
     lifecycle: readLifecycle(record.lifecycle, TRAINING_PLAN_LIFECYCLES, '$.lifecycle'),
     startLocalDate,
     endLocalDate,
@@ -523,7 +537,7 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
   rejectUnknownFields(record, ['mutationId', 'expectedRevisions', 'operation'], '$');
   const operationRecord = asRecord(record.operation, '$.operation');
   const kind = readLifecycle(operationRecord.kind, [
-    'create-plan', 'rename-plan', 'set-plan-lifecycle', 'shift-plan', 'create-workout',
+    'create-plan', 'rename-plan', 'set-plan-color', 'set-plan-lifecycle', 'shift-plan', 'create-workout',
     'update-workout', 'move-workout', 'copy-workout', 'set-workout-lifecycle',
     'delete-workout', 'permanently-delete-workout',
   ] as const, '$.operation.kind');
@@ -531,11 +545,15 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
   let operation: TrainingScheduleMutationOperationV1;
   switch (kind) {
     case 'create-plan': {
-      rejectUnknownFields(operationRecord, ['kind', 'planId', 'name', 'startLocalDate', 'endLocalDate', 'activate'], '$.operation');
+      rejectUnknownFields(operationRecord, ['kind', 'planId', 'name', 'startLocalDate', 'endLocalDate', 'activate', 'color'], '$.operation');
       if (typeof operationRecord.activate !== 'boolean') {
         throw new TrainingPlanContractError('$.operation.activate', 'Expected a boolean.');
       }
-      operation = { kind, ...parsePlanFields(operationRecord), activate: operationRecord.activate };
+      operation = { kind, ...parsePlanFields(operationRecord), activate: operationRecord.activate,
+        ...(operationRecord.color === undefined ? {} : {
+          color: readLifecycle(operationRecord.color, TRAINING_PLAN_COLORS, '$.operation.color'),
+        }),
+      };
       break;
     }
     case 'rename-plan':
@@ -544,6 +562,14 @@ export function parseMutateTrainingScheduleRequestV1(value: unknown): MutateTrai
         kind,
         planId: readEntityId(operationRecord.planId, '$.operation.planId'),
         name: readString(operationRecord.name, '$.operation.name', 120),
+      };
+      break;
+    case 'set-plan-color':
+      rejectUnknownFields(operationRecord, ['kind', 'planId', 'color'], '$.operation');
+      operation = {
+        kind,
+        planId: readEntityId(operationRecord.planId, '$.operation.planId'),
+        color: readLifecycle(operationRecord.color, TRAINING_PLAN_COLORS, '$.operation.color'),
       };
       break;
     case 'set-plan-lifecycle':

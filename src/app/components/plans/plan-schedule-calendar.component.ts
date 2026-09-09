@@ -4,6 +4,7 @@ import { buildPlanScheduleMonth } from '../../helpers/plan-schedule-calendar.hel
 import { formatActivityCalendarDateParam, navigateActivityCalendarDate, parseActivityCalendarDate } from '../../helpers/activity-calendar.helper';
 import { SharedModule } from '../../modules/shared.module';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 
 @Component({
   selector: 'app-plan-schedule-calendar',
@@ -20,6 +21,7 @@ export class PlanScheduleCalendarComponent {
   readonly today = input.required<string>();
   readonly startOfWeek = input<number | null>(null);
   readonly disabled = input(false);
+  readonly appearance = computed(() => trainingPlanAppearance(this.plan()));
   readonly dateSelected = output<string>();
   readonly workoutSelected = output<ScheduledWorkoutV1>();
   private readonly locale = inject(LOCALE_ID);

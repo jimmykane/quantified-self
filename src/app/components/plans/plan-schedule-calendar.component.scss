@@ -52,7 +52,7 @@
 }
 
 .calendar-weekday--week-start {
-  color: var(--mat-sys-primary);
+  color: var(--plan-calendar-color);
   font-weight: 600;
 }
 
@@ -63,7 +63,7 @@
   width: 18px;
   height: 2px;
   border-radius: 2px 2px 0 0;
-  background: var(--mat-sys-primary);
+  background: var(--plan-calendar-color);
   content: '';
   transform: translateX(-50%);
 }
@@ -85,7 +85,11 @@
 
 // Match Activity Calendar's quiet weekend cue; range and selection states take precedence.
 .calendar-day--weekend {
-  background: color-mix(in srgb, var(--mat-sys-primary) var(--plan-calendar-weekend-tint), transparent);
+  background: color-mix(in srgb, var(--plan-calendar-color) var(--plan-calendar-weekend-tint), transparent);
+}
+
+.calendar-day:not(.calendar-day--empty):not(.calendar-day--outside) {
+  border-inline-start: 3px solid var(--plan-calendar-color);
 }
 
 .calendar-day--outside {
@@ -94,9 +98,9 @@
 }
 
 .calendar-day--selected {
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
-  outline: 2px solid var(--mat-sys-primary);
+  background: color-mix(in srgb, var(--plan-calendar-color) 16%, transparent);
+  color: var(--mat-sys-on-surface);
+  outline: 2px solid var(--plan-calendar-color);
   outline-offset: -2px;
 }
 
@@ -148,6 +152,7 @@
 }
 
 .calendar-day-count mat-icon {
+  color: var(--plan-calendar-color);
   width: 12px;
   height: 12px;
   font-size: 12px;
@@ -156,7 +161,7 @@
 .calendar-boundary {
   display: block;
   padding: 0 6px 4px;
-  color: var(--mat-sys-primary);
+  color: var(--plan-calendar-color);
   font: var(--mat-sys-label-small);
   overflow-wrap: anywhere;
 }

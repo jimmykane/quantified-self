@@ -31,6 +31,7 @@ import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
+import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import {
   createManualWorkoutEditorStep,
   createManualWorkoutEditorValue,
@@ -52,6 +53,7 @@ import {
   type MutateTrainingScheduleResponseV1,
   type ScheduledWorkoutV1,
   type TrainingPlanLifecycle,
+  type TrainingPlanColor,
   type TrainingPlanV1,
   type TrainingScheduleHistoryEntryV1,
   type TrainingScheduleRevisionScope,
@@ -82,6 +84,7 @@ interface WorkoutRow {
 
 interface PlanDraft {
   name: string;
+  color: TrainingPlanColor;
   startLocalDate: string;
   endLocalDate: string;
   activate: boolean;
@@ -169,6 +172,8 @@ export class PlansWorkspaceComponent {
   private readonly scheduleDateSelection = signal<{ uid: string; planId: string; localDate: string } | null>(null);
   readonly showPlanForm = signal(false);
   readonly planDraft = signal<PlanDraft>(defaultPlanDraft());
+  readonly planColorOptions = TRAINING_PLAN_COLOR_OPTIONS;
+  readonly planDraftAppearance = computed(() => trainingPlanAppearance(this.planDraft()));
   readonly renamingPlanId = signal<string | null>(null);
   readonly renameValue = signal('');
   readonly shiftingPlanId = signal<string | null>(null);
@@ -198,11 +203,14 @@ export class PlansWorkspaceComponent {
   readonly selectedPlan = computed(() => this.planOptions().find(plan => (
     plan.id === this.selectedPlanId()
   )) ?? null);
+  readonly selectedPlanAppearance = computed(() => trainingPlanAppearance(this.selectedPlan()));
+  readonly planAppearances = computed(() => Object.fromEntries(this.planOptions().map(plan => [plan.id, trainingPlanAppearance(plan)])));
   readonly selectedPlanActionBusy = computed(() => {
     const planId = this.selectedPlanId();
     const action = this.busyAction();
     return Boolean(planId && action && [
       `rename-${planId}`,
+      `color-${planId}`,
       `shift-${planId}`,
       `lifecycle-${planId}`,
       `delete-plan-${planId}`,
@@ -368,7 +376,7 @@ export class PlansWorkspaceComponent {
 
   updatePlanDraft<K extends keyof PlanDraft>(field: K, value: PlanDraft[K]): void {
     if (this.busyAction() || this.planDraft()[field] === value) return;
-    if (field === 'activate') this.haptics.selection();
+    if (field === 'activate' || field === 'color') this.haptics.selection();
     this.planDraft.update(draft => ({ ...draft, [field]: value }));
   }
 
@@ -387,6 +395,7 @@ export class PlansWorkspaceComponent {
         kind: 'create-plan',
         planId,
         name: draft.name,
+        color: draft.color,
         startLocalDate: draft.startLocalDate,
         endLocalDate: draft.endLocalDate,
         activate: draft.activate,
@@ -407,6 +416,19 @@ export class PlansWorkspaceComponent {
     this.clearPlanActions();
     this.renamingPlanId.set(plan.id);
     this.renameValue.set(plan.name);
+  }
+
+  async setPlanColor(plan: TrainingPlanV1, color: TrainingPlanColor): Promise<void> {
+    if (this.busyAction() || !this.browsing() || !this.currentUser()?.uid || (plan.color ?? 'default') === color) return;
+    this.haptics.selection();
+    const response = await this.runMutation({
+      mutationId: this.plansService.createMutationId('set-plan-color'),
+      expectedRevisions: this.expectedRevisions({
+        planIds: [plan.id], planRevisionOverrides: new Map([[plan.id, plan.revision]]),
+      }),
+      operation: { kind: 'set-plan-color', planId: plan.id, color },
+    }, `color-${plan.id}`);
+    if (response) this.snackBar.open('Plan color updated.', 'Dismiss', { duration: 3000 });
   }
 
   async renamePlan(plan: TrainingPlanV1): Promise<void> {
@@ -1039,6 +1061,7 @@ function defaultPlanDraft(now = new Date()): PlanDraft {
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 27);
   return {
     name: '',
+    color: 'default',
     startLocalDate,
     endLocalDate: todayLocalDate(end),
     activate: true,

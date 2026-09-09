@@ -438,6 +438,10 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
     expect(planningSection?.content).toContain('calendar cues, not rest-day recommendations');
+    expect(planningSection?.content).toContain('**Plan actions -> Plan color**');
+    expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
+    expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
+      .toContain('Standalone workouts stay neutral');
     expect(planningSection?.content).toContain('Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');

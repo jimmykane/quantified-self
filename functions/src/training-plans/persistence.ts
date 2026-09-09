@@ -319,6 +319,7 @@ function getOperationWorkoutIds(request: MutateTrainingScheduleRequestV1): strin
     switch (request.operation.kind) {
         case 'create-plan':
         case 'rename-plan':
+        case 'set-plan-color':
         case 'set-plan-lifecycle':
         case 'shift-plan':
             return [];

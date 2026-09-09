@@ -3,6 +3,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ScheduledWorkoutV1, TrainingPlanV1 } from '@shared/training-plans';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
+import { trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 
 describe('PlanScheduleCalendarComponent', () => {
   const plan: TrainingPlanV1 = {
@@ -70,6 +71,20 @@ describe('PlanScheduleCalendarComponent', () => {
     fixture.componentInstance.onDayKeydown(new KeyboardEvent('keydown', { key: 'PageDown' }), '2026-09-30');
     fixture.detectChanges();
     expect(fixture.componentInstance.selectedDate()).toBe(plan.endLocalDate);
+  });
+
+  it('updates its plan accent without changing dates, weekends, workouts or selection', async () => {
+    const fixture = await render();
+    const calendar = fixture.nativeElement.querySelector('.plan-calendar') as HTMLElement;
+    expect(calendar.style.getPropertyValue('--plan-calendar-color')).toBe(trainingPlanAppearance(plan).color);
+    fixture.componentRef.setInput('plan', { ...plan, color: 'purple' });
+    fixture.detectChanges();
+    expect(calendar.style.getPropertyValue('--plan-calendar-color')).toBe(trainingPlanAppearance({ color: 'purple' }).color);
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day')).toHaveLength(35);
+    expect(fixture.nativeElement.querySelectorAll('.calendar-day--weekend')).toHaveLength(10);
+    expect(fixture.componentInstance.selectedDate()).toBe('2026-09-09');
+    expect(fixture.nativeElement.querySelectorAll('.calendar-workout--skipped')).toHaveLength(1);
+    expect(selection).not.toHaveBeenCalled();
   });
 
   it('marks the configured first day and actual weekends without changing selection or disabled/today states', async () => {

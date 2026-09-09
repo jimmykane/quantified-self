@@ -10,6 +10,7 @@ import { ActivityCalendarService } from '../../../services/activity-calendar.ser
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { TrainingPlansService, type CurrentTrainingScheduleV1 } from '../../../services/training-plans.service';
 import { ActivityCalendarTileComponent } from './activity-calendar-tile.component';
+import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from '../../../helpers/training-plan-appearance.helper';
 
 describe('ActivityCalendarTileComponent', () => {
   const user = {
@@ -100,6 +101,36 @@ describe('ActivityCalendarTileComponent', () => {
       data: { plannedWorkouts: Array<{ workout: { id: string } }> };
     }).data.plannedWorkouts;
     expect(plannedWorkouts.map(entry => entry.workout.id)).toEqual(['active-workout', 'standalone-workout']);
+  });
+
+  it.each([false, true])('updates saved plan colors in the tile / Today picker (navigation: %s) without changing activities', async showNavigation => {
+    const plannedDate = currentLocalDate(2);
+    const schedule = scheduleForDate(plannedDate);
+    const scheduleChanges = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(scheduleChanges);
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('showNavigation', showNavigation);
+    fixture.componentRef.setInput('showHeading', !showNavigation);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const originalModel = fixture.componentInstance.calendarModel();
+    const activity = fixture.nativeElement.querySelector('.activity-calendar-marker') as HTMLElement;
+    const originalActivityStyle = activity.getAttribute('style');
+    const colors = () => fixture.componentInstance.plannedWorkoutsByDate()[plannedDate].visibleEntries.map(entry => entry.color);
+    expect(colors()).toEqual([trainingPlanAppearance(null).color, STANDALONE_WORKOUT_COLOR]);
+
+    scheduleChanges.next({ ...schedule, plans: schedule.plans.map(plan => ({ ...plan, color: 'purple' as const })) });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(colors()).toEqual([trainingPlanAppearance({ color: 'purple' }).color, STANDALONE_WORKOUT_COLOR]);
+    expect(fixture.nativeElement.querySelectorAll('.planned-workout-markers mat-icon')).toHaveLength(2);
+    expect(fixture.componentInstance.calendarModel()).toBe(originalModel);
+    expect(activity.getAttribute('style')).toBe(originalActivityStyle);
+    expect(watchEvents).toHaveBeenCalledOnce();
   });
 
   it('pages the compact month picker without rendering the tile heading', async () => {

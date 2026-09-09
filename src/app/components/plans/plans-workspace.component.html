@@ -61,6 +61,20 @@
               <input #planNameInput matInput maxlength="120" [ngModel]="planDraft().name"
                 (ngModelChange)="updatePlanDraft('name', $event)">
             </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>Plan color</mat-label>
+              <mat-select [value]="planDraft().color" [disabled]="busyAction() !== null"
+                (openedChange)="$event && haptics.selection()" (selectionChange)="updatePlanDraft('color', $event.value)">
+                <mat-select-trigger><span class="plan-color-label">
+                  <mat-icon [style.color]="planDraftAppearance().color" aria-hidden="true">circle</mat-icon>
+                  <span>{{ planDraftAppearance().label }}</span>
+                </span></mat-select-trigger>
+                @for (option of planColorOptions; track option.id) {
+                  <mat-option [value]="option.id"><mat-icon [style.color]="option.color" aria-hidden="true">circle</mat-icon>{{ option.label }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Used in plan and Calendar workout markers</mat-hint>
+            </mat-form-field>
             <mat-form-field>
               <mat-label>Start date</mat-label>
               <input matInput type="date" [ngModel]="planDraft().startLocalDate"
@@ -107,9 +121,12 @@
             <mat-label>Training plan</mat-label>
             <mat-select [value]="selectedPlanId()" (selectionChange)="selectPlan($event.value)"
               [disabled]="busyAction() !== null">
-              <mat-select-trigger>{{ plan.name }}</mat-select-trigger>
+              <mat-select-trigger><span class="plan-color-label">
+                <mat-icon [style.color]="selectedPlanAppearance().color" aria-hidden="true">circle</mat-icon>
+                <span>{{ plan.name }}</span>
+              </span></mat-select-trigger>
               @for (plan of planOptions(); track plan.id) {
-                <mat-option [value]="plan.id">{{ plan.name }} · {{ plan.lifecycle | titlecase }}</mat-option>
+                <mat-option [value]="plan.id"><mat-icon [style.color]="planAppearances()[plan.id].color" aria-hidden="true">circle</mat-icon>{{ plan.name }} · {{ plan.lifecycle | titlecase }}</mat-option>
               }
             </mat-select>
           </mat-form-field>
@@ -132,6 +149,9 @@
                 <button appHapticTap mat-menu-item type="button" (click)="beginRename(plan)">
                   <mat-icon aria-hidden="true">edit</mat-icon><span>Rename</span>
                 </button>
+                <button appHapticTap mat-menu-item type="button" [matMenuTriggerFor]="planColorMenu">
+                  <mat-icon [style.color]="selectedPlanAppearance().color" aria-hidden="true">palette</mat-icon><span>Plan color</span>
+                </button>
                 <button appHapticTap mat-menu-item type="button" (click)="beginShift(plan)">
                   <mat-icon aria-hidden="true">date_range</mat-icon><span>Shift dates</span>
                 </button>
@@ -146,6 +166,16 @@
                 <button appHapticTap mat-menu-item type="button" (click)="beginPlanDeletion(plan)">
                   <mat-icon aria-hidden="true">delete</mat-icon><span>Delete plan</span>
                 </button>
+              </mat-menu>
+              <mat-menu #planColorMenu="matMenu" class="qs-menu-panel">
+                @for (option of planColorOptions; track option.id) {
+                  <button mat-menu-item type="button" [disabled]="busyAction() !== null"
+                    [attr.aria-label]="option.label + (selectedPlanAppearance().id === option.id ? ', current plan color' : '')"
+                    (click)="setPlanColor(plan, option.id)">
+                    <mat-icon [style.color]="option.color" aria-hidden="true">{{ selectedPlanAppearance().id === option.id ? 'check_circle' : 'circle' }}</mat-icon>
+                    <span>{{ option.label }}</span>
+                  </button>
+                }
               </mat-menu>
             </div>
           </div>

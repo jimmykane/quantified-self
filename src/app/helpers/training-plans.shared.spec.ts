@@ -1,6 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import {
   TRAINING_PLAN_CHECKPOINT_INTERVAL,
+  TRAINING_PLAN_COLORS,
   TRAINING_PLAN_MAX_CURRENT_WORKOUTS,
   TRAINING_PLAN_MAX_DAYS,
   TrainingPlanContractError,
@@ -78,6 +79,25 @@ describe('training-plan date contracts', () => {
 });
 
 describe('training-plan persisted contracts', () => {
+  it.each(TRAINING_PLAN_COLORS)('round-trips the named plan color %s without changing the recipe contract', color => {
+    const colored = { ...PLAN, color };
+    expect(parseTrainingPlanV1(JSON.parse(JSON.stringify(colored)))).toEqual(colored);
+    const operation = { kind: 'set-plan-color', planId: PLAN.id, color };
+    expect(parseMutateTrainingScheduleRequestV1({ mutationId: 'color', expectedRevisions: [], operation }).operation).toEqual(operation);
+    const create = { kind: 'create-plan', planId: PLAN.id, name: PLAN.name, color,
+      startLocalDate: PLAN.startLocalDate, endLocalDate: PLAN.endLocalDate, activate: false };
+    expect(parseMutateTrainingScheduleRequestV1({ mutationId: 'create', expectedRevisions: [], operation: create }).operation).toEqual(create);
+  });
+
+  it.each([null, '', '#ffffff', 'url(https://example.com)', 'toString', 5, {}])('rejects untrusted plan colors %s', color => {
+    expect(() => parseTrainingPlanV1({ ...PLAN, color })).toThrow(TrainingPlanContractError);
+    expect(() => parseMutateTrainingScheduleRequestV1({ mutationId: 'color', expectedRevisions: [],
+      operation: { kind: 'set-plan-color', planId: PLAN.id, color } })).toThrow(TrainingPlanContractError);
+    expect(() => parseMutateTrainingScheduleRequestV1({ mutationId: 'create', expectedRevisions: [],
+      operation: { kind: 'create-plan', planId: PLAN.id, name: PLAN.name, color,
+        startLocalDate: PLAN.startLocalDate, endLocalDate: PLAN.endLocalDate, activate: false } })).toThrow(TrainingPlanContractError);
+  });
+
   it('strictly parses state and plans', () => {
     expect(parseTrainingPlanStateV1({
       schemaVersion: 1,

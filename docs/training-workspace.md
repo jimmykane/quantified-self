@@ -247,6 +247,11 @@ packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic 
   revisions.
 - Multiple plans are allowed, but at most one is active. Activating one plan atomically pauses the previous active plan.
   Plans are limited to 366 inclusive local dates and an account to 400 current workouts.
+- `TrainingPlanV1.color` is optional QS presentation metadata, never part of the neutral workout recipe. It accepts only
+  `default`, `blue`, `purple`, `pink`, `orange`, `red`, or `green`. Missing legacy values stay omitted through the codec
+  and render as Default, so no migration is needed. Creation accepts a color; `set-plan-color` uses the existing mutation
+  callable, expected plan/state revisions, and idempotent receipt. Changing a color advances only that plan's history
+  stream and the schedule revision, not its workouts. History restore also restores the color (including legacy absence).
 - Workout IDs survive standalone-to-plan, plan-to-standalone, and plan-to-plan moves. An out-of-range add, move, copy, or
   attach requires explicit confirmation before the plan range is extended atomically. Shifting a plan moves only its
   range and associated current workouts.
@@ -284,6 +289,12 @@ compact mode, matching Health. Each labelled row retains its sport, date, unit-a
 dividers separate consecutive workouts without card borders or a multi-column card grid. Skipped workouts keep an
 explicit state marker; normal planned workouts need no repeated badge.
 
+Creation includes a named Material **Plan color** selector; existing plans use **Plan actions -> Plan color**. The selected
+color appears beside the plan name and accents its schedule. `training-plan-appearance.helper.ts` maps the allowlisted
+names to the existing `AppColors` palette, blended toward theme foreground for legibility; Default follows theme primary.
+No user-supplied CSS is accepted. Labels, check icons, and workout states keep color from being the only identifier.
+Color changes retain the selected date, disable conflicting actions while saving, and keep the saved appearance on error.
+
 The selected plan uses **Plan schedule**, not a second all-activity Calendar. `PlanScheduleCalendarComponent` owns a
 bounded month grid of only that plan's current workouts, including skipped workouts and paused/archived plans. It does
 not fetch events, show completed totals, or include standalone/other-plan workouts. The plan's inclusive start/end are
@@ -291,7 +302,7 @@ marked; outside-range days have a neutral fill and are disabled, and wholly outs
 navigation stops at the plan boundaries. Dates use local calendar arithmetic (including DST/leap years) and the user's
 week-start setting.
 The weekday header marks the configured first day, and a visible hint names it. Saturday and Sunday have a subtle
-theme-primary tint and stronger weekday labels, matching Activity Calendar (with a lighter tint in compact layouts).
+plan-color tint and stronger weekday labels (with a lighter tint in compact layouts).
 Weekends follow each date's actual weekday, never fixed column positions; they remain ordinary schedulable dates, not
 inferred rest days. Outside-range and selected-date states override the weekend fill. Live week-start preference changes
 reorder the grid without changing the selected date, schedule, or workout counts.
@@ -340,6 +351,13 @@ workouts from the active plan. Inactive-plan workouts remain visible only in `/t
 marked. Every rendered date is selectable, including empty dates. Day details keep **Planned workouts** and completed
 activities in separate sections. Planned workouts never enter recorded activity counts, durations, distance, elevation,
 group bars, activity tables, or Training-derived metrics.
+Planned and skipped icons use their current plan's color; standalone icons stay theme-neutral. The day-details planned
+rows repeat that accent on their leading edge. The overlay resolves colors from the live plans, so recoloring or moving
+a workout changes its appearance without rewriting workout snapshots. Up to two icons are shown, reserving one for
+each scope when standalone and active-plan workouts share a day; extra workouts retain an overflow count. Compact and
+Year views turn these into slim right-edge color segments (dashed for skipped workouts), below any note icon and opposite
+the note-color edge. They omit the visual overflow count to avoid collisions; the date's accessible name and day details
+retain complete counts. Completed activity circles, note colors, and global weekend shading stay independent.
 
 `/training/plans` is authenticated, client-rendered, and excluded from the sitemap. Its route metadata is `noindex, follow`
 and hosting also supplies `noindex` headers; `robots.txt` permits crawling so those directives can be read. It is a
@@ -1952,6 +1970,9 @@ reload persistence at desktop and narrow-mobile widths. Verify all seven week-st
 Saturday/Sunday tint across month/year boundaries, and selected/today/outside-range states. Use component fixtures for
 alternate preferences rather than changing the signed-in account's settings solely for QA. Keep the existing active plan
 unchanged and provider delivery disabled; test-data deletion requires its own explicit approval.
+Check named plan-color selection at desktop and narrow-mobile widths, including theme Default and existing plans without
+a color. Component and persistence fixtures cover live recoloring, failed saves, retries, history restore, and mixed
+standalone/active-plan days without changing recorded activity styles or totals.
 
 Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. Cover:
 

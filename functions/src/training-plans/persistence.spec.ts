@@ -359,6 +359,26 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         guard.getUserDeletionGuardStateInTransaction.mockImplementation(async () => guard.result);
     });
 
+    it('persists colors in current plans, history and exact retry receipts without touching workouts', async () => {
+        const created = await mutateTrainingScheduleForUser('user-1', request({
+            kind: 'create-plan', planId: 'plan-1', name: 'Colored plan', color: 'blue',
+            startLocalDate: '2026-09-01', endLocalDate: '2026-09-30', activate: false,
+        }), { db: db as never, nowMs: NOW_MS });
+        expect(created.plans[0].color).toBe('blue');
+        const change = { ...request({ kind: 'set-plan-color', planId: 'plan-1', color: 'purple' }),
+            expectedRevisions: [{ scope: 'state' as const, id: 'current', revision: 1 },
+                { scope: 'plan' as const, id: 'plan-1', revision: 1 }] };
+        const first = await mutateTrainingScheduleForUser('user-1', change, { db: db as never, nowMs: NOW_MS + 1 });
+        const retry = await mutateTrainingScheduleForUser('user-1', change, { db: db as never, nowMs: NOW_MS + 2 });
+        expect(retry).toEqual(first);
+        expect(db.read('users/user-1/trainingPlans/plan-1')).toMatchObject({ color: 'purple', revision: 2 });
+        expect(db.read('users/user-1/trainingPlans/plan-1/revisions/0000000002')).toMatchObject({
+            operationKind: 'set-plan-color', delta: { planBefore: { color: 'blue' }, planAfter: { color: 'purple' } },
+        });
+        expect(first.workouts).toEqual([]);
+        expect([...db.documents.keys()].some(path => path.includes('/scheduledWorkouts/'))).toBe(false);
+    });
+
     it('persists current state, a standalone snapshot, and an internal idempotency receipt', async () => {
         const mutation = request({
             kind: 'create-workout',

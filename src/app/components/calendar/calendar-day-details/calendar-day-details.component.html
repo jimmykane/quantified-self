@@ -46,6 +46,7 @@
       <mat-nav-list>
         @for (planned of plannedWorkoutRows(); track planned.id) {
         <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/training/plans']"
+          [style.--planned-workout-color]="planned.color"
           [queryParams]="{ workout: planned.id }" (click)="prepareWorkoutNavigation()">
           <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"
             aria-hidden="true"></app-activity-type-icon>

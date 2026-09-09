@@ -8,6 +8,10 @@
   overflow-x: hidden;
 }
 
+.calendar-day-planned-item {
+  border-inline-start: 3px solid var(--planned-workout-color, var(--mat-sys-primary));
+}
+
 .calendar-day-details {
   box-sizing: border-box;
   display: flex;

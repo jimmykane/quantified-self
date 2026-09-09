@@ -45,6 +45,7 @@ interface CalendarDayPlannedWorkoutRow {
   scopeLabel: string;
   lifecycleLabel: string;
   summary: string[];
+  color?: string;
 }
 
 interface CalendarDayEventRow {
@@ -99,6 +100,7 @@ export class CalendarDayDetailsComponent {
     title: entry.workout.title,
     sport: entry.workout.structure.sport,
     scopeLabel: entry.planName ?? 'Standalone',
+    color: entry.color,
     lifecycleLabel: entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
     summary: formatManualWorkoutStructure(entry.workout.structure, this.data.unitSettings, this.data.locale),
   })));

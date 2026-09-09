@@ -222,6 +222,7 @@ export function applyTrainingScheduleMutation(
                 schemaVersion: TRAINING_PLAN_SCHEMA_VERSION,
                 id: operation.planId,
                 name: operation.name,
+                ...(operation.color === undefined ? {} : { color: operation.color }),
                 lifecycle: operation.activate ? 'active' : 'paused',
                 startLocalDate: operation.startLocalDate,
                 endLocalDate: operation.endLocalDate,
@@ -239,6 +240,12 @@ export function applyTrainingScheduleMutation(
         case 'rename-plan': {
             const plan = expectPlan(operation.planId);
             plan.name = operation.name;
+            affectedPlanIds.add(plan.id);
+            break;
+        }
+        case 'set-plan-color': {
+            const plan = expectPlan(operation.planId);
+            plan.color = operation.color;
             affectedPlanIds.add(plan.id);
             break;
         }
