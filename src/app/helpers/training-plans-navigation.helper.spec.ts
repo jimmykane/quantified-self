@@ -1,5 +1,7 @@
 import { convertToParamMap } from '@angular/router';
 import {
+  isTrainingPlansBrowseUrl,
+  isTrainingPlansUrl,
   parseTrainingPlansRoute,
   trainingPlansBrowseRoute,
   trainingPlansCreateRoute,
@@ -49,5 +51,14 @@ describe('training plans navigation', () => {
     expect(trainingPlansCreateRoute(null, false)).toEqual(['/training/plans/new']);
     expect(trainingPlansCreateRoute(null, true)).toEqual(['/training/plans/standalone/new']);
     expect(trainingPlansWorkoutRoute('workout-1')).toEqual(['/training/plans/workout', 'workout-1']);
+  });
+
+  it('classifies valid route-family and browse URLs without accepting legacy query state', () => {
+    expect(isTrainingPlansUrl('/training/plans/workout/workout-1')).toBe(true);
+    expect(isTrainingPlansUrl('/training/plans/plan/plan-1/new?date=2026-09-10')).toBe(true);
+    expect(isTrainingPlansBrowseUrl('/training/plans/plan/plan-1?date=2026-09-10')).toBe(true);
+    expect(isTrainingPlansBrowseUrl('/training/plans/workout/workout-1')).toBe(false);
+    expect(isTrainingPlansUrl('/training/plans?workout=workout-1')).toBe(false);
+    expect(isTrainingPlansBrowseUrl('/training/plans?scope=standalone')).toBe(false);
   });
 });

@@ -308,9 +308,10 @@ inferred rest days. Outside-range and selected-date states override the weekend 
 reorder the grid without changing the selected date, schedule, or workout counts.
 Initial selection is today when within the range, otherwise the plan start. Explicit selection is account/plan-scoped,
 survives live refresh and editor cancellation, and resolves back inside the range when dates shift. Saving selects the
-workout's destination date and scope. Calendar-originated query parameters select the linked workout's scope/date or
-the requested add scope/date before opening the editor, so cancelling returns to that context rather than hiding the
-workout on today's date. Out-of-range add dates remain editor drafts until an explicitly confirmed range extension.
+workout's destination date and scope. Calendar-originated path routes select the linked workout or requested add scope,
+while the optional `date` query selects the requested day. Cancelling therefore returns to that context rather than
+hiding the workout on today's date. Out-of-range add dates remain editor drafts until an explicitly confirmed range
+extension.
 The local-today marker refreshes each minute and immediately on window focus or mobile-tab visibility restoration.
 Clock refreshes are silent and never replace an explicitly selected date or an open editor draft. Standalone creation
 resolves its default date when Add is clicked, not when the workspace was first opened. The browser-only clock is

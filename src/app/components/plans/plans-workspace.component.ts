@@ -35,6 +35,7 @@ import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.componen
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import {
+  isTrainingPlansBrowseUrl,
   parseTrainingPlansRoute,
   trainingPlansBrowseRoute,
   trainingPlansCreateRoute,
@@ -58,6 +59,7 @@ import {
 import {
   normalizeTrainingLocalDate,
   type DeleteTrainingPlanRequestV1,
+  type DeleteTrainingPlanResponseV1,
   type ExpectedTrainingScheduleRevision,
   type MutateTrainingScheduleRequestV1,
   type MutateTrainingScheduleResponseV1,
@@ -329,7 +331,19 @@ export class PlansWorkspaceComponent {
     if (this.scheduleState().status !== 'ready') return;
     // Only a navigation/account change can replace a draft, never a live schedule or unit-settings update.
     const key = trainingPlansRouteKey(uid, requested);
-    if (key === this.appliedRouteKey) return;
+    if (key === this.appliedRouteKey) {
+      // Keep a browse URL canonical when the selected plan is removed by this account in another session.
+      if (
+        requested.mode === 'browse'
+        && requested.planId
+        && !this.planOptions().some(plan => plan.id === requested.planId)
+        && !this.busyAction()
+      ) {
+        this.snackBar.open('That training plan is no longer available.', 'Dismiss', { duration: 5000 });
+        untracked(() => this.replaceUnavailableRoute());
+      }
+      return;
+    }
     untracked(() => this.applyRoute(requested));
   });
 
@@ -606,7 +620,7 @@ export class PlansWorkspaceComponent {
     if (!confirmed) return;
     this.busyAction.set(`delete-plan-${plan.id}`);
     try {
-      await this.plansService.deletePlan({
+      const response = await this.plansService.deletePlan({
         mutationId: this.plansService.createMutationId('delete-plan'),
         planId: plan.id,
         expectedRevisions,
@@ -615,6 +629,7 @@ export class PlansWorkspaceComponent {
       });
       this.haptics.success();
       this.deletingPlanId.set(null);
+      this.navigateAfterPlanDeletion(response);
       this.snackBar.open('Training plan deleted.', 'Dismiss', { duration: 4000 });
     } catch (error) {
       this.showError(error);
@@ -694,9 +709,27 @@ export class PlansWorkspaceComponent {
   }
 
   private replaceUnavailableRoute(): void {
-    const fallbackPlanId = this.schedule().state.activePlanId ?? this.planOptions()[0]?.id ?? null;
+    const plans = this.planOptions();
+    const activePlanId = this.schedule().state.activePlanId;
+    const fallbackPlanId = plans.some(plan => plan.id === activePlanId) ? activePlanId : plans[0]?.id ?? null;
     this.selectWorkoutScope(fallbackPlanId, todayLocalDate());
     if (!fallbackPlanId) this.view.set('plans');
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
+  }
+
+  private navigateAfterPlanDeletion(response: DeleteTrainingPlanResponseV1): void {
+    const remainingPlans = this.planOptions().filter(plan => plan.id !== response.removedPlanId);
+    const fallbackPlanId = remainingPlans.some(plan => plan.id === response.state.activePlanId)
+      ? response.state.activePlanId
+      : remainingPlans[0]?.id ?? null;
+    const standalone = fallbackPlanId === null && response.convertedWorkoutIds.length > 0;
+    this.view.set(standalone ? 'standalone' : 'plans');
+    this.selectedPlanId.set(fallbackPlanId);
+    if (fallbackPlanId) {
+      const uid = this.currentUser()?.uid;
+      if (uid) this.scheduleDateSelection.set({ uid, planId: fallbackPlanId, localDate: todayLocalDate() });
+    }
     const route = this.browseRouteState();
     this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
   }
@@ -1194,10 +1227,6 @@ function todayLocalDate(now = new Date()): string {
   const month = `${now.getMonth() + 1}`.padStart(2, '0');
   const day = `${now.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-function isTrainingPlansBrowseUrl(url: unknown): boolean {
-  return /^\/training\/plans(?:[?#]|$|\/standalone(?:[?#]|$)|\/plan\/[^/?#]+(?:[?#]|$))/.test(`${url ?? ''}`);
 }
 
 function defaultPlanDraft(now = new Date()): PlanDraft {

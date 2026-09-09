@@ -38,6 +38,7 @@ describe('PlansWorkspaceComponent', () => {
   let getHistory: ReturnType<typeof vi.fn>;
   let previewRestore: ReturnType<typeof vi.fn>;
   let restoreSchedule: ReturnType<typeof vi.fn>;
+  let deleteTrainingPlan: ReturnType<typeof vi.fn>;
   let dialogOpen: ReturnType<typeof vi.fn>;
   let snackBarOpen: ReturnType<typeof vi.fn>;
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
@@ -71,6 +72,7 @@ describe('PlansWorkspaceComponent', () => {
     getHistory = vi.fn();
     previewRestore = vi.fn();
     restoreSchedule = vi.fn();
+    deleteTrainingPlan = vi.fn();
     dialogOpen = vi.fn();
     snackBarOpen = vi.fn();
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
@@ -91,7 +93,7 @@ describe('PlansWorkspaceComponent', () => {
             getHistory,
             previewRestore,
             restore: restoreSchedule,
-            deletePlan: vi.fn(),
+            deletePlan: deleteTrainingPlan,
           },
         },
         { provide: MatDialog, useValue: { open: dialogOpen } },
@@ -421,6 +423,35 @@ describe('PlansWorkspaceComponent', () => {
     expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
       ['/training/plans/plan', 'active-plan'],
       expect.objectContaining({ replaceUrl: true }),
+    );
+  });
+
+  it('replaces a plan path when a live refresh removes that plan', async () => {
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live);
+    setRouteState({ planId: 'active-plan', date: '2026-09-09' });
+    const fixture = await renderPlans();
+    const navigate = vi.mocked(TestBed.inject(Router).navigate);
+    const componentSnackBar = (fixture.componentInstance as unknown as { snackBar: MatSnackBar }).snackBar;
+    const unavailableNotice = vi.spyOn(componentSnackBar, 'open');
+    navigate.mockClear();
+
+    live.next({
+      // The independent plan listener may arrive before the state document clears activePlanId.
+      state: schedule.state,
+      plans: [],
+      workouts: schedule.workouts.filter(workout => workout.planId === null),
+    });
+    fixture.detectChanges();
+
+    expect(navigate).toHaveBeenCalledWith(
+      ['/training/plans'],
+      expect.objectContaining({ replaceUrl: true }),
+    );
+    expect(unavailableNotice).toHaveBeenCalledWith(
+      'That training plan is no longer available.',
+      'Dismiss',
+      { duration: 5000 },
     );
   });
 
@@ -795,6 +826,30 @@ describe('PlansWorkspaceComponent', () => {
       operation: { kind: 'set-plan-lifecycle', planId: plan.id, lifecycle: 'archived' },
     }));
     expect(fixture.componentInstance.deletingPlanId()).toBeNull();
+  });
+
+  it('replaces a deleted plan path with Standalone when its workouts were kept there', async () => {
+    deleteTrainingPlan.mockResolvedValue({
+      mutationId: 'mutation-1',
+      state: { ...schedule.state, activePlanId: null, revision: schedule.state.revision + 1 },
+      removedPlanId: 'active-plan',
+      workoutDisposition: 'convert-to-standalone',
+      convertedWorkoutIds: ['plan-workout'],
+      permanentlyDeletedWorkoutIds: [],
+    });
+    const fixture = await renderPlans();
+    const componentDialog = (fixture.componentInstance as unknown as { dialog: MatDialog }).dialog;
+    vi.spyOn(componentDialog, 'open').mockReturnValue({ afterClosed: () => of(true) } as never);
+    const navigate = vi.mocked(TestBed.inject(Router).navigate);
+    navigate.mockClear();
+
+    await fixture.componentInstance.deletePlan(schedule.plans[0]);
+
+    expect(navigate).toHaveBeenCalledWith(
+      ['/training/plans/standalone'],
+      expect.objectContaining({ replaceUrl: true }),
+    );
+    expect(fixture.componentInstance.view()).toBe('standalone');
   });
 
   it('keeps plan mutations visibly pending beside the triggering controls', async () => {

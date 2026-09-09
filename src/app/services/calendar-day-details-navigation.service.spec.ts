@@ -57,6 +57,17 @@ describe('CalendarDayDetailsNavigationService', () => {
     expect(service.restorationFor('/calendar?view=month&date=2026-08-03')?.dateKey).toBe('2026-08-03');
   });
 
+  it('keeps the calendar return after a saved workout replaces its editor with the destination plan', () => {
+    const sourceUrl = '/calendar?view=month&date=2026-08-03';
+    service.prepareReturn(sourceUrl, '2026-08-03');
+
+    routerEvents.next(new NavigationStart(1, '/training/plans/workout/workout-1', 'imperative'));
+    routerEvents.next(new NavigationStart(2, '/training/plans/plan/plan-1?date=2026-08-03', 'imperative'));
+    routerEvents.next(new NavigationStart(3, sourceUrl, 'popstate'));
+
+    expect(service.restorationFor(sourceUrl)?.dateKey).toBe('2026-08-03');
+  });
+
   it('does not treat removed query-parameter editor links as workout paths', () => {
     service.prepareReturn('/calendar', '2026-08-03');
 

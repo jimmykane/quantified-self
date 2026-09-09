@@ -46,10 +46,26 @@ export function trainingPlansWorkoutRoute(workoutId: string): string[] {
   return ['/training/plans/workout', workoutId];
 }
 
+export function isTrainingPlansUrl(value: unknown): boolean {
+  const url = `${value ?? ''}`;
+  if (hasLegacyTrainingPlansQuery(url)) return false;
+  return /^\/training\/plans(?:[?#]|$|\/(?:new|standalone(?:\/new)?|workout\/[^/?#]+|plan\/[^/?#]+(?:\/new)?)(?:[?#]|$))/.test(url);
+}
+
+export function isTrainingPlansBrowseUrl(value: unknown): boolean {
+  const url = `${value ?? ''}`;
+  if (hasLegacyTrainingPlansQuery(url)) return false;
+  return /^\/training\/plans(?:[?#]|$|\/standalone(?:[?#]|$)|\/plan\/[^/?#]+(?:[?#]|$))/.test(url);
+}
+
 export function trainingPlansRouteKey(uid: string | undefined, state: TrainingPlansRouteState): string {
   return JSON.stringify([uid ?? null, state]);
 }
 
 function isMode(value: unknown): value is TrainingPlansRouteMode {
   return value === 'browse' || value === 'create' || value === 'edit';
+}
+
+function hasLegacyTrainingPlansQuery(url: string): boolean {
+  return /[?&](?:workout|plan|planId|scope|mode)=/.test(url);
 }
