@@ -101,6 +101,8 @@ export function healthHrvChartStatusDescription(
 
 const MAX_DISPLAY_POINTS = 600;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Match the app's light KPI strokes, including hover and coloured HRV segments.
+const HEALTH_TREND_LINE_WIDTH = 1;
 
 interface HealthTooltipParam {
   value?: unknown;
@@ -330,7 +332,7 @@ export function buildHealthMetricEChartsOption(
       z: useHrvPointColors ? 3 : undefined,
       lineStyle: {
         ...(!useStressStateColors ? { color: useHrvPointColors ? 'transparent' : seriesColor } : {}),
-        width: 1.5,
+        width: HEALTH_TREND_LINE_WIDTH,
       },
       itemStyle: useStressStateColors
         ? undefined
@@ -351,7 +353,7 @@ export function buildHealthMetricEChartsOption(
           )
           : seriesColor,
         },
-      emphasis: { scale: 1.25 },
+      emphasis: { scale: 1.25, lineStyle: { width: HEALTH_TREND_LINE_WIDTH } },
       markPoint: latestNumericPoint && statusOverlay
         ? {
           silent: true,
@@ -556,7 +558,7 @@ function buildPointStatusLineSeries(
         tooltip: { show: false },
         lineStyle: {
           color: pointStatuses.get(current[0])?.color || fallbackColor,
-          width: 1.5,
+          width: HEALTH_TREND_LINE_WIDTH,
         },
         emphasis: { disabled: true },
         z: 2,

@@ -83,6 +83,20 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 }
 
 describe('Health metric chart helpers', () => {
+  it.each([false, true])('keeps Health strokes light at rest and on hover (compact: %s)', compact => {
+    const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
+    for (const darkTheme of [false, true]) {
+      for (const width of [320, 1000]) {
+        const option = buildHealthMetricEChartsOption(model, 0, DAY_MS * 13,
+          buildDashboardEChartsStyleTokens(darkTheme, width), width < 600, null, compact) as {
+          series: Array<{ lineStyle: { width: number }; emphasis: { lineStyle: { width: number } } }>;
+        };
+        expect(option.series[0].lineStyle.width).toBe(1);
+        expect(option.series[0].emphasis.lineStyle.width).toBe(1);
+      }
+    }
+  });
+
   it.each([1, 14, 30, 90, 365])('keeps %i-day date axes collision-safe without changing readings or the selected window', days => {
     const start = Date.UTC(2026, 5, 11);
     const end = start + days * DAY_MS - 1;
@@ -242,13 +256,13 @@ describe('Health metric chart helpers', () => {
     ]);
     expect(option.series[0].showSymbol).toBe(true);
     expect(option.series[0].z).toBe(3);
-    expect(option.series[0].lineStyle).toEqual({ color: 'transparent', width: 1.5 });
+    expect(option.series[0].lineStyle).toEqual({ color: 'transparent', width: 1 });
     expect(option.series[0].itemStyle?.color({ value: [0, 40] })).toBe(AppDataColors.Altitude);
     expect(option.series[0].itemStyle?.color({ value: [DAY_MS, 46] })).toBe(AppDataColors.Stress);
     expect(option.series[1]).toMatchObject({
       data: [[0, 40], [DAY_MS, 46]],
       showSymbol: false,
-      lineStyle: { color: AppDataColors.Stress, width: 1.5 },
+      lineStyle: { color: AppDataColors.Stress, width: 1 },
       silent: true,
     });
     expect(option.series[0].markArea).toBeUndefined();
@@ -477,7 +491,7 @@ describe('Health metric chart helpers', () => {
         false,
       ) as HealthMetricColorOption;
       expect(option.series[0].lineStyle.color).toBe(color);
-      expect(option.series[0].lineStyle.width).toBe(1.5);
+      expect(option.series[0].lineStyle.width).toBe(1);
       expect(option.series[0].itemStyle.color).toBe(color);
     }
 
@@ -543,7 +557,7 @@ describe('Health metric chart helpers', () => {
       [DAY_MS * 3, 'active', 1],
       [DAY_MS * 4, 'provider specific', 4],
     ]);
-    expect(option.series[0].lineStyle).toEqual({ width: 1.5 });
+    expect(option.series[0].lineStyle).toEqual({ width: 1 });
     expect(option.series[0].itemStyle).toBeUndefined();
     expect(option.yAxis.axisLabel.color('relaxing')).toBe(AppDataColors.Altitude);
     expect(option.yAxis.axisLabel.color('active')).toBe(AppDataColors.Distance);

@@ -326,6 +326,8 @@ Sports Lib display formatting, chart calculations, and data-loading behavior are
 Highlight trend charts retain a visible, Sports Lib-formatted Y-axis and gridlines within their compact height.
 Their X-axis shows recorded-local time for one-day windows and dates for longer windows, using a compact tick target.
 ECharts reserves label space and suppresses overlapping labels on both axes without increasing the chart height.
+Health metric lines use a consistent 1px stroke in Highlights and the explorer, including coloured HRV segments.
+Hover retains that stroke weight; data markers, personal-range shading, and the shared Sleep chart are unchanged.
 
 ### Public Health previews
 
