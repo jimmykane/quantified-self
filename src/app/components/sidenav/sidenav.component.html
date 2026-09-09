@@ -50,17 +50,19 @@
     <span>Calendar</span>
   </mat-list-item>
 
-  @if (hasTrainingPlanningNavigationAccess()) {
-    <mat-list-item routerLinkActive="active" routerLink="/plans" (click)="closeSideNav()">
-      <mat-icon>event_note</mat-icon>
-      <span>Plans</span>
+  <div role="group" aria-label="Training">
+    <mat-list-item routerLinkActive="active" routerLink="/training" (click)="closeSideNav()">
+      <mat-icon>monitoring</mat-icon>
+      <span>Training</span>
     </mat-list-item>
-  }
 
-  <mat-list-item routerLinkActive="active" routerLink="/training" (click)="closeSideNav()">
-    <mat-icon>monitoring</mat-icon>
-    <span>Training</span>
-  </mat-list-item>
+    @if (hasTrainingPlanningNavigationAccess()) {
+      <mat-list-item class="sidenav-subitem" routerLinkActive="active" routerLink="/plans" (click)="closeSideNav()">
+        <mat-icon>event_note</mat-icon>
+        <span>Plans</span>
+      </mat-list-item>
+    }
+  </div>
 
   <mat-list-item routerLinkActive="active" routerLink="/health" (click)="closeSideNav()">
     <mat-icon>cardiology</mat-icon>

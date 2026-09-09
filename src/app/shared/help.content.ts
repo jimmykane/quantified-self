@@ -156,7 +156,7 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 
 const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 
-- Open [Plans](/plans) to create a dated workout. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
+- Open [Plans](/plans) to create a dated workout. Its sidebar entry sits beneath **Training**. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
 - Manual planning is available without a provider connection. Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet; connecting a service does not send anything automatically.
 - The first editor supports Running and Cycling, date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Unsupported recipe features remain unavailable instead of being approximated.
 

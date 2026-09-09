@@ -312,7 +312,7 @@ describe('SideNavComponent', () => {
         expect(healthItem).toBeUndefined();
     });
 
-    it('shows Plans navigation to the staged Training Planning user', () => {
+    it('shows Plans beneath the direct Training link for the staged user and closes on selection', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
@@ -326,6 +326,13 @@ describe('SideNavComponent', () => {
 
         expect(plansItem).toBeTruthy();
         expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/plans');
+        const trainingGroup = fixture.nativeElement.querySelector('[role="group"][aria-label="Training"]');
+        expect(plansItem?.nativeElement.parentElement).toBe(trainingGroup);
+        expect(plansItem?.nativeElement.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        plansItem!.triggerEventHandler('click');
+        expect(mockSideNavService.close).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
 
     it('silently hides Plans navigation from signed-in users outside the staged rollout', () => {
@@ -392,8 +399,8 @@ describe('SideNavComponent', () => {
         expect([
             navigationItems.indexOf(dashboardItem!),
             navigationItems.indexOf(calendarItem!),
-            navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(trainingItem!),
+            navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(healthItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
