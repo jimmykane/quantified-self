@@ -2,7 +2,6 @@ import { Component, Input, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { MatSelect } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -63,6 +62,8 @@ import { HealthPrioritySummaryComponent } from './health-priority-summary.compon
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { HealthActivityQueryService } from './health-activity-query.service';
 import { HealthSourcesBottomSheetComponent, type HealthSourcesResult } from './health-sources-bottom-sheet.component';
+import { HealthMetricsBottomSheetComponent } from './health-metrics-bottom-sheet.component';
+import type { HealthWorkspaceMetricSelection } from '../../helpers/health-workspace.helper';
 
 @Component({
   selector: 'app-sleep-trend-chart',
@@ -347,6 +348,7 @@ describe('HealthWorkspaceComponent', () => {
   let openBottomSheet: ReturnType<typeof vi.fn>;
   let dismissBottomSheet: ReturnType<typeof vi.fn>;
   let sourcesDismissed: Subject<HealthSourcesResult | undefined>;
+  let metricsDismissed: Subject<HealthWorkspaceMetricSelection | undefined>;
   let loadMetricRange: ReturnType<typeof vi.fn>;
   let loadAvailableMetricIds: ReturnType<typeof vi.fn>;
   let loadActivityHealthRange: ReturnType<typeof vi.fn>;
@@ -375,11 +377,13 @@ describe('HealthWorkspaceComponent', () => {
   ): Promise<void> {
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
     sourcesDismissed = new Subject();
+    metricsDismissed = new Subject();
     dismissBottomSheet = vi.fn();
-    openBottomSheet = vi.fn().mockReturnValue({
+    openBottomSheet = vi.fn().mockImplementation(sheetComponent => ({
       dismiss: dismissBottomSheet,
-      afterDismissed: () => sourcesDismissed.asObservable(),
-    });
+      afterDismissed: () => sheetComponent === HealthMetricsBottomSheetComponent
+        ? metricsDismissed.asObservable() : sourcesDismissed.asObservable(),
+    }));
     loadMetricRange = vi.fn().mockImplementation((_uid: string, request: { metricId: HealthMetricId }) =>
       loadImplementation ? loadImplementation(request.metricId) : Promise.resolve(rangeLoad(request.metricId)));
     loadAvailableMetricIds = availability.healthError
@@ -543,11 +547,9 @@ describe('HealthWorkspaceComponent', () => {
     host.querySelector<HTMLButtonElement>('.health-window-newer')!.click();
     expect(haptics.selection).not.toHaveBeenCalled();
 
-    const select = fixture.debugElement.query(By.directive(MatSelect));
-    select.triggerEventHandler('openedChange', true);
+    host.querySelector<HTMLButtonElement>('.health-mobile-metric-title')!.click();
     expect(haptics.selection).toHaveBeenCalledTimes(1);
-    select.triggerEventHandler('openedChange', false);
-    select.triggerEventHandler('selectionChange', { value: HEALTH_METRIC_IDS.Steps });
+    metricsDismissed.next(HEALTH_METRIC_IDS.Steps);
     expect(haptics.selection).toHaveBeenCalledTimes(2);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -565,6 +567,59 @@ describe('HealthWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(6);
     host.querySelector<HTMLButtonElement>('.health-window-today')!.click();
     expect(haptics.selection).toHaveBeenCalledTimes(7);
+  });
+
+  it('uses the mobile title picker without a duplicate form field and saves through existing preferences', async () => {
+    await createComponent(undefined, '14d');
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('.health-mobile-metric-selector')).toBeNull();
+    expect(host.querySelector('.health-explorer mat-select')).toBeNull();
+    expect(host.querySelector('.health-metric-list')).not.toBeNull();
+    const trigger = host.querySelector<HTMLButtonElement>('.health-mobile-metric-title')!;
+    expect(trigger.closest('h2')?.id).toBe('health-detail-title');
+    expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+    trigger.click(); component.openMetricPicker();
+    fixture.detectChanges();
+    expect(openBottomSheet).toHaveBeenCalledOnce();
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(openBottomSheet).toHaveBeenCalledWith(HealthMetricsBottomSheetComponent, expect.objectContaining({
+      restoreFocus: true, data: expect.objectContaining({ selected: component.selectedMetric() }),
+    }));
+    metricsDismissed.next('sleep');
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(component.routeState()).toMatchObject({ metric: 'sleep', range: '14d' });
+    expect(updateHealthWorkspacePreferences).toHaveBeenCalledWith('user-1', expect.objectContaining({ metric: 'sleep', range: '14d' }));
+    expect(component.metricPickerOpen()).toBe(false);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not save cancelled, unchanged, unavailable or unauthenticated metric choices', async () => {
+    await createComponent();
+    component.openMetricPicker(); metricsDismissed.next(undefined);
+    component.openMetricPicker(); metricsDismissed.next(component.selectedMetric());
+    component.openMetricPicker(); metricsDismissed.next('not-a-metric' as HealthWorkspaceMetricSelection);
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    setCurrentUserID(''); fixture.detectChanges(); await fixture.whenStable();
+    component.openMetricPicker();
+    expect(openBottomSheet).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['metric', 'window', 'account', 'destroy'] as const)('rejects a late metric choice after a %s change', async change => {
+    await createComponent();
+    component.openMetricPicker();
+    if (change === 'metric') component.selectMetric(HEALTH_METRIC_IDS.Steps);
+    if (change === 'window') component.navigateWindow('older');
+    if (change === 'account') setCurrentUserID('user-2');
+    if (change === 'destroy') fixture.destroy();
+    else { fixture.detectChanges(); await fixture.whenStable(); }
+    expect(dismissBottomSheet).toHaveBeenCalledOnce();
+    const selected = component.selectedMetric();
+    haptics.selection.mockClear(); updateHealthWorkspacePreferences.mockClear();
+    metricsDismissed.next('sleep');
+    expect(component.selectedMetric()).toBe(selected);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
   });
 
   it('wires highlight selection, Sleep chart gestures, and mouse/keyboard observation disclosure', async () => {

@@ -1,0 +1,31 @@
+<section class="health-metrics-sheet" aria-label="Health metrics">
+  <app-bottom-sheet-header title="Choose metric" icon="cardiology">
+    <button mat-icon-button type="button" aria-label="Close metric picker" (click)="close()">
+      <mat-icon aria-hidden="true">close</mat-icon>
+    </button>
+  </app-bottom-sheet-header>
+  <div class="bottom-sheet-content">
+    <mat-action-list aria-label="Available Health metrics">
+      @if (data.showSleep()) {
+        <button mat-list-item type="button" [activated]="data.selected === 'sleep'" [attr.aria-pressed]="data.selected === 'sleep'" (click)="select('sleep')">
+          <mat-icon matListItemIcon aria-hidden="true">{{ healthMetricIcon('sleep') }}</mat-icon>
+          <span matListItemTitle>Sleep overview</span>
+          @if (data.selected === 'sleep') { <mat-icon matListItemMeta aria-hidden="true">check</mat-icon> }
+        </button>
+      }
+      @for (group of data.groups(); track group.id) {
+        <h3 matSubheader>{{ group.label }}</h3>
+        @for (metric of group.metrics; track metric.id) {
+          <button mat-list-item type="button" [activated]="data.selected === metric.id" [attr.aria-pressed]="data.selected === metric.id" (click)="select(metric.id)">
+            <mat-icon matListItemIcon aria-hidden="true">{{ healthMetricIcon(metric.id) }}</mat-icon>
+            <span matListItemTitle>{{ metric.label }}</span>
+            @if (data.selected === metric.id) { <mat-icon matListItemMeta aria-hidden="true">check</mat-icon> }
+          </button>
+        }
+      }
+    </mat-action-list>
+    @if (!data.showSleep() && !data.groups().length) {
+      <p role="status">No imported Health metrics yet.</p>
+    }
+  </div>
+</section>

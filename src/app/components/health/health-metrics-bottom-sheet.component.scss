@@ -1,0 +1,12 @@
+:host, .health-metrics-sheet {
+  display: flex;
+  min-height: 0;
+  width: 100%;
+}
+
+.health-metrics-sheet { flex-direction: column; }
+
+.health-metrics-sheet h3 {
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+}

@@ -5,11 +5,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
@@ -111,6 +109,7 @@ import {
   resolveSleepTrendDate,
 } from '../../helpers/dashboard-sleep-chart.helper';
 import { healthMetricIcon } from '../../helpers/health-metric-icon.helper';
+import { HealthMetricsBottomSheetComponent, type HealthMetricsData } from './health-metrics-bottom-sheet.component';
 import type { AppDashboardSleepTrendRange } from '../../models/app-user.interface';
 
 type HealthLoadStatus = 'loading' | 'ready' | 'denied' | 'error';
@@ -164,11 +163,9 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
     MatButtonModule,
     MatButtonToggleModule,
     MatDialogModule,
-    MatFormFieldModule,
     MatIconModule,
     MatMenuModule,
     MatProgressSpinnerModule,
-    MatSelectModule,
     MatTooltipModule,
     AppChartsModule,
     PageHeaderComponent,
@@ -194,6 +191,8 @@ export class HealthWorkspaceComponent {
   private readonly bottomSheet = inject(MatBottomSheet);
   private sourcesRef: MatBottomSheetRef<HealthSourcesBottomSheetComponent, HealthSourcesResult> | null = null;
   readonly sourcesOpen = signal(false);
+  private metricPickerRef: MatBottomSheetRef<HealthMetricsBottomSheetComponent, HealthWorkspaceMetricSelection> | null = null;
+  readonly metricPickerOpen = signal(false);
   private readonly destroyRef = inject(DestroyRef);
   private manualDialogRef: MatDialogRef<unknown> | null = null;
   private manualAccountGeneration = 0;
@@ -771,6 +770,10 @@ export class HealthWorkspaceComponent {
         this.sourcesRef = null;
         this.sourcesOpen.set(false);
         ref?.dismiss();
+        const metricRef = this.metricPickerRef;
+        this.metricPickerRef = null;
+        this.metricPickerOpen.set(false);
+        metricRef?.dismiss();
       });
     });
     effect(onCleanup => {
@@ -1160,9 +1163,33 @@ export class HealthWorkspaceComponent {
     this.selectedProviders.set(next.length === 0 || next.length === available.length ? [] : next);
   }
 
+  openMetricPicker(): void {
+    const uid = this.signedInUserID();
+    if (!uid || this.metricPickerRef || this.sourcesRef || !this.hasAvailableMetricSelections()) return;
+    const requested = this.routeState();
+    this.haptics.selection();
+    const ref = this.bottomSheet.open<HealthMetricsBottomSheetComponent, HealthMetricsData, HealthWorkspaceMetricSelection>(
+      HealthMetricsBottomSheetComponent,
+      { data: { groups: this.metricCatalogGroups, showSleep: this.showSleepMetric, selected: requested.metric },
+        ariaLabel: 'Choose Health metric', autoFocus: 'button[aria-pressed="true"]', restoreFocus: true },
+    );
+    this.metricPickerRef = ref;
+    this.metricPickerOpen.set(true);
+    ref.afterDismissed().pipe(take(1), takeUntilDestroyed(this.destroyRef)).subscribe(metric => {
+      if (this.metricPickerRef !== ref) return;
+      this.metricPickerRef = null;
+      this.metricPickerOpen.set(false);
+      const current = this.routeState();
+      if (!metric || uid !== this.signedInUserID() || current.metric !== requested.metric
+        || current.range !== requested.range || current.endDate !== requested.endDate
+        || !this.availableMetricSelections().includes(metric)) return;
+      this.selectMetric(metric);
+    });
+  }
+
   openSources(): void {
     const uid = this.signedInUserID();
-    if (!uid || this.sourcesRef) return;
+    if (!uid || this.sourcesRef || this.metricPickerRef) return;
     const requested = this.routeState();
     const data: HealthSourcesData = {
       providers: this.workspaceSourceOptions(),

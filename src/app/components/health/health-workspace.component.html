@@ -64,28 +64,6 @@
       </div>
     }
 
-    <div class="health-mobile-metric-selector">
-      @if (hasAvailableMetricSelections()) {
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>Health metric</mat-label>
-          <mat-select [value]="routeState().metric" (openedChange)="$event && haptics.selection()" (selectionChange)="selectMetric($event.value)">
-            @if (showSleepMetric()) {
-              <mat-option value="sleep">Sleep overview</mat-option>
-            }
-            @for (group of metricCatalogGroups(); track group.id) {
-              <mat-optgroup [label]="group.label">
-                @for (metric of group.metrics; track metric.id) {
-                  <mat-option [value]="metric.id">{{ metric.label }}</mat-option>
-                }
-              </mat-optgroup>
-            }
-          </mat-select>
-        </mat-form-field>
-      } @else {
-        <p class="health-metric-empty" role="status">No imported Health metrics yet.</p>
-      }
-    </div>
-
     <div class="health-explorer-layout">
       <nav class="health-metric-list" aria-label="Health metrics">
         @if (showSleepMetric()) {
@@ -129,7 +107,18 @@
       <article class="health-detail" aria-labelledby="health-detail-title">
         <header class="health-detail-header">
           <div class="health-detail-heading">
-            <h2 id="health-detail-title">{{ detailTitle() }}</h2>
+            <h2 id="health-detail-title">
+              <span class="health-desktop-metric-title">{{ detailTitle() }}</span>
+              <button mat-button type="button" class="health-mobile-metric-title"
+                [disabled]="!hasAvailableMetricSelections()"
+                [attr.aria-label]="'Choose metric: ' + detailTitle()" aria-haspopup="dialog"
+                [attr.aria-expanded]="metricPickerOpen()" (click)="openMetricPicker()">
+                <span class="health-metric-title-content"><span>{{ detailTitle() }}</span><mat-icon aria-hidden="true">expand_more</mat-icon></span>
+              </button>
+            </h2>
+            @if (!hasAvailableMetricSelections()) {
+              <p class="health-mobile-metric-empty" role="status">No imported Health metrics yet.</p>
+            }
           </div>
           <div class="health-detail-controls">
           <div class="health-window-navigation" aria-label="Health data window">

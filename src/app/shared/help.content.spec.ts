@@ -14,6 +14,13 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('explains the compact mobile Health metric title picker and remembered selection', () => {
+    const health = HELP_SECTIONS.find(section => section.id === 'health')?.content;
+    expect(health).toContain('tap the metric title and its arrow');
+    expect(health).toContain('closing the picker changes nothing');
+    expect(health).toContain('Desktop keeps the metric list beside the chart');
+    expect(health).toContain('Your metric selection is remembered in your account settings');
+  });
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
     expect(content).toContain('**Timeline notes** is an independent read-only permission');
