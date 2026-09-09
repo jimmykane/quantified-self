@@ -29,6 +29,37 @@ describe('timeline chart overlays', () => {
     expect(overlay.markLine.data[0].symbol).toBe('circle');
     expect(overlay.markArea.data).toEqual([]);
   });
+  it.each([
+    { startDate: '2026-09-02', endDate: '2026-09-04', symbols: ['emptyCircle', 'emptyCircle'] },
+    { startDate: '2026-09-02', endDate: '2026-09-03', symbols: ['emptyCircle', 'arrow'] },
+    { startDate: '2026-09-03', endDate: '2026-09-04', symbols: ['arrow', 'emptyCircle'] },
+    { startDate: '2026-09-02', endDate: null, symbols: ['emptyCircle', 'emptyCircle'] },
+    { startDate: '2026-09-03', endDate: null, symbols: ['arrow', 'emptyCircle'] },
+  ])('keeps a period shaded across a single local day ($startDate – $endDate)', ({ startDate, endDate, symbols }) => {
+    const offsetSeconds = 10_800;
+    const min = date('2026-09-03') - offsetSeconds * 1000;
+    const max = date('2026-09-04') - offsetSeconds * 1000 - 1;
+    const source = { ...option, xAxis: { type: 'time', min, max },
+      series: [{ ...option.series[0], data: [[min, 65], [min + 9 * 3600_000, 80]] }] };
+    const period = { ...note, startDate, endDate, timeZone: 'Europe/Helsinki' };
+    const result = addTimelineNotesToChart(source, [period], { offsetSeconds: () => offsetSeconds }, min + 10 * 3600_000);
+    const overlay = result.option.series[1];
+    expect(result.range).toEqual({ startDate: '2026-09-03', endDate: '2026-09-03' });
+    expect(overlay.markArea.data[0].map(boundary => boundary.xAxis)).toEqual([min, max]);
+    expect(overlay.markLine.data.map(marker => marker.xAxis)).toEqual([min, max]);
+    expect(overlay.markLine.data.map(marker => marker.symbol)).toEqual(symbols);
+    expect(overlay.markLine.data.filter(marker => marker.label.show)).toHaveLength(1);
+    expect(result.groups.get(overlay.markLine.data[1].name)).toEqual([period]);
+    expect(overlay.markArea.silent).toBe(true);
+    expect(result.option.xAxis).toBe(source.xAxis);
+    expect(result.option.series[0]).toBe(source.series[0]);
+  });
+  it('does not add a period band to a genuine single-day note in a one-day view', () => {
+    const source = { ...option, xAxis: { type: 'time', min: date(note.startDate), max: date(note.startDate) + 86_400_000 - 1 } };
+    const overlay = addTimelineNotesToChart(source, [{ ...note, endDate: note.startDate }]).option.series[1];
+    expect(overlay.markLine.data).toHaveLength(1);
+    expect(overlay.markArea.data).toEqual([]);
+  });
   it('shows an open ongoing end at today in the captured zone, not in the forecast', () => {
     const ongoing = { ...note, endDate: null, timeZone: 'Pacific/Honolulu' };
     const overlay = addTimelineNotesToChart(option, [ongoing], {}, date('2026-09-06')).option.series[1];

@@ -98,7 +98,9 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       if (start === null || end === null || start > end) return;
       // Different calendar days can share a weekly bucket or clipped endpoint. Keep one selectable marker.
       const existing = positions.get(start);
-      const hasPeriod = group.startDate !== group.endDate;
+      // Clipping a period to a one-day view must not turn it into a point
+      // note. Preserve its original duration, including newly ongoing notes.
+      const hasPeriod = group.notes.some(note => note.endDate === null || note.startDate !== note.endDate);
       if (existing) {
         existing.notes.push(...group.notes);
         existing.end = Math.max(existing.end, end);
