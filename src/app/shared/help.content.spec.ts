@@ -937,6 +937,8 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain('**Suunto**, **COROS**, **Garmin**, and **Wahoo**');
     expect(uploadsSection?.content).toContain('Only eligible destinations appear.');
     expect(uploadsSection?.content).toContain('repeat sends are blocked until it finishes');
+    expect(uploadsSection?.content).toContain('**Reconnect Wahoo** dialog');
+    expect(uploadsSection?.content).toContain('successful delivery updates the destination badge');
     expect(uploadsSection?.content).toContain('parsed points and streams are not saved back to Firestore');
     expect(uploadsSection?.content).toContain('lightweight encoded route preview for route-table thumbnails, the Routes page map, and dashboard route maps');
     expect(uploadsSection?.content).toContain('Routes page map follows the current table filters using saved-route documents only');

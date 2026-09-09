@@ -25,6 +25,7 @@ import { AppThemeService } from '../../../services/app.theme.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { LoggerService } from '../../../services/logger.service';
+import { WahooRouteAccessReconnectDialogComponent } from '../../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { RouteNameDialogComponent } from '../route-name-dialog/route-name-dialog.component';
 import { RouteDetailComponent } from './route-detail.component';
@@ -616,6 +617,7 @@ describe('RouteDetailComponent', () => {
       expect(component.routeSendStatus()).toContain('Route sent to ');
       expect(hapticsMock.success).toHaveBeenCalledTimes(1);
       expect(hapticsMock.error).not.toHaveBeenCalled();
+      expect(component.routeDocument()?.syncedDestinationServiceNames).toContain(destination);
     },
   );
 
@@ -632,7 +634,11 @@ describe('RouteDetailComponent', () => {
     });
     await component.sendRouteToService(ServiceNames.WahooAPI);
     expect(component.routeSendStatus()).toBe(message);
-    expect(snackBarMock.open).toHaveBeenLastCalledWith(message, undefined, { duration: 3500 });
+    if (reason === 'DESTINATION_PERMISSION_REQUIRED') {
+      expect(dialogMock.open).toHaveBeenCalledWith(WahooRouteAccessReconnectDialogComponent);
+    } else {
+      expect(snackBarMock.open).toHaveBeenLastCalledWith(message, undefined, { duration: 3500 });
+    }
     expect(component.sendingToService()).toBe(false);
     expect(hapticsMock.error).toHaveBeenCalledTimes(1);
     expect(hapticsMock.success).not.toHaveBeenCalled();
@@ -643,6 +649,7 @@ describe('RouteDetailComponent', () => {
     routeSendServiceMock.sendRoutesToService.mockRejectedValueOnce(new Error('Connection interrupted. Please retry.'));
     await component.sendRouteToService(ServiceNames.WahooAPI);
     expect(component.routeSendStatus()).toBe('Connection interrupted. Please retry.');
+    expect(component.routeDocument()?.syncedDestinationServiceNames || []).not.toContain(ServiceNames.WahooAPI);
     expect(component.sendingToService()).toBe(false);
     expect(hapticsMock.error).toHaveBeenCalledTimes(1);
     routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce(successfulSend(ServiceNames.WahooAPI));
@@ -680,12 +687,110 @@ describe('RouteDetailComponent', () => {
       routeDocument: { ...routeDocument, id: 'route-2', name: 'Another route' },
     } });
     expect(component.routeSendStatus()).toBe('');
+    snackBarMock.open.mockClear();
     finish(successfulSend(ServiceNames.WahooAPI));
     await sending;
+    expect(snackBarMock.open).not.toHaveBeenCalled();
+    expect(hapticsMock.success).not.toHaveBeenCalled();
     expect(component.routeSendStatus()).toBe('');
     expect(component.sendingToService()).toBe(false);
     expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledWith(['route-1'], ServiceNames.WahooAPI);
   });
+
+  it.each(['destroyed', 'another-owner', 'away-and-back'])(
+    'discards a Suunto copy confirmation after the originating view is %s', async transition => {
+      component.routeDocument.set({ ...routeDocument, syncedDestinationServiceNames: [ServiceNames.SuuntoApp] });
+      const confirmation$ = new Subject<boolean>();
+      const close = vi.fn();
+      dialogMock.open.mockReturnValueOnce({ afterClosed: () => confirmation$, close });
+      const sending = component.sendRouteToSuunto();
+      if (transition === 'destroyed') {
+        fixture.destroy();
+      } else if (transition === 'another-owner') {
+        resolvedRouteData$.next({ route: {
+          ...resolvedRouteData$.value.route,
+          routeDocument: { ...routeDocument, userID: 'user-2' },
+          user: new User('user-2'),
+        } });
+      } else {
+        const original = resolvedRouteData$.value;
+        resolvedRouteData$.next({ route: { ...original.route, routeDocument: { ...routeDocument, id: 'route-2' } } });
+        resolvedRouteData$.next(original);
+      }
+      snackBarMock.open.mockClear();
+      if (transition === 'destroyed') {
+        expect(close).toHaveBeenCalledTimes(1);
+      } else {
+        confirmation$.next(true);
+      }
+      await sending;
+      expect(routeSendServiceMock.sendRoutesToService).not.toHaveBeenCalled();
+      expect(snackBarMock.open).not.toHaveBeenCalled();
+      expect(hapticsMock.success).not.toHaveBeenCalled();
+      expect(hapticsMock.error).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['success', 'failure', 'scope-failure'])(
+    'does not publish a late %s after Route Details is destroyed', async outcome => {
+      connectAllDestinations();
+      let finish!: (value: unknown) => void;
+      let fail!: (reason: unknown) => void;
+      routeSendServiceMock.sendRoutesToService.mockReturnValueOnce(new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+      const sending = component.sendRouteToService(ServiceNames.WahooAPI);
+      fixture.destroy();
+      snackBarMock.open.mockClear();
+      if (outcome === 'failure') {
+        fail(new Error('Service unavailable.'));
+      } else if (outcome === 'scope-failure') {
+        finish({
+          ...successfulSend(ServiceNames.WahooAPI), status: 'failure', successCount: 0, failureCount: 1,
+          results: [{ routeId: 'route-1', destinationServiceName: ServiceNames.WahooAPI, status: 'failure', reason: 'DESTINATION_PERMISSION_REQUIRED' }],
+        });
+      } else {
+        finish(successfulSend(ServiceNames.WahooAPI));
+      }
+      await sending;
+      expect(snackBarMock.open).not.toHaveBeenCalled();
+      expect(dialogMock.open).not.toHaveBeenCalled();
+      expect(hapticsMock.success).not.toHaveBeenCalled();
+      expect(hapticsMock.error).not.toHaveBeenCalled();
+    },
+  );
+
+  it('remembers successful sends in the current view so Suunto resends require copy confirmation', async () => {
+    await component.sendRouteToSuunto();
+    expect(component.syncedDestinationLabels()).toContain('Sent to Suunto App');
+    expect(component.routeSendActions().find(action => action.serviceName === ServiceNames.SuuntoApp)?.copy).toBe(true);
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(false) });
+    await component.sendRouteToSuunto();
+    expect(dialogMock.open).toHaveBeenCalledWith(ConfirmationDialogComponent, expect.anything());
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenCalledTimes(1);
+    await component.sendRouteToSuunto();
+    expect(routeSendServiceMock.sendRoutesToService).toHaveBeenLastCalledWith(
+      ['route-1'], ServiceNames.SuuntoApp, { forceCopy: true },
+    );
+  });
+
+  it.each(['response', 'exception'])(
+    'opens the existing Wahoo route-access recovery dialog for a scope %s', async outcome => {
+      connectAllDestinations();
+      const message = 'Reconnect Wahoo and allow route access before sending routes.';
+      if (outcome === 'response') {
+        routeSendServiceMock.sendRoutesToService.mockResolvedValueOnce({
+          ...successfulSend(ServiceNames.WahooAPI), status: 'failure', successCount: 0, failureCount: 1,
+          results: [{ routeId: 'route-1', destinationServiceName: ServiceNames.WahooAPI, status: 'failure', reason: 'DESTINATION_PERMISSION_REQUIRED', message }],
+        });
+      } else {
+        routeSendServiceMock.sendRoutesToService.mockRejectedValueOnce(new Error(message));
+      }
+      await component.sendRouteToService(ServiceNames.WahooAPI);
+      expect(dialogMock.open).toHaveBeenCalledWith(WahooRouteAccessReconnectDialogComponent);
+      expect(component.routeSendStatus()).toBe(message);
+      expect(component.sendingToService()).toBe(false);
+      expect(hapticsMock.error).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('uses Material keyboard navigation and restores focus on submenu dismissal', async () => {
     connectAllDestinations();

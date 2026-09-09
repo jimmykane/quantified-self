@@ -4,7 +4,7 @@
   <p>Reconnect Wahoo to grant route access. When you return, send the route again.</p>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
-  <button mat-button type="button" [disabled]="reconnecting()" mat-dialog-close>Not now</button>
+  <button mat-button type="button" [disabled]="reconnecting()" (click)="haptics.selection()" mat-dialog-close>Not now</button>
   <button mat-flat-button color="primary" type="button" [disabled]="reconnecting()" (click)="reconnect()">
     <span class="wahoo-route-access-reconnect-dialog__button-content">
       @if (reconnecting()) {
