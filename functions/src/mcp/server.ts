@@ -37,6 +37,7 @@ import {
 } from './tool-output-schemas';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { registerMcpTool } from './register-tool';
+import { isMcpHealthBodyMetric, MCP_HEALTH_METRIC_IDS } from './health.service';
 import { createMcpTransportHandler } from './transport';
 
 const defaultDataService = createMcpDataService();
@@ -577,6 +578,11 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
       'For saved routes by sport or name, use list_activity_types when needed, then list_routes with activityTypes or search. Use search_routes_near_location for nearby saved routes. Repeat the filters with nextCursor until matched or scanComplete.',
     );
   }
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.HealthRead)) {
+    instructions.push(
+      'Use list_health_metrics then query_health_metric for recorded all-day Health metrics, stress, resources/Body Battery, movement, energy, blood pressure and fitness metrics. This is not the activity metric catalog. Summary mode returns stored scalars; sample mode returns bounded representative trends for up to 31 provider calendar days, with explicit UTC sample instants. If summaries are empty, check sample mode before concluding that an all-day metric is missing. Keep provider/account/semantic/unit series separate. Garmin Body Battery uses its explicitly labelled native points scale, not a canonical percentage; pair numeric values with the series unit and normalization status. Do not sum cumulative samples, infer personal HRV ranges, or label missing data as zero. Report incomplete scans, downsampling, and unknown semantics. Body composition additionally requires measurements:read and is identity-free in summary mode. Weight and normalized Sleep remain in their existing tools and scopes; sleep references are not read by Health tools. No writes are available.',
+    );
+  }
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.MeasurementsRead)) {
     instructions.push(
       'Use list_measurement_types and query_measurements for body weight, body mass, weigh-ins, measurement history, and measurement trends. query_measurements returns bounded identity-free day, week, or month values; its default body-weight aggregation is the median. Treat body measurements as recorded values, not a medical or health assessment.',
@@ -628,8 +634,8 @@ export function createMcpServer(
   const server = new McpServer({
     name: 'quantified-self',
     title: 'Quantified Self',
-    version: '1.3.0',
-    description: 'Read-only activity metrics, body measurements, Training snapshots, and sleep-session summaries.',
+    version: '1.4.0',
+    description: 'Read-only activity and Health metrics, body measurements, Training snapshots, and sleep-session summaries.',
     websiteUrl: publicBaseUrl,
     icons: MCP_SERVER_ICON_VARIANTS.map(icon => ({
       src: `${publicBaseUrl}${icon.path}`,
@@ -650,6 +656,31 @@ export function createMcpServer(
     'list_activity_types',
     async () => dataService.listActivityTypes(),
   ));
+
+  if (auth.scopes.includes(MCP_OAUTH_SCOPES.HealthRead)) {
+    registerMcpTool(server, 'list_health_metrics', {
+      title: 'List Health metric capabilities',
+      description: 'Discover Health metrics, canonical Sports Lib units, explicitly approved native variants, required permissions and query limits. This static catalog describes capabilities, not whether the user has data. Weight and normalized Sleep use their existing tools and permissions.',
+      inputSchema: z.object({}),
+      outputSchema: outputSchemas.list_health_metrics,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, () => runReadOnlyTool('list_health_metrics', () => dataService.listHealthMetrics()));
+    registerMcpTool(server, 'query_health_metric', {
+      title: 'Query recorded Health history',
+      description: 'Read one Health metric over inclusive provider-calendar dates. Summaries preserve recorded values; samples return bounded representative trend points, not raw chunks. Provider/account/semantic/unit series are never blended. Body composition also requires measurements:read and returns identity-free date buckets in summary mode. Garmin Body Battery is an approved native points scale, not a percentage; other native-only values, Sleep references, device details, account IDs, provider payloads and all writes are excluded. Recorded values are not a medical assessment. Canonical display values/units use Sports Lib and user preferences; wire values stay in the explicitly returned series unit.',
+      inputSchema: z.object({
+        metricId: z.enum(MCP_HEALTH_METRIC_IDS),
+        startDate: z.iso.date().describe('Inclusive provider-local calendar date (YYYY-MM-DD), not a UTC midnight.'),
+        endDate: z.iso.date().describe('Inclusive provider-local calendar date (YYYY-MM-DD).'),
+        mode: z.enum(['summaries', 'samples']).default('summaries'),
+        maxPoints: z.number().int().min(2).max(400).default(200),
+      }),
+      outputSchema: outputSchemas.query_health_metric,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('query_health_metric', () => dataService.queryHealthMetric({
+      ...input, uid: auth.uid, measurementsAllowed: measurementToolsAvailable,
+    })));
+  }
 
   if (measurementToolsAvailable) {
     registerMcpTool(server, 'list_measurement_types', {
@@ -1435,6 +1466,11 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     && typeof (params as Record<string, unknown>).arguments === 'object'
     ? (params as Record<string, unknown>).arguments as Record<string, unknown>
     : {};
+  if (toolName === 'list_health_metrics' || toolName === 'query_health_metric') {
+    return toolName === 'query_health_metric' && isMcpHealthBodyMetric(toolArguments.metricId)
+      ? [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.MeasurementsRead]
+      : [MCP_OAUTH_SCOPES.HealthRead];
+  }
   if ([
     'get_activity_metrics',
     'get_activity_overview',

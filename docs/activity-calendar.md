@@ -9,7 +9,8 @@ This document is the implementation and maintenance guide for the Activity Calen
 - The authenticated `/calendar` route provides Week, Month, and Year views, period navigation, totals, activity-group bars, and day details.
 - Private [Timeline notes](timeline-notes.md) mark their dates in all three full-calendar views, including note-only days.
   The shared header manager and **Show on charts and calendar** preference apply; dashboard tiles/popovers stay unchanged.
-- Selecting an active day opens an Angular Material bottom sheet with day totals, the shared activity-group duration bars and available distance/ascent/descent totals, plus recorded distance/ascent/descent for each individual activity, and links to individual events.
+- Every rendered date is selectable. Its Angular Material bottom sheet keeps planned workouts separate from completed activity totals and rows, provides active-plan/standalone creation actions, and links to a planned-workout editor or individual event as appropriate.
+- Standalone workouts and workouts from the active plan appear on the full Calendar, dashboard tile, and Dashboard Today mini-calendar. Inactive-plan workouts remain in `/training/plans`; skipped workouts remain visible with a distinct marker.
 - The public `/features/activity-calendar` route explains the feature without reading or exposing user activity data.
 
 ## Query and state model
@@ -31,6 +32,11 @@ Dashboard migration state uses the shared automatic-tile framework:
 
 `src/app/services/activity-calendar.service.ts` reads lightweight event summary documents by `startDate`. It excludes merge and benchmark documents, maps only calendar-required fields into `EventInterface` values, and sorts results by start time. Exact user and query-window results are cached for five minutes with at most 12 entries; a cached value is emitted immediately while the live listener supplies current data.
 
+`TrainingPlansService.watchSchedule()` independently reads the owner-visible current plan, workout, and state documents.
+`planned-workout-calendar.helper.ts` projects only standalone workouts and workouts belonging to the active plan into a
+local-date map. The activity and planning listeners stay separate so a plan read failure cannot turn recorded activity
+data into an empty result, and a planned workout can never become an `EventInterface` or enter activity summaries.
+
 ## Day markers
 
 Activities are grouped with the shared Sports Lib activity-type groups and app colors. Events containing more than one group are represented as Multisport.
@@ -41,8 +47,11 @@ Activities are grouped with the shared Sports Lib activity-type groups and app c
 - Standard markers range from 8 to 30 px. Compact concentric markers range from 4 to 18 px and preserve at least a 14 percent size difference between visible layers.
 - At most three groups are drawn in a day cell; an overflow count represents additional groups.
 - Week and Month layouts separate markers when space allows. Compact tiles, narrow layouts, and Year view use concentric markers.
-- Date cells do not use Material tooltips. This preserves native touch scrolling; their accessible names contain the date, activity count, duration, and group summary.
-- Note days add an `event_note` indicator and accessible note count, separate from activity circles. Their day sheet lists
+- Planned and skipped-workout icons are independent from the duration-scaled activity markers. Their count does not change marker size or overflow.
+- Date cells do not use Material tooltips. This preserves native touch scrolling; their accessible names contain the date, activity, planned-workout, and visible note counts, duration, and group summary.
+- Note days add a category icon (or grouped `event_note` indicator), an accessible note count, and a slim colored edge,
+  separate from activity circles. The edge retains a segment for each distinct note color when notes overlap, with
+  the shared neutral gray used by chart note markers for Default. It does not change cell sizing or activity marker colors. Their day sheet lists
   note titles, categories, and actual dates above activities; selecting a note opens the shared editor. Inclusive periods,
   future bounded dates, and ongoing periods through today in their captured zone are supported without changing totals.
   Window focus and returning to a visible tab refresh the current-day clock, including ongoing note cutoffs after midnight.
@@ -58,6 +67,7 @@ The top summary shows distance, duration, and ascent for the selected primary pe
 
 - Duration is the bar metric. Positive recorded duration, distance, ascent, and descent values appear beneath the bar.
 - The day-details sheet reuses these exact group rows for the selected local day; its bars compare only that day's activity groups.
+- Planned workouts never contribute to distance, duration, ascent, descent, activity counts, group bars, or the activity table. Day details render them in a separate **Planned workouts** section.
 - Missing values remain unavailable rather than being inferred. A group without recorded duration uses `--` and has no progressbar semantics.
 - `AppEventUtilities.shouldExcludeAscent` and `shouldExcludeDescent` apply shared sport rules. Lift-served downhill types can contribute descent without contributing ascent; Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding contribute neither elevation metric because their vertical movement is depth.
 - User `removeAscentForEventTypes` and `removeDescentForEventTypes` summary settings are applied in addition to the shared sport rules.
@@ -72,14 +82,14 @@ Keep these interaction contracts:
 - Previous and next controls have period-specific accessible labels.
 - The period label announces navigation changes.
 - Loading occupies a stable progress slot so cached and live emissions do not move the page.
-- Days with activities or visible notes are buttons; entirely empty days are non-interactive cells.
+- Every rendered date is a button, including dates with neither a planned workout nor a completed activity. Empty dates open creation choices.
 - Activity bars expose progressbar semantics only when recorded duration exists.
 - Start-of-week and weekend treatment must follow the user's settings and shared theme tokens.
 
 ## SEO and privacy
 
 - `/features/activity-calendar` is a prerendered public page included in the sitemap and public startup-route allowlist.
-- `/calendar` requires authentication, uses `noindex, follow`, is excluded from the sitemap, and is disallowed in `robots.txt`.
+- `/calendar` and `/training/plans` require authentication, are client-rendered, and are excluded from the sitemap. They use `noindex, follow` route metadata and hosting `noindex` headers; `robots.txt` permits crawling so those directives can be read. Neither workspace is a public product page.
 - Public page metadata and structured data describe the feature only. They must never include activity values, account identifiers, or examples derived from a user's calendar.
 
 ## Test map
@@ -88,6 +98,7 @@ Keep these interaction contracts:
 - `src/app/services/activity-calendar.service.spec.ts`: summary queries, filtering, mapping, sorting, and cache behavior.
 - `src/app/helpers/dashboard-auto-tile.helper.spec.ts` and `src/app/services/dashboard-auto-tile.service.spec.ts`: Calendar identity, one-time dashboard migration, duplicate prevention, dismissal, Undo, and rollback behavior.
 - `src/app/components/calendar/**.spec.ts`: page, grid, tile, day details, responsive behavior, and Material interaction contracts.
+- `src/app/helpers/planned-workout-calendar.helper.spec.ts` and `src/app/services/training-plans.service.spec.ts`: active-plan/standalone overlay selection, inactive-plan exclusion, skipped visibility, and owner-current schedule reads.
 - `src/app/components/public-seo/public-seo-pages.content.spec.ts`: public page metadata, links, and structured data.
 - `src/app/app.routing.module.spec.ts`, `src/app/app.routes.server.spec.ts`, and `src/app/shared/public-startup-route.spec.ts`: public and authenticated route contracts.
 - `src/firebase-hosting.config.spec.ts`: sitemap, robots, and hosting behavior.

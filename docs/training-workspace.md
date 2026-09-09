@@ -208,6 +208,164 @@ overview is the indexable search entry point: it describes the curated workspace
 non-prescriptive treatment of readiness and sleep without exposing account-specific data. Keep that public page, the
 Features hub, homepage link, Help link, sitemap, and `robots.txt` aligned when the Training product contract changes.
 
+## Training Planning
+
+Training planning is a separate authored-workout workflow at authenticated `/training/plans`; it does not change the analytical
+meaning of `/training`. Manual planning is available without a provider connection. A scheduled workout may belong to a
+plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is a future Pro action
+and must never be inferred from merely connecting a service.
+
+### Canonical workout boundary
+
+Quantified Self currently owns the versioned planned-workout contract in `shared/planned-workout.ts`. It stores only
+plain canonical primitives: Sports Lib `ActivityTypes` strings, seconds, metres, bpm, watts, metres per second, rpm,
+kilojoules, percentage points, and positive repetition counts. It does not persist Sports Lib class instances or
+event-stat JSON. Sports Lib remains authoritative for activity types, canonical unit semantics, conversions, and scalar
+formatting; Quantified Self owns workout ordering, provider compatibility, scheduling, lifecycle, history, entitlement,
+and localized UI language.
+
+`WorkoutStructureV1` has stable node IDs, ordered steps or one-level repeats, purposes, endings, and typed targets. The
+strict codec rejects unknown fields and discriminants, unsupported versions or sports, duplicate IDs, non-finite or
+negative values, non-positive endings/reference snapshots, inverted ranges, more than 100 nodes, repeat counts above
+100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
+the persisted v1 value. The initial manual editor intentionally exposes the smaller Running/Cycling, date-only,
+time/distance, fixed-repeat, single absolute HR/power/pace subset. The shared contract is broader so saved v1 data does
+not need a redesign when later UI slices are enabled.
+
+Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
+recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
+pass sandbox create/update/reschedule/delete round trips, Wahoo and Suunto fixtures are complete, the provider adapters
+have not contaminated the neutral model, and persisted Quantified Self fixtures round-trip unchanged through a locally
+packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic #583.
+
+### Persistence, mutation, and history
+
+- Owner-visible current state is stored at `users/{uid}/trainingPlanState/current`,
+  `users/{uid}/trainingPlans/{planId}`, and `users/{uid}/scheduledWorkouts/{workoutId}`. Browser writes are denied.
+- Authenticated, App Check-enforced callables own mutations, history reads, restore previews/restores, and plan deletion.
+  Every write path is sanitized, fenced against account deletion, idempotent by `mutationId`, and guarded by expected
+  revisions.
+- Multiple plans are allowed, but at most one is active. Activating one plan atomically pauses the previous active plan.
+  Plans are limited to 366 inclusive local dates and an account to 400 current workouts.
+- Workout IDs survive standalone-to-plan, plan-to-standalone, and plan-to-plan moves. An out-of-range add, move, copy, or
+  attach requires explicit confirmation before the plan range is extended atomically. Shifting a plan moves only its
+  range and associated current workouts.
+- Plan-bound changes share the plan revision stream. Standalone changes have workout-scoped complete snapshots. Plan
+  history uses immutable deltas and compressed child-document checkpoint chunks every 20 revisions and after bulk
+  operations, keeping revision envelopes below Firestore document limits. A restore creates a new revision and cannot
+  reclaim a workout that has moved to a different scope or recreate a permanently deleted workout.
+- Ordinary workout deletion remains recoverable through history. Permanent deletion requires its own confirmation. Plan
+  deletion requires choosing whether its current workouts become standalone or are deleted; either choice removes the
+  plan history, while Archive remains the non-destructive choice.
+- Permanent deletion removes the workout root and its standalone revision subtree, then retains a server-internal hash
+  tombstone so the retired ID cannot be reused. A plan-bound workout can still occur in that plan's immutable revision
+  audit until the plan itself is deleted; it is tombstoned, cannot be restored, and this retention is disclosed in the
+  confirmation UI. Plan deletion removes the complete plan revision subtree.
+- Plan deletion uses a user-scoped durable lock while it prepares bounded tombstones and standalone revision snapshots.
+  An exact retry remains idempotent, and a same-disposition retry with the locked state/plan revisions may resume the
+  original operation after a browser reload even when the caller no longer has the original mutation ID.
+- Resumable processing at the full 400-current-workout boundary, paged recoverable-workout history, and durable retry of
+  post-commit recursive cleanup are tracked explicitly by epic subissue #657. Until that slice lands, unusually large
+  structure payloads may still reach Firestore's atomic request-size limit even when their write count is valid; do not
+  lower the public v1 limits or hide this boundary in an anonymous TODO.
+
+### UI and calendar contract
+
+`/training/plans` provides Plans and Standalone views plus create, edit, copy, move/associate, skip, delete, permanent delete,
+history/restore, activation, pause, archive, and date-shift actions. Calendar-originated creation defaults to the active
+plan when one exists and provides an explicit standalone action; without an active plan it defaults to standalone.
+
+The workspace presents one scope selector and one contextual **Add workout** action. The selected plan's name, lifecycle,
+and date range appear once; there is no separate overview strip or repeated plan/standalone heading. An account without
+plans sees one actionable empty state, not an empty plan selector and a second disabled workout section. Secondary plan
+and workout actions live in Material menus, while **Edit** remains directly available on each workout row (with the
+accessible label **Edit workout**). Planned and standalone workouts use the shared `CompactRowComponent` in stacked,
+compact mode, matching Health. Each labelled row retains its sport, date, unit-aware step summary, and projected actions;
+dividers separate consecutive workouts without card borders or a multi-column card grid. Skipped workouts keep an
+explicit state marker; normal planned workouts need no repeated badge.
+
+The selected plan uses **Plan schedule**, not a second all-activity Calendar. `PlanScheduleCalendarComponent` owns a
+bounded month grid of only that plan's current workouts, including skipped workouts and paused/archived plans. It does
+not fetch events, show completed totals, or include standalone/other-plan workouts. The plan's inclusive start/end are
+marked; outside-range days have a neutral fill and are disabled, and wholly outside-range weeks are omitted. Month
+navigation stops at the plan boundaries. Dates use local calendar arithmetic (including DST/leap years) and the user's
+week-start setting.
+The weekday header marks the configured first day, and a visible hint names it. Saturday and Sunday have a subtle
+theme-primary tint and stronger weekday labels, matching Activity Calendar (with a lighter tint in compact layouts).
+Weekends follow each date's actual weekday, never fixed column positions; they remain ordinary schedulable dates, not
+inferred rest days. Outside-range and selected-date states override the weekend fill. Live week-start preference changes
+reorder the grid without changing the selected date, schedule, or workout counts.
+Initial selection is today when within the range, otherwise the plan start. Explicit selection is account/plan-scoped,
+survives live refresh and editor cancellation, and resolves back inside the range when dates shift. Saving selects the
+workout's destination date and scope. Calendar-originated query parameters select the linked workout's scope/date or
+the requested add scope/date before opening the editor, so cancelling returns to that context rather than hiding the
+workout on today's date. Out-of-range add dates remain editor drafts until an explicitly confirmed range extension.
+The local-today marker refreshes each minute and immediately on window focus or mobile-tab visibility restoration.
+Clock refreshes are silent and never replace an explicitly selected date or an open editor draft. Standalone creation
+resolves its default date when Add is clicked, not when the workspace was first opened. The browser-only clock is
+disposed with the workspace and performs no schedule writes or provider requests.
+
+Desktop places the date grid beside one selected day's compact workout rows. Grid cells show up to two independently
+editable workout titles with full accessible labels/tooltips and an overflow action; the day's detail list shows every
+workout. Same-day previews and detail rows share the schedule service's stable workout-ID order, independent of creation
+time, so expanding overflow does not reorder the workouts. On narrow containers the grid shows counts, with day details
+below it. Selecting an empty day shows a neutral empty state rather than assuming rest, and the single **Add workout**
+action opens the existing editor with that date
+and plan prefilled. Dates support native keyboard activation plus arrow-key and Page Up/Down navigation, keeping focus
+and selection together. The date-cell button/ripple pattern follows Activity Calendar; a Material datepicker cannot
+contain separate accessible workout-edit actions without overriding its internals. Standalone retains its compact list.
+The **Main Calendar** link identifies the separate all-activity destination. No drag/drop, write API, provider sync,
+completed-activity matching, or new metric is introduced by this presentation change.
+
+Creating a plan or editing a workout is a focused view: scope navigation, lists, and other editors are hidden until Save
+or Cancel. The title field receives focus on entry; focus returns to the contextual add action (or scope navigation) on
+exit. A successful workout save selects its destination scope, including standalone/plan transfers. Pending saves disable
+native inputs and Material selectors, retain the draft on failure, and use a stable icon/spinner content row. Save/Cancel
+stay in a sticky, safe-area-aware footer for long mobile editors. Plan/workout forms are unboxed sections, and editable
+steps and repeat blocks reuse the same compact-row primitive with labelled headings and projected remove controls.
+The revision-history section also uses that primitive, while destructive plan confirmation retains its Material card.
+Fieldsets, grid children, and repeat rows allow shrinking
+without horizontal page overflow. Selection haptics belong to explicit UI actions; mutation success/error feedback follows
+the actual result, and hydration, typing, and unchanged choices stay silent. Phone emulation verifies layout and wiring,
+not physical vibration or a real mobile keyboard.
+
+A newly created plan remains selectable using the server-acknowledged record and revision until the independent live
+plan and state listeners catch up. This transient, user-scoped bridge prevents jumping back to a previously active plan
+or issuing the next mutation against the pre-creation revision; it does not replace the live schedule or persist a cache.
+Revision history uses wrapping semantic rows with Material restore buttons so operation and date details remain readable
+on phones rather than being truncated in single-line list slots. Failed history reads have an explicit Retry action.
+
+The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
+workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and
+marked. Every rendered date is selectable, including empty dates. Day details keep **Planned workouts** and completed
+activities in separate sections. Planned workouts never enter recorded activity counts, durations, distance, elevation,
+group bars, activity tables, or Training-derived metrics.
+
+`/training/plans` is authenticated, client-rendered, and excluded from the sitemap. Its route metadata is `noindex, follow`
+and hosting also supplies `noindex` headers; `robots.txt` permits crawling so those directives can be read. It is a
+full-page route registered before the analytical `/training` route, not embedded in the analysis workspace. Training
+Planning is not live yet: `/plans` is not registered and has no compatibility redirect. Calendar and help links use
+`/training/plans`, preserving date, standalone-scope, and workout query parameters. The sidebar entry remains indented
+beneath Training and UID-gated for presentation only; direct owner-scoped access is unchanged.
+
+### Provider proof status
+
+`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four delivery switches remain
+false. Garmin, COROS, Wahoo, and Suunto are `fixture-only`: pure serializers and redacted fixtures prove documented
+mapping behavior, but there is no provider transport, token use, schedule write, ZIP upload, or production action. The
+ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
+
+Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
+examples include Garmin relative targets frozen from their stored reference snapshots, Garmin cycling-secondary-target
+device limits, COROS recovery-to-rest and first-target-only behavior, COROS integer rounding, Wahoo's first-target-only
+ELEMNT behavior, unsupported Wahoo relative references frozen to their stored absolute snapshot, integer rounding for
+Wahoo FTP/heart-rate header references, Suunto relative targets frozen to absolute values, Wahoo relative HR/speed
+target support limited to treadmill workouts in its app, cadence converted from rpm to hertz, Unicode-safe text
+truncation, and Suunto text outside the guaranteed minimum watch character set. Unsupported sport, ending, or target
+combinations fail instead of being approximated. Sandbox CRUD, idempotency, retry/reconnect, deletion, reconciliation,
+rollout, AI, templates, completion matching, and the Sports Lib extraction remain separately tracked by subissues
+#645–#655 and #657 under epic #583; they must not be left as anonymous TODOs.
+
 ### Product analytics
 
 The app-wide, consent-gated Firebase `screen_view` already records `/training` route visits, so Training must not emit a
@@ -574,6 +732,10 @@ This probe is important in local development and recovery scenarios: opening Tra
 snapshots even when no new Firestore write arrives.
 
 ### Worker lifecycle
+
+`processDerivedMetricsIngressTask` runs with 512 MiB of memory and a 120-second timeout to provide headroom above
+the previous 256 MiB limit. It marks requested metric kinds dirty and queues a generation; it does not perform
+full-history builds. Its retry policy and default per-instance concurrency remain unchanged.
 
 `ensureDerivedMetrics` runs with 512 MiB of memory, a 120-second timeout, and at most 100 instances. It performs the
 authenticated freshness check, reads the coordinator and requested snapshot metadata, validates the narrowly scoped
@@ -1782,6 +1944,14 @@ git diff --check
 ```
 
 ### Browser QA matrix
+
+For `/training/plans`, create synthetic paused plans with multiple workouts across weeks, months, and December/January,
+including a maximum 366-day range. Check forward/backward navigation through every month, exact inclusive boundaries,
+empty days, three or more same-day workouts, long titles, overflow-to-detail order, mobile editing/skip actions, and
+reload persistence at desktop and narrow-mobile widths. Verify all seven week-start choices, weekday header order,
+Saturday/Sunday tint across month/year boundaries, and selected/today/outside-range states. Use component fixtures for
+alternate preferences rather than changing the signed-in account's settings solely for QA. Keep the existing active plan
+unchanged and provider delivery disabled; test-data deletion requires its own explicit approval.
 
 Inspect authenticated `/training` at desktop, tablet, and narrow-mobile widths. Cover:
 

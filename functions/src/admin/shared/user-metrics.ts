@@ -13,6 +13,7 @@ import type {
     AuthActivityPlanBreakdown,
     AuthActivityStats,
     AuthActivityWindowStats,
+    AuthEligiblePlanTotals,
     SubscriptionCadenceStats,
 } from './types';
 
@@ -81,6 +82,7 @@ export interface UserPlanActivityMetrics {
     onboardingCompleted: number;
     authActivity: AuthActivityStats;
     eligibleAccounts: number;
+    eligibleAccountsByPlan: AuthEligiblePlanTotals;
     providers: Record<string, number>;
 }
 
@@ -309,6 +311,7 @@ async function collectAuthenticationMetrics(
 ): Promise<{
     authActivity: AuthActivityStats;
     eligibleAccounts: number;
+    eligibleAccountsByPlan: AuthEligiblePlanTotals;
     providers: Record<string, number>;
 }> {
     const computedAtMs = computedAt.getTime();
@@ -321,6 +324,7 @@ async function collectAuthenticationMetrics(
     };
     const providers: Record<string, number> = {};
     let eligibleAccounts = 0;
+    const eligibleAccountsByPlan: AuthEligiblePlanTotals = { free: 0, basic: 0, pro: 0 };
     const [planByOwner, firstPage] = await Promise.all([
         planByOwnerPromise,
         auth.listUsers(1000, undefined),
@@ -331,6 +335,7 @@ async function collectAuthenticationMetrics(
         listResult.users.forEach((userRecord) => {
             if (recordAuthActivity(authActivity, userRecord, computedAtMs, planByOwner)) {
                 eligibleAccounts += 1;
+                eligibleAccountsByPlan[planByOwner.get(userRecord.uid) ?? 'free'] += 1;
             }
 
             const providerIds = userRecord.providerData.map(provider => provider.providerId);
@@ -348,7 +353,7 @@ async function collectAuthenticationMetrics(
         listResult = await auth.listUsers(1000, listResult.pageToken);
     }
 
-    return { authActivity, eligibleAccounts, providers };
+    return { authActivity, eligibleAccounts, eligibleAccountsByPlan, providers };
 }
 
 export async function collectUserPlanActivityMetrics(

@@ -13,6 +13,7 @@ import {
   healthHrvChartStatusDescription,
 } from '../../helpers/health-metric-chart.helper';
 import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.component';
+import { HEALTH_METRIC_IDS } from '@shared/health';
 
 @Component({
   selector: 'app-health-metric-chart',
@@ -20,6 +21,7 @@ import { HealthMetricSeriesChartComponent } from './health-metric-series-chart.c
   imports: [CompactRowComponent, MatChipsModule, HealthMetricSeriesChartComponent],
   templateUrl: './health-metric-chart.component.html',
   styleUrls: ['./health-metric-chart.component.scss'],
+  host: { '[class.health-metric-chart-fill-height]': 'fillHeight()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HealthMetricChartComponent {
@@ -27,6 +29,7 @@ export class HealthMetricChartComponent {
   readonly startTimeMs = input.required<number>();
   readonly endTimeMs = input.required<number>();
   readonly darkTheme = input(false);
+  readonly fillHeight = input(false);
   readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
   readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
   readonly chartStatuses = input<Readonly<Record<string, HealthHrvPersonalRangeStatus>>>({});
@@ -38,8 +41,12 @@ export class HealthMetricChartComponent {
   ));
   readonly renderedModels = computed(() => this.models().map(model => {
     const status = this.chartStatuses()[model.series.id] || null;
+    const [reading, ...details] = model.series.semanticLabel.split(' · ');
+    const describeHeartRate = model.series.metricId === HEALTH_METRIC_IDS.HeartRate && !model.series.nativeOnly;
     return {
       model,
+      title: describeHeartRate ? reading : model.series.sourceLabel,
+      summary: describeHeartRate ? [model.series.sourceLabel, ...details].join(' · ') : model.series.semanticLabel,
       statusOverlay: buildHealthHrvChartStatusOverlay(status),
       statusDescription: healthHrvChartStatusDescription(status),
     };

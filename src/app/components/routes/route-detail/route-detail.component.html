@@ -35,13 +35,14 @@
       <div summary-actions class="route-summary-actions">
         <button mat-icon-button type="button"
           aria-label="Route actions"
+          appHapticTap
           matTooltip="Route actions"
           [matMenuTriggerFor]="routeDetailActionsMenu">
           <mat-icon>more_vert</mat-icon>
         </button>
         <mat-menu #routeDetailActionsMenu="matMenu" class="qs-menu-panel">
           <button mat-menu-item type="button"
-            [disabled]="renaming() || downloading() || exportingGPX() || reprocessing() || deleting() || !canManageRoute()"
+            [disabled]="renaming() || downloading() || exportingGPX() || reprocessing() || deleting() || sendingToService() || !canManageRoute()"
             (click)="renameRoute()">
             <mat-icon>edit</mat-icon>
             <span>Rename</span>
@@ -64,12 +65,14 @@
             <mat-icon>autorenew</mat-icon>
             <span>Reprocess</span>
           </button>
-          <button mat-menu-item type="button"
+          @if (hasSendableRouteDestination()) {
+          <button mat-menu-item type="button" appHapticTap
             [matMenuTriggerFor]="routeDetailSendMenu"
             [disabled]="sendingToService() || renaming() || downloading() || exportingGPX() || reprocessing() || deleting() || !hasSendableRouteDestination()">
             <mat-icon>cloud_upload</mat-icon>
             <span>Send to</span>
           </button>
+          }
           <button mat-menu-item type="button"
             [disabled]="deleting() || renaming() || downloading() || reprocessing() || exportingGPX() || sendingToService() || !canManageRoute()"
             (click)="confirmDeleteRoute()">
@@ -78,33 +81,29 @@
           </button>
         </mat-menu>
         <mat-menu #routeDetailSendMenu="matMenu" class="qs-menu-panel">
-          @if (canSendRouteToSuunto()) {
+          @for (action of routeSendActions(); track action.serviceName) {
           <button mat-menu-item type="button"
-            [disabled]="sendingToService() || !canSendRoutesToSuunto()"
-            (click)="sendRouteToSuunto()">
-            <mat-icon>cloud_upload</mat-icon>
-            <span>{{ suuntoRouteSendMenuLabel() }}</span>
-          </button>
-          }
-          @if (isCOROSRouteUploadAvailableForUser() && (canSendRouteToCOROS() || canSendRoutesToCOROS())) {
-          <button mat-menu-item type="button"
-            [disabled]="sendingToService() || !canSendRoutesToCOROS() || !canSendRouteToCOROS()"
-            (click)="sendRouteToCOROS()">
-            <mat-icon>cloud_upload</mat-icon>
-            <span>COROS</span>
-          </button>
-          }
-          @if (canSendRouteToGarmin() || canSendRoutesToGarmin() || garminRouteSendDisabledReason()) {
-          <button mat-menu-item type="button"
-            [disabled]="sendingToService() || !canSendRoutesToGarmin() || !canSendRouteToGarmin()"
-            (click)="sendRouteToGarmin()">
-              <mat-icon>cloud_upload</mat-icon>
-            <span>{{ garminRouteSendMenuLabel() }}</span>
+            [disabled]="sendingToService() || renaming() || downloading() || exportingGPX() || reprocessing() || deleting()"
+            (click)="sendRouteToService(action.serviceName)">
+            <mat-icon aria-hidden="true">cloud_upload</mat-icon>
+            @if (action.copy) {
+              <span>Send updated copy to {{ action.label }}</span>
+            } @else {
+              <span>Send to {{ action.label }}</span>
+            }
           </button>
           }
         </mat-menu>
       </div>
     </app-summary-primary-info>
+    <div class="route-send-status" role="status" aria-live="polite" aria-atomic="true">
+      @if (routeSendStatus()) {
+        @if (sendingToService()) {
+          <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
+        }
+        <span>{{ routeSendStatus() }}</span>
+      }
+    </div>
   </section>
 
   <section class="route-detail-section" aria-label="Route map">

@@ -17,6 +17,7 @@ describe('McpConnectionsComponent', () => {
     clientName: 'Training Copilot',
     redirectHost: 'client.example',
     scopes: [
+      'health:read',
       'metrics:read',
       'measurements:read',
       'sleep:read',
@@ -25,6 +26,7 @@ describe('McpConnectionsComponent', () => {
       'routes:read',
       'route-location:read',
     ] as Array<
+      | 'health:read'
       | 'metrics:read'
       | 'measurements:read'
       | 'sleep:read'
@@ -73,6 +75,8 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Training Copilot');
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Body measurements');
+    expect(content).toContain('Health metrics');
+    expect(content).toContain('existing connections must reconnect');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('Activity locations');

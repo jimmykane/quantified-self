@@ -98,7 +98,9 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       if (start === null || end === null || start > end) return;
       // Different calendar days can share a weekly bucket or clipped endpoint. Keep one selectable marker.
       const existing = positions.get(start);
-      const hasPeriod = group.startDate !== group.endDate;
+      // Clipping a period to a one-day view must not turn it into a point
+      // note. Preserve its original duration, including newly ongoing notes.
+      const hasPeriod = group.notes.some(note => note.endDate === null || note.startDate !== note.endDate);
       if (existing) {
         existing.notes.push(...group.notes);
         existing.end = Math.max(existing.end, end);
@@ -121,7 +123,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
         })).join(''),
       };
       const labelColor = (option.textStyle as { color?: string } | undefined)?.color ?? axis.axisLabel?.color;
-      const color = timelineNoteGroupColor(group.notes) ?? labelColor;
+      const color = timelineNoteGroupColor(group.notes);
       const label = group.notes.length > 1 ? `${group.notes.length} notes` : group.notes[0].title.replace(/\s+/g, ' ');
       // A period collapsed into one weekly bucket still needs only one selectable marker.
       const showPeriod = group.hasPeriod && start < group.end;

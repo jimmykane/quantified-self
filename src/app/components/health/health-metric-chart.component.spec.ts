@@ -93,6 +93,31 @@ describe('HealthMetricChartComponent', () => {
     expect(host.textContent).not.toContain('Device:');
   });
 
+  it('stretches chart rows only when the workspace opts in', async () => {
+    const host = await render(null);
+    expect(host.classList.contains('health-metric-chart-fill-height')).toBe(false);
+    expect(host.querySelector('.compact-row-host--fill-height')).toBeNull();
+
+    fixture.componentRef.setInput('fillHeight', true);
+    fixture.componentRef.setInput('series', [series(null), { ...series(null), id: 'second-source' }]);
+    fixture.detectChanges();
+    expect(host.classList.contains('health-metric-chart-fill-height')).toBe(true);
+    expect(host.querySelectorAll('.compact-row-host--fill-height')).toHaveLength(2);
+
+    fixture.componentRef.setInput('fillHeight', false);
+    fixture.detectChanges();
+    expect(host.querySelector('.compact-row-host--fill-height')).toBeNull();
+  });
+
+  it('names the Heart rate reading prominently and keeps the provider attributed underneath', async () => {
+    const host = await render(null);
+    fixture.componentRef.setInput('series', [{ ...series(null), metricId: HEALTH_METRIC_IDS.HeartRate,
+      semanticLabel: '7-day average · Provider reported', semanticVariant: 'rolling_7_day_average' }]);
+    fixture.detectChanges();
+    expect(host.querySelector('h3')?.textContent).toBe('7-day average');
+    expect(host.textContent).toContain('Garmin · Provider reported');
+  });
+
   it('uses flat shared rows while preserving source separation and status labels', async () => {
     const host = await render('Garmin Test');
     const second = { ...series(null), id: 'suunto-native', provider: HEALTH_PROVIDERS.SuuntoApp,

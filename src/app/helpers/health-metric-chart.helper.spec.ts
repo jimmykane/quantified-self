@@ -83,6 +83,20 @@ function series(overrides: Partial<HealthWorkspaceSeries> = {}): HealthWorkspace
 }
 
 describe('Health metric chart helpers', () => {
+  it.each([false, true])('keeps Health strokes light at rest and on hover (compact: %s)', compact => {
+    const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
+    for (const darkTheme of [false, true]) {
+      for (const width of [320, 1000]) {
+        const option = buildHealthMetricEChartsOption(model, 0, DAY_MS * 13,
+          buildDashboardEChartsStyleTokens(darkTheme, width), width < 600, null, compact) as {
+          series: Array<{ lineStyle: { width: number }; emphasis: { lineStyle: { width: number } } }>;
+        };
+        expect(option.series[0].lineStyle.width).toBe(1);
+        expect(option.series[0].emphasis.lineStyle.width).toBe(1);
+      }
+    }
+  });
+
   it.each([1, 14, 30, 90, 365])('keeps %i-day date axes collision-safe without changing readings or the selected window', days => {
     const start = Date.UTC(2026, 5, 11);
     const end = start + days * DAY_MS - 1;
@@ -129,7 +143,7 @@ describe('Health metric chart helpers', () => {
     expect(option.tooltip.formatter({ value: [0, 52] })).toContain('52.00 ml/kg/min');
   });
 
-  it.each([280, 320, 480])('keeps compact Health value scales visible without expanding the grid (%i px)', width => {
+  it.each([280, 320, 480, 1000])('keeps compact Health axes visible without expanding the grid (%i px)', width => {
     const model = buildHealthChartModels([series()], 0, DAY_MS * 13)[0];
     const option = buildHealthMetricEChartsOption(
       model,
@@ -147,7 +161,7 @@ describe('Health metric chart helpers', () => {
     };
 
     expect(option.grid).toMatchObject({ left: 2, right: 2, outerBoundsContain: 'axisLabel' });
-    expect(option.xAxis.show).toBe(false);
+    expect(option.xAxis).toMatchObject({ show: true, splitNumber: 3, axisLabel: { hideOverlap: true } });
     expect(option.yAxis).toMatchObject({ show: true, splitNumber: 3, axisLabel: { hideOverlap: true } });
     expect(option.yAxis.axisLabel.formatter(50)).toBe('50');
     expect(model.displayUnit).toBe('bpm');
@@ -167,6 +181,30 @@ describe('Health metric chart helpers', () => {
       true,
     ) as { series: Array<{ showSymbol: boolean; symbolSize: number }> };
     expect(sparseOption.series[0]).toMatchObject({ showSymbol: true, symbolSize: 4 });
+  });
+
+  it.each([
+    { days: 1, metricId: HEALTH_METRIC_IDS.HeartRate, unit: 'bpm' },
+    { days: 14, metricId: HEALTH_METRIC_IDS.HeartRateVariability, unit: 'millisecond' },
+  ])('shows recorded-local $days-day time/date labels in Health highlights', ({ days, metricId, unit }) => {
+    const start = Date.parse('2026-09-06T21:00:00.000Z');
+    const end = start + days * DAY_MS - 1;
+    const model = buildHealthChartModels([series({
+      metricId,
+      unit,
+      points: [{ timestampMs: start, calendarDate: '2026-09-07', timezoneOffsetSeconds: 10800, value: 50, qualityCode: null }],
+    })], start, end)[0];
+    const option = buildHealthMetricEChartsOption(model, start, end,
+      buildDashboardEChartsStyleTokens(false, 320), true, null, true) as {
+      xAxis: { axisLabel: { formatter: (value: number) => string } };
+    };
+    const formatter = new Intl.DateTimeFormat(undefined, days === 1
+      ? { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }
+      : { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+    expect(option.xAxis).toMatchObject({ show: true, min: start, max: end });
+    expect(option.xAxis.axisLabel.formatter(start))
+      .toBe(formatter.format(new Date('2026-09-07T00:00:00.000Z')));
   });
 
   it.each([false, true])('plots each HRV range and color at its own date (compact: %s)', compact => {
@@ -218,13 +256,13 @@ describe('Health metric chart helpers', () => {
     ]);
     expect(option.series[0].showSymbol).toBe(true);
     expect(option.series[0].z).toBe(3);
-    expect(option.series[0].lineStyle).toEqual({ color: 'transparent', width: 1.5 });
+    expect(option.series[0].lineStyle).toEqual({ color: 'transparent', width: 1 });
     expect(option.series[0].itemStyle?.color({ value: [0, 40] })).toBe(AppDataColors.Altitude);
     expect(option.series[0].itemStyle?.color({ value: [DAY_MS, 46] })).toBe(AppDataColors.Stress);
     expect(option.series[1]).toMatchObject({
       data: [[0, 40], [DAY_MS, 46]],
       showSymbol: false,
-      lineStyle: { color: AppDataColors.Stress, width: 1.5 },
+      lineStyle: { color: AppDataColors.Stress, width: 1 },
       silent: true,
     });
     expect(option.series[0].markArea).toBeUndefined();
@@ -453,7 +491,7 @@ describe('Health metric chart helpers', () => {
         false,
       ) as HealthMetricColorOption;
       expect(option.series[0].lineStyle.color).toBe(color);
-      expect(option.series[0].lineStyle.width).toBe(1.5);
+      expect(option.series[0].lineStyle.width).toBe(1);
       expect(option.series[0].itemStyle.color).toBe(color);
     }
 
@@ -519,7 +557,7 @@ describe('Health metric chart helpers', () => {
       [DAY_MS * 3, 'active', 1],
       [DAY_MS * 4, 'provider specific', 4],
     ]);
-    expect(option.series[0].lineStyle).toEqual({ width: 1.5 });
+    expect(option.series[0].lineStyle).toEqual({ width: 1 });
     expect(option.series[0].itemStyle).toBeUndefined();
     expect(option.yAxis.axisLabel.color('relaxing')).toBe(AppDataColors.Altitude);
     expect(option.yAxis.axisLabel.color('active')).toBe(AppDataColors.Distance);

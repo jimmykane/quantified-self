@@ -40,6 +40,14 @@ alongside the route-specific class; do not add another outer width, margin, or p
 Settings intentionally retains its centered 760 px form column, including its aligned fixed save action, rather than
 stretching a form workflow across the workspace width.
 
+## Sidebar navigation
+
+Training remains a direct link to `/training`. Plans links to `/training/plans` as an indented subitem immediately below
+it in a labelled Training group, without an expansion control. Only the Plans entry uses the Training Planning navigation
+UID allowlist; other signed-in users retain the direct Training link. Calendar entry points and owner-scoped planning
+access remain available. Training matches only its exact path (ignoring query parameters and fragments), so Plans has an
+independent active state. Both links keep their existing close/haptic action.
+
 ## Material and accessibility
 
 Use Angular Material controls for header actions: `mat-icon-button` for icon-only navigation, `mat-button` for secondary
@@ -83,7 +91,7 @@ beta, and production builds; only the App Check debug provider is development-sp
 ### Shared compact rows
 
 `CompactRowComponent` (`app-compact-row`) in `src/app/components/shared/compact-row/` is the flat content-row
-primitive shared by Home, public feature pages, benchmark previews, and Health. It replaces the feature-specific
+primitive shared by Home, public feature pages, benchmark previews, Health, and Training Plans. It replaces the feature-specific
 `CompactFeatureRowComponent` name; existing callers use the same component rather than a compatibility wrapper.
 
 The default `layout="columns"` and `density="comfortable"` preserve the public feature presentation: optional icon,
@@ -91,6 +99,14 @@ heading, content, and action. `layout="stacked"` keeps an optional action beside
 full row width at every breakpoint. `density="compact"` uses smaller icon/header spacing and Material text roles;
 Health uses this combination for Highlights and source-separated charts. The primitive adds no card background,
 rounded container, shadow, or nested content padding. `showDivider` controls the bottom divider.
+Training Plans uses the same compact stacked rows for workouts, editable step/repeat blocks, and its history section;
+workflow state and unit-aware workout summaries remain owned by Plans.
+
+For stacked chart rows, `[fillHeight]="true"` opts into stretching the row body within its allocated height; it is
+ignored for column layouts and defaults to false. The Health metric explorer uses this on desktop to fill the space
+beside the metric list, with a minimum plot height for multi-row grids. Mobile, Highlights, and public previews
+retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
+extra padding is needed.
 
 `title`, optional `titleId`, and `headingLevel` (2, 3, or 4) own heading semantics; `summary`, `icon`, and `iconTone`
 provide optional context. Default projected content can contain existing charts, tables, or metric displays.

@@ -103,6 +103,7 @@ import {
   selectActivityHealthObservations,
   selectWorkoutWeightContextFallback,
   selectHealthPriorityTrendSeries,
+  selectTodayHeartRateHighlightSeries,
   sleepSessionHasHrv,
 } from '../../helpers/health-workspace.helper';
 import {
@@ -240,6 +241,11 @@ export class HealthWorkspaceComponent {
   readonly priorityWindow = resolveHealthWorkspaceWindow({
     metric: HEALTH_METRIC_IDS.HeartRate,
     range: '30d',
+    endDate: this.todayDate,
+  }, this.todayDate);
+  readonly priorityHeartRateWindow = resolveHealthWorkspaceWindow({
+    metric: HEALTH_METRIC_IDS.HeartRate,
+    range: 'today',
     endDate: this.todayDate,
   }, this.todayDate);
   readonly priorityHrvWindow: HealthPriorityChartWindow & { startDate: string; endDate: string } = {
@@ -587,6 +593,35 @@ export class HealthWorkspaceComponent {
       return selectedProviders.length === 0 || selectedProviders.includes(provider);
     }) === true
     && this.metricView().series.length === 0);
+  readonly omittedSampleSourceNotice = computed(() => {
+    if (this.selectedIsSleep() || this.selectedWindow().includeSamples
+      || this.selectedStatus() !== 'ready' || !this.hasData()) return null;
+    const shownProviders = new Set(this.metricView().series.map(series => series.provider));
+    const filters = this.effectiveProviderFilters();
+    const omitted = (this.selectedHealthLoad()?.sampleBackedProviders || [])
+      .filter(provider => (!filters.length || filters.includes(provider)) && !shownProviders.has(provider));
+    return omitted.length
+      ? `${omitted.map(providerLabel).join(', ')}: detailed readings exist, but no daily summary is available in this view. Select 30 days or less to see those readings.`
+      : null;
+  });
+  readonly heartRateReadingNotice = computed(() => {
+    if (this.routeState().metric !== HEALTH_METRIC_IDS.HeartRate
+      || this.selectedStatus() !== 'ready' || !this.hasData()) return null;
+    const series = this.metricView().series;
+    const messages: string[] = [];
+    if (series.some(item => item.semanticVariant === 'rolling_7_day_average')) {
+      messages.push('7-day average is the provider’s rolling value, not the average of your selected date range.');
+    }
+    if (series.some(item => item.semanticVariant.startsWith('qs_daily_'))) {
+      messages.push('Calculated by QS uses only the readings recorded on each day; gaps remain gaps.');
+      if (series.some(item => ['qs_daily_interval_low', 'qs_daily_interval_high'].includes(item.semanticVariant))) {
+        messages.push('Lowest and highest interval averages are not the day’s true heart-rate extremes.');
+      }
+    } else if (series.some(item => ['activity_interval_average', 'daily_15_second'].includes(item.semanticVariant))) {
+      messages.push('Throughout the day charts show individual recorded intervals, not daily averages.');
+    }
+    return messages.join(' ') || null;
+  });
   readonly incompleteNotice = computed(() => {
     const loaded = this.selectedHealthLoad();
     const reasons: string[] = [];
@@ -683,18 +718,19 @@ export class HealthWorkspaceComponent {
       ),
       priorityCard(
         'heart_rate',
-        'Heart rate',
+        'Today’s heart rate',
         healthMetricIcon(HEALTH_METRIC_IDS.HeartRate),
         HEALTH_METRIC_IDS.HeartRate,
         [],
-        selectHealthPriorityTrendSeries(
+        selectTodayHeartRateHighlightSeries(
           this.priorityHeartRateLoad()?.result,
-          this.priorityRecentSleepSessions(),
+          this.priorityHeartRateWindow,
           this.unitSettings(),
         ),
         this.priorityHeartRateStatus(),
-        'No Heart rate summaries in the last 30 days.',
+        'No recorded heart rate today.',
         !healthAvailabilityIsKnown || available.has(HEALTH_METRIC_IDS.HeartRate),
+        this.priorityHeartRateWindow,
       ),
       priorityCard(
         'heart_rate_variability',
@@ -719,7 +755,7 @@ export class HealthWorkspaceComponent {
       chartSeries: card.chartSeries.filter(series => selected.includes(series.provider)),
     } : card;
   }).filter(card =>
-    card.id === 'heart_rate_variability'
+    card.id === 'heart_rate_variability' || card.id === 'heart_rate'
       ? card.chartSeries.length > 0
       : card.loading || card.error || card.rows.length > 0 || card.chartSeries.length > 0));
   readonly syncStateViews = computed<HealthSyncStateView[]>(() => this.syncStates()
@@ -999,7 +1035,12 @@ export class HealthWorkspaceComponent {
       if (!uid) {
         return;
       }
-      void this.loadPriorityMetric(uid, HEALTH_METRIC_IDS.HeartRate, this.priorityWindow.startDate, generation, true);
+      // Provider calendar dates can differ from the viewer's local day. Read
+      // the adjacent dates too, then clip actual sample timestamps to today.
+      const todayMs = Date.parse(this.todayDate);
+      void this.loadPriorityMetric(uid, HEALTH_METRIC_IDS.HeartRate,
+        new Date(todayMs - DAY_MS).toISOString().slice(0, 10), generation, true,
+        new Date(todayMs + DAY_MS).toISOString().slice(0, 10));
       void this.loadPriorityMetric(
         uid,
         HEALTH_METRIC_IDS.HeartRateVariability,
@@ -1269,11 +1310,12 @@ export class HealthWorkspaceComponent {
     startDate: string,
     generation: number,
     includeSamples: boolean,
+    endDate = this.todayDate,
   ): Promise<void> {
     try {
       const result = await this.healthService.loadMetricRange(uid, {
         startDate,
-        endDate: this.todayDate,
+        endDate,
         metricId,
         includeSamples,
       });

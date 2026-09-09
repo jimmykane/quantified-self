@@ -13,11 +13,15 @@ import { of } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
+import { provideRouter, Router, RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
+import { TRAINING_PLANNING_NAVIGATION_ALLOWED_UIDS } from '@shared/training-planning-rollout';
+
+const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = TRAINING_PLANNING_NAVIGATION_ALLOWED_UIDS[0];
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
@@ -64,7 +68,9 @@ describe('SideNavComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [SideNavComponent],
+            imports: [RouterLink, RouterLinkActive],
             providers: [
+                provideRouter([{ path: '**', children: [] }]),
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppSideNavService, useValue: mockSideNavService },
@@ -285,7 +291,7 @@ describe('SideNavComponent', () => {
         expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeTruthy();
         expect(navigationItems.slice(0, 7).map(item => item.nativeElement.getAttribute('routerlink')))
             .toEqual(['/dashboard', '/calendar', '/training', '/health', '/routes', '/mytracks', '/tools/compare']);
-        healthItem!.triggerEventHandler('click');
+        healthItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();
         expect(mockHapticsService.selection).toHaveBeenCalledOnce();
     });
@@ -309,6 +315,64 @@ describe('SideNavComponent', () => {
         expect(healthItem).toBeUndefined();
     });
 
+    it('highlights Plans independently of Training while preserving query-driven Training navigation', async () => {
+        mockUserService.user = vi.fn().mockReturnValue({ uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID });
+        fixture.detectChanges();
+        const router = TestBed.inject(Router);
+        const trainingItem = fixture.nativeElement.querySelector('[routerlink="/training"]') as HTMLElement;
+        const plansItem = fixture.nativeElement.querySelector('[routerlink="/training/plans"]') as HTMLElement;
+
+        await router.navigateByUrl('/training/plans?date=2026-08-03&scope=standalone');
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(plansItem.classList.contains('active')).toBe(true);
+        expect(trainingItem.classList.contains('active')).toBe(false);
+
+        await router.navigateByUrl('/training?tab=load#trends');
+        await fixture.whenStable();
+        fixture.detectChanges();
+        expect(trainingItem.classList.contains('active')).toBe(true);
+        expect(plansItem.classList.contains('active')).toBe(false);
+    });
+
+    it('shows Plans beneath the direct Training link for the staged user and closes on selection', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+        const plansItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Plans'));
+
+        expect(plansItem).toBeTruthy();
+        expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/training/plans');
+        const trainingGroup = fixture.nativeElement.querySelector('[role="group"][aria-label="Training"]');
+        expect(plansItem?.nativeElement.parentElement).toBe(trainingGroup);
+        expect(plansItem?.nativeElement.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
+        expect(mockHapticsService.selection).not.toHaveBeenCalled();
+        plansItem!.triggerEventHandler('click', new MouseEvent('click'));
+        expect(mockSideNavService.close).toHaveBeenCalledOnce();
+        expect(mockHapticsService.selection).toHaveBeenCalledOnce();
+    });
+
+    it('silently hides Plans navigation from signed-in users outside the staged rollout', () => {
+        mockUserService.user = vi.fn().mockReturnValue({
+            uid: 'another-user',
+            displayName: 'Athlete',
+            email: 'athlete@example.com'
+        });
+
+        fixture.detectChanges();
+        const plansItem = fixture.debugElement
+            .queryAll(By.css('mat-list-item'))
+            .find(item => item.nativeElement.textContent.includes('Plans'));
+
+        expect(plansItem).toBeUndefined();
+    });
+
     it('opens the profile section when the signed-in profile shortcut is selected', () => {
         mockUserService.user = vi.fn().mockReturnValue({
             uid: 'user-1',
@@ -328,7 +392,7 @@ describe('SideNavComponent', () => {
 
     it('orders signed-in navigation with Assistant last', () => {
         mockUserService.user = vi.fn().mockReturnValue({
-            uid: 'user-1',
+            uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID,
             displayName: 'Athlete',
             email: 'athlete@example.com'
         });
@@ -338,6 +402,7 @@ describe('SideNavComponent', () => {
         const dashboardItem = navigationItems.find(item => item.nativeElement.textContent.includes('Dashboard'));
         const healthItem = navigationItems.find(item => item.nativeElement.textContent.includes('Health'));
         const calendarItem = navigationItems.find(item => item.nativeElement.textContent.includes('Calendar'));
+        const plansItem = navigationItems.find(item => item.nativeElement.textContent.includes('Plans'));
         const trainingItem = navigationItems.find(item => item.nativeElement.textContent.includes('Training'));
         const routesItem = navigationItems.find(item => item.nativeElement.textContent.includes('Routes'));
         const myTracksItem = navigationItems.find(item => item.nativeElement.textContent.includes('My Tracks'));
@@ -347,6 +412,7 @@ describe('SideNavComponent', () => {
         expect(dashboardItem).toBeTruthy();
         expect(healthItem).toBeTruthy();
         expect(calendarItem).toBeTruthy();
+        expect(plansItem).toBeTruthy();
         expect(trainingItem).toBeTruthy();
         expect(routesItem).toBeTruthy();
         expect(myTracksItem).toBeTruthy();
@@ -357,6 +423,7 @@ describe('SideNavComponent', () => {
             navigationItems.indexOf(dashboardItem!),
             navigationItems.indexOf(calendarItem!),
             navigationItems.indexOf(trainingItem!),
+            navigationItems.indexOf(plansItem!),
             navigationItems.indexOf(healthItem!),
             navigationItems.indexOf(routesItem!),
             navigationItems.indexOf(myTracksItem!),
@@ -371,6 +438,7 @@ describe('SideNavComponent', () => {
             dashboardIndex + 5,
             dashboardIndex + 6,
             dashboardIndex + 7,
+            dashboardIndex + 8,
         ]);
         expect(assistantItem?.nativeElement.textContent).toContain('Assistant');
         expect(assistantItem?.nativeElement.textContent).not.toContain('Going away');
@@ -471,7 +539,7 @@ describe('SideNavComponent', () => {
             ?? compareFilesItem?.nativeElement.getAttribute('routerLink')
         ).toBe('/tools/compare');
         expect(compareFilesItem?.nativeElement.textContent).not.toContain('New');
-        compareFilesItem?.triggerEventHandler('click');
+        compareFilesItem?.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockAnalyticsService.logToolCompareEntry).toHaveBeenCalledWith('side_nav', false);
 
         mockUserService.user = vi.fn().mockReturnValue({

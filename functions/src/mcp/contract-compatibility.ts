@@ -33,6 +33,12 @@ const MCP_CONTRACT_PROFILE_DEFINITIONS: ReadonlyArray<{
   id: 'sleep',
   scopes: [MCP_OAUTH_SCOPES.SleepRead],
 }, {
+  id: 'health',
+  scopes: [MCP_OAUTH_SCOPES.HealthRead],
+}, {
+  id: 'health-measurements',
+  scopes: [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.MeasurementsRead],
+}, {
   id: 'activity-details',
   scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead],
 }, {
@@ -59,6 +65,7 @@ const MCP_CONTRACT_PROFILE_DEFINITIONS: ReadonlyArray<{
 }, {
   id: 'all-parent-scopes',
   scopes: [
+    MCP_OAUTH_SCOPES.HealthRead,
     MCP_OAUTH_SCOPES.MetricsRead,
     MCP_OAUTH_SCOPES.MeasurementsRead,
     MCP_OAUTH_SCOPES.SleepRead,

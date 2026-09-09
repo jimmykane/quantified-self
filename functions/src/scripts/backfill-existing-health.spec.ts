@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { BackfillDependencies, runExistingHealthBackfill } from './backfill-existing-health';
-import { BackfillOptions, CHECKPOINT_COLLECTION, digest, parseBackfillOptions, PROVIDERS } from './health-backfill-plan';
+import { BackfillOptions, buildHealthBackfillJobs, CHECKPOINT_COLLECTION, digest, parseBackfillOptions, PROVIDERS } from './health-backfill-plan';
 
 vi.mock('firebase-admin', () => ({ firestore: { FieldPath: { documentId: () => '__name__' } } }));
 const hooks = vi.hoisted(() => ({ bindingAllowed: true }));
@@ -243,6 +243,63 @@ describe('existing-user Health backfill runner', () => {
     expect(await execute()).toMatchObject({ jobsSubmitted: 3, failed: 0 });
     expect(enqueue.mock.calls.at(-1)![0].rangeStartMs).toBe(Date.parse('2026-06-08T10:00:00Z'));
   });
+  it('clips Garmin history to five years and keeps its cursor and progress aligned on reservation retry', async () => {
+    connect('garmin');
+    options.startMs = Date.parse('2000-01-01');
+    const policyStart = Date.parse('2021-09-07T10:00:00Z');
+    // Inclusive endpoint: moving the start by two seconds drops a whole request window.
+    options.endMs = policyStart + 90 * 86_400_000;
+    enqueue.mockRejectedValueOnce(new Error('queue temporarily unavailable'));
+    expect(await execute()).toMatchObject({ jobsSubmitted: 0, failed: 1 });
+    const firstInput = enqueue.mock.calls[0][0];
+    expect(firstInput).toMatchObject({
+      rangeStartMs: policyStart, garminHealthBackfillNextStartMs: policyStart,
+      garminHealthBackfillWindowsTotal: 20,
+    });
+    deps.now = () => now + 2000;
+    expect(await execute()).toMatchObject({ jobsSubmitted: 1, failed: 0 });
+    const retryInput = enqueue.mock.calls[1][0];
+    expect(retryInput).toMatchObject({
+      rangeStartMs: policyStart + 2000, garminHealthBackfillNextStartMs: policyStart + 2000,
+      garminHealthBackfillWindowsTotal: 10,
+    });
+    expect(retryInput.dedupeKey).toBe(firstInput.dedupeKey);
+    expect(db.rows.get(`users/owner/sleepSyncState/${PROVIDERS.garmin}`)).toMatchObject({
+      lastBackfillStartMs: policyStart + 2000, healthBackfillWindowsTotal: 10,
+    });
+    expect(await execute()).toMatchObject({ jobsSubmitted: 0, failed: 0 });
+    expect(enqueue).toHaveBeenCalledTimes(2);
+  });
+  it.each(['pending', 'success', 'failed'])('preserves Garmin %s work that appears after the preview', async observation => {
+    connect('garmin');
+    // An ambiguous submission left a reservation. Its queue/worker result becomes
+    // visible after the retry's preview, but before the retry reserves again.
+    enqueue.mockRejectedValueOnce(new Error('ambiguous queue submission'));
+    expect(await execute()).toMatchObject({ jobsSubmitted: 0, failed: 1 });
+    enqueue.mockClear();
+    const statePath = `users/owner/sleepSyncState/${PROVIDERS.garmin}`;
+    const campaign = digest(['test-project', PROVIDERS.garmin, options.startMs, options.endMs]);
+    const job = buildHealthBackfillJobs(PROVIDERS.garmin, 'owner', 'provider-account', options.startMs, options.endMs, campaign)[0];
+    const progress = {
+      healthBackfillStatus: observation === 'pending' ? 'running' : observation === 'success' ? 'complete' : 'failed',
+      healthBackfillWindowsCompleted: observation === 'success' ? 10 : 9,
+      healthBackfillWindowsTotal: 10,
+    };
+    let injected = false;
+    db.beforeTransaction = () => {
+      if (injected) return;
+      injected = true;
+      db.rows.set(statePath, { ...db.rows.get(statePath), ...progress });
+      db.rows.set(`${observation === 'failed' ? 'failed_jobs' : 'sleepSyncQueue'}/${job.queueId}`, {
+        ...job.input, processed: observation !== 'pending', resultStatus: observation,
+      });
+    };
+    expect(await execute()).toMatchObject({ jobsSubmitted: 0, skipped: { queue_already_submitted_or_terminal: 1 } });
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(db.rows.get(statePath)).toMatchObject(progress);
+    expect(checkpointRows()).toHaveLength(1);
+    expect(checkpointRows()[0][1].observation).toBe('reserved');
+  });
   it('respects Pro, missing permissions, inactive accounts, and verified Suunto bindings', async () => {
     connect('garmin', 'free'); roles.free = { stripeRole: 'free' };
     connect('garmin', 'missing-permission'); db.rows.get('garminAPITokens/missing-permission/tokens/provider-account')!.permissions = ['HEALTH_EXPORT'];
@@ -336,6 +393,46 @@ describe('existing-user Health backfill runner', () => {
     connect('garmin'); db.rows.set('sleepSyncQueue/unrelated', { processed: false });
     expect(await execute({ maxPending: 1 })).toMatchObject({ jobsSubmitted: 0, incomplete: true, skipped: { queue_backpressure: 1 } });
     expect(db.writes).toEqual([]);
+  });
+  it('overrides only the approved cooldown, preserving it and deterministic resume', async () => {
+    connect('garmin');
+    const until = now + 60 * 86_400_000;
+    const statePath = 'users/owner/sleepSyncState/GarminAPI';
+    db.rows.set(statePath, { nextBackfillAllowedAtMs: until, lastSuccessfulSyncAtMs: 123 });
+    const scoped: BackfillOptions = { ...options, uid: 'owner', providers: ['garmin'], overrideCooldownUntilMs: until };
+    expect(await runExistingHealthBackfill(scoped, deps)).toMatchObject({ jobsPlanned: 1, jobsSubmitted: 0 });
+    expect(db.writes).toEqual([]);
+    expect(await execute({ ...scoped, execute: true })).toMatchObject({ jobsSubmitted: 1, failed: 0 });
+    expect(db.rows.get(statePath)).toMatchObject({ nextBackfillAllowedAtMs: until, lastSuccessfulSyncAtMs: 123 });
+    expect([...db.rows.values()].some(row => row.overriddenCooldownUntilMs === until)).toBe(true);
+    expect(await execute({ ...scoped, execute: true })).toMatchObject({ jobsSubmitted: 0, observed: { pending: 1 } });
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+  it('rejects bulk or malformed programmatic cooldown exceptions before reading', async () => {
+    await expect(execute({ overrideCooldownUntilMs: now + 1000 })).rejects.toThrow();
+    await expect(execute({ uid: 'owner', overrideCooldownUntilMs: now + 1000 })).rejects.toThrow();
+    await expect(execute({ uid: 'owner', providers: ['garmin'], overrideCooldownUntilMs: NaN })).rejects.toThrow();
+    expect(db.projections).toEqual([]);
+  });
+  it.each(['mismatch', 'changed', 'pending', 'lease', 'deletion', 'disconnect', 'pro', 'permissions', 'backpressure'])('keeps %s safeguards with a cooldown exception', async scenario => {
+    connect('garmin');
+    const until = now + 1000;
+    const statePath = 'users/owner/sleepSyncState/GarminAPI';
+    db.rows.set(statePath, { nextBackfillAllowedAtMs: scenario === 'mismatch' ? until + 1 : until });
+    if (scenario === 'changed') db.beforeTransaction = () => { db.rows.get(statePath)!.nextBackfillAllowedAtMs = until + 1; };
+    if (scenario === 'pending') db.rows.set('sleepSyncQueue/other', { userID: 'owner', provider: PROVIDERS.garmin, type: 'garmin_health_backfill', processed: false });
+    if (scenario === 'lease') db.rows.set(`${statePath}/${CHECKPOINT_COLLECTION}/control`, { leaseUntilMs: now + 1000 });
+    if (scenario === 'deletion') db.beforeTransaction = () => { db.rows.set('userDeletionTombstones/owner', {}); };
+    if (scenario === 'disconnect') db.beforeTransaction = () => { db.rows.get('garminAPITokens/owner')!.disconnectState = 'disconnecting'; };
+    if (scenario === 'pro') roles.owner = {};
+    if (scenario === 'permissions') db.rows.get('garminAPITokens/owner/tokens/provider-account')!.permissions = [];
+    if (scenario === 'backpressure') db.rows.set('sleepSyncQueue/unrelated', { processed: false });
+    const reason = ({ mismatch: 'history_cooldown', changed: 'history_cooldown', pending: 'other_history_work_pending',
+      lease: 'another_script_running', deletion: 'connection_changed', disconnect: 'connection_changed', pro: 'pro_required',
+      permissions: 'health_history_permission_missing', backpressure: 'queue_backpressure' })[scenario];
+    expect(await execute({ uid: 'owner', providers: ['garmin'], overrideCooldownUntilMs: until, maxPending: 1 }))
+      .toMatchObject({ jobsSubmitted: 0, skipped: { [reason!]: 1 } });
+    expect(enqueue).not.toHaveBeenCalled();
   });
   it('bounds owners and only queries the selected owner when requested', async () => {
     connect('garmin', 'one'); connect('garmin', 'two');

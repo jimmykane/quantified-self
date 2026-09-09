@@ -22,6 +22,7 @@ describe('help.content', () => {
       expect(content).toContain('Notes never change your measurements, readiness, or forecasts');
       expect(content).toContain('notes appear on the Highlights trend charts');
       expect(content).toContain('Choose a **Color**');
+      expect(content).toContain('**Default** uses the same neutral gray in lists, charts, and Calendar');
       expect(content).toContain('calendar buttons to pick dates');
       expect(content).toContain('Date ranges have start and end arrows');
       expect(content).toContain('ongoing shading stops at today');
@@ -30,6 +31,9 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
     expect(calendar).toContain('a note icon marks days');
+    expect(calendar).toContain("A slim colored edge uses your note's selected color");
+    expect(calendar).toContain('overlapping notes keep their different colors as separate segments');
+    expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
     expect(CONNECTED_SERVICES_POLICY_SECTION.content.join(' ')).toContain('content-free deletion receipt');
   });
@@ -60,6 +64,7 @@ describe('help.content', () => {
       'getting-started',
       'supported-activities',
       'activity-calendar',
+      'training-plans',
       'health',
       'training-analysis',
       'ai-insights',
@@ -71,8 +76,8 @@ describe('help.content', () => {
     ]);
   });
 
-  it('should define eleven unique sections with complete content', () => {
-    expect(HELP_SECTIONS).toHaveLength(11);
+  it('should define twelve unique sections with complete content', () => {
+    expect(HELP_SECTIONS).toHaveLength(12);
 
     const uniqueIds = new Set(HELP_SECTIONS.map(section => section.id));
     expect(uniqueIds.size).toBe(HELP_SECTIONS.length);
@@ -102,6 +107,11 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('a source with no readings does not silently switch');
     expect(healthSection?.content).not.toContain('**View options**');
     expect(healthSection?.content).toContain('**Resting heart rate · 30d**');
+    expect(healthSection?.content).toContain('**Read Heart rate charts by their time period.**');
+    expect(healthSection?.content).toContain('unweighted arithmetic average');
+    expect(healthSection?.content).toContain('**not the day\'s true heart-rate extremes**');
+    expect(healthSection?.content).toContain('names the omitted source even when other providers have visible charts');
+    expect(healthSection?.content).toContain('**Calculated by QS**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
     expect(healthSection?.content).toContain('**Add measurement** at the top of Health');
@@ -142,11 +152,14 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
     expect(healthSection?.content).toContain('never creates a cross-provider headline average');
     expect(healthSection?.content).toContain('**Choose a Highlight source.**');
+    expect(healthSection?.content).toContain('**Today’s heart rate**');
+    expect(healthSection?.content).toContain('whole highlight is hidden when none do');
+    expect(healthSection?.content).toContain('not a live sensor feed');
     expect(healthSection?.content).toContain('remembered separately for each highlight in your account settings');
     expect(healthSection?.content).toContain('without overwriting your saved choice');
     expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
-    expect(healthSection?.content).toContain('Detailed sample streams load for 1d, 14-day, and 30-day windows');
+    expect(healthSection?.content).toContain('Detailed sample charts are available for 1d, 14-day, and 30-day windows');
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
@@ -395,6 +408,9 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
     expect(calendarSection?.content).toContain('visible-period activity query');
     expect(calendarSection?.content).toContain('independent from the dashboard event table');
+    expect(calendarSection?.content).toContain('Select any date, including an empty one');
+    expect(calendarSection?.content).toContain('standalone workouts plus workouts from the active plan');
+    expect(calendarSection?.content).toContain('Planned workouts never change recorded period totals');
     expect(calendarSection?.content).toContain('Merge and benchmark records are excluded');
     expect(calendarSection?.content).toContain('action menu to share, reprocess, download, or delete it');
     expect(calendarSection?.links).toContainEqual({
@@ -410,6 +426,31 @@ describe('help.content', () => {
       target: '/help',
       fragment: 'activity-calendar',
     });
+  });
+
+  it('documents standalone manual planning, revision recovery, and truthful provider status', () => {
+    const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
+    const planningSection = HELP_SECTIONS.find(section => section.id === 'training-plans');
+
+    expect(planningSection?.content).toContain('You do not need to create a plan first');
+    expect(planningSection?.content).toContain('Manual planning is available without a provider connection');
+    expect(planningSection?.content).toContain('Settings -> Dashboard -> Start of the Week');
+    expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
+    expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
+    expect(planningSection?.content).toContain('calendar cues, not rest-day recommendations');
+    expect(planningSection?.content).toContain('Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet');
+    expect(planningSection?.content).toContain('only one can be active');
+    expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
+    expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');
+    expect(planningSection?.content).toContain('Every visible date');
+    expect(planningSection?.content).toContain('Planned workouts and completed activities are separate');
+    expect(planningSection?.links).toContainEqual({
+      label: 'Open Plans',
+      icon: 'event_note',
+      kind: 'route',
+      target: '/training/plans',
+    });
+    expect(gettingStartedSection?.content).toContain('[Training plans guide](/help#training-plans)');
   });
 
   it('should document safe event merge retry and recovery behavior', () => {
@@ -892,9 +933,16 @@ describe('help.content', () => {
     expect(uploadsSection?.content).toContain(`**Starter** includes up to **${ROUTE_USAGE_LIMITS.free} saved routes**`);
     expect(uploadsSection?.content).toContain(`**Basic** includes up to **${ROUTE_USAGE_LIMITS.basic} saved routes**`);
     expect(uploadsSection?.content).toContain("You may have reached your current plan's activity or route limit.");
+    expect(uploadsSection?.content).toContain('**Upload as route** appears after active upload batches finish');
     expect(uploadsSection?.content).toContain('[FIT and GPX Route Files](/features/fit-gpx-route-files)');
     expect(uploadsSection?.content).toContain('Saved routes open from **Routes** with the details action.');
     expect(uploadsSection?.content).toContain('waypoints and turn instructions');
+    expect(uploadsSection?.content).toContain('**Route actions → Send to** on Route Details');
+    expect(uploadsSection?.content).toContain('**Suunto**, **COROS**, **Garmin**, and **Wahoo**');
+    expect(uploadsSection?.content).toContain('Only eligible destinations appear.');
+    expect(uploadsSection?.content).toContain('repeat sends are blocked until it finishes');
+    expect(uploadsSection?.content).toContain('**Reconnect Wahoo** dialog');
+    expect(uploadsSection?.content).toContain('successful delivery updates the destination badge');
     expect(uploadsSection?.content).toContain('parsed points and streams are not saved back to Firestore');
     expect(uploadsSection?.content).toContain('lightweight encoded route preview for route-table thumbnails, the Routes page map, and dashboard route maps');
     expect(uploadsSection?.content).toContain('Routes page map follows the current table filters using saved-route documents only');
@@ -941,7 +989,12 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('[AI & Third-Party Processing](/policies#ai-and-third-party-processing)');
     expect(serviceConnectionsSection?.content).toContain("Suunto FIT activity uploads in Services show each file's upload status");
     expect(serviceConnectionsSection?.content).toContain('retrying the same row checks that job instead of uploading the FIT again');
-    expect(serviceConnectionsSection?.content).toContain('retry never replaces an issued job automatically');
+    expect(serviceConnectionsSection?.content).toContain('A pending or ambiguous job is never replaced automatically');
+    expect(serviceConnectionsSection?.content).toContain('After eight automatic checks');
+    expect(serviceConnectionsSection?.content).toContain('**Check status again**');
+    expect(serviceConnectionsSection?.content).toContain('removes its local progress notifications');
+    expect(serviceConnectionsSection?.content).toContain('This does not cancel an upload that Suunto may still be processing');
+    expect(serviceConnectionsSection?.content).toContain('An explicit processing failure that requires a restart stops status checks');
     expect(serviceConnectionsSection?.content).toContain('clear the upload list and choose the FIT file again');
     expect(serviceConnectionsSection?.content).toContain('retry control');
     expect(serviceConnectionsSection?.content).toContain('processed one file at a time with short pauses');
@@ -979,7 +1032,10 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('separate from workout FIT metrics and Sleep sessions');
     expect(serviceConnectionsSection?.content).toContain('raw webhook samples');
     expect(serviceConnectionsSection?.content).toContain('import the available last three months');
-    expect(serviceConnectionsSection?.content).toContain('Jan 1, 2016');
+    expect(serviceConnectionsSection?.content).toContain('Jan 1, 2000');
+    expect(serviceConnectionsSection?.content).toContain('up to the latest rolling five years');
+    expect(serviceConnectionsSection?.content).toContain('Garmin may allow a shorter range');
+    expect(serviceConnectionsSection?.content).not.toContain('2016');
     expect(serviceConnectionsSection?.content).toContain('7-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('30-day cooldown');
     expect(serviceConnectionsSection?.content).toContain('one-time dashboard prompt');
@@ -1289,6 +1345,10 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('does not send activity, route, account, or prompt data');
     expect(dataAndPrivacySection?.content).toContain('Original files');
     expect(dataAndPrivacySection?.content).toContain('full-resolution recordings');
+    expect(dataAndPrivacySection?.content).toContain('**Health metrics**');
+    expect(dataAndPrivacySection?.content).toContain('Existing clients must reconnect to grant Health access');
+    expect(dataAndPrivacySection?.content).toContain('Body composition also needs **Body measurements**');
+    expect(dataAndPrivacySection?.content).toContain('exact UTC times');
     expect(dataAndPrivacySection?.content).toContain('raw sleep-stage intervals');
     expect(dataAndPrivacySection?.content).toContain('[**Connections -> MCP**](/services?serviceName=mcp)');
     expect(dataAndPrivacySection?.content).toContain('Only clients that finish authorization appear');

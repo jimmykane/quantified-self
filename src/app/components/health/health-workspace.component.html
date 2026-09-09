@@ -33,10 +33,6 @@
         </span>
       </button>
       <span class="cdk-visually-hidden" role="status">{{ manualMutationBusy() ? 'Updating measurements…' : '' }}</span>
-      <a mat-button routerLink="/dashboard" aria-label="Return to dashboard">
-        <mat-icon aria-hidden="true">dashboard</mat-icon>
-        <span>Dashboard</span>
-      </a>
     </div>
   </app-page-header>
 
@@ -222,6 +218,18 @@
             <span>{{ revisionNotice() }}</span>
           </div>
         }
+        @if (omittedSampleSourceNotice()) {
+          <div class="health-notice health-notice-warning" role="status">
+            <mat-icon aria-hidden="true">timeline</mat-icon>
+            <span>{{ omittedSampleSourceNotice() }}</span>
+          </div>
+        }
+        @if (heartRateReadingNotice()) {
+          <div class="health-notice" role="note">
+            <mat-icon aria-hidden="true">info</mat-icon>
+            <span>{{ heartRateReadingNotice() }}</span>
+          </div>
+        }
         @if (partialCoverageNotice()) {
           <div class="health-notice" role="status">
             <mat-icon aria-hidden="true">data_usage</mat-icon>
@@ -300,7 +308,7 @@
             <mat-icon aria-hidden="true">timeline</mat-icon>
             <div>
               <strong>This metric is stored as detailed samples</strong>
-              <span>Detailed samples load only for Today, 14-day, and 30-day windows. Choose a shorter range to view them.</span>
+              <span>No daily summary is available here. Choose 1d, 14d, or 30d to view the detailed readings.</span>
               <button mat-stroked-button type="button" (click)="selectRange('30d')">View 30 days</button>
             </div>
           </div>
@@ -340,6 +348,7 @@
           </section>
         } @else {
           <app-health-metric-chart
+            [fillHeight]="true"
             [timelineNotes]="timelineNotes.context()"
             [series]="metricView().series"
             [startTimeMs]="selectedWindow().startTimeMs"

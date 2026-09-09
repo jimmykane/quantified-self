@@ -4,7 +4,9 @@
 }
 
 .health-metric-series-chart {
-  height: 190px;
+  // Size the plot from its host, not the canvas's previous resize dimensions.
+  contain: size;
+  height: var(--health-metric-series-chart-height, 190px);
   width: 100%;
 }
 

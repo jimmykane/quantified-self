@@ -43,7 +43,67 @@ Suunto Health failure logs retain allowlisted operation stages and error classif
 
 Garmin Sleep and Health history recovery must account for a moving provider minimum, not merely round it to the next second. Both allow up to 30 seconds of retry headroom without erasing a short valid window. Sleep retains its three-attempt window limit. The independent Health worker stops after three consecutive minimum-start failures in the same family per invocation and uses the existing durable queue retry/exhaustion path; cutoff-only adjustments must not reset that retry budget. Log safe cutoff/progress metadata without provider response bodies or credentials, and distinguish submitted/skipped request windows from ingested records. See [Garmin history recovery](garmin-integration.md#availability-and-history). Activity history is a separate path.
 
-Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. These diagnostics do not relax validation or recover failed callbacks. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
+Garmin stress-validation diagnostics use the existing WARNING with allowlisted family/field/reason, summary index, type, and bounded numeric-only values; never log raw provider strings or objects. Stress sample zeroes are numeric readings; daily average -2 is retained as a native-only availability code because its daily semantics are undocumented. Do not transfer sentinel meanings between summary families or let a recognized non-measurement code discard unrelated valid metrics. A fix does not recover an existing DLQ callback whose pull credentials were removed; use bounded Summary Resender recovery and verify replacement ingestion. See [Garmin delivery diagnostics](garmin-integration.md#delivery-and-trust-boundary) for the exact bound and metadata contract.
+
+### Structured-workout delivery proof (not production support)
+
+Training planning uses a stricter launch boundary than activity or route delivery. Manual plan and standalone-workout
+authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
+directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
+connection alone never opts workouts into delivery.
+
+The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
+`functions/src/training-plans/providers/`. Every provider delivery flag is currently `false`:
+
+| Provider | Proof state | Truthful model and current gate |
+| --- | --- | --- |
+| Garmin | `fixture-only` | The local ignored Training API V2 partner contract proves separate Workout and Workout Schedule CRUD, `WORKOUT_IMPORT`, 100-step single-sport limits, and primary/secondary target fields. Redacted Running/Cycling fixtures cover time/distance/manual steps and repeats. Evaluation credentials, device coverage, completion correlation, and sandbox CRUD remain unproven. |
+| COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
+| Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
+| Suunto | `fixture-only` | A scheduled workout maps to one dated SuuntoPlus Guide, not a native training-plan calendar. Time, distance, manual transition, repeats, and absolute HR/power/speed/pace/cadence targets map to Guide JSON; cadence converts from rpm to hertz. Guide entitlement, ZIP/icon transport, watch storage/pinning, supported-device behavior, CRUD, and FIT correlation need sandbox proof. |
+
+Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
+not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
+provider ID and CRUD lifecycle. The fixture mapper supports the portable Running/Cycling baseline, fixed repeats,
+time/distance/manual endings, and absolute HR/power/speed/pace/cadence ranges. Garmin's percentage fields do not carry
+the canonical reference snapshot, so relative targets are frozen to their stored absolute range only after explicit
+degradation approval. Secondary targets are rejected outside cycling, must differ from the primary target, and remain
+an explicit device-support degradation even for cycling. The private contract does not document a completed-activity
+workout identifier.
+
+COROS mapping follows the local ignored COROS API Reference V2.0.6 (February 2026); the confidential PDF is likewise
+kept out of Git. Partner athlete/workout IDs in fixtures are redacted or deterministic opaque safe integers. The mapper
+supports dated Run/Bike time/distance/manual steps and fixed repeats. Native FTP, threshold-HR, and threshold-speed
+percentage targets preserve their canonical reference snapshots. Maximum-HR, critical-power, and relative-cadence
+targets freeze to absolute ranges only after approval. COROS accepts one intensity target per step, exposes no distinct
+recovery intensity, documents cadence targets for running but not cycling, and requires integer lengths and percentages;
+each lossy case is surfaced before serialization.
+
+Wahoo mapping follows the official [Cloud API](https://cloud-api.wahooligan.com/) and
+[plan.json 1.0.0 format](https://cloud-api.wahooligan.com/docs/plan-json-format.pdf). Canonical repeat count is total
+passes, while Wahoo's repeat trigger counts passes after the first, so the serializer writes `count - 1`. Wahoo stores
+relative FTP, maximum-HR, threshold-HR, and threshold-speed references in the header. Conflicting snapshots, critical
+power, relative cadence, generic `other` purpose, and multiple targets where ELEMNT uses only the first are explicit
+degradations. FTP and heart-rate header references are integer fields; a fractional canonical snapshot is rounded only
+after explicit degradation approval. Relative threshold/max-heart-rate and threshold-speed targets are also explicit
+device-support degradations: Wahoo documents them for treadmill workouts in the Wahoo app, not ELEMNT computers or
+RIVAL. Unsupported endings fail.
+
+Suunto mapping follows the official [Guide API workflow](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api),
+[Guide JSON reference](https://apizone.suunto.com/suuntoplus-guide-description), and
+[FIT correlation description](https://apizone.suunto.com/fit-description). Guide `externalId` values are deterministic,
+opaque, and at most 64 characters. Relative targets are frozen from the canonical reference snapshot only after explicit
+degradation approval. Text and metadata limits are never truncated silently, truncation counts Unicode code points, and
+text outside Suunto's guaranteed minimum watch character set requires explicit degradation approval because rendering
+remains device-dependent. The serializer produces `guide.json`
+fixtures only; it must not be described as a completed Guide upload adapter because the API requires a ZIP containing
+that JSON and a valid 300 x 300 PNG.
+
+Fixture compatibility is not delivery readiness. Before any adapter flag changes, record sandbox evidence for create,
+update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and provider-specific horizon behavior. The
+shared delivery ledger, reconciliation queue, entitlement, disconnect/deletion behavior, provider certification,
+observability, and kill switches are tracked under epic #583. Do not hide an unmet gate in a code comment or silently
+narrow the epic acceptance criteria.
 
 ## 2. Choose the right architecture
 
@@ -207,6 +267,20 @@ For every new persistent write path:
 
 ### History imports
 
+Health/Sleep request boundaries are provider-specific and shared through
+`getHealthBackfillStartMs` in `shared/sleep-backfill.ts`: Garmin requests the latest
+rolling five calendar years, Suunto requests from January 1, 2000, and COROS retains
+its documented rolling three calendar months. Calendar subtraction clamps month-end
+and leap-day boundaries in UTC; Garmin admission rounds the start upward to whole
+seconds. These policies do not guarantee historical coverage. Preserve stricter
+provider-returned minima, per-request windows, pacing, cooldowns, and lifecycle/deletion
+guards. UI and operator scripts must use the same helper, not a shared fixed year.
+The Suunto callable caps admission at 512 windows and four concurrent queue writes,
+waits for started writes before reporting failure, and leaves provider requests to
+the existing workers. The operator CLI retains its smaller job/user/backpressure caps.
+Before publishing initial Garmin progress, its reservation transaction rechecks live
+and failed queue rows so a stale preview cannot reset or recreate already-submitted work.
+
 - Use the same queue format and processor as webhooks. Separate processing paths drift and create inconsistent duplicate or cleanup behavior.
 - Require the appropriate entitlement and connection state at request time, then re-check in the worker.
 - Use a per-user lease so duplicate browser clicks, tabs, or retried callables cannot run overlapping history scans.
@@ -252,9 +326,24 @@ When a provider accepts activities, use the shared `activity-sync` route model r
 - Preserve the provider phase boundary. A typed retry decision applies only while the provider request is in progress. Once the provider confirms success, a later metadata or queue write failure must not be reclassified as a provider failure. Prefer a durable acceptance receipt, DLQ record, or terminal manual-reconciliation marker before acknowledging accepted work. When a direct provider call needs an outbound-echo receipt, write it as an operation-scoped provisional claim, promote it only after the final account/lifecycle guard and immediately before provider I/O, and roll back only that claim if no request starts. Echo detection must require the promoted marker; concurrent rollback must never delete another operation's accepted receipt. Keep the terminal live marker without a TTL when work is copied to DLQ, and reject both automatic and manual re-enqueue until an operator has reconciled and explicitly cleared that marker. The DLQ audit copy may retain its normal TTL. If every Firestore persistence path is unavailable, leave the durable provider-operation claim untouched and fail the Cloud Task. A later delivery must reconcile or DLQ that stale claim without repeating the provider request. Retry exhaustion must retain the provider-specific DLQ context for diagnosis. Side effects derived from provider success, such as per-service upload counters, must use the durable queue item or provider operation ID as an idempotency record so completion retries cannot count the same upload twice. Treat a supposedly completed asynchronous response without its required provider operation ID as a terminal provider-contract failure rather than retrying the original non-idempotent request.
 - If authentication is lost while polling an already accepted asynchronous upload, retain the provider operation ID and fail closed into manual reconciliation. Do not downgrade accepted work to an ordinary reconnect skip that can later be manually replayed.
 - A direct browser file upload is a separate product path. State whether it creates an event or route. Wahoo direct activity delivery intentionally accepts FIT only and retains only the short-lived browser row/upload token needed to show status. Wahoo direct course/route delivery accepts FIT and GPX sources, converts GPX to FIT in memory because Wahoo receives FIT courses, makes a server-side idempotent route-library request using the source-file fingerprint, and does not create or retain a Quantified Self route. Saved-route delivery is distinct: Suunto routes already saved in Quantified Self flow through the shared route-delivery queue and use the saved-route ID as a stable opaque Wahoo external key, so revisions update rather than duplicate the provider route. Bound both source and converted output, and define conversion limits such as one route with valid coordinates.
-- Suunto FIT activity delivery currently uses a temporary provider-protection circuit breaker: the shared upload adapter checks an issued upload at most five times and spaces repeated status checks by ten seconds, while the direct callable accepts one request at a time on one instance. Keep this conservative bound until direct delivery moves to a dedicated rate-limited queue with asynchronous pending responses; do not raise it without a measured provider allowance.
+- Suunto FIT activity delivery keeps the direct callable at concurrency one and one instance. Shared queue uploads and legacy direct clients retain at most five status attempts spaced by ten seconds. Updated direct clients opt into `supportsPendingStatus: true` on the existing `importActivityToSuuntoApp` callable: each invocation makes one status attempt and returns HTTP 200/pending with the upload/account identifiers only for recognized `NEW`/`PROCESSING` states. Unknown/malformed responses remain retryable errors, never success. No new endpoint or persistent state is added. The browser reuses its bounded provider status-poll controller with a ten-second initial delay, exponential backoff capped at sixty seconds, and eight automatic checks; exhaustion leaves the row Processing with **Check status again**. In-flight duplicate checks, closed/cleared rows and account switches must not replay uploads or publish stale completion. Explicit `restart` failures stop status polling and clear the failed job identifiers; `resume` failures retain them. Direct blob acceptance can remain ambiguous without a persisted signed continuation, so status-only retries never automatically initialize a replacement. Provider failures remain WARNING with neutral "Retryable provider operation failure" wording rather than promising an automatic retry. Expected pending transitions are INFO.
+
+Provider-upload progress jobs belong to the uploader's local monitoring lifecycle. Closing/clearing the view, changing
+destination, or discarding an in-flight result after an account switch removes its active local jobs; it must not leave
+the global progress indicator active indefinitely or mark unconfirmed provider work complete/failed. Destination changes
+also discard the old rows so stale identifiers and in-flight controls cannot be reused against a new destination.
+
+For this direct-upload update, deploy the compatible callable before the updated frontend after separate approval. Old clients omit the capability flag and retain the legacy pending/error contract. A rolled-back backend still returns resume identifiers that the updated client can retain for manual retry. Neither deployment needs queue migrations, indexes, secrets, MCP changes or a provider-wide requeue. Verify pending-to-success/duplicate, explicit restart, transient resume, exhausted polling and dialog teardown with mocked provider calls before release; inspect production outcomes only after an approved rollout.
 
 Apply the same typed failure contract to queued saved-route delivery. Provider adapters should map 408, 429, and safely repeatable update failures to retryable outcomes; explicit content or validation rejection to permanent outcomes; and auth/scope failures to skipped outcomes. Keep any provider job or external route identifier needed for idempotent resume/update behavior. Persist each provider acceptance before continuing a multi-account direct delivery batch, but mark it partial until every account has been attempted. A stale partial receipt must fail closed for reconciliation rather than being finalized as complete or replayed. When a provider lacks a stable create key or duplicate-reconciliation endpoint, an ambiguous create timeout or transport failure must fail closed for operator reconciliation rather than automatically creating a possible duplicate; do not add a second adapter-level retry loop.
+
+### Saved-route actions on Route Details
+
+Route Details derives its Suunto, COROS, Garmin, and Wahoo menu from one ordered set of destination eligibility records. Disconnected, reconnect-required, pending-disconnect, non-Pro, non-owner, missing-original, and provider-specific ineligible destinations are hidden. Connection state comes from the existing safe connection watchers; Garmin retains its original-account and Course Import checks, Suunto retains its source-account restriction and explicit copy confirmation, and COROS retains its rollout gate. Wahoo route scopes are checked server-side because the browser connection projection does not expose them; scope failures retain the status explanation and open the existing Wahoo route-access reconnect dialog used by the Routes list, for both in-band and thrown failures.
+
+The action passes only the current saved-route ID and destination to `AppRouteSendService` / `sendRoutesToService`. The server loads the current saved name, original geometry, and adapter-supported metadata. Manual delivery returns a result from the existing adapter; it does not return a queued status. Automatic route-delivery queues are unchanged. The UI locks before any Suunto copy confirmation and remains locked through the request, shows persistent accessible sending/result feedback plus the usual snackbar, and uses selection/completion haptics. Successful responses immediately update the current view's destination badges and Suunto copy-confirmation state without writing Firestore delivery metadata or inventing provider IDs. Send confirmations and UI completion feedback are bound to the originating owner, route, view revision, and component lifetime; leaving and returning to the same route cannot dispatch a stale confirmation or publish stale feedback. Destroying the view dismisses its pending copy confirmation, and closing the Wahoo reconnect dialog discards late OAuth URL results rather than redirecting the new page. Server-owned authorization, Pro, deletion/disconnect, receipt, and deduplication safeguards remain authoritative.
+
+Provider actions use the existing Material menus for keyboard navigation and focus restoration. The app currently ships English strings without locale catalogs or a localization runtime; action text follows that convention and remains ordinary DOM text for browser translation.
 
 ### Direct manual route delivery formats
 
@@ -408,6 +497,18 @@ The current admin UI is aggregate observability. It does not provide provider-sp
 - disconnect-pending age, deauthorization failures, entitlement enforcement, and cleanup/deletion failures.
 
 Use structured logs with safe identifiers and error categories. Do not put token values, authorization codes, signed URLs, file query strings, or full raw partner payloads in logs, analytics, or admin responses.
+
+Outbound semantic FIT fingerprint failures and unexpected manual activity-parser failures use the shared
+`activity-parser-diagnostics` allowlist. It records a diagnostic ID (alongside the platform request trace), Sports Lib
+version, format and payload byte length, known error names/codes/literal messages, a bounded-message hash, and package
+line/column without raw stack paths. FIT signature and declared data-length facts are structural only. Unknown messages
+are withheld rather than relying on credential-only redaction to remove file content. Fingerprint failures remain
+WARNING and explicitly report `exact_only` fallback; exact-byte receipts remain available. Do not lower this warning
+until the new diagnostics explain the affected files. Manual route/course rejections retain HTTP 400 with the stable
+`route_file_in_activity_upload` code; the browser offers an explicit Routes navigation action after all active manual
+upload batches finish, including overlapping batches. Later per-file errors or the generic batch summary must not
+replace this action, and account changes or teardown suppress it. No rejected manual payload
+is retained by this change. Any future debug-file capture needs a separate retention/access/deletion-cleanup design.
 
 ## 11. Test plan
 

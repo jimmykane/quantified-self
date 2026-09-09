@@ -98,6 +98,7 @@ describe('serverRoutes', () => {
     expect(prerenderedPaths.has('mcp/authorize')).toBe(false);
     expect(prerenderedPaths.has('dashboard')).toBe(false);
     expect(prerenderedPaths.has('health')).toBe(false);
+    expect(prerenderedPaths.has('training/plans')).toBe(false);
     expect(prerenderedPaths.has('settings')).toBe(false);
     expect(prerenderedPaths.has('mytracks')).toBe(false);
     expect(prerenderedPaths.has('routes')).toBe(false);
@@ -156,6 +157,8 @@ describe('serverRoutes', () => {
     });
     expect(clientRoutes.find(route => route.path === 'dashboard')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'health')?.status).toBeUndefined();
+    expect(clientRoutes.find(route => route.path === 'training/plans')).toMatchObject({ renderMode: RenderMode.Client });
+    expect(clientRoutes.some(route => route.path === 'plans')).toBe(false);
     expect(clientRoutes.find(route => route.path === 'mcp/authorize')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'pricing')?.status).toBeUndefined();
     expect(clientRoutes.find(route => route.path === 'releases')?.status).toBeUndefined();

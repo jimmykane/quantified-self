@@ -134,6 +134,10 @@
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
         {
+          "source": "/training/plans",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
           "source": "/training",
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
@@ -328,6 +332,10 @@
         },
         {
           "source": "/calendar",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans",
           "destination": "/index.csr.html"
         },
         {
@@ -607,6 +615,10 @@
         },
         {
           "source": "/calendar",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans",
           "destination": "/index.csr.html"
         },
         {

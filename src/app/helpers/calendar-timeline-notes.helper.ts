@@ -1,12 +1,13 @@
 import { isTimelineNoteVisible, timelineNoteEnd, type TimelineNote, type TimelineNoteRange } from '@shared/timeline-notes';
 import type { ActivityCalendarDayViewModel, ActivityCalendarViewModel } from './activity-calendar.helper';
-import { TIMELINE_NOTE_ICONS, timelineNoteGroupColor } from './timeline-note-appearance.helper';
+import { TIMELINE_NOTE_ICONS, timelineNoteColor, timelineNoteGroupColor } from './timeline-note-appearance.helper';
 
 export interface CalendarDayTimelineNotes {
   notes: readonly TimelineNote[];
   ariaLabel: string;
   icon: string;
-  color: string | null;
+  color: string;
+  accentColors: readonly string[];
 }
 
 function visibleDays(model: ActivityCalendarViewModel): ActivityCalendarDayViewModel[] {
@@ -38,6 +39,8 @@ export function calendarTimelineNotesByDate(
       notes: matching,
       icon: matching.length === 1 ? TIMELINE_NOTE_ICONS[matching[0].category] : 'event_note',
       color: timelineNoteGroupColor(matching),
+      // One segment per distinct palette colour, never a blend or an activity marker.
+      accentColors: [...new Set(matching.map(timelineNoteColor))],
       ariaLabel: `${day.ariaLabel}. ${matching.length} Timeline ${matching.length === 1 ? 'note' : 'notes'}.`,
     });
   }

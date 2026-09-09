@@ -290,6 +290,8 @@ export interface SuuntoActivityUploadInitializationState extends SuuntoActivityU
 }
 
 export interface SuuntoActivityUploadOptions {
+  /** Direct clients can own bounded polling without occupying this invocation. */
+  statusPollOptions?: { maxAttempts: number; pollDelayMs: number };
   /** Runs after account validation and immediately before upload initialization. */
   beforeProviderRequest?: () => Promise<void>;
   /**
@@ -659,7 +661,7 @@ function logSuuntoActivityProviderFailure(userID: string, error: ProviderOperati
     ...toProviderOperationLogDetails(error),
   };
   if (error.disposition === 'retryable') {
-    logger.warn('[SuuntoActivityUpload] Provider operation will be retried.', details);
+    logger.warn('[SuuntoActivityUpload] Retryable provider operation failure.', details);
   } else {
     logger.error('[SuuntoActivityUpload] Provider operation failed permanently.', details);
   }
@@ -961,6 +963,7 @@ export async function uploadActivityFileToSuunto(
         uploadId,
         providerUserIdForUpload,
         tokenQueryDocumentSnapshot,
+        options.statusPollOptions,
       );
     } catch (error: unknown) {
       if (shouldPreserveServiceLifecycleError(error)) {
@@ -1087,13 +1090,14 @@ function toPendingSuuntoActivityUploadError(result: SuuntoActivityUploadResult):
 
 function toSuuntoActivityCallableResult(
   result: SuuntoActivityUploadResult,
-): Omit<SuuntoActivityUploadResult, 'providerUserId'> {
+): Omit<SuuntoActivityUploadResult, 'providerStatus'> {
   return {
     status: result.status,
     message: result.message,
     ...(result.code !== undefined ? { code: result.code } : {}),
     ...(result.workoutKey !== undefined ? { workoutKey: result.workoutKey } : {}),
     ...(result.uploadId !== undefined ? { uploadId: result.uploadId } : {}),
+    ...(result.status === 'pending' ? { providerUserId: result.providerUserId } : {}),
   };
 }
 
@@ -1125,6 +1129,10 @@ export const importActivityToSuuntoApp = onCall({
   }
 
   const resumeState = getSuuntoActivityCallableResumeState(request.data);
+  // Older clients expect a retryable error and cannot automatically poll a
+  // successful pending response. Keep that contract until they opt in.
+  const supportsPendingStatus = request.data?.supportsPendingStatus === true;
+  const statusPollOptions = supportsPendingStatus ? { maxAttempts: 1, pollDelayMs: 0 } : undefined;
   let fileBuffer: Buffer | null = null;
   if (!resumeState) {
     fileBuffer = decodeSuuntoActivityUpload(request.data?.file);
@@ -1134,6 +1142,7 @@ export const importActivityToSuuntoApp = onCall({
 
   try {
     const startDirectUpload = (buffer: Buffer) => uploadActivityFileToSuunto(userID, buffer, {
+      statusPollOptions,
       beforeProviderRequest: async () => {
         await recordActivitySyncOutboundFingerprint({
           userID,
@@ -1144,12 +1153,20 @@ export const importActivityToSuuntoApp = onCall({
     });
     let result: SuuntoActivityUploadResult;
     if (resumeState) {
-      result = await getSuuntoActivityUploadStatus(userID, resumeState.uploadId, resumeState.providerUserId);
+      result = await getSuuntoActivityUploadStatusInternal(
+        userID, resumeState.uploadId, resumeState.providerUserId, statusPollOptions,
+      );
     } else {
       result = await startDirectUpload(fileBuffer as Buffer);
     }
     if (result.status === 'pending') {
-      throw toPendingSuuntoActivityUploadError(result);
+      if (!supportsPendingStatus || !['NEW', 'PROCESSING'].includes(result.providerStatus || '')) {
+        throw toPendingSuuntoActivityUploadError(result);
+      }
+      logger.info('[SuuntoActivityUpload] Activity is still processing; client status check required.', {
+        uploadId: result.uploadId,
+        providerStatus: result.providerStatus,
+      });
     }
     await countSuccessfulSuuntoActivityUpload(userID, result);
     return toSuuntoActivityCallableResult(result);

@@ -9,8 +9,10 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 
 type McpScope =
+  | 'health:read'
   | 'metrics:read'
   | 'measurements:read'
   | 'sleep:read'
@@ -33,6 +35,10 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   title: string;
   description: string;
 }> = {
+  'health:read': {
+    title: 'Health metrics',
+    description: 'Read recorded all-day heart rate, HRV, stress, resources, movement, energy, blood pressure and other Health metrics. Includes provider names, local account numbers, calendar dates and bounded sample trends with exact UTC times. Garmin Body Battery keeps its labelled Garmin points scale. Body composition also needs Body measurements permission and excludes source identity and exact times. Raw provider payloads, device details, account IDs and Sleep sessions are excluded. No measurements can be added, edited or deleted.',
+  },
   'metrics:read': {
     title: 'Activity and Training metrics',
     description: 'Read persisted numeric activity metrics and redacted Training-derived snapshots. When individual activity access is also granted, the client can request selected canonical numeric metrics for one activity.',
@@ -89,6 +95,7 @@ interface McpAuthorizationRequest {
   styleUrls: ['./mcp-authorization.component.scss'],
 })
 export class McpAuthorizationComponent implements OnInit {
+  private readonly haptics = inject(AppHapticsService);
   private readonly route = inject(ActivatedRoute);
   private readonly functions = inject(AppFunctionsService);
   private readonly windowService = inject(AppWindowService);
@@ -137,6 +144,7 @@ export class McpAuthorizationComponent implements OnInit {
   }
 
   toggleScope(scope: McpScope, event: MatCheckboxChange): void {
+    const previous = this.selectedScopes();
     this.selectedScopes.update((scopes) => {
       if (event.checked) {
         const parent = MCP_SCOPE_PARENTS[scope];
@@ -147,6 +155,10 @@ export class McpAuthorizationComponent implements OnInit {
       const child = MCP_SCOPE_CHILDREN[scope];
       return scopes.filter(current => current !== scope && current !== child);
     });
+    const current = this.selectedScopes();
+    if (current.length !== previous.length || current.some(value => !previous.includes(value))) {
+      this.haptics.selection();
+    }
   }
 
   approve(): Promise<void> {

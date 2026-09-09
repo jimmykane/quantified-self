@@ -26,6 +26,7 @@ import {
   type ActivityHealthObservation,
 } from '@shared/activity-health';
 import { projectLoadedHealthRange } from '@shared/health-query';
+import { withDailyHeartRateSummaries } from './health-heart-rate-summary.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { formatCanonicalHealthMetricSportsLibValue } from '@shared/sports-lib-health-data';
 import {
@@ -47,6 +48,7 @@ import {
   resolveHealthWorkspaceWindow,
   resolveSleepReferenceValue,
   selectHealthPriorityTrendSeries,
+  selectTodayHeartRateHighlightSeries,
   selectActivityHealthObservations,
   selectWorkoutWeightContextFallback,
   sleepSessionHasHrv,
@@ -241,6 +243,26 @@ function activityObservation(overrides: Partial<ActivityHealthObservation> = {})
 }
 
 describe('Health workspace helpers', () => {
+  it('formats calculated daily HR values and units through Sports Lib under default and saved unit preferences', () => {
+    const record = sourceRecord({ id: 'parent', provider: HEALTH_PROVIDERS.SuuntoApp, accountKey: 'suunto', metrics: [] });
+    record.metricIds = [HEALTH_METRIC_IDS.HeartRate];
+    record.sampleChunkIds = ['samples'];
+    const chunk = { ...sampleChunk({ id: 'samples', provider: HEALTH_PROVIDERS.SuuntoApp, accountKey: 'suunto',
+      metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: 'activity_interval_average', values: [61, 72, 80] }),
+      parentSourceRecordId: record.id, aggregation: 'average', revision: record.source.revision };
+    const projected = projectLoadedHealthRange(withDailyHeartRateSummaries([record], [chunk]), [], {
+      startDate: '2026-08-01', endDate: '2026-08-01', metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    for (const settings of [null, normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(projected, [], [], settings);
+      const display = formatCanonicalHealthMetricSportsLibValue(HEALTH_METRIC_IDS.HeartRate, 71, settings)!;
+      const average = view.rows.find(row => row.semanticsText.includes('Daily average'))!;
+      expect(average.valueText).toBe(`${display.value} ${display.unit}`);
+      expect(average.semanticsText).toContain('Calculated by QS');
+      expect(average.sourceLabel).toBe('Suunto');
+      expect(view.series).toHaveLength(3);
+    }
+  });
   it('formats canonical values and units through Sports Lib while keeping native-only values provider-specific', () => {
     expect(formatHealthValue(
       HEALTH_METRIC_IDS.Vo2Max,
@@ -555,6 +577,52 @@ describe('Health workspace helpers', () => {
       ['Suunto', 'sample'],
       ['Garmin', 'average'],
     ]);
+  });
+
+  it('shows only recorded all-day HR samples inside the local day, retaining separate accounts', () => {
+    const window = resolveHealthWorkspaceWindow({ metric: HEALTH_METRIC_IDS.HeartRate, range: 'today', endDate: '2026-08-01' });
+    const eligible = (id: string, provider = HEALTH_PROVIDERS.GarminAPI as HealthProvider) => ({
+      ...sampleChunk({ id, provider, accountKey: id, metricId: HEALTH_METRIC_IDS.HeartRate,
+        semanticVariant: provider === HEALTH_PROVIDERS.GarminAPI ? 'daily_15_second' : 'activity_interval_average',
+        values: [50, 51, 52, 53] }),
+      aggregation: provider === HEALTH_PROVIDERS.GarminAPI ? 'representative_sample' : 'average',
+      startTimeMs: window.startTimeMs - 1,
+      endTimeMs: window.endTimeMs + 1,
+      offsetMs: [0, 1, window.endTimeMs - window.startTimeMs + 1, window.endTimeMs - window.startTimeMs + 2],
+    });
+    const garmin = eligible('garmin');
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-07-31', endDate: '2026-08-02', metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: true,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    result.sampleChunks = [garmin, eligible('garmin-two'), eligible('suunto', HEALTH_PROVIDERS.SuuntoApp),
+      { ...garmin, id: 'native', normalizationStatus: HEALTH_NORMALIZATION_STATUSES.NativeOnly },
+      { ...garmin, id: 'calculated', origin: HEALTH_VALUE_ORIGINS.ProviderSummary },
+      { ...garmin, id: 'manual', recordingMethod: HEALTH_RECORDING_METHODS.Manual },
+      { ...garmin, id: 'coros', provider: HEALTH_PROVIDERS.COROSAPI, semanticVariant: 'hrv_interval_mean' },
+      ...['daily_minimum', 'daily_maximum', 'rolling_7_day_average', 'sleep_average', 'health_snapshot', 'activity_interval_minimum']
+        .map(semanticVariant => ({ ...garmin, id: semanticVariant, semanticVariant })),
+    ];
+    const series = selectTodayHeartRateHighlightSeries(result, window);
+    expect(series).toHaveLength(3);
+    expect(series.map(item => item.sourceLabel).sort()).toEqual(['Garmin account 1', 'Garmin account 2', 'Suunto']);
+    expect(series.every(item => item.points.map(point => point.value).join() === '51,52')).toBe(true);
+    expect(series.every(item => item.points[0].timestampMs === window.startTimeMs
+      && item.points[1].timestampMs === window.endTimeMs)).toBe(true);
+    expect(selectTodayHeartRateHighlightSeries(result, {
+      startTimeMs: window.endTimeMs + DAY_MS, endTimeMs: window.endTimeMs + DAY_MS * 2,
+    })).toEqual([]);
+    expect(selectTodayHeartRateHighlightSeries(null, window)).toEqual([]);
+  });
+
+  it('does not substitute scalar HR summaries when today has no eligible samples', () => {
+    const result = projectLoadedHealthRange([sourceRecord({ id: 'summary', provider: HEALTH_PROVIDERS.GarminAPI,
+      accountKey: 'garmin', metrics: [valueEntry({ metricId: HEALTH_METRIC_IDS.HeartRate, semanticVariant: 'rolling_7_day_average' })],
+    })], [], { startDate: '2026-08-01', endDate: '2026-08-01', includeSamples: true,
+      metricIds: [HEALTH_METRIC_IDS.HeartRate] }, { sourceRecordsComplete: true, samplesComplete: true });
+    expect(result.observations).toHaveLength(1);
+    expect(selectTodayHeartRateHighlightSeries(result, resolveHealthWorkspaceWindow({
+      metric: HEALTH_METRIC_IDS.HeartRate, range: 'today', endDate: '2026-08-01',
+    }))).toEqual([]);
   });
 
   it('requires enough source-separated HRV observations in the selected trend window', () => {

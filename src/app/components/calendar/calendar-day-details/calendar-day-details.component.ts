@@ -22,6 +22,8 @@ import { SharedModule } from '../../../modules/shared.module';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { ActivityCalendarVolumeListComponent } from '../activity-calendar-volume-list/activity-calendar-volume-list.component';
 import { ActivityCalendarVolumeStatsComponent } from '../activity-calendar-volume-list/activity-calendar-volume-stats.component';
+import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-workout-calendar.helper';
+import { formatManualWorkoutStructure } from '../../../helpers/planned-workout-editor.helper';
 
 export interface CalendarDayDetailsData {
   day: ActivityCalendarDayViewModel;
@@ -31,6 +33,18 @@ export interface CalendarDayDetailsData {
   summariesSettings?: SummaryStatsSettingsLike | null;
   timelineNotes?: Signal<readonly TimelineNote[]>;
   activities?: Signal<{ status: 'loading' | 'ready' | 'error'; day: ActivityCalendarDayViewModel }>;
+  plannedWorkouts?: PlannedWorkoutCalendarEntry[];
+  plannedWorkoutsSource?: () => readonly PlannedWorkoutCalendarEntry[];
+  plannedWorkoutsStatusSource?: () => 'loading' | 'ready' | 'error';
+}
+
+interface CalendarDayPlannedWorkoutRow {
+  id: string;
+  title: string;
+  sport: string;
+  scopeLabel: string;
+  lifecycleLabel: string;
+  summary: string[];
 }
 
 interface CalendarDayEventRow {
@@ -77,6 +91,17 @@ export class CalendarDayDetailsComponent {
     note, category: TIMELINE_NOTE_LABELS[note.category], dates: timelineNoteDates(note),
     icon: TIMELINE_NOTE_ICONS[note.category], color: timelineNoteColor(note),
   })));
+  readonly plannedWorkoutsStatus = computed(() => this.data.plannedWorkoutsStatusSource?.() ?? 'ready');
+  readonly plannedWorkoutRows = computed(() => (
+    this.data.plannedWorkoutsSource?.() ?? this.data.plannedWorkouts ?? []
+  ).map<CalendarDayPlannedWorkoutRow>(entry => ({
+    id: entry.workout.id,
+    title: entry.workout.title,
+    sport: entry.workout.structure.sport,
+    scopeLabel: entry.planName ?? 'Standalone',
+    lifecycleLabel: entry.workout.lifecycle === 'skipped' ? 'Skipped' : 'Planned',
+    summary: formatManualWorkoutStructure(entry.workout.structure, this.data.unitSettings, this.data.locale),
+  })));
 
   selectNote(noteId: string): void {
     if (this.noteRows().some(row => row.note.id === noteId)) this.bottomSheetRef.dismiss(noteId);
@@ -91,6 +116,10 @@ export class CalendarDayDetailsComponent {
       return;
     }
     this.navigation.prepareReturn(this.router.url, this.data.day.dateKey);
+    this.dismiss();
+  }
+
+  prepareWorkoutNavigation(): void {
     this.dismiss();
   }
 

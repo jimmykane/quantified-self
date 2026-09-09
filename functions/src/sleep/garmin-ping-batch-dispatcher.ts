@@ -168,7 +168,7 @@ export async function dispatchGarminPingBatchQueueRevision(
 export const dispatchGarminPingBatchOnWrite = onDocumentWritten({
     document: 'sleepSyncQueue/{queueItemId}',
     region: 'europe-west2',
-    memory: '256MiB',
+    memory: '512MiB',
     maxInstances: 100,
     concurrency: 10,
     retry: true,

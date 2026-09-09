@@ -69,11 +69,11 @@ describe('AdminUserHistoryComponent', () => {
         expect(loader.init).not.toHaveBeenCalled();
     });
 
-    it('renders four focused charts once enough current daily snapshots exist', async () => {
+    it('renders five focused charts once enough current daily snapshots exist', async () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
 
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
         expect(text).toContain('Authentication activity');
@@ -84,7 +84,7 @@ describe('AdminUserHistoryComponent', () => {
         expect(text).toContain('1y');
 
         const chartElements = (fixture.nativeElement as HTMLElement).querySelectorAll('.history-chart[role="img"]');
-        expect(chartElements).toHaveLength(4);
+        expect(chartElements).toHaveLength(5);
         chartElements.forEach(element => expect(element.getAttribute('aria-label')).toBeTruthy());
 
         const options = loader.setOption.mock.calls.map(call => call[1] as {
@@ -113,8 +113,8 @@ describe('AdminUserHistoryComponent', () => {
         )));
         expect(activePlanOption?.series?.map(series => series.name)).toEqual(['Free', 'Basic', 'Pro']);
 
-        const userMixOption = options.find(option => option.series?.some(series => series.name === 'Onboarding complete'));
-        expect(userMixOption?.series).toHaveLength(4);
+        const userMixOption = options.find(option => option.series?.some(series => (series as { id?: string }).id === 'user-plan-free'));
+        expect(userMixOption?.series).toHaveLength(3);
         options.flatMap(option => option.series ?? []).forEach(series => {
             expect(series.stack).toBeUndefined();
             expect(series.areaStyle).toBeUndefined();
@@ -127,12 +127,12 @@ describe('AdminUserHistoryComponent', () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
 
         component.selectActivePlanWindow('last24Hours');
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(8));
+        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(10));
 
         const activePlanOption = loader.setOption.mock.calls
             .map(call => call[1] as { series?: Array<{ id?: string; data?: Array<number | null> }> })
@@ -149,19 +149,19 @@ describe('AdminUserHistoryComponent', () => {
         fixture.componentRef.setInput('history', legacyHistory);
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(3));
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
 
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
         expect(text).toContain('0 of 8 plan snapshots');
         expect(text).toContain('Legacy snapshots remain in the other charts');
-        expect((fixture.nativeElement as HTMLElement).querySelectorAll('.history-chart[role="img"]')).toHaveLength(3);
+        expect((fixture.nativeElement as HTMLElement).querySelectorAll('.history-chart[role="img"]')).toHaveLength(4);
     });
 
     it('keeps unknown cadence series hidden until an unknown value occurs', async () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
 
         let cadenceOption = loader.setOption.mock.calls
             .map(call => call[1] as { series?: Array<{ name?: string }> })
@@ -173,7 +173,7 @@ describe('AdminUserHistoryComponent', () => {
         fixture.componentRef.setInput('history', withUnknown);
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(8));
+        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(10));
 
         cadenceOption = loader.setOption.mock.calls
             .map(call => call[1] as {
@@ -221,7 +221,7 @@ describe('AdminUserHistoryComponent', () => {
 
         component.selectSeries('userMix', ['Free']);
         await renderCharts();
-        const selected = latestOption('Onboarding complete');
+        const selected = latestOption('Free');
         expect(selected.yAxis.min).toBeGreaterThan(1900);
         expect(selected.yAxis.min).toBeLessThan(1980);
         expect(selected.yAxis.max).toBeGreaterThan(2019);
@@ -230,7 +230,7 @@ describe('AdminUserHistoryComponent', () => {
         expect(selected.yAxis.axisLabel.formatter(2000)).toBe('2,000');
         expect(selected.legend).toMatchObject({
             show: false,
-            selected: { Free: true, Basic: false, Pro: false, 'Onboarding complete': false },
+            selected: { Free: true, Basic: false, Pro: false },
         });
         const tooltip = selected.tooltip.formatter([{ axisValue: data.endDate }]);
         expect(tooltip).toContain('Free');
@@ -241,13 +241,13 @@ describe('AdminUserHistoryComponent', () => {
         component.selectDays(30);
         component.selectActivePlanWindow('last24Hours');
         await renderCharts();
-        expect(latestOption('Onboarding complete').legend.selected).toEqual(selected.legend.selected);
-        expect(latestOption('Onboarding complete').series[0].data).toHaveLength(30);
+        expect(latestOption('Free').legend.selected).toEqual(selected.legend.selected);
+        expect(latestOption('Free').series[0].data).toHaveLength(30);
 
         component.selectScale('zero');
         await renderCharts();
-        expect(latestOption('Onboarding complete').yAxis.min).toBe(0);
-        expect(latestOption('Onboarding complete').legend.selected).toEqual(selected.legend.selected);
+        expect(latestOption('Free').yAxis.min).toBe(0);
+        expect(latestOption('Free').legend.selected).toEqual(selected.legend.selected);
     });
 
     it('lets the Material chips filter and restore series without hiding the last one', async () => {
@@ -336,24 +336,191 @@ describe('AdminUserHistoryComponent', () => {
         });
     });
 
+    it('switches through Material controls and keeps percentages independent of hidden series', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        await renderCharts();
+        const toggle = (fixture.nativeElement as HTMLElement).querySelector('mat-button-toggle-group[aria-label="User history values"]')!;
+        const percentageButton = Array.from(toggle.querySelectorAll('button')).find(button => button.textContent?.includes('Percentage'))!;
+        percentageButton.click();
+        await renderCharts();
+        expect(component.selectedMode()).toBe('percentage');
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(latestOption('Active 24h').series[0].data[0]).toBeCloseTo(2 / 9 * 100);
+        expect(latestOption('Free').series[0].data[0]).toBe(50);
+        expect(latestOption('Free').yAxis.axisLabel.formatter(0.5)).toBe('0.5%');
+        const onboarding = latestOption('Onboarding complete');
+        expect(onboarding.series).toHaveLength(1);
+        expect(onboarding.series[0].data[0]).toBe(70);
+        expect(onboarding.tooltip.formatter([{ axisValue: '2026-08-27' }])).toContain('70% · 7 of 10 total users');
+
+        const before = latestOption('Pro monthly').series[0].data;
+        component.selectSeries('cadence', ['Pro monthly']);
+        await renderCharts();
+        expect(latestOption('Pro monthly').series[0].data).toEqual(before);
+        expect(before[0]).toBe(50);
+        const tooltip = latestOption('Pro monthly').tooltip.formatter([{ axisValue: '2026-08-27' }]);
+        expect(tooltip).toContain('50% · 1 of 2 Pro users');
+        expect(tooltip).not.toContain('Pro yearly');
+
+        component.selectScale('zero');
+        await renderCharts();
+        expect(latestOption('Free').yAxis).toMatchObject({ min: 0, max: 100 });
+        expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label*="percentages of total users"]')?.getAttribute('aria-label')).toContain('percentage');
+    });
+
+    it('distinguishes within-plan activity rates from shares and preserves the rolling window', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        component.selectMode('percentage');
+        await renderCharts();
+        const activePlanOption = () => loader.setOption.mock.calls.map(call => call[1] as {
+            series: Array<{ id: string; data: number[] }>;
+            tooltip: { formatter: (params: unknown) => string };
+        }).filter(option => option.series.some(series => series.id === 'active-plan-pro')).at(-1)!;
+        expect(activePlanOption().series[2].data[0]).toBe(50);
+        expect(activePlanOption().tooltip.formatter([{ axisValue: '2026-08-27' }])).toContain('1 of 2 eligible Pro accounts');
+        component.selectActivePlanBasis('activeShare');
+        await renderCharts();
+        expect(activePlanOption().series[2].data[0]).toBe(12.5);
+        expect(activePlanOption().tooltip.formatter([{ axisValue: '2026-08-27' }])).toContain('1 of 8 active accounts');
+        component.selectActivePlanWindow('last7Days');
+        await renderCharts();
+        expect(activePlanOption().series[2].data[0]).toBe(20);
+        component.selectMode('count');
+        await renderCharts();
+        expect(activePlanOption().series[2].data[0]).toBe(1);
+    });
+
+    it('offers historical counts and active shares while eligible plan history collects', async () => {
+        const data = history(8);
+        data.snapshots.forEach(snapshot => { snapshot.authActivity.eligibleByPlan = null; });
+        fixture.componentRef.setInput('history', data);
+        component.selectMode('percentage');
+        await renderCharts(4);
+        expect(component.activePlanHistoryPoints()).toBe(0);
+        expect((fixture.nativeElement as HTMLElement).textContent).toContain('Use Count or Share of active users for older snapshots');
+        component.selectActivePlanBasis('activeShare');
+        await renderCharts();
+        expect(component.activePlanHistoryPoints()).toBe(8);
+        component.selectMode('count');
+        component.selectActivePlanBasis('withinPlan');
+        await renderCharts();
+        expect(component.activePlanHistoryPoints()).toBe(8);
+    });
+
+    it('keeps missing days and empty denominators as gaps in percentage mode', async () => {
+        const data = history(10);
+        data.snapshots.splice(4, 1);
+        data.snapshots[2].users = { total: 0, free: 0, basic: 0, pro: 0, onboardingCompleted: 0 };
+        data.snapshots[1].authActivity.eligibleByPlan = null;
+        fixture.componentRef.setInput('history', data);
+        component.selectMode('percentage');
+        await renderCharts();
+        expect(latestOption('Onboarding complete').series[0].data[2]).toBeNull();
+        expect(latestOption('Onboarding complete').series[0].data[4]).toBeNull();
+        expect(latestOption('Onboarding complete').tooltip.formatter([{ axisValue: data.snapshots[2].date }])).toContain('Percentage unavailable');
+        const active = loader.setOption.mock.calls.map(call => call[1] as { series: Array<{ id: string; data: Array<number | null>; connectNulls: boolean }> })
+            .filter(option => option.series.some(series => series.id === 'active-plan-pro')).at(-1)!;
+        expect(active.series[2].data[1]).toBeNull();
+        expect(active.series[2].connectNulls).toBe(false);
+    });
+
+    it('exposes the plan basis only for percentages and preserves it through count mode', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        await renderCharts();
+        const basisControl = () => (fixture.nativeElement as HTMLElement).querySelector('[aria-label="Active plan percentage basis"]');
+        expect(basisControl()).toBeNull();
+        component.selectActivePlanBasis('activeShare');
+        expect(component.selectedActivePlanBasis()).toBe('withinPlan');
+        expect(haptics.selection).not.toHaveBeenCalled();
+
+        const percentageButton = (fixture.nativeElement as HTMLElement).querySelector('mat-button-toggle[value="percentage"] button') as HTMLButtonElement;
+        percentageButton.click();
+        await renderCharts();
+        expect(basisControl()).not.toBeNull();
+        const shareButton = basisControl()!.querySelector('mat-button-toggle[value="activeShare"] button') as HTMLButtonElement;
+        shareButton.click();
+        await renderCharts();
+        expect(component.selectedActivePlanBasis()).toBe('activeShare');
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+
+        component.selectMode('count');
+        await renderCharts();
+        expect(basisControl()).toBeNull();
+        component.selectMode('percentage');
+        await renderCharts();
+        expect(basisControl()).not.toBeNull();
+        expect(component.selectedActivePlanBasis()).toBe('activeShare');
+    });
+
+    it('keeps repeated and invalid display choices silent', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        await renderCharts();
+        component.selectMode('count');
+        component.selectMode('invalid' as never);
+        component.selectActivePlanBasis('withinPlan');
+        component.selectActivePlanBasis('invalid' as never);
+        expect(haptics.selection).not.toHaveBeenCalled();
+        component.selectMode('percentage');
+        component.selectActivePlanBasis('activeShare');
+        await renderCharts();
+        expect(haptics.selection).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not recreate chart hosts when destroyed after queueing a display change', async () => {
+        fixture.componentRef.setInput('history', history(8));
+        await renderCharts();
+        loader.init.mockClear();
+        loader.setOption.mockClear();
+
+        component.selectMode('percentage');
+        fixture.destroy();
+        // Let queued renders and their initialization continuations finish.
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+        expect(loader.init).not.toHaveBeenCalled();
+        expect(loader.setOption).not.toHaveBeenCalled();
+    });
+
+    it('discards delayed chart initialization when the workspace closes', async () => {
+        const pendingInitializations: Array<() => void> = [];
+        const charts: Array<{ isDisposed: ReturnType<typeof vi.fn>; dispatchAction: ReturnType<typeof vi.fn> }> = [];
+        loader.init.mockImplementation(() => new Promise(resolve => {
+            const chart = { isDisposed: vi.fn(() => false), dispatchAction: vi.fn() };
+            charts.push(chart);
+            pendingInitializations.push(() => resolve(chart));
+        }));
+
+        fixture.componentRef.setInput('history', history(8));
+        component.selectMode('percentage');
+        fixture.detectChanges();
+        await vi.waitFor(() => expect(loader.init).toHaveBeenCalledTimes(5));
+        fixture.destroy();
+        pendingInitializations.forEach(resolve => resolve());
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+        expect(loader.setOption).not.toHaveBeenCalled();
+        expect(loader.init).toHaveBeenCalledTimes(5);
+        charts.forEach(chart => expect(loader.dispose).toHaveBeenCalledWith(chart));
+    });
+
     it('disposes every initialized chart host', async () => {
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
         await fixture.whenStable();
-        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(4));
+        await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
 
         const disposeCallsBeforeDestroy = loader.dispose.mock.calls.length;
         component.ngOnDestroy();
 
-        expect(loader.dispose.mock.calls.length - disposeCallsBeforeDestroy).toBe(4);
+        expect(loader.dispose.mock.calls.length - disposeCallsBeforeDestroy).toBe(5);
     });
 
-    async function renderCharts(): Promise<void> {
+    async function renderCharts(expectedCharts = 5): Promise<void> {
         const previous = loader.setOption.mock.calls.length;
         fixture.detectChanges();
         await fixture.whenStable();
         // Chart-host initialization runs outside Angular's stability tracking.
-        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(previous + 4));
+        await vi.waitFor(() => expect(loader.setOption.mock.calls.length).toBeGreaterThanOrEqual(previous + expectedCharts));
     }
 
     function latestOption(name: string) {
@@ -386,6 +553,7 @@ function point(date: string): AdminDashboardHistoryPoint {
         users: { total: 10, free: 5, basic: 3, pro: 2, onboardingCompleted: 7 },
         authActivity: {
             eligibleAccounts: 9,
+            eligibleByPlan: { free: 4, basic: 3, pro: 2 },
             last24Hours: 2,
             last7Days: 5,
             last30Days: 8,

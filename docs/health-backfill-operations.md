@@ -13,8 +13,8 @@ providers, and range. Building the script and running `--help` do not contact Fi
 
 | Provider | Work submitted | Historical boundary |
 | --- | --- | --- |
-| Garmin | One durable `garmin_health_backfill` cursor for the ten existing Health families | Existing configured 2016 boundary, clipped by stored/provider minimums |
-| Suunto | `suunto_health_poll` jobs in at most 28-day windows, recent windows first | Existing configured 2016 boundary; provider availability still applies |
+| Garmin | One durable `garmin_health_backfill` cursor for the ten existing Health families | Latest rolling five calendar years at request time, clipped by stored/provider minimums |
+| Suunto | `suunto_health_poll` jobs in at most 28-day windows, recent windows first | Requests from January 1, 2000; only history available from Suunto can be returned |
 | COROS | `coros_poll` daily-data jobs, which import both Health and Sleep | Current three-month lookback, split using the existing inclusive date-range helper |
 
 Garmin and Suunto **Sleep-only** history is not requested by this script. The normal
@@ -50,9 +50,19 @@ opaque account/range digests. Runtime error objects are never serialized in repo
 
 `--end` is mandatory: it names an inclusive, fully completed UTC day. Use the same
 project, provider, start, and end dates for every retry of a campaign. Omitting
-`--start` uses the existing configured historical boundary; changing this boundary
-is outside the script's scope. COROS clamps against retention **at execution time**,
-not against the requested end date, and clips an aging oldest window on resume.
+`--start` uses January 1, 2000 as a stable requested campaign boundary. The shared
+`getHealthBackfillStartMs` policy narrows it separately for each provider: Garmin to
+five calendar years before **execution time**, Suunto to 2000, and COROS to three
+calendar months before execution time. These are request limits, not promises of
+available data. Rolling limits are not relative to the requested end date; a wholly
+expired range is skipped. On resume, an aging oldest window is clipped. Garmin's
+initial cursor, request count, and progress state are kept aligned with that clipped
+range before queue creation; existing queued cursors are not reset.
+Garmin reservation rechecks both the live queue and the failed-job row inside its
+transaction, so a job submitted or moved to the DLQ after preview is skipped without
+resetting its progress or recreating it. Campaigns created with the former implicit
+2016 boundary must be resumed with an explicit `--start 2016-01-01`; the new default
+2000 boundary identifies a different requested campaign.
 
 Optional limits:
 
@@ -74,7 +84,7 @@ multiple bulk commands in parallel.
 
 Append `--execute` to the exact dry-run command. Bulk execution also requires
 `--confirm-all-users`; a single-owner `--uid` command does not. There is no force
-override for Pro eligibility, cooldowns, deletion, missing permissions, or a changed
+override for Pro eligibility, deletion, missing permissions, or a changed
 connection. Provider permissions are checked from server-owned metadata where
 available and verified by the worker when using the credential. Stale metadata can
 still result in a worker authorization failure; a dry run is not a live token test.
@@ -83,8 +93,18 @@ The CLI checks for other pending history work, respects the normal provider hist
 cooldown, and claims a per-owner/provider lease before writing. Accounts from one
 Suunto owner may be processed on successive invocations while earlier account jobs
 are pending. A campaign can resume through its own cooldown but cannot override a
-new history request's cooldown. It never waits inside an OAuth callback or imports
+new history request's cooldown by default. It never waits inside an OAuth callback or imports
 anything automatically after a connection.
+
+After separate, explicit operator approval, `--override-cooldown-until` accepts the
+exact observed `nextBackfillAllowedAtMs` as a UTC ISO timestamp (including milliseconds).
+This exception requires `--uid` and a single provider; use the same approved campaign
+range in dry run and execute. It bypasses only that matching application cooldown,
+checked again inside the lease transaction. A changed future cooldown still blocks.
+It does not bypass other pending history, leases, eligibility, permissions, deletion,
+connection fences, duplicate receipts, or provider pacing/rate limits. The cooldown
+is never cleared or shortened, and a new run receipt records the overridden timestamp.
+This is a local operator CLI option, not a browser or deployed Function capability.
 
 Submission checkpoints live at:
 

@@ -175,8 +175,9 @@ Pro user and, while Garmin Health is enabled, adds one durable cursor for all te
 The UI waits for `getGarminHealthSyncAvailability` before enabling the control, then labels the action and
 completion from the server response. If the operational switch is disabled, the same control retains Sleep-only behavior.
 
-Historical Health requests use inclusive windows of at most 90 days from January 1, 2016 to the request
-time. `processGarminHealthBackfillTask` is isolated from ordinary Sleep work at one concurrent dispatch and
+Historical Garmin Sleep and Health imports request up to the latest rolling five calendar years,
+with stricter provider minimums still applied. Health requests use inclusive windows of at most 90 days.
+`processGarminHealthBackfillTask` is isolated from ordinary Sleep work at one concurrent dispatch and
 at least 1.5 seconds between Garmin requests. It advances its Firestore cursor after each accepted or
 already-requested window, clips a family when Garmin reports its minimum start, retries network/`429`/`5xx`
 failures, and treats permanent authorization/permission/request errors as terminal. It re-reads and

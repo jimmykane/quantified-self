@@ -1,5 +1,34 @@
-// Simple styling to ensure neatness, though Material handles most of it
 mat-dialog-content {
   font-size: 16px;
   min-width: 300px;
+}
+
+@media (max-width: 599.98px) {
+  :host {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 32px);
+  }
+
+  mat-dialog-content {
+    min-width: 0;
+  }
+
+  mat-dialog-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+
+    button {
+      width: 100%;
+      min-height: 48px;
+      height: auto;
+      padding-block: 12px;
+      white-space: normal;
+    }
+
+    button + button {
+      margin: 0;
+    }
+  }
 }

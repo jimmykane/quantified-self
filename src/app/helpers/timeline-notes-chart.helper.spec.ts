@@ -3,6 +3,7 @@ import { addTimelineNotesToChart, groupTimelineNotes, TimelineNotesChartBinding 
 import type { TimelineNote } from '@shared/timeline-notes';
 import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome, renderDashboardEChartsTooltipCard } from './dashboard-echarts-style.helper';
 import { AppColors } from '../services/color/app.colors';
+import { TIMELINE_NOTE_DEFAULT_COLOR } from './timeline-note-appearance.helper';
 const date = (day: string) => Date.parse(`${day}T00:00:00Z`);
 const note: TimelineNote = { id: 'a'.repeat(64), category: 'sickness', title: '<script>private</script>', startDate: '2026-09-02', endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
 const option = { xAxis: { type: 'time', min: date('2026-09-01'), max: date('2026-09-10') }, yAxis: { min: 0 },
@@ -27,6 +28,37 @@ describe('timeline chart overlays', () => {
     const overlay = addTimelineNotesToChart(option, [single]).option.series[1];
     expect(overlay.markLine.data).toHaveLength(1);
     expect(overlay.markLine.data[0].symbol).toBe('circle');
+    expect(overlay.markArea.data).toEqual([]);
+  });
+  it.each([
+    { startDate: '2026-09-02', endDate: '2026-09-04', symbols: ['emptyCircle', 'emptyCircle'] },
+    { startDate: '2026-09-02', endDate: '2026-09-03', symbols: ['emptyCircle', 'arrow'] },
+    { startDate: '2026-09-03', endDate: '2026-09-04', symbols: ['arrow', 'emptyCircle'] },
+    { startDate: '2026-09-02', endDate: null, symbols: ['emptyCircle', 'emptyCircle'] },
+    { startDate: '2026-09-03', endDate: null, symbols: ['arrow', 'emptyCircle'] },
+  ])('keeps a period shaded across a single local day ($startDate – $endDate)', ({ startDate, endDate, symbols }) => {
+    const offsetSeconds = 10_800;
+    const min = date('2026-09-03') - offsetSeconds * 1000;
+    const max = date('2026-09-04') - offsetSeconds * 1000 - 1;
+    const source = { ...option, xAxis: { type: 'time', min, max },
+      series: [{ ...option.series[0], data: [[min, 65], [min + 9 * 3600_000, 80]] }] };
+    const period = { ...note, startDate, endDate, timeZone: 'Europe/Helsinki' };
+    const result = addTimelineNotesToChart(source, [period], { offsetSeconds: () => offsetSeconds }, min + 10 * 3600_000);
+    const overlay = result.option.series[1];
+    expect(result.range).toEqual({ startDate: '2026-09-03', endDate: '2026-09-03' });
+    expect(overlay.markArea.data[0].map(boundary => boundary.xAxis)).toEqual([min, max]);
+    expect(overlay.markLine.data.map(marker => marker.xAxis)).toEqual([min, max]);
+    expect(overlay.markLine.data.map(marker => marker.symbol)).toEqual(symbols);
+    expect(overlay.markLine.data.filter(marker => marker.label.show)).toHaveLength(1);
+    expect(result.groups.get(overlay.markLine.data[1].name)).toEqual([period]);
+    expect(overlay.markArea.silent).toBe(true);
+    expect(result.option.xAxis).toBe(source.xAxis);
+    expect(result.option.series[0]).toBe(source.series[0]);
+  });
+  it('does not add a period band to a genuine single-day note in a one-day view', () => {
+    const source = { ...option, xAxis: { type: 'time', min: date(note.startDate), max: date(note.startDate) + 86_400_000 - 1 } };
+    const overlay = addTimelineNotesToChart(source, [{ ...note, endDate: note.startDate }]).option.series[1];
+    expect(overlay.markLine.data).toHaveLength(1);
     expect(overlay.markArea.data).toEqual([]);
   });
   it('shows an open ongoing end at today in the captured zone, not in the forecast', () => {
@@ -135,10 +167,25 @@ describe('timeline chart overlays', () => {
     expect(overlay.markArea.data[0][0].itemStyle.color).toBe(AppColors.Purple);
     expect(overlay.markLine.data[0].label.color).toBe('#222222');
     const mixed = addTimelineNotesToChart(source, [colored, { ...note, id: 'b', color: 'blue' }]);
-    expect(mixed.option.series[1].markLine.data[0].itemStyle.color).toBe('#222222');
+    expect(mixed.option.series[1].markLine.data[0].itemStyle.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
     expect(mixed.option.series[0]).toBe(source.series[0]);
     const hidden = addTimelineNotesToChart(source, [colored, { ...note, id: 'b', color: 'blue', showOnCharts: false }]);
     expect(hidden.option.series[1].markLine.data[0].itemStyle.color).toBe(AppColors.Purple);
+  });
+  it.each([false, true])('uses the shared default colour independently of chart text (dark: %s)', darkTheme => {
+    const style = buildDashboardEChartsStyleTokens(darkTheme, 320);
+    const source = { ...option, textStyle: { color: style.textColor } };
+    for (const defaultNote of [note, { ...note, color: 'default' as const }]) {
+      const result = addTimelineNotesToChart(source, [defaultNote], {}, date('2026-09-10'), style);
+      const overlay = result.option.series[1];
+      for (const marker of overlay.markLine.data) {
+        expect(marker.itemStyle.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
+        expect(marker.lineStyle.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
+      }
+      expect(overlay.markArea.data[0][0].itemStyle.color).toBe(TIMELINE_NOTE_DEFAULT_COLOR);
+      expect(overlay.markLine.data[0].label.color).toBe(style.textColor);
+      expect(result.option.series[0]).toBe(source.series[0]);
+    }
   });
   it('excludes hidden notes from markers, bands, group counts and tooltips without changing readings', () => {
     const hidden = { ...note, id: 'b'.repeat(64), title: 'Hidden private note', showOnCharts: false };

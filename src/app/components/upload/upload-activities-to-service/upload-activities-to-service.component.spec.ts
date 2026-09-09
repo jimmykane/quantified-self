@@ -12,6 +12,7 @@ import { AppProcessingService } from '../../../services/app.processing.service';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -28,12 +29,14 @@ describe('UploadActivitiesToServiceComponent', () => {
         addJob: vi.fn(),
         updateJob: vi.fn(),
         completeJob: vi.fn(),
-        failJob: vi.fn()
+        failJob: vi.fn(),
+        removeJob: vi.fn(),
     };
     const mockRouter = {};
     const mockLogger = { error: vi.fn(), info: vi.fn() };
     const mockAnalytics = { logEvent: vi.fn() };
-    const mockAuth = { currentUser: { getIdToken: () => Promise.resolve('token') } };
+    const mockHaptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() };
+    const mockAuth = { currentUser: { uid: 'user-1', getIdToken: () => Promise.resolve('token') } };
     const mockFunctionsService = { call: vi.fn().mockResolvedValue({ data: { status: 'OK' } }) };
     const mockEventService = {};
 
@@ -50,6 +53,7 @@ describe('UploadActivitiesToServiceComponent', () => {
                 { provide: Router, useValue: mockRouter },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppAnalyticsService, useValue: mockAnalytics },
+                { provide: AppHapticsService, useValue: mockHaptics },
                 { provide: Auth, useValue: mockAuth },
                 { provide: AppFunctionsService, useValue: mockFunctionsService },
                 { provide: AppEventService, useValue: mockEventService },
@@ -68,14 +72,195 @@ describe('UploadActivitiesToServiceComponent', () => {
         mockProcessingService.updateJob.mockReset();
         mockProcessingService.completeJob.mockReset();
         mockProcessingService.failJob.mockReset();
+        mockProcessingService.removeJob.mockReset();
         mockFunctionsService.call.mockReset();
         mockProcessingService.addJob.mockReturnValue('job-id');
         mockFunctionsService.call.mockResolvedValue({ data: { status: 'OK' } });
         mockSnackBar.open.mockReset();
+        mockAuth.currentUser.uid = 'user-1';
+        Object.values(mockHaptics).forEach(mock => mock.mockClear());
     });
 
     afterEach(() => {
+        component.ngOnDestroy();
         vi.useRealTimers();
+    });
+
+    function suuntoProcessingRow() {
+        return {
+            id: 'suunto-row', file: new File(['fit'], 'activity.fit'), name: 'activity.fit',
+            filename: 'activity', extension: 'fit', sizeLabel: '3 B', status: 'processing' as const,
+            attempts: 1, progress: 75, message: 'Processing', jobId: 'suunto-job',
+            uploadId: 'suunto-upload', providerUserId: 'suunto-user', ownerUid: 'user-1',
+            destinationServiceName: ServiceNames.SuuntoApp,
+        };
+    }
+
+    it.each([
+        { response: { status: 'success' }, expected: 'success' },
+        { response: { status: 'info', code: 'ALREADY_EXISTS' }, expected: 'duplicate' },
+    ])('automatically checks a pending Suunto upload without resending its file: $expected', async ({ response, expected }) => {
+        vi.useFakeTimers();
+        const row = suuntoProcessingRow();
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile').mockResolvedValueOnce({
+            success: false, duplicate: false, pending: true,
+            uploadId: row.uploadId, providerUserId: row.providerUserId,
+        });
+        mockFunctionsService.call.mockResolvedValueOnce({ data: response });
+        await component.getFiles({
+            stopPropagation: vi.fn(), preventDefault: vi.fn(), target: { files: [row.file], value: 'file' },
+        });
+        expect(component.uploadRows()[0].status).toBe('processing');
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(1);
+        Object.values(mockHaptics).forEach(mock => mock.mockClear());
+        await vi.advanceTimersByTimeAsync(9999);
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(mockFunctionsService.call).toHaveBeenCalledExactlyOnceWith('importActivityToSuuntoApp', {
+            resumeUploadId: row.uploadId, resumeProviderUserId: row.providerUserId, supportsPendingStatus: true,
+        });
+        expect(uploadSpy).toHaveBeenCalledTimes(1);
+        expect(component.uploadRows()[0]).toMatchObject({ status: expected, attempts: 1 });
+        Object.values(mockHaptics).forEach(mock => expect(mock).not.toHaveBeenCalled());
+    });
+
+    it('keeps Suunto pending after its polling budget, with a manual status-only check', async () => {
+        vi.useFakeTimers();
+        component.wahooStatusPollMaxAttempts = 2;
+        const row = suuntoProcessingRow();
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockResolvedValue({ data: { status: 'pending' } });
+        await component.refreshUpload(row);
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(component.uploadRows()[0]).toMatchObject({
+            status: 'processing', message: expect.stringContaining('Use Check status again.'),
+        });
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(2);
+        expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+        await component.refreshUpload(component.uploadRows()[0]);
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(3);
+        expect(mockFunctionsService.call.mock.calls.every(([, payload]) => !('file' in payload))).toBe(true);
+        expect(mockHaptics.selection).toHaveBeenCalledTimes(2);
+        expect(mockHaptics.error).not.toHaveBeenCalled();
+    });
+
+    it('retains Suunto pending state on a transient status request failure', async () => {
+        vi.useFakeTimers();
+        const row = suuntoProcessingRow();
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockRejectedValueOnce({
+            code: 'functions/unavailable', message: 'Temporarily unavailable', details: { retryMode: 'resume' },
+        });
+        await component.refreshUpload(row);
+        expect(component.uploadRows()[0]).toMatchObject({ status: 'processing', uploadId: row.uploadId });
+        expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+    });
+
+    it('stops polling a Suunto processing ERROR and clears identifiers for an explicit restart', async () => {
+        vi.useFakeTimers();
+        const row = suuntoProcessingRow();
+        component.uploadRows.set([row]);
+        mockFunctionsService.call.mockRejectedValueOnce({
+            code: 'functions/unavailable', message: 'Internal error', details: { retryMode: 'restart' },
+        });
+        await component.refreshUpload(row);
+        expect(component.uploadRows()[0]).toMatchObject({ status: 'failed', uploadId: undefined, providerUserId: undefined });
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+        const uploadSpy = vi.spyOn(component, 'processAndUploadFile').mockResolvedValueOnce({ success: true, duplicate: false });
+        await component.retryUpload(component.uploadRows()[0]);
+        expect(uploadSpy).toHaveBeenCalledWith(expect.objectContaining({ name: row.name }), undefined);
+    });
+
+    it.each(['clear', 'destroy', 'account-change', 'provider-change'] as const)('ignores a late Suunto status result after %s', async action => {
+        const row = suuntoProcessingRow();
+        component.uploadRows.set([row]);
+        let resolve!: (value: { data: { status: string } }) => void;
+        mockFunctionsService.call.mockReturnValueOnce(new Promise(r => { resolve = r; }));
+        const pending = component.refreshUpload(row, true);
+        await component.refreshUpload(row);
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+        if (action === 'clear') component.clearRows();
+        else if (action === 'destroy') component.ngOnDestroy();
+        else if (action === 'provider-change') component.serviceName = ServiceNames.WahooAPI;
+        else mockAuth.currentUser.uid = 'different-user';
+        resolve({ data: { status: 'success' } });
+        await pending;
+        expect(mockProcessingService.completeJob).not.toHaveBeenCalled();
+        expect(mockProcessingService.removeJob).toHaveBeenCalledWith(row.jobId);
+        expect(mockHaptics.success).not.toHaveBeenCalled();
+        await component.refreshUpload(row);
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['destroy', 'account-change', 'provider-change'] as const)('discards an initial upload completion after %s', async action => {
+        vi.spyOn(component as any, 'readFileAsArrayBuffer').mockResolvedValue(new ArrayBuffer(12));
+        let resolve!: (value: { data: { status: string } }) => void;
+        mockFunctionsService.call.mockReturnValueOnce(new Promise(r => { resolve = r; }));
+        const pending = component.getFiles({
+            stopPropagation: vi.fn(), preventDefault: vi.fn(),
+            target: { files: [new File(['fit'], 'activity.fit')], value: 'file' },
+        });
+        await Promise.resolve();
+        expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+        mockProcessingService.updateJob.mockClear();
+        if (action === 'destroy') component.ngOnDestroy();
+        else if (action === 'provider-change') component.serviceName = ServiceNames.WahooAPI;
+        else mockAuth.currentUser.uid = 'different-user';
+        resolve({ data: { status: 'success' } });
+        await pending;
+        expect(mockProcessingService.updateJob).not.toHaveBeenCalled();
+        expect(mockProcessingService.completeJob).not.toHaveBeenCalled();
+        expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
+        expect(mockHaptics.success).not.toHaveBeenCalled();
+        expect(mockProcessingService.removeJob).toHaveBeenCalledWith('job-id');
+    });
+
+    it.each(['clear', 'destroy', 'provider-change'] as const)('removes only owned active progress jobs on %s', action => {
+        const row = suuntoProcessingRow();
+        component.uploadRows.set([row, { ...row, id: 'completed-row', jobId: 'completed-job', status: 'success' }]);
+        if (action === 'clear') component.clearRows();
+        else if (action === 'destroy') component.ngOnDestroy();
+        else component.serviceName = ServiceNames.WahooAPI;
+        expect(mockProcessingService.removeJob).toHaveBeenCalledExactlyOnceWith(row.jobId);
+        expect(mockProcessingService.completeJob).not.toHaveBeenCalled();
+        expect(mockProcessingService.failJob).not.toHaveBeenCalled();
+    });
+
+    it('removes the abandoned progress job when a scheduled poll finds a different account', async () => {
+        const row = suuntoProcessingRow();
+        component.uploadRows.set([row]);
+        mockAuth.currentUser.uid = 'different-user';
+        await component.refreshUpload(row, true);
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        expect(mockProcessingService.removeJob).toHaveBeenCalledExactlyOnceWith(row.jobId);
+        Object.values(mockHaptics).forEach(mock => expect(mock).not.toHaveBeenCalled());
+    });
+
+    it('does not restore stale rows or in-flight status controls when switching providers back', async () => {
+        const row = { ...suuntoProcessingRow(), statusCheckInProgress: true };
+        component.uploadRows.set([row]);
+        component.serviceName = ServiceNames.WahooAPI;
+        component.serviceName = ServiceNames.SuuntoApp;
+        expect(component.uploadRows()).toEqual([]);
+        await component.refreshUpload(row);
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+    });
+
+    it('does not send a file after the signed-in account changes while reading it', async () => {
+        let resolve!: (value: ArrayBuffer) => void;
+        vi.spyOn(component as any, 'readFileAsArrayBuffer').mockReturnValue(new Promise(r => { resolve = r; }));
+        const pending = component.getFiles({
+            stopPropagation: vi.fn(), preventDefault: vi.fn(),
+            target: { files: [new File(['fit'], 'activity.fit')], value: 'file' },
+        });
+        mockAuth.currentUser.uid = 'different-user';
+        resolve(new ArrayBuffer(12));
+        await pending;
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).not.toHaveBeenCalled();
     });
 
     it('should create', () => {
@@ -1074,6 +1259,7 @@ describe('UploadActivitiesToServiceComponent', () => {
         expect(mockFunctionsService.call).toHaveBeenCalledWith('importActivityToSuuntoApp', {
             resumeUploadId: 'suunto-upload-1',
             resumeProviderUserId: 'suunto-user-1',
+            supportsPendingStatus: true,
         });
         expect(fileReadSpy).not.toHaveBeenCalled();
         fileReadSpy.mockRestore();

@@ -10,11 +10,10 @@ import {
     SleepProvider,
 } from '../../../shared/sleep';
 import {
-    getCorosSleepBackfillStartMs,
+    getHealthBackfillStartMs,
     GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS,
     getSleepBackfillCooldownMs,
     getSleepBackfillWindowDays,
-    SLEEP_BACKFILL_START_DATE_ISO,
     SleepBackfillQueueResponse,
 } from '../../../shared/sleep-backfill';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
@@ -54,6 +53,8 @@ const GARMIN_SLEEP_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/bac
 const GARMIN_BACKFILL_SECOND_MS = 1000;
 const GARMIN_SLEEP_BACKFILL_RETRY_HEADROOM_MS = 30_000;
 const GARMIN_SLEEP_BACKFILL_MAX_ATTEMPTS = 3;
+const SUUNTO_BACKFILL_WINDOW_BATCH_SIZE = 4;
+const SUUNTO_BACKFILL_MAX_WINDOWS = 512;
 
 interface SleepBackfillWindow {
     startMs: number;
@@ -342,14 +343,6 @@ async function claimSleepBackfillCooldown(
         }, { merge: true });
         return true;
     });
-}
-
-function getSharedSleepBackfillStartMs(): number {
-    const startMs = new Date(SLEEP_BACKFILL_START_DATE_ISO).getTime();
-    if (!Number.isFinite(startMs)) {
-        throw new HttpsError('internal', 'Invalid sleep backfill start date.');
-    }
-    return startMs;
 }
 
 function getConfiguredSleepBackfillWindowDays(provider: SleepProvider, providerLabel: string): number {
@@ -643,10 +636,13 @@ export const backfillSuuntoAppSleep = onCall({
         includeHealth ? SUUNTO_HEALTH_BACKFILL_MAX_ACCOUNTS : undefined,
     );
     const sleepToken = tokens[0];
-    const startMs = getSharedSleepBackfillStartMs();
+    const startMs = getHealthBackfillStartMs(SLEEP_PROVIDERS.SuuntoApp, nowMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
 
-    const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
+    if (Math.ceil((nowMs - startMs) / (windowDays * 86_400_000)) > SUUNTO_BACKFILL_MAX_WINDOWS) {
+        throw new HttpsError('resource-exhausted', 'Suunto history exceeds the per-request window limit.');
+    }
+    const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
     const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
     const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.SuuntoApp, startMs, nowMs, nextAllowedAtMs);
     if (!cooldownClaimed) {
@@ -668,33 +664,50 @@ export const backfillSuuntoAppSleep = onCall({
         })
         : [];
     try {
-        for (const window of windows) {
-            await addSleepSyncQueueItem({
-                type: 'suunto_poll',
-                provider: SLEEP_PROVIDERS.SuuntoApp,
-                userID,
-                providerUserId: sleepToken.providerUserId,
-                rangeStartMs: window.startMs,
-                rangeEndMs: window.endMs,
-                dedupeKey: `sleep-backfill:${userID}:${window.startMs}:${window.endMs}`,
-            });
-            sleepQueued += 1;
-            if (includeHealth) {
-                for (const healthToken of healthTokens) {
+        // Only four queue admissions can be in flight. Recent windows go first;
+        // provider calls remain on the existing rate-limited durable workers.
+        for (let offset = 0; offset < windows.length; offset += SUUNTO_BACKFILL_WINDOW_BATCH_SIZE) {
+            let batchFailed = false;
+            const results = await Promise.allSettled(windows.slice(offset, offset + SUUNTO_BACKFILL_WINDOW_BATCH_SIZE).map(async window => {
+                try {
                     await addSleepSyncQueueItem({
-                        type: 'suunto_health_poll',
+                        type: 'suunto_poll',
                         provider: SLEEP_PROVIDERS.SuuntoApp,
                         userID,
-                        providerUserId: healthToken.providerUserId,
+                        providerUserId: sleepToken.providerUserId,
                         rangeStartMs: window.startMs,
                         rangeEndMs: window.endMs,
-                        healthTrigger: 'backfill',
-                        dedupeKey: `health-backfill:${userID}:${healthToken.providerUserId}:${window.startMs}:${window.endMs}`,
+                        dispatchImmediately: false,
+                        dedupeKey: `sleep-backfill:${userID}:${window.startMs}:${window.endMs}`,
                     });
-                    healthQueued += 1;
+                    sleepQueued += 1;
+                    if (includeHealth) {
+                        for (const healthToken of healthTokens) {
+                            if (batchFailed) return;
+                            await addSleepSyncQueueItem({
+                                type: 'suunto_health_poll',
+                                provider: SLEEP_PROVIDERS.SuuntoApp,
+                                userID,
+                                providerUserId: healthToken.providerUserId,
+                                rangeStartMs: window.startMs,
+                                rangeEndMs: window.endMs,
+                                healthTrigger: 'backfill',
+                                dispatchImmediately: false,
+                                dedupeKey: `health-backfill:${userID}:${healthToken.providerUserId}:${window.startMs}:${window.endMs}`,
+                            });
+                            healthQueued += 1;
+                        }
+                    }
+                    queued += 1;
+                } catch (error) {
+                    batchFailed = true;
+                    throw error;
                 }
-            }
-            queued += 1;
+            }));
+            // Drain started writes before clearing the cooldown on failure, so a
+            // retry cannot race unfinished writes from this invocation.
+            const failure = results.find(result => result.status === 'rejected');
+            if (failure?.status === 'rejected') throw failure.reason;
         }
     } catch (error) {
         const message = includeHealth
@@ -779,7 +792,7 @@ export const backfillCorosAPISleep = onCall({
     await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.COROSAPI, nowMs);
 
     const token = await getCorosSleepBackfillToken(userID);
-    const startMs = getCorosSleepBackfillStartMs(nowMs);
+    const startMs = getHealthBackfillStartMs(SLEEP_PROVIDERS.COROSAPI, nowMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.COROSAPI, 'COROS');
     const windows = chunkCOROSInclusiveTimestampRange(startMs, nowMs, windowDays);
     const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.COROSAPI, 'COROS');
@@ -873,13 +886,13 @@ export const backfillGarminAPIHealth = onCall({
     await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.GarminAPI, nowMs);
 
     const token = await getGarminSleepBackfillToken(userID);
-    const sharedStartMs = getSharedSleepBackfillStartMs();
+    const policyStartMs = ceilToGarminBackfillSecondMs(getHealthBackfillStartMs(SLEEP_PROVIDERS.GarminAPI, nowMs));
     const storedProviderMinStartMs = await getStoredGarminProviderMinBackfillStartMs(userID, token.providerUserId);
-    const startMs = Math.max(sharedStartMs, storedProviderMinStartMs || sharedStartMs);
+    const startMs = Math.max(policyStartMs, storedProviderMinStartMs || policyStartMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
     const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
     const includeHealth = isGarminHealthSyncEnabled();
-    const healthRangeStartMs = sharedStartMs;
+    const healthRangeStartMs = policyStartMs;
     const healthRangeEndMs = floorToGarminBackfillSecond(nowMs);
     const healthQueued = includeHealth
         ? countGarminHealthBackfillRequests(healthRangeStartMs, healthRangeEndMs)

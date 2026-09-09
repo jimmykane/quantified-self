@@ -1,4 +1,8 @@
 import * as admin from 'firebase-admin';
+import {
+  firestoreHealthReads, getMcpHealthCatalog, queryMcpHealth,
+  McpHealthError, McpHealthInput, McpHealthReadDependencies,
+} from './health.service';
 import { FieldPath } from 'firebase-admin/firestore';
 import {
   createCipheriv,
@@ -430,6 +434,7 @@ interface ActivityChartContextDocuments {
 }
 
 export interface McpDataServiceDependencies {
+  healthReads?: McpHealthReadDependencies;
   now: () => number;
   fetchMetricDiscoveryDocuments: (
     uid: string,
@@ -5940,6 +5945,23 @@ export function createMcpDataService(
 
     async queryMetrics(input: QueryMetricsInput) {
       return querySelectedMetrics(dependencies, input);
+    },
+
+    async listHealthMetrics() {
+      return getMcpHealthCatalog();
+    },
+
+    async queryHealthMetric(input: McpHealthInput) {
+      const healthReads = dependencies.healthReads
+        ?? (dependencies === defaultDependencies ? firestoreHealthReads : null);
+      if (!healthReads) throw new McpDataError('temporarily_unavailable', 'Health reads are unavailable.');
+      try {
+        return await queryMcpHealth(input, healthReads);
+      } catch (error) {
+        if (error instanceof McpHealthError) throw new McpDataError(error.code, error.message);
+        // Do not expose parser errors, provider content, or database identifiers.
+        throw new McpDataError('temporarily_unavailable', 'Health data could not be read safely. Try again later.');
+      }
     },
 
     async listMeasurementTypes(): Promise<ListMeasurementTypesResult> {

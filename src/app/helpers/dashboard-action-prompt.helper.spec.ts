@@ -200,6 +200,7 @@ describe('dashboard-action-prompt.helper', () => {
     expect(prompts[4]).toMatchObject({
       id: DASHBOARD_ACTION_PROMPT_BACKFILL_GARMIN_SLEEP_ID,
       title: 'Import Garmin history',
+      description: expect.stringContaining('up to five years'),
       primaryAction: {
         id: 'backfillGarminSleep',
         label: 'Import history',

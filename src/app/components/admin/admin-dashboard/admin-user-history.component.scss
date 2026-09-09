@@ -199,3 +199,17 @@
     height: 0.5rem;
     border-radius: 50%;
 }
+
+.history-display-controls > .history-scale-control + .history-scale-control,
+.plan-basis-control {
+    margin-top: 0.75rem;
+}
+
+@media (max-width: 480px) {
+    .plan-basis-control mat-button-toggle-group {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        max-width: 100%;
+    }
+}
