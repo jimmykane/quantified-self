@@ -605,6 +605,7 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-footer')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.qs-page-header__title-row .health-sources-button')).not.toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('.health-sync-card')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('a[href="/dashboard"]')).toBeNull();
     const connectivityLinks = (fixture.nativeElement as HTMLElement).querySelectorAll(
       'a[aria-label="Manage Health connections in Connectivity"]',
     );
