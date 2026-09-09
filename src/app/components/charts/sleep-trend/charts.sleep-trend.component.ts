@@ -435,7 +435,6 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         axisLine: { lineStyle: { color: style.axisColor } },
         axisLabel: {
           color: style.secondaryTextColor,
-          fontSize: style.axisFontSize,
           ...TRAINING_STATE_AXIS_LABEL,
           interval: xAxisLabelInterval,
           formatter: xAxisLabelFormatter,

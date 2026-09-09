@@ -306,8 +306,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
       },
       axisLabel: {
         show: true,
-        color: chartStyle.textColor,
-        fontSize: chartStyle.axisFontSize,
+        color: chartStyle.secondaryTextColor,
         hideOverlap: true,
         ...TRAINING_STATE_AXIS_LABEL,
         formatter: (value: number) => formatDashboardFormXAxisLabel(Number(value), labelConfig.mode),

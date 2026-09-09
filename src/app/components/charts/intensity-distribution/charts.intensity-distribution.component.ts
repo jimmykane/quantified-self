@@ -274,8 +274,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         axisLine: { lineStyle: { color: style.axisColor } },
         splitLine: { show: false },
         axisLabel: {
-          color: style.textColor,
-          fontSize: style.axisFontSize,
+          color: style.secondaryTextColor,
           hideOverlap: true,
           interval: xAxisLabelInterval,
           ...TRAINING_STATE_AXIS_LABEL,

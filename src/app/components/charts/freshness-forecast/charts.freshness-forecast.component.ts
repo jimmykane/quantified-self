@@ -225,8 +225,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: {
-          color: style.textColor,
-          fontSize: style.axisFontSize,
+          color: style.secondaryTextColor,
           hideOverlap: true,
           ...TRAINING_STATE_AXIS_LABEL,
           formatter: (value: number) => new Date(value).toLocaleDateString(undefined, {
