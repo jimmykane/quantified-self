@@ -35,7 +35,7 @@ export const getWahooAPIAuthRequestTokenRedirectURI = onCall({
   region: FUNCTIONS_MANIFEST.getWahooAPIAuthRequestTokenRedirectURI.region,
   secrets: FUNCTION_SECRET_BINDINGS.getWahooAPIAuthRequestTokenRedirectURI,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10,
 }, async (request): Promise<{ redirect_uri: string }> => {
   const userID = await requireWahooConnectAccess(request);
@@ -61,7 +61,7 @@ export const requestAndSetWahooAPIAccessToken = onCall({
   region: FUNCTIONS_MANIFEST.requestAndSetWahooAPIAccessToken.region,
   secrets: FUNCTION_SECRET_BINDINGS.requestAndSetWahooAPIAccessToken,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10,
 }, async (request): Promise<ServiceOAuthCompletionResult> => {
   const userID = await requireWahooConnectAccess(request);

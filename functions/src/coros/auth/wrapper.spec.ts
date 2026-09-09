@@ -4,6 +4,10 @@ import * as oauth2 from '../../OAuth2';
 import { SERVICE_NAME } from '../constants';
 import * as serviceOAuthAccess from '../../service-oauth-access';
 
+const hoisted = vi.hoisted(() => ({
+    callableOptions: new Map<unknown, { memory?: string }>(),
+}));
+
 // Mock dependencies
 vi.mock('firebase-functions/v1', () => ({
     region: () => ({
@@ -11,10 +15,13 @@ vi.mock('firebase-functions/v1', () => ({
             onCall: (handler: any) => handler
         }
     }),
-    runWith: () => ({
+    runWith: (options: { memory?: string }) => ({
         region: () => ({
             https: {
-                onCall: (handler: any) => handler
+                onCall: (handler: unknown) => {
+                    hoisted.callableOptions.set(handler, options);
+                    return handler;
+                },
             }
         })
     }),
@@ -56,6 +63,13 @@ import {
 describe('COROS Auth Wrapper', () => {
     let context: any;
     let data: any;
+
+    it.each([
+        ['getCOROSAPIAuthRequestTokenRedirectURI', getCOROSAPIAuthRequestTokenRedirectURI],
+        ['requestAndSetCOROSAPIAccessToken', requestAndSetCOROSAPIAccessToken],
+    ])('configures %s with 512 MiB', (_name, callable) => {
+        expect(hoisted.callableOptions.get(callable)).toMatchObject({ memory: '512MB' });
+    });
 
     beforeEach(() => {
         vi.clearAllMocks();

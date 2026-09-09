@@ -28,7 +28,7 @@ interface GetAuthRedirectURIResponse {
 
 export const getCOROSAPIAuthRequestTokenRedirectURI = functions
   .runWith({
-    memory: '256MB',
+    memory: '512MB',
     secrets: FUNCTION_SECRET_BINDINGS.getCOROSAPIAuthRequestTokenRedirectURI,
   })
   .region(FUNCTIONS_MANIFEST.getCOROSAPIAuthRequestTokenRedirectURI.region)
@@ -81,7 +81,7 @@ interface SetAccessTokenRequest {
 
 export const requestAndSetCOROSAPIAccessToken = functions
   .runWith({
-    memory: '256MB',
+    memory: '512MB',
     secrets: FUNCTION_SECRET_BINDINGS.requestAndSetCOROSAPIAccessToken,
   })
   .region(FUNCTIONS_MANIFEST.requestAndSetCOROSAPIAccessToken.region)

@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   const firestoreCollection = vi.fn(() => rootCollection);
   const firestore = vi.fn(() => ({ collection: firestoreCollection }));
   return {
+    callableOptions: new Map<unknown, { memory?: string; maxInstances?: number }>(),
     enforceAppCheck: vi.fn(),
     hasServiceOAuthConnectAccess: vi.fn(),
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
@@ -33,7 +34,10 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
-  onCall: (_options: unknown, handler: unknown) => handler,
+  onCall: (options: { memory?: string; maxInstances?: number }, handler: unknown) => {
+    mocks.callableOptions.set(handler, options);
+    return handler;
+  },
   HttpsError: class HttpsError extends Error {
     constructor(
       public readonly code: string,
@@ -94,6 +98,13 @@ import {
 import * as logger from 'firebase-functions/logger';
 
 describe('Wahoo Auth Wrapper', () => {
+  it.each([
+    ['getWahooAPIAuthRequestTokenRedirectURI', getWahooAPIAuthRequestTokenRedirectURI],
+    ['requestAndSetWahooAPIAccessToken', requestAndSetWahooAPIAccessToken],
+  ])('configures %s with 512 MiB while preserving its instance limit', (_name, callable) => {
+    expect(mocks.callableOptions.get(callable)).toMatchObject({ memory: '512MiB', maxInstances: 10 });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAndSetServiceOAuth2AccessTokenForUser.mockReset().mockResolvedValue({

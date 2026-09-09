@@ -36,7 +36,7 @@ interface SetAccessTokenRequest {
 }
 
 export const getGarminAPIAuthRequestTokenRedirectURI = functions
-  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.getGarminAPIAuthRequestTokenRedirectURI })
+  .runWith({ memory: '512MB', secrets: FUNCTION_SECRET_BINDINGS.getGarminAPIAuthRequestTokenRedirectURI })
   .region(FUNCTIONS_MANIFEST.getGarminAPIAuthRequestTokenRedirectURI.region)
   .https.onCall(async (data: GetAuthRedirectURIRequest, context) => {
   // 1. App Check Verification
@@ -94,7 +94,7 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions
 });
 
 export const requestAndSetGarminAPIAccessToken = functions
-  .runWith({ secrets: FUNCTION_SECRET_BINDINGS.requestAndSetGarminAPIAccessToken })
+  .runWith({ memory: '512MB', secrets: FUNCTION_SECRET_BINDINGS.requestAndSetGarminAPIAccessToken })
   .region(FUNCTIONS_MANIFEST.requestAndSetGarminAPIAccessToken.region)
   .https.onCall(async (data: SetAccessTokenRequest, context): Promise<ServiceOAuthCompletionResult> => {
   // 1. App Check Verification
