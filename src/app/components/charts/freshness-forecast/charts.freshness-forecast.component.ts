@@ -199,7 +199,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         left: 6,
         right: 6,
         top: 8,
-        bottom: 22,
+        bottom: 6,
         outerBoundsMode: 'same',
         outerBoundsContain: 'axisLabel',
       },
@@ -229,6 +229,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
+          margin: 3,
           formatter: (value: number) => new Date(value).toLocaleDateString(undefined, {
             month: 'short',
             day: 'numeric',

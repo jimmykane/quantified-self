@@ -132,6 +132,7 @@ describe('ChartsFreshnessForecastComponent', () => {
 
     expect(option.grid).toMatchObject({
       left: 6,
+      bottom: 6,
       outerBoundsMode: 'same',
       outerBoundsContain: 'axisLabel',
     });
@@ -170,7 +171,8 @@ describe('ChartsFreshnessForecastComponent', () => {
     const optionCandidate = setOptionCall[1] || setOptionCall[0];
     const option = optionCandidate as Record<string, any>;
 
-    expect(option.grid).toMatchObject({ left: 6, right: 6 });
+    expect(option.grid).toMatchObject({ left: 6, right: 6, bottom: 6 });
+    expect(option.xAxis.axisLabel.margin).toBe(3);
     expect(option.yAxis.axisLabel).toMatchObject({ show: true, fontSize: 11 });
   });
 
