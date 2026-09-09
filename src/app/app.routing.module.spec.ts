@@ -179,6 +179,7 @@ describe('AppRoutingModule routes', () => {
 
   it('keeps manual training plans authenticated, client-rendered, and noindexed', () => {
     const plansRoute = routes.find(route => route.path === 'training/plans');
+    const planRoutes = routes.filter(route => route.path?.startsWith('training/plans'));
 
     expect(plansRoute).toBeTruthy();
     expect(plansRoute?.canMatch).toEqual([authGuard, onboardingGuard]);
@@ -189,6 +190,25 @@ describe('AppRoutingModule routes', () => {
       robots: 'noindex, follow',
     });
     expect(plansRoute?.data?.['description']).toContain('standalone workouts');
+    expect(planRoutes.map(route => route.path)).toEqual([
+      'training/plans/workout/:workoutId',
+      'training/plans/standalone/new',
+      'training/plans/plan/:planId/new',
+      'training/plans/new',
+      'training/plans/standalone',
+      'training/plans/plan/:planId',
+      'training/plans',
+    ]);
+    expect(planRoutes.every(route => route.canMatch?.[0] === authGuard && route.canMatch?.[1] === onboardingGuard)).toBe(true);
+    expect(planRoutes.every(route => route.loadComponent instanceof Function)).toBe(true);
+    expect(planRoutes.every(route => route.data?.['robots'] === 'noindex, follow')).toBe(true);
+    expect(planRoutes.every(route => route.data?.['disableRouteAnimation'] === true)).toBe(true);
+    expect(planRoutes.find(route => route.path === 'training/plans/workout/:workoutId')?.data)
+      .toMatchObject({ trainingPlansMode: 'edit', trainingPlansScope: 'plans' });
+    expect(planRoutes.find(route => route.path === 'training/plans/plan/:planId/new')?.data)
+      .toMatchObject({ trainingPlansMode: 'create', trainingPlansScope: 'plans' });
+    expect(planRoutes.find(route => route.path === 'training/plans/standalone/new')?.data)
+      .toMatchObject({ trainingPlansMode: 'create', trainingPlansScope: 'standalone' });
     expect(routes.indexOf(plansRoute!)).toBeLessThan(routes.findIndex(route => route.path === 'training'));
     expect(routes.some(route => route.path === 'plans')).toBe(false);
   });

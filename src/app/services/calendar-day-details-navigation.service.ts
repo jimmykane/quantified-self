@@ -85,7 +85,7 @@ export class CalendarDayDetailsNavigationService {
       return;
     }
 
-    if (targetUrl && isEventDetailsUrl(targetUrl)) {
+    if (targetUrl && (isEventDetailsUrl(targetUrl) || isWorkoutEditorUrl(targetUrl))) {
       return;
     }
 
@@ -120,4 +120,8 @@ function normalizeDateKey(value: unknown): string | null {
 
 function isEventDetailsUrl(url: string): boolean {
   return /^\/user\/[^/?#]+\/event\/[^/?#]+(?:[?#]|$)/.test(url);
+}
+
+function isWorkoutEditorUrl(url: string): boolean {
+  return /^\/training\/plans\/(?:workout\/[^/?#]+|new|standalone\/new|plan\/[^/?#]+\/new)(?:[?#]|$)/.test(url);
 }

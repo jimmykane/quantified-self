@@ -454,6 +454,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
     expect(planningSection?.content).toContain('calendar cues, not rest-day recommendations');
+    expect(planningSection?.content).toContain('Each saved workout editor has its own link');
+    expect(planningSection?.content).toContain('browser Back and Forward');
     expect(planningSection?.content).toContain('**Plan actions -> Plan color**');
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)

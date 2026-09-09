@@ -1,6 +1,6 @@
 import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import type { ResolveData, Routes } from '@angular/router';
+import type { Data, ResolveData, Route, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
 import { assistantGuard } from './authentication/assistant.guard';
@@ -76,6 +76,29 @@ function publicSeoRouteData(page: PublicSeoPageKey): ResolveData {
       .then(module => module.PUBLIC_SEO_ROUTE_DATA[page]),
     PUBLIC_SEO_RESOLVED_KEYS,
   );
+}
+
+const TRAINING_PLANS_ROUTE_DATA: Data = {
+  title: 'Plans',
+  animation: 'Plans',
+  disableRouteAnimation: true,
+  description: 'Create standalone workouts and organize date-based running and cycling training plans.',
+  robots: 'noindex, follow',
+};
+
+function trainingPlansRoute(
+  path: string,
+  mode: 'browse' | 'create' | 'edit',
+  scope: 'plans' | 'standalone' = 'plans',
+  preload = false,
+): Route {
+  return {
+    path,
+    loadComponent: () => import('./components/plans/plans-workspace.component')
+      .then(module => module.PlansWorkspaceComponent),
+    data: { ...TRAINING_PLANS_ROUTE_DATA, trainingPlansMode: mode, trainingPlansScope: scope, preload },
+    canMatch: [authGuard, onboardingGuard],
+  };
 }
 
 const PUBLIC_LAYOUT_ROUTE_PATHS = new Set<string>([
@@ -566,19 +589,13 @@ const topLevelRoutes: Routes = [
     },
     canMatch: [authGuard, onboardingGuard]
   },
-  {
-    path: 'training/plans',
-    loadComponent: () => import('./components/plans/plans-workspace.component')
-      .then(module => module.PlansWorkspaceComponent),
-    data: {
-      title: 'Plans',
-      animation: 'Plans',
-      preload: true,
-      description: 'Create standalone workouts and organize date-based running and cycling training plans.',
-      robots: 'noindex, follow',
-    },
-    canMatch: [authGuard, onboardingGuard]
-  },
+  trainingPlansRoute('training/plans/workout/:workoutId', 'edit'),
+  trainingPlansRoute('training/plans/standalone/new', 'create', 'standalone'),
+  trainingPlansRoute('training/plans/plan/:planId/new', 'create'),
+  trainingPlansRoute('training/plans/new', 'create'),
+  trainingPlansRoute('training/plans/standalone', 'browse', 'standalone'),
+  trainingPlansRoute('training/plans/plan/:planId', 'browse'),
+  trainingPlansRoute('training/plans', 'browse', 'plans', true),
   {
     path: 'training',
     loadChildren: () => import('./modules/training.module').then(module => module.TrainingModule),

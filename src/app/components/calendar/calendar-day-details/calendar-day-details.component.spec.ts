@@ -77,14 +77,14 @@ describe('CalendarDayDetailsComponent', () => {
     const actions = [...fixture.nativeElement.querySelectorAll('.calendar-day-plan-actions a')] as HTMLAnchorElement[];
 
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.getAttribute('href'))
-      .toBe('/training/plans?workout=workout-1');
+      .toBe('/training/plans/workout/workout-1');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
     expect((fixture.nativeElement.querySelector('.calendar-day-planned-item') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
     expect(actions.map(action => action.getAttribute('href'))).toEqual([
-      '/training/plans?date=2026-08-03',
-      '/training/plans?date=2026-08-03&scope=standalone',
+      '/training/plans/new?date=2026-08-03',
+      '/training/plans/standalone/new?date=2026-08-03',
     ]);
     expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
@@ -151,6 +151,18 @@ describe('CalendarDayDetailsComponent', () => {
     const prepareReturn = vi.spyOn(navigation, 'prepareReturn');
 
     fixture.componentInstance.prepareEventNavigation(['/user', 'user-1', 'event', 'event-1']);
+
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();
+  });
+
+  it('records the calendar day before opening a workout path and dismisses the sheet', async () => {
+    const fixture = await renderDayDetails([], { plannedWorkouts: [{ workout: createPlannedWorkout() }] });
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    const bottomSheetRef = TestBed.inject(MatBottomSheetRef);
+    const prepareReturn = vi.spyOn(navigation, 'prepareReturn');
+
+    fixture.componentInstance.prepareWorkoutNavigation();
 
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
     expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();

@@ -138,6 +138,10 @@
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
         {
+          "source": "/training/plans/**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+        },
+        {
           "source": "/training",
           "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
         },
@@ -332,6 +336,30 @@
         },
         {
           "source": "/calendar",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/workout/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/standalone/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/plan/*/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/standalone",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/plan/*",
           "destination": "/index.csr.html"
         },
         {
@@ -615,6 +643,30 @@
         },
         {
           "source": "/calendar",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/workout/*",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/standalone/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/plan/*/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/new",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/standalone",
+          "destination": "/index.csr.html"
+        },
+        {
+          "source": "/training/plans/plan/*",
           "destination": "/index.csr.html"
         },
         {

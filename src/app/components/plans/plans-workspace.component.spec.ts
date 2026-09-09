@@ -1,14 +1,15 @@
 import { signal } from '@angular/core';
+import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
 import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
@@ -22,7 +23,15 @@ import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpe
 
 describe('PlansWorkspaceComponent', () => {
   const user = { uid: 'user-1', settings: { unitSettings: {} } };
-  let route: { snapshot: { queryParamMap: ReturnType<typeof convertToParamMap> } };
+  let route: {
+    snapshot: { paramMap: ParamMap; queryParamMap: ParamMap; data: Data };
+    paramMap: Observable<ParamMap>;
+    queryParamMap: Observable<ParamMap>;
+    data: Observable<Data>;
+  };
+  let routeParamChanges$: Subject<ParamMap>;
+  let routeQueryChanges$: Subject<ParamMap>;
+  let routeDataChanges$: Subject<Data>;
   let schedule: CurrentTrainingScheduleV1;
   let watchSchedule: ReturnType<typeof vi.fn>;
   let mutate: ReturnType<typeof vi.fn>;
@@ -36,7 +45,19 @@ describe('PlansWorkspaceComponent', () => {
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 8, 9, 12));
-    route = { snapshot: { queryParamMap: convertToParamMap({}) } };
+    routeParamChanges$ = new Subject();
+    routeQueryChanges$ = new Subject();
+    routeDataChanges$ = new Subject();
+    route = {
+      snapshot: {
+        paramMap: convertToParamMap({}),
+        queryParamMap: convertToParamMap({}),
+        data: { trainingPlansMode: 'browse', trainingPlansScope: 'plans' },
+      },
+      paramMap: concat(defer(() => of(route.snapshot.paramMap)), routeParamChanges$),
+      queryParamMap: concat(defer(() => of(route.snapshot.queryParamMap)), routeQueryChanges$),
+      data: concat(defer(() => of(route.snapshot.data)), routeDataChanges$),
+    };
     schedule = populatedSchedule();
     watchSchedule = vi.fn().mockImplementation(() => of(schedule));
     mutate = vi.fn().mockImplementation(async request => ({
@@ -87,6 +108,29 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+
+  function setRouteState(options: {
+    mode?: 'browse' | 'create' | 'edit';
+    scope?: 'plans' | 'standalone';
+    workoutId?: string;
+    planId?: string;
+    date?: string;
+  }, emit = false): void {
+    route.snapshot.paramMap = convertToParamMap({
+      ...(options.workoutId ? { workoutId: options.workoutId } : {}),
+      ...(options.planId ? { planId: options.planId } : {}),
+    });
+    route.snapshot.queryParamMap = convertToParamMap(options.date ? { date: options.date } : {});
+    route.snapshot.data = {
+      trainingPlansMode: options.mode ?? 'browse',
+      trainingPlansScope: options.scope ?? 'plans',
+    };
+    if (emit) {
+      routeParamChanges$.next(route.snapshot.paramMap);
+      routeQueryChanges$.next(route.snapshot.queryParamMap);
+      routeDataChanges$.next(route.snapshot.data);
+    }
+  }
 
   it('has one contextual add action without overview or duplicate plan headings', async () => {
     const fixture = await renderPlans();
@@ -292,6 +336,114 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.querySelector('.editor-save-actions [appHapticTap]')).toBeTruthy();
   });
 
+  it('opens saved workouts at a path URL without putting IDs in query parameters', async () => {
+    const fixture = await renderPlans();
+    const router = TestBed.inject(Router);
+    const navigate = vi.mocked(router.navigate);
+    navigate.mockClear();
+
+    fixture.componentInstance.editWorkout(schedule.workouts[0]);
+
+    expect(navigate).toHaveBeenCalledWith(
+      ['/training/plans/workout', 'plan-workout'],
+      expect.objectContaining({ queryParams: undefined, replaceUrl: undefined }),
+    );
+    expect(navigate.mock.calls[0]?.[1]?.state).toMatchObject({
+      trainingPlansEditorReturn: { uid: 'user-1' },
+    });
+  });
+
+  it('restores browse and edit screens through route history without live refreshes replacing the draft', async () => {
+    const live = new BehaviorSubject(schedule);
+    watchSchedule.mockReturnValue(live);
+    setRouteState({ planId: 'active-plan', date: '2026-09-09' });
+    const fixture = await renderPlans();
+
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' }, true);
+    fixture.detectChanges();
+    fixture.componentInstance.updateEditorField('title', 'Unsaved title');
+    live.next({ ...schedule, state: { ...schedule.state, updatedAtMs: 2 } });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editor()?.value.title).toBe('Unsaved title');
+
+    setRouteState({ planId: 'active-plan', date: '2026-09-09' }, true);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editor()).toBeNull();
+    expect(fixture.componentInstance.planScheduleDate()).toBe('2026-09-09');
+
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' }, true);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editor()).toMatchObject({
+      mode: 'edit',
+      original: { id: 'plan-workout' },
+      value: { title: 'Plan run' },
+    });
+  });
+
+  it('uses the recorded Plans history entry for Cancel and never guesses Back for a direct link', async () => {
+    const fixture = await renderPlans();
+    const location = TestBed.inject(Location);
+    const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
+    vi.spyOn(location, 'getState').mockReturnValue({
+      trainingPlansEditorReturn: {
+        uid: 'user-1',
+        url: '/training/plans/plan/active-plan?date=2026-09-09',
+      },
+    });
+    fixture.componentInstance.editWorkout(schedule.workouts[0]);
+
+    fixture.componentInstance.cancelEditor();
+
+    expect(back).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.editor()).toBeNull();
+  });
+
+  it('replaces an unavailable workout path with the owner-safe active plan route', async () => {
+    const fixture = await renderPlans();
+    const component = fixture.componentInstance as unknown as {
+      applyRoute(requested: {
+        mode: 'edit'; workoutId: string; planId: null; standalone: false; localDate: null;
+      }): void;
+      snackBar: MatSnackBar;
+    };
+    const notice = vi.spyOn(component.snackBar, 'open');
+
+    component.applyRoute({
+      mode: 'edit', workoutId: 'missing-workout', planId: null, standalone: false, localDate: null,
+    });
+
+    expect(fixture.componentInstance.editor()).toBeNull();
+    expect(notice).toHaveBeenCalledWith(
+      'That planned workout is no longer available.',
+      'Dismiss',
+      { duration: 5000 },
+    );
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(
+      ['/training/plans/plan', 'active-plan'],
+      expect.objectContaining({ replaceUrl: true }),
+    );
+  });
+
+  it('keeps plan IDs in browse and create paths while using the query string only for a date', async () => {
+    schedule.plans.push({ ...schedule.plans[0], id: 'paused-plan', lifecycle: 'paused' });
+    const fixture = await renderPlans();
+    const navigate = vi.mocked(TestBed.inject(Router).navigate);
+    navigate.mockClear();
+
+    fixture.componentInstance.selectPlan('paused-plan');
+    expect(navigate).toHaveBeenLastCalledWith(
+      ['/training/plans/plan', 'paused-plan'],
+      expect.objectContaining({ queryParams: { date: '2026-09-09' } }),
+    );
+
+    navigate.mockClear();
+    fixture.componentInstance.openNewWorkout('paused-plan', '2026-09-10');
+    expect(navigate).toHaveBeenLastCalledWith(
+      ['/training/plans/plan', 'paused-plan', 'new'],
+      expect.objectContaining({ queryParams: { date: '2026-09-10' } }),
+    );
+  });
+
   it('keeps a newly created plan selected when the callable finishes before the live plan listener', async () => {
     const live = new BehaviorSubject(schedule);
     watchSchedule.mockReturnValue(live);
@@ -484,7 +636,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('defaults a calendar add request to the active plan', async () => {
-    route.snapshot.queryParamMap = convertToParamMap({ date: '2026-09-10' });
+    setRouteState({ mode: 'create', date: '2026-09-10' });
     const fixture = await renderPlans();
 
     expect(fixture.componentInstance.editor()).toMatchObject({
@@ -495,7 +647,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('honors the prominent standalone calendar add path even with an active plan', async () => {
-    route.snapshot.queryParamMap = convertToParamMap({ date: '2026-09-10', scope: 'standalone' });
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-10' });
     const fixture = await renderPlans();
 
     expect(fixture.componentInstance.editor()?.destinationPlanId).toBeNull();
@@ -504,14 +656,14 @@ describe('PlansWorkspaceComponent', () => {
 
   it('defaults calendar adds to standalone when there is no active plan', async () => {
     schedule = { ...populatedSchedule(), state: { ...populatedSchedule().state, activePlanId: null } };
-    route.snapshot.queryParamMap = convertToParamMap({ date: '2026-09-10' });
+    setRouteState({ mode: 'create', date: '2026-09-10' });
     const fixture = await renderPlans();
 
     expect(fixture.componentInstance.editor()?.destinationPlanId).toBeNull();
   });
 
   it('opens a linked standalone workout in the editor without requiring a plan', async () => {
-    route.snapshot.queryParamMap = convertToParamMap({ workout: 'standalone-workout' });
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
     const fixture = await renderPlans();
 
     expect(fixture.componentInstance.view()).toBe('standalone');
@@ -524,7 +676,7 @@ describe('PlansWorkspaceComponent', () => {
 
   it('returns to the linked workout date when cancelling the calendar-originated editor', async () => {
     schedule.workouts[0].localDate = '2026-09-20';
-    route.snapshot.queryParamMap = convertToParamMap({ workout: 'plan-workout' });
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
     const fixture = await renderPlans();
     fixture.componentInstance.cancelEditor();
     fixture.detectChanges();
@@ -535,7 +687,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it.each([false, true])('returns to the calendar add scope and date after cancellation (standalone: %s)', async standalone => {
-    route.snapshot.queryParamMap = convertToParamMap({ date: '2026-09-20', ...(standalone ? { scope: 'standalone' } : {}) });
+    setRouteState({ mode: 'create', scope: standalone ? 'standalone' : 'plans', date: '2026-09-20' });
     const fixture = await renderPlans();
     fixture.componentInstance.cancelEditor();
     fixture.detectChanges();
@@ -546,7 +698,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('creates a standalone workout through the same revisioned mutation path', async () => {
-    route.snapshot.queryParamMap = convertToParamMap({ date: '2026-09-10', scope: 'standalone' });
+    setRouteState({ mode: 'create', scope: 'standalone', date: '2026-09-10' });
     const fixture = await renderPlans();
     fixture.componentInstance.updateEditorField('title', 'Unplanned run');
 
@@ -565,7 +717,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('saves content, date, and plan association in one atomic update mutation', async () => {
-    route.snapshot.queryParamMap = convertToParamMap({ workout: 'standalone-workout' });
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
     const fixture = await renderPlans();
     fixture.componentInstance.updateEditorField('title', 'Attached run');
     fixture.componentInstance.updateEditorField('localDate', '2026-09-10');
@@ -592,7 +744,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('keeps the editor-open workout revision instead of borrowing a concurrent update', async () => {
-    route.snapshot.queryParamMap = convertToParamMap({ workout: 'standalone-workout' });
+    setRouteState({ mode: 'edit', workoutId: 'standalone-workout' });
     const fixture = await renderPlans();
     fixture.componentInstance.updateEditorField('title', 'My pending edit');
     schedule.workouts.find(workout => workout.id === 'standalone-workout')!.revision = 9;
@@ -607,7 +759,7 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   it('reports a failed range-extension retry without losing the open editor', async () => {
-    route.snapshot.queryParamMap = convertToParamMap({ date: '2026-10-10' });
+    setRouteState({ mode: 'create', date: '2026-10-10' });
     mutate
       .mockRejectedValueOnce(new Error('Moving this workout requires extending Autumn build to include 2026-10-10.'))
       .mockRejectedValueOnce(new Error('The schedule changed before the extension was applied.'));
@@ -824,6 +976,25 @@ describe('PlansWorkspaceComponent', () => {
   });
 
   async function renderPlans() {
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockImplementation((commands, extras) => {
+      const root = `${commands[0] ?? ''}`;
+      if (root === '/training/plans/workout') {
+        setRouteState({ mode: 'edit', workoutId: `${commands[1] ?? ''}` }, true);
+      } else if (root === '/training/plans/standalone/new') {
+        setRouteState({ mode: 'create', scope: 'standalone', date: `${extras?.queryParams?.['date'] ?? ''}` || undefined }, true);
+      } else if (root === '/training/plans/plan' && commands[2] === 'new') {
+        setRouteState({ mode: 'create', planId: `${commands[1] ?? ''}`, date: `${extras?.queryParams?.['date'] ?? ''}` || undefined }, true);
+      } else if (root === '/training/plans/new') {
+        setRouteState({ mode: 'create', date: `${extras?.queryParams?.['date'] ?? ''}` || undefined }, true);
+      } else if (root === '/training/plans/standalone') {
+        setRouteState({ scope: 'standalone' }, true);
+      } else if (root === '/training/plans/plan') {
+        setRouteState({ planId: `${commands[1] ?? ''}`, date: `${extras?.queryParams?.['date'] ?? ''}` || undefined }, true);
+      } else {
+        setRouteState({}, true);
+      }
+      return Promise.resolve(true);
+    });
     const fixture = TestBed.createComponent(PlansWorkspaceComponent);
     fixture.detectChanges();
     await fixture.whenStable();

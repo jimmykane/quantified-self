@@ -315,14 +315,14 @@ describe('SideNavComponent', () => {
         expect(healthItem).toBeUndefined();
     });
 
-    it('highlights Plans independently of Training while preserving query-driven Training navigation', async () => {
+    it('highlights Plans independently of Training on a nested path while preserving Training query navigation', async () => {
         mockUserService.user = vi.fn().mockReturnValue({ uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID });
         fixture.detectChanges();
         const router = TestBed.inject(Router);
         const trainingItem = fixture.nativeElement.querySelector('[routerlink="/training"]') as HTMLElement;
         const plansItem = fixture.nativeElement.querySelector('[routerlink="/training/plans"]') as HTMLElement;
 
-        await router.navigateByUrl('/training/plans?date=2026-08-03&scope=standalone');
+        await router.navigateByUrl('/training/plans/standalone?date=2026-08-03');
         await fixture.whenStable();
         fixture.detectChanges();
         expect(plansItem.classList.contains('active')).toBe(true);

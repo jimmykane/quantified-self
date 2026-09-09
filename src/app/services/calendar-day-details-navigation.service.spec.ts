@@ -43,6 +43,29 @@ describe('CalendarDayDetailsNavigationService', () => {
     expect(service.restorationFor('/calendar')).toBeNull();
   });
 
+  it.each([
+    '/training/plans/workout/workout-1',
+    '/training/plans/new?date=2026-08-03',
+    '/training/plans/standalone/new?date=2026-08-03',
+    '/training/plans/plan/plan-1/new?date=2026-08-03',
+  ])('keeps the calendar return pending while visiting workout editor path %s', targetUrl => {
+    service.prepareReturn('/calendar?view=month&date=2026-08-03', '2026-08-03');
+
+    routerEvents.next(new NavigationStart(1, targetUrl, 'imperative'));
+    routerEvents.next(new NavigationStart(2, '/calendar?view=month&date=2026-08-03', 'popstate'));
+
+    expect(service.restorationFor('/calendar?view=month&date=2026-08-03')?.dateKey).toBe('2026-08-03');
+  });
+
+  it('does not treat removed query-parameter editor links as workout paths', () => {
+    service.prepareReturn('/calendar', '2026-08-03');
+
+    routerEvents.next(new NavigationStart(1, '/training/plans?workout=workout-1', 'imperative'));
+    routerEvents.next(new NavigationStart(2, '/calendar', 'popstate'));
+
+    expect(service.restorationFor('/calendar')).toBeNull();
+  });
+
   it('carries a deleted event ID into the returning calendar restoration', () => {
     service.prepareReturn('/dashboard', '2026-08-20');
     routerEvents.next(new NavigationStart(1, '/user/user-1/event/event-1', 'imperative'));

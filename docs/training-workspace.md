@@ -359,12 +359,23 @@ Year views turn these into slim right-edge color segments (dashed for skipped wo
 the note-color edge. They omit the visual overflow count to avoid collisions; the date's accessible name and day details
 retain complete counts. Completed activity circles, note colors, and global weekend shading stay independent.
 
-`/training/plans` is authenticated, client-rendered, and excluded from the sitemap. Its route metadata is `noindex, follow`
-and hosting also supplies `noindex` headers; `robots.txt` permits crawling so those directives can be read. It is a
-full-page route registered before the analytical `/training` route, not embedded in the analysis workspace. Training
-Planning is not live yet: `/plans` is not registered and has no compatibility redirect. Calendar and help links use
-`/training/plans`, preserving date, standalone-scope, and workout query parameters. The sidebar entry remains indented
-beneath Training and UID-gated for presentation only; direct owner-scoped access is unchanged.
+The Training Planning route family is authenticated, client-rendered, and excluded from the sitemap. Route metadata is
+`noindex, follow` and hosting also supplies `noindex` headers; `robots.txt` permits crawling so those directives can be
+read. It is registered before the analytical `/training` route, not embedded in the analysis workspace. Stable entity
+identifiers are path segments, matching the rest of the app: `/training/plans/plan/:planId` browses a plan and
+`/training/plans/workout/:workoutId` edits a saved workout. `/training/plans/standalone` browses independent workouts;
+new-workout routes append `/new` to the selected plan or Standalone path, while `/training/plans/new` applies the normal
+active-plan-or-standalone default. The optional `date` query parameter selects or prefills a local calendar date; plan
+and workout identifiers, scope, editor mode, and unsaved form values never use query parameters.
+
+Opening an editor pushes a browser-history entry. Back and Forward restore the previous browse/editor state, including
+the selected plan and date, and Calendar-originated Back restores the open day detail. Cancel uses the recorded Plans
+return entry when available and otherwise replaces a direct deep link with its safe owner-scoped browse destination.
+Route changes may replace a draft, but live schedule and unit-setting updates do not. A pending save captures the owner
+and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. Training
+Planning is not live yet: `/plans` and the former query-parameter editor shapes are not registered and have no
+compatibility redirects. The sidebar entry remains indented beneath Training and UID-gated for presentation only;
+direct owner-scoped access is unchanged.
 
 ### Provider proof status
 
@@ -1966,7 +1977,10 @@ git diff --check
 For `/training/plans`, create synthetic paused plans with multiple workouts across weeks, months, and December/January,
 including a maximum 366-day range. Check forward/backward navigation through every month, exact inclusive boundaries,
 empty days, three or more same-day workouts, long titles, overflow-to-detail order, mobile editing/skip actions, and
-reload persistence at desktop and narrow-mobile widths. Verify all seven week-start choices, weekday header order,
+reload persistence at desktop and narrow-mobile widths. Open plan, Standalone, create, and saved-workout path URLs
+directly; verify refresh, Back, and Forward restore the correct scope/date/editor, Calendar Back reopens the originating
+day detail, invalid owner-scoped IDs fall back safely, and no entity ID appears in a query parameter. Verify all seven
+week-start choices, weekday header order,
 Saturday/Sunday tint across month/year boundaries, and selected/today/outside-range states. Use component fixtures for
 alternate preferences rather than changing the signed-in account's settings solely for QA. Keep the existing active plan
 unchanged and provider delivery disabled; test-data deletion requires its own explicit approval.

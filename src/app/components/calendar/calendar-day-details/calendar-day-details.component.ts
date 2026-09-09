@@ -122,6 +122,7 @@ export class CalendarDayDetailsComponent {
   }
 
   prepareWorkoutNavigation(): void {
+    this.navigation.prepareReturn(this.router.url, this.data.day.dateKey);
     this.dismiss();
   }
 

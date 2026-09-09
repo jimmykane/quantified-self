@@ -26,13 +26,13 @@
       <div class="calendar-day-section-heading">
         <h3 id="calendar-day-planned-title">Planned workouts</h3>
         <div class="calendar-day-plan-actions" aria-label="Add a workout">
-          <a mat-flat-button [routerLink]="['/training/plans']" [queryParams]="{ date: data.day.dateKey }"
+          <a mat-flat-button [routerLink]="['/training/plans/new']" [queryParams]="{ date: data.day.dateKey }"
             (click)="prepareWorkoutNavigation()">
             <mat-icon aria-hidden="true">add</mat-icon>
             Add workout
           </a>
-          <a mat-stroked-button [routerLink]="['/training/plans']"
-            [queryParams]="{ date: data.day.dateKey, scope: 'standalone' }"
+          <a mat-stroked-button [routerLink]="['/training/plans/standalone/new']"
+            [queryParams]="{ date: data.day.dateKey }"
             (click)="prepareWorkoutNavigation()">
             Standalone
           </a>
@@ -45,9 +45,9 @@
       } @else if (plannedWorkoutRows().length) {
       <mat-nav-list>
         @for (planned of plannedWorkoutRows(); track planned.id) {
-        <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/training/plans']"
+        <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
           [style.--planned-workout-color]="planned.color"
-          [queryParams]="{ workout: planned.id }" (click)="prepareWorkoutNavigation()">
+          (click)="prepareWorkoutNavigation()">
           <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"
             aria-hidden="true"></app-activity-type-icon>
           <span matListItemTitle>{{ planned.title }}</span>
