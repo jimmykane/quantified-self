@@ -25,6 +25,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import {
   createManualWorkoutEditorStep,
   createManualWorkoutEditorValue,
@@ -98,7 +99,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule],
+  imports: [SharedModule, CompactRowComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,

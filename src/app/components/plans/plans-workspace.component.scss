@@ -48,7 +48,7 @@
   justify-content: space-between;
 }
 
-.plan-form-card,
+.plan-form,
 .plan-scope,
 .workout-editor,
 .workout-list,
@@ -65,8 +65,6 @@
   gap: 12px;
 }
 
-.plan-form-card mat-card-content,
-.workout-editor mat-card-content,
 .plan-deletion-card mat-card-content {
   padding-top: 16px;
 }
@@ -119,7 +117,7 @@
 
 .plans-workspace mat-form-field,
 .workout-nodes,
-.workout-node-card,
+.workout-node-row,
 .workout-editor,
 .workout-step-editor,
 .step-fields {
@@ -216,20 +214,6 @@
   gap: 14px;
 }
 
-.workout-node-card mat-card-header,
-.history-panel mat-card-header {
-  align-items: center;
-}
-
-.workout-node-card mat-card-header button,
-.history-panel mat-card-header button {
-  margin-inline-start: auto;
-}
-
-.workout-node-card mat-card-content {
-  padding-top: 12px;
-}
-
 .workout-step-editor {
   display: flex;
   align-items: start;
@@ -259,38 +243,41 @@
   font: var(--mat-sys-label-large);
 }
 
-.workout-cards {
+.workout-rows {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.workout-card mat-card-header {
-  display: block;
-}
-
-.workout-card-title,
+.workout-row,
 .workout-summary {
   overflow-wrap: anywhere;
 }
 
-.workout-card-title {
+.workout-row-meta {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
 }
 
-.workout-card-title app-activity-type-icon {
-  flex: 0 0 28px;
+.workout-row-meta app-activity-type-icon {
+  flex: 0 0 18px;
 }
 
-.workout-card-title span {
-  min-width: 0;
+.workout-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.workout-card mat-card-actions {
-  justify-content: space-between;
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
 }
 
 .editor-save-actions {
@@ -298,19 +285,16 @@
   bottom: 0;
   z-index: 2;
   gap: 8px;
-  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  padding: 12px 0 max(12px, env(safe-area-inset-bottom));
   background: var(--mat-sys-surface);
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
 
-.workout-card mat-chip-set {
-  margin-inline-start: auto;
-}
-
 .workout-summary {
-  margin: 16px 0 0;
+  margin: 4px 0 0;
   padding-inline-start: 22px;
   color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
 }
 
 .workout-summary li + li {
@@ -455,8 +439,4 @@ mat-card-actions button,
     flex: 1 1 120px;
   }
 
-  .workout-card mat-card-actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
 }

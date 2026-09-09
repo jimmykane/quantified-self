@@ -1,9 +1,11 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { BehaviorSubject, of } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -13,6 +15,7 @@ import {
   type CurrentTrainingScheduleV1,
 } from '../../services/training-plans.service';
 import { PlansWorkspaceComponent } from './plans-workspace.component';
+import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 
 describe('PlansWorkspaceComponent', () => {
   const user = { uid: 'user-1', settings: { unitSettings: {} } };
@@ -88,6 +91,59 @@ describe('PlansWorkspaceComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Add here');
     expect(haptics.selection).not.toHaveBeenCalled();
     expect(haptics.success).not.toHaveBeenCalled();
+  });
+
+  it('uses shared compact rows with labelled headings, actions, and dividers between workouts', async () => {
+    schedule.workouts.push({ ...schedule.workouts[0], id: 'recovery', title: 'Recovery', localDate: '2026-09-10', lifecycle: 'skipped' });
+    schedule.state.currentWorkoutCount = 3;
+    schedule.plans[0].workoutCount = 2;
+    const fixture = await renderPlans();
+    const rows = fixture.debugElement.queryAll(By.directive(CompactRowComponent));
+    expect(rows).toHaveLength(2);
+    expect(rows.map(row => (row.componentInstance as CompactRowComponent).title())).toEqual(['Plan run', 'Recovery']);
+    expect(rows.map(row => (row.componentInstance as CompactRowComponent).showDivider())).toEqual([true, false]);
+    for (const row of rows) {
+      const component = row.componentInstance as CompactRowComponent;
+      expect(component.layout()).toBe('stacked');
+      expect(component.density()).toBe('compact');
+      expect(row.nativeElement.querySelector('article')?.getAttribute('aria-labelledby')).toBe(component.titleId());
+      expect(row.nativeElement.querySelector('.compact-row__action [aria-label="Edit workout"]')).toBeTruthy();
+      expect(row.nativeElement.querySelector('.compact-row__body .workout-row-actions')).toBeNull();
+      expect(row.nativeElement.querySelector('.workout-row-meta')?.textContent).toContain('Running');
+    }
+    expect(fixture.nativeElement.querySelector('.workout-list mat-card')).toBeNull();
+    expect(rows[1].nativeElement.querySelector('mat-chip')?.textContent).toContain('Skipped');
+  });
+
+  it.each([
+    { preference: {}, expected: '1.61 Km' },
+    { preference: { distanceUnits: DistanceUnits.Miles }, expected: '1.00 mi' },
+  ])('retains unit-aware distance display in compact workout rows: $expected', async ({ preference, expected }) => {
+    const unitUser = { ...user, settings: { unitSettings: normalizeUserUnitSettings(preference) } };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(unitUser), user$: of(unitUser) } });
+    schedule.workouts[0].structure = {
+      version: 1, sport: ActivityTypes.Running,
+      nodes: [{ kind: 'step', id: 'mile', purpose: 'work', ending: { kind: 'distance', meters: 1609.344 }, targets: [] }],
+    };
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('app-compact-row.workout-row .workout-summary')?.textContent).toContain(expected);
+  });
+
+  it('uses compact rows for editable steps and repeats without nesting cards or changing edit actions', async () => {
+    const fixture = await renderPlans();
+    (fixture.nativeElement.querySelector('.workout-row-actions [aria-label="Edit workout"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.editor()?.original?.id).toBe('plan-workout');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    (fixture.nativeElement.querySelectorAll('.workout-node-add-actions button')[1] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const rows = fixture.debugElement.queryAll(By.directive(CompactRowComponent));
+    expect(rows.map(row => (row.componentInstance as CompactRowComponent).title())).toEqual(['Step 1', 'Repeat block 2']);
+    expect(rows.map(row => (row.componentInstance as CompactRowComponent).showDivider())).toEqual([true, false]);
+    expect(fixture.nativeElement.querySelectorAll('.workout-node-row .compact-row__action button')).toHaveLength(2);
+    expect(fixture.nativeElement.querySelector('.workout-editor mat-card')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.editor-save-actions [appHapticTap]')).toBeTruthy();
   });
 
   it('keeps a newly created plan selected when the callable finishes before the live plan listener', async () => {

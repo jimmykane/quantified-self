@@ -278,14 +278,20 @@ plan when one exists and provides an explicit standalone action; without an acti
 The workspace presents one scope selector and one contextual **Add workout** action. The selected plan's name, lifecycle,
 and date range appear once; there is no separate overview strip or repeated plan/standalone heading. An account without
 plans sees one actionable empty state, not an empty plan selector and a second disabled workout section. Secondary plan
-and workout actions live in Material menus, while **Edit workout** remains directly available on each workout card.
-Skipped workouts keep an explicit state marker; normal planned workouts need no repeated badge.
+and workout actions live in Material menus, while **Edit** remains directly available on each workout row (with the
+accessible label **Edit workout**). Planned and standalone workouts use the shared `CompactRowComponent` in stacked,
+compact mode, matching Health. Each labelled row retains its sport, date, unit-aware step summary, and projected actions;
+dividers separate consecutive workouts without card borders or a multi-column card grid. Skipped workouts keep an
+explicit state marker; normal planned workouts need no repeated badge.
 
 Creating a plan or editing a workout is a focused view: scope navigation, lists, and other editors are hidden until Save
 or Cancel. The title field receives focus on entry; focus returns to the contextual add action (or scope navigation) on
 exit. A successful workout save selects its destination scope, including standalone/plan transfers. Pending saves disable
 native inputs and Material selectors, retain the draft on failure, and use a stable icon/spinner content row. Save/Cancel
-stay in a sticky, safe-area-aware footer for long mobile editors. Fieldsets, grid children, and repeat rows allow shrinking
+stay in a sticky, safe-area-aware footer for long mobile editors. Plan/workout forms are unboxed sections, and editable
+steps and repeat blocks reuse the same compact-row primitive with labelled headings and projected remove controls.
+The revision-history section also uses that primitive, while destructive plan confirmation retains its Material card.
+Fieldsets, grid children, and repeat rows allow shrinking
 without horizontal page overflow. Selection haptics belong to explicit UI actions; mutation success/error feedback follows
 the actual result, and hydration, typing, and unchanged choices stay silent. Phone emulation verifies layout and wiring,
 not physical vibration or a real mobile keyboard.

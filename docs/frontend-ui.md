@@ -91,7 +91,7 @@ beta, and production builds; only the App Check debug provider is development-sp
 ### Shared compact rows
 
 `CompactRowComponent` (`app-compact-row`) in `src/app/components/shared/compact-row/` is the flat content-row
-primitive shared by Home, public feature pages, benchmark previews, and Health. It replaces the feature-specific
+primitive shared by Home, public feature pages, benchmark previews, Health, and Training Plans. It replaces the feature-specific
 `CompactFeatureRowComponent` name; existing callers use the same component rather than a compatibility wrapper.
 
 The default `layout="columns"` and `density="comfortable"` preserve the public feature presentation: optional icon,
@@ -99,6 +99,8 @@ heading, content, and action. `layout="stacked"` keeps an optional action beside
 full row width at every breakpoint. `density="compact"` uses smaller icon/header spacing and Material text roles;
 Health uses this combination for Highlights and source-separated charts. The primitive adds no card background,
 rounded container, shadow, or nested content padding. `showDivider` controls the bottom divider.
+Training Plans uses the same compact stacked rows for workouts, editable step/repeat blocks, and its history section;
+workflow state and unit-aware workout summaries remain owned by Plans.
 
 For stacked chart rows, `[fillHeight]="true"` opts into stretching the row body within its allocated height; it is
 ignored for column layouts and defaults to false. The Health metric explorer uses this on desktop to fill the space

@@ -158,7 +158,7 @@ const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 
 - Open [Plans](/training/plans) to create a dated workout. Its sidebar entry sits beneath **Training**. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
 - Select a plan or **Standalone**, then use **Add workout** in that view. The editor opens on its own; **Save workout** keeps you in the workout's chosen destination, and **Cancel** returns without saving. Save and Cancel stay available while scrolling on mobile.
-- Use **Plan actions** beside the plan selector for activation, pause, rename, date shifting, history, archive, and deletion. Each workout has **Edit workout** for its content, date, or plan association, and an actions menu for copy, skip/unskip, history, and deletion.
+- Workouts appear as compact rows with their sport, date, and ordered steps. Use **Edit** beside a workout's title for its content, date, or plan association, and its actions menu for copy, skip/unskip, history, and deletion. **Plan actions** beside the plan selector contains activation, pause, rename, date shifting, history, archive, and deletion.
 - Manual planning is available without a provider connection. Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet; connecting a service does not send anything automatically.
 - The first editor supports Running and Cycling, date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Unsupported recipe features remain unavailable instead of being approximated.
 
