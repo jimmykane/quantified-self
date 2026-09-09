@@ -12,6 +12,7 @@ import type {
     AdminDashboardHistoryResponse,
     AuthActivityPlanBreakdown,
     AuthActivityWindowStats,
+    AuthEligiblePlanTotals,
     GetAdminDashboardHistoryRequest,
     SubscriptionCadenceTierStats,
 } from '../shared/types';
@@ -21,8 +22,8 @@ import {
 } from '../shared/user-metrics';
 
 export const ADMIN_DASHBOARD_SNAPSHOTS_COLLECTION = 'adminDashboardSnapshots';
-const ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION = 2;
-const ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION = 2;
+const ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION = 3;
+const ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION = 3;
 const LEGACY_ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION = 1;
 const LEGACY_ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION = 1;
 const ADMIN_DASHBOARD_SNAPSHOT_RETENTION_DAYS = 730;
@@ -54,6 +55,7 @@ interface SnapshotValidationMetrics {
     pro: number;
     onboardingCompleted: number;
     eligibleAccounts: number;
+    eligibleByPlan?: AuthEligiblePlanTotals | null;
     authActivity: AuthActivityWindowStats & {
         byPlan: AuthActivityPlanBreakdown | null;
     };
@@ -135,6 +137,15 @@ function cadenceTotal(value: SubscriptionCadenceTierStats): number {
     return value.monthly + value.yearly + value.unknown;
 }
 
+function requireEligiblePlanTotals(value: unknown): AuthEligiblePlanTotals {
+    const record = requireObject(value, 'authActivity.eligibleByPlan');
+    return {
+        free: requireSafeCount(record['free'], 'authActivity.eligibleByPlan.free'),
+        basic: requireSafeCount(record['basic'], 'authActivity.eligibleByPlan.basic'),
+        pro: requireSafeCount(record['pro'], 'authActivity.eligibleByPlan.pro'),
+    };
+}
+
 function validateSnapshotMetrics(metrics: SnapshotValidationMetrics): void {
     const counts = {
         total: requireSafeCount(metrics.total, 'users.total'),
@@ -163,6 +174,15 @@ function validateSnapshotMetrics(metrics: SnapshotValidationMetrics): void {
     }
 
     const byPlan = metrics.authActivity.byPlan;
+    const eligibleByPlan = metrics.eligibleByPlan;
+    if (eligibleByPlan) {
+        const eligible = requireEligiblePlanTotals(eligibleByPlan);
+        if (!byPlan || eligible.free + eligible.basic + eligible.pro !== counts.eligibleAccounts
+            || eligible.basic > counts.basic || eligible.pro > counts.pro
+            || (['free', 'basic', 'pro'] as const).some(plan => byPlan[plan].last30Days > eligible[plan])) {
+            throw new Error('Admin dashboard eligible plan totals do not reconcile.');
+        }
+    }
     if (byPlan) {
         const windows: ReadonlyArray<keyof AuthActivityWindowStats> = [
             'last24Hours',
@@ -204,7 +224,8 @@ function buildStoredSnapshot(
     scheduledFor: Date,
     computedAt: Date,
 ): StoredAdminDashboardSnapshot {
-    validateSnapshotMetrics(metrics);
+    const eligibleByPlan = requireEligiblePlanTotals(metrics.eligibleAccountsByPlan);
+    validateSnapshotMetrics({ ...metrics, eligibleByPlan });
     return {
         schemaVersion: ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION,
         metricDefinitionVersion: ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION,
@@ -221,6 +242,7 @@ function buildStoredSnapshot(
         },
         authActivity: {
             eligibleAccounts: metrics.eligibleAccounts,
+            eligibleByPlan,
             last24Hours: metrics.authActivity.last24Hours,
             last7Days: metrics.authActivity.last7Days,
             last30Days: metrics.authActivity.last30Days,
@@ -241,7 +263,8 @@ function parseStoredSnapshot(document: StoredSnapshotDocument): AdminDashboardHi
             data['schemaVersion'] === LEGACY_ADMIN_DASHBOARD_SNAPSHOT_SCHEMA_VERSION
             && data['metricDefinitionVersion'] === LEGACY_ADMIN_DASHBOARD_METRIC_DEFINITION_VERSION
         );
-        if (!isCurrentVersion && !isLegacyVersion) {
+        const isPlanVersion = data['schemaVersion'] === 2 && data['metricDefinitionVersion'] === 2;
+        if (!isCurrentVersion && !isPlanVersion && !isLegacyVersion) {
             throw new Error('Snapshot schema or metric-definition version is unsupported.');
         }
         if (data['snapshotDate'] !== document.id || !isUtcDateKey(document.id)) {
@@ -282,7 +305,8 @@ function parseStoredSnapshot(document: StoredSnapshotDocument): AdminDashboardHi
                 last24Hours: requireSafeCount(authRecord['last24Hours'], 'authActivity.last24Hours'),
                 last7Days: requireSafeCount(authRecord['last7Days'], 'authActivity.last7Days'),
                 last30Days: requireSafeCount(authRecord['last30Days'], 'authActivity.last30Days'),
-                byPlan: isCurrentVersion
+                eligibleByPlan: isCurrentVersion ? requireEligiblePlanTotals(authRecord['eligibleByPlan']) : null,
+                byPlan: isCurrentVersion || isPlanVersion
                     ? requireAuthActivityPlanBreakdown(authRecord['byPlan'], 'authActivity.byPlan')
                     : null,
             },
@@ -297,6 +321,7 @@ function parseStoredSnapshot(document: StoredSnapshotDocument): AdminDashboardHi
             subscriptionCadence: point.subscriptionCadence,
             authActivity: point.authActivity,
             eligibleAccounts: point.authActivity.eligibleAccounts,
+            eligibleByPlan: point.authActivity.eligibleByPlan,
         });
         return point;
     } catch (error) {

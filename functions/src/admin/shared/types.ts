@@ -50,6 +50,8 @@ export interface AuthActivityPlanBreakdown {
     pro: AuthActivityWindowStats;
 }
 
+export type AuthEligiblePlanTotals = Record<'free' | 'basic' | 'pro', number>;
+
 export interface AuthActivityStats extends AuthActivityWindowStats {
     computedAt: string;
     byPlan: AuthActivityPlanBreakdown;
@@ -159,6 +161,7 @@ export interface AdminDashboardHistoryPoint {
         last7Days: number;
         last30Days: number;
         byPlan: AuthActivityPlanBreakdown | null;
+        eligibleByPlan?: AuthEligiblePlanTotals | null;
     };
     subscriptionCadence: SubscriptionCadenceStats;
 }
