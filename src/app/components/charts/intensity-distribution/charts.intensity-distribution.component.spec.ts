@@ -254,6 +254,23 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(tooltipHtml).not.toContain('Week of Apr 2026');
   });
 
+  it('uses compact x-axis bounds and label spacing', () => {
+    const weeks = [
+      {
+        weekStartMs: Date.UTC(2026, 0, 5),
+        easySeconds: 7200,
+        moderateSeconds: 3600,
+        hardSeconds: 1800,
+        source: 'power' as const,
+      },
+    ];
+
+    const option = (component as any).buildOption(weeks) as Record<string, any>;
+
+    expect(option.grid).toMatchObject({ bottom: 6, containLabel: true });
+    expect(option.xAxis.axisLabel.margin).toBe(3);
+  });
+
   it('uses tap-only tooltip triggering on mobile viewport', () => {
     const originalMatchMedia = window.matchMedia;
     const matchMediaSpy = vi.fn().mockImplementation(() => ({

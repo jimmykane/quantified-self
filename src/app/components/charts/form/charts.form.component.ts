@@ -305,7 +305,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
         color: chartStyle.textColor,
         fontSize: chartStyle.axisFontSize,
         hideOverlap: true,
-        margin: isMobileTooltipViewport ? 3 : 8,
+        margin: 3,
         formatter: (value: number) => formatDashboardFormXAxisLabel(Number(value), labelConfig.mode),
         rotate: 0,
       },

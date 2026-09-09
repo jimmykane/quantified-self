@@ -107,7 +107,8 @@ describe('ChartsEfficiencyTrendComponent', () => {
     expect(option.yAxis.max).toBeGreaterThan(1.96);
     expect(option.yAxis.max).toBeLessThan(2.1);
     expect(option.yAxis.axisLabel).toMatchObject({ show: true, hideOverlap: true });
-    expect(option.grid).toMatchObject({ outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' });
+    expect(option.grid).toMatchObject({ bottom: 6, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' });
+    expect(option.xAxis.axisLabel.margin).toBe(3);
   });
 
   it('shows pending no-data message while stale', async () => {

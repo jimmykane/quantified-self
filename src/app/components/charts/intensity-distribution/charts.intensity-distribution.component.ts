@@ -224,7 +224,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         left: 8,
         right: 6,
         top: 6,
-        bottom: 20,
+        bottom: 6,
         containLabel: true,
       },
       tooltip: {
@@ -276,6 +276,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
+          margin: 3,
           formatter: (value: string | number) => this.formatXAxisLabel(value, xAxisLabelMode),
         },
       },

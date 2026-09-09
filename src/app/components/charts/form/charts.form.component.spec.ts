@@ -206,6 +206,7 @@ describe('ChartsFormComponent', () => {
     expect(option.xAxis[1].splitNumber).toBeGreaterThanOrEqual(2);
     expect(option.xAxis[1].splitNumber).toBeLessThanOrEqual(7);
     expect(typeof option.xAxis[1].axisLabel.formatter).toBe('function');
+    expect(option.xAxis[1].axisLabel.margin).toBe(3);
     expect(option.xAxis[0].axisPointer?.snap).toBe(true);
     expect(option.xAxis[1].axisPointer?.snap).toBe(true);
     expect(option.axisPointer?.snap).toBe(true);
