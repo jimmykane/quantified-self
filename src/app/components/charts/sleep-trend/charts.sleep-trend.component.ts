@@ -1,4 +1,5 @@
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -99,8 +100,6 @@ const VITAL_AVERAGES = [
   { key: 'minimumHeartRateBpm', label: 'Avg Min HR', color: MINIMUM_HEART_RATE_SERIES.color, field: SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate },
 ] as const;
 
-const GRID_BOTTOM_WITH_LEGEND = 58;
-const GRID_BOTTOM_COMPACT = 34;
 const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 58;
 const MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH = 72;
 const FALLBACK_MAX_AXIS_LABELS = 8;
@@ -386,8 +385,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       grid: {
         left: 26,
         right: hasVitalsSeries ? 32 : 8,
-        top: 8,
-        bottom: style.isCompactLayout ? GRID_BOTTOM_COMPACT : GRID_BOTTOM_WITH_LEGEND,
+        top: style.isCompactLayout ? 8 : 32,
+        ...trainingStateChartGrid(),
       },
       tooltip: {
         show: true,
@@ -412,7 +411,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       },
       legend: {
         show: !style.isCompactLayout,
-        bottom: 0,
+        top: 0,
+        type: 'scroll',
         itemWidth: 10,
         itemHeight: 8,
         textStyle: {
@@ -436,7 +436,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         axisLabel: {
           color: style.secondaryTextColor,
           fontSize: style.axisFontSize,
-          lineHeight: 14,
+          ...TRAINING_STATE_AXIS_LABEL,
           interval: xAxisLabelInterval,
           formatter: xAxisLabelFormatter,
           hideOverlap: !showEveryDayLabel,

@@ -1,3 +1,4 @@
+import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -225,8 +226,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
         left: 8,
         right: 6,
         top: 6,
-        bottom: 6,
-        containLabel: true,
+        ...trainingStateChartGrid(),
       },
       tooltip: {
         show: true,
@@ -278,7 +278,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
           fontSize: style.axisFontSize,
           hideOverlap: true,
           interval: xAxisLabelInterval,
-          margin: 3,
+          ...TRAINING_STATE_AXIS_LABEL,
           formatter: (value: string | number) => this.formatXAxisLabel(value, xAxisLabelMode),
         },
       },

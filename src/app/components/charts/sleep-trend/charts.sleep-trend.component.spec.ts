@@ -78,7 +78,7 @@ describe('ChartsSleepTrendComponent', () => {
     }
   });
 
-  it('reserves bottom grid space for the visible legend below x-axis labels', async () => {
+  it('keeps the plot baseline fixed with the visible legend above the plot', async () => {
     const point = buildSleepPoint();
     component.sleepTrend = {
       points: [point],
@@ -96,8 +96,9 @@ describe('ChartsSleepTrendComponent', () => {
     const option = optionCandidate as Record<string, any>;
 
     expect(option?.legend?.show).toBe(true);
-    expect(option?.legend?.bottom).toBe(0);
-    expect(option?.grid?.bottom).toBeGreaterThan(34);
+    expect(option?.legend?.top).toBe(0);
+    expect(option?.grid?.top).toBe(32);
+    expect(option?.grid?.bottom).toBe(24);
   });
 
   it('thins x-axis labels for dense 90-day sleep windows', async () => {

@@ -267,7 +267,7 @@ describe('ChartsIntensityDistributionComponent', () => {
 
     const option = (component as any).buildOption(weeks) as Record<string, any>;
 
-    expect(option.grid).toMatchObject({ bottom: 6, containLabel: true });
+    expect(option.grid).toMatchObject({ bottom: 24, outerBoundsMode: 'auto', outerBounds: { bottom: 6 } });
     expect(option.xAxis.axisLabel.margin).toBe(3);
     expect(option.xAxis.axisLabel.interval).toBe(0);
   });

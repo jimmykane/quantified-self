@@ -470,7 +470,7 @@ describe('ChartsFormComponent', () => {
       expect(option.xAxis?.[1]?.axisLabel?.margin).toBe(3);
       expect(option.grid?.[0]?.top).toBe('3%');
       expect(option.grid?.[0]?.height).toBe('36%');
-      expect(option.grid?.[1]?.top).toBe('49%');
+      expect(option.grid?.[1]?.bottom).toBe(24);
       expect(option.grid?.[1]?.height).toBe('36%');
     } finally {
       window.matchMedia = originalMatchMedia;

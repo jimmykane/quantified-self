@@ -5,6 +5,8 @@
 }
 
 .form-chart-layout {
+  box-sizing: border-box;
+  padding-bottom: 8px;
   display: flex;
   flex-direction: column;
   width: 100%;

@@ -1,4 +1,5 @@
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -199,9 +200,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         left: 6,
         right: 6,
         top: 8,
-        bottom: 6,
-        outerBoundsMode: 'same',
-        outerBoundsContain: 'axisLabel',
+        ...trainingStateChartGrid(),
       },
       tooltip: {
         show: true,
@@ -229,7 +228,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
-          margin: 3,
+          ...TRAINING_STATE_AXIS_LABEL,
           formatter: (value: number) => new Date(value).toLocaleDateString(undefined, {
             month: 'short',
             day: 'numeric',

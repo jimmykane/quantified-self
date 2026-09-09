@@ -1,4 +1,5 @@
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { TRAINING_STATE_PLOT_BOTTOM, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -308,7 +309,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
         color: chartStyle.textColor,
         fontSize: chartStyle.axisFontSize,
         hideOverlap: true,
-        margin: 3,
+        ...TRAINING_STATE_AXIS_LABEL,
         formatter: (value: number) => formatDashboardFormXAxisLabel(Number(value), labelConfig.mode),
         rotate: 0,
       },
@@ -366,7 +367,6 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     const gridRight = chartStyle.isCompactLayout ? 14 : 16;
     const panelHeight = isMobileTooltipViewport ? '36%' : chartStyle.isCompactLayout ? '39%' : '40%';
     const topPanelTop = isMobileTooltipViewport ? '3%' : '4%';
-    const bottomPanelTop = isMobileTooltipViewport ? '49%' : chartStyle.isCompactLayout ? '52%' : '51%';
 
     return {
       option: {
@@ -387,7 +387,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
           {
             left: gridLeft,
             right: gridRight,
-            top: bottomPanelTop,
+            bottom: TRAINING_STATE_PLOT_BOTTOM,
             height: panelHeight,
             outerBoundsMode: 'none',
           },
