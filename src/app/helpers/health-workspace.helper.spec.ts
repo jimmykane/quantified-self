@@ -799,6 +799,25 @@ describe('Health workspace helpers', () => {
     expect(stale.pointStatuses).toEqual(status.pointStatuses);
   });
 
+  it.each(HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS)('keeps a daily baseline without fabricating readings for %s', semanticVariant => {
+    const end = Date.parse('2026-08-01T23:59:59.999Z');
+    const source = { ...hrvSeries(Array.from({ length: 20 }, (_, index) => ({ daysAgo: index + 5, value: 40 + index % 3 }))), semanticVariant };
+    const status = buildHealthHrvPersonalRangeStatus(source, end)!;
+    const lastReading = Math.max(...source.points.map(point => point.timestampMs));
+    expect(status.pointStatuses.every(point => point.timestampMs <= lastReading)).toBe(true);
+    expect(status.rangePoints!.filter(point => point.timestampMs > lastReading).length).toBeGreaterThan(1);
+    expect(status.rangePoints!.at(-1)).toEqual({ timestampMs: end, normalRange: expect.any(Object) });
+    const start = end - 3 * 86400000;
+    const missingWindow = buildHealthHrvPersonalRangeStatus(source, end, null, [], start)!;
+    expect(missingWindow.pointStatuses).toEqual([]);
+    expect(missingWindow.rangePoints).toHaveLength(4);
+    expect(missingWindow.rangePoints![0]).toEqual({ timestampMs: start, normalRange: expect.any(Object) });
+    const stale = buildHealthHrvPersonalRangeStatus(source, end + 60 * 86400000)!;
+    expect(stale.rangePoints!.at(-1)?.normalRange).toBeNull();
+    const futureSource = { ...source, points: [...source.points, { ...source.points[0], timestampMs: end + 86400000, value: 999 }] };
+    expect(buildHealthHrvPersonalRangeStatus(futureSource, end)!.rangePoints).toEqual(status.rangePoints);
+  });
+
   it('counts one nightly HRV baseline value per calendar day', () => {
     const endTimeMs = Date.parse('2026-08-01T23:59:59.999Z');
     const sameDaySamples = hrvSeries(Array.from({ length: 14 }, (_, index) => ({

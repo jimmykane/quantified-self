@@ -313,6 +313,7 @@ export class HealthWorkspaceComponent {
         this.priorityHrvWindow.endTimeMs,
         this.unitSettings(),
         series.points.map(point => point.timestampMs),
+        this.priorityHrvWindow.startTimeMs,
       );
       return status ? [[series.id, status]] : [];
     }));
@@ -481,6 +482,7 @@ export class HealthWorkspaceComponent {
         this.selectedWindow().endTimeMs,
         this.unitSettings(),
         series.points.map(point => point.timestampMs),
+        this.selectedWindow().startTimeMs,
       );
       return status ? [[series.id, status]] : [];
     }));

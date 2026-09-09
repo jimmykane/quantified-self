@@ -218,6 +218,7 @@ export interface HealthHrvPersonalRangePointStatus {
 }
 
 export interface HealthHrvPersonalRangeStatus {
+  rangePoints?: readonly { timestampMs: number; normalRange: { min: number; max: number } | null }[];
   tone: HealthHrvPersonalRangeTone;
   label: string;
   detailText: string;
@@ -786,6 +787,7 @@ export function buildHealthHrvPersonalRangeStatus(
   endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null = null,
   pointTimestampsMs: readonly number[] = series.points.map(point => point.timestampMs),
+  startTimeMs?: number,
 ): HealthHrvPersonalRangeStatus | null {
   if (!isHealthHrvPersonalRangeSemanticVariant(series.semanticVariant)) {
     return null;
@@ -801,6 +803,22 @@ export function buildHealthHrvPersonalRangeStatus(
     currentMinimumObservationDays: HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS,
   };
   const status = calculatePersonalMetricRange(observations, endTimeMs, rangeOptions);
+  // The baseline exists independently of a reading on the inspected day.
+  // Include actual reading times too, keeping the band and point grades aligned.
+  const rangeTimes = new Set(pointTimestampsMs.filter(time => Number.isFinite(time) && time <= endTimeMs));
+  const firstTime = Math.max(Number.isFinite(startTimeMs) ? startTimeMs!
+    : [...rangeTimes].reduce((first, time) => Math.min(first, time), Infinity), endTimeMs - 366 * 86400000);
+  for (let time = firstTime; time <= endTimeMs; time += 86400000) rangeTimes.add(time);
+  if (rangeTimes.size) rangeTimes.add(endTimeMs);
+  const rangePoints = [...rangeTimes].sort((a, b) => a - b).map(timestampMs => {
+    const baseline = calculatePersonalMetricRange(observations, timestampMs, {
+      ...rangeOptions,
+      currentWindowDays: HRV_PERSONAL_RANGE_DAYS,
+      currentMinimumObservationDays: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
+    });
+    return { timestampMs, normalRange: baseline.normalRange
+      ? { min: Math.max(0, baseline.normalRange.min), max: baseline.normalRange.max } : null };
+  });
   const observationsByTimestamp = new Map(observations.map(observation => [observation.timestampMs, observation]));
   const pointStatuses = [...new Set(pointTimestampsMs)]
     .filter(timestampMs => Number.isFinite(timestampMs)
@@ -840,6 +858,7 @@ export function buildHealthHrvPersonalRangeStatus(
       currentAverage: null,
       normalRange: null,
       pointStatuses,
+      rangePoints,
     };
   }
   if (status.reason === 'insufficient_current') {
@@ -852,6 +871,7 @@ export function buildHealthHrvPersonalRangeStatus(
       currentAverage: null,
       normalRange: null,
       pointStatuses,
+      rangePoints,
     };
   }
   const currentAverage = status.currentAverage;
@@ -887,6 +907,7 @@ export function buildHealthHrvPersonalRangeStatus(
     currentAverage,
     normalRange,
     pointStatuses,
+    rangePoints,
   };
 }
 

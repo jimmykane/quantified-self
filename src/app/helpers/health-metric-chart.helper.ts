@@ -54,6 +54,7 @@ export interface HealthChartSeriesModel {
 }
 
 export interface HealthChartStatusOverlay {
+  rangePoints?: readonly { timestampMs: number; normalRange: { min: number; max: number } | null }[];
   normalRangeColor: string;
   statusColor: string;
   pointStatuses?: readonly HealthChartPointStatus[];
@@ -83,6 +84,7 @@ export function buildHealthHrvChartStatusOverlay(
   }
   return {
     normalRangeColor: AppDataColors.Altitude,
+    rangePoints: status.rangePoints,
     statusColor: healthHrvPersonalRangeToneColor(status.tone),
     pointStatuses: status.pointStatuses.map(pointStatus => ({
       timestampMs: pointStatus.timestampMs,
@@ -141,9 +143,12 @@ export function buildHealthMetricEChartsOption(
   const chartData = useStressStateColors
     ? stressStateChartData(model.data, model.categoryLabels)
     : model.data;
-  // Use the same point-in-time ranges as the point colors, aligned with the
-  // displayed data so missing history and chart gaps stay unshaded.
-  const rangeData: Array<[number, number | null, number | null]> = chartData.map(([timestampMs, value]) => {
+  // Baselines have their own daily timeline; missing readings stay missing.
+  const rangeData: Array<[number, number | null, number | null]> = statusOverlay?.rangePoints
+    && model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability
+    ? statusOverlay.rangePoints.filter(point => point.timestampMs >= startTimeMs && point.timestampMs <= endTimeMs)
+      .map(({ timestampMs, normalRange }) => [timestampMs, normalRange?.min ?? null, normalRange?.max ?? null])
+    : chartData.map(([timestampMs, value]) => {
     const range = typeof value === 'number' && timestampMs >= startTimeMs && timestampMs <= endTimeMs
       ? hrvPointStatuses.get(timestampMs)?.normalRange : null;
     return range ? [timestampMs, range.min, range.max] : [timestampMs, null, null];
@@ -385,6 +390,7 @@ function buildPersonalRangeBandSeries(
     type: 'line',
     stack: 'hrv-personal-range',
     stackStrategy: 'all',
+    step: 'end',
     symbol: 'none',
     connectNulls: false,
     lineStyle: { opacity: 0 },
