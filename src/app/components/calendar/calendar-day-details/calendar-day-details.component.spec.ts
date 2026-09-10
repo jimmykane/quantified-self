@@ -82,6 +82,7 @@ describe('CalendarDayDetailsComponent', () => {
       .toContain('Autumn build · Planned');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
     expect((fixture.nativeElement.querySelector('.calendar-day-planned-item') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
     expect(actions.map(action => action.getAttribute('href'))).toEqual([
       '/training/plans/new?date=2026-08-03',
       '/training/plans/standalone/new?date=2026-08-03',
@@ -90,7 +91,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
   });
 
-  it('keeps trailing navigation icons visible inside Material list metadata', async () => {
+  it('centers trailing navigation icons and keeps the plan accent independent from the Material state layer', async () => {
     const fixture = await renderDayDetails(createEvent(), {
       plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
     });
@@ -105,8 +106,13 @@ describe('CalendarDayDetailsComponent', () => {
     expect(metaSlots.map(slot => slot.querySelector('mat-icon')?.textContent?.trim()))
       .toEqual(['chevron_right', 'chevron_right']);
     expect(styles).toMatch(
-      /\.calendar-day-item-meta\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
+      /\.calendar-day-item-meta\s*\{[^}]*display:\s*inline-flex !important[^}]*align-self:\s*center !important[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
     );
+    expect(styles).toMatch(
+      /\.calendar-day-planned-accent\s*\{[^}]*position:\s*absolute[^}]*inset-block:\s*8px[^}]*inset-inline-start:\s*2px[^}]*width:\s*3px[^}]*background:/s,
+    );
+    expect(styles).not.toMatch(/\.calendar-day-planned-accent\s*\{[^}]*border-radius:/s);
+    expect(styles).not.toMatch(/\.calendar-day-planned-item\s*\{[^}]*border-inline-start:/s);
   });
 
   it('updates an already-open day when the planned-workout listener finishes', async () => {

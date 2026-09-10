@@ -8,10 +8,6 @@
   overflow-x: hidden;
 }
 
-.calendar-day-planned-item {
-  border-inline-start: 3px solid var(--planned-workout-color, var(--mat-sys-primary));
-}
-
 .calendar-day-details {
   box-sizing: border-box;
   display: flex;
@@ -100,12 +96,23 @@ h3 {
   min-height: 72px;
 }
 
+.calendar-day-planned-accent {
+  position: absolute;
+  z-index: 2;
+  inset-block: 8px;
+  inset-inline-start: 2px;
+  width: 3px;
+  background: var(--planned-workout-color, var(--mat-sys-primary));
+  pointer-events: none;
+}
+
 .calendar-day-planned-summary {
   white-space: normal;
 }
 
 .calendar-day-item-meta {
-  display: inline-flex;
+  display: inline-flex !important;
+  align-self: center !important;
   align-items: center;
   justify-content: center;
 }

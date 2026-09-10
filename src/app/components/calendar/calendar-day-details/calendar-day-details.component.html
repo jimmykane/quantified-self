@@ -48,6 +48,7 @@
         <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
           [style.--planned-workout-color]="planned.color"
           (click)="prepareWorkoutNavigation()">
+          <span class="calendar-day-planned-accent" aria-hidden="true"></span>
           <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"
             aria-hidden="true"></app-activity-type-icon>
           <span matListItemTitle>{{ planned.title }}</span>
