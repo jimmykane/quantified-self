@@ -43,6 +43,7 @@ export type DeliveryRecovery = { kind: 'accepted'; artifact: DeliveryArtifact | 
   | { kind: 'not-accepted' } | { kind: 'uncertain' };
 
 /** Adapters must checkpoint every accepted artifact (e.g. workout, then schedule).
+ * Final upsert acceptance requires a nonempty artifact identity; final removal requires null.
  * Recovery must inspect or prove the SAME operation id idempotent before repeating it. */
 export interface TrainingDeliveryTransport {
   mappingVersion: string;

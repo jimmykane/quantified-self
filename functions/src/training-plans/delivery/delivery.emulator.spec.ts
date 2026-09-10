@@ -123,6 +123,25 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     expect((await ledgers())[0]).toMatchObject({ id: ledger.id, status: 'delivered' });
     expect(transport.artifacts.size).toBe(1);
   });
+  it.each(['upsert-null', 'remove-artifact', 'empty-ids'] as const)('does not publish success for inconsistent transport acceptance: %s', async response => {
+    const ledger = await send();
+    if (response === 'remove-artifact') {
+      await processTrainingDelivery(runtime, uid, ledger.id);
+      await trainingDeliveryCommand(runtime, uid, await currentCommand({ action: 'stop' }), false);
+      await drain();
+    }
+    const before = (await ledgers())[0];
+    vi.spyOn(transport, 'execute').mockResolvedValueOnce(response === 'upsert-null' ? null : response === 'empty-ids'
+      ? { ids: {}, localDate: '2026-09-10', completed: false } : before.actual);
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    const failed = (await ledgers())[0];
+    expect(failed.status).toBe('retrying');
+    expect(failed.attempt).not.toBeNull();
+    expect(failed.actual).toEqual(before.actual);
+    now = failed.retryAtMs + 1;
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect((await ledgers())[0].status).toBe(response === 'remove-artifact' ? 'removed' : 'delivered');
+  });
   it('recovers accepted-but-unrecorded creates without repeating them, including explicit Retry', async () => {
     const ledger = await send();
     transport.afterAccept = async () => { throw new Error('simulated lost persistence'); };
@@ -247,6 +266,41 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').doc('w').get()).data()?.localDate).toBe('2026-09-11');
     expect(transport.artifacts.size).toBe(0);
   });
+  it.each(['soft-workout', 'permanent-workout', 'deleted-plan'] as const)('recovers failed withdrawal after deleting its authored source: %s', async source => {
+    if (source === 'deleted-plan') { await createPlan(); await moveToPlan('p'); await configurePlan(); await drain(); }
+    else await send();
+    const ledger = (await ledgers())[0]; await processTrainingDelivery(runtime, uid, ledger.id);
+    if (source === 'deleted-plan') await deleteTrainingPlanForUser(uid, { mutationId: randomUUID(), planId: 'p',
+      expectedRevisions: await revisions(), workoutDisposition: 'delete-workouts', confirmPlanDeletion: true }, { db, nowMs: now });
+    else {
+      await editSchedule({ kind: 'delete-workout', workoutId: 'w' });
+      if (source === 'permanent-workout') await editSchedule({ kind: 'permanently-delete-workout', workoutId: 'w', confirmPermanentDeletion: true });
+    }
+    await drain();
+    transport.beforeAccept = async () => { throw new TrainingDeliveryTransportError('terminal'); };
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect((await ledgers())[0].status).toBe('failed');
+    const user = db.collection('users').doc(uid);
+    const recoveryCommand = async (action: 'retry' | 'stop' | 'send') => command({ action,
+      expectedScheduleRevision: (await user.collection('trainingPlanState').doc('current').get()).data()!.revision,
+      expectedScopeRevision: (await user.collection('scheduledWorkouts').doc('w').get()).data()?.revision ?? 0,
+      expectedSettingsRevision: (await user.collection('trainingDeliverySettings').doc('workout_w_garmin').get()).data()?.revision ?? 0 });
+    await expect(trainingDeliveryCommand(runtime, uid, await recoveryCommand('send'), false)).rejects.toBeDefined();
+    pro = false;
+    await trainingDeliveryCommand(runtime, uid, await recoveryCommand('stop'), false);
+    await trainingDeliveryCommand(runtime, uid, await recoveryCommand('retry'), false);
+    transport.beforeAccept = null;
+    await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.artifacts.size).toBe(0);
+    expect((await ledgers())[0].status).toBe('removed');
+    expect(transport.calls.filter(call => call.kind === 'upsert')).toHaveLength(1);
+    await expect(trainingDeliveryCommand(runtime, uid, { ...await recoveryCommand('retry'), scopeId: 'unknown',
+      expectedScopeRevision: 0, expectedSettingsRevision: 0 }, false))
+      .rejects.toMatchObject({ code: 'not-found' });
+    await db.runTransaction(async tx => stageTrainingDeliveryDisconnect(tx, db, uid, 'garmin'));
+    await expect(trainingDeliveryCommand(runtime, uid, await recoveryCommand('retry'), false))
+      .rejects.toMatchObject({ code: 'failed-precondition' });
+  });
   it('keeps individual plan-workout stops until an explicit resume', async () => {
     await createPlan(); await moveToPlan('p'); await configurePlan(); await drain();
     const ledger = (await ledgers())[0]; await processTrainingDelivery(runtime, uid, ledger.id);
@@ -268,13 +322,44 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
   });
   it('freezes auth failures until a verified same-account reconnect and recovers the same operation', async () => {
     const ledger = await send();
+    const recover = vi.spyOn(transport, 'recover');
     transport.beforeAccept = async () => { throw new TrainingDeliveryTransportError('auth'); };
-    await processTrainingDelivery(runtime, uid, ledger.id); await mark(); await drain();
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    const operationId = (await ledgers())[0].attempt!.id;
+    now += 60 * 60_000; // A dispatcher/reconciliation cycle after backoff is still blocked.
+    await mark(); await drain();
     await processTrainingDelivery(runtime, uid, ledger.id); expect(transport.calls).toHaveLength(1);
-    transport.beforeAccept = null; connectionGeneration = 'connection-2'; now += 60 * 60_000;
+    expect(recover).not.toHaveBeenCalled();
+    expect((await ledgers())[0].attempt?.id).toBe(operationId);
+    transport.beforeAccept = null; connectionGeneration = 'connection-2';
     await mark(); await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
     expect((await ledgers())[0].status).toBe('delivered'); expect(transport.artifacts.size).toBe(1);
+    expect(transport.calls[1].id).toBe(operationId);
   });
+  it.each(['stop', 'edit', 'pro-expiry', 'disconnect', 'deletion'] as const)(
+    'rechecks admission after recovery before repeating an operation: %s', async change => {
+      const ledger = await send();
+      transport.beforeAccept = async () => { throw new TrainingDeliveryTransportError('retryable'); };
+      await processTrainingDelivery(runtime, uid, ledger.id);
+      now = (await ledgers())[0].retryAtMs + 1;
+      transport.beforeAccept = null;
+      vi.spyOn(transport, 'recover').mockImplementationOnce(async () => {
+        if (change === 'stop') await trainingDeliveryCommand(runtime, uid, await currentCommand({ action: 'stop' }), false);
+        if (change === 'edit') await editSchedule({ kind: 'move-workout', workoutId: 'w', planId: null,
+          localDate: '2026-09-11', confirmPlanRangeExtension: false });
+        if (change === 'pro-expiry') pro = false;
+        if (change === 'disconnect') await db.runTransaction(async tx => stageTrainingDeliveryDisconnect(tx, db, uid, 'garmin'));
+        if (change === 'deletion') await db.collection('userDeletionTombstones').doc(uid).set({ deleting: true });
+        return { kind: 'not-accepted' };
+      });
+      await processTrainingDelivery(runtime, uid, ledger.id);
+      expect(transport.calls).toHaveLength(1);
+      expect(transport.artifacts.size).toBe(0);
+      if (change === 'edit') {
+        await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
+        expect(transport.calls[1].workout?.localDate).toBe('2026-09-11');
+      }
+    });
   it('inspects an ambiguous operation after persistence failure; never repeats an uncertain create', async () => {
     const ledger = await send(); let spy: ReturnType<typeof vi.spyOn> | undefined;
     transport.afterAccept = async () => { spy = vi.spyOn(db, 'runTransaction').mockRejectedValueOnce(new Error('Firestore unavailable')); };

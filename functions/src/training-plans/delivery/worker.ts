@@ -12,7 +12,8 @@ import { stageTrainingDeliveryReconciliation } from './marker';
 function validateArtifact(value: DeliveryArtifact | null): void {
   if (value === null) return;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value.localDate) || typeof value.completed !== 'boolean'
-    || !value.ids || Object.keys(value.ids).length > 16 || Object.entries(value.ids).some(([key, id]) =>
+    || !value.ids || Array.isArray(value.ids) || Object.keys(value.ids).length < 1 || Object.keys(value.ids).length > 16
+    || Object.entries(value.ids).some(([key, id]) =>
       !/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(key) || typeof id !== 'string' || !id || id.length > 512)) {
     throw new TrainingDeliveryTransportError('uncertain');
   }
@@ -40,11 +41,11 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     ]);
     if (!locks.empty) return null;
     const workout = workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null;
-    const context = await readDeliveryContext(runtime, tx, uid, workout, ledger.provider, pro);
+    const context = await readDeliveryContext(runtime, tx, uid, workout, ledger.provider, pro, ledger.workoutId);
     const intent = resolveDeliveryIntent(context, ledger);
     const transport = context.transport;
     if (!transport || context.connection.state !== 'connected' || ledger.destinationKey !== context.connection.destinationKey
-      || ledger.connectionEpoch !== context.connection.epoch) {
+      || ledger.connectionEpoch !== context.connection.epoch || ledger.blockedConnectionGeneration === context.connection.generation) {
       ledger.status = !transport ? 'provider_unavailable' : intent.status;
       ledger.lease = null;
       writeDelivery(runtime, tx, uid, ledger);
@@ -89,6 +90,11 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
 
   const checkpoint = async (artifact: DeliveryArtifact | null, complete = false): Promise<void> => {
     validateArtifact(artifact);
+    if (complete && ((operation.kind === 'remove') !== (artifact === null))) {
+      // A successful upsert must identify a copy; a successful removal must leave none.
+      // Preserve the journal and inspect inconsistent acknowledgements rather than claiming success.
+      throw new TrainingDeliveryTransportError('uncertain');
+    }
     await db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return;
       const doc = await tx.get(ledgerRef);
@@ -139,11 +145,11 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     });
   };
 
-  let inspectionUncertain = false;
-  try {
-    // Admission is deliberately repeated immediately before any transport operation.
+  // Recovery can itself take time. Repeat this check after proven nonacceptance,
+  // immediately before execute, so a Stop/edit/revocation during inspection wins.
+  const checkAdmission = async () => {
     const currentPro = await runtime.hasPro(uid);
-    const admission = await db.runTransaction(async tx => {
+    return db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return 'blocked';
       const doc = await tx.get(ledgerRef);
       if (!doc.exists) return 'blocked';
@@ -154,14 +160,19 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         tx.get(user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').limit(1)),
       ]);
       const context = await readDeliveryContext(runtime, tx, uid,
-        workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, ledger.provider, currentPro);
+        workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, ledger.provider, currentPro, ledger.workoutId);
       if (!locks.empty || !runtime.transport(ledger.provider, uid) || context.connection.state !== 'connected'
         || context.connection.destinationKey !== operation.destinationKey || context.connection.epoch !== ledger.connectionEpoch
-        || context.connection.generation !== operation.connectionGeneration) return 'blocked';
+        || context.connection.generation !== operation.connectionGeneration
+        || ledger.blockedConnectionGeneration === context.connection.generation) return 'blocked';
       const intent = resolveDeliveryIntent(context, ledger);
       return (operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)
         || (operation.kind === 'remove' && intent.desired === 'absent') ? 'execute' : 'recover-only';
     });
+  };
+  let inspectionUncertain = false;
+  try {
+    let admission = await checkAdmission();
     if (admission === 'blocked') return; // Lease expiry + dispatcher resumes after valid access; keep operation journal.
     if (claim.recover) {
       const recovery = await transport.recover(operation);
@@ -171,6 +182,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         return;
       }
       if (recovery.kind === 'uncertain') { inspectionUncertain = true; throw new TrainingDeliveryTransportError('uncertain'); }
+      admission = await checkAdmission();
+      if (admission === 'blocked') return;
     }
     if (admission === 'recover-only') {
       await abandonProvenUnaccepted();

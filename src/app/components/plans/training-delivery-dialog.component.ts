@@ -1,20 +1,20 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { catchError, map, of, startWith, switchMap } from 'rxjs';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
-import { normalizeDeliveryTimeZone, type TrainingDeliveryAction, type TrainingDeliveryCommandV1,
-  type TrainingDeliveryPreviewV1, type TrainingDeliveryScope, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import { normalizeDeliveryTimeZone, TRAINING_DELIVERY_PAGE_SIZE, type TrainingDeliveryAction, type TrainingDeliveryCommandV1,
+  type TrainingDeliveryPreviewV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
-import { EMPTY_TRAINING_DELIVERY_VIEW, TrainingDeliveryService } from '../../services/training-delivery.service';
+import { EMPTY_TRAINING_DELIVERY_VIEW, TrainingDeliveryService, type TrainingDeliveryViewScope } from '../../services/training-delivery.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { TRAINING_DELIVERY_STATUS_LABELS } from '../../helpers/training-delivery-display.helper';
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
 
-export interface TrainingDeliveryDialogData { scope: TrainingDeliveryScope; id: string; title: string; }
+export interface TrainingDeliveryDialogData { scope: TrainingDeliveryViewScope; id: string; title: string; }
 interface DeliveryDraft { provider: PlannedWorkoutProviderId; action: TrainingDeliveryAction; timeZone: string; approvalDigest?: string; }
 
 @Component({ selector: 'app-training-delivery-dialog', standalone: true,
@@ -23,6 +23,7 @@ interface DeliveryDraft { provider: PlannedWorkoutProviderId; action: TrainingDe
 export class TrainingDeliveryDialogComponent {
   readonly data = inject<TrainingDeliveryDialogData>(MAT_DIALOG_DATA);
   readonly dialogRef = inject(MatDialogRef<TrainingDeliveryDialogComponent>);
+  private readonly dialog = inject(MatDialog);
   readonly delivery = inject(TrainingDeliveryService);
   private readonly plans = inject(TrainingPlansService);
   private readonly users = inject(AppUserService);
@@ -33,9 +34,11 @@ export class TrainingDeliveryDialogComponent {
   readonly busy = signal(false);
   readonly draft = signal<DeliveryDraft | null>(null);
   readonly preview = signal<{ result: TrainingDeliveryPreviewV1; command: TrainingDeliveryCommandV1 } | null>(null);
-  readonly extraStatuses = signal<TrainingDeliveryStatusV1[]>([]);
-  readonly moreAvailable = signal(true);
-  readonly view = toSignal(this.users.user$.pipe(switchMap(user => user?.uid ? this.delivery.watchScope(user.uid, this.data.scope, this.data.id).pipe(
+  private readonly statusLimit = signal(TRAINING_DELIVERY_PAGE_SIZE);
+  // Keep the entire loaded prefix live: separate cursor snapshots leave stale rows
+  // and gaps when reconciliation inserts, removes, or transfers records between pages.
+  readonly view = toSignal(combineLatest([this.users.user$, toObservable(this.statusLimit)]).pipe(
+    switchMap(([user, statusLimit]) => user?.uid ? this.delivery.watchScope(user.uid, this.data.scope, this.data.id, statusLimit).pipe(
     map(view => ({ ...view, loaded: true, error: false })),
     startWith({ ...EMPTY_TRAINING_DELIVERY_VIEW, loaded: false, error: false }),
     catchError(() => of({ ...EMPTY_TRAINING_DELIVERY_VIEW, loaded: true, error: true })),
@@ -43,25 +46,32 @@ export class TrainingDeliveryDialogComponent {
   { initialValue: { ...EMPTY_TRAINING_DELIVERY_VIEW, loaded: false, error: false } });
   readonly schedule = toSignal(this.users.user$.pipe(switchMap(user => user?.uid ? this.plans.watchSchedule(user.uid).pipe(
     startWith(null), catchError(() => of(null))) : of(null))), { initialValue: null });
-  readonly scopeRecord = computed(() => this.data.scope === 'plan'
+  readonly scopeRecord = computed(() => this.data.scope === 'history' ? undefined : this.data.scope === 'plan'
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)
     : this.schedule()?.workouts.find(workout => workout.id === this.data.id));
   readonly planBound = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.data.id)?.planId != null && this.data.scope === 'workout');
-  readonly statuses = computed(() => [...new Map([...this.extraStatuses(), ...this.view().statuses].map(status => [status.id, status])).values()]);
+  readonly canSend = computed(() => !!this.scopeRecord() && this.scopeRecord()!.lifecycle !== 'deleted');
+  readonly canReview = computed(() => !!this.schedule() && this.data.scope !== 'history'
+    && (!!this.scopeRecord() || this.statuses().length > 0));
+  readonly statuses = computed(() => this.view().statuses);
   readonly rows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
     const setting = this.view().settings.find(item => item.provider === provider);
-    const statuses = this.statuses().filter(item => item.provider === provider).map(status => ({ ...status,
-      label: TRAINING_DELIVERY_STATUS_LABELS[status.status], route: trainingPlansWorkoutRoute(status.workoutId) }));
+    const statuses = this.statuses().filter(item => item.provider === provider).map(status => {
+      const workout = this.schedule()?.workouts.find(item => item.id === status.workoutId);
+      return { ...status, title: workout?.title ?? 'Deleted workout', sourceExists: !!workout && workout.lifecycle !== 'deleted',
+        label: TRAINING_DELIVERY_STATUS_LABELS[status.status], route: trainingPlansWorkoutRoute(status.workoutId) };
+    });
     const ready = this.delivery.isReady(provider);
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
-      visible: ready || !!setting || statuses.length > 0,
-      canStop: !!setting?.enabled || statuses.some(item => item.hasRemoteCopy || item.status === 'pending'),
+      visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
+      canStop: !!setting?.enabled || (this.planBound() && !setting?.suppressed)
+        || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
       approvalDigest: statuses.find(item => item.approvalDigest)?.approvalDigest ?? null,
       canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying'].includes(item.status)),
       reconnect: statuses.some(item => ['reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)),
     };
   }).filter(row => row.visible));
-  readonly canLoadMore = computed(() => this.view().statuses.length === 25 && this.moreAvailable());
+  readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
   readonly canConfirm = computed(() => {
     const preview = this.preview();
     return !!preview && (preview.command.action === 'stop'
@@ -72,12 +82,13 @@ export class TrainingDeliveryDialogComponent {
   constructor() {
     effect(() => {
       if (!this.uid() || this.uid() !== this.initialUid) {
-        this.preview.set(null); this.draft.set(null); this.extraStatuses.set([]); this.dialogRef.close();
+        this.preview.set(null); this.draft.set(null); this.dialogRef.close();
       }
     });
   }
   begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string): void {
-    if (this.busy() || !this.uid()) return;
+    if (this.busy() || !this.uid() || this.data.scope === 'history'
+      || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
     this.error.set(null); this.preview.set(null);
     this.draft.set({ provider, action, timeZone: setting?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -93,12 +104,12 @@ export class TrainingDeliveryDialogComponent {
   }
   async review(): Promise<void> {
     const draft = this.draft(); const scope = this.scopeRecord(); const schedule = this.schedule(); const uid = this.uid();
-    if (!draft || !scope || !schedule || !uid || this.busy()) return;
+    if (!draft || !schedule || !uid || this.busy() || !this.canReview() || this.data.scope === 'history') return;
     this.busy.set(true); this.error.set(null);
     try {
       const command: TrainingDeliveryCommandV1 = { schemaVersion: 1, mutationId: this.delivery.createMutationId(),
         scope: this.data.scope, scopeId: this.data.id, provider: draft.provider, action: draft.action,
-        expectedScheduleRevision: schedule.state.revision, expectedScopeRevision: scope.revision,
+        expectedScheduleRevision: schedule.state.revision, expectedScopeRevision: scope?.revision ?? 0,
         expectedSettingsRevision: this.view().settings.find(item => item.provider === draft.provider)?.revision ?? 0,
         ...(['configure', 'send'].includes(draft.action) || (draft.action === 'resume' && !this.planBound())
           ? { timeZone: normalizeDeliveryTimeZone(draft.timeZone) } : {}),
@@ -122,15 +133,15 @@ export class TrainingDeliveryDialogComponent {
     } catch { if (this.uid() === uid) { this.error.set('The change was not confirmed. Retry safely, or cancel and review the latest schedule.'); this.haptics.error(); } }
     finally { this.busy.set(false); }
   }
-  async loadMore(): Promise<void> {
-    const uid = this.uid(); if (!uid || this.busy()) return;
-    const cursor = this.statuses().map(status => status.id).sort().pop(); if (!cursor) return;
-    this.busy.set(true);
-    try {
-      const page = await this.delivery.moreStatuses(uid, this.data.scope, this.data.id, cursor);
-      if (this.uid() !== uid) return;
-      this.extraStatuses.update(rows => [...rows, ...page]); this.moreAvailable.set(page.length === 25);
-    } catch { if (this.uid() === uid) { this.error.set('Unable to load more delivery details.'); this.haptics.error(); } }
-    finally { this.busy.set(false); }
+  loadMore(): void {
+    if (!this.uid() || this.busy() || !this.canLoadMore()) return;
+    this.statusLimit.update(count => count + TRAINING_DELIVERY_PAGE_SIZE);
+  }
+  inspectWorkout(status: TrainingDeliveryStatusV1): void {
+    if (!this.uid() || this.busy()) return;
+    const title = this.schedule()?.workouts.find(workout => workout.id === status.workoutId)?.title ?? 'Deleted workout';
+    this.dialogRef.close();
+    this.dialog.open(TrainingDeliveryDialogComponent, { data: { scope: 'workout', id: status.workoutId, title },
+      width: '640px', maxWidth: '95vw' });
   }
 }

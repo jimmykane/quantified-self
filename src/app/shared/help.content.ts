@@ -184,6 +184,7 @@ const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 - Use **Stop sync before disconnecting** if you want future provider copies removed. Explicit disconnect ends the connection's delivery consent and leaves provider copies. An authentication failure keeps consent for a same-account reconnect; another account requires fresh consent. Provider-held copies may remain after disconnect or Quantified Self account deletion.
 - Copies do not inherit standalone Send consent. Moving into a plan adopts its settings; moving to Standalone requires a new Send. Restoring schedule history restores content, not old provider consent.
 - A workout that cannot map stays blocked. Review and explicitly approve supported mapping differences; a relevant edit needs renewed approval. Existing provider copies stay unchanged while an update is blocked. Retry inspects uncertain operations before repeating them and never blindly creates duplicates.
+- **Delivery history** appears in Plans once delivery records exist. It keeps provider details and failed removals reachable even after you delete a workout or its plan. Open a record's **Delivery details** to retry recovery; this does not restore the deleted workout or start new sync. Loaded details stay up to date automatically.
 
 ## Add from Calendar
 

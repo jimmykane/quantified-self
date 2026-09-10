@@ -11,14 +11,16 @@ import { deliveryContentDigest, deliveryIdentity, resolveDeliveryIntent } from '
 import { reconciliationJobId } from './marker';
 
 export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transaction, uid: string,
-  workout: ScheduledWorkoutV1 | null, provider: PlannedWorkoutProviderId, hasPro: boolean): Promise<DeliveryContext> {
+  workout: ScheduledWorkoutV1 | null, provider: PlannedWorkoutProviderId, hasPro: boolean,
+  retainedWorkoutId?: string): Promise<DeliveryContext> {
   const user = runtime.db.collection('users').doc(uid);
   const connection = await runtime.connection(tx, uid, provider);
-  const [overrideDoc, settingDoc, scopeDoc, planDoc] = workout ? await Promise.all([
-    tx.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('workout', workout.id, provider))),
-    workout.planId ? tx.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('plan', workout.planId, provider))) : null,
-    tx.get(user.collection(DELIVERY_SCOPES).doc(workout.id)),
-    workout.planId ? tx.get(user.collection('trainingPlans').doc(workout.planId)) : null,
+  const workoutId = workout?.id ?? retainedWorkoutId;
+  const [overrideDoc, settingDoc, scopeDoc, planDoc] = workoutId ? await Promise.all([
+    tx.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('workout', workoutId, provider))),
+    workout?.planId ? tx.get(user.collection(TRAINING_DELIVERY_SETTINGS).doc(deliverySettingsId('plan', workout.planId, provider))) : null,
+    tx.get(user.collection(DELIVERY_SCOPES).doc(workoutId)),
+    workout?.planId ? tx.get(user.collection('trainingPlans').doc(workout.planId)) : null,
   ]) : [null, null, null, null];
   const override = (overrideDoc?.data() ?? null) as TrainingDeliverySettingsV1 | null;
   return { workout, planActive: planDoc?.data()?.lifecycle === 'active',
@@ -126,7 +128,8 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
       } else {
         const previous = doc.data() as DeliveryLedgerV1;
         const workoutDoc = await tx.get(user.collection('scheduledWorkouts').doc(previous.workoutId));
-        const context = await readDeliveryContext(runtime, tx, uid, workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null, previous.provider, hasPro);
+        const context = await readDeliveryContext(runtime, tx, uid, workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null,
+          previous.provider, hasPro, previous.workoutId);
         const record = reconcileRecord(runtime, context, uid, previous.provider, previous.workoutId, previous);
         if (record) records.push(record);
       }

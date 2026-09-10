@@ -75,6 +75,57 @@ describe('Training provider delivery controls', () => {
     expect(component.preview()).toBeNull(); expect(component.view().statuses).toEqual([]); expect(close).toHaveBeenCalled();
     await component.confirm(); expect(service.mutate).not.toHaveBeenCalled();
   });
+  it('keeps loaded status pages live and drops records that leave the scope', async () => {
+    const first = Array.from({ length: 25 }, (_, index) => ({ ...status, id: String(index).padStart(3, '0') }));
+    const expanded$ = new BehaviorSubject({ settings: [], statuses: [...first, { ...status, id: '025' }] });
+    service.watchScope.mockImplementation((_uid, _scope, _id, count = 25) => count === 25
+      ? of({ settings: [], statuses: first }) : expanded$);
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    await component.loadMore(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.statuses()).toHaveLength(26);
+    expanded$.next({ settings: [], statuses: [...first, { ...status, id: '025', status: 'removed', hasRemoteCopy: false }] });
+    fixture.detectChanges();
+    expect(component.statuses().find(item => item.id === '025')?.status).toBe('removed');
+    expanded$.next({ settings: [], statuses: first }); fixture.detectChanges();
+    expect(component.statuses()).toHaveLength(25);
+    expect(component.canLoadMore()).toBe(false);
+    fixture.destroy();
+    expect(expanded$.observed).toBe(false);
+  });
+  it.each([false, true])('lets a plan workout suppress failed inherited sync, including stale prior-scope suppression: %s', staleSuppression => {
+    service.watchScope.mockReturnValue(of({ settings: staleSuppression ? [{ provider: 'garmin', enabled: false, suppressed: true,
+      associationPlanId: 'old-plan', timeZone: 'Europe/Helsinki' }] : [], statuses: [{ ...status, planId: 'p', hasRemoteCopy: false }] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+      .some(button => button.textContent?.trim() === 'Stop sync')).toBe(true);
+  });
+  it('opens retained workout delivery from history without linking to a deleted editor', () => {
+    const open = vi.fn();
+    TestBed.overrideComponent(TrainingDeliveryDialogComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'history', id: 'current', title: 'All provider deliveries' } });
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, workoutId: 'deleted' }] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const details = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+      .find(button => button.textContent?.trim() === 'Delivery details');
+    expect(details).toBeDefined(); details!.click();
+    expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent,
+      expect.objectContaining({ data: { scope: 'workout', id: 'deleted', title: 'Deleted workout' } }));
+    expect(close).toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('a[href*="deleted"]')).toBeNull();
+  });
+  it('previews recovery for a missing source with revision zero and never offers Send', async () => {
+    service.isReady.mockReturnValue(true);
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 }, plans: [], workouts: [] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(fixture.nativeElement.textContent).not.toContain('Send workout');
+    component.begin('garmin', 'send'); expect(component.draft()).toBeNull();
+    component.begin('garmin', 'retry'); await component.review();
+    expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ scope: 'workout', scopeId: 'w', expectedScopeRevision: 0, action: 'retry' }));
+  });
   it('does not expose a button when no provider is ready and no settings/status exist', () => {
     service.watchPresence.mockReturnValue(of(false));
     const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
@@ -85,7 +136,7 @@ describe('Training provider delivery controls', () => {
   it('renders the Material dialog shell and permits recovery without Pro without granting consent', async () => {
     TestBed.overrideProvider(MatDialog, { useFactory: () => new MatDialog() });
     service.isReady.mockImplementation(provider => provider === 'garmin');
-    const ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+    let ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
       data: { scope: 'workout', id: 'w', title: 'Morning run — September training' }, width: '640px', maxWidth: '95vw',
     });
     TestBed.inject(ApplicationRef).tick();
@@ -131,6 +182,18 @@ describe('Training provider delivery controls', () => {
     await ref.componentInstance.confirm();
     expect(service.mutate).toHaveBeenCalledWith(expect.objectContaining({ action: 'retry' }));
     expect(service.mutate.mock.calls[0][0]).not.toHaveProperty('timeZone');
+    ref.close();
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, workoutId: 'deleted' }] }));
+    ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'history', id: 'current', title: 'All provider deliveries' }, width: '640px', maxWidth: '95vw',
+    });
+    await TestBed.inject(ApplicationRef).whenStable(); render('delivery-history');
+    ref.componentInstance.inspectWorkout({ ...status, workoutId: 'deleted' } as Parameters<TrainingDeliveryDialogComponent['inspectWorkout']>[0]);
+    await TestBed.inject(ApplicationRef).whenStable();
+    ref = TestBed.inject(MatDialog).openDialogs.at(-1)!;
+    expect(ref.componentInstance.data).toEqual({ scope: 'workout', id: 'deleted', title: 'Deleted workout' });
+    ref.componentInstance.begin('garmin', 'retry'); await ref.componentInstance.review(); render('delivery-deleted-recovery');
+    expect(ref.componentInstance.preview()?.command.expectedScopeRevision).toBe(0);
     ref.close();
   });
 });

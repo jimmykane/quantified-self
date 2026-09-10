@@ -10,7 +10,8 @@ import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deleti
 import { hashTrainingScheduleRequestPayload } from '../persistence';
 import { assertNoTrainingPlanDeletionInProgress } from '../deletion-lock';
 import { TrainingScheduleMutationError } from '../mutation';
-import { DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, type DeliveryRuntime } from './contracts';
+import { DELIVERY_LEDGER, DELIVERY_RECEIPTS, DELIVERY_SCOPES, DELIVERY_STATE, type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
+import { deliveryIdentity } from './intent';
 import { assessTrainingDeliveryMapping } from './mapping';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { productionDeliveryRuntime } from './runtime';
@@ -41,23 +42,32 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       tx.get(stateRef), tx.get(user.collection(command.scope === 'plan' ? 'trainingPlans' : 'scheduledWorkouts').doc(command.scopeId)),
       tx.get(settingRef), tx.get(privateState), tx.get(user.collection(DELIVERY_SCOPES).doc(command.scopeId)),
     ]);
-    if (!scope.exists) throw new HttpsError('not-found', 'The plan or workout no longer exists.');
+    if (!scope.exists && command.scope === 'plan') throw new HttpsError('not-found', 'The plan no longer exists.');
+    const retired = command.scope === 'workout' && (!scope.exists || scope.data()?.lifecycle === 'deleted');
+    if (retired && !['stop', 'retry'].includes(command.action)) {
+      throw new HttpsError('failed-precondition', 'Deleted workouts permit only delivery recovery or Stop sync.');
+    }
     const previous = (settingDoc.data() ?? null) as TrainingDeliverySettingsV1 | null;
     if ((schedule.data()?.revision ?? 0) !== command.expectedScheduleRevision
-      || scope.data()!.revision !== command.expectedScopeRevision
+      || (scope.data()?.revision ?? 0) !== command.expectedScopeRevision
       || (previous?.revision ?? 0) !== command.expectedSettingsRevision) {
       throw new HttpsError('aborted', 'The schedule or delivery settings changed. Refresh and try again.');
     }
     const connection = await runtime.connection(tx, uid, command.provider);
     const transport = runtime.transport(command.provider, uid);
-    const workout = command.scope === 'workout' ? parseScheduledWorkoutV1(scope.data()) : null;
+    // A deleted source can recover only a server-owned identity for this exact account.
+    // Never recreate authored data, consent, or an identity from a client-supplied remote ID.
+    const retained = retired ? (await tx.get(user.collection(DELIVERY_LEDGER).doc(
+      deliveryIdentity(uid, command.provider, connection.destinationKey, command.scopeId)))).data() as DeliveryLedgerV1 | undefined : undefined;
+    if (retired && !retained) throw new HttpsError('not-found', 'No retained delivery exists for this workout and connected account.');
+    const workout = command.scope === 'workout' && scope.exists ? parseScheduledWorkoutV1(scope.data()) : null;
     const inherited = workout?.planId ? await tx.get(user.collection(TRAINING_DELIVERY_SETTINGS)
       .doc(deliverySettingsId('plan', workout.planId, command.provider))) : null;
     const planSetting = (inherited?.data() ?? null) as TrainingDeliverySettingsV1 | null;
     const enable = ['configure', 'send', 'resume'].includes(command.action);
     const currentOverride = previous && previous.scopeGeneration === (generationDoc.data()?.generation ?? 0)
       && previous.associationPlanId === (workout?.planId ?? null) ? previous : null;
-    const timeZone = workout?.planId ? planSetting?.timeZone ?? 'UTC'
+    const timeZone = retired ? retained!.timeZone : workout?.planId ? planSetting?.timeZone ?? 'UTC'
       : (enable ? command.timeZone : undefined) ?? previous?.timeZone ?? 'UTC';
     if (workout?.planId && command.timeZone && command.timeZone !== timeZone) {
       throw new HttpsError('failed-precondition', 'Plan workouts inherit the plan delivery time zone. Change it in the plan provider settings.');
@@ -65,7 +75,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     if (command.action === 'resume' && !workout?.planId && !previous) {
       throw new HttpsError('failed-precondition', 'Use Send to give initial standalone consent and choose a time zone.');
     }
-    const workouts = workout ? [workout] : (await tx.get(user.collection('scheduledWorkouts')
+    const workouts = workout ? [workout] : command.scope === 'workout' ? [] : (await tx.get(user.collection('scheduledWorkouts')
       .where('planId', '==', command.scopeId).where('lifecycle', 'in', ['planned', 'skipped']).limit(401)))
       .docs.map(doc => parseScheduledWorkoutV1(doc.data()));
     if (workouts.length > 400) throw new HttpsError('resource-exhausted', 'Plan exceeds the delivery limit.');
@@ -89,7 +99,10 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     if (!removal && !transport) throw new HttpsError('failed-precondition', 'This provider is not yet available for workout delivery.');
     if (!removal && connection.state !== 'connected') throw new HttpsError('failed-precondition', 'Repair or reconnect this provider connection first.');
     if (command.action === 'send' && workout?.planId) throw new HttpsError('failed-precondition', 'Plan workouts use plan provider settings.');
-    if (['retry', 'approve'].includes(command.action)) {
+    if (retired && retained!.connectionEpoch !== connection.epoch) {
+      throw new HttpsError('failed-precondition', 'Access was explicitly revoked. Provider-held copies may need removing in the provider app.');
+    }
+    if (!retired && ['retry', 'approve'].includes(command.action)) {
       const consent = workout?.planId ? currentOverride?.suppressed ? currentOverride : planSetting : previous;
       if (!consent || (command.action === 'approve' && !consent.enabled) || consent.destinationKey !== connection.destinationKey || consent.connectionEpoch !== connection.epoch
         || (consent.scope === 'workout' && (consent.scopeGeneration !== (generationDoc.data()?.generation ?? 0)
@@ -104,7 +117,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     }
     const revision = (state.data()?.revision ?? 0) + 1;
     const result: TrainingDeliverySettingsV1 = { schemaVersion: 1, scope: command.scope, scopeId: command.scopeId,
-      provider: command.provider, revision, enabled: removal ? false : enable ? true : previous?.enabled ?? false,
+      provider: command.provider, revision, enabled: removal || retired ? false : enable ? true : previous?.enabled ?? false,
       suppressed: enable ? false : removal && command.scope === 'workout' ? true : currentOverride?.suppressed ?? false, timeZone,
       destinationKey: removal ? previous?.destinationKey ?? planSetting?.destinationKey ?? connection.destinationKey : connection.destinationKey,
       connectionEpoch: removal ? previous?.connectionEpoch ?? planSetting?.connectionEpoch ?? connection.epoch : connection.epoch,

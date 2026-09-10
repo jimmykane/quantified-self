@@ -117,8 +117,11 @@ fresh consent. Do not reuse activity/route auto-restoration rules for Training.
 An adapter must bind to the server-resolved owner/account, implement compatibility, horizon/deletion policy, execution,
 inspection and accepted-artifact checkpoints. Garmin workout/schedule IDs and Wahoo Plan/Workout IDs remain distinct;
 COROS keeps stable partner workout IDs and batches at most 30; Suunto delivers dated Guides, not native plan parity.
-Inspection must establish acceptance or definitive nonacceptance before an uncertain create is repeated. New revisions
-never discard accepted IDs. Pausing a provider hides new Send actions, not existing status/removal controls. Neither a
+Inspection must establish acceptance or definitive nonacceptance before an uncertain create is repeated. It cannot run
+against an auth/permission-blocked connection generation, and execution rechecks current admission after inspection.
+New revisions never discard accepted IDs. Delivery history keeps failed withdrawals reachable after authored-source
+deletion; recovery commands use the retained server-owned identity, never re-enrol a deleted source, and still enforce
+the exact account and explicit-disconnect epoch. Pausing a provider hides new Send actions, not existing status/removal controls. Neither a
 connected service nor a capability fixture grants readiness, scopes or user consent. No production setting selects the fake.
 
 ## 2. Choose the right architecture

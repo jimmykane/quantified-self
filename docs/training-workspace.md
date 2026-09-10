@@ -424,9 +424,14 @@ ambiguous metadata produces connection repair, not a guessed account or account 
 can inspect the original unfinished operation with renewed authority. Auth/permission failures remain blocked against the
 failed connection generation. Explicit disconnect increments the consent epoch in the existing OAuth disconnect's initial
 transaction; subscription-driven disconnect and authentication failures do not invalidate consent.
+Recovery is transport work too: an auth/permission-blocked generation cannot inspect an unfinished operation. After
+inspection proves nonacceptance, the worker repeats admission before executing; Stop, edits, Pro expiry, disconnect or
+account deletion during inspection cannot release the obsolete operation.
 
 Every accepted artifact checkpoint survives a newer authored revision. The final acceptance records which operation and
-content were accepted, then reconciles current intent. An interrupted/ambiguous operation is inspected before any repeat;
+content were accepted, then reconciles current intent. Final upsert acceptance must identify at least one artifact and
+final removal must return none; inconsistent acknowledgements keep the operation unresolved for inspection instead of
+publishing false success. An interrupted/ambiguous operation is inspected before any repeat;
 only adapter-proven nonacceptance permits execution with the same operation identity. Uncertain inspection stops in
 `needs_attention`; Retry does not clear that evidence or blindly repeat a create. Account deletion fences all further local
 writes, including late acceptance checkpoints. Provider-held copies may remain after revoked access. Account cleanup
@@ -456,14 +461,21 @@ Consent/lifecycle rules:
 
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
 Unavailable Send/configuration actions stay hidden, but existing settings, problems, reconnect links and Stop remain
-readable. Status details are paged in groups of 25. Preview precedes consent; an uncertain callable response retains the
+readable. Status details expand in groups of 25 using a live loaded-prefix query, so subsequent pages cannot retain stale
+statuses or miss records moving across page boundaries. Plan workouts retain Stop even when their first delivery fails.
+The workspace's **Delivery history** entry appears only when delivery records exist and remains reachable after deleting
+their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
+only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
+cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
+but cannot bypass explicit-disconnect epochs. Preview precedes consent; an uncertain callable response retains the
 same mutation ID for Retry. Account changes clear drafts/results and close the dialog. The UID restriction still applies
 only to sidenav presentation; it is not a delivery authorization boundary. Completed activity totals are unchanged.
 Connected-provider summaries and account-deletion confirmation explain that local cleanup does not guarantee removal
 of provider-held copies, and direct users to Stop sync before revoking access.
 
 Verification: `npm run test:training-delivery` runs unit and real loopback Firestore transaction fixtures without provider
-HTTP calls. Use `npm run test:rules` for owner/cross-user/write/internal-record denial. Frontend coverage includes
+HTTP calls, including changes during inspection and failed withdrawals after source deletion. CI runs this command in
+addition to the Functions unit suite. Use `npm run test:rules` for owner/cross-user/write/internal-record denial. Frontend coverage includes
 `training-delivery-dialog.component.spec.ts`, `training-delivery.service.spec.ts` and the existing Plans/calendar suites.
 Build Functions and run `npm --prefix functions run secrets:check`; there are no new secrets. Deploy indexes/Functions and
 any receipt TTL policy only with separate approval. Do not add provider HTTP transports until #645 and #647–#650 pass
@@ -471,7 +483,7 @@ their contract/sandbox gates; completion matching remains #651 and Sports Lib ex
 
 For isolated visual QA, create a temporary directory and set `TRAINING_DELIVERY_QA_DIR` to it when running
 `npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts`. The test exports synthetic Material
-dialog DOM for status, settings, preview, pending and Retry states, including the real component SCSS compiled with the
+dialog DOM for status, settings, preview, pending, Retry, history and deleted-source recovery states, including the real component SCSS compiled with the
 Angular build's Sass dependency. Build the local app, then link/copy `dist/browser/styles.css` and `dist/browser/media`
 beside the HTML. Open those fixtures in a browser at 320, 390 and 1440px in light/dark themes; verify readable status,
 labelled inputs, named dialog, wrapping, scrolling, Close, and disabled pending controls with no horizontal overflow.
