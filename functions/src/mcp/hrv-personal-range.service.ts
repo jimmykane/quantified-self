@@ -55,6 +55,8 @@ export const firestoreHrvRangeReads: HrvRangeReads = {
         .orderBy('endTimeMs').orderBy(FieldPath.documentId())
         .select('source.provider', 'source.providerUserId', 'sleepDate', 'endTimeMs', 'isNap',
           'vitals.averageHrvMs', 'vitals.overnightHrvMs', 'sportsLibData.schemaVersion',
+          // The shared Sleep decoder requires canonical duration, even for a vital-only projection.
+          new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration),
           new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv),
           new FieldPath('sportsLibData', 'metrics', SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv));
     if (cursor) query = query.startAfter(cursor as admin.firestore.QueryDocumentSnapshot);

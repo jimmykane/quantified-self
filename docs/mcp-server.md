@@ -476,6 +476,7 @@ The analytics and map entries follow the
 | --- | --- | --- |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
+| `get_hrv_personal_range` | `health:read` + `sleep:read` | Shared rolling nightly HRV baseline, historical classifications and missing-day ranges, separated by source |
 | `list_measurement_types` | `measurements:read` | Supported first-class body-measurement types, units, aggregations, intervals, limits, and current-snapshot guidance |
 | `query_measurements` | `measurements:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
@@ -553,12 +554,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 35-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 35 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls every registered tool, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -1195,7 +1196,8 @@ and `end` instants with timezone offsets, up to 366 days, and loads a bounded ad
 semantic variants. Daily medians, mean/population deviation, 14-day minimum baseline, seven-day/three-day headline,
 historical classifications and missing-day baseline evaluation therefore share the Health chart's calculation.
 
-Only eligible canonical nightly Health scalars and normalized non-nap average/overnight Sleep HRV are read. Health
+Only eligible canonical nightly Health scalars and normalized non-nap average/overnight Sleep HRV are used. The Sleep
+field mask also includes canonical duration, required by the shared Sports Lib decoder; it is never returned by this tool. Health
 Sleep references are skipped; normalized sessions are read through the separately required Sleep grant. Health and
 Sleep remain separately labelled series, including provider, response-local account ordinal and fixed semantics.
 The projection never guesses equivalence between opaque Health account keys and Sleep provider identities. The

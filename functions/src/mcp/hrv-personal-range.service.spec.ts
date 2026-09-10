@@ -1,10 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HrvRangeInput, HrvRangeReads, queryHrvPersonalRange, MCP_HRV_RANGE_SCHEMA } from './hrv-personal-range.service';
+import { HrvRangeInput, HrvRangeReads, queryHrvPersonalRange, MCP_HRV_RANGE_SCHEMA, firestoreHrvRangeReads } from './hrv-personal-range.service';
+import * as admin from 'firebase-admin';
+import { FieldPath } from 'firebase-admin/firestore';
+import { encodeSleepSessionSportsLibData } from '../../../shared/sports-lib-health-data';
+import { SleepSession, SLEEP_SPORTS_LIB_METRIC_FIELDS } from '../../../shared/sleep';
 import { calculatePersonalMetricRange } from '../../../shared/personal-metric-range';
 import { HEALTH_UNITS } from '../../../shared/health';
 import { DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '../../../shared/unit-aware-display';
 const DAY = 86400000;
+vi.mock('firebase-admin', () => ({ firestore: vi.fn() }));
 const end = Date.parse('2026-09-10T23:59:59.999Z');
 const input: HrvRangeInput = { uid: 'owner', scopes: ['health:read', 'sleep:read'], startTimeMs: end - 29 * DAY, endTimeMs: end };
 function reads(count = 70): HrvRangeReads {
@@ -21,6 +26,33 @@ function reads(count = 70): HrvRangeReads {
   }) };
 }
 describe('MCP shared HRV personal range', () => {
+  it('reads the required canonical duration alongside Sports Lib-only HRV through the Firestore mask', async () => {
+    const encoded = encodeSleepSessionSportsLibData({ durationSeconds: 28800, vitals: { averageHrvMs: 42, overnightHrvMs: 44 } } as SleepSession);
+    const selectedMetrics: Record<string, unknown> = {};
+    const query = {
+      where: vi.fn().mockReturnThis(), orderBy: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(),
+      select: vi.fn((...fields: (string | FieldPath)[]) => {
+        for (const field of Object.values(SLEEP_SPORTS_LIB_METRIC_FIELDS)) {
+          if (fields.some(path => path instanceof FieldPath && path.isEqual(new FieldPath('sportsLibData', 'metrics', field)))) {
+            selectedMetrics[field] = encoded.sportsLibData!.metrics[field];
+          }
+        }
+        return query;
+      }),
+      get: vi.fn(async () => ({ docs: [{ data: () => ({
+        endTimeMs: end, sleepDate: '2026-09-10', source: { provider: 'SuuntoApp', providerUserId: 'private-account' },
+        sportsLibData: { schemaVersion: encoded.sportsLibData!.schemaVersion, metrics: selectedMetrics },
+      }) }] })),
+    };
+    vi.mocked(admin.firestore).mockReturnValue({ collection: () => ({ doc: () => ({ collection: () => query }) }) } as never);
+    const deps = reads(0);
+    deps.fetchPage = async (...args) => args[1] === 'health' ? [] : firestoreHrvRangeReads.fetchPage(...args);
+    const result = await queryHrvPersonalRange(input, deps);
+    expect(result.excludedValues).toBe(0);
+    expect(result.series.map(series => series.readings[0].value)).toEqual([42, 44]);
+    expect(selectedMetrics).toHaveProperty(SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration);
+    expect(JSON.stringify(result)).not.toMatch(/duration|private-account|sportsLibData/);
+  });
   it('keeps HRV in milliseconds with non-default unit preferences', async () => {
     const deps = reads(3);
     vi.mocked(deps.fetchUnitSettings).mockResolvedValue(normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles }));
