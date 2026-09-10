@@ -136,7 +136,9 @@ there is no separate Custom Charts section or persisted section migration. Curat
 existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
 Rows use the preset icon, title, and short description; only the selected chart mounts a full preview renderer.
 Desktop opens with the first available chart selected, without extra haptic feedback or any save. Mobile starts with
-the list and opens details on selection. Selecting the same entry again is a silent no-op.
+the list and opens details on selection. Selecting the same entry again is a silent no-op that preserves preview scroll
+and focus. Search/group changes release an unchanged preview if it no longer matches, so Add cannot target a hidden
+choice. Filtering never discards a configured or modified draft, and filter controls are locked during saves.
 The entry component opens its picker template in a wide Material dialog on desktop and a 92dvh Material bottom sheet
 below 960 px, using the shared overlay theme. The documented `qs-chart-picker-sheet` sizing exception lets the
 Material container fill the configured pane instead of applying its default 80vh cap. The gallery never expands the dashboard.

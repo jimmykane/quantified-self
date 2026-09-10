@@ -124,6 +124,49 @@ describe('responsive chart picker interactions', () => {
     expect(document.body.querySelectorAll('app-dashboard-chart-preview')).toHaveLength(1);
     expect(save).not.toHaveBeenCalled();
   });
+  it('clears an excluded preview when filtering and does not offer to add a hidden choice', async () => {
+    await component.toggle(); await settle();
+    const selected = component.state.selected()!;
+    const other = component.filtered().find(entry => entry.definition.id !== selected.definition.id)!;
+    haptics.selection.mockClear();
+    component.filter(other.definition.label); await settle();
+    expect(component.filtered().some(entry => entry.definition.id === selected.definition.id)).toBe(false);
+    expect(component.state.draft()).toBeNull();
+    expect(button('Add to dashboard')).toBeUndefined();
+    await component.select(other); await settle();
+    component.filter('no matching chart'); await settle();
+    expect(document.body.querySelector('.chart-library-empty')?.textContent).toContain('No charts match');
+    expect(component.state.draft()).toBeNull();
+    expect(button('Add to dashboard')).toBeUndefined();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(save).not.toHaveBeenCalled();
+  });
+  it('retains the preview scroll position when the selected row is activated again', async () => {
+    await component.toggle(); await settle();
+    // Finish the initial focus callback before simulating a reader scrolling through details.
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const detail = document.body.querySelector<HTMLElement>('.chart-library-detail')!;
+    detail.scrollTop = 300;
+    haptics.selection.mockClear();
+    await component.select(component.state.selected()!); await settle();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(detail.scrollTop).toBe(300);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+  });
+  it('retains matching previews but clears excluded previews when the KPI group changes', async () => {
+    await component.toggle(); await settle();
+    const draft = component.state.draft();
+    haptics.selection.mockClear();
+    component.filter('KPI'); component.selectGroup('load'); await settle();
+    expect(component.state.draft()).toBe(draft);
+    component.selectGroup('execution'); await settle();
+    expect(component.filtered().length).toBeGreaterThan(0);
+    expect(component.state.draft()).toBeNull();
+    expect(button('Add to dashboard')).toBeUndefined();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(save).not.toHaveBeenCalled();
+  });
   it('opens details before adding, then updates availability after the saved layout arrives', async () => {
     mobile = true;
     button('Add chart').click(); await settle(); (document.body.querySelector('button[mat-list-item]') as HTMLButtonElement).click(); await settle();
@@ -257,6 +300,26 @@ describe('responsive chart picker interactions', () => {
     expect(component.expanded()).toBe(true);
     resolve(); await saving; await settle();
     expect(document.body.querySelector('.chart-library-detail')).toBeNull();
+  });
+  it('locks list filters during a pending save and restores them when the save fails', async () => {
+    let reject!: (reason: Error) => void;
+    save.mockReturnValueOnce(new Promise<void>((_resolve, fail) => reject = fail));
+    await component.toggle(); await settle();
+    const draft = component.state.draft();
+    const saving = component.state.save(); await settle();
+    const input = document.body.querySelector<HTMLInputElement>('.chart-library-browser input')!;
+    expect(input.disabled).toBe(true);
+    expect(document.body.querySelector('mat-chip-listbox')?.getAttribute('aria-disabled')).toBe('true');
+    haptics.selection.mockClear();
+    component.filter('no matching chart'); component.selectGroup('execution'); await settle();
+    expect(component.search()).toBe(''); expect(component.group()).toBe('all');
+    expect(component.state.draft()).toBe(draft);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    reject(new Error('Save failed')); await saving; await settle();
+    expect(input.disabled).toBe(false);
+    expect(document.body.querySelector('mat-chip-listbox')?.getAttribute('aria-disabled')).not.toBe('true');
+    expect(component.state.draft()).toBe(draft);
+    expect(button('Add to dashboard').disabled).toBe(false);
   });
   it('keeps a failed save visible beside the retry action even when details are long', async () => {
     save.mockRejectedValueOnce(new Error('Save failed'));

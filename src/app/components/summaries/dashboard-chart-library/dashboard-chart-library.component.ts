@@ -144,7 +144,7 @@ export class DashboardChartLibraryComponent {
     }
   }
   async select(entry: ReturnType<typeof getAvailableDashboardCharts>[number]): Promise<void> {
-    await this.state.select(this.user(), entry);
+    if (!(await this.state.select(this.user(), entry))) return;
     this.focusContent(() => this.detail()?.nativeElement, this.breakpoints.isMatched('(max-width: 959.98px)'));
   }
   async createCustom(): Promise<void> { await this.state.createCustom(this.user()); this.focusDetail(); }
@@ -162,6 +162,18 @@ export class DashboardChartLibraryComponent {
       if (content) content.scrollTop = 0;
     });
   }
-  filter(value: string): void { this.search.set(value); }
-  selectGroup(value: string): void { if (this.group() === value) return; this.state.haptics.selection(); this.group.set(value || 'all'); }
+  private clearExcludedPreview(): void {
+    if (!this.expanded()) return;
+    const selected = this.state.selected();
+    if (selected && !this.filtered().some(entry => entry.definition.id === selected.definition.id)) this.state.clearPreview();
+  }
+  filter(value: string): void {
+    if (this.state.busy()) return;
+    this.search.set(value); this.clearExcludedPreview();
+  }
+  selectGroup(value: string): void {
+    const group = value || 'all';
+    if (this.state.busy() || this.group() === group) return;
+    this.state.haptics.selection(); this.group.set(group); this.clearExcludedPreview();
+  }
 }

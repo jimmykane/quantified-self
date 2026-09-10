@@ -51,6 +51,31 @@ describe('inline chart library state', () => {
     expect(state.undoAvailable()).toBe(false);
     expect(haptics.success).toHaveBeenCalledTimes(2);
   });
+  it('releases an unchanged preview silently without saving or closing the picker', async () => {
+    await state.open(calendar.lane); await state.select(user, calendar);
+    haptics.selection.mockClear();
+    state.clearPreview();
+    expect(state.draft()).toBeNull(); expect(state.selected()).toBeNull(); expect(state.editor()).toBeNull();
+    expect(state.activeLane()).toBe(calendar.lane);
+    expect(haptics.selection).not.toHaveBeenCalled(); expect(persistence.save).not.toHaveBeenCalled();
+  });
+  it('does not release a configured or changed draft when the chart list is filtered', async () => {
+    await state.select(user, calendar); state.configure();
+    const editor = state.editor();
+    state.clearPreview(); expect(state.editor()).toBe(editor);
+    state.configuring.set(false);
+    editor!.category = 'custom'; state.refreshDraft();
+    state.clearPreview(); expect(state.editor()).toBe(editor);
+    expect(dialog.open).not.toHaveBeenCalled(); expect(persistence.save).not.toHaveBeenCalled();
+  });
+  it('does not release a preview while its save is pending', async () => {
+    let resolve!: () => void; persistence.save.mockReturnValueOnce(new Promise<void>(done => resolve = done));
+    await state.select(user, calendar);
+    const draft = state.draft(); const saving = state.save();
+    state.clearPreview(); expect(state.draft()).toBe(draft);
+    resolve(); await saving;
+    expect(persistence.save).toHaveBeenCalledOnce();
+  });
   it('writes an explicit empty tile list when undoing the first addition on legacy settings', async () => {
     user.settings.dashboardSettings = {} as never;
     await state.select(user, calendar); await state.save(); await state.undo(user);

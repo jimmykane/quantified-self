@@ -13,9 +13,9 @@
   <div #scrollContent class="chart-library-layout qs-scrollbar" [class.has-selection]="state.draft() && !state.configuring()" [class.is-configuring]="state.configuring()">
     @if (!state.configuring()) {
     <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
-      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [disabled]="state.busy()" [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
       @if (lane() === 'kpi') {
-      <mat-chip-listbox aria-label="KPI group" [value]="group()" (change)="selectGroup($event.value)">
+      <mat-chip-listbox aria-label="KPI group" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
         <mat-chip-option value="all">All</mat-chip-option><mat-chip-option value="load">Load</mat-chip-option><mat-chip-option value="readiness">Readiness</mat-chip-option><mat-chip-option value="execution">Execution</mat-chip-option>
       </mat-chip-listbox>
       }

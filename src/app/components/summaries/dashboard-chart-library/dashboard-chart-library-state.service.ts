@@ -60,12 +60,19 @@ export class DashboardChartLibraryState implements OnDestroy {
     this.activeLane.set(null);
   }
 
-  async select(user: AppUserInterface, entry: DashboardChartCatalogEntry, feedback = true): Promise<void> {
-    if (this.busy() || this.selected()?.definition.id === entry.definition.id || !(await this.canDiscard())) return;
+  async select(user: AppUserInterface, entry: DashboardChartCatalogEntry, feedback = true): Promise<boolean> {
+    if (this.busy() || this.selected()?.definition.id === entry.definition.id || !(await this.canDiscard())) return false;
     if (feedback) this.haptics.selection();
     this.clearSelection();
     this.selected.set(entry);
     this.createEditor(user, entry.tile, false);
+    return true;
+  }
+
+  /** Filtering may release a preview, but must never discard edits or interrupt a save. */
+  clearPreview(): void {
+    if (this.busy() || this.configuring() || this.hasChanges()) return;
+    this.clearSelection();
   }
 
   async createCustom(user: AppUserInterface): Promise<void> {
@@ -199,9 +206,13 @@ export class DashboardChartLibraryState implements OnDestroy {
     this.editor()?.destroy(); this.editor.set(null); this.draft.set(null); this.selected.set(null); this.configuring.set(false); this.error.set(''); this.initialDraft = ''; this.originalTile = null;
   }
 
+  private hasChanges(): boolean {
+    return !!this.editor() && JSON.stringify(this.draft()) !== this.initialDraft;
+  }
+
   private async canDiscard(): Promise<boolean> {
     if (this.confirming) return false;
-    if (!this.editor() || JSON.stringify(this.draft()) === this.initialDraft) return true;
+    if (!this.hasChanges()) return true;
     this.confirming = true;
     const contextVersion = this.contextVersion;
     try {
