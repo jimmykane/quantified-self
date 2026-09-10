@@ -61,7 +61,7 @@ export class DashboardChartLibraryComponent {
     const tile = this.state.draft();
     if (!tile) return '';
     const type = `${tile['chartType'] || ''}`;
-    if (isDashboardHrvTrendChartType(type)) return 'Needs recorded overnight HRV · Last 14 days';
+    if (isDashboardHrvTrendChartType(type)) return 'Health HRV · Personal range · Last 14 days';
     if (isDashboardSleepBackedChartType(type)) return 'Needs recorded sleep · Last 14 days';
     if (tile['mapSource'] === 'routes') return 'Needs saved routes · Up to 50 recent routes';
     if (isDashboardKpiChartType(type)) return 'Uses prepared training snapshots';

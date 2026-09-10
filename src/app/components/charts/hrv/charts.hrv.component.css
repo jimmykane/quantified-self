@@ -1,0 +1,11 @@
+:host { display: block; height: 100%; min-width: 0; }
+.hrv-layout { display: flex; flex-direction: column; height: 100%; min-width: 0; gap: 4px; }
+.hrv-reserve-actions { padding-right: 48px; }
+.hrv-window, .hrv-context { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.hrv-reading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.hrv-reading strong { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; }
+.hrv-reading span { font: var(--mat-sys-body-small); }
+.hrv-status { display: flex; align-items: center; gap: 6px; font: var(--mat-sys-body-small); }
+.hrv-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.hrv-state { flex: 1; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 24px; color: var(--mat-sys-on-surface-variant); }
+app-health-metric-series-chart { flex: 1; min-height: 0; }

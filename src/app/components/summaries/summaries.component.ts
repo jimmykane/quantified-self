@@ -1,3 +1,5 @@
+import { DashboardHrvService } from '../../services/dashboard-hrv.service';
+import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
 import { DashboardConfigurationService, cloneDashboardSettings } from '../../services/dashboard-configuration.service';
 import { DashboardChartLibraryState } from './dashboard-chart-library/dashboard-chart-library-state.service';
 import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-preview.helper';
@@ -321,6 +323,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private todayHeaderRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private derivedMetricsSubscription: Subscription | null = null;
   private derivedMetricsUserUID: string | null = null;
+  private readonly hrvService = inject(DashboardHrvService);
+  private hrvSubscription: Subscription | null = null;
+  private hrvListenerKey: string | null = null;
+  private hrvTrend: DashboardHrvContext | null = null;
   private sleepSubscription: Subscription | null = null;
   private sleepListenerKey: string | null = null;
   private readinessSleepSubscription: Subscription | null = null;
@@ -652,6 +658,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       tileEventsByOrder: this.tileEventsByOrder,
       tileEventAnchorsByOrder: Object.fromEntries(this.tileEventAnchorEndMsByOrder),
       routePreviews: this.routePreviewRoutes,
+      hrvTrend: this.hrvTrend,
+      hrvPreferredSource: (this.user as AppUserInterface)?.settings?.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability ?? null,
       sleepSessions: this.sleepSessions,
       sleepTrendWindow: this.sleepTrendWindow,
       preferences: this.getAggregationPreferences(),
@@ -894,6 +902,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private syncSleepSubscription(): void {
     const uid = `${this.user?.uid || ''}`.trim();
     if (!uid) {
+      this.unsubscribeHrv();
       this.sleepSessions = [];
       this.sleepListenerKey = null;
       this.sleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
@@ -914,6 +923,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     const window = this.buildSleepTrendWindow();
     this.updateSleepTrendWindowState(window);
+    this.syncHrvSubscription(uid, window);
     const listenerKey = this.buildSleepListenerKey(uid, window);
     if (this.sleepListenerKey === listenerKey && this.sleepSubscription) {
       return;
@@ -940,6 +950,31 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         shouldRebuildForWindowChange = false;
         void this.rebuildTilesFromCurrentState();
       });
+  }
+
+  private syncHrvSubscription(uid: string, window: DashboardSleepTrendWindow): void {
+    const units = this.user?.settings?.unitSettings;
+    const visible = dashboardHrvWindows(this.sleepTrendRange, window.endMs).visible;
+    const key = JSON.stringify([uid, visible.startDate, visible.endDate, units]);
+    if (key === this.hrvListenerKey) return;
+    this.unsubscribeHrv();
+    this.hrvListenerKey = key;
+    this.hrvTrend = { window: visible, charts: [], loading: true, error: false };
+    this.hrvSubscription = this.hrvService.watch(uid, this.sleepTrendRange, window.endMs, units).subscribe({
+      next: context => { this.hrvTrend = context; void this.rebuildTilesFromCurrentState(); },
+      error: () => {
+        this.hrvListenerKey = null;
+        this.hrvTrend = { window: visible, charts: [], loading: false, error: true };
+        void this.rebuildTilesFromCurrentState();
+      },
+    });
+  }
+
+  private unsubscribeHrv(): void {
+    this.hrvSubscription?.unsubscribe();
+    this.hrvSubscription = null;
+    this.hrvListenerKey = null;
+    this.hrvTrend = null;
   }
 
   private syncReadinessSleepSubscription(): void {
@@ -2344,6 +2379,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private unsubscribeFromAll() {
+    this.unsubscribeHrv();
     this.unsubscribeThemeSubscription();
     this.clearRecoveryRefreshTimer();
     if (this.derivedMetricsSubscription) {

@@ -6,7 +6,7 @@ import { DashboardChartPreviewService } from '../../../services/dashboard-chart-
 import { DashboardPreviewInput, DashboardChartPreview, buildDashboardThumbnailPreview } from '../../../helpers/dashboard-chart-preview.helper';
 import { DashboardChartTileViewModel, DashboardMapTileViewModel } from '../../../helpers/dashboard-tile-view-model.helper';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
-import { DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, isDashboardKpiChartType } from '../../../helpers/dashboard-special-chart-types';
+import { DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, isDashboardKpiChartType, isDashboardHrvTrendChartType } from '../../../helpers/dashboard-special-chart-types';
 @Component({ selector: 'app-dashboard-chart-preview', standalone: false, templateUrl: './dashboard-chart-preview.component.html', styleUrls: ['./dashboard-chart-preview.component.css'] })
 export class DashboardChartPreviewComponent implements OnChanges, OnDestroy {
   private readonly locale = inject(LOCALE_ID);
@@ -18,6 +18,7 @@ export class DashboardChartPreviewComponent implements OnChanges, OnDestroy {
   @Input() darkTheme = false;
   readonly preview = signal<DashboardChartPreview | null>(null);
   readonly chart = computed(() => this.preview()?.tile.type === TileTypes.Chart ? this.preview()!.tile as DashboardChartTileViewModel : null);
+  readonly isHrv = computed(() => isDashboardHrvTrendChartType(this.chart()?.chartType));
   readonly isKpi = computed(() => isDashboardKpiChartType(this.chart()?.chartType));
   readonly mapTile = computed(() => this.preview()?.tile.type === TileTypes.Map ? this.preview()!.tile as DashboardMapTileViewModel : null);
   readonly calendar = computed(() => `${this.chart()?.chartType}` === DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE

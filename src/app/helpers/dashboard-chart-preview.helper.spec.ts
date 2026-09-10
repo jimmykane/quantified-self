@@ -1,6 +1,7 @@
+import { dashboardHrvWindows } from './dashboard-hrv-context.helper';
 import { describe, expect, it } from 'vitest';
 import { getDashboardChartCatalog } from './dashboard-chart-catalog.helper';
-import { buildDashboardExamplePreview, buildDashboardPreviewSeed, dashboardPreviewHasData, dashboardPreviewMetricKinds } from './dashboard-chart-preview.helper';
+import { buildDashboardExamplePreview, buildDashboardPreviewSeed, buildDashboardThumbnailPreview, dashboardPreviewHasData, dashboardPreviewMetricKinds } from './dashboard-chart-preview.helper';
 import { DashboardChartTileViewModel } from './dashboard-tile-view-model.helper';
 import { TileTypes } from '@sports-alliance/sports-lib';
 
@@ -17,6 +18,17 @@ describe('dashboard example previews', () => {
     const seed = { tiles: [], sleepSessions: sessions, sleepTrendWindow: { startMs: now-14*86400000, endMs: now, range: '14d' as const } };
     expect(buildDashboardPreviewSeed(tile, seed, now).sleepSessions).toBe(sessions);
     expect(buildDashboardPreviewSeed(tile, seed, now+14*86400000).sleepSessions).toEqual([]);
+  });
+  it('uses the Health source preference for thumbnails and rejects a stale HRV window', () => {
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile;
+    const context = (buildDashboardExamplePreview(tile).tile as DashboardChartTileViewModel).hrvTrend!;
+    context.window = dashboardHrvWindows().visible;
+    context.charts.push({ ...context.charts[0], key: 'preferred-source' });
+    const seed = { tiles: [], hrvTrend: context, hrvPreferredSource: 'preferred-source' };
+    const preview = buildDashboardThumbnailPreview(tile, seed);
+    expect(preview.source).toBe('user');
+    expect((preview.tile as DashboardChartTileViewModel).hrvTrend?.charts[0].key).toBe('preferred-source');
+    expect(buildDashboardPreviewSeed(tile, seed, Date.now() + 14 * 86400000).hrvTrend).toBeNull();
   });
   it('provides renderable, explicitly synthetic data for every catalog entry', () => {
     for (const entry of getDashboardChartCatalog()) {

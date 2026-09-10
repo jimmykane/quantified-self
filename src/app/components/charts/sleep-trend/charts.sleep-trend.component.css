@@ -150,7 +150,3 @@
     padding-right: 132px;
   }
 }
-
-.sleep-stats-hrv {
-  grid-template-columns: minmax(0, 1fr);
-}

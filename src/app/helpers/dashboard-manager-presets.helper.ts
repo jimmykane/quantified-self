@@ -258,7 +258,7 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_HRV,
     label: 'HRV',
     tileName: 'HRV',
-    description: 'Overnight heart rate variability with separate trends and averages for each source.',
+    description: 'Health HRV with your personal range, by connected source.',
     icon: 'monitor_heart',
     category: 'curated',
     curatedChartType: DASHBOARD_HRV_TREND_CHART_TYPE,

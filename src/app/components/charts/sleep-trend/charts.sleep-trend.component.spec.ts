@@ -78,44 +78,6 @@ describe('ChartsSleepTrendComponent', () => {
     }
   });
 
-  it.each([DistanceUnits.Kilometers, DistanceUnits.Miles])('renders HRV-only values through Sports Lib with %s preferences', async distanceUnits => {
-    component.displayMode = 'hrv';
-    component.unitSettings = normalizeUserUnitSettings({ distanceUnits });
-    const garmin = buildSleepPoint({ provider: SLEEP_PROVIDERS.GarminAPI, providerLabel: 'Garmin', averageHrvMs: 42 });
-    const suunto = buildSleepPoint({ averageHrvMs: 72, endTimeMs: garmin.endTimeMs + 1000 });
-    component.sleepTrend = { points: [garmin, suunto], latestPoint: suunto };
-    fixture.detectChanges(); await fixture.whenStable();
-    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
-    const option = mockLoader.setOption.mock.calls.at(-1)![1];
-    expect(option.series.map(series => series.name)).toEqual(['Garmin', 'Suunto']);
-    expect(option.series.every(series => series.type === 'line' && series.yAxisIndex === 0 && !series.connectNulls)).toBe(true);
-    expect(option.xAxis.data).toEqual(['2026-04-28']);
-    const canonical = formatCanonicalSleepMetricSportsLibValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv, 72, component.unitSettings)!;
-    const display = [canonical.value, canonical.unit].filter(Boolean).join(' ');
-    expect(component.latestHrvText).toBe(display);
-    expect(component.vitalAverages.map(average => average.label)).toEqual(['Garmin average', 'Suunto average']);
-    expect(option.yAxis.axisLabel.formatter(72)).toBe(display);
-    const tooltip = option.tooltip.formatter([{ dataIndex: 0 }]);
-    expect(tooltip).toContain(display); expect(tooltip).toContain('Garmin'); expect(tooltip).toContain('Suunto');
-    expect(tooltip).not.toContain('Deep');
-    expect(fixture.nativeElement.querySelector('.sleep-title').textContent.trim()).toBe('HRV');
-    expect(fixture.nativeElement.querySelector('.sleep-stats').textContent).not.toContain('Score');
-    expect(component.showNoDataError).toBe(false);
-    expect(mockChart.on).not.toHaveBeenCalled();
-  });
-
-  it('shows an HRV-specific empty state when sleep exists without recorded overnight HRV', async () => {
-    component.displayMode = 'hrv';
-    const point = buildSleepPoint({ averageHrvMs: null, napAverageHrvMs: 90 });
-    component.sleepTrend = { points: [point], latestPoint: point, hasRealPoints: true };
-    fixture.detectChanges(); await fixture.whenStable();
-    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
-    expect(component.showNoDataError).toBe(true);
-    expect(component.noDataErrorMessage).toBe('No overnight HRV data');
-    expect(component.latestHrvText).toBe('--');
-    expect(mockLoader.setOption.mock.calls.at(-1)![1].series).toEqual([]);
-  });
-
   it('keeps the plot baseline fixed with the visible legend above the plot', async () => {
     const point = buildSleepPoint();
     component.sleepTrend = {

@@ -30,6 +30,15 @@ describe('chart list thumbnail shapes', () => {
     const series = buildDashboardChartThumbnailOption(preview, false).series as SeriesOption[];
     expect(series[0].data).toEqual([[1, 1.4], [2, null], [3, .8]]);
   });
+  it('reuses Health’s range band and colored points in the HRV thumbnail', () => {
+    const entry = catalog.find(entry => entry.definition.id === 'curated-hrv')!;
+    const preview = buildDashboardExamplePreview(entry.tile);
+    const option = buildDashboardChartThumbnailOption(preview, false);
+    const series = option.series as SeriesOption[];
+    expect(series.some(item => item.id === 'hrv-personal-range-band')).toBe(true);
+    expect(series[0].itemStyle?.color).toBeTypeOf('function');
+    expect(option.xAxis).toMatchObject({ type: 'time', show: false });
+  });
   it('keeps distinct chart formats for forecasts, intensity, power, pies, bars and routes', () => {
     const types = (id: string) => (buildDashboardChartThumbnailOption(buildDashboardExamplePreview(catalog.find(entry => entry.definition.id === id)!.tile), false).series as SeriesOption[]).map(series => series.type);
     expect(types('curated-freshness-forecast')).toEqual(['line', 'line', 'line']);

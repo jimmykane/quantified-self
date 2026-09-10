@@ -174,14 +174,20 @@ Preview paths never call metric ensure/rebuild APIs or persist settings. Synthet
 and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
 
-The optional HRV preset (`HrvTrend`) belongs in Training State beside Sleep. It reuses the Sleep renderer in HRV mode
-and the existing sleep subscription/range/navigation; it has no automatic tile or derived-metric identity. The shared
-sleep view model supplies recorded overnight HRV. `dashboard-hrv-chart.helper.ts` keeps providers separate, excludes naps,
-preserves missing readings as gaps, and chooses the latest valid reading. Full previews require actual HRV, not merely
-sleep duration, before labelling the source as personal data. Header, per-source averages, axis labels, and tooltip values
-use the canonical Sleep HRV Sports Lib mapping and user unit settings. The shared chart host owns tooltip haptics;
-HRV does not attach Sleep stack highlight listeners. HRV and Sleep remain independently addable and removable.
-Synthetic HRV review captures: [desktop](images/dashboard-hrv/desktop.png) and [mobile](images/dashboard-hrv/mobile.png).
+The optional HRV preset (`HrvTrend`) belongs in Training State beside Sleep. `DashboardHrvService` supplies both the
+saved tile and picker with the same normalized Health/Sleep sources as the Health workspace. It reads the visible
+Health window and a separate 60-day history window through the existing owner-scoped `AppHealthService.loadMetricRange`
+API, plus the corresponding Sleep history. Splitting the reads preserves the Health query limit for a one-year view.
+`dashboard-hrv-context.helper.ts` reuses Health's series models, personal-range calculation, status colors and canonical
+Sports Lib display. `ChartsHrvComponent` renders `HealthMetricSeriesChartComponent`; thumbnails use the same ECharts
+option builder, including its historical band. No competing HRV renderer or baseline algorithm exists. Sources remain
+separate, and the full chart initially honors the user's Health highlight source preference. Source changes within
+the dashboard are local display choices, with selection haptics; the shared chart host owns tooltip feedback.
+
+HRV and Sleep share their saved date range/navigation, while HRV uses Health's calendar-day windows. Loading, empty and
+failed reads remain explicit; incomplete Health loads do not produce a misleading personal range. Preview fallbacks
+remain labelled examples, and historical dashboard windows cannot masquerade as the current 14-day preview. HRV and
+Sleep remain independently addable/removable; HRV has no automatic tile or derived-metric identity.
 
 `DashboardConfigurationService` persists owner-scoped dashboard patches through Firestore transactions. It compares the
 fields being changed against the draft baseline and refuses stale saves. Both sides use the profile hydration

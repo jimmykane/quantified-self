@@ -7,4 +7,7 @@
 .chart-preview-thumbnail.chart-preview-kpi .chart-preview-renderer { height: 152px; }
 .chart-preview-thumbnail .chart-preview-source { padding-inline: 8px; }
 mat-progress-bar { position: absolute; inset: 0 0 auto; z-index: 1; }
-@media (max-width: 599px) { .chart-preview-renderer { height: 260px; } }
+@media (max-width: 599px) {
+  .chart-preview-renderer { height: 260px; }
+  .chart-preview-hrv .chart-preview-renderer { height: 380px; }
+}

@@ -156,13 +156,18 @@
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-efficiency-trend-chart>
   }
-  @if (chartType === sleepTrendChartType || chartType === hrvTrendChartType) {
-  <app-sleep-trend-chart [displayMode]="chartType === hrvTrendChartType ? 'hrv' : 'sleep'" [unitSettings]="user?.settings?.unitSettings" [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+  @if (chartType === sleepTrendChartType) {
+  <app-sleep-trend-chart [unitSettings]="user?.settings?.unitSettings" [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [sleepTrend]="sleepTrend" [sleepRange]="sleepTrendRange" [sleepWindowLabel]="sleepTrendWindowLabel"
     [canNavigateOlder]="sleepTrendCanNavigateOlder" [canNavigateNewer]="sleepTrendCanNavigateNewer"
     [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls"
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-sleep-trend-chart>
+  }
+  @if (chartType === hrvTrendChartType) {
+  <app-hrv-chart [context]="hrvTrend" [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+    [unitSettings]="user?.settings?.unitSettings" [reserveTitleActionSpace]="showHeaderControls"
+    [preferredSource]="$any(user)?.settings?.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability" />
   }
   @if (chartType === powerCurveChartType) {
   <app-power-curve-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"

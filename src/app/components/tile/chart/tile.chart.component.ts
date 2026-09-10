@@ -1,3 +1,4 @@
+import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import {
   ChartDataCategoryTypes,
@@ -143,6 +144,7 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() freshnessForecast?: DashboardFreshnessForecastContext | null;
   @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
   @Input() efficiencyTrend?: DashboardEfficiencyTrendContext | null;
+  @Input() hrvTrend?: DashboardHrvContext | null;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
   @Input() powerCurve?: DashboardPowerCurveContext | null;
   @Input() aerobicCapacity?: DashboardAerobicCapacityContext | null;

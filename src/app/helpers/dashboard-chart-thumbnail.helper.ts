@@ -8,7 +8,8 @@ import { buildDashboardCartesianPoints } from './dashboard-echarts-cartesian.hel
 import { buildOfficialEChartsThemeTokens } from './echarts-theme.helper';
 import { buildRoutePreviewMapTracks } from './route-preview-map.helper';
 import { resolveActiveRecoveryTotalSeconds, resolveRemainingRecoverySeconds } from './dashboard-recovery-now.helper';
-import { buildDashboardHrvTrendModel } from './dashboard-hrv-chart.helper';
+import { buildHealthMetricEChartsOption } from './health-metric-chart.helper';
+import { buildDashboardEChartsStyleTokens } from './dashboard-echarts-style.helper';
 import { AppColors } from '../services/color/app.colors';
 import * as C from './dashboard-special-chart-types';
 
@@ -114,8 +115,16 @@ export function buildDashboardChartThumbnailOption(preview: DashboardChartPrevie
     return cartesian([line((tile.efficiencyTrend?.points || []).map(point => [point.weekStartMs, point.value]), theme.trendLineColor)]);
   }
   if (type === C.DASHBOARD_HRV_TREND_CHART_TYPE) {
-    return cartesian(buildDashboardHrvTrendModel(tile.sleepTrend).series.map(series =>
-      line(series.values.map((value, index) => [index, value]), series.color)));
+    const chart = tile.hrvTrend?.charts[0];
+    if (!chart) return cartesian([]);
+    const window = tile.hrvTrend!.window;
+    const option = buildHealthMetricEChartsOption(chart.model, window.startTimeMs, window.endTimeMs,
+      buildDashboardEChartsStyleTokens(darkTheme, 72), false, null, true, chart.statusOverlay) as EChartsOption;
+    return { ...option, ...base, xAxis: { type: 'time', show: false, min: window.startTimeMs, max: window.endTimeMs },
+      series: (option.series as SeriesOption[]).map((series): SeriesOption => series.type === 'line'
+        ? { ...series, silent: true, symbolSize: 2, markPoint: undefined, emphasis: { disabled: true } }
+        : { ...series, silent: true }) };
+
   }
   if (type === C.DASHBOARD_SLEEP_TREND_CHART_TYPE) {
     const points = sample(tile.sleepTrend?.points || []);

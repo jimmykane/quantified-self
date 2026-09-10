@@ -1,3 +1,6 @@
+import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
+import { DashboardHrvService } from '../../services/dashboard-hrv.service';
+import { EMPTY } from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
@@ -176,6 +179,7 @@ describe('SummariesComponent', () => {
         { provide: AppUserService, useValue: mockUserService },
         { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
         { provide: AppSleepService, useValue: mockSleepService },
+        { provide: DashboardHrvService, useValue: { watch: vi.fn(() => EMPTY) } },
         { provide: AppEventService, useValue: mockEventService },
         { provide: AppRouteService, useValue: mockRouteService },
         { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
@@ -198,6 +202,30 @@ describe('SummariesComponent', () => {
       writable: true,
       value: originalMatchMedia,
     });
+  });
+
+  it('cancels obsolete HRV windows and clears prior account data before loading another owner', () => {
+    const first = new Subject<DashboardHrvContext>();
+    const second = new Subject<DashboardHrvContext>();
+    const service = TestBed.inject(DashboardHrvService);
+    vi.mocked(service.watch).mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const rebuild = vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
+    const endMs = new Date(2026, 8, 10, 12).getTime();
+    const window = { range: '14d' as const, startMs: endMs - 14 * 86400000, endMs };
+    const context = { charts: [], window: dashboardHrvWindows('14d', endMs).visible, loading: false, error: false };
+    component['syncHrvSubscription']('first-owner', window);
+    first.next(context);
+    expect(component['hrvTrend']).toBe(context);
+    component['syncHrvSubscription']('second-owner', window);
+    expect(first.observed).toBe(false);
+    expect(component['hrvTrend']).toMatchObject({ charts: [], loading: true });
+    first.next(context);
+    expect(component['hrvTrend']?.loading).toBe(true);
+    second.error(new Error('offline'));
+    expect(component['hrvTrend']).toMatchObject({ charts: [], loading: false, error: true });
+    component['unsubscribeHrv']();
+    expect(component['hrvTrend']).toBeNull();
+    expect(rebuild).toHaveBeenCalled();
   });
 
   it('reveals a saved chart only after the picker closes and the dashboard refresh completes', async () => {
@@ -1224,6 +1252,8 @@ describe('SummariesComponent', () => {
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith({
       tileEventAnchorsByOrder: {},
+      hrvTrend: null,
+      hrvPreferredSource: null,
       tiles: component.user.settings.dashboardSettings.tiles,
       events: [],
       tileEventsByOrder: {},

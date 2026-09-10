@@ -1,3 +1,4 @@
+import { ChartsHrvComponent } from '../components/charts/hrv/charts.hrv.component';
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { ChartsColumnsComponent } from '../components/charts/columns/charts.columns.component';
@@ -15,6 +16,7 @@ import { AppSignalChartsModule } from './app-signal-charts.module';
     SharedModule,
     AppSignalChartsModule,
     ChartsSleepTrendComponent,
+    ChartsHrvComponent,
   ],
   declarations: [
     ChartsPieComponent,
@@ -30,6 +32,7 @@ import { AppSignalChartsModule } from './app-signal-charts.module';
     ChartsKpiComponent,
     AppSignalChartsModule,
     ChartsSleepTrendComponent,
+    ChartsHrvComponent,
     ChartRangeSelectorComponent,
   ],
 })

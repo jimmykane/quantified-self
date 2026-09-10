@@ -295,6 +295,16 @@ class MockEventIntensityZonesComponent {
   @Input() mobileTapFeedbackOptions?: unknown;
 }
 
+@Component({ selector: 'app-hrv-chart', template: '', standalone: false })
+class MockHrvChartComponent {
+  @Input() context: unknown;
+  @Input() unitSettings: unknown;
+  @Input() preferredSource: string;
+  @Input() isLoading = false;
+  @Input() darkTheme = false;
+  @Input() reserveTitleActionSpace = false;
+}
+
 describe('TileChartComponent', () => {
   let fixture: ComponentFixture<TileChartComponent>;
   let component: TileChartComponent;
@@ -315,6 +325,7 @@ describe('TileChartComponent', () => {
         MockIntensityDistributionChartComponent,
         MockEfficiencyTrendChartComponent,
         MockSleepTrendChartComponent,
+        MockHrvChartComponent,
         MockPowerCurveChartComponent,
         MockEventIntensityZonesComponent,
       ],
@@ -943,21 +954,20 @@ describe('TileChartComponent', () => {
     expect(sleepTrend.reserveTitleActionSpace).toBe(true);
   });
 
-  it('renders HRV with shared Sleep data and range controls and the user unit preferences', () => {
+  it('renders the Health HRV context with shared range controls and user unit preferences', () => {
     component.user = { ...component.user, settings: { ...component.user?.settings, unitSettings: normalizeUserUnitSettings({}) } } as typeof component.user;
     component.chartType = DASHBOARD_HRV_TREND_CHART_TYPE;
     component.sleepTrend = { points: [], latestPoint: null };
     component.sleepTrendRange = '30d';
     component.showActions = true;
     fixture.detectChanges();
-    const chart = getSleepTrendComponent();
-    expect(chart.displayMode).toBe('hrv');
-    expect(chart.sleepTrend).toBe(component.sleepTrend);
+    const chart = fixture.debugElement.query(By.directive(MockHrvChartComponent)).componentInstance as MockHrvChartComponent;
+    expect(chart.context).toBe(component.hrvTrend);
+    expect(fixture.debugElement.query(By.directive(MockSleepTrendChartComponent))).toBeNull();
     expect(chart.unitSettings).toBe(component.user.settings.unitSettings);
     expect(component.showEventFilters).toBe(false);
     expect(component.showSleepRangeControls).toBe(true);
     expect(fixture.nativeElement.querySelector('[aria-label="Show older HRV window"]')).not.toBeNull();
-    expect(chart.mobileTapFeedbackOptions).toBe(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
     fixture.componentRef.setInput('showActions', false); fixture.componentRef.setInput('previewMode', true); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.tile-local-range-navigation')).toBeNull();
   });

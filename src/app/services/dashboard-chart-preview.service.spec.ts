@@ -1,4 +1,6 @@
-import { SLEEP_PROVIDERS, type SleepSession } from '@shared/sleep';
+import { DashboardHrvService } from './dashboard-hrv.service';
+import { buildDashboardExamplePreview } from '../helpers/dashboard-chart-preview.helper';
+import { dashboardHrvWindows } from '../helpers/dashboard-hrv-context.helper';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Observable, of, throwError } from 'rxjs';
@@ -13,11 +15,12 @@ import { buildDashboardExampleEvents, DashboardChartPreview } from '../helpers/d
 
 describe('read-only chart preview data', () => {
  const events = { getEventsBy: vi.fn() }; const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
+ const hrv = { watch: vi.fn() };
  const sleep = { watchForDashboard: vi.fn() }; const routes = { watchRecentRoutePreviews: vi.fn() };
  const user = { uid: 'test-owner', settings: { unitSettings: { startOfTheWeek: 1 }, dashboardSettings: { tiles: [] } } } as unknown as AppUserInterface;
  beforeEach(() => {
-  vi.clearAllMocks(); events.getEventsBy.mockReturnValue(of([])); derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState())); sleep.watchForDashboard.mockReturnValue(of([])); routes.watchRecentRoutePreviews.mockReturnValue(of([]));
-  TestBed.configureTestingModule({ providers: [DashboardChartPreviewService, { provide: AppEventService, useValue: events }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: AppSleepService, useValue: sleep }, { provide: AppRouteService, useValue: routes }] });
+  vi.clearAllMocks(); hrv.watch.mockReturnValue(of(null)); events.getEventsBy.mockReturnValue(of([])); derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState())); sleep.watchForDashboard.mockReturnValue(of([])); routes.watchRecentRoutePreviews.mockReturnValue(of([]));
+  TestBed.configureTestingModule({ providers: [DashboardChartPreviewService, { provide: DashboardHrvService, useValue: hrv }, { provide: AppEventService, useValue: events }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: AppSleepService, useValue: sleep }, { provide: AppRouteService, useValue: routes }] });
  });
  it('does nothing until subscribed, shares a bounded event query and releases its listener', () => {
   const cleanup = vi.fn(); events.getEventsBy.mockReturnValue(new Observable(subscriber => { subscriber.next(buildDashboardExampleEvents()); return cleanup; }));
@@ -46,37 +49,22 @@ describe('read-only chart preview data', () => {
   service.watch(user, tile, { ...seed, tileEventAnchorsByOrder: { [tile.order]: Date.now()-90*86400000 } }).subscribe();
   expect(events.getEventsBy).toHaveBeenCalledTimes(1);
  });
- it('shares the bounded sleep query between Sleep and HRV, with separate data availability', () => {
-  const cleanup = vi.fn();
-  sleep.watchForDashboard.mockReturnValue(new Observable(subscriber => { subscriber.next([]); return cleanup; }));
-  const service = TestBed.inject(DashboardChartPreviewService);
-  const catalog = getDashboardChartCatalog();
-  const sleepTile = catalog.find(entry => entry.definition.id === 'curated-sleep')!.tile;
-  const hrvTile = catalog.find(entry => entry.definition.id === 'curated-hrv')!.tile;
-  const a = service.watch(user, sleepTile, { tiles: [] }).subscribe();
-  const values: DashboardChartPreview[] = [];
-  const b = service.watch(user, hrvTile, { tiles: [] }).subscribe(value => values.push(value));
-  expect(sleep.watchForDashboard).toHaveBeenCalledOnce();
-  const [uid, start, end] = sleep.watchForDashboard.mock.calls[0];
-  expect(uid).toBe(user.uid); expect(end - start).toBe(14 * 86400000);
-  expect(events.getEventsBy).not.toHaveBeenCalled(); expect(derived.watch).not.toHaveBeenCalled();
-  expect(values.at(-1)?.tile['chartType']).toBe('HrvTrend'); expect(values.at(-1)?.source).toBe('example');
-  a.unsubscribe(); expect(cleanup).not.toHaveBeenCalled(); b.unsubscribe(); expect(cleanup).toHaveBeenCalledOnce();
- });
-
- it('uses recorded HRV from the loaded sleep window and keeps sleep without HRV labelled as an example', () => {
-  const now = Date.now();
-  const session = { id: 'test-night', source: { provider: SLEEP_PROVIDERS.GarminAPI }, sleepDate: new Date(now).toISOString().slice(0, 10),
-   startTimeMs: now - 8 * 3600000, endTimeMs: now, durationSeconds: 8 * 3600, vitals: { averageHrvMs: 55 } } as SleepSession;
-  const seed = { tiles: [], sleepSessions: [session], sleepTrendWindow: { startMs: now - 14 * 86400000, endMs: now } };
+ it('loads HRV through the Health adapter and reuses only matching current data', () => {
   const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile;
+  const context = buildDashboardExamplePreview(tile).tile['hrvTrend'];
+  context.window = dashboardHrvWindows().visible;
+  hrv.watch.mockReturnValue(of(context));
   const service = TestBed.inject(DashboardChartPreviewService);
   let result: DashboardChartPreview;
-  service.watch(user, tile, seed).subscribe(value => result = value);
-  expect(result!.source).toBe('user'); expect(result!.tile['sleepTrend'].latestPoint.averageHrvMs).toBe(55);
-  expect(sleep.watchForDashboard).not.toHaveBeenCalled();
-  service.watch(user, tile, { ...seed, sleepSessions: [{ ...session, vitals: {} }] }).subscribe(value => result = value);
-  expect(result!.source).toBe('example'); expect(events.getEventsBy).not.toHaveBeenCalled();
+  service.watch(user, tile, { tiles: [], hrvTrend: context }).subscribe(value => result = value);
+  expect(result!.source).toBe('user'); expect(hrv.watch).not.toHaveBeenCalled();
+  service.watch(user, tile, { tiles: [] }).subscribe(value => result = value);
+  expect(hrv.watch).toHaveBeenCalledWith(user.uid, '14d', expect.any(Number), user.settings.unitSettings);
+  expect(result!.tile['hrvTrend']).toEqual(context);
+  expect(sleep.watchForDashboard).not.toHaveBeenCalled(); expect(events.getEventsBy).not.toHaveBeenCalled();
+  hrv.watch.mockReturnValue(of({ ...context, charts: [] }));
+  service.watch(user, tile, { tiles: [] }).subscribe(value => result = value);
+  expect(result!.source).toBe('example');
  });
  it('labels failed and missing personal data as an example without mixing sources', () => {
   events.getEventsBy.mockReturnValue(throwError(() => new Error('offline')));
