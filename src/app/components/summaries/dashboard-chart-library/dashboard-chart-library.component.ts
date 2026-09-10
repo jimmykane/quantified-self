@@ -159,7 +159,7 @@ export class DashboardChartLibraryComponent {
   }
   async createCustom(): Promise<void> { await this.state.createCustom(this.user()); this.focusDetail(); }
   configure(): void { this.state.configure(); this.focusDetail(); }
-  async back(): Promise<void> { await this.state.back(); if (!this.state.draft()) this.focusBrowser(); }
+  async back(): Promise<void> { await this.state.back(); if (this.state.draft()) this.focusDetail(); else this.focusBrowser(); }
   async close(): Promise<void> { await this.state.close(); }
   private focusDetail(): void { this.focusContent(() => this.detail()?.nativeElement); }
   private focusBrowser(): void { this.focusContent(() => this.browser()?.nativeElement); }

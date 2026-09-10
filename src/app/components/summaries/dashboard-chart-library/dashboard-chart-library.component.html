@@ -40,7 +40,7 @@
     @if (state.draft(); as draft) {
     <div #detail class="chart-library-detail qs-scrollbar" [class.is-configuring]="state.configuring()" tabindex="-1">
       <div class="chart-library-detail-heading" [class.chart-library-preview-heading]="!state.configuring()">
-        <button class="chart-library-back" mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
+        <button class="chart-library-back" mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>{{ state.configuring() ? 'Back to chart' : 'Back to charts' }}</button>
         @if (!state.configuring()) {
           <button mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>Chart settings</button>
         }

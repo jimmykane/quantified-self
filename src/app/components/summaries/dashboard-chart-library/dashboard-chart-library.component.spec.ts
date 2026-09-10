@@ -199,6 +199,30 @@ describe('responsive chart picker interactions', () => {
     expect(document.body.querySelector('.chart-library-detail')).toBeNull();
     expect(component.expanded()).toBe(true); expect(save).not.toHaveBeenCalled();
   });
+  it('returns from mobile settings to the chart without discarding unsaved properties', async () => {
+    mobile = true;
+    await component.toggle(); await component.select(component.filtered()[0]);
+    component.configure(); await settle();
+    const editor = component.state.editor()!;
+    editor.customEventRange = '30d'; component.state.refreshDraft();
+    const draft = component.state.draft();
+    haptics.selection.mockClear();
+    button('Back to chart').click(); await settle();
+    expect(component.state.configuring()).toBe(false);
+    expect(component.state.editor()).toBe(editor);
+    expect(component.state.draft()).toBe(draft);
+    expect(editor.customEventRange).toBe('30d');
+    expect(button('Chart settings')).toBeDefined();
+    expect(document.body.querySelector('app-dashboard-chart-preview')).not.toBeNull();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(save).not.toHaveBeenCalled();
+    button('Chart settings').click(); await settle();
+    expect(component.state.editor()).toBe(editor);
+    component.state.busy.set(true); haptics.selection.mockClear();
+    await component.back();
+    expect(component.state.configuring()).toBe(true);
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
   it('updates details to describe the configured chart instead of the original preset', async () => {
     const catalog = getDashboardChartCatalog();
     const distance = catalog.find(entry => entry.definition.id === 'custom-distance-columns')!;
@@ -259,7 +283,7 @@ describe('responsive chart picker interactions', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(save).not.toHaveBeenCalled();
   });
-  it('opens properties from the visible settings action and returns to the gallery', async () => {
+  it('opens properties from the visible settings action and returns to the chart', async () => {
     await component.toggle(); await component.select(component.filtered()[0]); await settle();
     const settings = button('Chart settings');
     const preview = document.body.querySelector('.chart-library-preview')!;
@@ -270,7 +294,7 @@ describe('responsive chart picker interactions', () => {
     expect(document.body.querySelector('.chart-library-properties')).not.toBeNull();
     expect(haptics.selection).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(document.activeElement).toBe(document.body.querySelector('.chart-library-detail')));
-    button('Back to charts').click(); await settle();
+    button('Back to chart').click(); await settle();
     expect(document.body.querySelector('.chart-library-browser')).not.toBeNull();
     expect(document.body.querySelector('.chart-library-properties')).toBeNull();
     expect(save).not.toHaveBeenCalled();

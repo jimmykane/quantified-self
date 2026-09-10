@@ -97,6 +97,12 @@ export class DashboardChartLibraryState implements OnDestroy {
   configure(): void { if (!this.configuring()) { this.haptics.selection(); this.configuring.set(true); } }
 
   async back(): Promise<void> {
+    if (this.busy()) return;
+    if (this.configuring()) {
+      this.haptics.selection();
+      this.configuring.set(false);
+      return;
+    }
     if (this.busy() || !(await this.canDiscard())) return;
     this.haptics.selection();
     this.clearSelection();
