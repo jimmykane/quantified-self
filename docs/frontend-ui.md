@@ -147,11 +147,15 @@ and on failure. Calendar previews use the stateless calendar grid, so browsing c
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
 
 `DashboardConfigurationService` persists owner-scoped dashboard patches through Firestore transactions. It compares the
-fields being changed against the draft baseline and refuses stale saves. It merges only dashboard settings, preserving
+fields being changed against the draft baseline and refuses stale saves. Both sides use the profile hydration
+normalizer, so defaults and legacy tile migrations do not look like concurrent edits. It merges only dashboard settings, preserving
 server-managed Training settings. Existing tile resize/reorder/removal and filter/display changes use the same transaction
 path. No backend callable or schema migration is introduced. Latest-add Undo retains before/after settings, checks the
 current layout locally and transactionally, and preserves auto-tile dismissal when removing the addition. Another dashboard
-change disables that Undo. Failed saves retain drafts and report the error; tile menu mutations roll back only their own
+change disables that Undo. Undo asks before discarding an open draft and closes its stale editor after success.
+Preview construction also covers duplicate selections that cannot be saved, so details and discard protection always
+follow the current form. Edits retain the original tile as the source of saved display settings; settings are inert while
+a save is pending. Failed saves retain drafts and report the error; tile menu mutations roll back only their own
 unchanged optimistic fields. Removing the final chart is supported.
 
 Visual verification uses synthetic data with the real Angular components and Material theme. Review captures:

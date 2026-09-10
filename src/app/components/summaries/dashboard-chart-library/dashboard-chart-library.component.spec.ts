@@ -14,6 +14,7 @@ import { AppSleepService } from '../../../services/app.sleep.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { DashboardDerivedMetricsService } from '../../../services/dashboard-derived-metrics.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
+import { getDashboardChartCatalog } from '../../../helpers/dashboard-chart-catalog.helper';
 
 describe('inline chart library interactions', () => {
   let fixture: ComponentFixture<DashboardChartLibraryComponent>;
@@ -60,5 +61,34 @@ describe('inline chart library interactions', () => {
     button('Back to charts').click(); await settle();
     expect(fixture.nativeElement.querySelector('.chart-library-detail')).toBeNull();
     expect(component.expanded()).toBe(true); expect(save).not.toHaveBeenCalled();
+  });
+  it('updates details to describe the configured chart instead of the original preset', async () => {
+    const catalog = getDashboardChartCatalog();
+    const distance = catalog.find(entry => entry.definition.id === 'custom-distance-columns')!;
+    const map = catalog.find(entry => entry.definition.category === 'map' && entry.tile['mapSource'] === 'events')!;
+    fixture.componentRef.setInput('lane', distance.lane);
+    await component.toggle(); await component.select(distance);
+    component.state.editor()!.onCategoryChange('map'); component.state.refreshDraft(); await settle();
+    expect(fixture.nativeElement.querySelector('.chart-library-detail h3').textContent).toBe(map.definition.label);
+    expect(component.explanation()).toBe(map.definition.description);
+    expect(save).not.toHaveBeenCalled();
+  });
+  it('asks only once when cancelling closure of a dirty custom chart', async () => {
+    const open = vi.spyOn(TestBed.inject(MatDialog), 'open');
+    fixture.componentRef.setInput('lane', 'section:custom');
+    await component.toggle();
+    component.state.editor()!.customEventRange = '30d'; component.state.refreshDraft();
+    await component.toggle();
+    expect(open).toHaveBeenCalledOnce(); expect(component.expanded()).toBe(true);
+    expect(component.state.editor()!.customEventRange).toBe('30d');
+  });
+  it('locks chart settings until the pending save completes', async () => {
+    let resolve!: () => void; save.mockReturnValueOnce(new Promise<void>(done => resolve = done));
+    await component.toggle(); await component.select(component.visible()[0]); component.state.configure(); await settle();
+    const saving = component.state.save(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-dashboard-tile-editor').hasAttribute('inert')).toBe(true);
+    expect(button('Saving…').disabled).toBe(true);
+    resolve(); await saving; await settle();
+    expect(fixture.nativeElement.querySelector('.chart-library-detail')).toBeNull();
   });
 });

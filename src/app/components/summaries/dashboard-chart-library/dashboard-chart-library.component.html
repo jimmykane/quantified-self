@@ -38,12 +38,12 @@
     @if (state.draft(); as draft) {
     <div class="chart-library-detail" tabindex="-1">
       <button mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
-      <h3>{{ state.selected()?.definition?.label || (state.editor()?.mode === 'edit' ? 'Edit chart' : 'Custom chart') }}</h3>
+      <h3>{{ draftDefinition()?.label || (state.editor()?.mode === 'edit' ? 'Edit chart' : 'Custom chart') }}</h3>
       <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
       <p>{{ explanation() }}</p><p class="chart-library-destination">{{ dataScope() }}</p>
       <p class="chart-library-destination">{{ state.editor()?.mode === 'edit' ? 'Saved in' : 'Adds to' }} {{ destination() }}</p>
       @if (state.configuring()) {
-      <app-dashboard-tile-editor [configuration]="state.editor()!" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
+      <app-dashboard-tile-editor [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
       } @else { <button mat-button (click)="state.configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>Chart settings</button> }
       @if (state.error()) { <p class="chart-library-error" role="alert">{{ state.error() }}</p> }
       <div class="chart-library-save"><button mat-flat-button [disabled]="state.busy() || state.editor()?.isSaveDisabled" (click)="state.save()"><span class="chart-library-button-content"><span class="chart-library-button-icon">@if (state.busy()) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>{{ state.editor()?.mode === 'edit' ? 'check' : 'add' }}</mat-icon> }</span><span>{{ state.busy() ? 'Saving…' : state.editor()?.mode === 'edit' ? 'Save changes' : 'Add to dashboard' }}</span></span></button></div>

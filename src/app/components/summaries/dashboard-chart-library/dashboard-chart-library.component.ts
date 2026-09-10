@@ -3,7 +3,7 @@ import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-cha
 import { DASHBOARD_TILE_EVENT_RANGE_OPTIONS, normalizeDashboardTileEventFilters } from '../../../helpers/dashboard-tile-event-filters.helper';
 import { Component, computed, inject, input, signal, ElementRef } from '@angular/core';
 import { AppUserInterface } from '../../../models/app-user.interface';
-import { getAvailableDashboardCharts } from '../../../helpers/dashboard-chart-catalog.helper';
+import { getAvailableDashboardCharts, getDashboardChartCatalog, matchesDashboardPreset } from '../../../helpers/dashboard-chart-catalog.helper';
 import { DashboardTileLaneKey, getDashboardTileSectionDefinition, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
 import { DashboardPreviewInput } from '../../../helpers/dashboard-chart-preview.helper';
 import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
@@ -24,7 +24,12 @@ export class DashboardChartLibraryComponent {
   readonly visible = computed(() => this.filtered().slice(this.currentPage()*6, this.currentPage()*6+6));
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length/6)));
   readonly currentPage = computed(() => Math.min(this.page(), this.totalPages()-1));
-  readonly explanation = computed(() => resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.state.selected()?.definition.description || 'Choose a metric, chart style, aggregation and date range.');
+  private readonly catalog = getDashboardChartCatalog();
+  readonly draftDefinition = computed(() => {
+    const draft = this.state.draft();
+    return draft ? this.catalog.find(entry => matchesDashboardPreset(draft, entry.tile))?.definition : null;
+  });
+  readonly explanation = computed(() => resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.draftDefinition()?.description || 'Choose a metric, chart style, aggregation and date range.');
   readonly dataScope = computed(() => {
     const tile = this.state.draft();
     if (!tile) return '';
@@ -52,14 +57,15 @@ export class DashboardChartLibraryComponent {
     return lane === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(lane.slice(8) as never).label;
   });
   async toggle(): Promise<void> {
+    const wasExpanded = this.expanded();
     await this.state.open(this.lane());
-    if (this.expanded() && this.lane() === 'section:custom' && !this.available().length) await this.createCustom();
+    if (!wasExpanded && this.expanded() && this.lane() === 'section:custom' && !this.available().length) await this.createCustom();
   }
   async select(entry: ReturnType<typeof getAvailableDashboardCharts>[number]): Promise<void> {
     await this.state.select(this.user(), entry); this.focusDetail();
   }
   async createCustom(): Promise<void> { await this.state.createCustom(this.user()); this.focusDetail(); }
-  async back(): Promise<void> { await this.state.back(); requestAnimationFrame(() => this.element.nativeElement.querySelector<HTMLInputElement>('input')?.focus()); }
+  async back(): Promise<void> { await this.state.back(); if (!this.state.draft()) requestAnimationFrame(() => this.element.nativeElement.querySelector<HTMLInputElement>('input')?.focus()); }
   async close(): Promise<void> { await this.state.close(); if (!this.expanded()) this.element.nativeElement.querySelector<HTMLButtonElement>('.chart-library-entry button')?.focus(); }
   private focusDetail(): void { requestAnimationFrame(() => this.element.nativeElement.querySelector<HTMLElement>('.chart-library-detail')?.focus()); }
   filter(value: string): void { this.search.set(value); this.page.set(0); }

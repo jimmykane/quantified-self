@@ -73,6 +73,40 @@ describe('inline chart library state', () => {
     dialog.open.mockReturnValue({ afterClosed: () => of(true) });
     await state.open('kpi'); expect(state.activeLane()).toBe('kpi'); expect(state.draft()).toBeNull();
   });
+  it('previews an invalid duplicate choice and still guards unsaved changes', async () => {
+    user.settings.dashboardSettings.tiles = [calendar.tile];
+    await state.open('section:custom'); await state.createCustom(user);
+    state.editor()!.category = 'curated'; state.editor()!.curatedChartType = calendar.tile['chartType']; state.refreshDraft();
+    expect(state.editor()!.isSaveDisabled).toBe(true);
+    expect(state.draft()?.['chartType']).toBe(calendar.tile['chartType']);
+    await state.close();
+    expect(dialog.open).toHaveBeenCalledOnce(); expect(state.editor()).not.toBeNull();
+    expect(persistence.save).not.toHaveBeenCalled();
+  });
+  it('previews retained chart display settings after changing away and back', async () => {
+    const power = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-power-curve')!.tile);
+    power['displaySettings'] = { powerCurveCompareMode: 'best30d' };
+    user.settings.dashboardSettings.tiles = [power];
+    await state.edit(user, power.order);
+    state.editor()!.category = 'custom'; state.refreshDraft();
+    state.editor()!.syncFormStateFromTile(power); state.refreshDraft();
+    expect(state.draft()?.['eventFilters']).toEqual(power['eventFilters']);
+    expect(state.draft()?.['displaySettings']).toEqual(power['displaySettings']);
+    await state.save();
+    expect(user.settings.dashboardSettings.tiles[0]['eventFilters']).toEqual(power['eventFilters']);
+  });
+  it('requires discarding an open draft before Undo and closes the stale editor after success', async () => {
+    await state.select(user, calendar); await state.save();
+    await state.open('section:custom'); await state.createCustom(user);
+    state.editor()!.customEventRange = '30d'; state.refreshDraft();
+    await state.undo(user);
+    expect(dialog.open).toHaveBeenCalledOnce(); expect(persistence.save).toHaveBeenCalledTimes(1);
+    expect(state.editor()).not.toBeNull(); expect(state.undoAvailable()).toBe(true);
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    await state.undo(user);
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(state.editor()).toBeNull(); expect(state.activeLane()).toBeNull();
+  });
   it('disables Undo after another layout change and never removes a different tile', async () => {
     await state.select(user, calendar); await state.save();
     user.settings.dashboardSettings.tiles[0].size.columns = 4;

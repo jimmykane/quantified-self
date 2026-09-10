@@ -1,5 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { doc, Firestore, runTransaction } from '../firebase/firestore';
+import { AppUserUtilities } from '../utils/app.user.utilities';
+import { User } from '@sports-alliance/sports-lib';
 import { AppDashboardSettingsInterface } from '../models/app-user.interface';
 import equal from 'fast-deep-equal';
 
@@ -11,16 +13,18 @@ export function cloneDashboardSettings(settings: Partial<AppDashboardSettingsInt
   return JSON.parse(JSON.stringify(settings || {}));
 }
 
-function fieldValue(settings: Partial<AppDashboardSettingsInterface>, key: string): unknown {
-  if (key === 'tiles') return settings.tiles || [];
-  if (key === 'showTodaySummary') return settings.showTodaySummary !== false;
-  if (key === 'autoTiles') return settings.autoTiles || {};
-  if (key === 'dismissedCuratedRecoveryNowTile') return settings.dismissedCuratedRecoveryNowTile === true;
-  return settings[key] ?? null;
+function normalizeDashboardConfiguration(settings: Partial<AppDashboardSettingsInterface>): AppDashboardSettingsInterface {
+  // Profile hydration migrates old tiles and fills defaults without writing them.
+  // Compare that same representation, on copies so validation never mutates inputs.
+  return AppUserUtilities.fillMissingAppSettings({
+    settings: { dashboardSettings: cloneDashboardSettings(settings) },
+  } as User).dashboardSettings;
 }
 
 export function assertDashboardConfigurationCurrent(current: Partial<AppDashboardSettingsInterface>, expected: Partial<AppDashboardSettingsInterface>, keys: string[]): void {
-  if (keys.some(key => !equal(fieldValue(current, key), fieldValue(expected, key)))) throw new DashboardConfigurationConflict();
+  const normalizedCurrent = normalizeDashboardConfiguration(current);
+  const normalizedExpected = normalizeDashboardConfiguration(expected);
+  if (keys.some(key => !equal(normalizedCurrent[key] ?? null, normalizedExpected[key] ?? null))) throw new DashboardConfigurationConflict();
 }
 
 /** Owner-scoped settings only. Transactions also guard drafts and Undo because

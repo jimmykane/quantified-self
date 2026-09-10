@@ -1351,30 +1351,30 @@ export class DashboardTileConfiguration {
     size: { columns: number; rows: number },
     existingTile: TileSettingsInterface | null,
   ): TileSettingsInterface | null {
-    if (this.category === 'map') {
-      if (this.isMapOptionDisabled()) {
-        this.saveError = 'This map source already exists.';
-        return null;
-      }
-      return this.buildMapTile(order, size, existingTile);
+    if (this.category === 'map' && this.isMapOptionDisabled()) {
+      this.saveError = 'This map source already exists.';
+      return null;
     }
-
-    if (this.category === 'curated') {
-      if (this.isCuratedOptionDisabled(this.curatedChartType)) {
-        this.saveError = 'This curated chart already exists.';
-        return null;
-      }
-      return this.buildCuratedTile(this.curatedChartType, order, size, existingTile);
+    if (this.category === 'curated' && this.isCuratedOptionDisabled(this.curatedChartType)) {
+      this.saveError = 'This curated chart already exists.';
+      return null;
     }
-
-    if (this.category === 'kpi') {
-      if (this.isKpiOptionDisabled(this.kpiChartType)) {
-        this.saveError = 'This KPI chart already exists.';
-        return null;
-      }
-      return this.buildKpiTile(this.kpiChartType, order, size);
+    if (this.category === 'kpi' && this.isKpiOptionDisabled(this.kpiChartType)) {
+      this.saveError = 'This KPI chart already exists.';
+      return null;
     }
+    return this.buildPreviewTile(order, size, existingTile);
+  }
 
+  /** Preview the current selection even when a duplicate prevents saving it. */
+  public buildPreviewTile(
+    order: number,
+    size: { columns: number; rows: number },
+    existingTile: TileSettingsInterface | null,
+  ): TileSettingsInterface {
+    if (this.category === 'map') return this.buildMapTile(order, size, existingTile);
+    if (this.category === 'curated') return this.buildCuratedTile(this.curatedChartType, order, size, existingTile);
+    if (this.category === 'kpi') return this.buildKpiTile(this.kpiChartType, order, size);
     return this.buildCustomTile(order, size, existingTile);
   }
 

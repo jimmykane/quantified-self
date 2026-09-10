@@ -34,6 +34,7 @@ export class DashboardChartLibraryState implements OnDestroy {
   readonly undoAvailable = signal(false);
   readonly changed$ = new Subject<number | null>();
   private initialDraft = '';
+  private originalTile: TileSettingsInterface | null = null;
   private undoState: { uid: string; before: AppDashboardSettingsInterface; after: AppDashboardSettingsInterface } | null = null;
   private confirming = false;
   private mutationVersion = 0;
@@ -96,9 +97,8 @@ export class DashboardChartLibraryState implements OnDestroy {
   refreshDraft(): void {
     const editor = this.editor();
     if (!editor) return;
-    const previous = this.draft();
-    const next = editor.buildTileForMode(previous?.order || 0, previous?.size || { columns: 1, rows: 1 }, editor.mode === 'edit' ? previous : null);
-    if (next) this.draft.set(next);
+    const original = this.originalTile;
+    this.draft.set(editor.buildPreviewTile(original?.order || 0, original?.size || { columns: 1, rows: 1 }, editor.mode === 'edit' ? original : null));
   }
 
   async save(): Promise<void> {
@@ -131,6 +131,7 @@ export class DashboardChartLibraryState implements OnDestroy {
     const undo = this.undoState;
     const contextVersion = this.contextVersion;
     if (!undo || !this.undoAvailable() || this.busy() || undo.uid !== user.uid) return;
+    if (!(await this.canDiscard()) || this.busy() || contextVersion !== this.contextVersion || undo !== this.undoState) return;
     this.haptics.selection(); this.busy.set(true); this.error.set('');
     try {
       assertDashboardConfigurationCurrent(user.settings.dashboardSettings, undo.after, Object.keys(undo.after));
@@ -142,6 +143,7 @@ export class DashboardChartLibraryState implements OnDestroy {
       await this.persistence.save(user.uid, undo.after, restored);
       if (contextVersion !== this.contextVersion) return;
       user.settings.dashboardSettings = restored;
+      this.clearSelection(); this.activeLane.set(null);
       this.undoAvailable.set(false); this.changed$.next(null); this.haptics.success();
     } catch (error) { if (contextVersion === this.contextVersion) { this.error.set(error instanceof Error ? error.message : 'Could not undo the addition.'); this.haptics.error(); } }
     finally { this.busy.set(false); }
@@ -160,7 +162,7 @@ export class DashboardChartLibraryState implements OnDestroy {
     controller.syncFormStateFromTile(tile);
     controller.activeWorkflowTab = 'manual';
     this.editor.set(controller);
-    this.draft.set(JSON.parse(JSON.stringify(tile)));
+    this.originalTile = JSON.parse(JSON.stringify(tile));
     this.refreshDraft();
     this.initialDraft = JSON.stringify(this.draft());
   }
@@ -187,7 +189,7 @@ export class DashboardChartLibraryState implements OnDestroy {
   }
 
   private clearSelection(): void {
-    this.editor()?.destroy(); this.editor.set(null); this.draft.set(null); this.selected.set(null); this.configuring.set(false); this.error.set(''); this.initialDraft = '';
+    this.editor()?.destroy(); this.editor.set(null); this.draft.set(null); this.selected.set(null); this.configuring.set(false); this.error.set(''); this.initialDraft = ''; this.originalTile = null;
   }
 
   private async canDiscard(): Promise<boolean> {
