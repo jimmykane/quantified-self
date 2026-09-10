@@ -30,6 +30,21 @@ export interface DashboardChartPreview {
   anchorMs: number;
 }
 
+/** List previews use current, already-loaded data only. Missing sources stay explicit examples. */
+export function buildDashboardThumbnailPreview(tile: TileSettingsInterface, seed: DashboardPreviewInput): DashboardChartPreview {
+  const input = buildDashboardPreviewSeed(tile, seed);
+  const existing = buildDashboardTileViewModels(input)[0];
+  const type = `${tile['chartType'] || ''}`;
+  if (C.isDashboardKpiChartType(type) && type !== C.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) {
+    const context = existing[contexts[type]] as { trend8Weeks?: { value: number | null }[]; trend?: { value: number | null }[] } | undefined;
+    // A headline alone cannot draw a sparkline. Keep its illustrative fallback labelled as example data.
+    if (!(context?.trend8Weeks || context?.trend)?.some(point => Number.isFinite(point.value))) return buildDashboardExamplePreview(tile);
+  }
+  return dashboardPreviewHasData(existing, input)
+    ? { tile: existing, source: 'user', loading: false, note: '', calendarEvents: input.events || [], anchorMs: Date.now() }
+    : buildDashboardExamplePreview(tile);
+}
+
 const DAY = 86400000;
 const K = C;
 const contexts: Record<string, keyof DashboardChartTileViewModel> = {

@@ -10,7 +10,7 @@ import { Component, computed, inject, input, signal, ElementRef, effect, untrack
 import { AppUserInterface } from '../../../models/app-user.interface';
 import { getAvailableDashboardCharts, getDashboardChartCatalog, matchesDashboardPreset } from '../../../helpers/dashboard-chart-catalog.helper';
 import { DashboardTileLaneKey, getDashboardTileSectionDefinition, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
-import { DashboardPreviewInput } from '../../../helpers/dashboard-chart-preview.helper';
+import { DashboardPreviewInput, buildDashboardThumbnailPreview } from '../../../helpers/dashboard-chart-preview.helper';
 import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
 import { DashboardChartPreviewService } from '../../../services/dashboard-chart-preview.service';
 @Component({ selector: 'app-dashboard-chart-library', standalone: false, templateUrl: './dashboard-chart-library.component.html', styleUrls: ['./dashboard-chart-library.component.css'], providers: [DashboardChartPreviewService] })
@@ -42,6 +42,15 @@ export class DashboardChartLibraryComponent {
   readonly addActionLabel = computed(() => `Add chart to ${this.sectionLabel()}`);
   readonly addActionHint = computed(() => this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
   readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group())));
+  private readonly availablePreviews = computed(() => this.available().map(entry => ({
+    ...entry, preview: buildDashboardThumbnailPreview(entry.tile, this.seed()),
+    title: entry.definition.label.replace(/^KPI:\s*/, ''),
+    format: entry.definition.category === 'kpi' ? 'KPI' : entry.definition.category === 'map' ? 'Map' : 'Chart',
+  })));
+  readonly rowPreviews = computed(() => {
+    const visible = new Set(this.filtered().map(entry => entry.definition.id));
+    return this.availablePreviews().filter(entry => visible.has(entry.definition.id));
+  });
   private readonly catalog = getDashboardChartCatalog();
   readonly draftDefinition = computed(() => {
     const draft = this.state.draft();

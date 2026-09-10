@@ -21,12 +21,14 @@
       }
       <p class="chart-library-count" aria-live="polite">{{ filtered().length }} {{ filtered().length === 1 ? 'chart' : 'charts' }} available</p>
       <mat-action-list class="chart-library-list qs-scrollbar" aria-label="Available charts">
-        @for (entry of filtered(); track entry.definition.id) {
-          <button mat-list-item type="button" [attr.aria-pressed]="state.selected()?.definition?.id === entry.definition.id" [attr.aria-label]="'Preview ' + entry.definition.label" [disabled]="state.busy()" (click)="select(entry)">
-            <mat-icon matListItemIcon aria-hidden="true">{{ entry.definition.icon }}</mat-icon>
-            <span matListItemTitle>{{ entry.definition.label }}</span>
-            <span matListItemLine>{{ entry.definition.description }}</span>
-            <span matListItemMeta class="chart-library-row-meta" aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
+        @for (entry of rowPreviews(); track entry.definition.id) {
+          <button mat-list-item type="button" [attr.aria-pressed]="state.selected()?.definition?.id === entry.definition.id" [attr.aria-label]="'Preview ' + entry.definition.label" [attr.aria-describedby]="'chart-source-' + entry.definition.id" [disabled]="state.busy()" (click)="select(entry)">
+            <span matListItemTitle>{{ entry.title }}</span>
+            <span matListItemLine [id]="'chart-source-' + entry.definition.id">{{ entry.format }} · {{ entry.preview.source === 'user' ? 'Your data' : 'Example data' }}</span>
+            <span matListItemMeta class="chart-library-row-meta" aria-hidden="true">
+              <app-dashboard-chart-thumbnail [preview]="entry.preview" [darkTheme]="darkTheme()"></app-dashboard-chart-thumbnail>
+              <mat-icon>chevron_right</mat-icon>
+            </span>
           </button>
         } @empty { <p class="chart-library-empty">{{ available().length ? 'No charts match your search.' : 'All presets in this section are on your dashboard.' }}</p> }
       </mat-action-list>

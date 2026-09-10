@@ -1,5 +1,6 @@
 import { ActivityCalendarGridComponent } from '../components/calendar/activity-calendar-grid/activity-calendar-grid.component';
 import { DashboardChartPreviewComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-preview.component';
+import { DashboardChartThumbnailComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-thumbnail.component';
 import { DashboardTileEditorComponent } from '../components/summaries/dashboard-chart-library/dashboard-tile-editor.component';
 import { DashboardChartLibraryComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-library.component';
 import { NgModule } from '@angular/core';
@@ -31,6 +32,7 @@ import { EventTableModule } from './event-table.module';
 @NgModule({
     imports: [
         CommonModule,
+        DashboardChartThumbnailComponent,
         SharedModule,
         MaterialModule,
         AppChartsModule,

@@ -3,8 +3,8 @@ import { Subscription } from 'rxjs';
 import { TileSettingsInterface, TileTypes } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import { DashboardChartPreviewService } from '../../../services/dashboard-chart-preview.service';
-import { DashboardPreviewInput, DashboardChartPreview, buildDashboardExamplePreview, buildDashboardPreviewSeed, dashboardPreviewHasData } from '../../../helpers/dashboard-chart-preview.helper';
-import { buildDashboardTileViewModels, DashboardChartTileViewModel, DashboardMapTileViewModel } from '../../../helpers/dashboard-tile-view-model.helper';
+import { DashboardPreviewInput, DashboardChartPreview, buildDashboardThumbnailPreview } from '../../../helpers/dashboard-chart-preview.helper';
+import { DashboardChartTileViewModel, DashboardMapTileViewModel } from '../../../helpers/dashboard-tile-view-model.helper';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, isDashboardKpiChartType } from '../../../helpers/dashboard-special-chart-types';
 @Component({ selector: 'app-dashboard-chart-preview', standalone: false, templateUrl: './dashboard-chart-preview.component.html', styleUrls: ['./dashboard-chart-preview.component.css'] })
@@ -27,10 +27,7 @@ export class DashboardChartPreviewComponent implements OnChanges, OnDestroy {
     this.subscription.unsubscribe();
     if (!this.tile || !this.user) return;
     if (this.thumbnail) {
-      const example = buildDashboardExamplePreview(this.tile);
-      const input = buildDashboardPreviewSeed(this.tile, this.seed);
-      const existing = buildDashboardTileViewModels(input)[0];
-      this.preview.set(dashboardPreviewHasData(existing, input) ? { ...example, source: 'user', tile: existing, note: '', calendarEvents: input.events || [], anchorMs: Date.now() } : example);
+      this.preview.set(buildDashboardThumbnailPreview(this.tile, this.seed));
       return;
     }
     this.subscription = this.data.watch(this.user, this.tile, this.seed).subscribe(preview => this.preview.set(preview));

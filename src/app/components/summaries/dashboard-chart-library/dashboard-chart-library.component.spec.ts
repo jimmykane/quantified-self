@@ -105,6 +105,9 @@ describe('responsive chart picker interactions', () => {
   it('lists all available charts without pagination and combines search with KPI groups', async () => {
     button('Add chart').click(); await settle();
     expect(document.body.querySelectorAll('button[mat-list-item]')).toHaveLength(17);
+    expect(document.body.querySelectorAll('button[mat-list-item] app-dashboard-chart-thumbnail')).toHaveLength(17);
+    expect(document.body.querySelector('button[mat-list-item] [matListItemIcon]')).toBeNull();
+    expect(document.body.querySelector('button[mat-list-item] [matListItemLine]')?.textContent).toContain('KPI · Example data');
     expect(document.body.querySelector('[aria-label="Next charts"]')).toBeNull();
     component.selectGroup('execution'); component.filter('aerobic'); await settle();
     expect(document.body.querySelectorAll('button[mat-list-item]')).toHaveLength(2);
@@ -123,6 +126,16 @@ describe('responsive chart picker interactions', () => {
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(document.body.querySelectorAll('app-dashboard-chart-preview')).toHaveLength(1);
     expect(save).not.toHaveBeenCalled();
+  });
+  it('reuses thumbnail models while typing and refreshes them when loaded data changes', () => {
+    const row = component.rowPreviews()[0];
+    component.filter(row.definition.label);
+    expect(component.rowPreviews()[0]).toBe(row);
+    component.filter('');
+    expect(component.rowPreviews()[0]).toBe(row);
+    fixture.componentRef.setInput('seed', { tiles: [] });
+    expect(component.rowPreviews()[0].preview).not.toBe(row.preview);
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('clears an excluded preview when filtering and does not offer to add a hidden choice', async () => {
     await component.toggle(); await settle();

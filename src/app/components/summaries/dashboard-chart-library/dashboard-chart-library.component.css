@@ -13,7 +13,8 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-list button { border-radius: 8px; border-inline-start: 3px solid transparent; }
 /* The action list keeps the preview selection visible independently of hover/focus. */
 .chart-library-list button[aria-pressed="true"] { background: var(--mat-sys-secondary-container); border-inline-start-color: var(--mat-sys-primary); }
-.chart-library-list .chart-library-row-meta { display: flex; align-items: center; align-self: center; }
+.chart-library-list .chart-library-row-meta { display: flex; align-items: center; align-self: center; gap: 8px; margin-inline: 8px 12px; }
+.chart-library-row-meta > mat-icon { width: 18px; height: 18px; font-size: 18px; }
 .chart-library-count, .chart-library-empty, .chart-library-destination, .chart-library-preview-placeholder p { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
 .chart-library-count { margin-block: 12px 4px; }
 .chart-library-empty { padding: 12px; }

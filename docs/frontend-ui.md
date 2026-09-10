@@ -134,7 +134,7 @@ open section and one local draft. All custom metric charts and presets belong in
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
 there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
 existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
-Rows use the preset icon, title, and short description; only the selected chart mounts a full preview renderer.
+Rows show the title, format, data-source label, and a small chart beside the chevron; only the selected chart mounts a full preview renderer.
 Desktop opens with the first available chart selected, without extra haptic feedback or any save. Mobile starts with
 the list and opens details on selection. Selecting the same entry again is a silent no-op that preserves preview scroll
 and focus. Search/group changes release an unchanged preview if it no longer matches, so Add cannot target a hidden
@@ -162,7 +162,11 @@ Custom equivalence uses metric, chart style, aggregation, axis, and time bucket 
 New catalog entries need an example and catalog coverage. Homepage signal fixtures are re-exported from the shared
 `dashboard-chart-example-signals.helper.ts`; homepage renderers and dashboard previews remain the existing app charts.
 
-`DashboardChartPreviewService` reads only. Thumbnail rendering uses loaded context or labelled examples; selecting a
+`DashboardChartPreviewService` reads only. Row thumbnails use the shared ECharts host and a bounded, decorative shape
+from the existing preview view model, with no axes, values, tooltips, focus targets, or haptic handlers. The row's
+accessible description includes its format and data source. Preview models are cached across search/group filtering;
+closing the picker disposes its thumbnail charts. Thumbnail rendering uses loaded context or labelled examples and
+does not start additional reads. Selecting a
 chart lazily reads only the missing source (bounded activity window, 14 days of sleep, recent route previews, or the
 required prepared metric snapshots). Subscriptions are shared within a library and released when previews are destroyed.
 A historically navigated event/sleep window cannot supply a current preview. Preview event reads exclude merged events.
