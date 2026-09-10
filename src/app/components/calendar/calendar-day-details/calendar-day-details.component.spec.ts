@@ -81,7 +81,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
-    expect((fixture.nativeElement.querySelector('.calendar-day-planned-item') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
+    expect((fixture.nativeElement.querySelector('.calendar-day-planned-row') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
     expect(actions.map(action => action.getAttribute('href'))).toEqual([
       '/training/plans/new?date=2026-08-03',
@@ -91,7 +91,7 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
   });
 
-  it('centers trailing navigation icons and keeps the plan accent independent from the Material state layer', async () => {
+  it('centers trailing navigation icons and keeps the rounded plan accent outside the Material row', async () => {
     const fixture = await renderDayDetails(createEvent(), {
       plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
     });
@@ -109,7 +109,10 @@ describe('CalendarDayDetailsComponent', () => {
       /\.calendar-day-item-meta\s*\{[^}]*display:\s*inline-flex !important[^}]*align-self:\s*center !important[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
     );
     expect(styles).toMatch(
-      /\.calendar-day-planned-accent\s*\{[^}]*position:\s*absolute[^}]*inset-block:\s*8px[^}]*inset-inline-start:\s*2px[^}]*width:\s*3px[^}]*border-radius:\s*9999px[^}]*background:/s,
+      /\.calendar-day-planned-row\s*\{[^}]*margin-inline-start:\s*-7px[^}]*padding-inline-start:\s*7px/s,
+    );
+    expect(styles).toMatch(
+      /\.calendar-day-planned-accent\s*\{[^}]*position:\s*absolute[^}]*inset-block:\s*8px[^}]*inset-inline-start:\s*0[^}]*width:\s*3px[^}]*border-radius:\s*9999px/s,
     );
     expect(styles).not.toMatch(/\.calendar-day-planned-item\s*\{[^}]*border-inline-start:/s);
   });

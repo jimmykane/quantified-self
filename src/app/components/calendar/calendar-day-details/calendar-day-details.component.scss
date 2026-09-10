@@ -91,20 +91,26 @@ h3 {
   gap: 8px;
 }
 
-.calendar-day-planned-item {
-  height: auto;
-  min-height: 72px;
+.calendar-day-planned-row {
+  position: relative;
+  min-width: 0;
+  margin-inline-start: -7px;
+  padding-inline-start: 7px;
 }
 
 .calendar-day-planned-accent {
   position: absolute;
-  z-index: 2;
   inset-block: 8px;
-  inset-inline-start: 2px;
+  inset-inline-start: 0;
   width: 3px;
   border-radius: 9999px;
   background: var(--planned-workout-color, var(--mat-sys-primary));
   pointer-events: none;
+}
+
+.calendar-day-planned-item {
+  height: auto;
+  min-height: 72px;
 }
 
 .calendar-day-planned-summary {

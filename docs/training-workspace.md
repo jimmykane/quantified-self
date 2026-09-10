@@ -354,9 +354,9 @@ activities in separate sections. Their navigation rows retain a visible trailing
 supporting text yielding before that affordance. Planned workouts never enter recorded activity counts, durations, distance, elevation,
 group bars, activity tables, or Training-derived metrics.
 Planned and skipped icons use their current plan's color; standalone icons stay theme-neutral. The day-details planned
-rows repeat that accent as a rounded inset leading rail, kept clear of the Material row highlight so the two edges do
-not produce a competing anti-aliased seam. Trailing navigation chevrons stay vertically centered for multi-line rows. The
-overlay resolves colors from the live plans, so recoloring or moving
+rows repeat that accent as a rounded rail outside the Material row highlight, keeping the selection surface and color
+edge visually separate. Trailing navigation chevrons stay vertically centered for multi-line rows. The overlay resolves
+colors from the live plans, so recoloring or moving
 a workout changes its appearance without rewriting workout snapshots. Up to two icons are shown, reserving one for
 each scope when standalone and active-plan workouts share a day; extra workouts retain an overflow count. Compact and
 Year views turn these into slim right-edge color segments (dashed for skipped workouts), below any note icon and opposite
