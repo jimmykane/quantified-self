@@ -282,7 +282,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### HRV chart
 
-Add **HRV** from **Training State**, beside **Sleep**. It uses the same HRV chart and recorded data as **Health**, with sources kept separate. Eligible nightly series include the shaded **personal range**, colored readings, and 7-day average calculated using the same 60-day baseline as Health. Earlier history is loaded for the baseline when you change the visible date window. Missing readings remain gaps and naps are excluded; insufficient history shows **Building personal range**.
+Add **HRV** from **Training State**, beside **Sleep**. It uses the same HRV chart and recorded data as **Health**, with sources kept separate. Eligible nightly series include the shaded **personal range**, colored readings, and 7-day average calculated using the same 60-day baseline as Health. The date selector controls the visible HRV period independently of Sleep. The 60-day baseline is calculation history, not the displayed date range. Earlier history is loaded for the baseline when you change the visible date window. Missing readings remain gaps and naps are excluded; insufficient history shows **Building personal range**.
 
 HRV and Sleep share their date range and older/newer navigation. The chart picker includes a small HRV preview and a large preview with details. A labelled example appears when your HRV data is not available yet.
 

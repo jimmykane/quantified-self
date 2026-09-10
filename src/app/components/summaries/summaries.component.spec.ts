@@ -211,12 +211,13 @@ describe('SummariesComponent', () => {
     vi.mocked(service.watch).mockReturnValueOnce(first).mockReturnValueOnce(second);
     const rebuild = vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
     const endMs = new Date(2026, 8, 10, 12).getTime();
-    const window = { range: '14d' as const, startMs: endMs - 14 * 86400000, endMs };
     const context = { charts: [], window: dashboardHrvWindows('14d', endMs).visible, loading: false, error: false };
-    component['syncHrvSubscription']('first-owner', window);
+    component.user = { uid: 'first-owner' } as any;
+    component['syncHrvSubscription']();
     first.next(context);
     expect(component['hrvTrend']).toBe(context);
-    component['syncHrvSubscription']('second-owner', window);
+    component.user = { uid: 'second-owner' } as any;
+    component['syncHrvSubscription']();
     expect(first.observed).toBe(false);
     expect(component['hrvTrend']).toMatchObject({ charts: [], loading: true });
     first.next(context);
@@ -226,6 +227,51 @@ describe('SummariesComponent', () => {
     component['unsubscribeHrv']();
     expect(component['hrvTrend']).toBeNull();
     expect(rebuild).toHaveBeenCalled();
+  });
+
+  it('keeps HRV range, navigation and persistence independent of Sleep in both directions', async () => {
+    vi.useFakeTimers();
+    const nowMs = new Date(2026, 8, 10, 12).getTime();
+    vi.setSystemTime(nowMs);
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = { uid: 'user-1', settings: { dashboardSettings: {
+      tiles: [], sleepTrend: { range: '14d' }, hrvTrend: { range: '30d' },
+    } } } as any;
+    component['syncSleepSubscription'](); component['syncHrvSubscription']();
+    const hrv = TestBed.inject(DashboardHrvService);
+    mockSleepService.watchForDashboard.mockClear(); vi.mocked(hrv.watch).mockClear();
+    await component.onHrvTrendRangeChange('90d');
+    expect(component.hrvTrendRange).toBe('90d');
+    expect(component.sleepTrendRange).toBe('14d');
+    expectDashboardSettingsWrite(component.user, { hrvTrend: { range: '90d' } });
+    expect(hrv.watch).toHaveBeenLastCalledWith('user-1', '90d', nowMs, undefined);
+    component.onHrvTrendNavigate('older');
+    expect(component.hrvTrendCanNavigateNewer).toBe(true);
+    expect(component.sleepTrendCanNavigateNewer).toBe(false);
+    expect(mockSleepService.watchForDashboard).not.toHaveBeenCalled();
+    const hrvWindow = component['hrvTrend']!.window;
+    vi.mocked(hrv.watch).mockClear();
+    await component.onSleepTrendRangeChange('1y'); component.onSleepTrendNavigate('older');
+    expect(hrv.watch).not.toHaveBeenCalled();
+    expect(component.hrvTrendRange).toBe('90d');
+    expect(component['hrvTrend']!.window).toBe(hrvWindow);
+    expect(component.user.settings.dashboardSettings.hrvTrend.range).toBe('90d');
+    vi.setSystemTime(nowMs + 30_000);
+    component.onHrvTrendNavigate('newer');
+    expect(component.hrvTrendCanNavigateNewer).toBe(false);
+    expect(component.sleepTrendCanNavigateNewer).toBe(true);
+  });
+
+  it('restores only HRV settings when saving its range fails', async () => {
+    component.user = { uid: 'user-1', settings: { dashboardSettings: {
+      tiles: [], sleepTrend: { range: '1y' }, hrvTrend: { range: '30d' },
+    } } } as any;
+    component['syncSleepSubscription'](); component['syncHrvSubscription']();
+    vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockRejectedValueOnce(new Error('offline'));
+    await component.onHrvTrendRangeChange('90d');
+    expect(component.hrvTrendRange).toBe('30d');
+    expect(component.user.settings.dashboardSettings.hrvTrend.range).toBe('30d');
+    expect(component.sleepTrendRange).toBe('1y');
   });
 
   it('reveals a saved chart only after the picker closes and the dashboard refresh completes', async () => {

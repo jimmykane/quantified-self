@@ -149,6 +149,8 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() powerCurve?: DashboardPowerCurveContext | null;
   @Input() aerobicCapacity?: DashboardAerobicCapacityContext | null;
   @Input() aerobicDurability?: DashboardAerobicDurabilityContext | null;
+  @Input() hrvTrendRange?: AppDashboardSleepTrendRange;
+  @Input() hrvTrendCanNavigateNewer = false;
   @Input() sleepTrendRange?: AppDashboardSleepTrendRange;
   @Input() sleepTrendWindowLabel?: string | null;
   @Input() sleepTrendCanNavigateOlder = false;
@@ -194,6 +196,8 @@ export class TileChartComponent extends TileAbstractDirective {
   @Output() derivedChartRangeChange = new EventEmitter<AppDashboardDerivedChartRange>();
   @Output() formTimelineWindowChange = new EventEmitter<AppDashboardFormTimelineWindow>();
   @Output() powerCurveCompareModeChange = new EventEmitter<AppDashboardPowerCurveCompareMode>();
+  @Output() hrvTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
+  @Output() hrvTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
   @Output() sleepTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
   @Output() sleepTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
   @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
@@ -337,7 +341,8 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   onSleepRangeSelection(value: unknown): void {
-    this.sleepTrendRangeChange.emit(normalizeDashboardSleepTrendRange(value));
+    const output = this.chartType === this.hrvTrendChartType ? this.hrvTrendRangeChange : this.sleepTrendRangeChange;
+    output.emit(normalizeDashboardSleepTrendRange(value));
   }
 
   onPowerCurveCompareModeSelection(value: unknown): void {

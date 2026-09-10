@@ -134,7 +134,7 @@
           [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
           [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
           [powerCurveCompareMode]="getChartTile(tile).displaySettings?.powerCurveCompareMode"
-          [hrvTrend]="getChartTile(tile).hrvTrend" [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
+          [hrvTrend]="getChartTile(tile).hrvTrend" [hrvTrendRange]="hrvTrendRange" [hrvTrendCanNavigateNewer]="hrvTrendCanNavigateNewer" [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
           [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
           [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
           [powerCurve]="getChartTile(tile).powerCurve"
@@ -147,6 +147,7 @@
           (derivedChartRangeChange)="onTileDerivedChartRangeChange(tile.order, $event)"
           (formTimelineWindowChange)="onTileFormTimelineWindowChange(tile.order, $event)"
           (powerCurveCompareModeChange)="onTilePowerCurveCompareModeChange(tile.order, $event)"
+          (hrvTrendRangeChange)="onHrvTrendRangeChange($event)" (hrvTrendNavigate)="onHrvTrendNavigate($event)"
           (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
           (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
       </div>
@@ -215,7 +216,7 @@
             [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
             [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
             [powerCurveCompareMode]="getChartTile(tile).displaySettings?.powerCurveCompareMode"
-            [hrvTrend]="getChartTile(tile).hrvTrend" [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
+            [hrvTrend]="getChartTile(tile).hrvTrend" [hrvTrendRange]="hrvTrendRange" [hrvTrendCanNavigateNewer]="hrvTrendCanNavigateNewer" [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
             [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
             [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
             [powerCurve]="getChartTile(tile).powerCurve"
@@ -228,7 +229,8 @@
             (derivedChartRangeChange)="onTileDerivedChartRangeChange(tile.order, $event)"
             (formTimelineWindowChange)="onTileFormTimelineWindowChange(tile.order, $event)"
             (powerCurveCompareModeChange)="onTilePowerCurveCompareModeChange(tile.order, $event)"
-            (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
+            (hrvTrendRangeChange)="onHrvTrendRangeChange($event)" (hrvTrendNavigate)="onHrvTrendNavigate($event)"
+          (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
             (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
           }
           @if (tile.type === tileTypes.Map) {

@@ -1,3 +1,4 @@
+import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
 import { DashboardConfigurationService, cloneDashboardSettings } from '../../services/dashboard-configuration.service';
@@ -312,6 +313,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private libraryFocusOrder: number | null = null;
   public showTodaySummary = true;
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+  public hrvTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
+  public hrvTrendCanNavigateNewer = false;
+  private hrvTrendAnchorEndMs: number | null = null;
+  private hrvOwnerUID: string | null = null;
   public sleepTrendWindowLabel = 'Last 14 days';
   public sleepTrendCanNavigateOlder = true;
   public sleepTrendCanNavigateNewer = false;
@@ -641,6 +646,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     });
     this.syncDerivedMetricsSubscription();
     this.syncSleepSubscription();
+    this.syncHrvSubscription();
     this.syncReadinessSleepSubscription();
     this.syncDashboardAutoTileSubscription();
     this.syncTileEventSubscriptions();
@@ -923,7 +929,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     const window = this.buildSleepTrendWindow();
     this.updateSleepTrendWindowState(window);
-    this.syncHrvSubscription(uid, window);
     const listenerKey = this.buildSleepListenerKey(uid, window);
     if (this.sleepListenerKey === listenerKey && this.sleepSubscription) {
       return;
@@ -952,15 +957,23 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       });
   }
 
-  private syncHrvSubscription(uid: string, window: DashboardSleepTrendWindow): void {
+  private syncHrvSubscription(): void {
+    const uid = `${this.user?.uid || ''}`.trim();
+    const range = normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.hrvTrend?.range);
+    if (this.hrvOwnerUID !== uid || range !== this.hrvTrendRange) this.hrvTrendAnchorEndMs = null;
+    this.hrvOwnerUID = uid;
+    this.hrvTrendRange = range;
+    this.hrvTrendCanNavigateNewer = this.hrvTrendAnchorEndMs !== null;
+    if (!uid) { this.unsubscribeHrv(); return; }
+    const endMs = this.hrvTrendAnchorEndMs ?? Date.now();
     const units = this.user?.settings?.unitSettings;
-    const visible = dashboardHrvWindows(this.sleepTrendRange, window.endMs).visible;
+    const visible = dashboardHrvWindows(this.hrvTrendRange, endMs).visible;
     const key = JSON.stringify([uid, visible.startDate, visible.endDate, units]);
     if (key === this.hrvListenerKey) return;
     this.unsubscribeHrv();
     this.hrvListenerKey = key;
     this.hrvTrend = { window: visible, charts: [], loading: true, error: false };
-    this.hrvSubscription = this.hrvService.watch(uid, this.sleepTrendRange, window.endMs, units).subscribe({
+    this.hrvSubscription = this.hrvService.watch(uid, this.hrvTrendRange, endMs, units).subscribe({
       next: context => { this.hrvTrend = context; void this.rebuildTilesFromCurrentState(); },
       error: () => {
         this.hrvListenerKey = null;
@@ -1173,6 +1186,61 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     this.syncSleepSubscription();
+    this.changeDetector.markForCheck();
+  }
+
+  public async onHrvTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {
+    const nextRange = normalizeDashboardSleepTrendRange(range);
+    if (nextRange === this.getHrvTrendRange()) {
+      return;
+    }
+    if (!this.user) {
+      return;
+    }
+
+    const userWithSettings = this.user as AppUserInterface;
+    userWithSettings.settings = userWithSettings.settings || {};
+    const dashboardSettings = (userWithSettings.settings.dashboardSettings || {}) as AppDashboardSettingsInterface;
+    userWithSettings.settings.dashboardSettings = dashboardSettings;
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
+    const previousHrvTrend = { ...(dashboardSettings.hrvTrend || {}) };
+
+    dashboardSettings.hrvTrend = {
+      ...previousHrvTrend,
+      range: nextRange,
+    };
+    this.hrvTrendRange = nextRange;
+    this.hrvTrendAnchorEndMs = null;
+    this.syncHrvSubscription();
+    this.changeDetector.markForCheck();
+
+    try {
+      await this.persistDashboardSettings({
+        hrvTrend: dashboardSettings.hrvTrend,
+      }, expectedSettings);
+    } catch (error) {
+      dashboardSettings.hrvTrend = previousHrvTrend;
+      this.hrvTrendRange = normalizeDashboardSleepTrendRange(previousHrvTrend.range);
+      this.hrvTrendAnchorEndMs = null;
+      this.syncHrvSubscription();
+      this.changeDetector.markForCheck();
+      this.logger.error('[SummariesComponent] Failed to persist HRV trend range update', error);
+    }
+  }
+
+  public onHrvTrendNavigate(direction: DashboardSleepTrendNavigationDirection): void {
+    const days = dashboardSleepTrendRangeDays(this.hrvTrendRange);
+    const nowMs = Date.now();
+    const windowMs = days * 24 * 60 * 60 * 1000;
+    const currentWindow = { endMs: this.hrvTrendAnchorEndMs ?? nowMs };
+    if (direction === 'older') {
+      this.hrvTrendAnchorEndMs = Math.max(windowMs, currentWindow.endMs - windowMs);
+    } else {
+      const nextEndMs = currentWindow.endMs + windowMs;
+      this.hrvTrendAnchorEndMs = localCalendarDate(nextEndMs) >= localCalendarDate(nowMs) ? null : nextEndMs;
+    }
+
+    this.syncHrvSubscription();
     this.changeDetector.markForCheck();
   }
 
@@ -1653,6 +1721,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private buildSleepListenerKey(uid: string, window: { range: AppDashboardSleepTrendRange; startMs: number; endMs: number }): string {
     const anchorKey = this.sleepTrendAnchorEndMs === null ? 'latest' : `${window.startMs}:${window.endMs}`;
     return `${uid}:${window.range}:${anchorKey}`;
+  }
+
+  private getHrvTrendRange(): AppDashboardSleepTrendRange {
+    return normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.hrvTrend?.range);
   }
 
   private getSleepTrendRange(): AppDashboardSleepTrendRange {
@@ -2532,6 +2604,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       userUID: `${user?.uid || ''}`.trim(),
       eventUserUID: `${eventUser?.uid || user?.uid || ''}`.trim(),
       startOfTheWeek: appUser?.settings?.unitSettings?.startOfTheWeek ?? null,
+      hrvTrendRange: normalizeDashboardSleepTrendRange(appUser?.settings?.dashboardSettings?.hrvTrend?.range),
       sleepTrendRange: normalizeDashboardSleepTrendRange(appUser?.settings?.dashboardSettings?.sleepTrend?.range),
       showTodaySummary: appUser?.settings?.dashboardSettings?.showTodaySummary !== false,
       removeAscentForEventTypes: summariesSettings?.removeAscentForEventTypes ?? null,

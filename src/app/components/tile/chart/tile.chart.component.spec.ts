@@ -972,6 +972,23 @@ describe('TileChartComponent', () => {
     expect(fixture.nativeElement.querySelector('.tile-local-range-navigation')).toBeNull();
   });
 
+  it('routes HRV header actions only to HRV outputs', () => {
+    component.chartType = DASHBOARD_HRV_TREND_CHART_TYPE;
+    component.hrvTrendRange = '90d'; component.sleepTrendRange = '14d';
+    component.hrvTrendCanNavigateNewer = true; component.sleepTrendCanNavigateNewer = false;
+    component.showActions = true; fixture.detectChanges();
+    const hrvRange = vi.spyOn(component.hrvTrendRangeChange, 'emit');
+    const sleepRange = vi.spyOn(component.sleepTrendRangeChange, 'emit');
+    const hrvNavigation = vi.spyOn(component.hrvTrendNavigate, 'emit');
+    const sleepNavigation = vi.spyOn(component.sleepTrendNavigate, 'emit');
+    component.onSleepRangeSelection('30d');
+    fixture.nativeElement.querySelector('[aria-label="Show newer HRV window"]').click();
+    expect(hrvRange).toHaveBeenCalledWith('30d');
+    expect(hrvNavigation).toHaveBeenCalledWith('newer');
+    expect(sleepRange).not.toHaveBeenCalled(); expect(sleepNavigation).not.toHaveBeenCalled();
+    expect(component.sleepTrendRange).toBe('14d');
+  });
+
   it('should emit sleep trend range and navigation events from shared tile header controls', () => {
     component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
     component.sleepTrendRange = '14d';

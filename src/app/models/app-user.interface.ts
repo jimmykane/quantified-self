@@ -183,6 +183,7 @@ export interface AppDashboardSettingsInterface extends UserDashboardSettingsInte
     showTodaySummary?: boolean;
     dismissedCuratedRecoveryNowTile?: boolean;
     sleepTrend?: AppDashboardSleepTrendSettingsInterface;
+    hrvTrend?: AppDashboardSleepTrendSettingsInterface;
     autoTiles?: AppDashboardAutoTiles;
     eventTableFilters?: AppDashboardEventTableFiltersInterface;
 }
