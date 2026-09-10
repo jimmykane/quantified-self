@@ -68,6 +68,8 @@ export class DashboardChartLibraryComponent {
     const range = normalizeDashboardTileEventFilters(tile['eventFilters']).range;
     return 'Activity data · ' + (DASHBOARD_TILE_EVENT_RANGE_OPTIONS.find(option => option.range === range)?.label || range);
   });
+  readonly creatingCustom = computed(() => this.state.editor()?.mode === 'add' && !this.state.selected());
+  readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? 'Edit chart' : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? 'Chart settings' : 'Add charts');
   readonly expanded = computed(() => this.state.activeLane() === this.lane());
   readonly destination = computed(() => {
     const tile = this.state.draft(); if (!tile) return '';
@@ -137,6 +139,7 @@ export class DashboardChartLibraryComponent {
     await this.state.select(this.user(), entry); this.focusDetail();
   }
   async createCustom(): Promise<void> { await this.state.createCustom(this.user()); this.focusDetail(); }
+  configure(): void { this.state.configure(); this.focusDetail(); }
   async back(): Promise<void> { await this.state.back(); if (!this.state.draft()) this.focusBrowser(); }
   async close(): Promise<void> { await this.state.close(); }
   private focusDetail(): void { this.focusContent(() => this.detail()?.nativeElement); }

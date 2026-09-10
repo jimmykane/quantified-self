@@ -1,3 +1,5 @@
+import { CommonModule } from '@angular/common';
+import { DashboardTileEditorComponent } from './dashboard-tile-editor.component';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -35,7 +37,7 @@ describe('responsive chart picker interactions', () => {
   const button = (label: string): HTMLButtonElement => Array.from(document.body.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(element => element.textContent?.includes(label))!;
   beforeEach(async () => {
     vi.restoreAllMocks(); vi.clearAllMocks(); mobile = false; discard = false; save.mockResolvedValue(undefined);
-    await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent], imports: [MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
+    await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent, DashboardTileEditorComponent], imports: [CommonModule, MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
       DashboardChartLibraryState, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
       { provide: BreakpointObserver, useValue: { isMatched: () => mobile, observe: () => of({ matches: false, breakpoints: {} }) } },
       { provide: AppEventService, useValue: {} }, { provide: AppSleepService, useValue: {} }, { provide: AppRouteService, useValue: {} }, { provide: DashboardDerivedMetricsService, useValue: {} },
@@ -150,9 +152,46 @@ describe('responsive chart picker interactions', () => {
     haptics.selection.mockClear();
     button('Create custom chart').click(); await settle();
     expect(component.state.configuring()).toBe(true);
+    expect(document.body.querySelector('.chart-library-browser')).toBeNull();
+    expect(document.body.querySelector('.chart-library-heading h2')?.textContent).toContain('Create custom chart');
+    expect(document.body.querySelector('app-dashboard-tile-editor mat-radio-group')).toBeNull();
+    expect(Array.from(document.body.querySelectorAll('app-dashboard-tile-editor mat-label')).map(label => label.textContent?.trim())).toEqual(['Chart type', 'Data type', 'Value aggregation', 'Category axis', 'Tile date range']);
     expect(component.destination()).toBe('Activity Overview');
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(save).not.toHaveBeenCalled();
+  });
+  it('opens properties from the visible settings action and returns to the gallery', async () => {
+    await component.toggle(); await component.select(component.visible()[0]); await settle();
+    const settings = button('Chart settings');
+    const preview = document.body.querySelector('.chart-library-preview')!;
+    expect(settings.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    haptics.selection.mockClear();
+    settings.click(); await settle();
+    expect(document.body.querySelector('.chart-library-browser')).toBeNull();
+    expect(document.body.querySelector('.chart-library-properties')).not.toBeNull();
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(document.activeElement).toBe(document.body.querySelector('.chart-library-detail')));
+    button('Back to charts').click(); await settle();
+    expect(document.body.querySelector('.chart-library-browser')).not.toBeNull();
+    expect(document.body.querySelector('.chart-library-properties')).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+  });
+  it('changes a custom property through its Material select and saves that choice', async () => {
+    fixture.componentRef.setInput('lane', 'section:activityOverview');
+    await component.toggle(); await component.createCustom(); await settle();
+    const fields = Array.from(document.body.querySelectorAll('mat-form-field'));
+    const typeField = fields.find(field => field.querySelector('mat-label')?.textContent?.trim() === 'Chart type')!;
+    haptics.selection.mockClear();
+    (typeField.querySelector('mat-select') as HTMLElement).click(); await settle();
+    const pie = Array.from(document.body.querySelectorAll('mat-option')).find(option => option.textContent?.trim() === 'Pie')!;
+    (pie as HTMLElement).click(); await settle();
+    expect(component.state.draft()?.['chartType']).toBe('Pie');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(document.body.querySelector('.chart-library-properties')?.textContent).not.toContain('Value aggregation');
+    expect(save).not.toHaveBeenCalled();
+    button('Add to dashboard').click(); await settle();
+    expect(user.settings.dashboardSettings.tiles[0]['chartType']).toBe('Pie');
+    expect(save).toHaveBeenCalledOnce();
   });
   it('asks only once when cancelling closure of a dirty custom chart', async () => {
     const open = vi.spyOn(TestBed.inject(MatDialog), 'open');

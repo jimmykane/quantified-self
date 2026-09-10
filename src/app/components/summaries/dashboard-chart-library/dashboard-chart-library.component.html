@@ -7,10 +7,11 @@
 <ng-template #picker>
 <section class="chart-library bottom-sheet-container" [attr.aria-busy]="state.busy()">
   <div class="chart-library-heading">
-    <h2>{{ state.editor()?.mode === 'edit' ? 'Edit chart' : 'Add charts' }} · {{ sectionLabel() }}</h2>
+    <h2>{{ pickerTitle() }} · {{ sectionLabel() }}</h2>
     <button mat-icon-button aria-label="Close chart library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
   </div>
-  <div #scrollContent class="chart-library-layout qs-scrollbar" [class.has-selection]="state.draft()">
+  <div #scrollContent class="chart-library-layout qs-scrollbar" [class.has-selection]="state.draft() && !state.configuring()" [class.is-configuring]="state.configuring()">
+    @if (!state.configuring()) {
     <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
       @if (lane() === 'kpi') {
@@ -35,16 +36,30 @@
       <button mat-button [disabled]="state.busy()" (click)="createCustom()"><mat-icon>tune</mat-icon>Create custom chart</button>
       }
     </div>
+    }
     @if (state.draft(); as draft) {
-    <div #detail class="chart-library-detail qs-scrollbar" tabindex="-1">
-      <button mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
-      <h3>{{ draftDefinition()?.label || (state.editor()?.mode === 'edit' ? 'Edit chart' : 'Custom chart') }}</h3>
-      <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
-      <p>{{ explanation() }}</p><p class="chart-library-destination">{{ dataScope() }}</p>
-      <p class="chart-library-destination">{{ state.editor()?.mode === 'edit' ? 'Saved in' : 'Adds to' }} {{ destination() }}</p>
-      @if (state.configuring()) {
-      <app-dashboard-tile-editor [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
-      } @else { <button mat-button (click)="state.configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>Chart settings</button> }
+    <div #detail class="chart-library-detail qs-scrollbar" [class.is-configuring]="state.configuring()" tabindex="-1">
+      <div class="chart-library-detail-heading">
+        <button mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
+        @if (!state.configuring()) {
+          <button mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>Chart settings</button>
+        }
+      </div>
+      <div [class.chart-library-editor-layout]="state.configuring()" class="qs-scrollbar">
+        @if (state.configuring()) {
+        <section class="chart-library-properties qs-scrollbar" aria-label="Chart properties">
+          <h3>Chart properties</h3>
+          <app-dashboard-tile-editor [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" [showCategorySelector]="!creatingCustom()" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
+        </section>
+        }
+        <section class="chart-library-preview qs-scrollbar" aria-label="Chart preview">
+          <h3>{{ state.configuring() ? 'Live preview' : draftDefinition()?.label || (state.editor()?.mode === 'edit' ? 'Edit chart' : 'Custom chart') }}</h3>
+          <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
+          @if (!creatingCustom()) { <p>{{ explanation() }}</p> }
+          <p class="chart-library-destination">{{ dataScope() }}</p>
+          <p class="chart-library-destination">{{ state.editor()?.mode === 'edit' ? 'Saved in' : 'Adds to' }} {{ destination() }}</p>
+        </section>
+      </div>
     </div>
     }
   </div>

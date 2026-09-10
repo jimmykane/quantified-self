@@ -1,4 +1,5 @@
 <div class="chart-editor">
+        @if (showCategorySelector) {
         <section class="chart-editor-section">
           <div class="chart-editor-section-title">Category</div>
           <mat-radio-group class="chart-editor-inline-radio-group" [value]="configuration.category" (change)="configuration.onCategoryChange($event.value); changed.emit()">
@@ -12,6 +13,8 @@
             }
           </mat-radio-group>
         </section>
+
+        }
 
         @if (configuration.category === 'curated') {
         <section class="chart-editor-section" #curatedSection>
@@ -77,7 +80,7 @@
         @if (configuration.category === 'custom') {
         <section class="chart-editor-section" #customSection>
           <div class="chart-editor-fields-grid">
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Chart type</mat-label>
               <mat-icon matPrefix>stacked_line_chart</mat-icon>
               <mat-select #customChartTypeSelect [value]="configuration.customChartType" (selectionChange)="configuration.onCustomChartTypeChange($event.value); changed.emit()">
@@ -88,7 +91,7 @@
             </mat-form-field>
 
             @if (configuration.customChartType !== configuration.chartTypes.IntensityZones) {
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Data type</mat-label>
               <mat-icon matPrefix>query_stats</mat-icon>
               <mat-select [value]="configuration.customDataType" (selectionChange)="configuration.customDataType = $event.value; changed.emit(); configuration.hapticSelection()">
@@ -104,7 +107,7 @@
             }
 
             @if (configuration.customChartType !== configuration.chartTypes.Pie && configuration.customChartType !== configuration.chartTypes.IntensityZones) {
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Value aggregation</mat-label>
               <mat-icon matPrefix>functions</mat-icon>
               <mat-select [value]="configuration.customDataValueType" (selectionChange)="configuration.customDataValueType = $event.value; changed.emit(); configuration.hapticSelection()">
@@ -116,7 +119,7 @@
             }
 
             @if (configuration.customChartType !== configuration.chartTypes.IntensityZones) {
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Category axis</mat-label>
               <mat-icon matPrefix>view_timeline</mat-icon>
               <mat-select [value]="configuration.customDataCategoryType" (selectionChange)="configuration.customDataCategoryType = $event.value; changed.emit(); configuration.hapticSelection()">
@@ -128,7 +131,7 @@
             }
 
             @if (configuration.customDataCategoryType === configuration.chartCategoryTypes.DateType && configuration.customChartType !== configuration.chartTypes.IntensityZones) {
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Time interval</mat-label>
               <mat-icon matPrefix>schedule</mat-icon>
               <mat-select [value]="configuration.customTimeInterval" (selectionChange)="configuration.customTimeInterval = $event.value; changed.emit(); configuration.hapticSelection()">
@@ -139,7 +142,7 @@
             </mat-form-field>
             }
 
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Tile date range</mat-label>
               <mat-icon matPrefix>date_range</mat-icon>
               <mat-select [value]="configuration.customEventRange" (selectionChange)="changeRange('custom', $event.value)">
@@ -161,7 +164,7 @@
         @if (configuration.category === 'map') {
         <section class="chart-editor-section" #mapSection>
           <div class="chart-editor-fields-grid">
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Map source</mat-label>
               <mat-icon matPrefix>layers</mat-icon>
               <mat-select [value]="configuration.mapSource" (selectionChange)="configuration.onMapSourceChange($event.value); changed.emit()">
@@ -173,7 +176,7 @@
                 }
               </mat-select>
             </mat-form-field>
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Map style</mat-label>
               <mat-icon matPrefix>map</mat-icon>
               <mat-select #mapStyleSelect [value]="configuration.mapStyle" (selectionChange)="configuration.mapStyle = $event.value; changed.emit(); configuration.hapticSelection()">
@@ -192,7 +195,7 @@
             </mat-slide-toggle>
             }
             @if (configuration.mapSource === 'events') {
-            <mat-form-field appearance="outline" class="chart-editor-full-width">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
               <mat-label>Tile date range</mat-label>
               <mat-icon matPrefix>date_range</mat-icon>
               <mat-select [value]="configuration.mapEventRange" (selectionChange)="changeRange('map', $event.value)">

@@ -286,7 +286,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Search within the section, use **Load**, **Readiness**, or **Execution** to filter KPIs, and page through six previews at a time.
 - The section’s add action opens a chart picker: a wide dialog on desktop or a bottom sheet on mobile. Select **Preview & details** to see a larger chart, its explanation, data scope, and destination section. Desktop keeps the list beside the details; mobile uses **Back to charts** to return to the list.
 - **Your data** previews use available personal data. **Example data** previews use synthetic examples when data is missing or unavailable, including while personal data is loading. Browsing never adds a chart or starts a metric rebuild.
-- Use **Chart settings** for the full editor in the picker with **Curated**, **KPI**, **Custom**, and **Map** categories. The Add or Save button stays at the bottom of the picker. Nothing is saved until **Add to dashboard** or **Save changes**; a successful save closes the picker and reveals the chart. Leaving changed settings asks whether to discard them.
+- Use **Chart settings** above the preview for the full editor in the picker with **Curated**, **KPI**, **Custom**, and **Map** categories. Chart properties appear first, beside the live preview on desktop and above it on mobile. The Add or Save button stays at the bottom of the picker. Nothing is saved until **Add to dashboard** or **Save changes**; a successful save closes the picker and reveals the chart. Leaving changed settings asks whether to discard them.
 - After adding a chart, **Undo** removes that addition until another chart change makes it unsafe to undo. Your event-table search and date filters stay unchanged. If you have started editing another chart, Undo asks before discarding those changes. If the dashboard changed elsewhere, reopen the editor with the current layout before saving again.
 - Open a tile's three-dot menu and choose **Edit chart** to open its settings in the chart picker. You can remove the last tile; empty sections retain their add action. Shared dashboards remain read-only.
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
@@ -300,7 +300,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - The main dashboard groups chart and map tiles by intent, **Training State**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**.
-- All custom charts belong in **Activity Overview**, regardless of their metric. Open that section’s chart picker and choose **Create custom chart** to build your own.
+- All custom charts belong in **Activity Overview**, regardless of their metric. Open that section’s chart picker and choose **Create custom chart** to select the chart type, metric, aggregation, grouping, and date range directly.
 - New dashboard tiles use chart-aware default sizes: Activity Calendar, simple custom totals, KPIs, and the clustered heatmap start at 1 x 1, while Form/TSS, Power Curve, and the Routes map start wider.
 - Empty editable dashboards show lightweight section guidance until chart or map sections exist.
 - KPI choices are grouped as **Load**, **Readiness**, and **Execution** in the chart library and inline editor.

@@ -138,6 +138,10 @@ Desktop shows list and details in independently scrolling panes; mobile selectio
 600 px cards use one column. Thumbnails render at native text size without CSS scaling. KPI cards use a shorter preview
 and omit the duplicate catalog heading; full details give the sparkline more room. The shared ECharts host explicitly
 returns to automatic dimensions on resize so initialization fallback sizes cannot pin a chart to a tiny canvas.
+Creating a custom chart, editing a tile, or choosing Chart settings replaces the gallery with a dedicated properties
+workspace. Properties and the live preview scroll independently on desktop; mobile puts properties before the preview
+in a single scrolling column. New custom charts omit the redundant category selector and use an explicit Create custom
+chart title. The Chart settings action sits above the preview so it is immediately discoverable.
 The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
 recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
 dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,

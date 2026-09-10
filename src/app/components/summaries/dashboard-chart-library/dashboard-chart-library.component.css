@@ -25,5 +25,17 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-button-icon { display: flex; align-items: center; justify-content: center; }
 .chart-library-save { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: 0 0 auto; padding: 12px 24px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--mat-sys-outline-variant); }
 .chart-library-button-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.chart-library-layout.is-configuring { grid-template-rows: minmax(0, 1fr); align-items: stretch; overflow: hidden; }
+.chart-library-detail.is-configuring { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.chart-library-detail-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; flex: 0 0 auto; margin-block-end: 12px; }
+.chart-library-editor-layout { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(0, 1.15fr); gap: 32px; min-height: 0; flex: 1 1 auto; }
+.chart-library-properties, .chart-library-preview { min-width: 0; }
+.chart-library-editor-layout > section { min-height: 0; overflow: auto; }
+.chart-library-properties h3, .chart-library-editor-layout .chart-library-preview h3 { margin-block: 0 16px; }
 @media (max-width: 959px) { .chart-library-heading, .chart-library-layout, .chart-library-save { padding-inline: 0; } .chart-library-cards { grid-template-columns: repeat(2,minmax(0,1fr)); } .chart-library-layout.has-selection { grid-template-columns: minmax(0,1fr); } .has-selection .chart-library-browser { display: none; } }
 @media (max-width: 599px) { .chart-library-cards { grid-template-columns: minmax(0,1fr); } .chart-library-save { flex-direction: column; align-items: stretch; } .chart-library-save button { width: 100%; } .chart-library-heading h2 { font: var(--mat-sys-title-medium); } }
+@media (max-width: 959px) {
+  .chart-library-editor-layout { display: block; overflow: auto; }
+  .chart-library-editor-layout > section { overflow: visible; }
+  .chart-library-editor-layout .chart-library-preview { margin-block-start: 24px; }
+}
