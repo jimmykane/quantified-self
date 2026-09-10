@@ -28,8 +28,10 @@ describe('Built-in Assistant policy', () => {
     const external = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
     expect(assistant).toContain('Timeline notes');
+    expect(assistant).toContain('Timeline notes access is off by default');
     expect(assistant).toContain('full private');
     expect(external).toContain('Timeline notes permission');
+    expect(external).toContain('The checkbox is selected by default when requested; uncheck it before approving to withhold access.');
     expect(external).toContain('Activity descriptions permission');
     expect(external).toContain('64 KiB of UTF-8 text');
     expect(external).toContain('even without Activity locations permission');

@@ -39,7 +39,7 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'timeline-notes:read': {
     title: 'Timeline notes',
-    description: 'Read full private note titles and details, categories, dates and captured time zones, including notes hidden from charts. This text may contain sensitive health or personal information. Off by default; existing connections must reauthorize. Revoking access cannot erase copies already received by the client. No notes or Training plans can be changed.',
+    description: 'Read full private note titles and details, categories, dates and captured time zones, including notes hidden from charts. This text may contain sensitive health or personal information. Selected by default when requested; uncheck it before approving to keep notes private from this client. Existing connections must reauthorize. Revoking access cannot erase copies already received by the client. No notes or Training plans can be changed.',
   },
   'health:read': {
     title: 'Health metrics',
@@ -140,7 +140,7 @@ export class McpAuthorizationComponent implements OnInit {
         McpAuthorizationRequest
       >('getMcpAuthorizationRequest', { requestId });
       this.request.set(result.data);
-      this.selectedScopes.set(result.data.scopes.filter(scope => scope !== 'timeline-notes:read' && scope !== 'activity-descriptions:read'));
+      this.selectedScopes.set(result.data.scopes.filter(scope => scope !== 'activity-descriptions:read'));
     } catch (error) {
       this.logger.error('[McpAuthorizationComponent] Failed to load authorization request', error);
       this.error.set('This authorization request is invalid, expired, or no longer available.');

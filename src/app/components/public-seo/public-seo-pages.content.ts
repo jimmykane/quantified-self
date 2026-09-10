@@ -637,7 +637,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Timeline notes?',
-        answer: 'Only with separate Timeline notes permission, which starts unchecked and requires reauthorization for existing clients. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
+        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. Uncheck it before approving to withhold access. Existing clients must reauthorize. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',

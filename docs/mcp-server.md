@@ -1329,7 +1329,8 @@ into a real profile.
 ### Timeline notes
 
 `timeline-notes.service.ts` reads the owner's existing `timelineNotes` collection only after checking its independent
-scope. The external consent checkbox starts unchecked, including for a notes-only authorization request. Existing grants
+scope. The external consent checkbox is selected by default when requested, including for a notes-only authorization
+request. The owner can uncheck it before approving; selection alone does not authorize access. Existing grants
 cannot gain this scope through refresh; the owner must reauthorize. External clients receive full private text, which
 may contain sensitive health or personal information. Revocation cannot erase copies already received.
 

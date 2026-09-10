@@ -37,8 +37,9 @@ chart tooltips HTML-escape titles. This version does not change a measurement or
 ## Explicit read-only AI access
 
 The existing MCP endpoint exposes full titles/details, category, fixed dates and captured timezone through
-`query_timeline_notes` only with the independent `timeline-notes:read` grant. Consent starts unchecked and existing
-connections must reauthorize. Chart-hidden notes are included; color/visibility, IDs, revisions, audit timestamps and
+`query_timeline_notes` only with the independent `timeline-notes:read` grant. The external consent checkbox is selected
+by default when requested; the owner can uncheck it before approving. Existing connections must reauthorize.
+Chart-hidden notes are included; color/visibility, IDs, revisions, audit timestamps and
 deletion receipts are not returned. External clients receive full private text and may retain received copies after
 revocation. The [MCP guide](mcp-server.md#timeline-notes) defines overlap, frozen ongoing cutoffs, ordering, bounds and
 encrypted continuation. No additional notes storage, index, migration or Cloud Function is needed.

@@ -24,6 +24,8 @@ describe('help.content', () => {
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
     expect(content).toContain('**Timeline notes** is an independent read-only permission');
+    expect(content).toContain('It is selected by default when requested; uncheck it before approving to withhold access.');
+    expect(content).toContain('It is off by default. Changing notes or location access starts a fresh chat');
     expect(content).toContain('full private');
     expect(content).toContain('hidden from charts');
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
