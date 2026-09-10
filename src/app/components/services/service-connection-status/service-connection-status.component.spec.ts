@@ -84,6 +84,14 @@ describe('ServiceConnectionStatusComponent', () => {
 
         expect(providerIcon).toBeTruthy();
     });
+    it('explains planned-workout consent and retained copies before disconnecting', () => {
+        component.providerIcon = 'garmin'; component.connected = true;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Disconnecting ends any planned-workout sync opt-in');
+        expect(fixture.nativeElement.textContent).toContain('Use Stop sync in Training plans before disconnecting');
+        component.connected = false; fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).not.toContain('Disconnecting ends any planned-workout sync opt-in');
+    });
 
     it('uses the app success green for connected status text', () => {
         const styles = readFileSync(

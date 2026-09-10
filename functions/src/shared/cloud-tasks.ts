@@ -559,6 +559,20 @@ export async function enqueueRouteDeliverySyncTask(
     });
 }
 
+/** A fresh dispatch reservation can recover a lost acknowledgement or an expired task name.
+ * The durable ledger/lease, not the task name, enforces operation idempotency. */
+export async function enqueueTrainingDeliveryTask(queueItemId: string, reservation: string): Promise<boolean> {
+    const { projectId, location, trainingDeliveryQueue } = config.cloudtasks;
+    if (!projectId) throw new Error('Project ID is not defined in config');
+    return enqueueTaskWithRetry({
+        projectId, location, functionName: trainingDeliveryQueue,
+        taskId: `training-${sanitizeTaskNamePart(queueItemId)}-${sanitizeTaskNamePart(reservation)}`,
+        payload: { queueItemId },
+        alreadyExistsLogMessage: '[TrainingDelivery] Dispatch reservation already exists.',
+        failedLogPrefix: '[TrainingDelivery] Dispatch failed:',
+    });
+}
+
 /**
  * Enqueue a sleep sync processing task to Cloud Tasks.
  * Uses deterministic task names for deduplication.

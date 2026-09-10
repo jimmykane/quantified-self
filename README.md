@@ -213,6 +213,11 @@ The hosted project uses Firestore TTL policies for short-lived operational data:
 
 These policies are infrastructure configuration; starting local emulators does not create or deploy production TTL policies.
 
+Training delivery jobs/ledgers are an exception to short-lived queues: unfinished delivery/withdrawal evidence has no TTL.
+Account deletion cleans them recursively, including UID-associated top-level jobs. Delivery receipts carry a 30-day expiry;
+their production TTL setup and rollout remain separate approval-gated work. See the
+[Training delivery foundation](docs/training-workspace.md#provider-delivery-foundation-646).
+
 Unified health history under `users/{uid}/healthSourceRecords` and `healthSampleChunks` has no time-based TTL. It is bounded per document, atomic replacement, and query; provider disconnect retains imported history, while recursive account deletion removes the complete user-scoped health subtree. See [Unified health data foundation](docs/unified-health-data.md).
 
 ## Architecture documentation

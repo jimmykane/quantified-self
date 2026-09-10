@@ -597,6 +597,10 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingPlanState' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingPlans' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/scheduledWorkouts' }));
+        for (const collection of ['trainingDeliveryLedger', 'trainingDeliveryState', 'trainingDeliveryScopes',
+            'trainingDeliverySettings', 'trainingDeliveryStatuses']) {
+            expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: `subcollection/${collection}` }));
+        }
     });
 
     it('should handle subcollection deletion error and continue', async () => {
@@ -612,6 +616,29 @@ describe('cleanupUserAccounts', () => {
         // Should still call COROS and Garmin
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
+    });
+    it('recursively removes UID-scoped Training delivery jobs on a repeat cleanup after a failure', async () => {
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        const queueRef = { path: 'trainingDeliveryQueue/delivery-job' };
+        const restoreCollectionMock = mockCollectionWhereResultsByName((collection, field, _operator, value) => (
+            collection === 'trainingDeliveryQueue' && field === 'uid' && value === user.uid
+                ? { docs: [{ id: 'delivery-job', ref: queueRef, data: () => ({ uid: user.uid }) }] } : null
+        ));
+        let failed = false;
+        recursiveDeleteMock.mockImplementation(async ref => {
+            if (ref === queueRef && !failed) { failed = true; throw new Error('Transient cleanup failure'); }
+        });
+        try {
+            await cleanupUserAccounts(user, { eventId: 'first' } as unknown as functions.EventContext);
+            await cleanupUserAccounts(user, { eventId: 'retry' } as unknown as functions.EventContext);
+            expect(recursiveDeleteMock.mock.calls.filter(([ref]) => ref === queueRef)).toHaveLength(2);
+            expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
+                'trainingDeliveryQueue', 'delivery-job', 'account_deletion_cleanup',
+            );
+        } finally {
+            recursiveDeleteMock.mockReset().mockResolvedValue({});
+            restoreCollectionMock();
+        }
     });
 
     it('should force delete Garmin tokens even if deauthorization fails', async () => {
@@ -1462,9 +1489,8 @@ describe('cleanupUserAccounts', () => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
-        whereMock.mockImplementation((field: string, _operator: string, value: string) => ({
-            get: vi.fn().mockResolvedValue(
-                field === 'uid' && value === 'testUser123'
+        const restoreCollectionMock = mockCollectionWhereResultsByName((collectionName, field, _operator, value) => (
+                collectionName === 'failed_jobs' && field === 'uid' && value === 'testUser123'
                     ? {
                         docs: [{
                             id: 'failed-job-without-source',
@@ -1474,11 +1500,11 @@ describe('cleanupUserAccounts', () => {
                             }),
                         }],
                     }
-                    : { docs: [] }
-            )
-        }));
+                    : null
+        ));
 
         await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+        restoreCollectionMock();
 
         expect(markQueueItemDeletedForUserCleanupMock).toHaveBeenCalledWith(
             'activitySyncQueue',

@@ -1,0 +1,5 @@
+@if (visible()) {
+  <button mat-button appHapticTap type="button" (click)="open()" [disabled]="disabled()">
+    <mat-icon aria-hidden="true">sync</mat-icon>{{ hasRecords() ? 'Delivery details' : scope() === 'plan' ? 'Provider settings' : standalone() ? 'Send workout' : 'Provider delivery' }}
+  </button>
+}

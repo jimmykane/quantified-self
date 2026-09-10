@@ -14,6 +14,14 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it('distinguishes Training consent, expiry, disconnect and the disabled provider launch boundary', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('not enabled yet');
+    expect(content).toContain('Stop sync before disconnecting');
+    expect(content).toContain('content, not old provider consent');
+    expect(content).toContain('Pro expiry pauses creates and updates');
+    expect(content).toContain('IANA time zone');
+  });
   it('explains the compact mobile Health metric title picker and remembered selection', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')?.content;
     expect(health).toContain('tap the metric title and its arrow');

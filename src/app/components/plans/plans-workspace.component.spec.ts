@@ -12,6 +12,7 @@ import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import {
   TrainingPlansService,
@@ -83,6 +84,7 @@ describe('PlansWorkspaceComponent', () => {
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: AppHapticsService, useValue: haptics },
+        { provide: TrainingDeliveryService, useValue: { anyReady: false, watchPresence: () => of(false) } },
         {
           provide: TrainingPlansService,
           useValue: {

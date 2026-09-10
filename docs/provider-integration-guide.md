@@ -101,9 +101,25 @@ that JSON and a valid 300 x 300 PNG.
 
 Fixture compatibility is not delivery readiness. Before any adapter flag changes, record sandbox evidence for create,
 update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and provider-specific horizon behavior. The
-shared delivery ledger, reconciliation queue, entitlement, disconnect/deletion behavior, provider certification,
-observability, and kill switches are tracked under epic #583. Do not hide an unmet gate in a code comment or silently
+shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved only with an excluded
+test transport. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
+source of truth for its contracts, operations, evidence and maintenance. Every real provider transport remains unavailable.
+Provider certification, production observability and kill switches remain tracked under epic #583. Do not hide an unmet gate in a code comment or silently
 narrow the epic acceptance criteria.
+
+Training is a distinct consent lifecycle: plans opt in per provider, standalone Send means ongoing sync, inactive plans
+withdraw eligible future copies, and Stop can suppress an individual plan workout. Pro expiry keeps preferences and copies
+while pausing writes; cleanup removals remain allowed with valid access. Subscription enforcement may revoke access and
+require same-account reconnect. Explicit disconnect invalidates Training consent atomically before provider I/O and leaves
+copies; authentication failure preserves consent but blocks the failed connection generation. A changed account requires
+fresh consent. Do not reuse activity/route auto-restoration rules for Training.
+
+An adapter must bind to the server-resolved owner/account, implement compatibility, horizon/deletion policy, execution,
+inspection and accepted-artifact checkpoints. Garmin workout/schedule IDs and Wahoo Plan/Workout IDs remain distinct;
+COROS keeps stable partner workout IDs and batches at most 30; Suunto delivers dated Guides, not native plan parity.
+Inspection must establish acceptance or definitive nonacceptance before an uncertain create is repeated. New revisions
+never discard accepted IDs. Pausing a provider hides new Send actions, not existing status/removal controls. Neither a
+connected service nor a capability fixture grants readiness, scopes or user consent. No production setting selects the fake.
 
 ## 2. Choose the right architecture
 

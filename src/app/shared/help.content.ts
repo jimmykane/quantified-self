@@ -174,6 +174,17 @@ const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 - Ordinary deletion is recoverable from history. Permanent deletion has a separate confirmation and prevents restoration. A standalone workout's revision history is removed with it; a plan-bound workout can remain in its plan's immutable audit until that plan is deleted, and the confirmation identifies this retention. Deleting a plan asks whether its current workouts should become standalone or be deleted; archiving is the non-destructive alternative.
 - History preview shows what a restore would change before you confirm it. A restore creates a new revision, does not silently reclaim a workout moved to another plan or to standalone, and never recreates a permanently deleted workout.
 
+## Provider delivery
+
+- Garmin, COROS, Wahoo and Suunto workout delivery are not enabled yet. Send controls stay hidden until the provider is ready; existing delivery details and Stop sync remain accessible if a provider is paused.
+- When available, **Provider settings** beside a plan's actions opts that active plan into one connected account per provider. **Send workout** for a standalone workout establishes ongoing sync: later edits update the same provider copy. Connecting a service alone never opts in. Provider delivery requires Pro; manual planning remains free.
+- Review the preview before confirming. Initial consent saves your browser's IANA time zone; travel does not silently change workout dates. Plan workouts inherit their plan's delivery time zone. Change a saved zone explicitly in delivery settings.
+- Pausing or archiving a plan, or activating another plan, removes eligible future provider copies but retains preferences for reactivation. **Stop sync** ends consent and removes eligible future copies; stopping one plan workout suppresses that provider until you resume it. Past or provider-completed workouts remain unchanged.
+- Pro expiry pauses creates and updates but keeps preferences and copies. Removal remains possible while the connection is valid. When Pro returns, delivery resumes with the latest eligible workouts after the same account is connected; it never reactivates paused plans.
+- Use **Stop sync before disconnecting** if you want future provider copies removed. Explicit disconnect ends the connection's delivery consent and leaves provider copies. An authentication failure keeps consent for a same-account reconnect; another account requires fresh consent. Provider-held copies may remain after disconnect or Quantified Self account deletion.
+- Copies do not inherit standalone Send consent. Moving into a plan adopts its settings; moving to Standalone requires a new Send. Restoring schedule history restores content, not old provider consent.
+- A workout that cannot map stays blocked. Review and explicitly approve supported mapping differences; a relevant edit needs renewed approval. Existing provider copies stay unchanged while an update is blocked. Retry inspects uncertain operations before repeating them and never blindly creates duplicates.
+
 ## Add from Calendar
 
 - Every visible date in the full Calendar, dashboard Activity Calendar tile, and Today mini-calendar can be selected, including an empty date.

@@ -223,6 +223,7 @@ vi.mock('firebase-admin', () => {
 vi.mock('firebase-admin/firestore', () => ({
     FieldValue: {
         delete: mockFieldValueDelete,
+        increment: vi.fn((value: number) => ({ __increment: value })),
         serverTimestamp: vi.fn(() => 'server-timestamp-sentinel'),
     },
 }));
