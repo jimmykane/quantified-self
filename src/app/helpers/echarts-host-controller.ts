@@ -219,6 +219,10 @@ export class EChartsHostController {
     }
 
     this.config.eChartsLoader.resize(this.chart, {
+      // ECharts retains explicit initialization dimensions unless resize replaces them.
+      // Switch back to the live host size once layout is available (including overlays).
+      width: 'auto',
+      height: 'auto',
       silent: true,
     });
   }

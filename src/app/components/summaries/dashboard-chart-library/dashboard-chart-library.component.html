@@ -11,7 +11,7 @@
     <button mat-icon-button aria-label="Close chart library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
   </div>
   <div #scrollContent class="chart-library-layout qs-scrollbar" [class.has-selection]="state.draft()">
-    <div #browser class="chart-library-browser" tabindex="-1">
+    <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
       @if (lane() === 'kpi') {
       <mat-chip-listbox aria-label="KPI group" [value]="group()" (change)="selectGroup($event.value)">
@@ -22,7 +22,7 @@
         @for (entry of visible(); track entry.definition.id) {
         <mat-card appearance="outlined" [class.chart-library-card-selected]="state.selected()?.definition?.id === entry.definition.id">
           <div class="chart-library-thumbnail" aria-hidden="true" inert><app-dashboard-chart-preview [user]="user()" [tile]="entry.tile" [seed]="seed()" [darkTheme]="darkTheme()" [thumbnail]="true"></app-dashboard-chart-preview></div>
-          <mat-card-header><mat-card-title>{{ entry.definition.label }}</mat-card-title></mat-card-header>
+          @if (lane() !== 'kpi') { <mat-card-header><mat-card-title>{{ entry.definition.label }}</mat-card-title></mat-card-header> }
           <mat-card-content><p>{{ entry.definition.description }}</p></mat-card-content>
           <mat-card-actions><button mat-button [attr.aria-label]="'Preview ' + entry.definition.label" [disabled]="state.busy()" (click)="select(entry)">Preview & details<mat-icon>arrow_forward</mat-icon></button></mat-card-actions>
         </mat-card>
@@ -36,7 +36,7 @@
       }
     </div>
     @if (state.draft(); as draft) {
-    <div #detail class="chart-library-detail" tabindex="-1">
+    <div #detail class="chart-library-detail qs-scrollbar" tabindex="-1">
       <button mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
       <h3>{{ draftDefinition()?.label || (state.editor()?.mode === 'edit' ? 'Edit chart' : 'Custom chart') }}</h3>
       <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
@@ -45,13 +45,14 @@
       @if (state.configuring()) {
       <app-dashboard-tile-editor [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
       } @else { <button mat-button (click)="state.configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>Chart settings</button> }
-      @if (state.error()) { <p class="chart-library-error" role="alert">{{ state.error() }}</p> }
-
     </div>
     }
   </div>
   @if (state.draft()) {
-      <div class="chart-library-save"><button mat-flat-button [disabled]="state.busy() || state.editor()?.isSaveDisabled" (click)="state.save()"><span class="chart-library-button-content"><span class="chart-library-button-icon">@if (state.busy()) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>{{ state.editor()?.mode === 'edit' ? 'check' : 'add' }}</mat-icon> }</span><span>{{ state.busy() ? 'Saving…' : state.editor()?.mode === 'edit' ? 'Save changes' : 'Add to dashboard' }}</span></span></button></div>
+      <div class="chart-library-save">
+        @if (state.error()) { <p class="chart-library-error" role="alert">{{ state.error() }}</p> }
+        <button mat-flat-button [disabled]="state.busy() || state.editor()?.isSaveDisabled" (click)="state.save()"><span class="chart-library-button-content"><span class="chart-library-button-icon">@if (state.busy()) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>{{ state.editor()?.mode === 'edit' ? 'check' : 'add' }}</mat-icon> }</span><span>{{ state.busy() ? 'Saving…' : state.editor()?.mode === 'edit' ? 'Save changes' : 'Add to dashboard' }}</span></span></button>
+      </div>
   }
 </section>
 </ng-template>

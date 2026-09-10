@@ -142,7 +142,7 @@ export class DashboardChartLibraryState implements OnDestroy {
       controller.destroy();
       await this.persistence.save(user.uid, undo.after, restored);
       if (contextVersion !== this.contextVersion) return;
-      user.settings.dashboardSettings = restored;
+      user.settings.dashboardSettings = { ...user.settings.dashboardSettings, ...restored };
       this.clearSelection(); this.activeLane.set(null);
       this.undoAvailable.set(false); this.changed$.next(null); this.haptics.success();
     } catch (error) { if (contextVersion === this.contextVersion) { this.error.set(error instanceof Error ? error.message : 'Could not undo the addition.'); this.haptics.error(); } }
@@ -180,7 +180,13 @@ export class DashboardChartLibraryState implements OnDestroy {
       this.mutationVersion++;
       user.settings.dashboardSettings = { ...user.settings.dashboardSettings, ...patch };
       const order = controller.mode === 'add' && controller.savingAction === 'save' ? user.settings.dashboardSettings.tiles.at(-1)?.order ?? null : controller.editTileOrder;
-      this.undoState = allowUndo ? { uid: user.uid, before: baseline, after: cloneDashboardSettings(user.settings.dashboardSettings) } : null;
+      // Undo owns the same fields as the chart write. Event-table filters can have
+      // newer local dates than storage and must neither block Undo nor be rolled back.
+      this.undoState = allowUndo ? {
+        uid: user.uid,
+        before: cloneDashboardSettings(Object.fromEntries(Object.keys(patch).map(key => [key, baseline[key]]))),
+        after: cloneDashboardSettings(patch),
+      } : null;
       this.undoAvailable.set(allowUndo);
       this.changed$.next(order);
     } }, this.haptics, this.sleep, this.events, this.routes, this.derived);

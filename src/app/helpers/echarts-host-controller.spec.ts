@@ -266,8 +266,32 @@ describe('EChartsHostController', () => {
     expect(loader.setOption).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledWith(chartMock, {
+      width: 'auto',
+      height: 'auto',
       silent: true,
     });
+  });
+
+  it('releases fixed initialization dimensions when a preview grows to its live container', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+      initOptions: { width: 96, height: 38 },
+    });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 540 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 100 });
+    await controller.init(container);
+    controller.scheduleResize();
+    frames.shift()!(0);
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 'auto', height: 'auto', silent: true });
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 280 });
+    resizeObserverRecords[0].trigger();
+    frames.shift()!(0);
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 'auto', height: 'auto', silent: true });
   });
 
   it('should hide the active tooltip after initialization', async () => {

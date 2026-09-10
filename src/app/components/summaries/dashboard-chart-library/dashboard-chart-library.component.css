@@ -6,23 +6,24 @@
 .chart-library-heading, .chart-library-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 16px 24px; min-height: 0; overflow: auto; flex: 1 1 auto; align-content: start; align-items: start; }
-.chart-library-layout.has-selection { grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr); }
+.chart-library-layout.has-selection { grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr); grid-template-rows: minmax(0, 1fr); align-items: stretch; overflow: hidden; }
+.has-selection .chart-library-browser, .has-selection .chart-library-detail { min-height: 0; overflow: auto; }
 .chart-library-browser, .chart-library-detail { min-width: 0; }
 .chart-library-browser > mat-form-field { width: 100%; margin-block-end: 12px; }
 .chart-library-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block: 12px; }
-.has-selection .chart-library-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.has-selection .chart-library-cards { grid-template-columns: minmax(0, 1fr); }
 .chart-library-cards mat-card { min-width: 0; overflow: hidden; }
 .chart-library-cards mat-card-title { font: var(--mat-sys-title-small); }
 .chart-library-cards p, .chart-library-destination { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
 .chart-library-cards mat-card-actions { margin-top: auto; }
 .chart-library-card-selected { border-color: var(--mat-sys-primary); }
-.chart-library-thumbnail { height: 170px; overflow: hidden; pointer-events: none; }
+.chart-library-thumbnail { overflow: hidden; pointer-events: none; }
 .chart-library-pagination { justify-content: center; }
-.chart-library-error { color: var(--mat-sys-error); }
+.chart-library-error { color: var(--mat-sys-error); font: var(--mat-sys-body-medium); margin: 0; flex: 1; }
 .chart-library-save button { min-width: 180px; }
 .chart-library-button-icon, .chart-library-button-icon mat-icon { width: 18px; height: 18px; font-size: 18px; line-height: 18px; }
 .chart-library-button-icon { display: flex; align-items: center; justify-content: center; }
-.chart-library-save { display: flex; justify-content: flex-end; flex: 0 0 auto; padding: 12px 24px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--mat-sys-outline-variant); }
+.chart-library-save { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: 0 0 auto; padding: 12px 24px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--mat-sys-outline-variant); }
 .chart-library-button-content { display: flex; align-items: center; justify-content: center; gap: 8px; }
 @media (max-width: 959px) { .chart-library-heading, .chart-library-layout, .chart-library-save { padding-inline: 0; } .chart-library-cards { grid-template-columns: repeat(2,minmax(0,1fr)); } .chart-library-layout.has-selection { grid-template-columns: minmax(0,1fr); } .has-selection .chart-library-browser { display: none; } }
-@media (max-width: 599px) { .chart-library-cards { grid-template-columns: minmax(0,1fr); } .chart-library-save button { width: 100%; } .chart-library-heading h2 { font: var(--mat-sys-title-medium); } }
+@media (max-width: 599px) { .chart-library-cards { grid-template-columns: minmax(0,1fr); } .chart-library-save { flex-direction: column; align-items: stretch; } .chart-library-save button { width: 100%; } .chart-library-heading h2 { font: var(--mat-sys-title-medium); } }

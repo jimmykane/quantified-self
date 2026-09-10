@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
-import { DashboardConfigurationService, DashboardConfigurationConflict } from '../../../services/dashboard-configuration.service';
+import { DashboardConfigurationService, DashboardConfigurationConflict, assertDashboardConfigurationCurrent } from '../../../services/dashboard-configuration.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppSleepService } from '../../../services/app.sleep.service';
@@ -113,6 +113,26 @@ describe('inline chart library state', () => {
     state.invalidateUndo(user.settings.dashboardSettings); await state.undo(user);
     expect(state.undoAvailable()).toBe(false); expect(persistence.save).toHaveBeenCalledTimes(1);
     expect(user.settings.dashboardSettings.tiles).toHaveLength(1);
+  });
+  it('undoes only chart fields when local and persisted event-table filters differ', async () => {
+    user.settings.dashboardSettings.eventTableFilters = { searchTerm: 'local search', startDate: 100, endDate: 200 } as never;
+    let stored = { tiles: [], eventTableFilters: { searchTerm: 'stored search', startDate: 10, endDate: 20 } };
+    persistence.save.mockImplementation(async (_uid, expected, patch) => {
+      assertDashboardConfigurationCurrent(stored as never, expected, Object.keys(patch));
+      stored = { ...stored, ...structuredClone(patch) };
+    });
+    await state.select(user, calendar); await state.save();
+    user.settings.dashboardSettings.eventTableFilters.searchTerm = 'new local search';
+    state.invalidateUndo(user.settings.dashboardSettings);
+    expect(state.undoAvailable()).toBe(true);
+    await state.undo(user);
+    expect(state.error()).toBe('');
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(user.settings.dashboardSettings.eventTableFilters.searchTerm).toBe('new local search');
+    expect(stored.tiles).toEqual([]);
+    expect(stored.eventTableFilters.searchTerm).toBe('stored search');
+    expect(persistence.save.mock.calls.at(-1)?.[2]).not.toHaveProperty('eventTableFilters');
+    expect(state.undoAvailable()).toBe(false);
   });
   it('keeps the open draft when a bulk confirmation is cancelled', async () => {
     await state.open(calendar.lane); await state.select(user, calendar);

@@ -5,6 +5,7 @@
 }
 
 .kpi-layout {
+  box-sizing: border-box;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: 100%;

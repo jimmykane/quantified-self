@@ -33,4 +33,17 @@ describe('chart preview rendering contract', () => {
     fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Example data · Loading your data');
   });
+  it('uses a KPI-specific preview height while preserving the full chart renderer', () => {
+    const kpi = getDashboardChartCatalog().find(entry => entry.definition.category === 'kpi')!.tile;
+    watch.mockReturnValue(of(buildDashboardExamplePreview(kpi)));
+    const fixture = TestBed.createComponent(DashboardChartPreviewComponent);
+    fixture.componentRef.setInput('user', { uid: 'example', settings: { unitSettings: {} } });
+    fixture.componentRef.setInput('tile', kpi);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges();
+    expect(fixture.debugElement.query(By.css('app-tile-chart')).properties['previewMode']).toBe(true);
+    expect(fixture.nativeElement.querySelector('.chart-preview-kpi')).not.toBeNull();
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.chart-preview-kpi')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.chart-preview-thumbnail')).toBeNull();
+  });
 });

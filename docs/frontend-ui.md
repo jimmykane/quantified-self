@@ -131,8 +131,11 @@ open section and one local draft. The browser shows six catalog entries per page
 The entry component opens its picker template in a wide Material dialog on desktop and a 92dvh Material bottom sheet
 below 960 px, using the shared overlay theme. The documented `qs-chart-picker-sheet` sizing exception lets the
 Material container fill the configured pane instead of applying its default 80vh cap. The gallery never expands the dashboard.
-Desktop shows list and details together; mobile selection opens details with Back, and below 600 px cards use one
-column. The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
+Desktop shows list and details in independently scrolling panes; mobile selection opens details with Back, and below
+600 px cards use one column. Thumbnails render at native text size without CSS scaling. KPI cards use a shorter preview
+and omit the duplicate catalog heading; full details give the sparkline more room. The shared ECharts host explicitly
+returns to automatic dimensions on resize so initialization fallback sizes cannot pin a chart to a tiny canvas.
+The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
 recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
 dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,
 the dashboard waits for the overlay to close and the chart layout to refresh before focusing and revealing the saved
@@ -156,9 +159,11 @@ All canonical values continue through existing chart renderers and Sports Lib wi
 fields being changed against the draft baseline and refuses stale saves. Both sides use the profile hydration
 normalizer, so defaults and legacy tile migrations do not look like concurrent edits. It merges only dashboard settings, preserving
 server-managed Training settings. Existing tile resize/reorder/removal and filter/display changes use the same transaction
-path. No backend callable or schema migration is introduced. Latest-add Undo retains before/after settings, checks the
-current layout locally and transactionally, and preserves auto-tile dismissal when removing the addition. Another dashboard
-change disables that Undo. Undo asks before discarding an open draft and closes its stale editor after success.
+path. No backend callable or schema migration is introduced. Latest-add Undo retains before/after values only for the
+fields in the chart write, checks those fields locally and transactionally, and preserves auto-tile dismissal when
+removing the addition. Event-table filters and dates remain untouched and cannot cause an unrelated Undo conflict.
+Another change to the affected chart fields disables that Undo. Undo asks before discarding an open draft and closes
+its stale editor after success.
 Preview construction also covers duplicate selections that cannot be saved, so details and discard protection always
 follow the current form. Edits retain the original tile as the source of saved display settings; settings are inert while
 a save is pending. Failed saves retain drafts and report the error; tile menu mutations roll back only their own

@@ -1,5 +1,5 @@
 @if (preview(); as model) {
-<div class="chart-preview" [class.chart-preview-thumbnail]="thumbnail">
+<div class="chart-preview" [class.chart-preview-thumbnail]="thumbnail" [class.chart-preview-kpi]="isKpi()">
   <div class="chart-preview-source" role="status">{{ model.loading ? 'Example data · Loading your data…' : model.source === 'user' ? 'Your data' : 'Example data' }}</div>
   <div class="chart-preview-renderer" [attr.aria-busy]="model.loading">
     @if (model.loading) { <mat-progress-bar mode="indeterminate" aria-label="Loading chart preview"></mat-progress-bar> }

@@ -89,13 +89,19 @@ describe('responsive chart picker interactions', () => {
     await component.select(component.visible()[0]); await settle();
     await vi.waitFor(() => expect(content.scrollTop).toBe(0));
     expect(document.activeElement).toBe(document.body.querySelector('.chart-library-detail'));
+    const detail = document.body.querySelector<HTMLElement>('.chart-library-detail')!;
+    detail.scrollTop = 400;
+    await component.select(component.visible()[1]); await settle();
+    await vi.waitFor(() => expect(detail.scrollTop).toBe(0));
   });
   it('pages a large section and combines search with KPI groups', async () => {
     button('Add charts').click(); await settle();
     expect(document.body.querySelectorAll('mat-card')).toHaveLength(6);
     expect(component.totalPages()).toBe(3);
+    document.body.querySelector<HTMLElement>('.chart-library-layout')!.scrollTop = 500;
     (document.body.querySelector('[aria-label="Next charts"]') as HTMLButtonElement).click(); await settle();
     expect(component.currentPage()).toBe(1);
+    await vi.waitFor(() => expect(document.body.querySelector<HTMLElement>('.chart-library-layout')!.scrollTop).toBe(0));
     component.selectGroup('execution'); component.filter('aerobic'); await settle();
     expect(document.body.querySelectorAll('mat-card')).toHaveLength(2);
     expect(component.currentPage()).toBe(0); expect(save).not.toHaveBeenCalled();
@@ -148,5 +154,14 @@ describe('responsive chart picker interactions', () => {
     expect(component.expanded()).toBe(true);
     resolve(); await saving; await settle();
     expect(document.body.querySelector('.chart-library-detail')).toBeNull();
+  });
+  it('keeps a failed save visible beside the retry action even when details are long', async () => {
+    save.mockRejectedValueOnce(new Error('Save failed'));
+    await component.toggle(); await component.select(component.visible()[0]); await settle();
+    await component.state.save(); await settle();
+    expect(component.expanded()).toBe(true);
+    expect(document.body.querySelector('.chart-library-save [role="alert"]')?.textContent).toContain('Could not save');
+    expect(button('Add to dashboard').disabled).toBe(false);
+    expect(component.state.draft()).not.toBeNull();
   });
 });

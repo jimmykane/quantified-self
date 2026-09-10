@@ -145,12 +145,14 @@ export class DashboardChartLibraryComponent {
   private focusBrowser(): void { this.focusContent(() => this.browser()?.nativeElement); }
   private focusContent(target: () => HTMLElement | undefined): void {
     requestAnimationFrame(() => {
-      target()?.focus({ preventScroll: true });
+      const pane = target();
+      pane?.focus({ preventScroll: true });
+      if (pane) pane.scrollTop = 0;
       const content = this.scrollContent()?.nativeElement;
       if (content) content.scrollTop = 0;
     });
   }
   filter(value: string): void { this.search.set(value); this.page.set(0); }
   selectGroup(value: string): void { if (this.group() === value) return; this.state.haptics.selection(); this.group.set(value || 'all'); this.page.set(0); }
-  changePage(delta: number): void { this.state.haptics.selection(); this.page.set(this.currentPage()+delta); }
+  changePage(delta: number): void { this.state.haptics.selection(); this.page.set(this.currentPage()+delta); this.focusBrowser(); }
 }

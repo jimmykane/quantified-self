@@ -2,7 +2,9 @@
 .chart-preview-source, .chart-preview-note { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); padding-block: 4px; }
 .chart-preview-renderer { height: 300px; position: relative; overflow: hidden; }
 .chart-preview-renderer > app-tile-chart, .chart-preview-map, app-events-map, app-route-preview-map { display: block; height: 100%; width: 100%; }
-.chart-preview-thumbnail .chart-preview-renderer { height: 220px; width: 150%; transform: scale(.666667); transform-origin: top left; }
+.chart-preview-thumbnail .chart-preview-renderer { height: 260px; }
+.chart-preview-kpi .chart-preview-renderer { height: 200px; }
+.chart-preview-thumbnail.chart-preview-kpi .chart-preview-renderer { height: 152px; }
 .chart-preview-thumbnail .chart-preview-source { padding-inline: 8px; }
 mat-progress-bar { position: absolute; inset: 0 0 auto; z-index: 1; }
 @media (max-width: 599px) { .chart-preview-renderer { height: 260px; } }
