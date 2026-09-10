@@ -104,6 +104,12 @@ h3 {
   white-space: normal;
 }
 
+.calendar-day-item-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .calendar-day-empty {
   margin: 12px 0 0;
   color: var(--mat-sys-on-surface-variant);

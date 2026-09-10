@@ -53,7 +53,9 @@
           <span matListItemTitle>{{ planned.title }}</span>
           <span matListItemLine>{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
           <span matListItemLine class="calendar-day-planned-summary">{{ planned.summary.join(' · ') }}</span>
-          <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+          <span matListItemMeta class="calendar-day-item-meta" aria-hidden="true">
+            <mat-icon>chevron_right</mat-icon>
+          </span>
         </a>
         }
       </mat-nav-list>
@@ -110,7 +112,9 @@
                 [stats]="event.metricStats"></app-activity-calendar-volume-stats>
               }
             </div>
-            <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+            <span matListItemMeta class="calendar-day-item-meta" aria-hidden="true">
+              <mat-icon>chevron_right</mat-icon>
+            </span>
           </a>
           } @else {
           <div mat-list-item class="calendar-day-event-item"

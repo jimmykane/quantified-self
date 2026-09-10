@@ -350,7 +350,8 @@ on phones rather than being truncated in single-line list slots. Failed history 
 The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
 workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and
 marked. Every rendered date is selectable, including empty dates. Day details keep **Planned workouts** and completed
-activities in separate sections. Planned workouts never enter recorded activity counts, durations, distance, elevation,
+activities in separate sections. Their navigation rows retain a visible trailing affordance at narrow widths, with
+supporting text yielding before that affordance. Planned workouts never enter recorded activity counts, durations, distance, elevation,
 group bars, activity tables, or Training-derived metrics.
 Planned and skipped icons use their current plan's color; standalone icons stay theme-neutral. The day-details planned
 rows repeat that accent on their leading edge. The overlay resolves colors from the live plans, so recoloring or moving

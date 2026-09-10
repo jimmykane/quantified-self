@@ -90,6 +90,25 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
   });
 
+  it('keeps trailing navigation icons visible inside Material list metadata', async () => {
+    const fixture = await renderDayDetails(createEvent(), {
+      plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
+    });
+    const metaSlots = [...fixture.nativeElement.querySelectorAll('.calendar-day-item-meta')] as HTMLElement[];
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
+      'utf8',
+    );
+
+    expect(metaSlots).toHaveLength(2);
+    expect(metaSlots.every(slot => slot.tagName === 'SPAN' && slot.hasAttribute('matListItemMeta'))).toBe(true);
+    expect(metaSlots.map(slot => slot.querySelector('mat-icon')?.textContent?.trim()))
+      .toEqual(['chevron_right', 'chevron_right']);
+    expect(styles).toMatch(
+      /\.calendar-day-item-meta\s*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
+    );
+  });
+
   it('updates an already-open day when the planned-workout listener finishes', async () => {
     const status = signal<'loading' | 'ready' | 'error'>('loading');
     const planned = signal<PlannedWorkoutCalendarEntry[]>([]);
