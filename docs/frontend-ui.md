@@ -122,3 +122,39 @@ Both that primitive and default Material cards are intentionally flat through `-
 the primary separation from the workspace background. Floating menus, dialogs, datepickers, configuration submenus,
 and bottom sheets use `--qs-overlay-shadow` so their temporary layer remains visually distinct. Do not reuse the overlay
 shadow for in-flow cards or add route-local card shadows.
+
+## Inline dashboard chart library
+
+Owners add charts from the end of the KPI lane or an intent section. Empty owner sections retain an entry point;
+shared/read-only dashboards do not instantiate the library. A dashboard-scoped `DashboardChartLibraryState` permits one
+open section and one local draft. The browser shows six catalog entries per page, section search, and KPI group filters.
+Desktop shows list and details together; below 960 px selection opens details with Back, and below 600 px cards use one
+column. The editor is inline and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
+recommendation eligibility, and auto-tile dismissal rules. Close, Back, section switches, and bulk actions protect dirty drafts.
+
+`dashboard-chart-catalog.helper.ts` adapts the shared preset registry and uses the same preset-equivalence rules for
+availability and bulk additions. Special chart identity includes power discipline; map identity includes its source.
+Custom equivalence uses metric, chart style, aggregation, axis, and time bucket rather than order, size, or activity filters.
+New catalog entries need an example and catalog coverage. Homepage signal fixtures are re-exported from the shared
+`dashboard-chart-example-signals.helper.ts`; homepage renderers and dashboard previews remain the existing app charts.
+
+`DashboardChartPreviewService` reads only. Thumbnail rendering uses loaded context or labelled examples; selecting a
+chart lazily reads only the missing source (bounded activity window, 14 days of sleep, recent route previews, or the
+required prepared metric snapshots). Subscriptions are shared within a library and released when previews are destroyed.
+A historically navigated event/sleep window cannot supply a current preview. Preview event reads exclude merged events.
+Preview paths never call metric ensure/rebuild APIs or persist settings. Synthetic examples remain labelled during loading
+and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
+All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
+
+`DashboardConfigurationService` persists owner-scoped dashboard patches through Firestore transactions. It compares the
+fields being changed against the draft baseline and refuses stale saves. It merges only dashboard settings, preserving
+server-managed Training settings. Existing tile resize/reorder/removal and filter/display changes use the same transaction
+path. No backend callable or schema migration is introduced. Latest-add Undo retains before/after settings, checks the
+current layout locally and transactionally, and preserves auto-tile dismissal when removing the addition. Another dashboard
+change disables that Undo. Failed saves retain drafts and report the error; tile menu mutations roll back only their own
+unchanged optimistic fields. Removing the final chart is supported.
+
+Visual verification uses synthetic data with the real Angular components and Material theme. Review captures:
+[desktop](images/dashboard-chart-library/desktop.png) and [mobile](images/dashboard-chart-library/mobile.png).
+These captures contain no account data; the “Your data” label reflects synthetic input injected as loaded dashboard state.
+Physical haptics require a supported device; browser emulation only verifies interaction wiring and layout.

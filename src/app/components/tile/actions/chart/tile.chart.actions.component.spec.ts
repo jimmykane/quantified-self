@@ -1,3 +1,5 @@
+import { DashboardConfigurationService } from '../../../../services/dashboard-configuration.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -27,10 +29,11 @@ describe('TileChartActionsComponent', () => {
   let fixture: ComponentFixture<TileChartActionsComponent>;
   let userMock: any;
   let analyticsMock: any;
-  let hapticsMock: { selection: ReturnType<typeof vi.fn> };
+  let hapticsMock: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     userMock = {
+      uid: 'owner',
       settings: {
         appSettings: { theme: 'dark' },
         unitSettings: { startOfTheWeek: 1 },
@@ -65,7 +68,7 @@ describe('TileChartActionsComponent', () => {
       logEvent: vi.fn(),
     };
     hapticsMock = {
-      selection: vi.fn(),
+      selection: vi.fn(), success: vi.fn(), error: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -78,6 +81,8 @@ describe('TileChartActionsComponent', () => {
         FormsModule,
       ],
       providers: [
+        { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => userMock.updateUserProperties(userMock, { settings: { dashboardSettings: patch } }) } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: AppUserService, useValue: userMock },
         { provide: AppAnalyticsService, useValue: analyticsMock },
         { provide: AppHapticsService, useValue: hapticsMock },
@@ -124,18 +129,22 @@ describe('TileChartActionsComponent', () => {
     expect(template).toContain('Edit');
   });
 
-  it('should emit editInDashboardManager with current tile order', () => {
+  it('should emit editTile with current tile order', () => {
     const emittedOrders: number[] = [];
-    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+    component.editTile.subscribe((order) => emittedOrders.push(order));
     const preventDefault = vi.fn();
     const stopPropagation = vi.fn();
 
+    const trigger = { restoreFocus: true, closeMenu: vi.fn() };
+    (component as any).menuTrigger = trigger;
     component.order = 1;
-    component.openEditInDashboardManager({ preventDefault, stopPropagation } as any);
+    component.openEditTile({ preventDefault, stopPropagation } as any);
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(stopPropagation).toHaveBeenCalledTimes(1);
     expect(emittedOrders).toEqual([1]);
+    expect(trigger.closeMenu).toHaveBeenCalledOnce();
+    expect(trigger.restoreFocus).toBe(false);
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
@@ -420,7 +429,7 @@ describe('TileChartActionsComponent', () => {
     expect(userMock.settings.dashboardSettings.autoTiles.sleepTrend).toEqual(previousAutoTileState);
   });
 
-  it('should not mark Sleep Trend dismissed when deleting the only tile is rejected', async () => {
+  it('allows removing the last Sleep tile and keeps it dismissed', async () => {
     userMock.settings.dashboardSettings.autoTiles = {};
     userMock.settings.dashboardSettings.tiles = [{
       order: 0,
@@ -435,11 +444,10 @@ describe('TileChartActionsComponent', () => {
     component.order = 0;
     fixture.detectChanges();
 
-    await expect(component.deleteTile({} as any)).rejects.toThrow('Cannot delete tile there is only one left');
-
-    expect(userMock.settings.dashboardSettings.autoTiles).toEqual({});
-    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
-    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    await component.deleteTile({} as any);
+    expect(userMock.settings.dashboardSettings.autoTiles.sleepTrend.state).toBe('dismissed');
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(0);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
   });
 
   it('should persist KPI auto-tile dismissal when deleting a default KPI tile', async () => {

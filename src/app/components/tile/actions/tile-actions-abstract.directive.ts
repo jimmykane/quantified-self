@@ -1,3 +1,7 @@
+import { MatMenuTrigger } from '@angular/material/menu';
+import equal from 'fast-deep-equal';
+import { DashboardConfigurationService, cloneDashboardSettings } from '../../../services/dashboard-configuration.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   TileSettingsInterface, TileTypes,
 } from '@sports-alliance/sports-lib';
@@ -5,8 +9,7 @@ import { TileAbstractDirective } from '../tile-abstract.directive';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { EventEmitter, Input, Output, Directive, inject } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib';
+import { EventEmitter, Input, Output, Directive, ViewChild, inject } from '@angular/core';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { AppDashboardSettingsInterface } from '../../../models/app-user.interface';
 import {
@@ -17,6 +20,18 @@ import {
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
+  protected configurationService = inject(DashboardConfigurationService);
+  private readonly snackBar = inject(MatSnackBar);
+  protected pendingBaseline: AppDashboardSettingsInterface | null = null;
+  public isSaving = false;
+  @ViewChild(MatMenuTrigger) protected menuTrigger?: MatMenuTrigger;
+  public restoreMenuFocus(): void { if (this.menuTrigger) this.menuTrigger.restoreFocus = true; }
+  protected closeMenuForEditor(): void {
+    if (this.menuTrigger) { this.menuTrigger.restoreFocus = false; this.menuTrigger.closeMenu(); }
+  }
+  protected captureDashboardBaseline(): void {
+    this.pendingBaseline ??= cloneDashboardSettings(this.user.settings.dashboardSettings);
+  }
   protected analyticsService = inject(AppAnalyticsService);
   protected hapticsService = inject(AppHapticsService);
   @Input() showLayoutControls = true;
@@ -27,25 +42,41 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   protected async withSavingState<T>(operation: () => Promise<T>): Promise<T> {
+    this.isSaving = true;
     this.savingChange.emit(true);
     try {
       return await operation();
     } finally {
+      this.isSaving = false;
       this.savingChange.emit(false);
     }
   }
 
   protected async persistUserSettings(): Promise<unknown> {
-    const dashboardSettingsPatch = this.buildDashboardSettingsPersistencePatch();
+    const dashboardSettingsPatch = cloneDashboardSettings(this.buildDashboardSettingsPersistencePatch());
     if (Object.keys(dashboardSettingsPatch).length === 0) {
       return this.withSavingState(() => Promise.resolve());
     }
 
-    return this.withSavingState(() => this.userService.updateUserProperties(this.user, {
-      settings: {
-        dashboardSettings: dashboardSettingsPatch,
-      },
-    }));
+    const baseline = this.pendingBaseline || cloneDashboardSettings(this.user.settings.dashboardSettings);
+    this.pendingBaseline = null;
+    return this.withSavingState(async () => {
+      try {
+        await this.configurationService.save(this.user.uid, baseline, dashboardSettingsPatch);
+        this.hapticsService.success();
+      } catch (error) {
+        // Restore only our unchanged optimistic fields; a later local edit owns its own outcome.
+        for (const key of Object.keys(dashboardSettingsPatch)) {
+          if (equal(this.user.settings.dashboardSettings[key], dashboardSettingsPatch[key])) {
+            if (baseline[key] === undefined) delete this.user.settings.dashboardSettings[key];
+            else this.user.settings.dashboardSettings[key] = baseline[key];
+          }
+        }
+        this.hapticsService.error();
+        this.snackBar.open(error instanceof Error ? error.message : 'Could not save dashboard changes.', 'Dismiss', { duration: 6000 });
+        throw error;
+      }
+    });
   }
 
   protected buildDashboardSettingsPersistencePatch(): Partial<AppDashboardSettingsInterface> {
@@ -59,7 +90,9 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     };
   }
 
-  async changeTileType(event) {
+  async changeTileType(_event) {
+    if (this.isSaving) return;
+    this.captureDashboardBaseline();
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileType' });
     const tileIndex = this.user.settings.dashboardSettings.tiles.findIndex(tile => tile.order === this.order);
     this.user.settings.dashboardSettings.tiles[tileIndex] = this.type === TileTypes.Map ? AppUserUtilities.getDefaultUserDashboardChartTile() : AppUserUtilities.getDefaultUserDashboardMapTile();
@@ -68,7 +101,10 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   async changeTileColumnSize(event) {
+    if (this.isSaving || this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)?.size.columns === event.value) return;
+    this.captureDashboardBaseline();
     if (!this.showLayoutControls) {
+      this.pendingBaseline = null;
       return;
     }
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
@@ -79,7 +115,10 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   async changeTileRowSize(event) {
+    if (this.isSaving || this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)?.size.rows === event.value) return;
+    this.captureDashboardBaseline();
     if (!this.showLayoutControls) {
+      this.pendingBaseline = null;
       return;
     }
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
@@ -89,7 +128,9 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     return this.persistUserSettings();
   }
 
-  async addNewTile($event: MouseEvent) {
+  async addNewTile(_event: MouseEvent) {
+    if (this.isSaving) return;
+    this.captureDashboardBaseline();
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'addNewTile' });
     const chart = Object.assign({}, (<TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)));
     chart.order = this.user.settings.dashboardSettings.tiles.length;
@@ -97,12 +138,11 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
     return this.persistUserSettings();
   }
 
-  async deleteTile(event) {
+  async deleteTile(_event) {
+    if (this.isSaving) return;
+    this.captureDashboardBaseline();
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'deleteTile' });
     this.hapticsService.selection();
-    if (this.user.settings.dashboardSettings.tiles.length === 1) {
-      throw new Error('Cannot delete tile there is only one left');
-    }
     const remainingTiles = this.getOrderedTiles().filter((chartSetting) => chartSetting.order !== this.order);
     this.user.settings.dashboardSettings.tiles = orderDashboardTilesByIntentSections(remainingTiles)
       .map((chartSetting, index) => ({ ...chartSetting, order: index }));
@@ -124,12 +164,10 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   async moveTileBackward() {
-    this.hapticsService.selection();
     return this.moveTileByOffset(-1, 'moveTileBackward');
   }
 
   async moveTileForward() {
-    this.hapticsService.selection();
     return this.moveTileByOffset(1, 'moveTileForward');
   }
 
@@ -142,6 +180,9 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
       return;
     }
 
+    if (this.isSaving) return;
+    this.captureDashboardBaseline();
+    this.hapticsService.selection();
     this.analyticsService.logEvent('dashboard_tile_action', { method: analyticsMethod });
     const currentTile = orderedLaneTiles[currentIndex];
     orderedLaneTiles[currentIndex] = orderedLaneTiles[targetIndex];

@@ -349,12 +349,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('choice is saved');
   });
 
-  it('should document dashboard manager curated/custom/map categories', () => {
+  it('should document inline chart discovery, editing, examples, and categories', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('Dashboard manager');
-    expect(gettingStartedSection?.content).toContain('Manual');
-    expect(gettingStartedSection?.content).toContain('Presets');
+    expect(gettingStartedSection?.content).toContain('Add and edit dashboard charts');
+    expect(gettingStartedSection?.content).toContain('Preview & details');
+    expect(gettingStartedSection?.content).toContain('Example data');
     expect(gettingStartedSection?.content).toContain('Curated');
     expect(gettingStartedSection?.content).toContain('KPI');
     expect(gettingStartedSection?.content).toContain('Custom');
@@ -380,9 +380,9 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Beyond the default Activity Calendar');
     expect(gettingStartedSection?.content).toContain('[Activity Calendar guide](/help#activity-calendar)');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
-    expect(gettingStartedSection?.content).toContain('**Reset to default**');
+    expect(gettingStartedSection?.content).toContain('**Reset to recommended**');
     expect(gettingStartedSection?.content).toContain('replaces the current dashboard tiles');
-    expect(gettingStartedSection?.content).toContain('**Add everything**');
+    expect(gettingStartedSection?.content).toContain('**Add all presets**');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('**Training** remains the fixed analytical workspace');
     expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
@@ -406,7 +406,7 @@ describe('help.content', () => {
     expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
     expect(calendarSection?.content).toContain('Dashboard and Training headers each include a **Calendar** action');
     expect(calendarSection?.content).toContain('Existing editable dashboards that do not contain the Activity Calendar receive it once automatically');
-    expect(calendarSection?.content).toContain('Dashboard manager **Remove all** to keep it from returning');
+    expect(calendarSection?.content).toContain('Dashboard options **Remove all** to keep it from returning');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
     expect(calendarSection?.content).toContain('individual activities with their available distance and elevation metrics');

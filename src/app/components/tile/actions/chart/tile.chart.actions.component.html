@@ -1,4 +1,4 @@
-<button mat-icon-button class="tile-actions-trigger" [matMenuTriggerFor]="chartOptions" aria-label="Tile actions"
+<button mat-icon-button class="tile-actions-trigger" [disabled]="isSaving" (menuOpened)="restoreMenuFocus()" [matMenuTriggerFor]="chartOptions" aria-label="Tile actions"
   (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
   <mat-icon>more_vert</mat-icon>
 </button>
@@ -45,12 +45,12 @@
       <mat-icon>arrow_forward</mat-icon>
       <span>Move later</span>
     </button>
-    <button mat-menu-item type="button" class="tile-action-menu-item" (click)="openEditInDashboardManager($event)">
+    <button mat-menu-item type="button" class="tile-action-menu-item" (click)="openEditTile($event)">
       <mat-icon>edit</mat-icon>
-      <span>Edit in manager</span>
+      <span>Edit chart</span>
     </button>
 
-    @if (user.settings.dashboardSettings.tiles.length > 1) {
+    @if (user.settings.dashboardSettings.tiles.length > 0) {
     <app-tile-actions-footer (delete)="deleteTile($event)"></app-tile-actions-footer>
     }
   </div>

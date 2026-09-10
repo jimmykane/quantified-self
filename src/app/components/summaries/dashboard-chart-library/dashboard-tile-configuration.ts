@@ -1,6 +1,6 @@
-import { AfterViewInit, Component, ElementRef, Inject, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatSelect } from '@angular/material/select';
+import { DashboardConfigurationConflict } from '../../../services/dashboard-configuration.service';
+import { matchesDashboardPreset } from '../../../helpers/dashboard-chart-catalog.helper';
+import { MatDialog } from '@angular/material/dialog';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -173,14 +173,14 @@ import { buildDashboardPowerCurveContextFromSnapshot } from '../../../helpers/da
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
 import type { SleepSession } from '@shared/sleep';
 
-export interface DashboardManagerDialogData {
+export interface DashboardTileConfigurationData {
   user: AppUserInterface;
   initialMode?: 'add' | 'edit';
   initialEditTileOrder?: number | null;
   previewTodaySummaryVisibility?: (showTodaySummary: boolean) => void;
 }
 
-export interface DashboardManagerDialogResult {
+export interface DashboardTileConfigurationResult {
   saved: boolean;
 }
 
@@ -210,13 +210,7 @@ interface DashboardManagerSettingsSnapshot {
 
 type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'resetToDefault' | 'addAll' | 'removeAll' | null;
 
-@Component({
-  selector: 'app-dashboard-manager-dialog',
-  templateUrl: './dashboard-manager-dialog.component.html',
-  styleUrls: ['./dashboard-manager-dialog.component.css'],
-  standalone: false,
-})
-export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, OnDestroy {
+export class DashboardTileConfiguration {
   private static readonly recommendedActivityLookbackMs = 90 * 24 * 60 * 60 * 1000;
   private static readonly recommendedSleepLookbackMs = 14 * 24 * 60 * 60 * 1000;
   private static readonly excludedChartTypePatterns = [
@@ -228,7 +222,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   public readonly chartCategoryTypes = ChartDataCategoryTypes;
   public readonly chartValueTypes = ChartDataValueTypes;
   public readonly customChartTypeOptions = Object.values(ChartTypes).filter(chartType =>
-    !DashboardManagerDialogComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
+    !DashboardTileConfiguration.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
   );
   public readonly curatedChartDefinitions = getDashboardCuratedChartDefinitions();
   public readonly kpiChartDefinitions = getDashboardKpiChartDefinitions();
@@ -453,21 +447,13 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   };
   private hasSavedChanges = false;
   private bulkEligibilitySubscription = new Subscription();
-  private shouldAutoFocusEditSection = false;
 
-  @ViewChild('customSection') private customSectionRef?: ElementRef<HTMLElement>;
-  @ViewChild('curatedSection') private curatedSectionRef?: ElementRef<HTMLElement>;
-  @ViewChild('kpiSection') private kpiSectionRef?: ElementRef<HTMLElement>;
-  @ViewChild('mapSection') private mapSectionRef?: ElementRef<HTMLElement>;
-  @ViewChild('customChartTypeSelect') private customChartTypeSelect?: MatSelect;
-  @ViewChild('mapStyleSelect') private mapStyleSelect?: MatSelect;
-  @ViewChild('editTileSelect') private editTileSelect?: MatSelect;
 
   constructor(
-    @Inject(MAT_DIALOG_DATA) public data: DashboardManagerDialogData,
-    private dialogRef: MatDialogRef<DashboardManagerDialogComponent, DashboardManagerDialogResult>,
+    public data: DashboardTileConfigurationData,
+    private dialogRef: { close: (result: DashboardTileConfigurationResult) => void },
     private dialog: MatDialog,
-    private userService: AppUserService,
+    private userService: Pick<AppUserService, 'updateUserProperties'>,
     private hapticsService: AppHapticsService,
     private sleepService: AppSleepService,
     private eventService: AppEventService,
@@ -475,9 +461,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     private derivedMetricsService: DashboardDerivedMetricsService,
   ) { }
 
-  ngOnInit(): void {
+  initialize(): void {
     if (!this.data?.user) {
-      throw new Error('Dashboard manager dialog requires a user.');
+      throw new Error('The chart editor requires a user.');
     }
 
     if (!this.data.user.settings) {
@@ -495,7 +481,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
 
     this.dataGroups = this.buildDataGroups();
     this.ensurePresetSelection();
-    this.watchBulkPresetEligibility();
 
     if (this.dashboardTiles.length > 0) {
       this.editTileOrder = this.dashboardTiles[0].order;
@@ -511,16 +496,12 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       const editTarget = this.resolveEditTile();
       if (editTarget) {
         this.syncFormStateFromTile(editTarget);
-        this.shouldAutoFocusEditSection = true;
       }
     }
   }
 
-  ngAfterViewInit(): void {
-    this.scrollAndFocusInitialEditSection();
-  }
 
-  ngOnDestroy(): void {
+  destroy(): void {
     this.bulkEligibilitySubscription.unsubscribe();
   }
 
@@ -898,6 +879,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return `${displayName} (${tileKindLabel} #${tile.order + 1})`;
   }
 
+  hapticSelection(): void { this.hapticsService.selection(); }
+
   close(): void {
     this.hapticsService.selection();
     this.dialogRef.close({ saved: this.hasSavedChanges });
@@ -1040,7 +1023,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     } catch (error) {
       this.saveError = 'Could not load recommended dashboard tiles. Please try again.';
       this.hapticsService.error();
-      console.error('[DashboardManagerDialogComponent] Failed to load recommended dashboard tiles', error);
+      console.error('[DashboardTileConfiguration] Failed to load recommended dashboard tiles', error);
       this.stopSaving();
       return;
     }
@@ -1117,7 +1100,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return this.dashboardTiles.find(tile => tile.order === this.editTileOrder) || null;
   }
 
-  private syncFormStateFromTile(tile: TileSettingsInterface): void {
+  public syncFormStateFromTile(tile: TileSettingsInterface): void {
     if (tile.type === TileTypes.Map) {
       const mapTile = tile as DashboardMapTileSettings;
       this.category = 'map';
@@ -1241,9 +1224,9 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   }
 
   private handleDashboardSettingsSaveError(error: unknown): void {
-    this.saveError = 'Could not save dashboard settings.';
+    this.saveError = error instanceof DashboardConfigurationConflict ? error.message : 'Could not save dashboard settings. Please try again.';
     this.hapticsService.error();
-    console.error('[DashboardManagerDialogComponent] Failed to save dashboard settings', error);
+    console.error('[DashboardTileConfiguration] Failed to save dashboard settings', error);
   }
 
   private setTodaySummaryVisibility(
@@ -1353,7 +1336,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     });
   }
 
-  private syncAutoTileStateAfterSave(
+  public syncAutoTileStateAfterSave(
     dashboardSettings: AppDashboardSettingsInterface,
     previousTiles: TileSettingsInterface[],
     nextTiles: TileSettingsInterface[],
@@ -1363,7 +1346,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     this.syncChartBackedAutoTileStatesAfterSave(dashboardSettings, previousTiles, nextTiles, nowMs);
   }
 
-  private buildTileForMode(
+  public buildTileForMode(
     order: number,
     size: { columns: number; rows: number },
     existingTile: TileSettingsInterface | null,
@@ -1624,36 +1607,8 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       }));
   }
 
-  private isTileForBulkDashboardTile(
-    tile: TileSettingsInterface,
-    defaultTile: TileSettingsInterface,
-  ): boolean {
-    if (defaultTile.type === TileTypes.Map) {
-      return tile.type === TileTypes.Map
-        && ((tile as AppDashboardMapTileSettingsInterface).mapSource || 'events')
-        === ((defaultTile as AppDashboardMapTileSettingsInterface).mapSource || 'events');
-    }
-
-    if (tile.type !== TileTypes.Chart || defaultTile.type !== TileTypes.Chart) {
-      return false;
-    }
-
-    if (isDashboardSleepTrendTile(defaultTile)) {
-      return isDashboardSleepTrendTile(tile);
-    }
-
-    const defaultDescriptor = getDashboardAutoTileDescriptorForTile(defaultTile);
-    if (defaultDescriptor) {
-      return getDashboardAutoTileDescriptorForTile(tile)?.id === defaultDescriptor.id;
-    }
-
-    const chartTile = tile as TileChartSettingsInterface;
-    const defaultChartTile = defaultTile as TileChartSettingsInterface;
-    return `${chartTile.chartType}` === `${defaultChartTile.chartType}`
-      && chartTile.dataType === defaultChartTile.dataType
-      && chartTile.dataValueType === defaultChartTile.dataValueType
-      && chartTile.dataCategoryType === defaultChartTile.dataCategoryType
-      && chartTile.dataTimeInterval === defaultChartTile.dataTimeInterval;
+  private isTileForBulkDashboardTile(tile: TileSettingsInterface, defaultTile: TileSettingsInterface): boolean {
+    return matchesDashboardPreset(tile, defaultTile);
   }
 
   private appendBulkTiles(
@@ -1693,39 +1648,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     return Math.max(...tiles.map(tile => Number(tile?.order || 0))) + 1;
   }
 
-  private watchBulkPresetEligibility(): void {
-    this.bulkEligibilitySubscription.unsubscribe();
-    this.bulkEligibilitySubscription = new Subscription();
-    this.resetRecommendedEligibility();
-    const uid = `${this.data?.user?.uid || ''}`.trim();
-    if (!uid) {
-      return;
-    }
-
-    this.bulkEligibilitySubscription.add(this.watchRecommendedActivityEvents().subscribe({
-      next: events => this.updateActivityEligibility(events.length > 0),
-      error: () => this.updateActivityEligibility(false),
-    }));
-    this.bulkEligibilitySubscription.add(this.watchRecommendedSleepSessions(uid).subscribe({
-      next: (sessions) => {
-        this.updateSleepEligibility(sessions);
-      },
-      error: () => {
-        this.updateSleepEligibility([]);
-      },
-    }));
-    this.bulkEligibilitySubscription.add(this.routeService.watchHasAnyRoutePreview(uid).subscribe({
-      next: hasRoutes => this.recommendedEligibility.routes = hasRoutes === true,
-      error: () => this.recommendedEligibility.routes = false,
-    }));
-    this.bulkEligibilitySubscription.add(this.derivedMetricsService.watch(this.data.user, {
-      metricKinds: this.getBulkEligibilityMetricKinds(),
-    }).subscribe({
-      next: state => this.updateDerivedEligibility(state),
-      error: () => this.updateDerivedEligibility(createDashboardDerivedMetricsMissingState()),
-    }));
-  }
-
   private async refreshRecommendedEligibility(): Promise<void> {
     const uid = `${this.data?.user?.uid || ''}`.trim();
     if (!uid) {
@@ -1752,7 +1674,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
       {
         fieldPath: 'startDate',
         opStr: '>=',
-        value: Math.max(0, nowMs - DashboardManagerDialogComponent.recommendedActivityLookbackMs),
+        value: Math.max(0, nowMs - DashboardTileConfiguration.recommendedActivityLookbackMs),
       },
       { fieldPath: 'startDate', opStr: '<=', value: nowMs },
     ], 'startDate', false, 1);
@@ -1761,7 +1683,7 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
   private watchRecommendedSleepSessions(uid: string, nowMs = Date.now()) {
     return this.sleepService.watchForDashboard(
       uid,
-      Math.max(0, nowMs - DashboardManagerDialogComponent.recommendedSleepLookbackMs),
+      Math.max(0, nowMs - DashboardTileConfiguration.recommendedSleepLookbackMs),
       nowMs,
     );
   }
@@ -2067,64 +1989,6 @@ export class DashboardManagerDialogComponent implements OnInit, AfterViewInit, O
     }
 
     return groups;
-  }
-
-  private scrollAndFocusInitialEditSection(): void {
-    if (!this.shouldAutoFocusEditSection || this.mode !== 'edit') {
-      return;
-    }
-
-    this.shouldAutoFocusEditSection = false;
-    if (this.category === 'curated') {
-      const curatedSection = this.curatedSectionRef?.nativeElement;
-      curatedSection?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-      const firstEnabledCuratedOption = curatedSection?.querySelector('input[type="radio"]:not(:disabled)') as HTMLElement | null;
-      firstEnabledCuratedOption?.focus?.();
-      if (!firstEnabledCuratedOption) {
-        this.focusSelect(this.editTileSelect);
-      }
-      return;
-    }
-
-    if (this.category === 'kpi') {
-      const kpiSection = this.kpiSectionRef?.nativeElement;
-      kpiSection?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-      const firstEnabledKpiOption = kpiSection?.querySelector('input[type="radio"]:not(:disabled)') as HTMLElement | null;
-      firstEnabledKpiOption?.focus?.();
-      if (!firstEnabledKpiOption) {
-        this.focusSelect(this.editTileSelect);
-      }
-      return;
-    }
-
-    if (this.category === 'map') {
-      const mapSection = this.mapSectionRef?.nativeElement;
-      mapSection?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-      if (this.focusSelect(this.mapStyleSelect)) {
-        return;
-      }
-      this.focusSelect(this.editTileSelect);
-      return;
-    }
-
-    const customSection = this.customSectionRef?.nativeElement;
-    customSection?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-    if (this.focusSelect(this.customChartTypeSelect)) {
-      return;
-    }
-    this.focusSelect(this.editTileSelect);
-  }
-
-  private focusSelect(select: MatSelect | undefined): boolean {
-    if (!select) {
-      return false;
-    }
-    const maybeFocusableSelect = select as unknown as { focus?: () => void };
-    if (typeof maybeFocusableSelect.focus !== 'function') {
-      return false;
-    }
-    maybeFocusableSelect.focus();
-    return true;
   }
 
   private normalizeMapStyle(mapStyle: unknown): MapStyleName {
