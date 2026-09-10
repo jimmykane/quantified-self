@@ -34,18 +34,18 @@
     </app-chart-range-selector>
     }
     @if (showSleepRangeControls) {
-    <div class="tile-local-range-navigation" aria-label="Sleep trend range navigation">
+    <div class="tile-local-range-navigation" [attr.aria-label]="chartType === hrvTrendChartType ? 'HRV range navigation' : 'Sleep trend range navigation'">
       <button mat-icon-button class="tile-local-range-nav-button" appHapticTap [disabled]="!sleepTrendCanNavigateOlder"
-        (click)="sleepTrendNavigate.emit('older')" matTooltip="Older sleep window" matTooltipPosition="below"
-        aria-label="Show older sleep window">
+        (click)="sleepTrendNavigate.emit('older')" [matTooltip]="chartType === hrvTrendChartType ? 'Older HRV window' : 'Older sleep window'" matTooltipPosition="below"
+        [attr.aria-label]="chartType === hrvTrendChartType ? 'Show older HRV window' : 'Show older sleep window'">
         <mat-icon>chevron_left</mat-icon>
       </button>
       <app-chart-range-selector class="tile-local-range-selector" [options]="sleepRangeSelectorOptions"
-        [value]="sleepTrendRange" ariaLabel="Select sleep range" (valueChange)="onSleepRangeSelection($event)">
+        [value]="sleepTrendRange" [ariaLabel]="chartType === hrvTrendChartType ? 'Select HRV range' : 'Select sleep range'" (valueChange)="onSleepRangeSelection($event)">
       </app-chart-range-selector>
       <button mat-icon-button class="tile-local-range-nav-button" appHapticTap [disabled]="!sleepTrendCanNavigateNewer"
-        (click)="sleepTrendNavigate.emit('newer')" matTooltip="Newer sleep window" matTooltipPosition="below"
-        aria-label="Show newer sleep window">
+        (click)="sleepTrendNavigate.emit('newer')" [matTooltip]="chartType === hrvTrendChartType ? 'Newer HRV window' : 'Newer sleep window'" matTooltipPosition="below"
+        [attr.aria-label]="chartType === hrvTrendChartType ? 'Show newer HRV window' : 'Show newer sleep window'">
         <mat-icon>chevron_right</mat-icon>
       </button>
     </div>
@@ -156,8 +156,8 @@
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-efficiency-trend-chart>
   }
-  @if (chartType === sleepTrendChartType) {
-  <app-sleep-trend-chart [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+  @if (chartType === sleepTrendChartType || chartType === hrvTrendChartType) {
+  <app-sleep-trend-chart [displayMode]="chartType === hrvTrendChartType ? 'hrv' : 'sleep'" [unitSettings]="user?.settings?.unitSettings" [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [sleepTrend]="sleepTrend" [sleepRange]="sleepTrendRange" [sleepWindowLabel]="sleepTrendWindowLabel"
     [canNavigateOlder]="sleepTrendCanNavigateOlder" [canNavigateNewer]="sleepTrendCanNavigateNewer"
     [infoTooltip]="chartInfoTooltip" [reserveTitleActionSpace]="showHeaderControls"

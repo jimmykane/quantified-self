@@ -80,6 +80,7 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardCuratedChartType,
   type DashboardKpiGroup,
@@ -335,6 +336,7 @@ export class DashboardTileConfiguration {
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'bar_chart',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'show_chart',
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'hotel',
+    [DASHBOARD_HRV_TREND_CHART_TYPE]: 'monitor_heart',
     [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'speed',
   };
   public readonly curatedChartDescriptionByType: Record<DashboardCuratedChartType, string> = {
@@ -345,6 +347,7 @@ export class DashboardTileConfiguration {
     [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'Weekly easy/moderate/hard zone time (Power or HR fallback).',
     [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'Weekly duration-weighted power/heart-rate efficiency trend.',
     [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'Sleep duration and stages by connected source.',
+    [DASHBOARD_HRV_TREND_CHART_TYPE]: 'Overnight heart rate variability by connected source.',
     [DASHBOARD_POWER_CURVE_CHART_TYPE]: 'Best power envelope with latest activity or recent-best comparison.',
   };
   public readonly kpiChartIconByType: Record<DashboardKpiChartType, string> = {
@@ -1414,6 +1417,8 @@ export class DashboardTileConfiguration {
       tile = buildDashboardActivityCalendarTile(order, size);
     } else if (chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
       tile = buildDashboardSleepTrendAutoTile(order, size);
+    } else if (chartType === DASHBOARD_HRV_TREND_CHART_TYPE) {
+      tile = buildDashboardManagerPresetTile({ presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_HRV, order, size }) as TileChartSettingsInterface;
     } else if (chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {
       const existingScope = resolveDashboardPowerCurveTileScope(existingTile);
       tile = buildDashboardPowerCurveAutoTile(existingScope || this.curatedPowerCurveScope, order, size);

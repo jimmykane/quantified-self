@@ -43,6 +43,7 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
@@ -234,6 +235,7 @@ describe('DashboardTileConfiguration', () => {
       DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
       DASHBOARD_EFFICIENCY_TREND_CHART_TYPE,
       DASHBOARD_SLEEP_TREND_CHART_TYPE,
+      DASHBOARD_HRV_TREND_CHART_TYPE,
       DASHBOARD_POWER_CURVE_CHART_TYPE,
     ]);
     expect(component.presetDefinitions.map(definition => definition.id)).toContain(DASHBOARD_MANAGER_PRESET_IDS.CURATED_SLEEP);
@@ -479,6 +481,15 @@ describe('DashboardTileConfiguration', () => {
       chartType: DASHBOARD_FORM_CHART_TYPE,
       size: { columns: 2, rows: 1 },
     });
+  });
+
+  it('adds HRV without altering Sleep automatic tile state and prevents a duplicate', async () => {
+    dialogData.user.settings.dashboardSettings.autoTiles = { sleepTrend: { state: 'dismissed', dismissedAt: 123, source: 'sleep-sync' } };
+    component.mode = 'add'; component.category = 'curated'; component.curatedChartType = DASHBOARD_HRV_TREND_CHART_TYPE;
+    await component.save();
+    expect(dialogData.user.settings.dashboardSettings.tiles.at(-1)).toMatchObject({ chartType: DASHBOARD_HRV_TREND_CHART_TYPE, name: 'HRV', size: { columns: 1, rows: 1 } });
+    expect(dialogData.user.settings.dashboardSettings.autoTiles.sleepTrend.state).toBe('dismissed');
+    expect(component.isCuratedOptionDisabled(DASHBOARD_HRV_TREND_CHART_TYPE)).toBe(true);
   });
 
   it('marks Sleep Trend auto-tile state added when manually adding Sleep Trend', async () => {

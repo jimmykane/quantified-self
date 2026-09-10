@@ -56,6 +56,7 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardChartType,
@@ -222,6 +223,7 @@ export class TileChartComponent extends TileAbstractDirective {
   public intensityDistributionChartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE;
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
   public sleepTrendChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE;
+  public hrvTrendChartType = DASHBOARD_HRV_TREND_CHART_TYPE;
   public powerCurveChartType = DASHBOARD_POWER_CURVE_CHART_TYPE;
   public isTileActionSaving = false;
   private selectedDerivedChartRange: AppDashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE as AppDashboardDerivedChartRange;
@@ -278,7 +280,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showSleepRangeControls(): boolean {
-    return this.chartType === this.sleepTrendChartType;
+    return this.chartType === this.sleepTrendChartType || this.chartType === this.hrvTrendChartType;
   }
 
   get showPowerCurveCompareSelector(): boolean {

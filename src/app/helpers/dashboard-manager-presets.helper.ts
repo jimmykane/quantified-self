@@ -7,6 +7,7 @@ import {
   DataDuration,
   DataEnergy,
   DataHeartRateAvg,
+  DataSleepHRVAvg,
   DataRecoveryTime,
   MapThemes,
   TileChartSettingsInterface,
@@ -41,6 +42,8 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
+  isDashboardSleepBackedChartType,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardChartCategory,
   type DashboardCuratedChartType,
@@ -67,6 +70,7 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
   CURATED_INTENSITY_DISTRIBUTION: 'curated-intensity-distribution',
   CURATED_EFFICIENCY_TREND: 'curated-efficiency-trend',
   CURATED_SLEEP: 'curated-sleep',
+  CURATED_HRV: 'curated-hrv',
   CURATED_POWER_CURVE: 'curated-power-curve',
   CURATED_RUNNING_POWER_CURVE: 'curated-running-power-curve',
   KPI_ACWR: 'kpi-acwr',
@@ -249,6 +253,15 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
     curatedChartType: DASHBOARD_SLEEP_TREND_CHART_TYPE,
     recommended: true,
     eligibility: 'sleep',
+  },
+  {
+    id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_HRV,
+    label: 'HRV',
+    tileName: 'HRV',
+    description: 'Overnight heart rate variability with separate trends and averages for each source.',
+    icon: 'monitor_heart',
+    category: 'curated',
+    curatedChartType: DASHBOARD_HRV_TREND_CHART_TYPE,
   },
   {
     id: DASHBOARD_MANAGER_PRESET_IDS.CURATED_POWER_CURVE,
@@ -660,14 +673,14 @@ export function buildDashboardManagerPresetTile(
       return formTile;
     }
 
-    if (definition.curatedChartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) {
+    if (isDashboardSleepBackedChartType(definition.curatedChartType)) {
       const sleepTile: TileChartSettingsInterface = {
         name: definition.tileName,
         type: TileTypes.Chart,
         order: input.order,
         size: input.size,
-        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE as unknown as ChartTypes,
-        dataType: 'SleepDuration',
+        chartType: definition.curatedChartType as unknown as ChartTypes,
+        dataType: definition.curatedChartType === DASHBOARD_HRV_TREND_CHART_TYPE ? DataSleepHRVAvg.type : 'SleepDuration',
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.DateType,
         dataTimeInterval: TimeIntervals.Daily,

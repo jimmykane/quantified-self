@@ -101,7 +101,6 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
@@ -128,7 +127,7 @@ import {
   isDashboardRecoveryDebtKpiChartType,
   isDashboardRecoveryNowChartType,
   isRetiredDashboardReadinessConfidenceKpiChartType,
-  isDashboardSleepTrendChartType,
+  isDashboardSleepBackedChartType,
   isDashboardPowerCurveChartType,
   isDashboardTrainingBalanceKpiChartType,
 } from './dashboard-special-chart-types';
@@ -596,10 +595,9 @@ export function buildDashboardTileViewModels(
       return viewModels;
     }
 
-    if (isDashboardSleepTrendChartType(chartTile.chartType)) {
+    if (isDashboardSleepBackedChartType(chartTile.chartType)) {
       viewModels.push({
         ...chartTile,
-        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE as unknown as ChartTypes,
         timeInterval: TimeIntervals.Daily,
         data: [],
         sleepTrend: sleepTrendContext,

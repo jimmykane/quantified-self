@@ -12,6 +12,7 @@ import {
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
   isDashboardKpiChartType,
 } from './dashboard-special-chart-types';
 
@@ -46,6 +47,7 @@ const SPECIAL_CHART_SECTION_BY_TYPE: Record<string, DashboardTileSectionId> = {
   [DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'performancePower',
   [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'trainingState',
   [DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'trainingState',
+  [DASHBOARD_HRV_TREND_CHART_TYPE]: 'trainingState',
   [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'trainingState',
   [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'trainingState',
 };

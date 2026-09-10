@@ -8,7 +8,7 @@ import { AppSleepService } from './app.sleep.service';
 import { DashboardDerivedMetricsService } from './dashboard-derived-metrics.service';
 import { buildDashboardTileViewModels } from '../helpers/dashboard-tile-view-model.helper';
 import { buildDashboardExamplePreview, buildDashboardPreviewSeed, DashboardChartPreview, DashboardPreviewInput, dashboardPreviewHasData, dashboardPreviewMetricKinds } from '../helpers/dashboard-chart-preview.helper';
-import { DASHBOARD_SLEEP_TREND_CHART_TYPE } from '../helpers/dashboard-special-chart-types';
+import { isDashboardSleepBackedChartType } from '../helpers/dashboard-special-chart-types';
 import { resolveDashboardTileEventWindow, normalizeDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
 
 /** Scoped to the open library. No ensure/rebuild or settings API is available here. */
@@ -30,12 +30,12 @@ export class DashboardChartPreviewService {
     const filters = normalizeDashboardTileEventFilters(tile['eventFilters']);
     const now = Math.floor(Date.now()/60000)*60000;
     const window = resolveDashboardTileEventWindow(filters, user.settings.unitSettings?.startOfTheWeek, null, now);
-    const key = JSON.stringify([user.uid, kinds, chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE ? 'sleep' : tile['mapSource'] === 'routes' ? 'routes' : kinds.length ? 'derived' : 'events', filters.range]);
+    const key = JSON.stringify([user.uid, kinds, isDashboardSleepBackedChartType(chartType) ? 'sleep' : tile['mapSource'] === 'routes' ? 'routes' : kinds.length ? 'derived' : 'events', filters.range]);
     let request$ = this.requests.get(key);
     if (!request$) {
       request$ = defer((): Observable<DashboardPreviewInput> => {
         if (kinds.length) return this.derived.watch(user, { metricKinds: kinds }).pipe(map(state => ({ ...input, derivedMetrics: state })));
-        if (chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE) return this.sleep.watchForDashboard(user.uid, now-14*86400000, now).pipe(map(sleepSessions => ({ ...input, sleepSessions, sleepTrendWindow: { startMs: now-14*86400000, endMs: now } })));
+        if (isDashboardSleepBackedChartType(chartType)) return this.sleep.watchForDashboard(user.uid, now-14*86400000, now).pipe(map(sleepSessions => ({ ...input, sleepSessions, sleepTrendWindow: { startMs: now-14*86400000, endMs: now } })));
         if (tile.type === TileTypes.Map && tile['mapSource'] === 'routes') return this.routes.watchRecentRoutePreviews(user, 50).pipe(map(routePreviews => ({ ...input, routePreviews })));
         return this.events.getEventsBy(user, [...(window.startMs === null ? [] : [{ fieldPath: 'startDate', opStr: '>=', value: window.startMs }]), { fieldPath: 'startDate', opStr: '<=', value: window.endMs ?? now }], 'startDate', false, 0).pipe(map(events => ({ ...input, events: events.filter(event => !event.isMerge) })));
       }).pipe(finalize(() => this.requests.delete(key)), shareReplay({ bufferSize: 1, refCount: true }));

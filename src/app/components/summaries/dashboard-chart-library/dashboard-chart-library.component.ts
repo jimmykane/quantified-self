@@ -3,7 +3,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { Observable, Subscription } from 'rxjs';
-import { isDashboardKpiChartType } from '../../../helpers/dashboard-special-chart-types';
+import { isDashboardKpiChartType, isDashboardSleepBackedChartType, isDashboardHrvTrendChartType } from '../../../helpers/dashboard-special-chart-types';
 import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import { DASHBOARD_TILE_EVENT_RANGE_OPTIONS, normalizeDashboardTileEventFilters } from '../../../helpers/dashboard-tile-event-filters.helper';
 import { Component, computed, inject, input, signal, ElementRef, effect, untracked, viewChild, TemplateRef, ViewContainerRef, DestroyRef, output } from '@angular/core';
@@ -61,7 +61,8 @@ export class DashboardChartLibraryComponent {
     const tile = this.state.draft();
     if (!tile) return '';
     const type = `${tile['chartType'] || ''}`;
-    if (type === 'SleepTrend') return 'Needs recorded sleep · Last 14 days';
+    if (isDashboardHrvTrendChartType(type)) return 'Needs recorded overnight HRV · Last 14 days';
+    if (isDashboardSleepBackedChartType(type)) return 'Needs recorded sleep · Last 14 days';
     if (tile['mapSource'] === 'routes') return 'Needs saved routes · Up to 50 recent routes';
     if (isDashboardKpiChartType(type)) return 'Uses prepared training snapshots';
     const scopes: Record<string, string> = {

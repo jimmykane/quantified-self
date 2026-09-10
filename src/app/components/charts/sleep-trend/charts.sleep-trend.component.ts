@@ -12,6 +12,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import dayjs from 'dayjs';
+import { buildDashboardHrvTrendModel } from '../../../helpers/dashboard-hrv-chart.helper';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { SLEEP_SPORTS_LIB_METRIC_FIELDS } from '@shared/sleep';
 import { formatCanonicalSleepMetricSportsLibValue } from '@shared/sports-lib-health-data';
@@ -117,6 +118,7 @@ const STACK_BAR_EMPHASIS = { focus: 'none' as const };
 })
 export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() darkTheme = false;
+  @Input() displayMode: 'sleep' | 'hrv' = 'sleep';
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() isLoading = false;
@@ -187,7 +189,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.sleepTrend || changes.unitSettings || changes.timelineNotes) {
+    if (changes.darkTheme || changes.isLoading || changes.sleepTrend || changes.unitSettings || changes.timelineNotes || changes.displayMode || changes.sleepRange) {
       void this.refreshChart();
     }
   }
@@ -211,9 +213,10 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
 
     this.clearSleepBarHighlight();
     this.chartHost.hideTooltip();
-    this.chartHost.setTimelineNotes(this.timelineNotes, { categoryDates: points.map(point => point.sleepDate) });
+    this.chartHost.setTimelineNotes(this.timelineNotes, { categoryDates: this.displayMode === 'hrv' ? buildDashboardHrvTrendModel(this.sleepTrend).dates : points.map(point => point.sleepDate) });
     this.chartHost.setOption(this.buildOption(points), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
-    this.bindSleepBarHighlight(chart);
+    this.unbindSleepBarHighlight();
+    if (this.displayMode === 'sleep') this.bindSleepBarHighlight(chart);
     this.chartHost.scheduleResize();
   }
 
@@ -222,6 +225,21 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private updateHeaderAndErrorState(points: DashboardSleepTrendPoint[] = this.getPoints()): void {
+    if (this.displayMode === 'hrv') {
+      const model = buildDashboardHrvTrendModel(this.sleepTrend);
+      this.latestHrvText = this.formatHrv(model.latest?.averageHrvMs);
+      this.latestContextText = model.latest
+        ? `${model.latest.providerLabel} · ${this.formatDateTime(model.latest.endTimeMs)}` : 'No overnight reading';
+      this.vitalAverages = model.series.map(series => ({ label: `${series.label} average`, color: series.color, display: this.formatHrv(series.average) }));
+      this.showNoDataError = !model.hasData;
+      this.noDataErrorMessage = 'No overnight HRV data';
+      this.noDataErrorHint = 'This window has no recorded overnight HRV. Choose another range or sync a sleep source that records HRV.';
+      this.noDataErrorIcon = 'monitor_heart';
+      return;
+    }
+    this.noDataErrorMessage = 'No sleep data yet';
+    this.noDataErrorHint = 'Connect Garmin, Suunto, or COROS sleep sync to populate this chart.';
+    this.noDataErrorIcon = 'hotel';
     this.vitalAverages = VITAL_AVERAGES.flatMap(definition => {
       const average = this.averageMetric(points.map(point => this.toFiniteMetric(point[definition.key])));
       if (average === null) {
@@ -375,7 +393,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       ? [this.buildVitalsLineSeries(SPO2_SERIES, spo2Data)]
       : [];
 
-    return {
+    const option: ChartOption = {
       animation: false,
       backgroundColor: 'transparent',
       textStyle: {
@@ -450,6 +468,41 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         ...minimumHeartRateSeries,
         ...spo2Series,
       ],
+    };
+    return this.displayMode === 'hrv' ? this.buildHrvOption(option, style, isMobileTooltipViewport) : option;
+  }
+
+  private formatHrv(value: number | null | undefined): string {
+    if (!Number.isFinite(value)) return '--';
+    const display = formatCanonicalSleepMetricSportsLibValue(SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv, value, this.unitSettings);
+    return display ? [display.value, display.unit].filter(Boolean).join(' ') : '--';
+  }
+
+  private buildHrvOption(base: ChartOption, style: ReturnType<typeof buildDashboardEChartsStyleTokens>, mobile: boolean): ChartOption {
+    const model = buildDashboardHrvTrendModel(this.sleepTrend);
+    const xAxis = Array.isArray(base.xAxis) ? base.xAxis[0] : base.xAxis;
+    const dateLabel = (date: string) => new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`));
+    return {
+      ...base,
+      grid: { left: 52, right: 10, top: 8, ...trainingStateChartGrid() },
+      legend: { show: false }, // Source-labelled averages above the chart serve as the legend.
+      xAxis: { ...xAxis, data: model.dates, boundaryGap: false,
+        axisLabel: { color: style.secondaryTextColor, ...TRAINING_STATE_AXIS_LABEL, interval: 'auto', hideOverlap: true, formatter: dateLabel } },
+      yAxis: { type: 'value', scale: true,
+        axisLabel: { color: style.secondaryTextColor, fontSize: style.axisFontSize, formatter: (value: number) => this.formatHrv(value) },
+        splitLine: { lineStyle: { color: style.gridColor } } },
+      series: model.series.map(series => this.buildVitalsLineSeries({ name: series.label, color: series.color }, series.values, {
+        yAxisIndex: 0,
+        markLine: this.buildAverageVitalsMarkLine({ color: series.color, average: series.average, label: `${series.label} average` }),
+      })),
+      tooltip: { ...(typeof base.tooltip === 'object' ? base.tooltip : {}), axisPointer: { type: 'line', axis: 'x', snap: true },
+        formatter: (params: AxisTooltipParam[]) => {
+          const index = params?.[0]?.dataIndex;
+          if (!Number.isInteger(index) || !model.dates[index]) return '';
+          const rows = model.series.flatMap(series => series.values[index] === null ? [] : [{ label: series.label, value: this.formatHrv(series.values[index]), markerColor: series.color }]);
+          return renderDashboardEChartsTooltipCard(style, { title: dateLabel(model.dates[index]), subtitle: 'Overnight HRV', rows,
+            maxWidthPx: mobile ? MOBILE_TOOLTIP_MAX_WIDTH_PX : undefined, stackHeader: mobile });
+        } },
     };
   }
 

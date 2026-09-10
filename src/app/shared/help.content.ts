@@ -280,6 +280,12 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Core dashboard features
 
+### HRV chart
+
+Add **HRV** from **Training State**, beside **Sleep**. It shows recorded overnight average HRV from your synced sleep sessions, with separate lines and range averages for each source. Missing readings remain gaps and naps are excluded. The latest value is the most recent night with recorded HRV in the selected window.
+
+HRV and Sleep share their date range and older/newer navigation. The chart picker includes a small HRV preview and a large preview with details. A labelled example appears when your HRV data is not available yet.
+
 ### Add and edit dashboard charts
 
 - Use the compact **Add chart** action beside a section title to browse its available presets. The action disappears when all presets in that section are already on your dashboard. **Activity Overview** keeps its add action for custom charts; when all its presets are added, it opens custom chart properties directly.

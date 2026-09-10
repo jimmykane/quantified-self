@@ -1,3 +1,4 @@
+import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -36,6 +37,7 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
 } from '../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../../helpers/echarts-tooltip-interaction.helper';
@@ -251,6 +253,8 @@ class MockEfficiencyTrendChartComponent {
   standalone: false
 })
 class MockSleepTrendChartComponent {
+  @Input() displayMode: string;
+  @Input() unitSettings: unknown;
   @Input() isLoading = false;
   @Input() darkTheme = false;
   @Input() sleepTrend: any;
@@ -937,6 +941,25 @@ describe('TileChartComponent', () => {
     expect(sleepTrend.canNavigateNewer).toBe(false);
     expect(sleepTrend.infoTooltip).toContain('Sleep Trend');
     expect(sleepTrend.reserveTitleActionSpace).toBe(true);
+  });
+
+  it('renders HRV with shared Sleep data and range controls and the user unit preferences', () => {
+    component.user = { ...component.user, settings: { ...component.user?.settings, unitSettings: normalizeUserUnitSettings({}) } } as typeof component.user;
+    component.chartType = DASHBOARD_HRV_TREND_CHART_TYPE;
+    component.sleepTrend = { points: [], latestPoint: null };
+    component.sleepTrendRange = '30d';
+    component.showActions = true;
+    fixture.detectChanges();
+    const chart = getSleepTrendComponent();
+    expect(chart.displayMode).toBe('hrv');
+    expect(chart.sleepTrend).toBe(component.sleepTrend);
+    expect(chart.unitSettings).toBe(component.user.settings.unitSettings);
+    expect(component.showEventFilters).toBe(false);
+    expect(component.showSleepRangeControls).toBe(true);
+    expect(fixture.nativeElement.querySelector('[aria-label="Show older HRV window"]')).not.toBeNull();
+    expect(chart.mobileTapFeedbackOptions).toBe(DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS);
+    fixture.componentRef.setInput('showActions', false); fixture.componentRef.setInput('previewMode', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.tile-local-range-navigation')).toBeNull();
   });
 
   it('should emit sleep trend range and navigation events from shared tile header controls', () => {

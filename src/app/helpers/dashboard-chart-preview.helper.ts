@@ -6,6 +6,8 @@ import { DERIVED_METRIC_KINDS as M, DerivedMetricKind } from '@shared/derived-me
 import * as C from './dashboard-special-chart-types';
 import { buildDashboardTileViewModels, DashboardChartTileViewModel, DashboardTileViewModel } from './dashboard-tile-view-model.helper';
 import { buildHomeSignalChartsPreviewData, HOME_SIGNAL_CHARTS_PREVIEW_ANCHOR_MS as ANCHOR } from './dashboard-chart-example-signals.helper';
+import { buildDashboardHrvTrendModel } from './dashboard-hrv-chart.helper';
+import { SLEEP_PROVIDERS } from '@shared/sleep';
 import type { DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
 
 export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & { tileEventAnchorsByOrder?: Record<number, number | null> };
@@ -58,7 +60,7 @@ const contexts: Record<string, keyof DashboardChartTileViewModel> = {
   [K.DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: 'hardPercent', [K.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE]: 'intensityDistribution',
   [K.DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: 'efficiencyDelta4w', [K.DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE]: 'freshnessForecast',
   [K.DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'intensityDistribution', [K.DASHBOARD_EFFICIENCY_TREND_CHART_TYPE]: 'efficiencyTrend',
-  [K.DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'sleepTrend', [K.DASHBOARD_POWER_CURVE_CHART_TYPE]: 'powerCurve',
+  [K.DASHBOARD_SLEEP_TREND_CHART_TYPE]: 'sleepTrend', [K.DASHBOARD_HRV_TREND_CHART_TYPE]: 'sleepTrend', [K.DASHBOARD_POWER_CURVE_CHART_TYPE]: 'powerCurve',
   [K.DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: 'aerobicCapacity', [K.DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: 'aerobicDurability',
 };
 const metricKinds: Partial<Record<keyof DashboardChartTileViewModel, DerivedMetricKind[]>> = {
@@ -76,6 +78,7 @@ export function dashboardPreviewHasData(tile: DashboardTileViewModel, input: Das
   const chart = tile as DashboardChartTileViewModel;
   if (`${chart.chartType}` === K.DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE) return !!input.events?.length;
   const context = contexts[chart.chartType];
+  if (C.isDashboardHrvTrendChartType(chart.chartType)) return buildDashboardHrvTrendModel(chart.sleepTrend).hasData;
   if (context === 'sleepTrend') return chart.sleepTrend?.hasRealPoints === true;
   if (context === 'powerCurve') return !!chart.powerCurve?.series?.length;
   return context ? !!chart[context] : !!chart.data?.length;
@@ -132,12 +135,12 @@ export function buildDashboardExamplePreview(tile: TileSettingsInterface): Dashb
     (vm as DashboardChartTileViewModel).powerCurve = { ...examples.powerCurve, latestSeriesLabel: label, comparisonSeriesLabel: label,
       series: examples.powerCurve.series.map(series => series.seriesKey === 'latest' ? { ...series, label } : series) };
   }
-  if (vm.type === TileTypes.Chart && `${(vm as DashboardChartTileViewModel).chartType}` === K.DASHBOARD_SLEEP_TREND_CHART_TYPE) {
+  if (vm.type === TileTypes.Chart && C.isDashboardSleepBackedChartType((vm as DashboardChartTileViewModel).chartType)) {
     const points: DashboardSleepTrendPoint[] = Array.from({ length: 14 }, (_, i) => ({
-      id: `example-sleep-${i}`, sleepDate: new Date(ANCHOR-(13-i)*DAY).toISOString().slice(0,10), provider: null, providerLabel: 'Example source', categoryLabel: '',
+      id: `example-sleep-${i}`, sleepDate: new Date(ANCHOR-(13-i)*DAY).toISOString().slice(0,10), provider: SLEEP_PROVIDERS.GarminAPI, providerLabel: 'Example source', categoryLabel: '',
       startTimeMs: ANCHOR-(13-i)*DAY-28000000, endTimeMs: ANCHOR-(13-i)*DAY, totalSeconds: 26000+i%3*1200,
       deepSeconds: 5400, lightSeconds: 14000+i%3*1200, remSeconds: 6600, awakeSeconds: 900, unknownSeconds: 0,
-      score: null, averageHeartRateBpm: null, minimumHeartRateBpm: null, averageHrvMs: null, maxSpo2Percent: null,
+      score: null, averageHeartRateBpm: null, minimumHeartRateBpm: null, averageHrvMs: C.isDashboardHrvTrendChartType(tile['chartType']) ? [48, 51, 47, 54, 50, 56, 53, 58, 55, 60, 54, 59, 62, 57][i] : null, maxSpo2Percent: null,
       isNap: false, napSeconds: 0, napCount: 0, napAverageHrvMs: null, napAverageHeartRateBpm: null, napStartTimeMs: null, napEndTimeMs: null,
     }));
     (vm as DashboardChartTileViewModel).sleepTrend = { points, latestPoint: points.at(-1)!, hasRealPoints: true };

@@ -8,6 +8,7 @@ import { buildDashboardCartesianPoints } from './dashboard-echarts-cartesian.hel
 import { buildOfficialEChartsThemeTokens } from './echarts-theme.helper';
 import { buildRoutePreviewMapTracks } from './route-preview-map.helper';
 import { resolveActiveRecoveryTotalSeconds, resolveRemainingRecoverySeconds } from './dashboard-recovery-now.helper';
+import { buildDashboardHrvTrendModel } from './dashboard-hrv-chart.helper';
 import { AppColors } from '../services/color/app.colors';
 import * as C from './dashboard-special-chart-types';
 
@@ -111,6 +112,10 @@ export function buildDashboardChartThumbnailOption(preview: DashboardChartPrevie
   }
   if (type === C.DASHBOARD_EFFICIENCY_TREND_CHART_TYPE) {
     return cartesian([line((tile.efficiencyTrend?.points || []).map(point => [point.weekStartMs, point.value]), theme.trendLineColor)]);
+  }
+  if (type === C.DASHBOARD_HRV_TREND_CHART_TYPE) {
+    return cartesian(buildDashboardHrvTrendModel(tile.sleepTrend).series.map(series =>
+      line(series.values.map((value, index) => [index, value]), series.color)));
   }
   if (type === C.DASHBOARD_SLEEP_TREND_CHART_TYPE) {
     const points = sample(tile.sleepTrend?.points || []);

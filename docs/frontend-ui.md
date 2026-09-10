@@ -174,6 +174,15 @@ Preview paths never call metric ensure/rebuild APIs or persist settings. Synthet
 and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
 
+The optional HRV preset (`HrvTrend`) belongs in Training State beside Sleep. It reuses the Sleep renderer in HRV mode
+and the existing sleep subscription/range/navigation; it has no automatic tile or derived-metric identity. The shared
+sleep view model supplies recorded overnight HRV. `dashboard-hrv-chart.helper.ts` keeps providers separate, excludes naps,
+preserves missing readings as gaps, and chooses the latest valid reading. Full previews require actual HRV, not merely
+sleep duration, before labelling the source as personal data. Header, per-source averages, axis labels, and tooltip values
+use the canonical Sleep HRV Sports Lib mapping and user unit settings. The shared chart host owns tooltip haptics;
+HRV does not attach Sleep stack highlight listeners. HRV and Sleep remain independently addable and removable.
+Synthetic HRV review captures: [desktop](images/dashboard-hrv/desktop.png) and [mobile](images/dashboard-hrv/mobile.png).
+
 `DashboardConfigurationService` persists owner-scoped dashboard patches through Firestore transactions. It compares the
 fields being changed against the draft baseline and refuses stale saves. Both sides use the profile hydration
 normalizer, so defaults and legacy tile migrations do not look like concurrent edits. It merges only dashboard settings, preserving
