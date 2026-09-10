@@ -43,6 +43,10 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 
 ## Permissions and Privacy
 
+- If a comparison needs the Health chart's personal HRV range, discover its dedicated shared-calculation capability.
+  It needs both `health:read` and `sleep:read`; never estimate the band from downsampled Health points. Preserve source
+  separation, historical status, and insufficient-history results. This is not the Training readiness baseline.
+
 - Treat a missing permission, unavailable source, processing budget, incomplete page, and genuinely absent data as
   different outcomes. Name the permission that must be granted through reconnection.
 - Map each domain to its grant: Training and aggregate metrics use `metrics:read`, body measurements use

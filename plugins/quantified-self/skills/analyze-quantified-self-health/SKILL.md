@@ -28,6 +28,12 @@ Use recorded Health metrics, not workout aggregates, as the source of all-day hi
 
 ## Permissions and interpretation
 
+- For a personal HRV range or comparison with the Health chart, discover the dedicated personal-range capability.
+  It requires both Health and Sleep access. Use its shared-calculation results, not a range estimated from representative
+  sample points. Pass explicit timezone-offset start/end instants. Preserve each source/account/semantic series,
+  historical point status, daily range boundaries, and insufficient-history states. A range on a missing-reading day
+  is a baseline, not an invented HRV measurement; it is not a diagnosis or the provider's proprietary algorithm.
+
 - Health metrics requires `health:read`. Explain reconnection when it is missing; never substitute another user's data.
 - Body composition also requires `measurements:read` and returns identity-free date buckets only. Use the focused
   measurements workflow. Weight history keeps its existing permission and tool.

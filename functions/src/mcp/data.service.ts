@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { firestoreHrvRangeReads, HrvRangeInput, queryHrvPersonalRange } from './hrv-personal-range.service';
 import { firestoreTimelineNotesReads, queryMcpTimelineNotes, McpTimelineNotesError,
   McpTimelineNotesInput, McpTimelineNotesReads } from './timeline-notes.service';
 import {
@@ -5980,6 +5981,14 @@ export function createMcpDataService(
         if (error instanceof McpHealthError) throw new McpDataError(error.code, error.message);
         // Do not expose parser errors, provider content, or database identifiers.
         throw new McpDataError('temporarily_unavailable', 'Health data could not be read safely. Try again later.');
+      }
+    },
+
+    async getHrvPersonalRange(input: HrvRangeInput) {
+      try { return await queryHrvPersonalRange(input, firestoreHrvRangeReads); }
+      catch (error) {
+        if (error instanceof McpHealthError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'HRV history could not be read safely. Try again later.');
       }
     },
 

@@ -37,6 +37,10 @@ import {
 } from './server';
 
 describe('MCP HTTP scope enforcement', () => {
+  it('requires Health and Sleep before serving shared HRV ranges', () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'get_hrv_personal_range' } }))
+      .toEqual([MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]);
+  });
   it('bounds per-instance concurrency for memory-intensive chart requests', () => {
     expect(MCP_API_RUNTIME_OPTIONS).toMatchObject({
       region: 'europe-west2',

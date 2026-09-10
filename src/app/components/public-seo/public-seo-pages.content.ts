@@ -574,7 +574,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitor_heart',
             title: 'Recorded Health metrics',
-            copy: 'Explore all-day heart rate, HRV, stress, Body Battery or resources, movement, energy and blood pressure with separate Health permission. Sources stay separate; Body Battery keeps its Garmin points scale. Bounded sample trends include UTC times. Body composition also needs Body measurements access. Reconnect an existing client to grant Health access.',
+            copy: 'Explore all-day heart rate, HRV, stress, Body Battery or resources, movement, energy and blood pressure with separate Health permission. Sources stay separate; Body Battery keeps its Garmin points scale. With Health and Sleep access, compare nightly HRV with the Health chart’s shared personal range. Bounded sample trends include UTC times. Body composition also needs Body measurements access. Reconnect an existing client to grant Health access.',
           },
           {
             icon: 'directions_run',

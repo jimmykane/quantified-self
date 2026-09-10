@@ -445,6 +445,15 @@ function createFixtureDataService(
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
   const service = {
+    getHrvPersonalRange: vi.fn().mockResolvedValue({ startTimeMs: 0, endTimeMs: DAY_MS,
+      baselineWindowDays: 60, baselineMinimumObservationDays: 14, currentWindowDays: 7, currentMinimumObservationDays: 3,
+      recordsRead: 1, excludedValues: 0, series: [{ source: 'sleep', provider: 'SuuntoApp', accountNumber: 1,
+        seriesNumber: 1, semanticVariant: 'sleep_session_average_hrv', aggregation: 'average', origin: 'provider_summary',
+        recordingMethod: 'provider_calculated', unit: 'ms', status: 'building_baseline', currentAverage: null,
+        currentAverageDisplay: null, normalRange: null, observationDayCount: 1,
+        readings: [{ date: '1970-01-01', value: 42, display: { value: '42', unit: 'ms' }, status: 'building_baseline', normalRange: null }],
+        rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
+      }] }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
       notes: [{ category: 'sickness', title: 'Reported context', details: 'Full text including personal context.',
@@ -1167,6 +1176,7 @@ const successfulToolArguments: Record<
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   list_health_metrics: {},
   query_health_metric: { metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02' },
+  get_hrv_personal_range: { start: '2026-07-01T00:00:00Z', end: '2026-07-02T00:00:00Z' },
   list_measurement_types: {},
   query_measurements: {
     measurementType: 'body_weight',
@@ -1732,7 +1742,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       [...PUBLIC_MCP_TOOL_NAMES].sort(),
     );
     expect(tools.every(tool => Boolean(tool.outputSchema))).toBe(true);
-    const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric'].includes(tool.name));
+    const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric', 'get_hrv_personal_range'].includes(tool.name));
     const noteTools = tools.filter(tool => tool.name === 'query_timeline_notes');
     expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
     // Keep the existing frozen surface's budget; account separately for the two
@@ -1892,6 +1902,36 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       expect(result).not.toHaveProperty('structuredContent');
       expect(JSON.stringify(result)).not.toMatch(/1788220800001|private-category-canary|endTimeMs|observedAtMs/);
     }
+  });
+
+  it('requires both HRV grants and rejects private HRV output on every transport', async () => {
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.HealthRead], [MCP_OAUTH_SCOPES.SleepRead]]) {
+      const connection = await connectFixtureServer(createFixtureDataService(), scopes);
+      connections.push(connection);
+      expect((await connection.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_hrv_personal_range');
+    }
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]);
+    connections.push(connection);
+    await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: {
+      ...successfulToolArguments.get_hrv_personal_range, uid: 'attacker', scopes: [],
+    } });
+    expect(service.getHrvPersonalRange).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1',
+      scopes: [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead] }));
+    const fixture = await service.getHrvPersonalRange({ uid: 'user-1', scopes: [], startTimeMs: 0, endTimeMs: DAY_MS });
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ ...fixture, series: [] });
+    const empty = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(empty.structuredContent).toMatchObject({ series: [] });
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ ...fixture,
+      series: [{ ...fixture.series[0], providerAccountId: 'private-hrv-canary' }] });
+    const nested = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(nested.isError).toBe(true);
+    expect(JSON.stringify(nested)).not.toContain('private-hrv-canary');
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ sourceKey: 'private-hrv-canary' });
+    const rejected = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(rejected.isError).toBe(true);
+    expect(rejected).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(rejected)).not.toContain('private-hrv-canary');
   });
 
   it('binds full notes to the bearer grant and rejects private neighboring fields', async () => {

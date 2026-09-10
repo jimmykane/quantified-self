@@ -38,6 +38,10 @@ returned.
 
 ## Limits
 
+- For personal HRV ranges, use the advertised shared personal-range capability when both `sleep:read` and `health:read`
+  are granted. Keep its source-separated nightly classifications distinct from its seven-day headline and from Training
+  readiness. If unavailable, report recorded HRV through the ordinary Sleep trend without reconstructing the range.
+
 - If `sleep:read` is missing, explain that Sleep summaries access must be granted through reconnection.
 - All-day Health HRV and stress are a different domain and need the focused Health workflow and `health:read`.
   Health does not resolve Sleep references; never use that permission as a workaround for missing Sleep access.

@@ -64,6 +64,9 @@ import { heartRateSemanticLabel } from './health-heart-rate-summary.helper';
 import {
   calculatePersonalMetricPointRange,
   calculatePersonalMetricRange,
+  calculatePersonalMetricRangeTimeline,
+  HRV_PERSONAL_RANGE_OPTIONS,
+  HRV_PERSONAL_RANGE_VARIANTS,
   type PersonalMetricPointRangeResult,
   type PersonalMetricRangeResult,
   type PersonalMetricRangeTone,
@@ -198,14 +201,7 @@ export interface HealthPriorityTrendSelectionOptions {
   semanticVariantPriority?: readonly string[];
 }
 
-export const HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS = [
-  // Ordered from the most recovery-specific provider summary to the broadest
-  // normalized Sleep fallback. The priority selector preserves this order.
-  'overnight_rmssd',
-  'overnight_average',
-  'sleep_overnight_hrv',
-  'sleep_session_average_hrv',
-] as const;
+export const HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS = HRV_PERSONAL_RANGE_VARIANTS;
 type HealthHrvPersonalRangeSemanticVariant = typeof HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS[number];
 
 export type HealthHrvPersonalRangeTone = PersonalMetricRangeTone;
@@ -274,10 +270,10 @@ interface MetricDatum {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS = 36 * 60 * 60 * 1000;
-const HRV_PERSONAL_RANGE_DAYS = 60;
-const HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS = 14;
-const HRV_CURRENT_AVERAGE_DAYS = 7;
-const HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS = 3;
+const HRV_PERSONAL_RANGE_DAYS = HRV_PERSONAL_RANGE_OPTIONS.baselineWindowDays;
+const HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS = HRV_PERSONAL_RANGE_OPTIONS.baselineMinimumObservationDays;
+const HRV_CURRENT_AVERAGE_DAYS = HRV_PERSONAL_RANGE_OPTIONS.currentWindowDays;
+const HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS = HRV_PERSONAL_RANGE_OPTIONS.currentMinimumObservationDays;
 const SLEEP_HRV_SEMANTIC_VARIANTS = new Set([
   'sleep_session_average_hrv',
   'sleep_overnight_hrv',
@@ -808,17 +804,7 @@ export function buildHealthHrvPersonalRangeStatus(
   const rangeTimes = new Set(pointTimestampsMs.filter(time => Number.isFinite(time) && time <= endTimeMs));
   const firstTime = Math.max(Number.isFinite(startTimeMs) ? startTimeMs!
     : [...rangeTimes].reduce((first, time) => Math.min(first, time), Infinity), endTimeMs - 366 * 86400000);
-  for (let time = firstTime; time <= endTimeMs; time += 86400000) rangeTimes.add(time);
-  if (rangeTimes.size) rangeTimes.add(endTimeMs);
-  const rangePoints = [...rangeTimes].sort((a, b) => a - b).map(timestampMs => {
-    const baseline = calculatePersonalMetricRange(observations, timestampMs, {
-      ...rangeOptions,
-      currentWindowDays: HRV_PERSONAL_RANGE_DAYS,
-      currentMinimumObservationDays: HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS,
-    });
-    return { timestampMs, normalRange: baseline.normalRange
-      ? { min: Math.max(0, baseline.normalRange.min), max: baseline.normalRange.max } : null };
-  });
+  const rangePoints = calculatePersonalMetricRangeTimeline(observations, firstTime, endTimeMs, rangeOptions, [...rangeTimes]);
   const observationsByTimestamp = new Map(observations.map(observation => [observation.timestampMs, observation]));
   const pointStatuses = [...new Set(pointTimestampsMs)]
     .filter(timestampMs => Number.isFinite(timestampMs)

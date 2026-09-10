@@ -1187,6 +1187,32 @@ requires no new Firestore composite index.
 
 ## Recorded Health tools
 
+### Shared HRV personal range
+
+`get_hrv_personal_range` is additive and requires both `health:read` and `sleep:read`. It accepts explicit ISO `start`
+and `end` instants with timezone offsets, up to 366 days, and loads a bounded additional 60-day history. It uses
+`shared/personal-metric-range.ts`, also re-exported by the frontend helper, including shared HRV options and nightly
+semantic variants. Daily medians, mean/population deviation, 14-day minimum baseline, seven-day/three-day headline,
+historical classifications and missing-day baseline evaluation therefore share the Health chart's calculation.
+
+Only eligible canonical nightly Health scalars and normalized non-nap average/overnight Sleep HRV are read. Health
+Sleep references are skipped; normalized sessions are read through the separately required Sleep grant. Health and
+Sleep remain separately labelled series, including provider, response-local account ordinal and fixed semantics.
+The projection never guesses equivalence between opaque Health account keys and Sleep provider identities. The
+internal identities are used only to prevent blending and never appear in output. No spot-check/activity HRV, raw
+samples, device fields, callback URLs or persisted personal-range state are exposed. Reading dates remain the recorded
+calendar dates; daily range instants follow the explicitly requested window, not an inferred UTC calendar date.
+
+Complete reads are required: 2,048 Health records plus 1,000 Sleep records in 32-record pages, 16 MiB selected input,
+8,192 readings, 32 series and 512 KiB output. An over-budget request fails instead of grading a partial history.
+Owner deletion is checked before and after reading. Baseline context stays out of visible readings. A missing-day band
+is not an HRV reading, and insufficient history remains null. This is neither a medical interpretation nor Suunto's
+unpublished proprietary calculation. The internal Assistant allowlist is unchanged.
+
+No new Function, migration, index or stored data is introduced. Release requires separately approved deployment of
+the existing MCP endpoint, registered-app refresh/rescan and digest verification, then local `npm run plugin:sync`
+for the updated Health, Sleep and cross-domain skills. Preserve prior pending changes; do not promote before live verification.
+
 `health.service.ts` is the explicit read-only Health projection boundary. `list_health_metrics` describes 34 approved
 canonical metrics; it does not scan user data or claim availability. It routes Weight to `query_measurements` and
 normalized Sleep to `get_sleep_trend`. Shared-catalog additions do not automatically become public MCP metrics.

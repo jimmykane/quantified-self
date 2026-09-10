@@ -583,6 +583,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     instructions.push(
       'Use list_health_metrics then query_health_metric for recorded all-day Health metrics, stress, resources/Body Battery, movement, energy, blood pressure and fitness metrics. This is not the activity metric catalog. Summary mode returns stored scalars; sample mode returns bounded representative trends for up to 31 provider calendar days, with explicit UTC sample instants. If summaries are empty, check sample mode before concluding that an all-day metric is missing. Keep provider/account/semantic/unit series separate. Garmin Body Battery uses its explicitly labelled native points scale, not a canonical percentage; pair numeric values with the series unit and normalization status. Do not sum cumulative samples, infer personal HRV ranges, or label missing data as zero. Report incomplete scans, downsampling, and unknown semantics. Body composition additionally requires measurements:read and is identity-free in summary mode. Weight and normalized Sleep remain in their existing tools and scopes; sleep references are not read by Health tools. No writes are available.',
     );
+    if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) instructions.push(
+      'For nightly HRV personal ranges, use get_hrv_personal_range with explicit timezone-offset start/end instants. It shares the Health chart calculation, loads baseline context, and separates Health and Sleep series. Use the returned historical classifications and daily bands rather than estimating ranges from sampled data. Missing-day bands are baselines, not readings; insufficient-history states are not zeroes. This is separate from Training readiness and is not a diagnosis.',
+    );
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.TimelineNotesRead)) {
@@ -678,6 +681,17 @@ export function createMcpServer(
   }
 
   if (auth.scopes.includes(MCP_OAUTH_SCOPES.HealthRead)) {
+    if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
+      registerMcpTool(server, 'get_hrv_personal_range', {
+        title: 'Get HRV personal range',
+        description: 'Read source-separated nightly HRV and the same rolling personal range used by Health charts. Requires Health and Sleep access. Supply explicit start/end instants with timezone offsets, at most 366 days. Reads an additional 60 days of bounded summary history, never downsampled data. Returns each recorded night\'s classification, daily baseline boundaries (including missing-reading days), and a seven-day headline with insufficient-history states. Provider/account/semantic series stay separate; activity and spot-check HRV are excluded. This is a personal trend, not a diagnosis or the proprietary Suunto algorithm. No raw samples, device/account identifiers or writes.',
+        inputSchema: z.object({ start: z.string().datetime({ offset: true }), end: z.string().datetime({ offset: true }) }),
+        outputSchema: outputSchemas.get_hrv_personal_range,
+        annotations: READ_ONLY_TOOL_ANNOTATIONS,
+      }, input => runReadOnlyTool('get_hrv_personal_range', () => dataService.getHrvPersonalRange({
+        uid: auth.uid, scopes: auth.scopes, startTimeMs: parseMcpDateTime(input.start, 'start'), endTimeMs: parseMcpDateTime(input.end, 'end'),
+      })));
+    }
     registerMcpTool(server, 'list_health_metrics', {
       title: 'List Health metric capabilities',
       description: 'Discover Health metrics, canonical Sports Lib units, explicitly approved native variants, required permissions and query limits. This static catalog describes capabilities, not whether the user has data. Weight and normalized Sleep use their existing tools and permissions.',
@@ -1486,6 +1500,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     && typeof (params as Record<string, unknown>).arguments === 'object'
     ? (params as Record<string, unknown>).arguments as Record<string, unknown>
     : {};
+  if (toolName === 'get_hrv_personal_range') return [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead];
   if (toolName === 'list_health_metrics' || toolName === 'query_health_metric') {
     return toolName === 'query_health_metric' && isMcpHealthBodyMetric(toolArguments.metricId)
       ? [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.MeasurementsRead]
