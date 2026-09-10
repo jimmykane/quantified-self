@@ -29,16 +29,14 @@
         <span class="dashboard-derived-metrics-retry-label">Retry</span>
       </button>
       }
-      @if (showActions) {
-      <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
-        (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
-        <mat-icon>add_chart</mat-icon>
-        <span>Dashboard manager</span>
-      </button>
-      <button mat-icon-button class="dashboard-manager-button dashboard-manager-button-mobile" appHapticTap
-        (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen" aria-label="Dashboard manager">
-        <mat-icon>add_chart</mat-icon>
-      </button>
+      @if (showActions && isOwnerDashboard) {
+      <button mat-icon-button appHapticTap aria-label="Dashboard options" [matMenuTriggerFor]="dashboardOptions" [disabled]="library.busy()"><mat-icon>more_horiz</mat-icon></button>
+      <mat-menu #dashboardOptions="matMenu" class="qs-menu-panel">
+        <button mat-menu-item (click)="library.bulk($any(user), 'today')"><mat-icon>{{ showTodaySummary ? 'visibility_off' : 'visibility' }}</mat-icon><span>{{ showTodaySummary ? 'Hide Today summary' : 'Show Today summary' }}</span></button>
+        <button mat-menu-item (click)="library.bulk($any(user), 'reset')"><mat-icon>restart_alt</mat-icon><span>Reset to recommended</span></button>
+        <button mat-menu-item (click)="library.bulk($any(user), 'all')"><mat-icon>library_add</mat-icon><span>Add all presets</span></button>
+        <button mat-menu-item (click)="library.bulk($any(user), 'clear')"><mat-icon>delete_sweep</mat-icon><span>Remove all</span></button>
+      </mat-menu>
       }
     </div>
     }
@@ -83,8 +81,13 @@
     </dl>
   </section>
   }
-  @if (kpiLaneTiles.length) {
-  <section class="dashboard-kpi-section">
+  @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }
+  @if (showActions && library.error() && !library.activeLane()) { <p role="alert">{{ library.error() }}</p> }
+  @if (showActions && library.undoAvailable()) { <div role="status" class="dashboard-chart-added">Chart added <button mat-button (click)="library.undo($any(user))" [disabled]="library.busy()">Undo</button></div> }
+  @if (kpiLaneTiles.length || (showActions && isOwnerDashboard)) {
+  <section class="dashboard-kpi-section" aria-label="KPIs">
+    @if (showActions && isOwnerDashboard) { <h2 class="dashboard-kpi-heading">KPIs</h2> }
+    @if (kpiLaneTiles.length) {
     <div
       class="qs-glass-card-panel dashboard-kpi-lane"
       cdkDropList
@@ -95,7 +98,7 @@
       (cdkDropListDropped)="onKpiTilesDrop($event)">
       @for (tile of kpiLaneTiles; track trackByTile($index, tile)) {
       <div
-        class="dashboard-kpi-tile"
+        class="dashboard-kpi-tile" tabindex="-1" [attr.data-dashboard-tile-order]="tile.order"
         cdkDrag
         [cdkDragPreviewContainer]="'parent'"
         [cdkDragDisabled]="!desktopTileDragEnabled || kpiLaneTiles.length < 2"
@@ -132,7 +135,7 @@
           [powerCurve]="getChartTile(tile).powerCurve"
           [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
           [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled && kpiLaneTiles.length > 1"
-          (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+          (editTile)="openTileEditor($event)"
           (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
           (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
           (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
@@ -144,6 +147,8 @@
       </div>
       }
     </div>
+    }
+    @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [darkTheme]="darkTheme"></app-dashboard-chart-library> }
   </section>
   }
   @if (mainGridSections.length) {
@@ -158,6 +163,7 @@
           </div>
         </div>
       </div>
+      @if (section.tiles.length) {
       <app-dashboard-tile-board
         cdkDropList
         cdkDropListOrientation="mixed"
@@ -170,7 +176,7 @@
         (cdkDropListDropped)="onTilesDrop($event, section.id)">
         @for (cell of section.cells; track trackByTile($index, cell.tile)) {
         @let tile = cell.tile;
-        <app-dashboard-tile-cell
+        <app-dashboard-tile-cell tabindex="-1" [attr.data-dashboard-tile-order]="tile.order"
           cdkDrag
           [cdkDragPreviewContainer]="'global'"
           [cdkDragDisabled]="!desktopTileDragEnabled || section.tiles.length < 2"
@@ -210,7 +216,7 @@
             [powerCurve]="getChartTile(tile).powerCurve"
             [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
             [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled && section.tiles.length > 1"
-            (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+            (editTile)="openTileEditor($event)"
             (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
             (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
             (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
@@ -231,7 +237,7 @@
             [size]="tile.size" [order]="tile.order"
             [enableDesktopDrag]="desktopTileDragEnabled && section.tiles.length > 1" [eventFilters]="getTileEventFilters(tile)"
             [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"
-            (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+            (editTile)="openTileEditor($event)"
             (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
             (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
             (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"></app-tile-map>
@@ -247,19 +253,10 @@
           [maxColumns]="section.columns"></app-dashboard-tile-cell>
         }
       </app-dashboard-tile-board>
+      }
+      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [darkTheme]="darkTheme"></app-dashboard-chart-library> }
     </section>
     }
-  </div>
-  }
-  @if (showActions && !mainGridSections.length) {
-  <div class="qs-glass-card-panel dashboard-empty-section-guidance" aria-label="Dashboard section guidance">
-    <div class="dashboard-empty-section-guidance-header">
-      <mat-icon aria-hidden="true">info</mat-icon>
-      <div>
-        <h3>Build your dashboard by intent</h3>
-        <p>Add tiles from Dashboard manager. Sections appear automatically when matching charts or maps exist.</p>
-      </div>
-    </div>
   </div>
   }
 </section>

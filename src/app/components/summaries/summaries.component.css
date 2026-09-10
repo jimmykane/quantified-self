@@ -273,13 +273,6 @@
   margin-left: auto;
 }
 
-.dashboard-manager-button {
-  max-width: 100%;
-}
-
-.dashboard-manager-button-mobile {
-  display: none;
-}
 
 .dashboard-section-divider {
   margin: 0 0 1.25rem;
@@ -410,13 +403,6 @@ section {
     gap: 0.75rem;
   }
 
-  .dashboard-manager-button-desktop {
-    display: none;
-  }
-
-  .dashboard-manager-button-mobile {
-    display: inline-flex;
-  }
 
   .dashboard-kpi-lane {
     grid-template-columns: minmax(0, 1fr);
@@ -448,3 +434,6 @@ section {
     width: 100%;
   }
 }
+
+.dashboard-kpi-heading { font: var(--mat-sys-title-medium); margin-block: 16px 12px; }
+.dashboard-chart-added { display: flex; align-items: center; gap: 12px; }

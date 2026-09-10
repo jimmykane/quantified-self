@@ -17,7 +17,7 @@ class MockTileMapActionsComponent {
   @Input() order?: number;
   @Input() size: any;
   @Input() type: any;
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
 }
 
 @Component({
@@ -71,11 +71,11 @@ describe('TileMapComponent', () => {
 
   it('should re-emit dashboard manager edit requests from map tile actions', () => {
     const emittedOrders: number[] = [];
-    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+    component.editTile.subscribe((order) => emittedOrders.push(order));
 
     const actionsDebugElement = fixture.debugElement.query(By.directive(MockTileMapActionsComponent));
     const actions = actionsDebugElement.componentInstance as MockTileMapActionsComponent;
-    actions.editInDashboardManager.emit(5);
+    actions.editTile.emit(5);
 
     expect(emittedOrders).toEqual([5]);
   });

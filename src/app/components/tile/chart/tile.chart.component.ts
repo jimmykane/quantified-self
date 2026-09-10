@@ -113,6 +113,7 @@ type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing
 
 export class TileChartComponent extends TileAbstractDirective {
   @Input() tileName = '';
+  @Input() previewMode = false;
   @Input() chartType: DashboardChartType;
   @Input() dataType: string;
   @Input() dataValueType: ChartDataValueTypes;
@@ -186,7 +187,7 @@ export class TileChartComponent extends TileAbstractDirective {
   get powerCurveCompareMode(): AppDashboardPowerCurveCompareMode {
     return this.selectedPowerCurveCompareMode;
   }
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
   @Output() derivedChartRangeChange = new EventEmitter<AppDashboardDerivedChartRange>();
   @Output() formTimelineWindowChange = new EventEmitter<AppDashboardFormTimelineWindow>();
   @Output() powerCurveCompareModeChange = new EventEmitter<AppDashboardPowerCurveCompareMode>();
@@ -302,7 +303,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showHeaderControls(): boolean {
-    return this.showCalendarRouteAction || this.showSharedRangeControls || this.showActions;
+    return !this.previewMode && (this.showCalendarRouteAction || this.showSharedRangeControls || this.showActions);
   }
 
   get showCalendarRouteAction(): boolean {
@@ -310,7 +311,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showStackedMobileHeaderControls(): boolean {
-    return this.showPowerCurveCompareSelector && this.showPowerCurveRangeSelector;
+    return !this.previewMode && this.showPowerCurveCompareSelector && this.showPowerCurveRangeSelector;
   }
 
   onDerivedRangeSelection(value: unknown): void {
@@ -352,8 +353,8 @@ export class TileChartComponent extends TileAbstractDirective {
     this.isTileActionSaving = isSaving === true;
   }
 
-  onEditInDashboardManager(order: number): void {
-    this.editInDashboardManager.emit(order);
+  onEditTile(order: number): void {
+    this.editTile.emit(order);
   }
 
 }

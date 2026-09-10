@@ -704,10 +704,11 @@ Training state and Readiness are fixed inside the optional Today summary:
   never exposes source-account keys. This remains neutral context, not a health assessment, training prescription, or
   input to Readiness, Form, or the TSS-only Training state.
 
-Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
+Dashboard **Reset to recommended** recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
 useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
 its default 14-day window, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild
-merely because the manager dialog was opened.
+merely because the inline chart library was opened. Selecting a chart reads existing prepared snapshots only;
+thumbnail examples and preview fallback data never enter Training calculations or trigger a rebuild.
 
 ### Writes and ingress
 

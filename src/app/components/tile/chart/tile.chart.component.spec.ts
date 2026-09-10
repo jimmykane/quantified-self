@@ -76,7 +76,7 @@ class MockTileChartActionsComponent {
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Input() showLayoutControls = true;
   @Output() savingChange = new EventEmitter<boolean>();
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
 }
 
 @Component({
@@ -493,12 +493,12 @@ describe('TileChartComponent', () => {
     component.chartType = ChartTypes.ColumnsVertical;
     component.showActions = true;
     const emittedOrders: number[] = [];
-    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+    component.editTile.subscribe((order) => emittedOrders.push(order));
 
     fixture.detectChanges();
 
     const actions = getActionsComponent();
-    actions.editInDashboardManager.emit(4);
+    actions.editTile.emit(4);
 
     expect(emittedOrders).toEqual([4]);
   });

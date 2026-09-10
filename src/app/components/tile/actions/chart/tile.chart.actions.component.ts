@@ -37,7 +37,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() chartTimeInterval: TimeIntervals;
   @Input() chartOrder: number;
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
   private persistAutoTileStateWithNextSave = false;
 
   constructor(
@@ -47,9 +47,8 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
 
   override async deleteTile(event: unknown) {
     const dashboardTiles = this.user?.settings?.dashboardSettings?.tiles || [];
-    if (dashboardTiles.length <= 1) {
-      return super.deleteTile(event);
-    }
+    if (this.isSaving || !dashboardTiles.some(tile => tile.order === this.order)) return;
+    this.captureDashboardBaseline();
 
     const dashboardSettings = this.user.settings.dashboardSettings as AppDashboardSettingsInterface;
     const previousTiles = this.cloneTiles(dashboardTiles);
@@ -89,11 +88,12 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     }
   }
 
-  openEditInDashboardManager(event: MouseEvent): void {
+  openEditTile(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
     this.hapticsService.selection();
-    this.editInDashboardManager.emit(this.order);
+    this.closeMenuForEditor();
+    this.editTile.emit(this.order);
   }
 
   private cloneTiles(tiles: TileSettingsInterface[]): TileSettingsInterface[] {

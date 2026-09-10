@@ -1,3 +1,7 @@
+import { MatMenuModule } from '@angular/material/menu';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
@@ -163,9 +167,11 @@ describe('SummariesComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [PageHeaderComponent, MetricIndicatorComponent],
+      imports: [PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, NoopAnimationsModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
+        { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => mockUserService.updateUserProperties(component.user, { settings: { dashboardSettings: patch } }) } },
+        { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
         { provide: AppThemeService, useValue: mockThemeService },
         { provide: AppUserService, useValue: mockUserService },
         { provide: DashboardDerivedMetricsService, useValue: mockDashboardDerivedMetricsService },
@@ -182,6 +188,7 @@ describe('SummariesComponent', () => {
 
     fixture = TestBed.createComponent(SummariesComponent);
     component = fixture.componentInstance;
+    component.showActions = true;
   });
 
   afterEach(() => {
@@ -457,7 +464,7 @@ describe('SummariesComponent', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each(['free', 'basic', 'pro'])('keeps Dashboard Manager but removes workspace shortcuts for a %s user', stripeRole => {
+  it.each(['free', 'basic', 'pro'])('keeps dashboard options but removes workspace shortcuts for a %s user', stripeRole => {
     component.user = {
       uid: 'user-1',
       stripeRole,
@@ -470,11 +477,11 @@ describe('SummariesComponent', () => {
     expect(header.querySelector('[routerLink="/training"]')).toBeNull();
     expect(header.querySelector('[routerLink="/health"]')).toBeNull();
     expect(header.querySelector('.dashboard-calendar-link')).toBeNull();
-    expect(header.querySelector('.dashboard-manager-button-desktop')).not.toBeNull();
-    expect(header.querySelector('.dashboard-manager-button-mobile')?.getAttribute('aria-label')).toBe('Dashboard manager');
+    expect(header.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
+    expect(header.textContent).not.toContain('Dashboard manager');
   });
 
-  it('keeps Dashboard Manager hidden on a shared dashboard', () => {
+  it('keeps inline chart discovery and options hidden on a shared dashboard', () => {
     component.user = {
       uid: 'user-1',
       settings: { dashboardSettings: { tiles: [] } },
@@ -482,7 +489,8 @@ describe('SummariesComponent', () => {
     component.showActions = false;
     fixture.detectChanges();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-manager-button')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-dashboard-chart-library')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Dashboard options"]')).toBeNull();
   });
 
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
@@ -539,8 +547,8 @@ describe('SummariesComponent', () => {
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(dashboardHeader?.querySelector('.qs-page-header__subtitle')?.textContent?.trim()).toBe(component.todayDateSubtitle);
     expect(dashboardHeader?.querySelector('.dashboard-section-actions')).not.toBeNull();
-    expect(dashboardHeader?.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
-    expect(dashboardHeader?.querySelector('.dashboard-manager-button-mobile')).not.toBeNull();
+    expect(dashboardHeader?.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
+    expect(dashboardHeader?.textContent).not.toContain('Dashboard manager');
     expect(dashboardHeader?.querySelector('.dashboard-kpi-lane')).toBeNull();
     const kpiSection = nativeElement.querySelector('.dashboard-kpi-section');
     expect(kpiSection).not.toBeNull();
@@ -554,9 +562,9 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
-    expect(sectionHeadings).toEqual(['Activity Overview', 'Routes & Maps']);
+    expect(sectionHeadings).toEqual(['Training State', 'Performance & Power', 'Activity Overview', 'Routes & Maps', 'Custom Charts']);
     const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
-    expect(sectionTitleBlocks).toHaveLength(2);
+    expect(sectionTitleBlocks).toHaveLength(5);
     sectionTitleBlocks.forEach(block => {
       expect(block.querySelector(':scope > mat-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(block.querySelector(':scope > .dashboard-section-title-copy > h2')).not.toBeNull();
@@ -570,7 +578,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-placeholder')).toHaveLength(0);
     expect(component.mainGridSections.every(section => section.trailingPlaceholders.length === 0)).toBe(true);
     expect(component.mainGridSections.every(section => section.columns === 1)).toBe(true);
-    expect(component.mainGridSections.every(section => section.cells[0]?.columns === 1)).toBe(true);
+    expect(component.mainGridSections.filter(section => section.tiles.length).every(section => section.cells[0]?.columns === 1)).toBe(true);
     const singletonCells = nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile:not(.dashboard-grid-placeholder)');
     singletonCells.forEach((cell) => {
       expect((cell as HTMLElement).style.gridColumn).toBe('span 1');
@@ -908,7 +916,7 @@ describe('SummariesComponent', () => {
     expect(component.mainGridSections[0]?.trailingPlaceholders).toEqual([]);
   });
 
-  it('renders the dashboard header and manager action when there are no KPI tiles', () => {
+  it('renders the dashboard header and dashboard options when there are no KPI tiles', () => {
     const mainGridTile = {
       type: TileTypes.Chart,
       order: 0,
@@ -920,7 +928,8 @@ describe('SummariesComponent', () => {
       size: { columns: 1, rows: 1 },
     } as any;
 
-    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.user = {
+      uid: 'test-owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [mainGridTile];
     component.kpiLaneTiles = [];
@@ -929,36 +938,36 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('.dashboard-kpi-section')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-kpi-section')).not.toBeNull();
+    expect(nativeElement.querySelector('.dashboard-kpi-tile')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+    expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
-  it('renders the dashboard header and manager action for an editable empty dashboard', () => {
-    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
+  it('renders the dashboard header and section add entries for an editable empty dashboard', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [];
     component.kpiLaneTiles = [];
     component.mainGridTiles = [];
 
+    component.isOwnerDashboard = true;
+    (component as any).refreshMainGridSections();
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('.dashboard-kpi-section')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-kpi-section')).not.toBeNull();
     expect(nativeElement.querySelector('app-dashboard-tile-board')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
-    const emptyGuidance = nativeElement.querySelector('.dashboard-empty-section-guidance');
-    expect(emptyGuidance).not.toBeNull();
-    expect(emptyGuidance?.textContent).toContain('Build your dashboard by intent');
-    expect(emptyGuidance?.textContent).not.toContain('Training State');
-    expect(emptyGuidance?.textContent).not.toContain('Performance & Power');
+    expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
+    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(6);
   });
 
-  it('hides the Today summary while preserving manager access on an editable dashboard', () => {
+  it('hides the Today summary while preserving dashboard options on an editable dashboard', () => {
     component.user = {
+      uid: 'test-owner',
       settings: {
         dashboardSettings: {
           tiles: [],
@@ -982,7 +991,7 @@ describe('SummariesComponent', () => {
     expect(sharedHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
     expect(nativeElement.querySelector('#dashboard-today-title')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-current-state-row')).toBeNull();
-    expect(nativeElement.querySelector('.dashboard-manager-button-desktop span')?.textContent?.trim()).toBe('Dashboard manager');
+    expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
   it('renders the fixed Today summary on an otherwise empty read-only dashboard', () => {
@@ -1177,6 +1186,7 @@ describe('SummariesComponent', () => {
     });
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith({
+      tileEventAnchorsByOrder: {},
       tiles: component.user.settings.dashboardSettings.tiles,
       events: [],
       tileEventsByOrder: {},
@@ -2769,227 +2779,6 @@ describe('SummariesComponent', () => {
     expect(component.desktopTileDragEnabled).toBe(false);
   });
 
-  it('should resynchronize dashboard subscriptions when the manager saves changes', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [{
-            type: TileTypes.Chart,
-            order: 0,
-            chartType: ChartTypes.ColumnsVertical,
-            dataType: DataAscent.type,
-            dataValueType: ChartDataValueTypes.Total,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            size: { columns: 1, rows: 1 },
-          }],
-        },
-      },
-    } as any;
-    component.showActions = true;
-    mockDialog.open.mockReturnValue({
-      afterClosed: () => of({ saved: true }),
-    });
-    const refreshSpy = vi.spyOn(component as any, 'unsubscribeAndCreateCharts').mockResolvedValue(undefined);
-
-    await component.openDashboardManagerDialog();
-
-    expect(mockDialog.open).toHaveBeenCalledTimes(1);
-    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      data: expect.objectContaining({
-        user: component.user,
-        initialMode: undefined,
-        initialEditTileOrder: null,
-        previewTodaySummaryVisibility: expect.any(Function),
-      }),
-    }));
-    expect(refreshSpy).toHaveBeenCalledTimes(1);
-    expect(component.isDashboardManagerOpen).toBe(false);
-  });
-
-  it('previews Today summary visibility while the manager remains open', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [],
-          showTodaySummary: true,
-        },
-      },
-    } as any;
-    component.showActions = true;
-    (component as any).refreshDerivedMetricsBannerState();
-    expect(component.derivedMetricsBanner?.title).toBe('Building derived metrics');
-    const afterClosedSubject = new Subject<{ saved: boolean } | undefined>();
-    mockDialog.open.mockReturnValueOnce({
-      afterClosed: () => afterClosedSubject.asObservable(),
-    });
-
-    const openPromise = component.openDashboardManagerDialog();
-    const dialogConfig = mockDialog.open.mock.calls[0]?.[1];
-    const previewTodaySummaryVisibility = dialogConfig?.data?.previewTodaySummaryVisibility;
-
-    expect(previewTodaySummaryVisibility).toEqual(expect.any(Function));
-
-    (component.user as any).settings.dashboardSettings.showTodaySummary = false;
-    previewTodaySummaryVisibility(false);
-    fixture.detectChanges();
-
-    expect(component.showTodaySummary).toBe(false);
-    expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(false);
-    expect(component.derivedMetricsBanner).toBeNull();
-    expect(fixture.nativeElement.querySelector('#dashboard-today-title')).toBeNull();
-
-    (component as any).derivedFormStatus = 'ready';
-    (component as any).derivedRecoveryNowStatus = 'ready';
-    (component as any).derivedFormNowStatus = 'ready';
-    (component as any).derivedRampRateStatus = 'ready';
-    (component.user as any).settings.dashboardSettings.showTodaySummary = true;
-    previewTodaySummaryVisibility(true);
-    fixture.detectChanges();
-
-    expect(component.showTodaySummary).toBe(true);
-    expect((component.user as any).settings.dashboardSettings.showTodaySummary).toBe(true);
-    expect(fixture.nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
-
-    afterClosedSubject.next(undefined);
-    afterClosedSubject.complete();
-    await openPromise;
-  });
-
-  it('starts and stops the bounded readiness listener with the Today preview', () => {
-    const nowMs = Date.UTC(2026, 6, 18, 12);
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(nowMs));
-    component.user = {
-      uid: 'user-1',
-      settings: { dashboardSettings: { tiles: [], showTodaySummary: false } },
-    } as any;
-    component.showTodaySummary = false;
-
-    (component as any).previewTodaySummaryVisibility(true);
-
-    expect(mockSleepService.watchForDashboard).toHaveBeenCalledWith(
-      'user-1',
-      nowMs - (30 * 24 * 60 * 60 * 1000),
-      Number.MAX_SAFE_INTEGER,
-    );
-    expect((component as any).readinessSleepListenerKey).toBe('user-1:current-readiness');
-
-    (component as any).previewTodaySummaryVisibility(false);
-
-    expect((component as any).readinessSleepListenerKey).toBeNull();
-  });
-
-  it('should re-enable dashboard manager button as soon as the dialog starts closing', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [{
-            type: TileTypes.Chart,
-            order: 0,
-            chartType: ChartTypes.ColumnsVertical,
-            dataType: DataAscent.type,
-            dataValueType: ChartDataValueTypes.Total,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            size: { columns: 1, rows: 1 },
-          }],
-        },
-      },
-    } as any;
-    component.showActions = true;
-    const beforeClosedSubject = new Subject<void>();
-    const afterClosedSubject = new Subject<{ saved: boolean } | undefined>();
-    mockDialog.open.mockReturnValueOnce({
-      beforeClosed: () => beforeClosedSubject.asObservable(),
-      afterClosed: () => afterClosedSubject.asObservable(),
-    });
-
-    const openPromise = component.openDashboardManagerDialog();
-
-    expect(component.isDashboardManagerOpen).toBe(true);
-
-    beforeClosedSubject.next();
-    beforeClosedSubject.complete();
-
-    expect(component.isDashboardManagerOpen).toBe(false);
-
-    afterClosedSubject.next(undefined);
-    afterClosedSubject.complete();
-    await openPromise;
-
-    expect(component.isDashboardManagerOpen).toBe(false);
-  });
-
-  it('should open dashboard manager dialog in edit mode for a specific chart tile order', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [{
-            type: TileTypes.Chart,
-            order: 3,
-            chartType: ChartTypes.ColumnsVertical,
-            dataType: DataAscent.type,
-            dataValueType: ChartDataValueTypes.Total,
-            dataCategoryType: ChartDataCategoryTypes.ActivityType,
-            size: { columns: 1, rows: 1 },
-          }],
-        },
-      },
-    } as any;
-    component.showActions = true;
-    mockDialog.open.mockReturnValue({
-      afterClosed: () => of({ saved: false }),
-    });
-
-    await component.openDashboardManagerForTileOrder(3);
-
-    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      data: expect.objectContaining({
-        user: component.user,
-        initialMode: 'edit',
-        initialEditTileOrder: 3,
-      }),
-    }));
-  });
-
-  it('should open dashboard manager dialog in edit mode for a map tile order', async () => {
-    component.user = {
-      settings: {
-        dashboardSettings: {
-          tiles: [{
-            type: TileTypes.Map,
-            order: 4,
-            mapStyle: 'default',
-            clusterMarkers: true,
-            size: { columns: 1, rows: 1 },
-          }],
-        },
-      },
-    } as any;
-    component.showActions = true;
-    mockDialog.open.mockReturnValue({
-      afterClosed: () => of({ saved: false }),
-    });
-
-    await component.openDashboardManagerForTileOrder(4);
-
-    expect(mockDialog.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-      data: expect.objectContaining({
-        user: component.user,
-        initialMode: 'edit',
-        initialEditTileOrder: 4,
-      }),
-    }));
-  });
-
-  it('should ignore dashboard manager open requests when actions are hidden', async () => {
-    component.user = { settings: { dashboardSettings: { tiles: [] } } } as any;
-    component.showActions = false;
-
-    await component.openDashboardManagerDialog();
-
-    expect(mockDialog.open).not.toHaveBeenCalled();
-  });
-
   it('should reorder and persist dashboard tiles on valid drop', async () => {
     component.showActions = true;
     component.desktopTileDragEnabled = true;
@@ -3269,6 +3058,7 @@ describe('SummariesComponent', () => {
     component.desktopTileDragEnabled = true;
     mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('persist failed'));
     component.user = {
+      uid: 'owner',
       settings: {
         dashboardSettings: {
           tiles: [

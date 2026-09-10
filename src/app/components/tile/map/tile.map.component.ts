@@ -30,12 +30,12 @@ export class TileMapComponent extends TileAbstractDirective {
   @Input() routePreviews: FirestoreRouteJSON[] = [];
   @Input() eventFilters?: AppDashboardTileEventFiltersInterface | null;
   @Input() canNavigateTileEventsNewer = false;
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
   @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
   @Output() eventFilterActivityTypesChange = new EventEmitter<ActivityTypes[]>();
   @Output() eventFilterNavigate = new EventEmitter<DashboardTileEventNavigationDirection>();
 
-  onEditInDashboardManager(order: number): void {
-    this.editInDashboardManager.emit(order);
+  onEditTile(order: number): void {
+    this.editTile.emit(order);
   }
 }

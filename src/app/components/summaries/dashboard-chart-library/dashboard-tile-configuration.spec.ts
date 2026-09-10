@@ -1,11 +1,6 @@
-import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { BehaviorSubject, of, throwError } from 'rxjs';
 import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -64,14 +59,8 @@ import {
   getDefaultDashboardMapTileSizeForSource,
 } from '../../../helpers/dashboard-tile-default-size.helper';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
-import { AppUserService } from '../../../services/app.user.service';
-import { AppHapticsService } from '../../../services/app.haptics.service';
-import { AppSleepService } from '../../../services/app.sleep.service';
-import { AppEventService } from '../../../services/app.event.service';
-import { AppRouteService } from '../../../services/app.route.service';
 import {
   createDashboardDerivedMetricsMissingState,
-  DashboardDerivedMetricsService,
 } from '../../../services/dashboard-derived-metrics.service';
 import {
   DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE,
@@ -80,7 +69,7 @@ import {
   DASHBOARD_AUTO_TILE_RUNNING_POWER_CURVE_SOURCE,
 } from '../../../helpers/dashboard-auto-tile.helper';
 import { getDashboardPowerCurveActivityTypes } from '../../../helpers/dashboard-power-curve-scope.helper';
-import { DashboardManagerDialogComponent } from './dashboard-manager-dialog.component';
+import { DashboardTileConfiguration } from './dashboard-tile-configuration';
 
 function createUser(tiles: any[] = []): any {
   return {
@@ -161,23 +150,8 @@ function expectDashboardSettingsOnlyWrite(
   expect(userServiceMock.updateUserProperties.mock.calls[callIndex][1].settings.dashboardSettings.eventTableFilters).toBeUndefined();
 }
 
-function createDeferred<T = unknown>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-} {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve;
-    reject = promiseReject;
-  });
-  return { promise, resolve, reject };
-}
-
-describe('DashboardManagerDialogComponent', () => {
-  let component: DashboardManagerDialogComponent;
-  let fixture: ComponentFixture<DashboardManagerDialogComponent>;
+describe('DashboardTileConfiguration', () => {
+  let component: DashboardTileConfiguration;
   let userServiceMock: { updateUserProperties: ReturnType<typeof vi.fn> };
   let dialogRefMock: { close: ReturnType<typeof vi.fn> };
   let dialogMock: { open: ReturnType<typeof vi.fn> };
@@ -244,25 +218,10 @@ describe('DashboardManagerDialogComponent', () => {
       error: vi.fn(),
     };
 
-    await TestBed.configureTestingModule({
-      declarations: [DashboardManagerDialogComponent],
-      providers: [
-        { provide: AppUserService, useValue: userServiceMock },
-        { provide: AppHapticsService, useValue: hapticsMock },
-        { provide: AppSleepService, useValue: sleepServiceMock },
-        { provide: AppEventService, useValue: eventServiceMock },
-        { provide: AppRouteService, useValue: routeServiceMock },
-        { provide: DashboardDerivedMetricsService, useValue: derivedMetricsServiceMock },
-        { provide: MatDialogRef, useValue: dialogRefMock },
-        { provide: MatDialog, useValue: dialogMock },
-        { provide: MAT_DIALOG_DATA, useValue: dialogData },
-      ],
-      schemas: [NO_ERRORS_SCHEMA],
-    }).compileComponents();
-
-    fixture = TestBed.createComponent(DashboardManagerDialogComponent);
-    component = fixture.componentInstance;
-    fixture.detectChanges();
+    component = new DashboardTileConfiguration(dialogData, dialogRefMock, dialogMock as never,
+      userServiceMock as never, hapticsMock as never, sleepServiceMock as never,
+      eventServiceMock as never, routeServiceMock as never, derivedMetricsServiceMock as never);
+    component.initialize();
   });
 
   it('should create', () => {
@@ -593,7 +552,7 @@ describe('DashboardManagerDialogComponent', () => {
         source: 'sleep-sync',
       },
     };
-    component.ngOnInit();
+    component.initialize();
     component.mode = 'edit';
     component.editTileOrder = 0;
     component.category = 'curated';
@@ -629,7 +588,7 @@ describe('DashboardManagerDialogComponent', () => {
         source: 'default-kpi',
       },
     };
-    component.ngOnInit();
+    component.initialize();
     component.mode = 'edit';
     component.editTileOrder = 0;
     component.category = 'custom';
@@ -669,7 +628,7 @@ describe('DashboardManagerDialogComponent', () => {
         source: 'default-curated',
       },
     };
-    component.ngOnInit();
+    component.initialize();
     component.mode = 'edit';
     component.editTileOrder = 0;
     component.category = 'custom';
@@ -710,7 +669,7 @@ describe('DashboardManagerDialogComponent', () => {
         source: DASHBOARD_AUTO_TILE_POWER_CURVE_SOURCE,
       },
     };
-    component.ngOnInit();
+    component.initialize();
     component.mode = 'edit';
     component.editTileOrder = 0;
     component.category = 'custom';
@@ -744,7 +703,7 @@ describe('DashboardManagerDialogComponent', () => {
       size: { columns: 1, rows: 1 },
       eventFilters: { range: '30d', activityTypes: [ActivityTypes.Cycling] },
     }];
-    component.ngOnInit();
+    component.initialize();
     component.mode = 'edit';
     component.editTileOrder = 0;
     component.category = 'curated';
@@ -785,7 +744,7 @@ describe('DashboardManagerDialogComponent', () => {
         eventFilters: { range: '30d', activityTypes: [ActivityTypes.Running] },
       },
     ];
-    component.ngOnInit();
+    component.initialize();
     component.onModeChange('edit');
     component.onEditTileSelectionChange(1);
 
@@ -820,7 +779,7 @@ describe('DashboardManagerDialogComponent', () => {
         source: 'default-curated',
       },
     };
-    component.ngOnInit();
+    component.initialize();
     component.mode = 'edit';
     component.editTileOrder = 0;
     component.category = 'custom';
@@ -869,7 +828,7 @@ describe('DashboardManagerDialogComponent', () => {
         source: 'sleep-sync',
       },
     };
-    component.ngOnInit();
+    component.initialize();
     component.mode = 'edit';
     component.editTileOrder = 1;
     component.category = 'custom';
@@ -1008,42 +967,6 @@ describe('DashboardManagerDialogComponent', () => {
     ]);
   });
 
-  it('should render presets tab content and category controls in template', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component.html');
-    const stylesPath = resolve(process.cwd(), 'src/app/components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component.css');
-    const template = readFileSync(templatePath, 'utf8');
-    const styles = readFileSync(stylesPath, 'utf8');
-
-    expect(template).not.toContain('Simplify dashboard');
-    expect(template).toContain('Reset to default');
-    expect(template).toContain('replaces all current dashboard tiles');
-    expect(template).toContain('class="qs-mat-primary" data-testid="dashboard-manager-reset-default-button"');
-    expect(template).toContain('Add everything');
-    expect(template).toContain('Remove all');
-    expect(template).toContain('Show Today summary');
-    expect(template).toContain('dashboard-manager-today-summary-toggle');
-    expect(template).toContain('Preset category');
-    expect(template).toContain('Presets');
-    expect(template).toContain('Apply preset');
-    expect(template).toContain('mat-chip-listbox');
-    expect(styles).toContain('.dashboard-manager-button-content');
-    expect(styles).toContain('align-items: center;');
-    expect(styles).toContain('line-height: 1;');
-    expect(styles).toContain('.dashboard-manager-button-content mat-icon');
-    expect(styles).toContain('.dashboard-manager-button-content mat-spinner');
-    expect(styles).toMatch(
-      /\.dashboard-manager-reset-warning\s*{[^}]*color:\s*var\(--mat-sys-error\);/,
-    );
-    expect(styles).toMatch(
-      /:host ::ng-deep \.dashboard-manager-bulk-actions \.mdc-button__label\s*{[^}]*align-items:\s*center;[^}]*display:\s*inline-flex;/,
-    );
-
-    const resetButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-reset-default-button"]');
-    const resetWarning: HTMLElement = fixture.nativeElement.querySelector('#dashboard-manager-reset-warning');
-    expect(resetButton.getAttribute('aria-describedby')).toBe(resetWarning.id);
-    expect(template).toContain('class="dashboard-manager-error" role="alert"');
-  });
-
   it('keeps an explicitly empty saved dashboard empty while defaults include the calendar', () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
 
@@ -1079,7 +1002,7 @@ describe('DashboardManagerDialogComponent', () => {
 
     await component.onTodaySummaryVisibilityChange(false);
 
-    expect(component.saveError).toBe('Could not save dashboard settings.');
+    expect(component.saveError).toBe('Could not save dashboard settings. Please try again.');
     expect(component.showTodaySummary).toBe(true);
     expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(true);
     expect(dialogData.previewTodaySummaryVisibility.mock.calls).toEqual([[false], [true]]);
@@ -1152,30 +1075,6 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
-  it('shows an Add all loading state while bulk all add is saving', async () => {
-    dialogData.user.settings.dashboardSettings.tiles = [];
-    const saveDeferred = createDeferred<boolean>();
-    userServiceMock.updateUserProperties.mockReturnValueOnce(saveDeferred.promise);
-
-    const addAllPromise = component.addAllTiles();
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.detectChanges();
-
-    const addAllButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-add-all-button"]');
-    expect(component.isAddAllSaving).toBe(true);
-    expect(component.savingAction).toBe('addAll');
-    expect(addAllButton.getAttribute('aria-busy')).toBe('true');
-    expect(addAllButton.textContent).toContain('Adding...');
-    expect(addAllButton.querySelector('mat-spinner')).toBeTruthy();
-
-    saveDeferred.resolve(true);
-    await addAllPromise;
-
-    expect(component.isSaving).toBe(false);
-    expect(component.savingAction).toBeNull();
-  });
-
   it('resets the dashboard to the refreshed recommended tiles', async () => {
     sleepServiceMock.watchForDashboard.mockReturnValueOnce(of([{ id: 'recent-sleep' }]));
 
@@ -1199,29 +1098,6 @@ describe('DashboardManagerDialogComponent', () => {
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
-  it('shows a Resetting loading state while the default reset is saving', async () => {
-    const saveDeferred = createDeferred<boolean>();
-    userServiceMock.updateUserProperties.mockReturnValueOnce(saveDeferred.promise);
-
-    const resetPromise = component.resetToDefault();
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.detectChanges();
-
-    const resetButton: HTMLElement = fixture.nativeElement.querySelector('[data-testid="dashboard-manager-reset-default-button"]');
-    expect(component.isResetToDefaultSaving).toBe(true);
-    expect(component.savingAction).toBe('resetToDefault');
-    expect(resetButton.getAttribute('aria-busy')).toBe('true');
-    expect(resetButton.textContent).toContain('Resetting...');
-    expect(resetButton.querySelector('mat-spinner')).toBeTruthy();
-
-    saveDeferred.resolve(true);
-    await resetPromise;
-
-    expect(component.isSaving).toBe(false);
-    expect(component.savingAction).toBeNull();
-  });
-
   it('restores dashboard settings when resetting to default fails', async () => {
     const dashboardSettings = dialogData.user.settings.dashboardSettings;
     dashboardSettings.showTodaySummary = false;
@@ -1241,7 +1117,7 @@ describe('DashboardManagerDialogComponent', () => {
 
     await component.resetToDefault();
 
-    expect(component.saveError).toBe('Could not save dashboard settings.');
+    expect(component.saveError).toBe('Could not save dashboard settings. Please try again.');
     expect(dashboardSettings.tiles).toStrictEqual(originalTiles);
     expect(dashboardSettings.showTodaySummary).toBe(false);
     expect(component.showTodaySummary).toBe(false);
@@ -1351,7 +1227,11 @@ describe('DashboardManagerDialogComponent', () => {
     );
   });
 
-  it('checks recommendation evidence inside the default activity and sleep windows', () => {
+  it('reads recommendation evidence only on reset, inside the default activity and sleep windows', async () => {
+    expect(eventServiceMock.getEventsBy).not.toHaveBeenCalled();
+    expect(sleepServiceMock.watchForDashboard).not.toHaveBeenCalled();
+    expect(derivedMetricsServiceMock.watch).not.toHaveBeenCalled();
+    await component.resetToDefault();
     const dayMs = 24 * 60 * 60 * 1000;
     const activityCall = eventServiceMock.getEventsBy.mock.calls[0];
     const sleepCall = sleepServiceMock.watchForDashboard.mock.calls[0];
@@ -1426,7 +1306,7 @@ describe('DashboardManagerDialogComponent', () => {
 
     await component.addAllTiles();
 
-    expect(component.saveError).toBe('Could not save dashboard settings.');
+    expect(component.saveError).toBe('Could not save dashboard settings. Please try again.');
     expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
     expect(dialogData.user.settings.dashboardSettings.autoTiles.kpiAcwr).toEqual({
       state: 'dismissed',
@@ -1534,7 +1414,7 @@ describe('DashboardManagerDialogComponent', () => {
 
     await component.removeAllTiles();
 
-    expect(component.saveError).toBe('Could not save dashboard settings.');
+    expect(component.saveError).toBe('Could not save dashboard settings. Please try again.');
     expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
     expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBeUndefined();
     expect(component.showTodaySummary).toBe(true);
@@ -1799,7 +1679,7 @@ describe('DashboardManagerDialogComponent', () => {
       clusterMarkers: true,
       size: { columns: 1, rows: 1 },
     }];
-    component.ngOnInit();
+    component.initialize();
 
     component.mode = 'edit';
     component.editTileOrder = 0;
@@ -1829,7 +1709,7 @@ describe('DashboardManagerDialogComponent', () => {
       size: { columns: 1, rows: 1 },
       eventFilters: { range: '90d', activityTypes: [] },
     }];
-    component.ngOnInit();
+    component.initialize();
 
     component.mode = 'edit';
     component.editTileOrder = 0;
@@ -1879,7 +1759,7 @@ describe('DashboardManagerDialogComponent', () => {
       clusterMarkers: true,
       size: { columns: 1, rows: 1 },
     }];
-    component.ngOnInit();
+    component.initialize();
 
     component.mode = 'edit';
     component.editTileOrder = 0;
@@ -1922,7 +1802,7 @@ describe('DashboardManagerDialogComponent', () => {
       size: { columns: 1, rows: 1 },
       eventFilters: { range: '3y', activityTypes: [ActivityTypes.Cycling] },
     }];
-    component.ngOnInit();
+    component.initialize();
     component.onModeChange('edit');
 
     component.onEditTileSelectionChange(0);
@@ -1951,7 +1831,7 @@ describe('DashboardManagerDialogComponent', () => {
       range: '2y',
       activityTypes: [ActivityTypes.Running],
     };
-    component.ngOnInit();
+    component.initialize();
 
     component.onModeChange('edit');
     component.onEditTileSelectionChange(0);
@@ -2001,7 +1881,7 @@ describe('DashboardManagerDialogComponent', () => {
 
     await component.save();
 
-    expect(component.saveError).toBe('Could not save dashboard settings.');
+    expect(component.saveError).toBe('Could not save dashboard settings. Please try again.');
     expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
     expect(dialogData.user.settings.dashboardSettings.tiles[0]).not.toHaveProperty('eventFilters');
     expect(dialogData.user.settings.dashboardSettings.dismissedCuratedRecoveryNowTile).toBe(true);
@@ -2015,7 +1895,7 @@ describe('DashboardManagerDialogComponent', () => {
       activityTypes: [ActivityTypes.Running],
     };
     userServiceMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
-    component.ngOnInit();
+    component.initialize();
     component.mode = 'edit';
     component.editTileOrder = 0;
     component.category = 'custom';
@@ -2064,7 +1944,7 @@ describe('DashboardManagerDialogComponent', () => {
       size: { columns: 1, rows: 1 },
     }));
 
-    component.ngOnInit();
+    component.initialize();
 
     expect(component.isSaveDisabled).toBe(false);
 
@@ -2095,7 +1975,7 @@ describe('DashboardManagerDialogComponent', () => {
       size: { columns: 1, rows: 1 },
     }));
 
-    component.ngOnInit();
+    component.initialize();
     component.onWorkflowTabChange(1);
     component.onPresetCategoryChange('custom');
     component.onPresetSelectionChange(DASHBOARD_MANAGER_PRESET_IDS.CUSTOM_DURATION_PIE);
@@ -2123,7 +2003,7 @@ describe('DashboardManagerDialogComponent', () => {
       range: '2y',
       activityTypes: [ActivityTypes.Running],
     };
-    component.ngOnInit();
+    component.initialize();
 
     component.onModeChange('edit');
     component.onEditTileSelectionChange(0);
@@ -2144,7 +2024,7 @@ describe('DashboardManagerDialogComponent', () => {
       size: { columns: 1, rows: 1 },
       eventFilters: { range: '3y', activityTypes: [ActivityTypes.Cycling] },
     });
-    component.ngOnInit();
+    component.initialize();
     component.onModeChange('edit');
     component.onEditTileSelectionChange(1);
 
@@ -2170,7 +2050,7 @@ describe('DashboardManagerDialogComponent', () => {
     (component as any).data.initialMode = 'edit';
     (component as any).data.initialEditTileOrder = 1;
 
-    component.ngOnInit();
+    component.initialize();
 
     expect(component.mode).toBe('edit');
     expect(component.editTileOrder).toBe(1);
@@ -2178,63 +2058,5 @@ describe('DashboardManagerDialogComponent', () => {
     expect(component.curatedChartType).toBe(DASHBOARD_RECOVERY_NOW_CHART_TYPE);
   });
 
-  it('scrolls and focuses the edit section after deep-link edit initialization', () => {
-    (component as any).data.initialMode = 'edit';
-    (component as any).data.initialEditTileOrder = 0;
-    const focusSpy = vi.spyOn(component as any, 'scrollAndFocusInitialEditSection');
 
-    component.ngOnInit();
-    component.ngAfterViewInit();
-
-    expect(focusSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('focuses custom chart type selector when auto-focusing a custom edit section', () => {
-    const scrollIntoView = vi.fn();
-    const focus = vi.fn();
-    (component as any).mode = 'edit';
-    (component as any).category = 'custom';
-    (component as any).shouldAutoFocusEditSection = true;
-    (component as any).customSectionRef = { nativeElement: { scrollIntoView } };
-    (component as any).customChartTypeSelect = { focus };
-
-    (component as any).scrollAndFocusInitialEditSection();
-
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
-    expect(focus).toHaveBeenCalledTimes(1);
-  });
-
-  it('focuses first curated radio option when auto-focusing a curated edit section', () => {
-    const scrollIntoView = vi.fn();
-    const focus = vi.fn();
-    (component as any).mode = 'edit';
-    (component as any).category = 'curated';
-    (component as any).shouldAutoFocusEditSection = true;
-    (component as any).curatedSectionRef = {
-      nativeElement: {
-        scrollIntoView,
-        querySelector: vi.fn().mockReturnValue({ focus }),
-      },
-    };
-
-    (component as any).scrollAndFocusInitialEditSection();
-
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
-    expect(focus).toHaveBeenCalledTimes(1);
-  });
-
-  it('focuses map style selector when auto-focusing a map edit section', () => {
-    const scrollIntoView = vi.fn();
-    const focus = vi.fn();
-    (component as any).mode = 'edit';
-    (component as any).category = 'map';
-    (component as any).shouldAutoFocusEditSection = true;
-    (component as any).mapSectionRef = { nativeElement: { scrollIntoView } };
-    (component as any).mapStyleSelect = { focus };
-
-    (component as any).scrollAndFocusInitialEditSection();
-
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
-    expect(focus).toHaveBeenCalledTimes(1);
-  });
 });

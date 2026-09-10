@@ -1,3 +1,5 @@
+import { DashboardConfigurationService } from '../../../../services/dashboard-configuration.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -18,10 +20,11 @@ describe('TileMapActionsComponent', () => {
   let fixture: ComponentFixture<TileMapActionsComponent>;
   let userMock: any;
   let analyticsMock: any;
-  let hapticsMock: { selection: ReturnType<typeof vi.fn> };
+  let hapticsMock: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     userMock = {
+      uid: 'owner',
       settings: {
         appSettings: { theme: 'dark' },
         unitSettings: { startOfTheWeek: 1 },
@@ -39,7 +42,7 @@ describe('TileMapActionsComponent', () => {
       logEvent: vi.fn(),
     };
     hapticsMock = {
-      selection: vi.fn(),
+      selection: vi.fn(), success: vi.fn(), error: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -51,6 +54,8 @@ describe('TileMapActionsComponent', () => {
         BrowserAnimationsModule,
       ],
       providers: [
+        { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => userMock.updateUserProperties(userMock, { settings: { dashboardSettings: patch } }) } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: AppUserService, useValue: userMock },
         { provide: AppAnalyticsService, useValue: analyticsMock },
         { provide: AppHapticsService, useValue: hapticsMock },
@@ -94,14 +99,14 @@ describe('TileMapActionsComponent', () => {
     expect(template).toContain('Edit');
   });
 
-  it('should emit editInDashboardManager with current tile order', () => {
+  it('should emit editTile with current tile order', () => {
     const emittedOrders: number[] = [];
-    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+    component.editTile.subscribe((order) => emittedOrders.push(order));
     const preventDefault = vi.fn();
     const stopPropagation = vi.fn();
 
     component.order = 1;
-    component.openEditInDashboardManager({ preventDefault, stopPropagation } as any);
+    component.openEditTile({ preventDefault, stopPropagation } as any);
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(stopPropagation).toHaveBeenCalledTimes(1);

@@ -1,0 +1,54 @@
+<div class="chart-library-entry">
+  <button mat-stroked-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="'chart-library-' + lane()" [disabled]="state.busy()" (click)="toggle()">
+    <mat-icon>{{ expanded() ? 'expand_less' : 'add_chart' }}</mat-icon>
+    <span>{{ available().length ? 'Add charts · ' + available().length + ' available' : (lane() === 'section:custom' ? 'Create custom chart' : 'Browse charts · All added') }}</span>
+  </button>
+</div>
+@if (expanded()) {
+<section class="chart-library" tabindex="-1" [id]="'chart-library-' + lane()" aria-label="Chart library" (keydown.escape)="close(); $event.stopPropagation()" [attr.aria-busy]="state.busy()">
+  <div class="chart-library-heading">
+    <h3>Add charts</h3>
+    <button mat-icon-button aria-label="Close chart library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
+  </div>
+  <div class="chart-library-layout" [class.has-selection]="state.draft()">
+    <div class="chart-library-browser">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
+      @if (lane() === 'kpi') {
+      <mat-chip-listbox aria-label="KPI group" [value]="group()" (change)="selectGroup($event.value)">
+        <mat-chip-option value="all">All</mat-chip-option><mat-chip-option value="load">Load</mat-chip-option><mat-chip-option value="readiness">Readiness</mat-chip-option><mat-chip-option value="execution">Execution</mat-chip-option>
+      </mat-chip-listbox>
+      }
+      <div class="chart-library-cards">
+        @for (entry of visible(); track entry.definition.id) {
+        <mat-card appearance="outlined" [class.chart-library-card-selected]="state.selected()?.definition?.id === entry.definition.id">
+          <div class="chart-library-thumbnail" aria-hidden="true" inert><app-dashboard-chart-preview [user]="user()" [tile]="entry.tile" [seed]="seed()" [darkTheme]="darkTheme()" [thumbnail]="true"></app-dashboard-chart-preview></div>
+          <mat-card-header><mat-card-title>{{ entry.definition.label }}</mat-card-title></mat-card-header>
+          <mat-card-content><p>{{ entry.definition.description }}</p></mat-card-content>
+          <mat-card-actions><button mat-button [attr.aria-label]="'Preview ' + entry.definition.label" [disabled]="state.busy()" (click)="select(entry)">Preview & details<mat-icon>arrow_forward</mat-icon></button></mat-card-actions>
+        </mat-card>
+        } @empty { <p>{{ available().length ? 'No charts match your search.' : 'All presets in this section are on your dashboard.' }}</p> }
+      </div>
+      @if (totalPages() > 1) {
+      <nav class="chart-library-pagination" aria-label="Chart pages"><button mat-icon-button aria-label="Previous charts" [disabled]="currentPage() === 0" (click)="changePage(-1)"><mat-icon>chevron_left</mat-icon></button><span aria-live="polite">{{ currentPage()+1 }} / {{ totalPages() }}</span><button mat-icon-button aria-label="Next charts" [disabled]="currentPage()+1 >= totalPages()" (click)="changePage(1)"><mat-icon>chevron_right</mat-icon></button></nav>
+      }
+      @if (lane() !== 'kpi' && lane() !== 'section:routesMaps') {
+      <button mat-button [disabled]="state.busy()" (click)="createCustom()"><mat-icon>tune</mat-icon>Create custom chart</button>
+      }
+    </div>
+    @if (state.draft(); as draft) {
+    <div class="chart-library-detail" tabindex="-1">
+      <button mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
+      <h3>{{ draftDefinition()?.label || (state.editor()?.mode === 'edit' ? 'Edit chart' : 'Custom chart') }}</h3>
+      <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
+      <p>{{ explanation() }}</p><p class="chart-library-destination">{{ dataScope() }}</p>
+      <p class="chart-library-destination">{{ state.editor()?.mode === 'edit' ? 'Saved in' : 'Adds to' }} {{ destination() }}</p>
+      @if (state.configuring()) {
+      <app-dashboard-tile-editor [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
+      } @else { <button mat-button (click)="state.configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>Chart settings</button> }
+      @if (state.error()) { <p class="chart-library-error" role="alert">{{ state.error() }}</p> }
+      <div class="chart-library-save"><button mat-flat-button [disabled]="state.busy() || state.editor()?.isSaveDisabled" (click)="state.save()"><span class="chart-library-button-content"><span class="chart-library-button-icon">@if (state.busy()) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>{{ state.editor()?.mode === 'edit' ? 'check' : 'add' }}</mat-icon> }</span><span>{{ state.busy() ? 'Saving…' : state.editor()?.mode === 'edit' ? 'Save changes' : 'Add to dashboard' }}</span></span></button></div>
+    </div>
+    }
+  </div>
+</section>
+}

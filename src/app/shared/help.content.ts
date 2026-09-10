@@ -185,7 +185,7 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 - New dashboards start with a 1 x 1 **Activity Calendar** tile showing the current month. Select its open action to move to the full [Calendar](/calendar).
 - The Dashboard and Training headers each include a **Calendar** action for opening the full [Calendar](/calendar).
-- Existing editable dashboards that do not contain the Activity Calendar receive it once automatically. Use **Undo** on the notice, remove the tile, or use Dashboard manager **Remove all** to keep it from returning; adding it again manually restores it to the dashboard.
+- Existing editable dashboards that do not contain the Activity Calendar receive it once automatically. Use **Undo** on the notice, remove the tile, or use Dashboard options **Remove all** to keep it from returning; adding it again manually restores it to the dashboard.
 - The full Calendar has **Week**, **Month**, and **Year** views. The previous and next controls move by the selected view's period, and **Today** returns to the current period without taking a separate row on smaller screens.
 - The selected view and date are kept in the URL, so refreshing or sharing the authenticated route preserves the same calendar position.
 
@@ -280,27 +280,30 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ## Core dashboard features
 
-### Dashboard manager
+### Add and edit dashboard charts
 
-- Use the **Dashboard manager** button above dashboard tiles to add or edit dashboard tiles.
-- Dashboard manager supports two workflows: **Manual** and **Presets**.
-- You can choose between **Curated**, **KPI**, **Custom**, and **Map** categories.
-- **Presets** provide quick-start tile templates and can be applied in both **Add** and **Edit** modes.
+- Each dashboard section ends with **Add charts** and the number of available presets. Open it to browse previews in that section; presets already represented on your dashboard are excluded from the count.
+- Search within the section, use **Load**, **Readiness**, or **Execution** to filter KPIs, and page through six previews at a time.
+- Select **Preview & details** to see a larger chart, its explanation, data scope, and destination section. Desktop keeps the list beside the details; mobile uses **Back to charts** to return to the list.
+- **Your data** previews use available personal data. **Example data** previews use synthetic examples when data is missing or unavailable, including while personal data is loading. Browsing never adds a chart or starts a metric rebuild.
+- Use **Chart settings** for the full inline editor with **Curated**, **KPI**, **Custom**, and **Map** categories. Nothing is saved until **Add to dashboard** or **Save changes**. Leaving changed settings asks whether to discard them.
+- After adding a chart, **Undo** removes that addition until another dashboard change makes it unsafe to undo. If you have started editing another chart, Undo asks before discarding those changes. If the dashboard changed elsewhere, reopen the editor with the current layout before saving again.
+- Open a tile's three-dot menu and choose **Edit chart** to edit it in its section. You can remove the last tile; empty sections retain their add action. Shared dashboards remain read-only.
 - **Curated Recovery** remains a fixed insight and does not react to event table or custom tile date ranges.
 - **Activity Calendar** is the default 1 x 1 dashboard tile. It shows the current month and opens the full [Calendar](/calendar). Existing editable dashboards that do not contain it receive it once automatically; **Undo** or removing it keeps it dismissed. The [Activity Calendar guide](/help#activity-calendar) explains its views, circles, summaries, and data scope.
 - **Curated Form/TSS** computes from full history and does not react to event table or custom tile date ranges. Its **W / M / Y** view setting is saved on that dashboard tile.
 - New curated charts: **Freshness Forecast**, **Intensity Distribution**, **Efficiency Trend**, **Cycling Power Curve**, and **Running Power Curve**.
-- New dashboards start with the Activity Calendar tile. The optional Dashboard **Today** header greets the dashboard owner according to browser-local morning, afternoon, or evening time, using the first part of their display name when available and generic copy otherwise; the greeting stays hidden on shared dashboards. Today then begins with the same TSS-only **Training state** shown in Training and shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, and Overnight HR. Open **Training** or **Health** from the main navigation. Select its calendar icon to open a mini calendar for the current month, use its previous and next controls to browse months, then select an activity day for details. Use **Show Today summary** in Dashboard manager to show or hide it independently from chart and map tiles.
+- New dashboards start with the Activity Calendar tile. The optional Dashboard **Today** header greets the dashboard owner according to browser-local morning, afternoon, or evening time, using the first part of their display name when available and generic copy otherwise; the greeting stays hidden on shared dashboards. Today then begins with the same TSS-only **Training state** shown in Training and shows current **Readiness** with its score, confidence, available-signal count, Load, Sleep, HRV, and Overnight HR. Open **Training** or **Health** from the main navigation. Select its calendar icon to open a mini calendar for the current month, use its previous and next controls to browse months, then select an activity day for details. Use **Show Today summary** in **Dashboard options** to show or hide it independently from chart and map tiles.
 - Today uses the same compact Readiness, sleep-score, evidence-coverage, and personal-baseline indicators as Training. Exact values and labels remain visible, so the indicators add scanability without turning Form, ramp, recovery time, or other unbounded metrics into arbitrary percentages.
 - **Training** remains the fixed analytical workspace. Dashboard tiles can reuse selected derived evidence without changing Training calculations or layout.
-- Existing curated and KPI tiles are preserved until you edit or remove them in Dashboard manager.
+- Existing curated and KPI tiles are preserved until you edit or remove them using their tile menu.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
 - The main dashboard groups chart and map tiles by intent, such as **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
 - Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
 - New dashboard tiles use chart-aware default sizes: Activity Calendar, simple custom totals, KPIs, and the clustered heatmap start at 1 x 1, while Form/TSS, Power Curve, and the Routes map start wider.
 - Empty editable dashboards show lightweight section guidance until chart or map sections exist.
-- KPI choices in Dashboard manager are grouped as **Load**, **Readiness**, and **Execution** for both manual and preset flows.
+- KPI choices are grouped as **Load**, **Readiness**, and **Execution** in the chart library and inline editor.
 - **Aerobic Capacity** shows the latest imported running or cycling VO2 max and compares only observations from the same source. It does not substitute FTP or rolling CP/W′/Pmax capacity for VO2 max.
 - **Aerobic Durability** shows the current persisted long-session context with the strongest sample evidence: aerobic decoupling for Running, Cycling, and Open water, or pace retention for Pool. Missing and ineligible activity evidence stays unavailable.
 - Dashboard **Today** begins with the same compact **Training state** label and caption as Training. It uses current Form, ramp, CTL, and ATL only, so recorded sleep and imported recovery never change it; those are shown separately in Today Readiness.
@@ -310,7 +313,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Haptics automatically fall back to no-op when vibration support is unavailable or reduced-motion is enabled.
 - Event search filters only the dashboard event table.
 - Event tags can be added from an event row or event details. The table supports an exact tag filter, and up to 250 selected events can receive atomic add/remove tag changes in bulk. Each event supports up to 10 tags of 32 characters; tags are visible on public event and comparison links.
-- **Custom** charts use their own tile date-range and activity filters, with matching controls in Dashboard manager.
+- **Custom** charts use their own tile date-range and activity filters, with matching controls in the inline editor.
 - If your account has no activities yet, the dashboard shows **No activities yet** with actions to **Upload activity** or **Connect service**. Uploads support FIT, GPX, TCX, JSON, and SML files; service connections support Garmin, Suunto, COROS, and Wahoo.
 - Dashboard **Action prompts** are contextual setup cards shown above your dashboard when an account action needs attention after activity data exists.
 - New users can choose a kilometers or miles preset from the dashboard **Default units** action prompt; choose **Advanced settings** there, or open **Settings -> Units**, to fine-tune individual unit preferences later.
@@ -324,9 +327,9 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Beyond the default Activity Calendar and its one-time addition to existing dashboards that lack it, the Dashboard does not automatically add sleep, KPI, curated training, or power-curve tiles. It can add a **Routes** map once saved routes have generated previews.
 - Derived curated and KPI chart types are unique: only one tile per special derived chart type can exist at a time.
 - Map tiles are unique per source: one activity map and one saved-routes map can exist at a time.
-- Map style and cluster-marker settings are edited inside Dashboard manager.
-- Default manager sizes are chart-aware: Activity Calendar, simple custom totals, KPIs, and the clustered heatmap start at 1 x 1, while Form/TSS, Power Curve, and the Routes map start wider.
-- Dashboard manager bulk actions include **Reset to default**, which replaces the current dashboard tiles with a useful recommended set based on evidence in each tile's default window (90 days for activity-backed tiles, 14 days for Sleep, and the prepared 1-year Power Curve snapshots), plus route, capacity, and durability evidence; **Add everything**, which inserts every available preset including overlapping metrics; and **Remove all**, which hides the Today summary, clears every dashboard chart/map tile, and keeps automatic suggestions dismissed. Reset to default and Add everything restore the Today summary.
+- Map style and cluster-marker settings are edited in the inline chart editor.
+- Default tile sizes are chart-aware: Activity Calendar, simple custom totals, KPIs, and the clustered heatmap start at 1 x 1, while Form/TSS, Power Curve, and the Routes map start wider.
+- **Dashboard options** includes **Reset to recommended**, which replaces the current dashboard tiles with a useful recommended set based on evidence in each tile's default window (90 days for activity-backed tiles, 14 days for Sleep, and the prepared 1-year Power Curve snapshots), plus route, capacity, and durability evidence; **Add all presets**, which inserts every available preset including overlapping metrics; and **Remove all**, which hides the Today summary, clears every dashboard chart/map tile, and keeps automatic suggestions dismissed. Reset to recommended and Add all presets restore the Today summary.
 
 ### Reorder dashboard tiles
 
@@ -337,7 +340,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Recovery tile summary
 
-- The curated **Recovery** pie tile is optional and can be added from Dashboard manager presets or **Add everything**.
+- The curated **Recovery** pie tile is optional and can be added from the **Training State** chart library or **Add all presets**.
 - The tile shows live recovery split between **Left now** and **Elapsed**.
 - The summary shows **Recovery left**, plus **Active total** and **Latest workout** recovery context.
 - Active totals only include currently active recovery windows, not all historical recovery values.

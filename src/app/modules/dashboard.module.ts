@@ -1,3 +1,7 @@
+import { ActivityCalendarGridComponent } from '../components/calendar/activity-calendar-grid/activity-calendar-grid.component';
+import { DashboardChartPreviewComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-preview.component';
+import { DashboardTileEditorComponent } from '../components/summaries/dashboard-chart-library/dashboard-tile-editor.component';
+import { DashboardChartLibraryComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-library.component';
 import { NgModule } from '@angular/core';
 import { MaterialModule } from './material.module';
 import { SharedModule } from './shared.module';
@@ -15,7 +19,6 @@ import { TileActionsFooterComponent } from '../components/tile/actions/footer/ti
 import { BenchmarkModule } from './benchmark.module';
 import { AppChartsModule } from './app-charts.module';
 import { DragDropModule } from '@angular/cdk/drag-drop';
-import { DashboardManagerDialogComponent } from '../components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component';
 import { DashboardTileEventFiltersComponent } from '../components/tile/event-filters/dashboard-tile-event-filters.component';
 import { DashboardTileBoardComponent } from '../components/summaries/dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from '../components/summaries/dashboard-tile-cell/dashboard-tile-cell.component';
@@ -37,6 +40,7 @@ import { EventTableModule } from './event-table.module';
         EventsMapComponent,
         RoutePreviewMapComponent,
         ActivityCalendarTileComponent,
+        ActivityCalendarGridComponent,
         UploadActivitiesComponent,
         EventTableModule,
     ],
@@ -44,6 +48,9 @@ import { EventTableModule } from './event-table.module';
     declarations: [
         DashboardComponent,
         SummariesComponent,
+        DashboardChartPreviewComponent,
+        DashboardTileEditorComponent,
+        DashboardChartLibraryComponent,
         TileChartActionsComponent,
         TileMapActionsComponent,
         TileActionsHeaderComponent,
@@ -51,7 +58,6 @@ import { EventTableModule } from './event-table.module';
         TileChartComponent,
         TileMapComponent,
         DashboardTileEventFiltersComponent,
-        DashboardManagerDialogComponent,
         DashboardTileBoardComponent,
         DashboardTileCellComponent,
         DashboardActionPromptsComponent,

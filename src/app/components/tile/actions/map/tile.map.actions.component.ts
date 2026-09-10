@@ -10,7 +10,7 @@ import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive
   standalone: false
 })
 export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit {
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
 
   constructor(
     userService: AppUserService) {
@@ -24,10 +24,11 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
     }
   }
 
-  openEditInDashboardManager(event: MouseEvent): void {
+  openEditTile(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
     this.hapticsService.selection();
-    this.editInDashboardManager.emit(this.order);
+    this.closeMenuForEditor();
+    this.editTile.emit(this.order);
   }
 }

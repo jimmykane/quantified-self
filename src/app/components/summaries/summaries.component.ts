@@ -1,3 +1,6 @@
+import { DashboardConfigurationService, cloneDashboardSettings } from '../../services/dashboard-configuration.service';
+import { DashboardChartLibraryState } from './dashboard-chart-library/dashboard-chart-library-state.service';
+import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-preview.helper';
 import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -6,6 +9,7 @@ import {
   DoCheck,
   HostListener,
   Inject,
+  inject,
   Input,
   LOCALE_ID,
   OnChanges,
@@ -111,7 +115,6 @@ import {
 } from '../../helpers/dashboard-special-chart-types';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { DashboardManagerDialogComponent } from './dashboard-manager-dialog/dashboard-manager-dialog.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import {
   CalendarMonthPickerBottomSheetComponent,
@@ -276,7 +279,8 @@ interface DashboardTileEventSubscriptionState {
   templateUrl: './summaries.component.html',
   styleUrls: ['./summaries.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false
+  standalone: false,
+  providers: [DashboardChartLibraryState],
 })
 
 export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges, DoCheck {
@@ -298,7 +302,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
-  public isDashboardManagerOpen = false;
+  private readonly configuration = inject(DashboardConfigurationService);
+  readonly library = inject(DashboardChartLibraryState);
+  public previewInput: DashboardPreviewInput = { tiles: [] };
+  private librarySubscription?: Subscription;
   public showTodaySummary = true;
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public sleepTrendWindowLabel = 'Last 14 days';
@@ -415,12 +422,23 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnInit() {
+    this.librarySubscription = this.library.changed$.subscribe(async order => {
+      await this.unsubscribeAndCreateCharts();
+      this.changeDetector.markForCheck();
+      if (order !== null) requestAnimationFrame(() => {
+        const target = this.documentRef.querySelector<HTMLElement>(`[data-dashboard-tile-order="${order}"]`);
+        target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'nearest' });
+      });
+    });
     this.updateDesktopTileDragCapability();
     this.documentRef.addEventListener('visibilitychange', this.onDocumentVisibilityChange);
     this.refreshTodayHeaderAndSchedule();
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
+    if (['user', 'eventUser'].some(key => simpleChanges[key] && simpleChanges[key].previousValue?.uid !== simpleChanges[key].currentValue?.uid)) {
+      this.library.resetContext();
+    }
     if (simpleChanges.user || simpleChanges.eventUser) {
       this.refreshTodayHeader(new Date());
     }
@@ -466,6 +484,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.librarySubscription?.unsubscribe();
     this.documentRef.removeEventListener('visibilitychange', this.onDocumentVisibilityChange);
     this.clearTodayHeaderRefreshTimer();
     this.unsubscribeFromAll();
@@ -573,10 +592,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     await this.persistLaneOrder();
   }
 
-  public async openDashboardManagerDialog(): Promise<void> {
-    return this.openDashboardManagerDialogWithState();
-  }
-
   public openDashboardCalendar(): void {
     if (!this.user?.uid) {
       return;
@@ -590,61 +605,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     );
   }
 
-  public async openDashboardManagerForTileOrder(order: number): Promise<void> {
-    await this.openDashboardManagerDialogWithState({
-      initialMode: 'edit',
-      initialEditTileOrder: Number(order),
-    });
-  }
-
-  private async openDashboardManagerDialogWithState(
-    initialState?: { initialMode?: 'add' | 'edit'; initialEditTileOrder?: number | null },
-  ): Promise<void> {
-    if (!this.showActions || !this.user || this.isDashboardManagerOpen) {
-      return;
-    }
-
-    this.setDashboardManagerOpenState(true);
-
-    try {
-      const dialogRef = this.dialog.open(DashboardManagerDialogComponent, {
-        data: {
-          user: this.user,
-          initialMode: initialState?.initialMode,
-          initialEditTileOrder: initialState?.initialEditTileOrder ?? null,
-          previewTodaySummaryVisibility: (showTodaySummary: boolean) => {
-            this.previewTodaySummaryVisibility(showTodaySummary);
-          },
-        },
-        width: '680px',
-        maxWidth: '95vw',
-      });
-      dialogRef.beforeClosed?.().pipe(take(1)).subscribe(() => {
-        this.setDashboardManagerOpenState(false);
-      });
-      const result = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
-      if (result?.saved === true) {
-        await this.unsubscribeAndCreateCharts();
-      }
-    } finally {
-      this.setDashboardManagerOpenState(false);
-    }
-  }
-
-  private setDashboardManagerOpenState(isOpen: boolean): void {
-    if (this.isDashboardManagerOpen === isOpen) {
-      return;
-    }
-    this.isDashboardManagerOpen = isOpen;
-    this.changeDetector.markForCheck();
-  }
-
-  private previewTodaySummaryVisibility(showTodaySummary: boolean): void {
-    this.showTodaySummary = showTodaySummary;
-    this.syncReadinessSleepSubscription();
-    this.refreshDashboardTodaySignals();
-    this.refreshDerivedMetricsBannerState();
-    this.changeDetector.markForCheck();
+  public async openTileEditor(order: number): Promise<void> {
+    if (!this.showActions || !this.resolveOwnDashboardUID()) return;
+    await this.library.edit(this.user as AppUserInterface, order);
+    requestAnimationFrame(() => this.documentRef.querySelector<HTMLElement>('.chart-library-detail')?.focus());
   }
 
   private async unsubscribeAndCreateCharts() {
@@ -673,10 +637,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const buildStart = performance.now();
     this.refreshDashboardTodaySignals();
     this.refreshDerivedMetricsBannerState();
-    const newTiles = buildDashboardTileViewModels({
+    this.previewInput = {
       tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
       events: [],
       tileEventsByOrder: this.tileEventsByOrder,
+      tileEventAnchorsByOrder: Object.fromEntries(this.tileEventAnchorEndMsByOrder),
       routePreviews: this.routePreviewRoutes,
       sleepSessions: this.sleepSessions,
       sleepTrendWindow: this.sleepTrendWindow,
@@ -701,7 +666,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         trainingCapacity: this.derivedTrainingCapacityContext,
         trainingDurability: this.derivedTrainingDurabilityPayload,
       },
-    });
+    };
+    this.library.invalidateUndo(this.user?.settings?.dashboardSettings);
+    const newTiles = buildDashboardTileViewModels(this.previewInput);
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.logger.log('[perf] summaries_build_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
@@ -1101,14 +1068,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.dashboardAutoTileUser = null;
   }
 
-  private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>): Promise<void> {
+  private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>, expected: AppDashboardSettingsInterface): Promise<void> {
     if (!this.user) {
       return Promise.resolve();
     }
 
-    return this.userService.updateUserProperties(this.user as AppUserInterface, {
-      settings: { dashboardSettings },
-    });
+    if (!this.resolveOwnDashboardUID()) return Promise.resolve();
+    return this.configuration.save(this.user.uid, expected, dashboardSettings);
   }
 
   public async onSleepTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {
@@ -1124,6 +1090,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     userWithSettings.settings = userWithSettings.settings || {};
     const dashboardSettings = (userWithSettings.settings.dashboardSettings || {}) as AppDashboardSettingsInterface;
     userWithSettings.settings.dashboardSettings = dashboardSettings;
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
     const previousSleepTrend = { ...(dashboardSettings.sleepTrend || {}) };
 
     dashboardSettings.sleepTrend = {
@@ -1138,7 +1105,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     try {
       await this.persistDashboardSettings({
         sleepTrend: dashboardSettings.sleepTrend,
-      });
+      }, expectedSettings);
     } catch (error) {
       dashboardSettings.sleepTrend = previousSleepTrend;
       this.sleepTrendRange = normalizeDashboardSleepTrendRange(previousSleepTrend.range);
@@ -1494,6 +1461,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     const dashboardSettings = (this.user as AppUserInterface).settings.dashboardSettings as AppDashboardSettingsInterface;
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
     const previousTiles = this.cloneDashboardTiles(dashboardSettings.tiles);
     const tile = dashboardSettings.tiles.find(candidate => candidate.order === order);
     const isPowerCurveTile = tile?.type === TileTypes.Chart
@@ -1516,7 +1484,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     try {
       await this.persistDashboardSettings({
         tiles: dashboardSettings.tiles,
-      });
+      }, expectedSettings);
     } catch (error) {
       dashboardSettings.tiles = previousTiles;
       this.tileEventAnchorEndMsByOrder.delete(order);
@@ -1536,6 +1504,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     const dashboardSettings = (this.user as AppUserInterface).settings.dashboardSettings as AppDashboardSettingsInterface;
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
     const previousTiles = this.cloneDashboardTiles(dashboardSettings.tiles);
     const tile = dashboardSettings.tiles.find(candidate => candidate.order === order);
     if (!tile || !this.isDisplaySettingsChartTile(tile)) {
@@ -1558,7 +1527,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     try {
       await this.persistDashboardSettings({
         tiles: dashboardSettings.tiles,
-      });
+      }, expectedSettings);
     } catch (error) {
       dashboardSettings.tiles = previousTiles;
       await this.rebuildTilesFromCurrentState();
@@ -2037,7 +2006,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
         };
       })
-      .filter(section => section.tiles.length > 0);
+      .filter(section => section.tiles.length > 0 || (this.showActions && this.resolveOwnDashboardUID()));
   }
 
   private refreshMainGridSectionLayout(): void {
@@ -2325,6 +2294,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return;
     }
 
+    const expectedSettings = cloneDashboardSettings(dashboardSettings);
     const previousSettingsTiles = this.cloneTileSettings(dashboardSettings.tiles);
     const previousRenderedTiles = this.cloneDashboardViewModels(this.tiles);
     const previousRenderedTilesByPersistedOrder = [...previousRenderedTiles]
@@ -2345,7 +2315,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     try {
       await this.persistDashboardSettings({
         tiles: dashboardSettings.tiles,
-      });
+      }, expectedSettings);
       this.updateDesktopTileDragCapability();
     } catch (error) {
       dashboardSettings.tiles = this.cloneTileSettings(previousSettingsTiles);
