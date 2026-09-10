@@ -1,6 +1,6 @@
 ---
 name: mcp-metric-surface
-description: Keep the read-only Quantified Self MCP surface aligned when Sports Lib metrics, activity details, routes, Training-derived kinds, sleep sessions, or their persisted contracts change.
+description: Keep Quantified Self MCP tools, scopes, consent, projections, contracts, and bundled plugin workflows aligned when exposed data or authorization changes.
 ---
 
 # MCP Metric Surface
@@ -40,7 +40,7 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   projection. Never forward whole activity documents, raw streams, creator/device metadata, source keys, names/notes,
   internal identifier fields, arbitrary stats, or parser extensions. The separate `get_activity_description` tool may
   read only the parent event description with both `activity-descriptions:read` and `activity-details:read`; this never
-  widens normal activity/metric projections. Preserve opt-in consent, full-text bounds and untrusted-context semantics.
+  widens normal activity/metric projections. Preserve explicit consent, full-text bounds and untrusted-context semantics.
   Exact activity start/end and jump coordinates,
   nearby search, and chart breadcrumbs require dependent `activity-location:read` in addition to
   `activity-details:read`.
@@ -60,6 +60,11 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   domain changes. Do not duplicate complete tool names or metric IDs in a skill; make it discover authoritative runtime
   tools and catalogs. Keep each skill's `agents/openai.yaml` prompt, one hosted MCP dependency, and implicit-invocation
   policy aligned. Keep the ChatGPT technical app ID and generated cache-busted bundle files out of Git.
+- **OAuth consent UI:** initialize selected permissions from the complete validated scope list returned for the
+  authorization request. Every requested current and future scope starts checked. Do not maintain per-scope default-off
+  filters. Users must remain able to uncheck independent scopes before approval; removing a parent scope must remove and
+  disable its dependent child scopes. Preselection is presentation state only and never creates or expands a grant
+  without explicit approval.
 
 ## Implementation Contract
 
@@ -123,7 +128,9 @@ Add or update focused tests for:
   opaque-reference binding, selective on-demand parsing, identity ambiguity, complete-domain downsampling, and every
   source/sample/runtime/point/response/rate limit;
 - IANA timezone/DST bucketing;
-- scope denial and query limits.
+- scope denial and query limits;
+- consent initialization with every requested scope checked, independent-scope unchecking, parent/child removal, and
+  approval as the only grant boundary.
 
 Then run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts` plus the focused Functions tests,
 `npm --prefix functions run mcp:contract:check`, the affected frontend tests, the Firestore rules suite when access changes,
