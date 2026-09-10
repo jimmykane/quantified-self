@@ -325,8 +325,11 @@ function userShareSubtitle(users: number | null, totalUsers: number, prefix?: st
         return prefix;
     }
 
-    const share = Math.min(100, Math.round((normalizedUsers / normalizedTotalUsers) * 100));
-    return [prefix, `${share}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
+    const share = Math.min(100, (normalizedUsers / normalizedTotalUsers) * 100);
+    const displayShare = share > 0 && share < 0.1
+        ? '<0.1'
+        : new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(share);
+    return [prefix, `${displayShare}% of users`].filter((value): value is string => Boolean(value)).join(' · ');
 }
 
 function authActivity7DaySubtitle(active7Days: number | null, active30Days: number | null): string {
