@@ -1,17 +1,17 @@
 <div class="chart-library-entry">
-  <button mat-stroked-button type="button" [attr.aria-expanded]="expanded()" [attr.aria-controls]="'chart-library-' + lane()" [disabled]="state.busy()" (click)="toggle()">
-    <mat-icon>{{ expanded() ? 'expand_less' : 'add_chart' }}</mat-icon>
+  <button #entryButton mat-stroked-button type="button" aria-haspopup="dialog" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" (click)="toggle()">
+    <mat-icon>add_chart</mat-icon>
     <span>{{ available().length ? 'Add charts · ' + available().length + ' available' : (lane() === 'section:custom' ? 'Create custom chart' : 'Browse charts · All added') }}</span>
   </button>
 </div>
-@if (expanded()) {
-<section class="chart-library" tabindex="-1" [id]="'chart-library-' + lane()" aria-label="Chart library" (keydown.escape)="close(); $event.stopPropagation()" [attr.aria-busy]="state.busy()">
+<ng-template #picker>
+<section class="chart-library bottom-sheet-container" [attr.aria-busy]="state.busy()">
   <div class="chart-library-heading">
-    <h3>Add charts</h3>
+    <h2>{{ state.editor()?.mode === 'edit' ? 'Edit chart' : 'Add charts' }} · {{ sectionLabel() }}</h2>
     <button mat-icon-button aria-label="Close chart library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
   </div>
-  <div class="chart-library-layout" [class.has-selection]="state.draft()">
-    <div class="chart-library-browser">
+  <div #scrollContent class="chart-library-layout qs-scrollbar" [class.has-selection]="state.draft()">
+    <div #browser class="chart-library-browser" tabindex="-1">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
       @if (lane() === 'kpi') {
       <mat-chip-listbox aria-label="KPI group" [value]="group()" (change)="selectGroup($event.value)">
@@ -36,7 +36,7 @@
       }
     </div>
     @if (state.draft(); as draft) {
-    <div class="chart-library-detail" tabindex="-1">
+    <div #detail class="chart-library-detail" tabindex="-1">
       <button mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
       <h3>{{ draftDefinition()?.label || (state.editor()?.mode === 'edit' ? 'Edit chart' : 'Custom chart') }}</h3>
       <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
@@ -46,9 +46,12 @@
       <app-dashboard-tile-editor [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
       } @else { <button mat-button (click)="state.configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>Chart settings</button> }
       @if (state.error()) { <p class="chart-library-error" role="alert">{{ state.error() }}</p> }
-      <div class="chart-library-save"><button mat-flat-button [disabled]="state.busy() || state.editor()?.isSaveDisabled" (click)="state.save()"><span class="chart-library-button-content"><span class="chart-library-button-icon">@if (state.busy()) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>{{ state.editor()?.mode === 'edit' ? 'check' : 'add' }}</mat-icon> }</span><span>{{ state.busy() ? 'Saving…' : state.editor()?.mode === 'edit' ? 'Save changes' : 'Add to dashboard' }}</span></span></button></div>
+
     </div>
     }
   </div>
+  @if (state.draft()) {
+      <div class="chart-library-save"><button mat-flat-button [disabled]="state.busy() || state.editor()?.isSaveDisabled" (click)="state.save()"><span class="chart-library-button-content"><span class="chart-library-button-icon">@if (state.busy()) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>{{ state.editor()?.mode === 'edit' ? 'check' : 'add' }}</mat-icon> }</span><span>{{ state.busy() ? 'Saving…' : state.editor()?.mode === 'edit' ? 'Save changes' : 'Add to dashboard' }}</span></span></button></div>
+  }
 </section>
-}
+</ng-template>

@@ -200,6 +200,23 @@ describe('SummariesComponent', () => {
     });
   });
 
+  it('reveals a saved chart only after the picker closes and the dashboard refresh completes', async () => {
+    let refresh!: () => void;
+    vi.spyOn(component as any, 'unsubscribeAndCreateCharts').mockReturnValue(new Promise<void>(resolve => refresh = resolve));
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callback(0); return 0; });
+    const tile = document.createElement('button');
+    tile.dataset.dashboardTileOrder = '4'; tile.scrollIntoView = vi.fn(); document.body.append(tile);
+    try {
+      component.ngOnInit(); component.library.changed$.next(4);
+      expect(document.activeElement).not.toBe(tile);
+      const closing = component.onChartPickerClosed();
+      expect(tile.scrollIntoView).not.toHaveBeenCalled();
+      refresh(); await closing;
+      expect(document.activeElement).toBe(tile);
+      expect(tile.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    } finally { tile.remove(); }
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });

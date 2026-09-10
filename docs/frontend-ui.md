@@ -123,14 +123,20 @@ the primary separation from the workspace background. Floating menus, dialogs, d
 and bottom sheets use `--qs-overlay-shadow` so their temporary layer remains visually distinct. Do not reuse the overlay
 shadow for in-flow cards or add route-local card shadows.
 
-## Inline dashboard chart library
+## Dashboard chart picker
 
 Owners add charts from the end of the KPI lane or an intent section. Empty owner sections retain an entry point;
 shared/read-only dashboards do not instantiate the library. A dashboard-scoped `DashboardChartLibraryState` permits one
 open section and one local draft. The browser shows six catalog entries per page, section search, and KPI group filters.
-Desktop shows list and details together; below 960 px selection opens details with Back, and below 600 px cards use one
-column. The editor is inline and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
-recommendation eligibility, and auto-tile dismissal rules. Close, Back, section switches, and bulk actions protect dirty drafts.
+The entry component opens its picker template in a wide Material dialog on desktop and a 92dvh Material bottom sheet
+below 960 px, using the shared overlay theme. The documented `qs-chart-picker-sheet` sizing exception lets the
+Material container fill the configured pane instead of applying its default 80vh cap. The gallery never expands the dashboard.
+Desktop shows list and details together; mobile selection opens details with Back, and below 600 px cards use one
+column. The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
+recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
+dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,
+the dashboard waits for the overlay to close and the chart layout to refresh before focusing and revealing the saved
+chart; cancellation restores the original trigger focus. Latest-add Undo stays on the dashboard.
 
 `dashboard-chart-catalog.helper.ts` adapts the shared preset registry and uses the same preset-equivalence rules for
 availability and bulk additions. Special chart identity includes power discipline; map identity includes its source.

@@ -306,6 +306,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   readonly library = inject(DashboardChartLibraryState);
   public previewInput: DashboardPreviewInput = { tiles: [] };
   private librarySubscription?: Subscription;
+  private libraryRefresh = Promise.resolve();
+  private libraryFocusOrder: number | null = null;
   public showTodaySummary = true;
   public sleepTrendRange: AppDashboardSleepTrendRange = DASHBOARD_SLEEP_TREND_DEFAULT_RANGE;
   public sleepTrendWindowLabel = 'Last 14 days';
@@ -422,13 +424,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnInit() {
-    this.librarySubscription = this.library.changed$.subscribe(async order => {
-      await this.unsubscribeAndCreateCharts();
-      this.changeDetector.markForCheck();
-      if (order !== null) requestAnimationFrame(() => {
-        const target = this.documentRef.querySelector<HTMLElement>(`[data-dashboard-tile-order="${order}"]`);
-        target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'nearest' });
-      });
+    this.librarySubscription = this.library.changed$.subscribe(order => {
+      this.libraryFocusOrder = order;
+      this.libraryRefresh = this.unsubscribeAndCreateCharts().then(() => this.changeDetector.markForCheck());
     });
     this.updateDesktopTileDragCapability();
     this.documentRef.addEventListener('visibilitychange', this.onDocumentVisibilityChange);
@@ -608,7 +606,18 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public async openTileEditor(order: number): Promise<void> {
     if (!this.showActions || !this.resolveOwnDashboardUID()) return;
     await this.library.edit(this.user as AppUserInterface, order);
-    requestAnimationFrame(() => this.documentRef.querySelector<HTMLElement>('.chart-library-detail')?.focus());
+
+  }
+
+  public async onChartPickerClosed(): Promise<void> {
+    await this.libraryRefresh;
+    const order = this.libraryFocusOrder;
+    this.libraryFocusOrder = null;
+    if (order === null) return;
+    requestAnimationFrame(() => {
+      const target = this.documentRef.querySelector<HTMLElement>(`[data-dashboard-tile-order="${order}"]`);
+      target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'nearest' });
+    });
   }
 
   private async unsubscribeAndCreateCharts() {

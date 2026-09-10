@@ -686,6 +686,14 @@ mat-table {
   padding: 0 !important;
 }
 
+/* Documented Material overlay exception: the chart picker config sets a 92dvh pane.
+   Material's default 80vh container cap would leave the fixed footer floating above
+   the viewport edge. Fill this picker pane while its content owns scrolling. */
+.cdk-overlay-pane.qs-chart-picker-sheet .mat-bottom-sheet-container {
+  height: 100%;
+  max-height: 100%;
+}
+
 /* Normalize custom wrapper usage so inner content can own scrolling. */
 .mat-bottom-sheet-container>.bottom-sheet-container {
   flex: 1 1 auto;

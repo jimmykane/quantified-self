@@ -148,7 +148,7 @@
       }
     </div>
     }
-    @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [darkTheme]="darkTheme"></app-dashboard-chart-library> }
+    @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
   </section>
   }
   @if (mainGridSections.length) {
@@ -254,7 +254,7 @@
         }
       </app-dashboard-tile-board>
       }
-      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [darkTheme]="darkTheme"></app-dashboard-chart-library> }
+      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
     </section>
     }
   </div>
