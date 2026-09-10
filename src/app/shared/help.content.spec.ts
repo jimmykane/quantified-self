@@ -356,7 +356,7 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('Add and edit dashboard charts');
-    expect(gettingStartedSection?.content).toContain('Preview & details');
+    expect(gettingStartedSection?.content).toContain('Select a chart row');
     expect(gettingStartedSection?.content).toContain('Example data');
     expect(gettingStartedSection?.content).toContain('Curated');
     expect(gettingStartedSection?.content).toContain('KPI');

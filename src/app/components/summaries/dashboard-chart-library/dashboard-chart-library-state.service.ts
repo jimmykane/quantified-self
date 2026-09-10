@@ -60,9 +60,9 @@ export class DashboardChartLibraryState implements OnDestroy {
     this.activeLane.set(null);
   }
 
-  async select(user: AppUserInterface, entry: DashboardChartCatalogEntry): Promise<void> {
-    if (this.busy() || !(await this.canDiscard())) return;
-    this.haptics.selection();
+  async select(user: AppUserInterface, entry: DashboardChartCatalogEntry, feedback = true): Promise<void> {
+    if (this.busy() || this.selected()?.definition.id === entry.definition.id || !(await this.canDiscard())) return;
+    if (feedback) this.haptics.selection();
     this.clearSelection();
     this.selected.set(entry);
     this.createEditor(user, entry.tile, false);

@@ -19,19 +19,17 @@
         <mat-chip-option value="all">All</mat-chip-option><mat-chip-option value="load">Load</mat-chip-option><mat-chip-option value="readiness">Readiness</mat-chip-option><mat-chip-option value="execution">Execution</mat-chip-option>
       </mat-chip-listbox>
       }
-      <div class="chart-library-cards">
-        @for (entry of visible(); track entry.definition.id) {
-        <mat-card appearance="outlined" [class.chart-library-card-selected]="state.selected()?.definition?.id === entry.definition.id">
-          <div class="chart-library-thumbnail" aria-hidden="true" inert><app-dashboard-chart-preview [user]="user()" [tile]="entry.tile" [seed]="seed()" [darkTheme]="darkTheme()" [thumbnail]="true"></app-dashboard-chart-preview></div>
-          @if (lane() !== 'kpi') { <mat-card-header><mat-card-title>{{ entry.definition.label }}</mat-card-title></mat-card-header> }
-          <mat-card-content><p>{{ entry.definition.description }}</p></mat-card-content>
-          <mat-card-actions><button mat-button [attr.aria-label]="'Preview ' + entry.definition.label" [disabled]="state.busy()" (click)="select(entry)">Preview & details<mat-icon>arrow_forward</mat-icon></button></mat-card-actions>
-        </mat-card>
-        } @empty { <p>{{ available().length ? 'No charts match your search.' : 'All presets in this section are on your dashboard.' }}</p> }
-      </div>
-      @if (totalPages() > 1) {
-      <nav class="chart-library-pagination" aria-label="Chart pages"><button mat-icon-button aria-label="Previous charts" [disabled]="currentPage() === 0" (click)="changePage(-1)"><mat-icon>chevron_left</mat-icon></button><span aria-live="polite">{{ currentPage()+1 }} / {{ totalPages() }}</span><button mat-icon-button aria-label="Next charts" [disabled]="currentPage()+1 >= totalPages()" (click)="changePage(1)"><mat-icon>chevron_right</mat-icon></button></nav>
-      }
+      <p class="chart-library-count" aria-live="polite">{{ filtered().length }} {{ filtered().length === 1 ? 'chart' : 'charts' }} available</p>
+      <mat-action-list class="chart-library-list qs-scrollbar" aria-label="Available charts">
+        @for (entry of filtered(); track entry.definition.id) {
+          <button mat-list-item type="button" [attr.aria-pressed]="state.selected()?.definition?.id === entry.definition.id" [attr.aria-label]="'Preview ' + entry.definition.label" [disabled]="state.busy()" (click)="select(entry)">
+            <mat-icon matListItemIcon aria-hidden="true">{{ entry.definition.icon }}</mat-icon>
+            <span matListItemTitle>{{ entry.definition.label }}</span>
+            <span matListItemLine>{{ entry.definition.description }}</span>
+            <span matListItemMeta class="chart-library-row-meta" aria-hidden="true"><mat-icon>chevron_right</mat-icon></span>
+          </button>
+        } @empty { <p class="chart-library-empty">{{ available().length ? 'No charts match your search.' : 'All presets in this section are on your dashboard.' }}</p> }
+      </mat-action-list>
       @if (lane() === 'section:activityOverview') {
       <button mat-button [disabled]="state.busy()" (click)="createCustom()"><mat-icon>tune</mat-icon>Create custom chart</button>
       }
@@ -39,8 +37,8 @@
     }
     @if (state.draft(); as draft) {
     <div #detail class="chart-library-detail qs-scrollbar" [class.is-configuring]="state.configuring()" tabindex="-1">
-      <div class="chart-library-detail-heading">
-        <button mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
+      <div class="chart-library-detail-heading" [class.chart-library-preview-heading]="!state.configuring()">
+        <button class="chart-library-back" mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>Back to charts</button>
         @if (!state.configuring()) {
           <button mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>Chart settings</button>
         }
@@ -61,6 +59,12 @@
         </section>
       </div>
     </div>
+    } @else if (!state.configuring()) {
+      <div class="chart-library-preview-placeholder">
+        <mat-icon aria-hidden="true">query_stats</mat-icon>
+        <h3>Select a chart</h3>
+        <p>Choose a chart from the list to see its preview and details.</p>
+      </div>
     }
   </div>
   @if (state.draft()) {

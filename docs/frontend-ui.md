@@ -133,13 +133,16 @@ shared/read-only dashboards do not instantiate the library. A dashboard-scoped `
 open section and one local draft. All custom metric charts and presets belong in Activity Overview, which is the only
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
 there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
-existing destinations. The browser shows six catalog entries per page, section search, and KPI group filters.
+existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
+Rows use the preset icon, title, and short description; only the selected chart mounts a full preview renderer.
+Desktop opens with the first available chart selected, without extra haptic feedback or any save. Mobile starts with
+the list and opens details on selection. Selecting the same entry again is a silent no-op.
 The entry component opens its picker template in a wide Material dialog on desktop and a 92dvh Material bottom sheet
 below 960 px, using the shared overlay theme. The documented `qs-chart-picker-sheet` sizing exception lets the
 Material container fill the configured pane instead of applying its default 80vh cap. The gallery never expands the dashboard.
-Desktop shows list and details in independently scrolling panes; mobile selection opens details with Back, and below
-600 px cards use one column. Thumbnails render at native text size without CSS scaling. KPI cards use a shorter preview
-and omit the duplicate catalog heading; full details give the sparkline more room. The shared ECharts host explicitly
+Desktop gives the selected chart most of the width beside a compact list; each pane scrolls independently. Mobile
+selection opens details with Back. Full chart previews render at native text size without CSS scaling, and KPI details
+use a shorter preview suited to their headline and sparkline. The shared ECharts host explicitly
 returns to automatic dimensions on resize so initialization fallback sizes cannot pin a chart to a tiny canvas.
 Creating a custom chart, editing a tile, or choosing Chart settings replaces the gallery with a dedicated properties
 workspace. Properties and the live preview scroll independently on desktop; mobile puts properties before the preview
@@ -180,6 +183,7 @@ a save is pending. Failed saves retain drafts and report the error; tile menu mu
 unchanged optimistic fields. Removing the final chart is supported.
 
 Visual verification uses synthetic data with the real Angular components and Material theme. Review captures:
-[desktop](images/dashboard-chart-library/desktop.png) and [mobile](images/dashboard-chart-library/mobile.png).
+[desktop](images/dashboard-chart-library/desktop.png), [mobile list](images/dashboard-chart-library/mobile.png),
+and [mobile preview](images/dashboard-chart-library/mobile-preview.png).
 These captures contain no account data; the “Your data” label reflects synthetic input injected as loaded dashboard state.
 Physical haptics require a supported device; browser emulation only verifies interaction wiring and layout.

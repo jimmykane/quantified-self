@@ -35,7 +35,6 @@ export class DashboardChartLibraryComponent {
   readonly darkTheme = input(false);
   readonly search = signal('');
   readonly group = signal('all');
-  readonly page = signal(0);
   readonly sectionLabel = computed(() => this.lane() === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(this.lane().slice(8) as never).label);
   readonly available = computed(() => getAvailableDashboardCharts(this.lane(), this.seed().tiles));
   readonly canCreateCustom = computed(() => this.lane() === 'section:activityOverview');
@@ -43,9 +42,6 @@ export class DashboardChartLibraryComponent {
   readonly addActionLabel = computed(() => `Add chart to ${this.sectionLabel()}`);
   readonly addActionHint = computed(() => this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
   readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group())));
-  readonly visible = computed(() => this.filtered().slice(this.currentPage()*6, this.currentPage()*6+6));
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length/6)));
-  readonly currentPage = computed(() => Math.min(this.page(), this.totalPages()-1));
   private readonly catalog = getDashboardChartCatalog();
   readonly draftDefinition = computed(() => {
     const draft = this.state.draft();
@@ -118,7 +114,7 @@ export class DashboardChartLibraryComponent {
     }
     const overlay = { close, subscriptions: new Subscription() };
     this.overlay = overlay;
-    overlay.subscriptions.add(opened$.subscribe(() => this.state.draft() ? this.focusDetail() : this.focusBrowser()));
+    overlay.subscriptions.add(opened$.subscribe(() => this.state.configuring() || this.state.draft() && this.breakpoints.isMatched('(max-width: 959.98px)') ? this.focusDetail() : this.focusBrowser()));
     overlay.subscriptions.add(backdrop$.subscribe(() => this.close()));
     overlay.subscriptions.add(keydown$.subscribe(event => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
@@ -141,10 +137,15 @@ export class DashboardChartLibraryComponent {
       await this.createCustom();
       return;
     }
+    const wasExpanded = this.expanded();
     await this.state.open(this.lane());
+    if (!wasExpanded && this.expanded() && !this.breakpoints.isMatched('(max-width: 959.98px)') && this.filtered().length) {
+      await this.state.select(this.user(), this.filtered()[0], false);
+    }
   }
   async select(entry: ReturnType<typeof getAvailableDashboardCharts>[number]): Promise<void> {
-    await this.state.select(this.user(), entry); this.focusDetail();
+    await this.state.select(this.user(), entry);
+    this.focusContent(() => this.detail()?.nativeElement, this.breakpoints.isMatched('(max-width: 959.98px)'));
   }
   async createCustom(): Promise<void> { await this.state.createCustom(this.user()); this.focusDetail(); }
   configure(): void { this.state.configure(); this.focusDetail(); }
@@ -152,16 +153,15 @@ export class DashboardChartLibraryComponent {
   async close(): Promise<void> { await this.state.close(); }
   private focusDetail(): void { this.focusContent(() => this.detail()?.nativeElement); }
   private focusBrowser(): void { this.focusContent(() => this.browser()?.nativeElement); }
-  private focusContent(target: () => HTMLElement | undefined): void {
+  private focusContent(target: () => HTMLElement | undefined, focus = true): void {
     requestAnimationFrame(() => {
       const pane = target();
-      pane?.focus({ preventScroll: true });
+      if (focus) pane?.focus({ preventScroll: true });
       if (pane) pane.scrollTop = 0;
       const content = this.scrollContent()?.nativeElement;
       if (content) content.scrollTop = 0;
     });
   }
-  filter(value: string): void { this.search.set(value); this.page.set(0); }
-  selectGroup(value: string): void { if (this.group() === value) return; this.state.haptics.selection(); this.group.set(value || 'all'); this.page.set(0); }
-  changePage(delta: number): void { this.state.haptics.selection(); this.page.set(this.currentPage()+delta); this.focusBrowser(); }
+  filter(value: string): void { this.search.set(value); }
+  selectGroup(value: string): void { if (this.group() === value) return; this.state.haptics.selection(); this.group.set(value || 'all'); }
 }
