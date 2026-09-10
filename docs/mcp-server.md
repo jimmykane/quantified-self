@@ -1322,7 +1322,9 @@ digest before contract promotion, and sync the changed local plugin. Preserve ev
 
 The bundled cross-domain skill guides note-to-Health/Sleep comparisons with existing read tools: bounded
 before/during/after periods, captured timezones and provider/sleep-day conventions, same-response source separation,
-coverage counts, historical HRV classifications and association-only conclusions. Health and Sleep skills route such
+coverage counts, optional historical HRV classifications and association-only conclusions. Comparisons do not prorate
+coarse aggregates across note boundaries or require the additional personal-range grants for ordinary recorded HRV.
+Health and Sleep skills route such
 comparisons there. Notes never become baseline or readiness inputs. This guidance-only change needs local plugin sync
 after validation, but no additional server deployment or registered-app rescan of its own.
 
