@@ -185,7 +185,6 @@
 
 .dashboard-section-header.dashboard-main-section-header {
   margin-bottom: 0.5rem;
-  justify-content: flex-start;
 }
 
 .dashboard-main-section-header > app-dashboard-chart-library {
