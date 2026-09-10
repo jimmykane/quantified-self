@@ -134,10 +134,31 @@ describe('responsive chart picker interactions', () => {
     expect(component.explanation()).toBe(map.definition.description);
     expect(save).not.toHaveBeenCalled();
   });
+  it.each(['kpi', 'section:trainingState', 'section:performancePower', 'section:routesMaps'])(
+    'does not offer custom creation in %s', async (lane) => {
+      fixture.componentRef.setInput('lane', lane);
+      await component.toggle(); await settle();
+      expect(button('Create custom chart')).toBeUndefined();
+    },
+  );
+  it('keeps custom creation available in Activity Overview when every preset is already added', async () => {
+    fixture.componentRef.setInput('lane', 'section:activityOverview');
+    fixture.componentRef.setInput('seed', { tiles: getDashboardChartCatalog().map(entry => entry.tile) });
+    await component.toggle(); await settle();
+    expect(component.available()).toHaveLength(0);
+    expect(component.state.draft()).toBeNull();
+    haptics.selection.mockClear();
+    button('Create custom chart').click(); await settle();
+    expect(component.state.configuring()).toBe(true);
+    expect(component.destination()).toBe('Activity Overview');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(save).not.toHaveBeenCalled();
+  });
   it('asks only once when cancelling closure of a dirty custom chart', async () => {
     const open = vi.spyOn(TestBed.inject(MatDialog), 'open');
-    fixture.componentRef.setInput('lane', 'section:custom');
-    await component.toggle(); await settle(); open.mockClear();
+    fixture.componentRef.setInput('lane', 'section:activityOverview');
+    await component.toggle(); await settle();
+    button('Create custom chart').click(); await settle(); open.mockClear();
     component.state.editor()!.customEventRange = '30d'; component.state.refreshDraft();
     await component.toggle();
     expect(open).toHaveBeenCalledOnce(); expect(component.expanded()).toBe(true);

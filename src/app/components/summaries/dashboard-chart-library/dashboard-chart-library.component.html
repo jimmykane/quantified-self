@@ -1,7 +1,7 @@
 <div class="chart-library-entry">
   <button #entryButton mat-stroked-button type="button" aria-haspopup="dialog" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" (click)="toggle()">
     <mat-icon>add_chart</mat-icon>
-    <span>{{ available().length ? 'Add charts · ' + available().length + ' available' : (lane() === 'section:custom' ? 'Create custom chart' : 'Browse charts · All added') }}</span>
+    <span>{{ available().length ? 'Add charts · ' + available().length + ' available' : 'Browse charts · All added' }}</span>
   </button>
 </div>
 <ng-template #picker>
@@ -31,7 +31,7 @@
       @if (totalPages() > 1) {
       <nav class="chart-library-pagination" aria-label="Chart pages"><button mat-icon-button aria-label="Previous charts" [disabled]="currentPage() === 0" (click)="changePage(-1)"><mat-icon>chevron_left</mat-icon></button><span aria-live="polite">{{ currentPage()+1 }} / {{ totalPages() }}</span><button mat-icon-button aria-label="Next charts" [disabled]="currentPage()+1 >= totalPages()" (click)="changePage(1)"><mat-icon>chevron_right</mat-icon></button></nav>
       }
-      @if (lane() !== 'kpi' && lane() !== 'section:routesMaps') {
+      @if (lane() === 'section:activityOverview') {
       <button mat-button [disabled]="state.busy()" (click)="createCustom()"><mat-icon>tune</mat-icon>Create custom chart</button>
       }
     </div>

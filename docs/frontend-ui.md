@@ -127,7 +127,10 @@ shadow for in-flow cards or add route-local card shadows.
 
 Owners add charts from the end of the KPI lane or an intent section. Empty owner sections retain an entry point;
 shared/read-only dashboards do not instantiate the library. A dashboard-scoped `DashboardChartLibraryState` permits one
-open section and one local draft. The browser shows six catalog entries per page, section search, and KPI group filters.
+open section and one local draft. All custom metric charts and presets belong in Activity Overview, which is the only
+section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
+there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
+existing destinations. The browser shows six catalog entries per page, section search, and KPI group filters.
 The entry component opens its picker template in a wide Material dialog on desktop and a 92dvh Material bottom sheet
 below 960 px, using the shared overlay theme. The documented `qs-chart-picker-sheet` sizing exception lets the
 Material container fill the configured pane instead of applying its default 80vh cap. The gallery never expands the dashboard.

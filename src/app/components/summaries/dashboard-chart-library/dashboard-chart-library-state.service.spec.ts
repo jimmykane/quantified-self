@@ -65,17 +65,28 @@ describe('inline chart library state', () => {
     expect(state.error()).toContain('dashboard changed'); expect(user.settings.dashboardSettings.tiles).toHaveLength(0);
     expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).toHaveBeenCalledTimes(1);
   });
+  it('opens existing custom charts for editing in Activity Overview without changing their saved settings', async () => {
+    const custom = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.category === 'custom')!.tile);
+    custom['dataType'] = 'DeviceName';
+    user.settings.dashboardSettings.tiles = [custom];
+    await state.edit(user, custom.order);
+    expect(state.activeLane()).toBe('section:activityOverview');
+    expect(state.editor()?.mode).toBe('edit');
+    expect(state.draft()?.['dataType']).toBe('DeviceName');
+    expect(user.settings.dashboardSettings.tiles).toEqual([custom]);
+    expect(persistence.save).not.toHaveBeenCalled();
+  });
   it('requires discarding a dirty draft before switching sections', async () => {
-    await state.open('section:custom'); await state.createCustom(user);
+    await state.open('section:activityOverview'); await state.createCustom(user);
     state.editor()!.customEventRange = '30d'; state.refreshDraft();
     await state.open('kpi');
-    expect(state.activeLane()).toBe('section:custom'); expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(state.activeLane()).toBe('section:activityOverview'); expect(dialog.open).toHaveBeenCalledTimes(1);
     dialog.open.mockReturnValue({ afterClosed: () => of(true) });
     await state.open('kpi'); expect(state.activeLane()).toBe('kpi'); expect(state.draft()).toBeNull();
   });
   it('previews an invalid duplicate choice and still guards unsaved changes', async () => {
     user.settings.dashboardSettings.tiles = [calendar.tile];
-    await state.open('section:custom'); await state.createCustom(user);
+    await state.open('section:activityOverview'); await state.createCustom(user);
     state.editor()!.category = 'curated'; state.editor()!.curatedChartType = calendar.tile['chartType']; state.refreshDraft();
     expect(state.editor()!.isSaveDisabled).toBe(true);
     expect(state.draft()?.['chartType']).toBe(calendar.tile['chartType']);
@@ -97,7 +108,7 @@ describe('inline chart library state', () => {
   });
   it('requires discarding an open draft before Undo and closes the stale editor after success', async () => {
     await state.select(user, calendar); await state.save();
-    await state.open('section:custom'); await state.createCustom(user);
+    await state.open('section:activityOverview'); await state.createCustom(user);
     state.editor()!.customEventRange = '30d'; state.refreshDraft();
     await state.undo(user);
     expect(dialog.open).toHaveBeenCalledOnce(); expect(persistence.save).toHaveBeenCalledTimes(1);

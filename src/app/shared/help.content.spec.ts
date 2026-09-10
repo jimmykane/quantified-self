@@ -392,8 +392,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
     expect(gettingStartedSection?.content).toContain('current **Readiness**');
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
-    expect(gettingStartedSection?.content).toContain('**Activity Overview**, **Routes & Maps**, and **Custom Charts**');
-    expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');
+    expect(gettingStartedSection?.content).toContain('**Training State**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
+    expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
     expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');

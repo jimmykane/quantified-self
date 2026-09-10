@@ -299,8 +299,8 @@ export const HELP_SECTIONS: HelpSection[] = [
 - Existing curated and KPI tiles are preserved until you edit or remove them using their tile menu.
 - The **Today** header can show **Uploaded activities**, which counts current uploaded activity events.
 - On mobile, Today rows stay compact while the chart/map grid stays unchanged below.
-- The main dashboard groups chart and map tiles by intent, such as **Activity Overview**, **Routes & Maps**, and **Custom Charts**.
-- Custom charts are placed in those dashboard sections automatically when their metric intent is obvious; otherwise they appear under **Custom Charts**.
+- The main dashboard groups chart and map tiles by intent, **Training State**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**.
+- All custom charts belong in **Activity Overview**, regardless of their metric. Open that section’s chart picker and choose **Create custom chart** to build your own.
 - New dashboard tiles use chart-aware default sizes: Activity Calendar, simple custom totals, KPIs, and the clustered heatmap start at 1 x 1, while Form/TSS, Power Curve, and the Routes map start wider.
 - Empty editable dashboards show lightweight section guidance until chart or map sections exist.
 - KPI choices are grouped as **Load**, **Readiness**, and **Execution** in the chart library and inline editor.

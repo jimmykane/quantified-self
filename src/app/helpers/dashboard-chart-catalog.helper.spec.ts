@@ -13,6 +13,12 @@ describe('dashboard chart catalog', () => {
       expect(getAvailableDashboardCharts(entry.lane, [entry.tile]).some(item => item.definition.id === entry.definition.id)).toBe(false);
     }
   });
+  it('offers every custom preset only in Activity Overview', () => {
+    const customEntries = getDashboardChartCatalog().filter(entry => entry.definition.category === 'custom');
+    expect(customEntries).toHaveLength(8);
+    expect(customEntries.every(entry => entry.lane === 'section:activityOverview')).toBe(true);
+    expect(getAvailableDashboardCharts('section:activityOverview', []).filter(entry => entry.definition.category === 'custom')).toHaveLength(8);
+  });
   it('keeps running and cycling power, and the two map sources, independently available', () => {
     const entries = getDashboardChartCatalog();
     for (const category of ['power', 'map']) {

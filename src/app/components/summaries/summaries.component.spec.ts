@@ -510,6 +510,23 @@ describe('SummariesComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Dashboard options"]')).toBeNull();
   });
 
+  it('groups existing custom charts together on read-only shared dashboards', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = false;
+    component.tiles = [DataDistance.type, 'Power', 'DeviceName'].map((dataType, order) => ({
+      type: TileTypes.Chart, chartType: ChartTypes.ColumnsVertical, dataType, order,
+      dataCategoryType: ChartDataCategoryTypes.DateType, dataValueType: ChartDataValueTypes.Total,
+      data: [], timeInterval: TimeIntervals.Daily, size: { columns: 1, rows: 1 },
+    } as any));
+    (component as any).refreshTileLanes();
+    fixture.detectChanges();
+    expect(component.mainGridSections.map(section => section.id)).toEqual(['activityOverview']);
+    expect(component.mainGridSections[0].tiles.map(tile => tile.order)).toEqual([0, 1, 2]);
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelectorAll('app-dashboard-tile-cell.dashboard-grid-tile')).toHaveLength(3);
+    expect(nativeElement.querySelector('app-dashboard-chart-library')).toBeNull();
+  });
+
   it('renders the Today dashboard header separately from KPI and main-grid tiles', () => {
     const kpiTile = {
       type: TileTypes.Chart,
@@ -579,9 +596,9 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
-    expect(sectionHeadings).toEqual(['Training State', 'Performance & Power', 'Activity Overview', 'Routes & Maps', 'Custom Charts']);
+    expect(sectionHeadings).toEqual(['Training State', 'Performance & Power', 'Activity Overview', 'Routes & Maps']);
     const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
-    expect(sectionTitleBlocks).toHaveLength(5);
+    expect(sectionTitleBlocks).toHaveLength(4);
     sectionTitleBlocks.forEach(block => {
       expect(block.querySelector(':scope > mat-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(block.querySelector(':scope > .dashboard-section-title-copy > h2')).not.toBeNull();
@@ -979,7 +996,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
-    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(6);
+    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(5);
   });
 
   it('hides the Today summary while preserving dashboard options on an editable dashboard', () => {

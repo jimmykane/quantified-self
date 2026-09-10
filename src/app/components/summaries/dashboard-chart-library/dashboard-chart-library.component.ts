@@ -131,9 +131,7 @@ export class DashboardChartLibraryComponent {
   }
 
   async toggle(): Promise<void> {
-    const wasExpanded = this.expanded();
     await this.state.open(this.lane());
-    if (!wasExpanded && this.expanded() && this.lane() === 'section:custom' && !this.available().length) await this.createCustom();
   }
   async select(entry: ReturnType<typeof getAvailableDashboardCharts>[number]): Promise<void> {
     await this.state.select(this.user(), entry); this.focusDetail();

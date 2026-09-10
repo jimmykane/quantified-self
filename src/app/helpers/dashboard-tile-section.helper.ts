@@ -1,12 +1,4 @@
 import {
-  ChartDataCategoryTypes,
-  DataAscent,
-  DataDistance,
-  DataDuration,
-  DataEnergy,
-  DataHeartRateAvg,
-  DataPower,
-  DataRecoveryTime,
   TileChartSettingsInterface,
   TileSettingsInterface,
   TileTypes,
@@ -22,17 +14,12 @@ import {
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
   isDashboardKpiChartType,
 } from './dashboard-special-chart-types';
-import {
-  DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
-  DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-} from './dashboard-form.helper';
 
 export type DashboardTileSectionId =
   | 'trainingState'
   | 'performancePower'
   | 'activityOverview'
-  | 'routesMaps'
-  | 'custom';
+  | 'routesMaps';
 
 export interface DashboardTileSectionDefinition {
   id: DashboardTileSectionId;
@@ -47,7 +34,6 @@ export const DASHBOARD_TILE_SECTION_DEFINITIONS: DashboardTileSectionDefinition[
   { id: 'performancePower', label: 'Performance & Power', icon: 'speed' },
   { id: 'activityOverview', label: 'Activity Overview', icon: 'insights' },
   { id: 'routesMaps', label: 'Routes & Maps', icon: 'map' },
-  { id: 'custom', label: 'Custom Charts', icon: 'dashboard_customize' },
 ];
 
 export const DASHBOARD_TILE_SECTION_ORDER: DashboardTileSectionId[] =
@@ -64,28 +50,16 @@ const SPECIAL_CHART_SECTION_BY_TYPE: Record<string, DashboardTileSectionId> = {
   [DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE]: 'trainingState',
 };
 
-const ACTIVITY_OVERVIEW_DATA_TYPES = new Set<string>([
-  DataDistance.type,
-  DataDuration.type,
-  DataAscent.type,
-  DataEnergy.type,
-]);
-
-const TRAINING_LOAD_DATA_TYPES = new Set<string>([
-  DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-  DASHBOARD_FORM_LEGACY_TRAINING_STRESS_SCORE_TYPE,
-]);
-
 export function getDashboardTileSectionDefinition(
   sectionId: DashboardTileSectionId,
 ): DashboardTileSectionDefinition {
   return DASHBOARD_TILE_SECTION_DEFINITIONS.find(definition => definition.id === sectionId)
-    || DASHBOARD_TILE_SECTION_DEFINITIONS[DASHBOARD_TILE_SECTION_DEFINITIONS.length - 1];
+    || DASHBOARD_TILE_SECTION_DEFINITIONS.find(definition => definition.id === 'activityOverview')!;
 }
 
 export function resolveDashboardTileSection(tile: TileSettingsInterface | null | undefined): DashboardTileSectionId {
   if (!tile) {
-    return 'custom';
+    return 'activityOverview';
   }
 
   if (tile.type === TileTypes.Map) {
@@ -93,7 +67,7 @@ export function resolveDashboardTileSection(tile: TileSettingsInterface | null |
   }
 
   if (tile.type !== TileTypes.Chart) {
-    return 'custom';
+    return 'activityOverview';
   }
 
   const chartTile = tile as TileChartSettingsInterface;
@@ -102,7 +76,8 @@ export function resolveDashboardTileSection(tile: TileSettingsInterface | null |
     return specialChartSection;
   }
 
-  return resolveCustomDashboardChartSection(chartTile);
+  // All user-configured activity metrics share one home, regardless of metric type.
+  return 'activityOverview';
 }
 
 export function resolveDashboardTileLaneKey(tile: TileSettingsInterface | null | undefined): DashboardTileLaneKey {
@@ -127,53 +102,4 @@ export function orderDashboardTilesByIntentSections<T extends TileSettingsInterf
     ...(tilesByLane.get('kpi') || []),
     ...DASHBOARD_TILE_SECTION_ORDER.flatMap(sectionId => tilesByLane.get(`section:${sectionId}`) || []),
   ];
-}
-
-function resolveCustomDashboardChartSection(tile: TileChartSettingsInterface): DashboardTileSectionId {
-  const dataType = `${tile.dataType || ''}`.trim();
-  if (!dataType) {
-    return 'custom';
-  }
-
-  if (isTrainingLoadDataType(dataType)) {
-    return 'trainingState';
-  }
-
-  if (isPowerDataType(dataType)) {
-    return 'performancePower';
-  }
-
-  if (dataType === DataRecoveryTime.type) {
-    return 'trainingState';
-  }
-
-  if (
-    ACTIVITY_OVERVIEW_DATA_TYPES.has(dataType)
-    || (
-      dataType === DataHeartRateAvg.type
-      && tile.dataCategoryType === ChartDataCategoryTypes.ActivityType
-    )
-  ) {
-    return 'activityOverview';
-  }
-
-  return 'custom';
-}
-
-function isTrainingLoadDataType(dataType: string): boolean {
-  if (TRAINING_LOAD_DATA_TYPES.has(dataType)) {
-    return true;
-  }
-
-  const normalizedDataType = dataType.toLowerCase();
-  return normalizedDataType.includes('training stress')
-    || normalizedDataType === 'tss';
-}
-
-function isPowerDataType(dataType: string): boolean {
-  if (dataType === DataPower.type) {
-    return true;
-  }
-
-  return dataType.toLowerCase().includes('power');
 }
