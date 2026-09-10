@@ -1,5 +1,4 @@
 :host { display: block; min-width: 0; }
-.chart-library-entry { margin-block: 12px; }
 .chart-library { display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; color: var(--mat-sys-on-surface); }
 .chart-library-heading { flex: 0 0 auto; padding: 12px 24px; border-bottom: 1px solid var(--mat-sys-outline-variant); }
 .chart-library-heading h2 { font: var(--mat-sys-title-large); margin: 0; }

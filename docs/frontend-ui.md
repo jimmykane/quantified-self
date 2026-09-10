@@ -125,7 +125,10 @@ shadow for in-flow cards or add route-local card shadows.
 
 ## Dashboard chart picker
 
-Owners add charts from the end of the KPI lane or an intent section. Empty owner sections retain an entry point;
+Owners add charts from compact Add chart actions beside the KPI and intent section titles. The action is hidden when
+a section has no available presets; keep the library component mounted so existing tiles can still open for editing.
+Activity Overview retains its action for custom creation and opens properties directly when no presets remain. Empty
+owner sections retain an entry point;
 shared/read-only dashboards do not instantiate the library. A dashboard-scoped `DashboardChartLibraryState` permits one
 open section and one local draft. All custom metric charts and presets belong in Activity Overview, which is the only
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;

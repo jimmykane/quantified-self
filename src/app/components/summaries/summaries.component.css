@@ -183,8 +183,13 @@
   min-width: 0;
 }
 
-.dashboard-main-section-header {
+.dashboard-section-header.dashboard-main-section-header {
   margin-bottom: 0.5rem;
+  justify-content: flex-start;
+}
+
+.dashboard-main-section-header > app-dashboard-chart-library {
+  flex: 0 0 auto;
 }
 
 .dashboard-section-header.dashboard-main-section-header h2 {
@@ -435,5 +440,4 @@ section {
   }
 }
 
-.dashboard-kpi-heading { font: var(--mat-sys-title-medium); margin-block: 16px 12px; }
 .dashboard-chart-added { display: flex; align-items: center; gap: 12px; }

@@ -72,6 +72,7 @@ export class DashboardChartLibraryState implements OnDestroy {
     if (this.busy() || !(await this.canDiscard())) return;
     this.haptics.selection();
     this.clearSelection();
+    this.activeLane.set('section:activityOverview');
     this.createEditor(user, AppUserUtilities.getDefaultUserDashboardChartTile(), false);
     this.configuring.set(true);
   }

@@ -38,6 +38,10 @@ export class DashboardChartLibraryComponent {
   readonly page = signal(0);
   readonly sectionLabel = computed(() => this.lane() === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(this.lane().slice(8) as never).label);
   readonly available = computed(() => getAvailableDashboardCharts(this.lane(), this.seed().tiles));
+  readonly canCreateCustom = computed(() => this.lane() === 'section:activityOverview');
+  readonly showAddAction = computed(() => this.available().length > 0 || this.canCreateCustom());
+  readonly addActionLabel = computed(() => `Add chart to ${this.sectionLabel()}`);
+  readonly addActionHint = computed(() => this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
   readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group())));
   readonly visible = computed(() => this.filtered().slice(this.currentPage()*6, this.currentPage()*6+6));
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filtered().length/6)));
@@ -133,6 +137,10 @@ export class DashboardChartLibraryComponent {
   }
 
   async toggle(): Promise<void> {
+    if (!this.expanded() && this.canCreateCustom() && !this.available().length) {
+      await this.createCustom();
+      return;
+    }
     await this.state.open(this.lane());
   }
   async select(entry: ReturnType<typeof getAvailableDashboardCharts>[number]): Promise<void> {

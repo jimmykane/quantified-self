@@ -60,7 +60,7 @@ describe('responsive chart picker interactions', () => {
   it('opens a nearly full-height bottom sheet on mobile and restores the entry focus when closed', async () => {
     mobile = true;
     const open = vi.spyOn(TestBed.inject(MatBottomSheet), 'open');
-    const entry = button('Add charts'); entry.focus();
+    const entry = button('Add chart'); entry.focus();
     await component.toggle(); await settle();
     expect(document.body.querySelector('mat-bottom-sheet-container')).not.toBeNull();
     expect(document.body.querySelector('mat-dialog-container')).toBeNull();
@@ -97,7 +97,7 @@ describe('responsive chart picker interactions', () => {
     await vi.waitFor(() => expect(detail.scrollTop).toBe(0));
   });
   it('pages a large section and combines search with KPI groups', async () => {
-    button('Add charts').click(); await settle();
+    button('Add chart').click(); await settle();
     expect(document.body.querySelectorAll('mat-card')).toHaveLength(6);
     expect(component.totalPages()).toBe(3);
     document.body.querySelector<HTMLElement>('.chart-library-layout')!.scrollTop = 500;
@@ -109,7 +109,7 @@ describe('responsive chart picker interactions', () => {
     expect(component.currentPage()).toBe(0); expect(save).not.toHaveBeenCalled();
   });
   it('opens details before adding, then updates availability after the saved layout arrives', async () => {
-    button('Add charts').click(); await settle(); button('Preview & details').click(); await settle();
+    button('Add chart').click(); await settle(); button('Preview & details').click(); await settle();
     expect(document.body.querySelector('.has-selection .chart-library-detail')).not.toBeNull();
     expect(button('Add to dashboard')).toBeDefined(); expect(save).not.toHaveBeenCalled();
     expect(component.dataScope()).toContain('training snapshots');
@@ -120,7 +120,7 @@ describe('responsive chart picker interactions', () => {
   });
   it('returns from details without mutation and keeps initialization and unchanged group selection silent', async () => {
     expect(haptics.selection).not.toHaveBeenCalled(); component.selectGroup('all'); expect(haptics.selection).not.toHaveBeenCalled();
-    button('Add charts').click(); await settle(); button('Preview & details').click(); await settle();
+    button('Add chart').click(); await settle(); button('Preview & details').click(); await settle();
     button('Back to charts').click(); await settle();
     expect(document.body.querySelector('.chart-library-detail')).toBeNull();
     expect(component.expanded()).toBe(true); expect(save).not.toHaveBeenCalled();
@@ -143,14 +143,39 @@ describe('responsive chart picker interactions', () => {
       expect(button('Create custom chart')).toBeUndefined();
     },
   );
+  it.each(['kpi', 'section:trainingState', 'section:performancePower', 'section:routesMaps'])(
+    'hides the add action when %s is full and restores it when a preset is removed', async (lane) => {
+      const entries = getDashboardChartCatalog().filter(entry => entry.lane === lane);
+      fixture.componentRef.setInput('lane', lane);
+      fixture.componentRef.setInput('seed', { tiles: entries.map(entry => entry.tile) });
+      await settle();
+      expect(fixture.nativeElement.querySelector('button')).toBeNull();
+      expect(haptics.selection).not.toHaveBeenCalled();
+      fixture.componentRef.setInput('seed', { tiles: entries.slice(1).map(entry => entry.tile) });
+      await settle();
+      expect(fixture.nativeElement.querySelector('button')?.textContent).toContain('Add chart');
+      expect(component.available()).toHaveLength(1);
+    },
+  );
+  it('keeps editing available when the section has no add action', async () => {
+    const entries = getDashboardChartCatalog().filter(entry => entry.lane === 'kpi');
+    user.settings.dashboardSettings.tiles = entries.map((entry, order) => ({ ...entry.tile, order }));
+    fixture.componentRef.setInput('seed', { tiles: user.settings.dashboardSettings.tiles });
+    await settle();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    await component.state.edit(user, 0); await settle();
+    expect(document.body.querySelector('.chart-library-heading h2')?.textContent).toContain('Edit chart');
+    expect(document.body.querySelector('.chart-library-properties')).not.toBeNull();
+    expect(button('Save changes')).toBeDefined();
+  });
   it('keeps custom creation available in Activity Overview when every preset is already added', async () => {
     fixture.componentRef.setInput('lane', 'section:activityOverview');
     fixture.componentRef.setInput('seed', { tiles: getDashboardChartCatalog().map(entry => entry.tile) });
-    await component.toggle(); await settle();
+    await settle();
     expect(component.available()).toHaveLength(0);
     expect(component.state.draft()).toBeNull();
     haptics.selection.mockClear();
-    button('Create custom chart').click(); await settle();
+    button('Add chart').click(); await settle();
     expect(component.state.configuring()).toBe(true);
     expect(document.body.querySelector('.chart-library-browser')).toBeNull();
     expect(document.body.querySelector('.chart-library-heading h2')?.textContent).toContain('Create custom chart');

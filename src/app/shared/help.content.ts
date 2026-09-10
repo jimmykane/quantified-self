@@ -282,7 +282,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 
 ### Add and edit dashboard charts
 
-- Each dashboard section ends with **Add charts** and the number of available presets. Open it to browse previews in that section; presets already represented on your dashboard are excluded from the count.
+- Use the compact **Add chart** action beside a section title to browse its available presets. The action disappears when all presets in that section are already on your dashboard. **Activity Overview** keeps its add action for custom charts; when all its presets are added, it opens custom chart properties directly.
 - Search within the section, use **Load**, **Readiness**, or **Execution** to filter KPIs, and page through six previews at a time.
 - The section’s add action opens a chart picker: a wide dialog on desktop or a bottom sheet on mobile. Select **Preview & details** to see a larger chart, its explanation, data scope, and destination section. Desktop keeps the list beside the details; mobile uses **Back to charts** to return to the list.
 - **Your data** previews use available personal data. **Example data** previews use synthetic examples when data is missing or unavailable, including while personal data is loading. Browsing never adds a chart or starts a metric rebuild.

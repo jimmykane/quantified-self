@@ -86,7 +86,12 @@
   @if (showActions && library.undoAvailable()) { <div role="status" class="dashboard-chart-added">Chart added <button mat-button (click)="library.undo($any(user))" [disabled]="library.busy()">Undo</button></div> }
   @if (kpiLaneTiles.length || (showActions && isOwnerDashboard)) {
   <section class="dashboard-kpi-section" aria-label="KPIs">
-    @if (showActions && isOwnerDashboard) { <h2 class="dashboard-kpi-heading">KPIs</h2> }
+    @if (showActions && isOwnerDashboard) {
+    <div class="dashboard-section-header dashboard-main-section-header">
+      <h2>KPIs</h2>
+      <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library>
+    </div>
+    }
     @if (kpiLaneTiles.length) {
     <div
       class="qs-glass-card-panel dashboard-kpi-lane"
@@ -148,7 +153,6 @@
       }
     </div>
     }
-    @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
   </section>
   }
   @if (mainGridSections.length) {
@@ -162,6 +166,7 @@
             <h2 [id]="'dashboard-section-' + section.id">{{ section.label }}</h2>
           </div>
         </div>
+      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
       </div>
       @if (section.tiles.length) {
       <app-dashboard-tile-board
@@ -254,7 +259,6 @@
         }
       </app-dashboard-tile-board>
       }
-      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
     </section>
     }
   </div>

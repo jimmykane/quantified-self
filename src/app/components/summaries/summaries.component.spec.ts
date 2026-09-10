@@ -599,6 +599,9 @@ describe('SummariesComponent', () => {
     expect(sectionHeadings).toEqual(['Training State', 'Performance & Power', 'Activity Overview', 'Routes & Maps']);
     const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
     expect(sectionTitleBlocks).toHaveLength(4);
+    expect(kpiSection?.querySelector('.dashboard-section-header app-dashboard-chart-library')).not.toBeNull();
+    expect(nativeElement.querySelectorAll('.dashboard-main-section-header app-dashboard-chart-library')).toHaveLength(5);
+    expect(nativeElement.querySelectorAll('.dashboard-main-section > app-dashboard-chart-library')).toHaveLength(0);
     sectionTitleBlocks.forEach(block => {
       expect(block.querySelector(':scope > mat-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(block.querySelector(':scope > .dashboard-section-title-copy > h2')).not.toBeNull();

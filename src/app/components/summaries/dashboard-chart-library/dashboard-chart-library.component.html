@@ -1,9 +1,9 @@
-<div class="chart-library-entry">
-  <button #entryButton mat-stroked-button type="button" aria-haspopup="dialog" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" (click)="toggle()">
-    <mat-icon>add_chart</mat-icon>
-    <span>{{ available().length ? 'Add charts · ' + available().length + ' available' : 'Browse charts · All added' }}</span>
+@if (showAddAction()) {
+  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" (click)="toggle()">
+    <mat-icon>add</mat-icon>
+    <span>Add chart</span>
   </button>
-</div>
+}
 <ng-template #picker>
 <section class="chart-library bottom-sheet-container" [attr.aria-busy]="state.busy()">
   <div class="chart-library-heading">
