@@ -38,6 +38,7 @@ import {
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { registerMcpTool } from './register-tool';
 import { isMcpHealthBodyMetric, MCP_HEALTH_METRIC_IDS } from './health.service';
+import { MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES } from './activity-description.service';
 import { MCP_TIMELINE_NOTES_LIMITS } from './timeline-notes.service';
 import { createMcpTransportHandler } from './transport';
 
@@ -507,7 +508,14 @@ function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
     try {
       const projected = await operation();
       const validated = await outputSchemas[name].parseAsync(projected);
-      return toolResult(validated as Record<string, unknown>);
+      const result = toolResult(validated as Record<string, unknown>);
+      // Private descriptions occur in structuredContent and again as escaped JSON text.
+      // Bound the complete result, reserving 1 KiB for protocol response metadata.
+      if (name === 'get_activity_description'
+        && Buffer.byteLength(JSON.stringify(result), 'utf8') > MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES - 1024) {
+        throw new McpDataError('query_too_large', 'The activity description exceeds the MCP response limit. Read it in Quantified Self.');
+      }
+      return result;
     } catch (error) {
       if (!(error instanceof McpDataError)) {
         const validationIssues = summarizeMcpOutputValidationIssues(error);

@@ -4,6 +4,7 @@ import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 
 export const MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH = 65_536;
 export const MCP_ACTIVITY_DESCRIPTION_MAX_BYTES = 64 * 1024;
+export const MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES = 128 * 1024;
 export interface McpActivityDescriptionInput {
   uid: string;
   connectionId: string;

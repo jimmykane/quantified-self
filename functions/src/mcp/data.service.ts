@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import {
   firestoreActivityDescriptionReads, McpActivityDescriptionInput, McpActivityDescriptionReads,
-  MCP_ACTIVITY_DESCRIPTION_MAX_BYTES, MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH,
+  MCP_ACTIVITY_DESCRIPTION_MAX_BYTES, MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH, MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES,
 } from './activity-description.service';
 import { firestoreTimelineNotesReads, queryMcpTimelineNotes, McpTimelineNotesError,
   McpTimelineNotesInput, McpTimelineNotesReads } from './timeline-notes.service';
@@ -5992,7 +5992,7 @@ export function createMcpDataService(
           throw new McpDataError('query_too_large', 'The activity description exceeds the 64 KiB text limit. Read it in Quantified Self.');
         }
         const result = { activityRef: input.activityRef, description };
-        requireJsonBudget(result, 128 * 1024, 'The activity description exceeds the MCP response limit. Read it in Quantified Self.');
+        requireJsonBudget(result, MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES, 'The activity description exceeds the MCP response limit. Read it in Quantified Self.');
         await assertOwner();
         return result;
       } catch (error) {

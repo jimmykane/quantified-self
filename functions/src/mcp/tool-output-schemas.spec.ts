@@ -1896,6 +1896,33 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     }
   });
 
+  it('bounds both serialized copies of private description text on every transport', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+    ]);
+    connections.push(connection);
+    const args = successfulToolArguments.get_activity_description;
+    for (const description of ['x'.repeat(65_536), '\u0000'.repeat(11_000)]) {
+      const projection = { activityRef: args.activityRef, description };
+      // Both pass the original projection-only byte check, including the escaped-text case.
+      expect(Buffer.byteLength(JSON.stringify(projection), 'utf8')).toBeLessThan(128 * 1024);
+      service.getActivityDescription = vi.fn().mockResolvedValue(projection);
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ error: 'query_too_large' });
+      expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThan(128 * 1024);
+    }
+    const description = 'private-description-canary\n'.repeat(1_000);
+    service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef, description });
+    const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ activityRef: args.activityRef, description });
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(result.structuredContent);
+    expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThan(128 * 1024);
+  });
+
   it('requires both activity grants and strictly projects description text on every transport', async () => {
     const service = createFixtureDataService();
     for (const scopes of [[], [MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]]) {

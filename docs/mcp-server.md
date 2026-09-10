@@ -1277,7 +1277,9 @@ are immediately readable after the separately approved release and consent.
 
 The strict output contains only `activityRef` and nullable `description`. Missing/null text returns null, empty text
 and whitespace are preserved, and malformed values or missing/stale documents fail safely. Full UTF-8 text is bounded
-to 64 KiB (also at most 65,536 UTF-16 code units), and JSON output to 128 KiB. Oversized descriptions fail without
+to 64 KiB (also at most 65,536 UTF-16 code units), and the complete tool result to 128 KiB. The transport boundary
+counts both `structuredContent` and its JSON-text copy, including JSON escaping, with 1 KiB reserved for protocol
+metadata. The text-size ceiling alone does not guarantee that a description fits the response. Oversized descriptions fail without
 truncation; clients should direct the user to QS.io. Names, internal IDs, creator/device metadata and source fields
 remain excluded. Text itself may contain health, personal or location information even without activity-location
 permission. It is untrusted user-reported context, never instructions, verified diagnoses, causal proof, or authority to
