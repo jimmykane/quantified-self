@@ -7,7 +7,6 @@ import { TileChartActionsComponent } from './tile.chart.actions.component';
 import { AppUserService } from '../../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { AppHapticsService } from '../../../../services/app.haptics.service';
-import { TileActionsFooterComponent } from '../footer/tile.actions.footer.component';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
@@ -72,7 +71,7 @@ describe('TileChartActionsComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TileChartActionsComponent, TileActionsFooterComponent],
+      declarations: [TileChartActionsComponent],
       imports: [
         MatMenuModule,
         MatSelectModule,
@@ -118,6 +117,29 @@ describe('TileChartActionsComponent', () => {
     edit.click(); fixture.detectChanges();
     expect(emitted).toHaveBeenCalledWith(0);
     expect(hapticsMock.selection).toHaveBeenCalledOnce();
+  });
+  it.each([
+    [ChartTypes.Line, 'chart'],
+    [DASHBOARD_ACWR_KPI_CHART_TYPE, 'KPI'],
+    [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, 'calendar'],
+  ])('includes Remove %s in keyboard navigation and persists it once', async (chartType, noun) => {
+    fixture.componentRef.setInput('chartType', chartType); fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector<HTMLElement>('[role="menu"]')!;
+    hapticsMock.selection.mockClear();
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }));
+    const remove = document.activeElement as HTMLButtonElement;
+    expect(remove.textContent).toContain(`Remove ${noun}`);
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    remove.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalledOnce();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsMock.success).toHaveBeenCalledOnce();
+    expect(hapticsMock.error).not.toHaveBeenCalled();
   });
   it('should create', () => {
     expect(component).toBeTruthy();

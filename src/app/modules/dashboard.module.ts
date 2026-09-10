@@ -16,7 +16,6 @@ import { TileMapComponent } from '../components/tile/map/tile.map.component';
 import { TileChartActionsComponent } from '../components/tile/actions/chart/tile.chart.actions.component';
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
 import { TileActionsHeaderComponent } from '../components/tile/actions/header/tile.actions.header.component';
-import { TileActionsFooterComponent } from '../components/tile/actions/footer/tile.actions.footer.component';
 import { BenchmarkModule } from './benchmark.module';
 import { AppChartsModule } from './app-charts.module';
 import { DragDropModule } from '@angular/cdk/drag-drop';
@@ -56,7 +55,6 @@ import { EventTableModule } from './event-table.module';
         TileChartActionsComponent,
         TileMapActionsComponent,
         TileActionsHeaderComponent,
-        TileActionsFooterComponent,
         TileChartComponent,
         TileMapComponent,
         DashboardTileEventFiltersComponent,

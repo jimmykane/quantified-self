@@ -32,6 +32,7 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-detail.is-configuring { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .chart-library-detail-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; flex: 0 0 auto; margin-block-end: 12px; }
 .chart-library-preview-heading { justify-content: flex-end; }
+.chart-library-settings { margin-inline-start: auto; flex: 0 0 auto; }
 .chart-library-editor-layout { display: grid; grid-template-columns: minmax(280px, .85fr) minmax(0, 1.15fr); gap: 32px; min-height: 0; flex: 1 1 auto; }
 .chart-library-properties, .chart-library-preview { min-width: 0; }
 .chart-library-editor-layout > section { min-height: 0; overflow: auto; }

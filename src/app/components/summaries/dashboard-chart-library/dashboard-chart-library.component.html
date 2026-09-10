@@ -42,7 +42,7 @@
       <div class="chart-library-detail-heading" [class.chart-library-preview-heading]="!state.configuring()">
         <button class="chart-library-back" mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>{{ backLabel() }}</button>
         @if (!state.configuring()) {
-          <button mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>{{ draftPresentation().settings }}</button>
+          <button class="chart-library-settings" mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>{{ draftPresentation().settings }}</button>
         }
       </div>
       <div [class.chart-library-editor-layout]="state.configuring()" class="qs-scrollbar">

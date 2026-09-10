@@ -5,6 +5,8 @@
 <mat-menu #tileOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
   <div class="tile-actions-menu-shell">
     @if (showLayoutControls) {
+    <!-- This wrapper only prevents select clicks from dismissing the menu. The Material selects own keyboard handling and focus. -->
+    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
     <section class="tile-actions-section tile-size-actions" [attr.aria-label]="presentation.label + ' layout'" (click)="$event.stopPropagation()">
       <div class="tile-section-heading">
         <mat-icon aria-hidden="true">dashboard_customize</mat-icon>
@@ -51,7 +53,12 @@
     </button>
 
     @if (user.settings.dashboardSettings.tiles.length > 0) {
-    <app-tile-actions-footer [presentation]="presentation" [disabled]="isSaving" (delete)="deleteTile($event)"></app-tile-actions-footer>
+    <!-- Keep menu items in this view so MatMenu includes them in keyboard navigation. -->
+    <div class="tile-actions-divider" role="separator"></div>
+    <button mat-menu-item type="button" class="tile-action-menu-item tile-delete-menu-item" [disabled]="isSaving" (click)="deleteTile($event)">
+      <mat-icon>delete_outline</mat-icon>
+      <span>{{ presentation.remove }}</span>
+    </button>
     }
   </div>
 </mat-menu>

@@ -149,14 +149,17 @@ returns to automatic dimensions on resize so initialization fallback sizes canno
 Creating a custom chart, editing a tile, or choosing its settings replaces the gallery with a dedicated properties
 workspace. Properties and the live preview scroll independently on desktop; mobile puts properties before the preview
 in a single scrolling column. New custom charts omit the redundant category selector and use an explicit Create custom
-chart title. The type-specific settings action sits above the preview so it is immediately discoverable.
+chart title. The type-specific settings action sits above the preview so it is immediately discoverable, and stays
+right-aligned when longer labels wrap onto a second row on narrow screens.
 `dashboard-tile-presentation.helper.ts` owns the presentation kinds and terminology for chart, KPI, map, calendar,
 and generic tile. It resolves the existing stored renderer types; KPIs and Activity Calendar are stored as Chart but
 have their own UI kinds. Section terminology uses the full catalog, so adding presets or filtering the list cannot
 rename the section action. Draft terminology is recomputed after editor changes. Future renderer kinds belong in this
 resolver and label registry, with generic tile as the safe fallback. This does not change persistence or section routing.
 Chart and map action components use the same `tile-actions-menu.html` and base edit handler; chart-specific auto-tile
-dismissal remains in the chart component. All menu mutations and editing are disabled during a pending save.
+dismissal remains in the chart component. Keep every `mat-menu-item`, including Remove, in the menu template itself:
+Material cannot include items inside a child component’s view in its keyboard navigation. All menu mutations and
+editing are disabled during a pending save.
 The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
 recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
 dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,
