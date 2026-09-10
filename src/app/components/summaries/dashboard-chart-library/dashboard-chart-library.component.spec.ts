@@ -74,6 +74,33 @@ describe('responsive chart picker interactions', () => {
     await vi.waitFor(() => expect(document.body.querySelector('mat-bottom-sheet-container')).toBeNull());
     expect(document.activeElement).toBe(entry);
   });
+  it('restores the tile action after editing even when the section has no add action', async () => {
+    const maps = getDashboardChartCatalog().filter(entry => entry.lane === 'section:routesMaps');
+    user.settings.dashboardSettings.tiles = maps.map((entry, order) => ({ ...entry.tile, order }));
+    fixture.componentRef.setInput('lane', 'section:routesMaps');
+    fixture.componentRef.setInput('seed', { tiles: user.settings.dashboardSettings.tiles }); await settle();
+    const tile = document.createElement('div'); tile.dataset.dashboardTileOrder = '0';
+    const trigger = document.createElement('button'); trigger.className = 'tile-actions-trigger';
+    tile.append(trigger); document.body.append(tile);
+    const menuItem = document.createElement('button'); document.body.append(menuItem); menuItem.focus();
+    try {
+      expect(fixture.nativeElement.querySelector('button')).toBeNull();
+      await component.state.edit(user, 0); await settle(); menuItem.remove();
+      await component.close(); await settle();
+      await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+      expect(save).not.toHaveBeenCalled();
+    } finally { tile.remove(); menuItem.remove(); }
+  });
+  it('returns mobile preview focus to the selected list row', async () => {
+    mobile = true;
+    await component.toggle(); await settle();
+    const row = document.body.querySelectorAll<HTMLButtonElement>('.chart-library-list button')[4];
+    row.click(); await settle();
+    await component.back(); await settle();
+    await vi.waitFor(() => expect(document.activeElement).toBe(row));
+    expect(component.state.draft()).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+  });
   it('guards backdrop dismissal and retains the picker when changes are kept', async () => {
     await component.toggle(); await component.select(component.filtered()[0]);
     component.state.editor()!.category = 'custom'; component.state.refreshDraft(); await settle();

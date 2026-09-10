@@ -136,7 +136,8 @@ there is no separate Custom Charts section or persisted section migration. Curat
 existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
 Rows show the title, format, data-source label, and a small chart beside the chevron; only the selected chart mounts a full preview renderer.
 Desktop opens with the first available chart selected, without extra haptic feedback or any save. Mobile starts with
-the list and opens details on selection. Selecting the same entry again is a silent no-op that preserves preview scroll
+the list and opens details on selection. Back from a mobile preview restores focus to the selected row, scrolling it
+into view if needed. Selecting the same entry again is a silent no-op that preserves preview scroll
 and focus. Search/group changes release an unchanged preview if it no longer matches, so Add cannot target a hidden
 choice. Filtering never discards a configured or modified draft, and filter controls are locked during saves.
 The entry component opens its picker template in a wide Material dialog on desktop and a 92dvh Material bottom sheet
@@ -159,12 +160,14 @@ resolver and label registry, with generic tile as the safe fallback. This does n
 Chart and map action components use the same `tile-actions-menu.html` and base edit handler; chart-specific auto-tile
 dismissal remains in the chart component. Keep every `mat-menu-item`, including Remove, in the menu template itself:
 Material cannot include items inside a child component’s view in its keyboard navigation. All menu mutations and
-editing are disabled during a pending save.
+editing are disabled during a pending save, with a spinner in the original action button. Rows and Columns use
+standard Material submenus with checked choices so arrow-key navigation can reach every layout setting.
 The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
 recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
 dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,
 the dashboard waits for the overlay to close and the chart layout to refresh before focusing and revealing the saved
-chart; cancellation restores the original trigger focus. Latest-add Undo stays on the dashboard.
+chart; cancellation restores the original trigger focus. Existing-tile editing restores the tile's persistent action
+button instead of the dismissed menu item, including sections with no add action. Latest-add Undo stays on the dashboard.
 
 `dashboard-chart-catalog.helper.ts` adapts the shared preset registry and uses the same preset-equivalence rules for
 availability and bulk additions. Special chart identity includes power discipline; map identity includes its source.

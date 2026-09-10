@@ -111,7 +111,10 @@ export class DashboardChartLibraryComponent {
   }
 
   private openOverlay(template: TemplateRef<unknown>): void {
-    const returnFocus = this.document.activeElement as HTMLElement | null;
+    const editOrder = this.state.editor()?.editTileOrder;
+    const tileAction = editOrder == null ? null : this.document.querySelector<HTMLElement>(`[data-dashboard-tile-order="${editOrder}"] .tile-actions-trigger`);
+    // The menu item that launched editing is removed when its menu closes.
+    const returnFocus = tileAction || this.document.activeElement as HTMLElement | null;
     const options = {
       viewContainerRef: this.viewContainerRef,
       disableClose: true, // Route every dismissal through the existing dirty-draft/pending-save guard.
@@ -168,10 +171,25 @@ export class DashboardChartLibraryComponent {
   }
   async createCustom(): Promise<void> { await this.state.createCustom(this.user()); this.focusDetail(); }
   configure(): void { this.state.configure(); this.focusDetail(); }
-  async back(): Promise<void> { await this.state.back(); if (this.state.draft()) this.focusDetail(); else this.focusBrowser(); }
+  async back(): Promise<void> {
+    const selectedId = this.state.selected()?.definition.id;
+    await this.state.back();
+    if (this.state.draft()) this.focusDetail();
+    else this.focusBrowser(selectedId);
+  }
   async close(): Promise<void> { await this.state.close(); }
   private focusDetail(): void { this.focusContent(() => this.detail()?.nativeElement); }
-  private focusBrowser(): void { this.focusContent(() => this.browser()?.nativeElement); }
+  private focusBrowser(selectedId?: string): void {
+    if (!selectedId) { this.focusContent(() => this.browser()?.nativeElement); return; }
+    requestAnimationFrame(() => {
+      const browser = this.browser()?.nativeElement;
+      const row = Array.from(browser?.querySelectorAll<HTMLButtonElement>('[data-preset-id]') || [])
+        .find(button => button.dataset.presetId === selectedId);
+      // A row can safely scroll into view; focusing a tall pane must not move the sheet.
+      if (row) row.focus();
+      else browser?.focus({ preventScroll: true });
+    });
+  }
   private focusContent(target: () => HTMLElement | undefined, focus = true): void {
     requestAnimationFrame(() => {
       const pane = target();

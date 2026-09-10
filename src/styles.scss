@@ -877,7 +877,7 @@ tr.mat-row:focus,
   min-width: min(280px, calc(100vw - 24px)) !important;
 }
 
-/* Tile menu uses compact row/column selectors and does not need the wider config width. */
+/* Tile action menus use concise labels and do not need the wider config width. */
 .mat-mdc-menu-panel.qs-tile-actions-menu {
   min-width: 228px !important;
   max-width: min(320px, calc(100vw - 24px)) !important;

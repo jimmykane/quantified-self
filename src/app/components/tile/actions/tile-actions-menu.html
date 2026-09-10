@@ -1,40 +1,22 @@
-<button mat-icon-button class="tile-actions-trigger" [disabled]="isSaving" (menuOpened)="restoreMenuFocus()" [matMenuTriggerFor]="tileOptions" [attr.aria-label]="presentation.actions"
+<button mat-icon-button class="tile-actions-trigger" [disabled]="isSaving" [attr.aria-busy]="isSaving" (menuOpened)="restoreMenuFocus()" [matMenuTriggerFor]="tileOptions" [attr.aria-label]="presentation.actions"
   (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
+  @if (isSaving) {
+  <mat-spinner diameter="18" aria-label="Saving dashboard changes"></mat-spinner>
+  } @else {
   <mat-icon>more_vert</mat-icon>
+  }
 </button>
 <mat-menu #tileOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
   <div class="tile-actions-menu-shell">
     @if (showLayoutControls) {
-    <!-- This wrapper only prevents select clicks from dismissing the menu. The Material selects own keyboard handling and focus. -->
-    <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
-    <section class="tile-actions-section tile-size-actions" [attr.aria-label]="presentation.label + ' layout'" (click)="$event.stopPropagation()">
-      <div class="tile-section-heading">
-        <mat-icon aria-hidden="true">dashboard_customize</mat-icon>
-        <span>Layout</span>
-      </div>
-      <div class="tile-size-fields">
-        <mat-form-field appearance="outline" class="tile-size-field" subscriptSizing="dynamic">
-          <mat-label>Columns</mat-label>
-          <mat-select [disabled]="isSaving" [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
-            (selectionChange)="changeTileColumnSize($event)">
-            <mat-option [value]="1">1</mat-option>
-            <mat-option [value]="2">2</mat-option>
-            <mat-option [value]="3">3</mat-option>
-            <mat-option [value]="4">4</mat-option>
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="tile-size-field" subscriptSizing="dynamic">
-          <mat-label>Rows</mat-label>
-          <mat-select [disabled]="isSaving" [value]="size.rows" panelClass="qs-config-submenu qs-config-submenu-compact"
-            (selectionChange)="changeTileRowSize($event)">
-            <mat-option [value]="1">1</mat-option>
-            <mat-option [value]="2">2</mat-option>
-            <mat-option [value]="3">3</mat-option>
-            <mat-option [value]="4">4</mat-option>
-          </mat-select>
-        </mat-form-field>
-      </div>
-    </section>
+    <button mat-menu-item type="button" class="tile-action-menu-item" [disabled]="isSaving" [matMenuTriggerFor]="columnsMenu" (menuOpened)="onLayoutMenuOpened()">
+      <mat-icon>view_column</mat-icon>
+      <span>Columns: {{ size.columns }}</span>
+    </button>
+    <button mat-menu-item type="button" class="tile-action-menu-item" [disabled]="isSaving" [matMenuTriggerFor]="rowsMenu" (menuOpened)="onLayoutMenuOpened()">
+      <mat-icon>table_rows</mat-icon>
+      <span>Rows: {{ size.rows }}</span>
+    </button>
 
     <div class="tile-actions-divider" role="separator"></div>
     }
@@ -61,4 +43,21 @@
     </button>
     }
   </div>
+</mat-menu>
+
+<mat-menu #columnsMenu="matMenu" class="qs-menu-panel" aria-label="Columns">
+  @for (count of tileSizeOptions; track count) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="size.columns === count" [disabled]="isSaving" (click)="changeTileColumnSize({ value: count })">
+      <mat-icon>{{ size.columns === count ? 'check' : 'view_column' }}</mat-icon>
+      <span>{{ count }} {{ count === 1 ? 'column' : 'columns' }}</span>
+    </button>
+  }
+</mat-menu>
+<mat-menu #rowsMenu="matMenu" class="qs-menu-panel" aria-label="Rows">
+  @for (count of tileSizeOptions; track count) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="size.rows === count" [disabled]="isSaving" (click)="changeTileRowSize({ value: count })">
+      <mat-icon>{{ size.rows === count ? 'check' : 'table_rows' }}</mat-icon>
+      <span>{{ count }} {{ count === 1 ? 'row' : 'rows' }}</span>
+    </button>
+  }
 </mat-menu>
