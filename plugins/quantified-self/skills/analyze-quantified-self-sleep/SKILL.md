@@ -60,6 +60,9 @@ returned.
 
 ## Optional Timeline notes context
 
+For before/during/after comparisons around a note, use the bundled cross-domain skill's notes-comparison workflow.
+Keep this focused workflow for normalized Sleep readings and their sleep-day convention.
+
 When relevant to the question, discover the separately authorized Timeline notes read capability. It requires
 `timeline-notes:read`; missing access requires reauthorization, never a substitute metric grant. Do not fetch notes for
 every analysis. Use the matching inclusive calendar window, preserve actual dates and captured timezone, and follow
