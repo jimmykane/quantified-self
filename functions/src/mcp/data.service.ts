@@ -1,4 +1,8 @@
 import * as admin from 'firebase-admin';
+import {
+  firestoreActivityDescriptionReads, McpActivityDescriptionInput, McpActivityDescriptionReads,
+  MCP_ACTIVITY_DESCRIPTION_MAX_BYTES, MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH,
+} from './activity-description.service';
 import { firestoreTimelineNotesReads, queryMcpTimelineNotes, McpTimelineNotesError,
   McpTimelineNotesInput, McpTimelineNotesReads } from './timeline-notes.service';
 import {
@@ -437,6 +441,7 @@ interface ActivityChartContextDocuments {
 }
 
 export interface McpDataServiceDependencies {
+  activityDescriptionReads?: McpActivityDescriptionReads;
   timelineNotesReads?: McpTimelineNotesReads;
   healthReads?: McpHealthReadDependencies;
   now: () => number;
@@ -5953,6 +5958,47 @@ export function createMcpDataService(
 
     async listHealthMetrics() {
       return getMcpHealthCatalog();
+    },
+
+    async getActivityDescription(input: McpActivityDescriptionInput) {
+      if (!input.scopes.includes('activity-details:read') || !input.scopes.includes('activity-descriptions:read')) {
+        throw new McpDataError('invalid_request', 'Individual activity details and Activity descriptions permissions are required. Reauthorize to enable them.');
+      }
+      const reference = decodeActivityReference(input.activityRef, input.uid, input.connectionId);
+      const reads = dependencies.activityDescriptionReads
+        ?? (dependencies === defaultDependencies ? firestoreActivityDescriptionReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Activity description reads are unavailable.');
+      try {
+        const assertOwner = async () => {
+          if (!await reads.activeOwner(input.uid)) {
+            throw new McpDataError('invalid_request', 'Activity descriptions are unavailable for this account.');
+          }
+        };
+        await assertOwner();
+        const activity = await reads.fetchActivity(input.uid, reference.activityId);
+        if (!activity || activity.id !== reference.activityId || activity.data.eventID !== reference.eventId) {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        const event = await reads.fetchEvent(input.uid, reference.eventId);
+        if (!event || event.id !== reference.eventId) {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        const description = event.data.description ?? null;
+        if (description !== null && typeof description !== 'string') {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        if (description !== null && (description.length > MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH
+          || Buffer.byteLength(description, 'utf8') > MCP_ACTIVITY_DESCRIPTION_MAX_BYTES)) {
+          throw new McpDataError('query_too_large', 'The activity description exceeds the 64 KiB text limit. Read it in Quantified Self.');
+        }
+        const result = { activityRef: input.activityRef, description };
+        requireJsonBudget(result, 128 * 1024, 'The activity description exceeds the MCP response limit. Read it in Quantified Self.');
+        await assertOwner();
+        return result;
+      } catch (error) {
+        if (error instanceof McpDataError) throw error;
+        throw new McpDataError('temporarily_unavailable', 'The activity description could not be read safely. Try again later.');
+      }
     },
 
     async queryTimelineNotes(input: McpTimelineNotesInput) {

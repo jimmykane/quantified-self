@@ -1,3 +1,4 @@
+import { PUBLIC_MCP_TOOL_NAMES } from './tool-output-schemas';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Request } from 'firebase-functions/v2/https';
@@ -117,7 +118,7 @@ describe('MCP Function protocol compatibility', () => {
     } });
     const tools = await post(modernRequest('tools/list'));
     const listing = await tools.json() as { result: { tools: Array<{ name: string; execution?: unknown }> } };
-    expect(listing.result.tools).toHaveLength(35);
+    expect(listing.result.tools).toHaveLength(PUBLIC_MCP_TOOL_NAMES.length);
     expect(listing.result.tools.every(tool => tool.execution === undefined)).toBe(true);
     const call = await post(modernRequest('tools/call', { name: 'list_activity_types', arguments: {} }));
     expect(call.status).toBe(200);
@@ -223,6 +224,17 @@ describe('MCP Function protocol compatibility', () => {
     expect(denied.headers.get('www-authenticate')).toContain('activity-location:read');
     expect(info).not.toHaveBeenCalled();
   });
+
+  it.each([[MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]])(
+    'rejects description requests without both grants before dispatch: %s', async scope => {
+      authenticateBearer.mockResolvedValueOnce({ scopes: [scope] });
+      const response = await post(modernRequest('tools/call', {
+        name: 'get_activity_description', arguments: { activityRef: 'opaque-ref' },
+      }));
+      expect(response.status).toBe(403);
+      expect(response.headers.get('www-authenticate')).toContain('activity-descriptions:read');
+      expect(info).not.toHaveBeenCalled();
+    });
 
   it('rejects ungranted Health and body-composition reads before transport dispatch', async () => {
     authenticateBearer.mockResolvedValueOnce({ scopes: [MCP_OAUTH_SCOPES.SleepRead] });

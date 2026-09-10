@@ -145,7 +145,9 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
       section.items?.some(item => item.copy.includes('recent training trends'))
     ))).toBe(true);
-    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, and optional Timeline notes');
+    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, optional Timeline notes and activity descriptions');
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my activity descriptions'))?.answer)
+      .toContain('checkbox starts unchecked');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)
       .toContain('sensitive health or personal information');
     expect(PUBLIC_SEO_PAGES.mcpServer.intro).toContain('plan your next workout');

@@ -1499,6 +1499,51 @@ describe('MCP OAuth service', () => {
     expect(fetchClientMetadata).not.toHaveBeenCalled();
   });
 
+  it('requires explicit description consent and preserves its dependent grant through the OAuth lifecycle', async () => {
+    const store = createMemoryStore();
+    let sequence = 0;
+    const service = createMcpOAuthService({ store, fetchClientMetadata: async () => metadata(),
+      now: () => 1_000, randomToken: () => `descriptions-fixture-${++sequence}` });
+    const origin = 'https://quantified-self.io';
+    const resource = `${origin}/mcp`;
+    const verifier = 'correct-verifier-value-with-at-least-43-characters';
+    const parent = MCP_OAUTH_SCOPES.ActivityDetailsRead;
+    const child = MCP_OAUTH_SCOPES.ActivityDescriptionsRead;
+    expect(() => normalizeOAuthScopes(child)).toThrow(expect.objectContaining({ code: 'invalid_scope' }));
+    expect(hasValidMcpScopeDependencies([child])).toBe(false);
+    expect(hasValidMcpScopeDependencies([parent, child])).toBe(true);
+    const authorize = async (selected?: string[]) => {
+      const start = await service.startAuthorization({ ...authorizationParams(verifier), scope: `${parent} ${child}` }, origin);
+      const approval = await service.decideAuthorization({ uid: 'user-1', requestId: start.requestId,
+        approved: true, ...(selected ? { grantedScopes: selected } : {}) });
+      return service.exchangeAuthorizationCode({ grant_type: 'authorization_code',
+        code: new URL(approval.redirectUri).searchParams.get('code')!, client_id: metadata().client_id,
+        redirect_uri: metadata().redirect_uris[0], code_verifier: verifier, resource }, origin);
+    };
+    await expect(authorize([child])).rejects.toMatchObject({ code: 'invalid_scope' });
+    const legacy = await authorize();
+    expect((await service.authenticateBearer(legacy.access_token, resource)).scopes).toEqual([parent]);
+    const refresh = (refresh_token: string, scope?: string) => service.exchangeRefreshToken({
+      grant_type: 'refresh_token', refresh_token, client_id: metadata().client_id, resource,
+      ...(scope ? { scope } : {}),
+    }, origin);
+    await expect(refresh(legacy.refresh_token, `${parent} ${child}`)).rejects.toMatchObject({ code: 'invalid_scope' });
+    const consented = await authorize([parent, child]);
+    await expect(service.authenticateBearer(legacy.access_token, resource)).rejects.toMatchObject({ code: 'invalid_grant' });
+    const refreshed = await refresh(consented.refresh_token);
+    const auth = await service.authenticateBearer(refreshed.access_token, resource);
+    expect(auth.scopes).toEqual([parent, child]);
+    await expect(refresh(refreshed.refresh_token, child)).rejects.toMatchObject({ code: 'invalid_scope' });
+    const narrowed = await refresh(refreshed.refresh_token, parent);
+    expect((await service.authenticateBearer(narrowed.access_token, resource)).scopes).toEqual([parent]);
+    await expect(service.authenticateBearer(refreshed.access_token, resource)).rejects.toMatchObject({ code: 'invalid_grant' });
+    await expect(refresh(narrowed.refresh_token, `${parent} ${child}`)).rejects.toMatchObject({ code: 'invalid_scope' });
+    const restored = await authorize([parent, child]);
+    await service.revokeConnection('user-1', auth.connectionId);
+    await expect(service.authenticateBearer(restored.access_token, resource)).rejects.toMatchObject({ code: 'invalid_grant' });
+    await expect(refresh(restored.refresh_token)).rejects.toMatchObject({ code: 'invalid_grant' });
+  });
+
   it('supports a notes-only reauthorization, preserves its scope on refresh and enforces revocation', async () => {
     const store = createMemoryStore();
     let sequence = 0;
