@@ -355,8 +355,8 @@ describe('help.content', () => {
   it('should document inline chart discovery, editing, examples, and categories', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('Add and edit dashboard charts');
-    expect(gettingStartedSection?.content).toContain('Select a chart row');
+    expect(gettingStartedSection?.content).toContain('Add and edit dashboard tiles');
+    expect(gettingStartedSection?.content).toContain('Select a row');
     expect(gettingStartedSection?.content).toContain('Example data');
     expect(gettingStartedSection?.content).toContain('Curated');
     expect(gettingStartedSection?.content).toContain('KPI');

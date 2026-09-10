@@ -939,7 +939,7 @@ export class DashboardTileConfiguration {
       }
 
       if (this.hasDuplicateSpecialTiles(clonedTiles)) {
-        this.saveError = 'Derived curated and KPI chart types can only be added once each.';
+        this.saveError = 'Each curated tile and KPI can only be added once.';
         this.stopSaving();
         return;
       }
@@ -1363,7 +1363,7 @@ export class DashboardTileConfiguration {
       return null;
     }
     if (this.category === 'kpi' && this.isKpiOptionDisabled(this.kpiChartType)) {
-      this.saveError = 'This KPI chart already exists.';
+      this.saveError = 'This KPI is already on your dashboard.';
       return null;
     }
     return this.buildPreviewTile(order, size, existingTile);
@@ -1627,7 +1627,7 @@ export class DashboardTileConfiguration {
     });
 
     if (this.hasDuplicateSpecialTiles(targetTiles)) {
-      return 'Derived curated and KPI chart types can only be added once each.';
+      return 'Each curated tile and KPI can only be added once.';
     }
 
     if (this.hasDuplicateMapTiles(targetTiles)) {

@@ -184,10 +184,13 @@
 }
 
 .dashboard-section-header.dashboard-main-section-header {
+  min-height: 40px;
   margin-bottom: 0.5rem;
 }
 
 .dashboard-main-section-header > app-dashboard-chart-library {
+  margin-inline-start: auto;
+  white-space: nowrap;
   flex: 0 0 auto;
 }
 

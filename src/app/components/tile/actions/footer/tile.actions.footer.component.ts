@@ -1,4 +1,5 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { DASHBOARD_TILE_PRESENTATIONS, DashboardTilePresentation } from '../../../../helpers/dashboard-tile-presentation.helper';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 @Component({
     selector: 'app-tile-actions-footer',
@@ -7,9 +8,11 @@ import { Component, EventEmitter, Output } from '@angular/core';
     standalone: false
 })
 export class TileActionsFooterComponent {
+    @Input() presentation: DashboardTilePresentation = DASHBOARD_TILE_PRESENTATIONS.tile;
+    @Input() disabled = false;
     @Output() delete = new EventEmitter<MouseEvent>();
 
     onDeleteClick(event: MouseEvent): void {
-        this.delete.emit(event);
+        if (!this.disabled) this.delete.emit(event);
     }
 }

@@ -125,7 +125,7 @@ shadow for in-flow cards or add route-local card shadows.
 
 ## Dashboard chart picker
 
-Owners add charts from compact Add chart actions beside the KPI and intent section titles. The action is hidden when
+Owners add tiles from compact, right-aligned section actions: Add KPI, Add chart, or Add map. Mixed sections such as Activity Overview use Add tile. The action is hidden when
 a section has no available presets; keep the library component mounted so existing tiles can still open for editing.
 Activity Overview retains its action for custom creation and opens properties directly when no presets remain. Empty
 owner sections retain an entry point;
@@ -146,10 +146,17 @@ Desktop gives the selected chart most of the width beside a compact list; each p
 selection opens details with Back. Full chart previews render at native text size without CSS scaling, and KPI details
 use a shorter preview suited to their headline and sparkline. The shared ECharts host explicitly
 returns to automatic dimensions on resize so initialization fallback sizes cannot pin a chart to a tiny canvas.
-Creating a custom chart, editing a tile, or choosing Chart settings replaces the gallery with a dedicated properties
+Creating a custom chart, editing a tile, or choosing its settings replaces the gallery with a dedicated properties
 workspace. Properties and the live preview scroll independently on desktop; mobile puts properties before the preview
 in a single scrolling column. New custom charts omit the redundant category selector and use an explicit Create custom
-chart title. The Chart settings action sits above the preview so it is immediately discoverable.
+chart title. The type-specific settings action sits above the preview so it is immediately discoverable.
+`dashboard-tile-presentation.helper.ts` owns the presentation kinds and terminology for chart, KPI, map, calendar,
+and generic tile. It resolves the existing stored renderer types; KPIs and Activity Calendar are stored as Chart but
+have their own UI kinds. Section terminology uses the full catalog, so adding presets or filtering the list cannot
+rename the section action. Draft terminology is recomputed after editor changes. Future renderer kinds belong in this
+resolver and label registry, with generic tile as the safe fallback. This does not change persistence or section routing.
+Chart and map action components use the same `tile-actions-menu.html` and base edit handler; chart-specific auto-tile
+dismissal remains in the chart component. All menu mutations and editing are disabled during a pending save.
 The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
 recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
 dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,

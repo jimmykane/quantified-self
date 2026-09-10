@@ -1,3 +1,4 @@
+import { DASHBOARD_TILE_PRESENTATIONS, DashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
 import { MatMenuTrigger } from '@angular/material/menu';
 import equal from 'fast-deep-equal';
 import { DashboardConfigurationService, cloneDashboardSettings } from '../../../services/dashboard-configuration.service';
@@ -24,6 +25,17 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   private readonly snackBar = inject(MatSnackBar);
   protected pendingBaseline: AppDashboardSettingsInterface | null = null;
   public isSaving = false;
+  public presentation: DashboardTilePresentation = DASHBOARD_TILE_PRESENTATIONS.tile;
+  @Output() editTile = new EventEmitter<number>();
+
+  openEditTile(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.isSaving) return;
+    this.hapticsService.selection();
+    this.closeMenuForEditor();
+    this.editTile.emit(this.order);
+  }
   @ViewChild(MatMenuTrigger) protected menuTrigger?: MatMenuTrigger;
   public restoreMenuFocus(): void { if (this.menuTrigger) this.menuTrigger.restoreFocus = true; }
   protected closeMenuForEditor(): void {

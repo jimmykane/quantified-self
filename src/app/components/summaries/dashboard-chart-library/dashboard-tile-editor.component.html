@@ -18,7 +18,7 @@
 
         @if (configuration.category === 'curated') {
         <section class="chart-editor-section" #curatedSection>
-          <div class="chart-editor-section-title">Curated chart</div>
+          <div class="chart-editor-section-title">Curated tile</div>
           <mat-radio-group class="chart-editor-radio-group" [value]="configuration.curatedChartType" (change)="configuration.curatedChartType = $event.value; changed.emit(); configuration.hapticSelection()">
             @for (definition of configuration.curatedChartDefinitions; track definition.chartType) {
             <mat-radio-button class="chart-editor-radio-option" [value]="definition.chartType" [disabled]="configuration.isCuratedOptionDisabled(definition.chartType)">
@@ -36,14 +36,14 @@
             }
           </mat-radio-group>
           <p class="chart-editor-hint">
-            Curated charts use fixed logic and are independent from dashboard date-range changes.
+            Curated tiles use fixed logic and are independent from dashboard date-range changes.
           </p>
         </section>
         }
 
         @if (configuration.category === 'kpi') {
         <section class="chart-editor-section" #kpiSection>
-          <div class="chart-editor-section-title">KPI chart</div>
+          <div class="chart-editor-section-title">KPI</div>
           <mat-chip-listbox class="chart-editor-chip-listbox" [multiple]="false" [hideSingleSelectionIndicator]="true" [value]="configuration.kpiGroup" (change)="configuration.onKpiGroupChange($event.value); changed.emit()">
             @for (groupOption of configuration.kpiGroupOptions; track groupOption.value) {
             <mat-chip-option [value]="groupOption.value">
@@ -72,7 +72,7 @@
           </mat-radio-group>
           <p class="chart-editor-hint chart-editor-tip-hint" role="note" aria-label="KPI tip">
             <mat-icon>info</mat-icon>
-            <span>KPI rows are derived-only compact tiles with fixed logic.</span>
+            <span>KPIs summarize training measures in compact tiles.</span>
           </p>
         </section>
         }
@@ -143,7 +143,7 @@
             }
 
             <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
-              <mat-label>Tile date range</mat-label>
+              <mat-label>Chart date range</mat-label>
               <mat-icon matPrefix>date_range</mat-icon>
               <mat-select [value]="configuration.customEventRange" (selectionChange)="changeRange('custom', $event.value)">
                 @for (rangeOption of configuration.tileEventRangeOptions; track rangeOption.range) {
@@ -196,7 +196,7 @@
             }
             @if (configuration.mapSource === 'events') {
             <mat-form-field appearance="outline" subscriptSizing="dynamic" class="chart-editor-full-width">
-              <mat-label>Tile date range</mat-label>
+              <mat-label>Map date range</mat-label>
               <mat-icon matPrefix>date_range</mat-icon>
               <mat-select [value]="configuration.mapEventRange" (selectionChange)="changeRange('map', $event.value)">
                 @for (rangeOption of configuration.tileEventRangeOptions; track rangeOption.range) {
@@ -213,14 +213,14 @@
           </div>
 
           @if (configuration.isMapOptionDisabled()) {
-          <div class="chart-editor-option-warning">Map tile already exists on the dashboard.</div>
+          <div class="chart-editor-option-warning">This map is already on your dashboard.</div>
           }
 
           <p class="chart-editor-hint">
             @if (configuration.mapSource === 'routes') {
             Routes maps show recent saved route previews.
             } @else {
-            The map tile stays reactive to dashboard date-range and filters.
+            This map uses its selected date range and activity filters.
             }
           </p>
         </section>

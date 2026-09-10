@@ -1,3 +1,4 @@
+import { resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
 import { inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom, Subject } from 'rxjs';
@@ -223,7 +224,7 @@ export class DashboardChartLibraryState implements OnDestroy {
     const contextVersion = this.contextVersion;
     try {
       return await firstValueFrom(this.dialog.open(ConfirmationDialogComponent, { data: {
-        title: 'Discard chart changes?', message: 'Your changes have not been saved.', confirmLabel: 'Discard', cancelLabel: 'Keep editing',
+        title: `Discard ${resolveDashboardTilePresentation(this.draft()).singular} changes?`, message: 'Your changes have not been saved.', confirmLabel: 'Discard', cancelLabel: 'Keep editing',
       } }).afterClosed()) === true && contextVersion === this.contextVersion;
     } finally { this.confirming = false; }
   }

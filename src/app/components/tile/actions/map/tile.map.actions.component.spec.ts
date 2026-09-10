@@ -72,25 +72,42 @@ describe('TileMapActionsComponent', () => {
     fixture.detectChanges();
   });
 
+  it('uses map wording and disables all actions while an open menu is saving', async () => {
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-label')).toBe('Map actions');
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).toContain('Edit map');
+    expect(menu.textContent).toContain('Remove map');
+    component.isSaving = true; fixture.detectChanges();
+    expect(Array.from(menu.querySelectorAll<HTMLButtonElement>('button')).every(button => button.disabled)).toBe(true);
+    expect(Array.from(menu.querySelectorAll('mat-select')).every(select => select.getAttribute('aria-disabled') === 'true')).toBe(true);
+    hapticsMock.selection.mockClear();
+    const emitted = vi.spyOn(component.editTile, 'emit');
+    component.openEditTile(new MouseEvent('click'));
+    expect(emitted).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
   it('should use form menu panel classes', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/map/tile.map.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
     expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
   });
 
   it('should use compact submenu panel classes for row and column size selects', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/map/tile.map.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
     const compactClassMatches = template.match(/panelClass="qs-config-submenu qs-config-submenu-compact"/g) ?? [];
     expect(compactClassMatches.length).toBe(2);
   });
 
   it('should remove type and map setting controls from the map tile menu', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/map/tile.map.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
 
     expect(template).not.toContain('<mat-label>Type');

@@ -1,3 +1,4 @@
+import { resolveDashboardTileCollectionPresentation, resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
 import { DOCUMENT } from '@angular/common';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { MatDialog } from '@angular/material/dialog';
@@ -39,13 +40,18 @@ export class DashboardChartLibraryComponent {
   readonly available = computed(() => getAvailableDashboardCharts(this.lane(), this.seed().tiles));
   readonly canCreateCustom = computed(() => this.lane() === 'section:activityOverview');
   readonly showAddAction = computed(() => this.available().length > 0 || this.canCreateCustom());
-  readonly addActionLabel = computed(() => `Add chart to ${this.sectionLabel()}`);
+  readonly sectionPresentation = computed(() => resolveDashboardTileCollectionPresentation(this.catalog.filter(entry => entry.lane === this.lane()).map(entry => entry.tile)));
+  readonly draftPresentation = computed(() => resolveDashboardTilePresentation(this.state.draft()));
+  readonly addActionLabel = computed(() => `${this.sectionPresentation().add} to ${this.sectionLabel()}`);
+  readonly availableCountLabel = computed(() => `${this.filtered().length} ${this.filtered().length === 1 ? this.sectionPresentation().singular : this.sectionPresentation().plural} available`);
+  readonly emptyMessage = computed(() => this.available().length ? `No ${this.sectionPresentation().plural} match your search.` : 'All presets in this section are on your dashboard.');
+  readonly backLabel = computed(() => this.state.configuring() ? this.draftPresentation().back : `Back to ${this.sectionPresentation().plural}`);
   readonly addActionHint = computed(() => this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
   readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group())));
   private readonly availablePreviews = computed(() => this.available().map(entry => ({
     ...entry, preview: buildDashboardThumbnailPreview(entry.tile, this.seed()),
     title: entry.definition.label.replace(/^KPI:\s*/, ''),
-    format: entry.definition.category === 'kpi' ? 'KPI' : entry.definition.category === 'map' ? 'Map' : 'Chart',
+    format: resolveDashboardTilePresentation(entry.tile).label,
   })));
   readonly rowPreviews = computed(() => {
     const visible = new Set(this.filtered().map(entry => entry.definition.id));
@@ -56,6 +62,7 @@ export class DashboardChartLibraryComponent {
     const draft = this.state.draft();
     return draft ? this.catalog.find(entry => matchesDashboardPreset(draft, entry.tile))?.definition : null;
   });
+  readonly previewTitle = computed(() => this.draftDefinition()?.label || (this.state.editor()?.mode === 'edit' ? this.draftPresentation().edit : this.draftPresentation().kind === 'chart' ? 'Custom chart' : this.draftPresentation().label));
   readonly explanation = computed(() => resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.draftDefinition()?.description || 'Choose a metric, chart style, aggregation and date range.');
   readonly explanationParagraphs = computed(() => this.explanation().split('\n\n'));
   readonly dataScope = computed(() => {
@@ -80,7 +87,8 @@ export class DashboardChartLibraryComponent {
     return 'Activity data · ' + (DASHBOARD_TILE_EVENT_RANGE_OPTIONS.find(option => option.range === range)?.label || range);
   });
   readonly creatingCustom = computed(() => this.state.editor()?.mode === 'add' && !this.state.selected());
-  readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? 'Edit chart' : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? 'Chart settings' : 'Add charts');
+  readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? this.draftPresentation().edit : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? this.draftPresentation().settings : `Add ${this.sectionPresentation().plural}`);
+  readonly pickerHeading = computed(() => this.sectionLabel().toLowerCase() === this.sectionPresentation().plural.toLowerCase() ? this.pickerTitle() : `${this.pickerTitle()} · ${this.sectionLabel()}`);
   readonly expanded = computed(() => this.state.activeLane() === this.lane());
   readonly destination = computed(() => {
     const tile = this.state.draft(); if (!tile) return '';
@@ -109,7 +117,7 @@ export class DashboardChartLibraryComponent {
       disableClose: true, // Route every dismissal through the existing dirty-draft/pending-save guard.
       restoreFocus: false, // Restore here, then let the dashboard reveal a successfully saved tile.
       autoFocus: 'dialog',
-      ariaLabel: `Chart library · ${this.sectionLabel()}`,
+      ariaLabel: `${this.sectionPresentation().label} library · ${this.sectionLabel()}`,
     };
     let close: () => void;
     let closed$: Observable<unknown>;

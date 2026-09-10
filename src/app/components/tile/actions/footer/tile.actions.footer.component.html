@@ -1,5 +1,5 @@
 <div class="tile-actions-divider" role="separator"></div>
-<button mat-menu-item type="button" class="tile-action-menu-item tile-delete-menu-item" (click)="onDeleteClick($event)">
+<button mat-menu-item type="button" class="tile-action-menu-item tile-delete-menu-item" [disabled]="disabled" (click)="onDeleteClick($event)">
     <mat-icon>delete_outline</mat-icon>
-    <span>Delete tile</span>
+    <span>{{ presentation.remove }}</span>
 </button>

@@ -1,5 +1,7 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import { resolveDashboardTilePresentation } from '../../../../helpers/dashboard-tile-presentation.helper';
+import { Component, Input, OnInit } from '@angular/core';
 import {
+  TileTypes,
   TileSettingsInterface,
   TileChartSettingsInterface,
   ChartDataCategoryTypes,
@@ -25,19 +27,23 @@ import { AppDashboardAutoTileState, AppDashboardSettingsInterface } from '../../
 
 @Component({
   selector: 'app-tile-chart-actions',
-  templateUrl: './tile.chart.actions.component.html',
-  styleUrls: ['../tile.actions.abstract.css', './tile.chart.actions.component.css'],
+  templateUrl: '../tile-actions-menu.html',
+  styleUrls: ['../tile.actions.abstract.css'],
   providers: [],
   standalone: false
 })
 export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit {
-  @Input() chartType: DashboardChartType;
+  private currentChartType: DashboardChartType;
+  @Input() set chartType(value: DashboardChartType) {
+    this.currentChartType = value;
+    this.presentation = resolveDashboardTilePresentation({ type: TileTypes.Chart, chartType: value });
+  }
+  get chartType(): DashboardChartType { return this.currentChartType; }
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() chartTimeInterval: TimeIntervals;
   @Input() chartOrder: number;
-  @Output() editTile = new EventEmitter<number>();
   private persistAutoTileStateWithNextSave = false;
 
   constructor(
@@ -86,14 +92,6 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     if (!this.user) {
       throw new Error('Component needs user');
     }
-  }
-
-  openEditTile(event: MouseEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    this.hapticsService.selection();
-    this.closeMenuForEditor();
-    this.editTile.emit(this.order);
   }
 
   private cloneTiles(tiles: TileSettingsInterface[]): TileSettingsInterface[] {

@@ -99,25 +99,45 @@ describe('TileChartActionsComponent', () => {
     fixture.detectChanges();
   });
 
+  it.each([
+    [ChartTypes.Line, 'Chart', 'chart'],
+    [DASHBOARD_ACWR_KPI_CHART_TYPE, 'KPI', 'KPI'],
+    [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, 'Calendar', 'calendar'],
+  ])('renders type-specific actions for %s and updates when inputs change', async (chartType, label, noun) => {
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('chartType', chartType); fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-label')).toBe(`${label} actions`);
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).toContain(`Edit ${noun}`);
+    expect(menu.textContent).toContain(`Remove ${noun}`);
+    hapticsMock.selection.mockClear();
+    const emitted = vi.spyOn(component.editTile, 'emit');
+    const edit = Array.from(menu.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.includes(`Edit ${noun}`))!;
+    edit.click(); fixture.detectChanges();
+    expect(emitted).toHaveBeenCalledWith(0);
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+  });
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
   it('should use form menu panel classes', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
     expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
   });
 
   it('should keep compact submenu panel classes for row and column size selects', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
     const compactClassMatches = template.match(/panelClass="qs-config-submenu qs-config-submenu-compact"/g) ?? [];
     expect(compactClassMatches.length).toBe(2);
   });
 
   it('should remove chart data configuration controls and add-new action from the tile menu', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
 
     expect(template).not.toContain('app-tile-actions-header');
