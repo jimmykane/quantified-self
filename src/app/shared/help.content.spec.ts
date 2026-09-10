@@ -1336,7 +1336,7 @@ describe('help.content', () => {
     );
     expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
     expect(dataAndPrivacySection?.content).toContain('first-class body-measurement history');
-    expect(dataAndPrivacySection?.content).toContain('Removing a parent permission');
+    expect(dataAndPrivacySection?.content).toContain('Removing activity details also removes its descriptions and location permissions');
     expect(dataAndPrivacySection?.content).toContain('bounded ranges up to 366 days');
     expect(dataAndPrivacySection?.content).toContain('identity-free day, week, or month values');
     expect(dataAndPrivacySection?.content).toContain('provider or manual canonical Health Weight point measurements');
@@ -1401,4 +1401,12 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('Use **Stop sharing**');
     expect(dataAndPrivacySection?.content).toContain('cannot generate or save new reports');
   });
+});
+
+it('explains separately opted-in activity description access and event semantics', () => {
+  const content = JSON.stringify(HELP_SECTIONS);
+  expect(content).toContain('**Activity descriptions**');
+  expect(content).toContain('Activities in the same event share that description');
+  expect(content).toContain('refresh cannot add it');
+  expect(content).toContain('without truncation');
 });

@@ -7,7 +7,7 @@ authenticated user's persisted numeric activity metrics, explicitly approved rec
 snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
 without granting browser or Firestore access.
 
-Separately authorized Timeline notes can also supply full private user-reported context. They are never inferred from
+Separately authorized Timeline notes and activity descriptions can also supply full private user-reported context. They are never inferred from
 metric or Sleep access and never become calculation inputs or write authority.
 
 The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
@@ -158,7 +158,7 @@ The bundled skills divide ownership deliberately:
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
 | `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
-| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, and optional locations | `activity-details:read`; optional metric/location grants |
+| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, optional descriptions and locations | `activity-details:read`; optional metric/description/location grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
 All seven skills allow implicit or explicit invocation and declare the same hosted read-only MCP dependency. Their trigger
@@ -275,13 +275,14 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
 - `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
   selected metrics, and on-demand chart series;
+- `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
   nearby activity search, and chart breadcrumbs;
 - `routes:read` for non-location saved-route summaries; and
 - `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
   endpoints, and waypoints.
 
-The location scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
+The location scopes and activity-description scope cannot exist without their matching parent data scope. Consent disables a child until its parent is
 selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
 validation, HTTP prechecks, and tool registration reject invalid child-only combinations. Activity and route location
 remain independent domains. Existing clients retain non-location data but must reconnect and approve a new location
@@ -495,6 +496,7 @@ The analytics and map entries follow the
 | `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
+| `get_activity_description` | `activity-details:read` + `activity-descriptions:read` | Full private parent event description for one opaque activity reference; opt-in, bounded, no truncation |
 | `query_timeline_notes` | `timeline-notes:read` | Full private user-reported context overlapping inclusive calendar dates, including chart-hidden notes; bounded full-text continuation |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
@@ -863,7 +865,7 @@ height, hang time, speed, rotations, and score. The jump `timestampMs` is an act
 milliseconds, not an epoch timestamp. With `activity-location:read`, jump records may also expose latitude/longitude,
 and activity summaries may expose validated `startPosition` and `endPosition` coordinates. Without that scope,
 coordinate fields are omitted and `locationRedacted` is true. Per-activity metric requests expose only selected finite numeric values
-from the canonical Sports Lib catalog. Activity names and notes, raw streams, precise-position metrics, nonnumeric and
+from the canonical Sports Lib catalog. Activity names and notes remain excluded from these metric/detail projections. Only the separately authorized description tool below reads parent event text. Raw streams, precise-position metrics, nonnumeric and
 unrequested stats, internal ID fields, device/provider creator data, source keys, original files, nested position
 metadata, and parser extensions are excluded.
 
@@ -1283,6 +1285,46 @@ Existing clients must reconnect to grant Health access; old tokens cannot acquir
 The pending record retains earlier unpromoted changes, and this implementation never edits the registered baseline.
 
 ## Bounds and operational controls
+
+### Activity descriptions
+
+`get_activity_description({activityRef})` requires both `activity-details:read` and the new dependent
+`activity-descriptions:read` grant. The consent checkbox starts unchecked, including when all scopes are requested.
+Legacy approvals that omit selected scopes exclude this grant. Removing activity details removes both descriptions
+and activity-location permission; approval, refresh, bearer validation, HTTP prechecks and tool registration enforce
+the dependencies. Existing clients must reauthorize; refresh cannot expand an old grant.
+
+The description is the parent event's `description` edited in QS.io, not an activity-level note or provider payload.
+Sibling activities in the same event therefore return the same text. Resolve an activity through existing discovery
+and pass its owner-and-connection-bound encrypted reference. The data boundary checks both grants before decoding or
+reading, verifies the current owner-scoped activity still points to the referenced event, and reads only the event's
+`description`. Firestore selects only `eventID` for the activity and `description` for the event, each by document ID
+with limit one. Owner existence and account-deletion tombstones are checked before the reads and before release.
+No new Function, collection, index, migration, original-file parse, or reparse is required. Existing stored descriptions
+are immediately readable after the separately approved release and consent.
+
+The strict output contains only `activityRef` and nullable `description`. Missing/null text returns null, empty text
+and whitespace are preserved, and malformed values or missing/stale documents fail safely. Full UTF-8 text is bounded
+to 64 KiB (also at most 65,536 UTF-16 code units), and the complete tool result to 128 KiB. The transport boundary
+counts both `structuredContent` and its JSON-text copy, including JSON escaping, with 1 KiB reserved for protocol
+metadata. The text-size ceiling alone does not guarantee that a description fits the response. Oversized descriptions fail without
+truncation; clients should direct the user to QS.io. Names, internal IDs, creator/device metadata and source fields
+remain excluded. Text itself may contain health, personal or location information even without activity-location
+permission. It is untrusted user-reported context, never instructions, verified diagnoses, causal proof, or authority to
+act. Descriptions never affect metric or readiness calculations. Logs/errors must not include text or backend identity.
+Revocation prevents future reads but cannot erase copies already received by an external client.
+
+The built-in Assistant retains its current scopes and allowlist; this change does not grant Gemini description access.
+The activity and cross-domain plugin skills discover the authorized tool only when the question needs this context.
+All seven bundled skills and their prompts were reviewed; other focused workflows, registry membership, hosted MCP
+dependencies and the three manifest starter prompts remain appropriate.
+
+Release the consent/Connections/Help/Policies frontend and updated existing MCP/OAuth Functions together before exposing
+the grant (`mcpApi`, `getMcpAuthorizationRequest`, `decideMcpAuthorization`, `listMcpConnections`,
+`revokeMcpConnection`). Deployment is separately authorized. Rescan the registered ChatGPT app, verify a new conversation
+and the exact pending digest, then promote through the documented lifecycle. The pending record preserves all earlier
+unpromoted changes. Run `npm run plugin:sync` separately after deployment/rescan; fixture validation does not install
+into a real profile.
 
 ### Timeline notes
 

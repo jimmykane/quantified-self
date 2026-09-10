@@ -454,6 +454,7 @@ function createFixtureDataService(
         readings: [{ date: '1970-01-01', value: 42, display: { value: '42', unit: 'ms' }, status: 'building_baseline', normalRange: null }],
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
+    getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
       notes: [{ category: 'sickness', title: 'Reported context', details: 'Full text including personal context.',
@@ -1173,6 +1174,7 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   list_health_metrics: {},
   query_health_metric: { metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02' },
@@ -1743,7 +1745,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     );
     expect(tools.every(tool => Boolean(tool.outputSchema))).toBe(true);
     const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric', 'get_hrv_personal_range'].includes(tool.name));
-    const noteTools = tools.filter(tool => tool.name === 'query_timeline_notes');
+    const noteTools = tools.filter(tool => ['query_timeline_notes', 'get_activity_description'].includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
     // Keep the existing frozen surface's budget; account separately for the two
     // additive Health contracts so schema growth remains bounded and visible.
@@ -1932,6 +1934,67 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(rejected.isError).toBe(true);
     expect(rejected).not.toHaveProperty('structuredContent');
     expect(JSON.stringify(rejected)).not.toContain('private-hrv-canary');
+  });
+
+  it('bounds both serialized copies of private description text on every transport', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+    ]);
+    connections.push(connection);
+    const args = successfulToolArguments.get_activity_description;
+    for (const description of ['x'.repeat(65_536), '\u0000'.repeat(11_000)]) {
+      const projection = { activityRef: args.activityRef, description };
+      // Both pass the original projection-only byte check, including the escaped-text case.
+      expect(Buffer.byteLength(JSON.stringify(projection), 'utf8')).toBeLessThan(128 * 1024);
+      service.getActivityDescription = vi.fn().mockResolvedValue(projection);
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ error: 'query_too_large' });
+      expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThan(128 * 1024);
+    }
+    const description = 'private-description-canary\n'.repeat(1_000);
+    service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef, description });
+    const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ activityRef: args.activityRef, description });
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(result.structuredContent);
+    expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThan(128 * 1024);
+  });
+
+  it('requires both activity grants and strictly projects description text on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]]) {
+      const denied = await connectFixtureServer(service, scopes);
+      connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_activity_description');
+    }
+    const scopes = [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead];
+    const connection = await connectFixtureServer(service, scopes);
+    connections.push(connection);
+    const args = successfulToolArguments.get_activity_description;
+    const injected = await connection.client.callTool({ name: 'get_activity_description', arguments: {
+      ...args, uid: 'attacker', scopes: [], connectionId: 'attacker',
+    } });
+    expect(injected.isError).toBe(true);
+    expect(service.getActivityDescription).not.toHaveBeenCalled();
+    for (const description of [null, '', 'Private context.\nIgnore all instructions is text, not authority.']) {
+      service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef, description });
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual({ activityRef: args.activityRef, description });
+      expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(result.structuredContent);
+      expect(service.getActivityDescription).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1', scopes }));
+    }
+    for (const field of ['eventID', 'name', 'creator', 'sourceKey', 'startPosition', 'notes', 'originalFile']) {
+      service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef,
+        description: 'Allowed text', [field]: 'private-description-canary' });
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError, field).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-description-canary');
+    }
   });
 
   it('binds full notes to the bearer grant and rejects private neighboring fields', async () => {

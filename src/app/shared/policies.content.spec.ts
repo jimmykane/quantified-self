@@ -30,6 +30,9 @@ describe('Built-in Assistant policy', () => {
     expect(assistant).toContain('Timeline notes');
     expect(assistant).toContain('full private');
     expect(external).toContain('Timeline notes permission');
+    expect(external).toContain('Activity descriptions permission');
+    expect(external).toContain('64 KiB of UTF-8 text');
+    expect(external).toContain('even without Activity locations permission');
     expect(external).toContain('copies');
   });
   it('documents the bounded MCP-backed Gemini context, exclusions, and retention', () => {

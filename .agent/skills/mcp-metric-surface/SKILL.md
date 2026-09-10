@@ -38,7 +38,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   intervals, or raw HRV, SpO2, or respiration samples.
 - **Activity-detail field:** decide whether it belongs in the explicit activity summary, lap, jump, or swim-length
   projection. Never forward whole activity documents, raw streams, creator/device metadata, source keys, names/notes,
-  internal identifier fields, arbitrary stats, or parser extensions. Exact activity start/end and jump coordinates,
+  internal identifier fields, arbitrary stats, or parser extensions. The separate `get_activity_description` tool may
+  read only the parent event description with both `activity-descriptions:read` and `activity-details:read`; this never
+  widens normal activity/metric projections. Preserve opt-in consent, full-text bounds and untrusted-context semantics.
+  Exact activity start/end and jump coordinates,
   nearby search, and chart breadcrumbs require dependent `activity-location:read` in addition to
   `activity-details:read`.
 - **On-demand activity chart stream:** add deliberate aliases and canonical units to

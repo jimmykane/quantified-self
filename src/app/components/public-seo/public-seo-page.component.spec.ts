@@ -128,7 +128,8 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('No settings or data writes');
     expect(text).toContain('External clients have their own privacy and retention practices');
     expect(mcpFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(9);
-    expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(6);
+    expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(7);
+    expect(text).toContain('Activity descriptions');
     expect(text).toContain('Timeline notes');
     expect(text).toContain('sensitive health or personal');
     expect(hrefs).toContain('/login');

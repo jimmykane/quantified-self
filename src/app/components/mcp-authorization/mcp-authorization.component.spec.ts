@@ -120,6 +120,38 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('finish setup in ChatGPT on the web from a desktop');
   });
 
+  it('keeps descriptions opt-in and removes both child grants when activity details is unchecked', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'description-request',
+      scopes: ['activity-details:read', 'activity-descriptions:read', 'activity-location:read'],
+      clientName: 'Description client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const option = () => component.scopeOptions().find(value => value.scope === 'activity-descriptions:read');
+    expect(option()).toMatchObject({ title: 'Activity descriptions', selected: false, disabled: false });
+    expect(fixture.nativeElement.textContent).toContain('location information, even without Activity locations');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    component.toggleScope('activity-descriptions:read', { checked: true } as never);
+    component.toggleScope('activity-descriptions:read', { checked: true } as never);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'description-request', approved: true,
+      grantedScopes: ['activity-details:read', 'activity-location:read', 'activity-descriptions:read'],
+    });
+    component.deciding.set(null);
+    component.toggleScope('activity-details:read', { checked: false } as never);
+    expect(component.selectedScopes()).toEqual([]);
+    expect(option()).toMatchObject({ selected: false, disabled: true });
+    component.toggleScope('activity-descriptions:read', { checked: true } as never);
+    expect(component.selectedScopes()).toEqual([]);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    component.toggleScope('activity-details:read', { checked: true } as never);
+    expect(option()).toMatchObject({ selected: false, disabled: false });
+  });
+
   it('requires an explicit unchecked-by-default selection even for a notes-only request', async () => {
     functions.call.mockResolvedValueOnce({ data: { requestId: 'notes-request', scopes: ['timeline-notes:read'],
       clientName: 'Notes client', redirectUri: 'https://client.example/callback' } });

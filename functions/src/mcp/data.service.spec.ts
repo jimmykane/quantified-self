@@ -287,6 +287,81 @@ describe('MCP data service', () => {
     };
   });
 
+  async function descriptionFixture() {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const reads = { activeOwner: vi.fn().mockResolvedValue(true),
+      fetchActivity: vi.fn().mockResolvedValue({ id: 'activity-1', data: { eventID: 'event-1', description: 'Wrong activity text' } }),
+      fetchEvent: vi.fn().mockResolvedValue({ id: 'event-1', data: { description: 'Parent context\nFelt tired 🏃',
+        name: 'private-name', creator: 'private-device', sourceKey: 'private-source', notes: 'private-notes' } }),
+    };
+    dependencies.activityDescriptionReads = reads;
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({ uid: 'user-1', connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io' });
+    const input = { uid: 'user-1', connectionId: 'connection-1',
+      scopes: ['activity-details:read', 'activity-descriptions:read'], activityRef: listed.activities[0].activityRef };
+    return { reads, service, input };
+  }
+
+  it('reads only the referenced parent description and preserves full text, null and empty values', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    const result = await service.getActivityDescription(input);
+    expect(result).toEqual({ activityRef: input.activityRef, description: 'Parent context\nFelt tired 🏃' });
+    expect(JSON.stringify(result)).not.toMatch(/private-|Wrong activity/);
+    expect(reads.fetchActivity).toHaveBeenCalledWith('user-1', 'activity-1');
+    expect(reads.fetchEvent).toHaveBeenCalledWith('user-1', 'event-1');
+    expect(reads.activeOwner).toHaveBeenCalledTimes(2);
+    for (const description of [undefined, null, '', '  keep whitespace  ', 'a'.repeat(65_536)]) {
+      reads.fetchEvent.mockResolvedValue({ id: 'event-1', data: { description } } as never);
+      expect((await service.getActivityDescription(input)).description).toBe(description ?? null);
+    }
+  });
+
+  it('denies description reads before database work for missing grants and replayed or tampered references', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    for (const change of [{ scopes: [] }, { scopes: ['activity-details:read'] },
+      { scopes: ['activity-descriptions:read'] }, { uid: 'other-owner' }, { connectionId: 'other-connection' },
+      { activityRef: input.activityRef.slice(0, -8) + 'tampered' }]) {
+      await expect(service.getActivityDescription({ ...input, ...change })).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+    expect(reads.activeOwner).not.toHaveBeenCalled();
+    expect(reads.fetchActivity).not.toHaveBeenCalled();
+    expect(reads.fetchEvent).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for stale parent bindings, missing documents, malformed or oversized text and backend errors', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    for (const activity of [null, { id: 'different', data: { eventID: 'event-1' } },
+      { id: 'activity-1', data: { eventID: 'other-event' } }]) {
+      reads.fetchActivity.mockResolvedValue(activity as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'detail_not_available' });
+    }
+    expect(reads.fetchEvent).not.toHaveBeenCalled();
+    reads.fetchActivity.mockResolvedValue({ id: 'activity-1', data: { eventID: 'event-1' } } as never);
+    for (const event of [null, { id: 'different', data: { description: 'private' } },
+      { id: 'event-1', data: { description: { text: 'private' } } }]) {
+      reads.fetchEvent.mockResolvedValue(event as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'detail_not_available' });
+    }
+    for (const description of ['a'.repeat(65_537), '🏃'.repeat(16_385), '\u0000'.repeat(30_000)]) {
+      reads.fetchEvent.mockResolvedValue({ id: 'event-1', data: { description } } as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'query_too_large' });
+    }
+    reads.fetchEvent.mockRejectedValue(new Error('private description and backend path'));
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'temporarily_unavailable',
+      message: 'The activity description could not be read safely. Try again later.' });
+  });
+
+  it('checks account deletion before reading and again before releasing private description text', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    reads.activeOwner.mockResolvedValueOnce(false);
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'invalid_request' });
+    expect(reads.fetchActivity).not.toHaveBeenCalled();
+    reads.activeOwner.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'invalid_request' });
+    expect(reads.fetchEvent).toHaveBeenCalledOnce();
+  });
+
   it('redacts unexpected Health reader errors instead of disclosing backend details', async () => {
     dependencies.healthReads = {
       fetchPage: vi.fn().mockRejectedValue(new Error('private callback token and provider account')),
