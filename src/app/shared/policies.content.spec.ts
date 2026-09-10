@@ -33,6 +33,8 @@ describe('Built-in Assistant policy', () => {
     expect(external).toContain('Timeline notes permission');
     expect(external).toContain('The checkbox is selected by default when requested; uncheck it before approving to withhold access.');
     expect(external).toContain('Activity descriptions permission');
+    expect(external).toContain('Like every requested MCP permission, the checkbox is selected by default');
+    expect(external).toContain('Every requested current or future permission starts checked');
     expect(external).toContain('64 KiB of UTF-8 text');
     expect(external).toContain('even without Activity locations permission');
     expect(external).toContain('copies');

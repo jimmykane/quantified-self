@@ -25,6 +25,7 @@ describe('help.content', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
     expect(content).toContain('**Timeline notes** is an independent read-only permission');
     expect(content).toContain('It is selected by default when requested; uncheck it before approving to withhold access.');
+    expect(content).toContain('Every requested permission starts checked, including permissions added later');
     expect(content).toContain('It is off by default. Changing notes or location access starts a fresh chat');
     expect(content).toContain('full private');
     expect(content).toContain('hidden from charts');
@@ -1405,7 +1406,7 @@ describe('help.content', () => {
   });
 });
 
-it('explains separately opted-in activity description access and event semantics', () => {
+it('explains separately approved activity description access and event semantics', () => {
   const content = JSON.stringify(HELP_SECTIONS);
   expect(content).toContain('**Activity descriptions**');
   expect(content).toContain('Activities in the same event share that description');

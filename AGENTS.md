@@ -58,6 +58,10 @@ Always-on rules:
   MCP documentation current. Existing registered tool schemas are frozen; follow the documented digest-bound
   refresh/publication lifecycle for compatible additive metadata, and never hand-edit the registered baseline or its
   append-only transition history.
+- On the external MCP authorization screen, initialize the selected permissions from the complete validated scope list
+  returned for the authorization request. Every requested current or future permission must start checked, while the
+  user must remain able to uncheck individual permissions before approval. Do not add per-scope default-off filters;
+  preserve scope dependency rules and remember that preselection alone never grants access without explicit approval.
 - When MCP tools, schemas, scopes, instructions, plugin metadata, starter prompts, branding, or any bundled Quantified
   Self plugin skill change, follow the local-plugin update matrix in `docs/mcp-server.md`. Review every affected focused
   skill and the cross-domain skill, and keep the exhaustive bundled-skill registry, fixtures, per-skill starter prompts,

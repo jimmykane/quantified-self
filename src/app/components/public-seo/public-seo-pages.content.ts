@@ -633,7 +633,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my activity descriptions?',
-        answer: 'Only when you opt in to Activity descriptions and Individual activity details. The description checkbox starts unchecked and existing clients must reauthorize. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation, and MCP cannot edit descriptions.',
+        answer: 'Only when Activity descriptions and Individual activity details are approved. Like every requested permission, the description checkbox starts checked; uncheck it before approving to withhold access. Existing clients must reauthorize. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation, and MCP cannot edit descriptions.',
       },
       {
         question: 'Can an MCP client read my Timeline notes?',

@@ -35,7 +35,7 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
 }> = {
   'activity-descriptions:read': {
     title: 'Activity descriptions',
-    description: 'Read the full private event description shown in the QS.io event editor for a selected activity. Activities within the same event share this text. Requires Individual activity details. Off by default; existing connections must reauthorize. Text may include sensitive health, personal or location information, even without Activity locations permission. Revoking access cannot erase copies already received. No descriptions can be changed.',
+    description: 'Read the full private event description shown in the QS.io event editor for a selected activity. Activities within the same event share this text. Requires Individual activity details. Selected by default when requested; uncheck it before approving to keep descriptions private from this client. Existing connections must reauthorize. Text may include sensitive health, personal or location information, even without Activity locations permission. Revoking access cannot erase copies already received. No descriptions can be changed.',
   },
   'timeline-notes:read': {
     title: 'Timeline notes',
@@ -140,7 +140,7 @@ export class McpAuthorizationComponent implements OnInit {
         McpAuthorizationRequest
       >('getMcpAuthorizationRequest', { requestId });
       this.request.set(result.data);
-      this.selectedScopes.set(result.data.scopes.filter(scope => scope !== 'activity-descriptions:read'));
+      this.selectedScopes.set([...result.data.scopes]);
     } catch (error) {
       this.logger.error('[McpAuthorizationComponent] Failed to load authorization request', error);
       this.error.set('This authorization request is invalid, expired, or no longer available.');

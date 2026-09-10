@@ -147,7 +147,7 @@ describe('public-seo-pages.content', () => {
     ))).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, optional Timeline notes and activity descriptions');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my activity descriptions'))?.answer)
-      .toContain('checkbox starts unchecked');
+      .toContain('description checkbox starts checked; uncheck it before approving to withhold access');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)
       .toContain('sensitive health or personal information');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)

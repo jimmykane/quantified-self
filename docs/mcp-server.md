@@ -288,6 +288,9 @@ validation, HTTP prechecks, and tool registration reject invalid child-only comb
 remain independent domains. Existing clients retain non-location data but must reconnect and approve a new location
 scope to regain coordinate-bearing tools. Consent explains that coordinates may reveal sensitive places and that
 place-name searches send only supplied location text to Mapbox; direct-coordinate searches do not call Mapbox.
+The consent page initializes its selection from the complete validated requested-scope list, so every current and future
+requested permission starts checked. The user can uncheck any independent permission before approval; removing a parent
+also removes its dependent children. Preselection never creates or expands a grant until the user explicitly approves.
 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
@@ -1289,7 +1292,8 @@ The pending record retains earlier unpromoted changes, and this implementation n
 ### Activity descriptions
 
 `get_activity_description({activityRef})` requires both `activity-details:read` and the new dependent
-`activity-descriptions:read` grant. The consent checkbox starts unchecked, including when all scopes are requested.
+`activity-descriptions:read` grant. The consent checkbox is selected by default when requested, including when all
+scopes are requested; the owner can uncheck it before approval.
 Legacy approvals that omit selected scopes exclude this grant. Removing activity details removes both descriptions
 and activity-location permission; approval, refresh, bearer validation, HTTP prechecks and tool registration enforce
 the dependencies. Existing clients must reauthorize; refresh cannot expand an old grant.

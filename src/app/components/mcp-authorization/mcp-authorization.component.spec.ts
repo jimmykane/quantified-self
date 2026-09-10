@@ -122,7 +122,7 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('finish setup in ChatGPT on the web from a desktop');
   });
 
-  it('keeps descriptions opt-in and removes both child grants when activity details is unchecked', async () => {
+  it('preselects descriptions and removes both child grants when activity details is unchecked', async () => {
     functions.call.mockResolvedValueOnce({ data: { requestId: 'description-request',
       scopes: ['activity-details:read', 'activity-descriptions:read', 'activity-location:read'],
       clientName: 'Description client', redirectUri: 'https://client.example/callback' } });
@@ -132,16 +132,17 @@ describe('McpAuthorizationComponent', () => {
     fixture.detectChanges();
     const component = fixture.componentInstance;
     const option = () => component.scopeOptions().find(value => value.scope === 'activity-descriptions:read');
-    expect(option()).toMatchObject({ title: 'Activity descriptions', selected: false, disabled: false });
+    expect(component.selectedScopes()).toEqual([
+      'activity-details:read', 'activity-descriptions:read', 'activity-location:read',
+    ]);
+    expect(option()).toMatchObject({ title: 'Activity descriptions', selected: true, disabled: false });
+    expect(fixture.nativeElement.textContent).toContain('Selected by default when requested');
     expect(fixture.nativeElement.textContent).toContain('location information, even without Activity locations');
     expect(haptics.selection).not.toHaveBeenCalled();
-    component.toggleScope('activity-descriptions:read', { checked: true } as never);
-    component.toggleScope('activity-descriptions:read', { checked: true } as never);
-    expect(haptics.selection).toHaveBeenCalledTimes(1);
     await component.approve();
     expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
       requestId: 'description-request', approved: true,
-      grantedScopes: ['activity-details:read', 'activity-location:read', 'activity-descriptions:read'],
+      grantedScopes: ['activity-details:read', 'activity-descriptions:read', 'activity-location:read'],
     });
     component.deciding.set(null);
     component.toggleScope('activity-details:read', { checked: false } as never);
@@ -149,9 +150,10 @@ describe('McpAuthorizationComponent', () => {
     expect(option()).toMatchObject({ selected: false, disabled: true });
     component.toggleScope('activity-descriptions:read', { checked: true } as never);
     expect(component.selectedScopes()).toEqual([]);
-    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
     component.toggleScope('activity-details:read', { checked: true } as never);
     expect(option()).toMatchObject({ selected: false, disabled: false });
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
   it('preselects a requested notes-only permission but waits for approval to grant it', async () => {
@@ -185,16 +187,21 @@ describe('McpAuthorizationComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     const component = fixture.componentInstance;
-    expect(component.selectedScopes()).toEqual(['timeline-notes:read', 'health:read', 'activity-details:read']);
+    expect(component.selectedScopes()).toEqual([
+      'timeline-notes:read', 'health:read', 'activity-details:read', 'activity-descriptions:read',
+    ]);
     const notesCheckbox = Array.from(fixture.nativeElement.querySelectorAll('mat-checkbox') as NodeListOf<HTMLElement>)
       .find(checkbox => checkbox.textContent?.includes('Timeline notes'))!;
     notesCheckbox.querySelector<HTMLInputElement>('input')!.click();
     fixture.detectChanges();
-    expect(component.selectedScopes()).toEqual(['health:read', 'activity-details:read']);
+    expect(component.selectedScopes()).toEqual([
+      'health:read', 'activity-details:read', 'activity-descriptions:read',
+    ]);
     expect(haptics.selection).toHaveBeenCalledTimes(1);
     await component.approve();
     expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
-      requestId: 'mixed-request', approved: true, grantedScopes: ['health:read', 'activity-details:read'],
+      requestId: 'mixed-request', approved: true,
+      grantedScopes: ['health:read', 'activity-details:read', 'activity-descriptions:read'],
     });
   });
 
