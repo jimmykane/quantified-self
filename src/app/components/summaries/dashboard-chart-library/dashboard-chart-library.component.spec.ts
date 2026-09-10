@@ -185,7 +185,8 @@ describe('responsive chart picker interactions', () => {
     button('Add chart').click(); await settle(); (document.body.querySelector('button[mat-list-item]') as HTMLButtonElement).click(); await settle();
     expect(document.body.querySelector('.has-selection .chart-library-detail')).not.toBeNull();
     expect(button('Add to dashboard')).toBeDefined(); expect(save).not.toHaveBeenCalled();
-    expect(component.dataScope()).toContain('training snapshots');
+    expect(component.dataScope()).toContain('recorded training data');
+    expect(document.body.querySelectorAll('.chart-library-explanation p').length).toBeGreaterThan(1);
     button('Add to dashboard').click(); await settle();
     expect(save).toHaveBeenCalledTimes(1); expect(user.settings.dashboardSettings.tiles).toHaveLength(1);
     fixture.componentRef.setInput('seed', { tiles: user.settings.dashboardSettings.tiles }); await settle();

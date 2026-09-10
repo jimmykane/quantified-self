@@ -55,7 +55,11 @@
         <section class="chart-library-preview qs-scrollbar" aria-label="Chart preview">
           <h3>{{ state.configuring() ? 'Live preview' : draftDefinition()?.label || (state.editor()?.mode === 'edit' ? 'Edit chart' : 'Custom chart') }}</h3>
           <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
-          @if (!creatingCustom()) { <p>{{ explanation() }}</p> }
+          @if (!creatingCustom()) {
+            <div class="chart-library-explanation">
+              @for (paragraph of explanationParagraphs(); track $index) { <p>{{ paragraph }}</p> }
+            </div>
+          }
           <p class="chart-library-destination">{{ dataScope() }}</p>
           <p class="chart-library-destination">{{ state.editor()?.mode === 'edit' ? 'Saved in' : 'Adds to' }} {{ destination() }}</p>
         </section>

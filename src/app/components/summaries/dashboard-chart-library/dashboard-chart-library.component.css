@@ -52,3 +52,6 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
   .chart-library-save button { width: 100%; }
   .chart-library-heading h2 { font: var(--mat-sys-title-medium); }
 }
+
+.chart-library-explanation { max-width: 65ch; font: var(--mat-sys-body-medium); }
+.chart-library-explanation p { margin-block: 0 12px; }

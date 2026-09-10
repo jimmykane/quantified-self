@@ -299,6 +299,7 @@
 }
 
 .kpi-details-description {
+  white-space: pre-line;
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
   letter-spacing: 0;

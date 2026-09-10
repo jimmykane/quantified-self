@@ -57,22 +57,23 @@ export class DashboardChartLibraryComponent {
     return draft ? this.catalog.find(entry => matchesDashboardPreset(draft, entry.tile))?.definition : null;
   });
   readonly explanation = computed(() => resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.draftDefinition()?.description || 'Choose a metric, chart style, aggregation and date range.');
+  readonly explanationParagraphs = computed(() => this.explanation().split('\n\n'));
   readonly dataScope = computed(() => {
     const tile = this.state.draft();
     if (!tile) return '';
     const type = `${tile['chartType'] || ''}`;
-    if (isDashboardHrvTrendChartType(type)) return 'Health HRV · Personal range · Last 14 days';
-    if (isDashboardSleepBackedChartType(type)) return 'Needs recorded sleep · Last 14 days';
-    if (tile['mapSource'] === 'routes') return 'Needs saved routes · Up to 50 recent routes';
-    if (isDashboardKpiChartType(type)) return 'Uses prepared training snapshots';
+    if (isDashboardHrvTrendChartType(type)) return 'Recorded HRV summaries · Sources kept separate';
+    if (isDashboardSleepBackedChartType(type)) return 'Recorded sleep · Stages and readings depend on your source';
+    if (tile['mapSource'] === 'routes') return 'Saved routes · Up to 50 recent routes';
+    if (isDashboardKpiChartType(type)) return 'Calculated from your recorded training data';
     const scopes: Record<string, string> = {
-      Form: 'Training load history · Full history',
-      RecoveryNowPie: 'Latest training recovery snapshot · Independent of activity filters',
+      Form: 'Training Stress Score (TSS) history',
+      RecoveryNowPie: 'Recorded recovery estimates · Independent of activity filters',
       FreshnessForecast: 'Training load · Next 7 days with no new training',
       IntensityDistribution: 'Training intensity · Weekly distribution',
       EfficiencyTrend: 'Training efficiency · Recent weekly trend',
-      PowerCurve: 'Activities with power · Last year',
-      ActivityCalendar: 'Activity calendar · Current month',
+      PowerCurve: 'Activities with power · Uses this chart’s selected range',
+      ActivityCalendar: 'Activity calendar · Uses the displayed month',
     };
     if (scopes[type]) return scopes[type];
     const range = normalizeDashboardTileEventFilters(tile['eventFilters']).range;

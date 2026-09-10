@@ -433,7 +433,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         title: 'Form Now',
         primaryValue: context?.value ?? null,
         primaryLabel: 'Current TSB',
-        secondaryLabel: 'Current readiness',
+        secondaryLabel: 'Training-load balance',
         primarySigned: true,
         trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
       };
