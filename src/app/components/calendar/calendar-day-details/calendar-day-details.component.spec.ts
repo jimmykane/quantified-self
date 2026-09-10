@@ -109,9 +109,8 @@ describe('CalendarDayDetailsComponent', () => {
       /\.calendar-day-item-meta\s*\{[^}]*display:\s*inline-flex !important[^}]*align-self:\s*center !important[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
     );
     expect(styles).toMatch(
-      /\.calendar-day-planned-accent\s*\{[^}]*position:\s*absolute[^}]*inset-block:\s*8px[^}]*inset-inline-start:\s*2px[^}]*width:\s*3px[^}]*background:/s,
+      /\.calendar-day-planned-accent\s*\{[^}]*position:\s*absolute[^}]*inset-block:\s*8px[^}]*inset-inline-start:\s*2px[^}]*width:\s*3px[^}]*border-radius:\s*9999px[^}]*background:/s,
     );
-    expect(styles).not.toMatch(/\.calendar-day-planned-accent\s*\{[^}]*border-radius:/s);
     expect(styles).not.toMatch(/\.calendar-day-planned-item\s*\{[^}]*border-inline-start:/s);
   });
 

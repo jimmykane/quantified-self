@@ -102,6 +102,7 @@ h3 {
   inset-block: 8px;
   inset-inline-start: 2px;
   width: 3px;
+  border-radius: 9999px;
   background: var(--planned-workout-color, var(--mat-sys-primary));
   pointer-events: none;
 }
