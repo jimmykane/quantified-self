@@ -90,19 +90,19 @@ they do not alter measurement series, axis bounds, legends, metric tooltips, gap
 Markers and period bands use the selected color; text retains its theme contrast. Mixed-color overlaps group into neutral
 markers instead of blending colors; same-color groups keep that color. Each note retains its category and actual dates
 in the escaped tooltip and manager. Date ranges have inward-facing native ECharts arrows at the start and inclusive end,
-joined by the existing subtle period band, with the title shown only at the start. Both boundaries open the same note/group.
+joined by the existing subtle period band, with the title shown only at the start. Both boundaries show the same note/group tooltip.
 Period fills are non-interactive (`markArea.silent`) with tooltips and emphasis disabled, so hovering/tapping anywhere
-inside the band retains the chart's metric tooltip. Note tooltips and selection live on the title and boundary markers;
-the binding ignores area clicks. Keep this boundary covered by real-renderer pointer tests, not only option assertions.
+inside the band retains the chart's metric tooltip. Note tooltips live on the title and boundary markers;
+the binding registers no click-to-edit handler. Keep this boundary covered by real-renderer pointer tests, not only option assertions.
 Ongoing periods use an open end marker at today in the note's zone; boundaries clipped by the visible window also use open
 markers, avoiding a false start/end. Single-day notes and periods collapsed into one weekly bucket retain one dot marker.
 Single markers display the note title as plain, single-line text, with native ECharts
 ellipsis for long titles (100px in compact charts, 160px otherwise). Compact charts stagger adjacent labels onto two rows
 without adding chart padding. A formatter callback prevents title text from being
 interpreted as ECharts template placeholders. The full title remains in the escaped tooltip and editor. Grouped markers
-keep their note count instead of labeling several notes as one. Single markers open the editor; grouped markers open the matching list. The header
-manager provides the keyboard-accessible alternative to click/tap, without requiring hover.
-Distinct dates projected onto the same weekly bucket or clipped endpoint share one selectable marker, preserving access
+keep their note count instead of labeling several notes as one. Chart markers only show tooltips and never open an editor or list. The header
+manager provides keyboard-accessible browsing and editing, without requiring hover.
+Distinct dates projected onto the same weekly bucket or clipped endpoint share one tooltip marker, preserving access
 to every note and its actual dates. Grouping single-day notes does not create a period band between them.
 Note tooltips reuse the shared ECharts tooltip card and chrome with the active chart theme and responsive typography.
 Titles wrap above their actual dates, grouped notes remain separate, and the chart's existing tooltip positioning is retained.

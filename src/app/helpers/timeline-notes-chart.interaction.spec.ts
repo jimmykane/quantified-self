@@ -4,7 +4,7 @@ import { LineChart } from 'echarts/charts';
 import { GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { SVGRenderer } from 'echarts/renderers';
 import type { TimelineNote } from '@shared/timeline-notes';
-import { addTimelineNotesToChart } from './timeline-notes-chart.helper';
+import { TimelineNotesChartBinding } from './timeline-notes-chart.helper';
 
 use([LineChart, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
@@ -23,13 +23,16 @@ describe('Timeline note tooltips with the real ECharts renderer', () => {
     const day = (date: string) => Date.parse(`${date}T00:00:00Z`);
     const note: TimelineNote = { id: 'sample', category: 'travel', title: 'Weekend <away>', startDate: '2026-09-02',
       endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
-    chart.setOption(addTimelineNotesToChart({ animation: false,
+    const select = vi.fn();
+    const binding = new TimelineNotesChartBinding();
+    binding.set({ notes: [note], select, reportRange: vi.fn() });
+    chart.setOption(binding.apply(chart, { animation: false,
       grid: { left: 40, right: 40, top: 40, bottom: 40 },
       xAxis: { type: 'time', min: day('2026-09-01'), max: day('2026-09-10') }, yAxis: { min: 0, max: 100 },
       tooltip: { trigger: 'axis', triggerOn: trigger, renderMode: 'html', transitionDuration: 0, hideDelay: 0,
         formatter: () => 'Metric reading' },
       series: [{ type: 'line', data: [[day('2026-09-01'), 50], [day('2026-09-03'), 50], [day('2026-09-10'), 50]] }],
-    }, [note]).option);
+    }));
     const [x, y] = chart.convertToPixel({ gridIndex: 0 }, [day('2026-09-03'), 25]);
     chart.getZr().trigger(trigger, { offsetX: x, offsetY: y, target: chart.getZr().findHover(x, y).target,
       event: new MouseEvent(trigger) });
@@ -48,5 +51,7 @@ describe('Timeline note tooltips with the real ECharts renderer', () => {
       expect(tooltip?.textContent).toContain('2026-09-02 – 2026-09-04');
       expect(tooltip?.innerHTML).toContain('Weekend &lt;away&gt;');
     }
+    expect(select).not.toHaveBeenCalled();
+    binding.dispose();
   });
 });
