@@ -6,11 +6,40 @@
   margin: 0;
 }
 
-.dashboard-today-greeting {
+.dashboard-summary-status {
+  align-items: center;
   color: var(--mat-sys-on-surface-variant);
+  display: flex;
   font: var(--mat-sys-body-medium);
   font-weight: 500;
+  gap: 8px;
+  line-height: 1.5;
   margin: 0.35rem 0 0;
+  min-height: 1.5em;
+}
+
+.dashboard-summary-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-summary-status-icon {
+  align-items: center;
+  display: flex;
+  flex: 0 0 16px;
+  height: 16px;
+}
+
+.dashboard-summary-status-icon mat-icon {
+  font-size: 16px;
+  height: 16px;
+  width: 16px;
+}
+
+.dashboard-summary-status--warning {
+  color: var(--mat-sys-error);
 }
 
 .dashboard-kpi-section {

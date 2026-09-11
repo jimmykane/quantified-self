@@ -2607,8 +2607,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (refreshPhase === 'failed') {
       this.derivedMetricsBanner = {
         type: 'warning',
-        title: 'Derived metrics update failed',
-        description: 'Some dashboard values may be out of date. Retry the update.',
+        title: 'Couldn’t update your dashboard',
+        description: 'Try again in a moment. Some values may be out of date.',
         showRetry: true,
       };
       return;
@@ -2617,10 +2617,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (refreshPhase === 'refreshing' || refreshPhase === 'building') {
       this.derivedMetricsBanner = {
         type: 'pending',
-        title: refreshPhase === 'refreshing' ? 'Refreshing derived metrics' : 'Building derived metrics',
+        title: refreshPhase === 'refreshing' ? 'Updating your dashboard…' : 'Preparing your dashboard…',
         description: refreshPhase === 'refreshing'
-          ? 'Available last completed values stay visible while the update finishes.'
-          : 'Some dashboard insights are still being prepared.',
+          ? 'You can keep browsing while your latest data is added.'
+          : 'Your charts and stats will appear as they’re ready.',
         showRetry: false,
       };
       return;

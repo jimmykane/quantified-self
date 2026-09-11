@@ -32,6 +32,11 @@ limited to the surrounding layout and domain-specific action groups.
 Guest and public marketing views may retain a distinct hero composition. Their heading styles must remain local to that
 public surface and must not become a new authenticated workspace-header pattern.
 
+Dashboard loading messages use a reserved single-line status/greeting row below the header. **Today**, its date,
+and its calendar action remain mounted through preparation, refresh, failure, and completion. A small Material spinner
+shows pending work; failures keep the accessible Retry action. The status row keeps its height when it clears, including
+when Today or the owner greeting is hidden. Do not replace the page title with changing loading messages.
+
 ## Workspace Shells
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It

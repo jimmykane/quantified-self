@@ -378,7 +378,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Opening the dashboard also runs a freshness check against your latest events and requeues a rebuild automatically if snapshots are behind.
 - If rebuilding requests fail repeatedly, the dashboard shows a retry notification and continues with last known snapshot values.
 - If a stale/building state is stuck for too long, the dashboard switches to a retryable failed state so you can trigger a rebuild immediately.
-- While rebuilding, the dashboard uses the existing top summary-header slot for the derived-metrics status before **Today** and the tiles. This keeps the page in place while any available last completed values remain visible; a failed update adds **Retry** in that same header. The optional imported recovery snapshot affects this route-level status only when an active recovery estimate is visible in **Today** or when a Recovery tile is configured.
+- **Preparing your dashboard…** means your charts and stats are being prepared. **Updating your dashboard…** means newer data is being added; you can keep browsing the values already shown. The **Today** title, date, and calendar stay in place, and the short loading message returns to your greeting when the update finishes. If an update fails, use **Retry** beside the dashboard options. Recovery affects this status only when an active recovery estimate appears in Today or a Recovery tile is on your dashboard.
 - The status title updates dynamically from current Form bands:
   - **High fatigue** at very negative Form values,
   - **Building fitness** while carrying meaningful load,

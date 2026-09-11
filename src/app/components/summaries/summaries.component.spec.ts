@@ -5,6 +5,8 @@ import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.
 import type { DashboardChartTileViewModel } from '../../helpers/dashboard-tile-view-model.helper';
 import { EMPTY } from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { HapticTapDirective } from '../../directives/haptic-tap.directive';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -173,8 +175,8 @@ describe('SummariesComponent', () => {
     });
 
     await TestBed.configureTestingModule({
-      declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
-      imports: [PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, NoopAnimationsModule],
+      declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent, HapticTapDirective],
+      imports: [PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
         { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => mockUserService.updateUserProperties(component.user, { settings: { dashboardSettings: patch } }) } },
@@ -429,7 +431,7 @@ describe('SummariesComponent', () => {
     component.showActions = true;
     component.derivedMetricsBanner = {
       type: 'pending',
-      title: 'Building derived metrics',
+      title: 'Preparing your dashboard…',
       description: 'Some dashboard insights are still being prepared.',
       showRetry: false,
     };
@@ -448,6 +450,51 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
     expect(component.isOwnerDashboard).toBe(false);
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')).toBeNull();
+  });
+
+  it.each([true, false])('retains the header and status line through updates with Today enabled=%s', showToday => {
+    const updates$ = new Subject<DashboardDerivedMetricsState>();
+    mockDashboardDerivedMetricsService.watch.mockReturnValue(updates$);
+    const formTile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-form')!.tile;
+    component.user = {
+      uid: 'owner-user', displayName: 'Morgan Lee',
+      settings: { dashboardSettings: { tiles: [formTile], showTodaySummary: showToday } },
+    } as unknown as SummariesComponent['user'];
+    component.eventUser = { uid: 'owner-user' } as SummariesComponent['eventUser'];
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const header = host.querySelector('.dashboard-summary-header');
+    const status = host.querySelector('.dashboard-summary-status');
+    const calendar = host.querySelector(`[aria-label="Open this month's activity calendar"]`);
+    const date = host.querySelector('.qs-page-header__subtitle')?.textContent;
+    const calendarOpen = vi.spyOn(component, 'openDashboardCalendar').mockImplementation(() => undefined);
+    const retry = vi.spyOn(component, 'retryDerivedMetricsRebuild').mockImplementation(() => undefined);
+
+    for (const [formStatus, banner] of [
+      ['missing', { type: 'pending', title: 'Preparing your dashboard…', showRetry: false }],
+      ['stale', { type: 'pending', title: 'Updating your dashboard…', showRetry: false }],
+      ['failed', { type: 'warning', title: 'Couldn’t update your dashboard', showRetry: true }],
+      ['ready', null],
+    ] as const) {
+      updates$.next({ ...createDashboardDerivedMetricsMissingState(), formStatus, formNowStatus: 'ready', rampRateStatus: 'ready' });
+      fixture.detectChanges();
+      expect(host.querySelector('.dashboard-summary-header')).toBe(header);
+      expect(host.querySelector('.dashboard-summary-status')).toBe(status);
+      expect(host.querySelector('.qs-page-header__subtitle')?.textContent).toBe(date);
+      expect(status?.getAttribute('role')).toBe(banner?.type === 'warning' ? 'alert' : 'status');
+      expect(!!status?.querySelector('mat-spinner')).toBe(banner?.type === 'pending');
+      if (showToday) {
+        expect(host.querySelector('#dashboard-today-title')?.textContent).toBe('Today');
+        expect(host.querySelector(`[aria-label="Open this month's activity calendar"]`)).toBe(calendar);
+      }
+      if (banner) expect(status?.textContent).toContain(banner.title);
+      if (banner?.type === 'pending' && showToday) (calendar as HTMLButtonElement).click();
+      if (banner?.showRetry) host.querySelector<HTMLButtonElement>('[aria-label="Retry dashboard update"]')!.click();
+    }
+    expect(calendarOpen).toHaveBeenCalledTimes(showToday ? 2 : 0);
+    expect(retry).toHaveBeenCalledOnce();
+    expect(TestBed.inject(AppHapticsService).selection).toHaveBeenCalledTimes(showToday ? 3 : 1);
+    expect(!!host.querySelector('.dashboard-today-greeting')).toBe(showToday);
   });
 
   it('refreshes the greeting when the signed-in user input changes with the same uid', () => {
@@ -816,7 +863,7 @@ describe('SummariesComponent', () => {
     const template = readFileSync(templatePath, 'utf8');
     const styles = readFileSync(stylePath, 'utf8');
 
-    expect(template).toContain('aria-label="Retry derived metrics update"');
+    expect(template).toContain('aria-label="Retry dashboard update"');
     expect(template).toContain('class="dashboard-derived-metrics-retry-label"');
     expect(template).not.toContain('dashboard-training-link');
     expect(template).not.toContain('dashboard-health-link');
@@ -2863,15 +2910,14 @@ describe('SummariesComponent', () => {
     (component as any).refreshDerivedMetricsBannerState();
 
     expect(component.derivedMetricsBanner?.type).toBe('pending');
-    expect(component.derivedMetricsBanner?.title).toBe('Refreshing derived metrics');
-    expect(component.derivedMetricsBanner?.description).toContain('Available last completed values');
+    expect(component.derivedMetricsBanner?.title).toBe('Updating your dashboard…');
+    expect(component.derivedMetricsBanner?.description).toContain('You can keep browsing');
     expect(component.derivedMetricsBanner?.showRetry).toBe(false);
 
     fixture.detectChanges();
     const nativeElement = fixture.nativeElement as HTMLElement;
-    const status = nativeElement.querySelector('.qs-page-header--status');
-    const statusHeader = status?.closest('.dashboard-summary-header');
-    const summaryHeading = statusHeader?.closest('.dashboard-summary-heading');
+    const status = nativeElement.querySelector('.dashboard-summary-status');
+    const summaryHeading = status?.closest('.dashboard-summary-heading');
     const today = nativeElement.querySelector('.dashboard-current-state-row');
     expect(status).not.toBeNull();
     expect(summaryHeading?.nextElementSibling).toBe(today);
@@ -2899,7 +2945,7 @@ describe('SummariesComponent', () => {
     (component as any).refreshDerivedMetricsBannerState();
 
     expect(component.derivedMetricsBanner?.type).toBe('pending');
-    expect(component.derivedMetricsBanner?.title).toBe('Building derived metrics');
+    expect(component.derivedMetricsBanner?.title).toBe('Preparing your dashboard…');
   });
 
   it('ignores the optional recovery status unless Today is showing an active estimate', () => {

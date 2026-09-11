@@ -815,8 +815,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Latest workout TSS');
     expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
-    expect(gettingStartedSection?.content).toContain('top summary-header slot');
-    expect(gettingStartedSection?.content).toContain('before **Today** and the tiles');
+    expect(gettingStartedSection?.content).toContain('**Preparing your dashboard…**');
+    expect(gettingStartedSection?.content).toContain('**Today** title, date, and calendar stay in place');
   });
 
   it('should document new derived KPI rows and curated charts', () => {
