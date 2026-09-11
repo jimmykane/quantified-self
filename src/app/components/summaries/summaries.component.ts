@@ -200,6 +200,8 @@ interface DashboardDerivedMetricsBanner {
 type DashboardTodayReadinessTone = 'positive' | 'negative' | 'neutral';
 
 interface DashboardTodayReadinessViewModel {
+  loading: boolean;
+  warningText: string;
   label: string;
   score: number | null;
   scoreText: string;
@@ -226,18 +228,20 @@ interface DashboardTodayTrainingStateViewModel {
   caption: string;
 }
 
-function createEmptyDashboardTodayReadinessViewModel(): DashboardTodayReadinessViewModel {
+function createEmptyDashboardTodayReadinessViewModel(loading = false): DashboardTodayReadinessViewModel {
   return {
-    label: 'Awaiting data',
+    loading,
+    warningText: '',
+    label: loading ? 'Loading readiness…' : 'Awaiting data',
     score: null,
-    scoreText: '--',
+    scoreText: loading ? '' : '--',
     confidenceText: 'No confidence level',
     evidenceText: '0/4 signals',
     availableSignalCount: 0,
     loadText: '-- / --',
     sleepText: '--',
     sleepScore: null,
-    sleepContextText: 'No eligible night',
+    sleepContextText: loading ? 'Loading sleep…' : 'No eligible night',
     hrvText: '--',
     hrvDeviationPercent: null,
     hrvTone: 'neutral',
@@ -356,6 +360,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
   private sleepSessions: SleepSession[] = [];
   private readinessSleepSessions: SleepSession[] = [];
+  private readinessSleepStatus: 'loading' | 'ready' | 'error' = 'loading';
   private sleepTrendWindow: DashboardSleepTrendWindow | null = null;
   private derivedFormPoints: DashboardFormPoint[] | null = null;
   private derivedRecoveryNowContext: DashboardRecoveryNowContext | null = null;
@@ -392,7 +397,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private derivedMetricsHydrated = false;
   private recoveryRefreshIntervalHandle: ReturnType<typeof setInterval> | null = null;
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
-  public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel();
+  public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
   public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
 
   private readonly onDocumentVisibilityChange = (): void => {
@@ -834,6 +839,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
 
       if (!hasTileDataChanged && !hasBannerStateChanged && !wasHydrated) {
+        this.refreshDashboardTodaySignals();
         this.refreshDerivedMetricsBannerState();
         this.changeDetector.markForCheck();
         return;
@@ -1011,7 +1017,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       window.endMs,
     ).subscribe({
       next: (sessions) => {
-        if (equal(this.readinessSleepSessions, sessions)) {
+        const wasReady = this.readinessSleepStatus === 'ready';
+        this.readinessSleepStatus = 'ready';
+        if (wasReady && equal(this.readinessSleepSessions, sessions)) {
           return;
         }
         this.readinessSleepSessions = sessions;
@@ -1019,10 +1027,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         void this.rebuildTilesFromCurrentState();
       },
       error: () => {
-        if (!this.readinessSleepSessions.length) {
-          return;
-        }
-        this.readinessSleepSessions = [];
+        // Keep previously loaded nights subject to the normal age/baseline rules.
+        // A failed first read must also settle loading, even with no sessions.
+        this.readinessSleepStatus = 'error';
         this.updateReadinessSleepRefreshTimer();
         void this.rebuildTilesFromCurrentState();
       },
@@ -1036,6 +1043,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     this.readinessSleepListenerKey = null;
     this.readinessSleepSessions = [];
+    this.readinessSleepStatus = 'loading';
     this.clearReadinessSleepRefreshTimer();
   }
 
@@ -1811,12 +1819,26 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.derivedPowerCurveStatus = 'missing';
     this.derivedTrainingCapacityStatus = 'missing';
     this.derivedTrainingDurabilityStatus = 'missing';
-    this.dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel();
+    this.dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
     this.dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
     this.refreshDerivedMetricsBannerState();
   }
 
   private buildDashboardTodayReadiness(): DashboardTodayReadinessViewModel {
+    const uid = `${this.user?.uid || ''}`.trim();
+    // The derived stream emits after every requested snapshot has answered. Wait
+    // for Sleep too; an uninitialized empty list is not confirmed missing data.
+    if (uid && (!this.derivedMetricsHydrated
+      || !this.derivedMetricsUserUID?.startsWith(`${uid}:`)
+      || this.readinessSleepListenerKey !== `${uid}:current-readiness`
+      || this.readinessSleepStatus === 'loading')) {
+      return createEmptyDashboardTodayReadinessViewModel(true);
+    }
+    const warningText = this.readinessSleepStatus === 'error'
+      ? (this.readinessSleepSessions.length
+        ? 'Sleep could not be refreshed. Showing available data.'
+        : 'Sleep could not be loaded. Showing available signals.')
+      : '';
     const nowMs = Date.now();
     const formNow = resolveDashboardFormNowContextFromPoints(this.derivedFormPoints, nowMs)
       || this.derivedFormNowContext;
@@ -1840,12 +1862,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (!context) {
       return {
         ...createEmptyDashboardTodayReadinessViewModel(),
+        warningText,
+        sleepContextText: warningText ? 'Sleep unavailable' : 'No eligible night',
         recoveryText,
         recoveryRemainingPercent,
         recoveryFinishTimeMs,
       };
     }
     return {
+      loading: false,
+      warningText,
       label: context.label,
       score: context.score,
       scoreText: `${this.formatDashboardTodayMetric(context.score)}/100`,
@@ -1855,7 +1881,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       loadText: `${this.formatDashboardTodayMetric(context.form, true)} / ${this.formatDashboardTodayMetric(context.rampRate, true)}`,
       sleepText: context.sleepScore === null ? '--' : `${this.formatDashboardTodayMetric(context.sleepScore)}/100`,
       sleepScore: context.sleepScore,
-      sleepContextText: formatDashboardRelativeDay(context.latestSleepAtMs, { nowMs, locale: this.locale }),
+      sleepContextText: warningText && context.latestSleepAtMs === null
+        ? 'Sleep unavailable'
+        : formatDashboardRelativeDay(context.latestSleepAtMs, { nowMs, locale: this.locale }),
       hrvText: this.formatDashboardTodayRatio(context.hrvRatio),
       hrvDeviationPercent: context.hrvRatio === null ? null : (context.hrvRatio - 1) * 100,
       hrvTone: this.resolveDashboardTodayRatioTone(context.hrvRatio, false),

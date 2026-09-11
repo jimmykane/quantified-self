@@ -1001,6 +1001,15 @@ mixed, or strained and directs attention to the drivers rather than choosing a w
 failed sleep listener are identified separately from genuinely missing evidence. Sleep already loaded before a listener
 failure remains visible only while it is still eligible; load-only readiness remains available afterward.
 
+Dashboard Today withholds the readiness score, category, confidence, and signal count until both the initial derived
+snapshot emission and the bounded sleep listener have resolved for the current account. It shows **Loading readiness…**
+with a Material progress indicator during that interval; an uninitialized sleep list must never render as **No eligible
+night** or produce an interim load-only score. A successful empty sleep result settles loading and permits the normal
+load-only calculation. A failed first sleep read also settles loading, with explicit unavailable copy alongside any
+available load result. A later listener failure retains eligible sleep evidence, shows a refresh warning, and continues
+the normal age/baseline refresh timer. Hiding Today or switching accounts clears its sleep state, and re-entering waits
+for that account's first reads again. Later live evidence updates still recalculate readiness normally.
+
 Readiness is the recovery-aware companion to the load model, not a replacement for it. It adds recorded sleep, HRV, and
 overnight heart-rate evidence to the Form/ramp driver when those signals are available. Form/Freshness, CTL, ATL, Ramp,
 Load Status, and the zero-load forecast remain deliberately TSS-only; recovery evidence never changes their values or

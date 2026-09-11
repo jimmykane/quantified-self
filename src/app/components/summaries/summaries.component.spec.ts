@@ -28,7 +28,8 @@ import {
 import { AppThemeService } from '../../services/app.theme.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppUserService } from '../../services/app.user.service';
-import { DashboardDerivedMetricsService } from '../../services/dashboard-derived-metrics.service';
+import { createDashboardDerivedMetricsMissingState, DashboardDerivedMetricsService, type DashboardDerivedMetricsState } from '../../services/dashboard-derived-metrics.service';
+import type { SleepSession } from '@shared/sleep';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
@@ -1200,6 +1201,148 @@ describe('SummariesComponent', () => {
     expect(component.dashboardTodayReadiness.recoveryFinishTimeMs).toBeNull();
     expect(component.dashboardTodayReadiness.recoveryText).toBe('--');
     expect(nativeElement.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
+  });
+
+  describe('Today readiness initial loading', () => {
+    const nowMs = Date.UTC(2026, 8, 11, 12);
+    let load$: Subject<DashboardDerivedMetricsState>;
+    let sleep$: Subject<SleepSession[]>;
+    let loadState: DashboardDerivedMetricsState;
+    let nights: SleepSession[];
+
+    const render = () => {
+      component['changeDetector'].markForCheck();
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(nowMs);
+      load$ = new Subject();
+      sleep$ = new Subject();
+      mockDashboardDerivedMetricsService.watch.mockReturnValue(load$);
+      mockSleepService.watchForDashboard.mockReturnValue(sleep$);
+      buildDashboardTileViewModelsSpy.mockReturnValue([]);
+      component.user = { uid: 'readiness-owner', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+      loadState = {
+        ...createDashboardDerivedMetricsMissingState(),
+        formNow: { value: 24.9, latestDayMs: nowMs, trend8Weeks: [] },
+        rampRate: { rampRate: -1.3, latestDayMs: nowMs, ctlToday: 90, ctl7DaysAgo: 91.3, trend8Weeks: [] },
+        formNowStatus: 'ready',
+        rampRateStatus: 'ready',
+      };
+      // Synthetic readings reproduce the reported 75 (load only) -> 62 (four signals) transition.
+      nights = Array.from({ length: 6 }, (_, index): SleepSession => ({
+        id: `night-${index}`,
+        userID: 'readiness-owner',
+        sleepDate: new Date(nowMs - index * 86_400_000).toISOString().slice(0, 10),
+        startTimeMs: nowMs - index * 86_400_000 - 9 * 3_600_000,
+        endTimeMs: nowMs - index * 86_400_000 - 3_600_000,
+        durationSeconds: 8 * 3_600,
+        isNap: false,
+        stages: [],
+        stageDurationsSeconds: {},
+        score: { value: index === 0 ? 68 : 80 },
+        vitals: { averageHrvMs: index === 0 ? 44.95 : 50, averageHeartRateBpm: index === 0 ? 52.15 : 50 },
+        source: { provider: 'SuuntoApp', sourceSessionKey: `night-${index}`, providerUserId: 'synthetic-source' },
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+      }));
+      component['syncDerivedMetricsSubscription']();
+      component['syncReadinessSleepSubscription']();
+    });
+
+    it.each(['load', 'sleep'])('waits for both reads when %s arrives first', (first) => {
+      if (first === 'load') load$.next(loadState);
+      else sleep$.next(nights);
+
+      expect(component.dashboardTodayReadiness.loading).toBe(true);
+      expect(component.dashboardTodayReadiness.score).toBeNull();
+      const element = render();
+      expect(element.querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('Loading readiness…');
+      expect(element.querySelector('[aria-label="Loading readiness"]')).not.toBeNull();
+      expect(element.querySelector('.dashboard-current-state-row')?.textContent).not.toContain('No eligible night');
+      expect(element.querySelector('.dashboard-current-state-row')?.textContent).not.toContain('1/4 signals');
+
+      if (first === 'load') sleep$.next(nights);
+      else load$.next(loadState);
+
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 62, availableSignalCount: 4 });
+      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('62/100');
+      expect(element.querySelector('[aria-label="Loading readiness"]')).toBeNull();
+      expect(element.querySelector('.dashboard-current-state-primary[aria-busy="false"]')).not.toBeNull();
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
+    it('shows load-only readiness after an empty first sleep result', () => {
+      load$.next(loadState);
+      sleep$.next([]);
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, warningText: '' });
+      expect(render().querySelector('.dashboard-current-state-row')?.textContent).toContain('No eligible night');
+      // Newly imported sleep continues updating the open dashboard.
+      sleep$.next(nights);
+      expect(component.dashboardTodayReadiness.score).toBe(62);
+    });
+
+    it('settles an unchanged missing load result instead of remaining on loading', () => {
+      sleep$.next([]);
+      load$.next(createDashboardDerivedMetricsMissingState());
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Awaiting data' });
+      expect(render().querySelector('[aria-label="Loading readiness"]')).toBeNull();
+    });
+
+    it('settles a failed first sleep read with explicit unavailable copy and available load', () => {
+      load$.next(loadState);
+      sleep$.error(new Error('read failed'));
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, sleepContextText: 'Sleep unavailable' });
+      expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be loaded');
+      expect(fixture.nativeElement.textContent).not.toContain('No eligible night');
+    });
+
+    it('keeps eligible sleep after a refresh failure, then expires it normally', async () => {
+      load$.next(loadState);
+      sleep$.next(nights);
+      sleep$.error(new Error('refresh failed'));
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 62, availableSignalCount: 4 });
+      expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be refreshed');
+      await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
+    });
+
+    it('clears prior evidence when Today is reopened and ignores the old listener', () => {
+      load$.next(loadState);
+      sleep$.next(nights);
+      component.showTodaySummary = false;
+      component['syncReadinessSleepSubscription']();
+      expect(sleep$.observed).toBe(false);
+      const reopened$ = new Subject<SleepSession[]>();
+      mockSleepService.watchForDashboard.mockReturnValue(reopened$);
+      component.showTodaySummary = true;
+      component['syncReadinessSleepSubscription']();
+      component['refreshDashboardTodaySignals']();
+      sleep$.next(nights);
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
+      reopened$.next([]);
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75 });
+    });
+
+    it('does not combine a new owner’s load with the previous owner’s sleep', () => {
+      load$.next(loadState);
+      sleep$.next(nights);
+      const nextLoad$ = new Subject<DashboardDerivedMetricsState>();
+      const nextSleep$ = new Subject<SleepSession[]>();
+      mockDashboardDerivedMetricsService.watch.mockReturnValue(nextLoad$);
+      mockSleepService.watchForDashboard.mockReturnValue(nextSleep$);
+      component.user = { ...component.user, uid: 'next-owner' };
+      component['syncDerivedMetricsSubscription']();
+      nextLoad$.next(loadState);
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
+      component['syncReadinessSleepSubscription']();
+      expect(sleep$.observed).toBe(false);
+      nextSleep$.next([]);
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1 });
+    });
   });
 
   it('shows the same TSS-only training state as Training above Today readiness', () => {
