@@ -25,6 +25,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   private readonly snackBar = inject(MatSnackBar);
   protected pendingBaseline: AppDashboardSettingsInterface | null = null;
   public isSaving = false;
+  public canConfigure = true;
   readonly tileSizeOptions = [1, 2, 3, 4] as const;
   onLayoutMenuOpened(): void { if (!this.isSaving) this.hapticsService.selection(); }
   public presentation: DashboardTilePresentation = DASHBOARD_TILE_PRESENTATIONS.tile;

@@ -165,7 +165,7 @@
   </app-sleep-trend-chart>
   }
   @if (chartType === hrvTrendChartType) {
-  <app-hrv-chart [context]="hrvTrend" [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
+  <app-hrv-chart [infoTooltip]="chartInfoTooltip" [context]="hrvTrend" [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [unitSettings]="user?.settings?.unitSettings" [reserveTitleActionSpace]="showHeaderControls"
     [preferredSource]="$any(user)?.settings?.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability" />
   }

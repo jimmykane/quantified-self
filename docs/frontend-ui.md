@@ -147,11 +147,15 @@ Desktop gives the selected chart most of the width beside a compact list; each p
 selection opens details with Back. Full chart previews render at native text size without CSS scaling, and KPI details
 use a shorter preview suited to their headline and sparkline. The shared ECharts host explicitly
 returns to automatic dimensions on resize so initialization fallback sizes cannot pin a chart to a tiny canvas.
-Creating a custom chart, editing a tile, or choosing its settings replaces the gallery with a dedicated properties
+Creating a custom chart, editing a configurable tile, or choosing its settings replaces the gallery with a dedicated properties
 workspace. Properties and the live preview scroll independently on desktop; mobile puts properties before the preview
 in a single scrolling column. New custom charts omit the redundant category selector and use an explicit Create custom
 chart title. The type-specific settings action sits above the preview so it is immediately discoverable, and stays
-right-aligned when longer labels wrap onto a second row on narrow screens.
+right-aligned when longer labels wrap onto a second row on narrow screens. Settings are offered only for generic metric
+charts and maps, using `hasDashboardTileSettings`. Curated charts, KPIs and the calendar have fixed configuration:
+their menu opens details without properties or a Save button. Their existing inline range/source controls remain
+available on the dashboard, and library previews retain Add. Recovery uses smaller centre text and a wrapped total
+inside a larger donut opening at narrow chart widths; metric values still use canonical formatting.
 `dashboard-tile-presentation.helper.ts` owns the presentation kinds and terminology for chart, KPI, map, calendar,
 and generic tile. It resolves the existing stored renderer types; KPIs and Activity Calendar are stored as Chart but
 have their own UI kinds. Section terminology uses the full catalog, so adding presets or filtering the list cannot
@@ -195,9 +199,11 @@ API, plus the corresponding Sleep history. Splitting the reads preserves the Hea
 Sports Lib display. `ChartsHrvComponent` renders `HealthMetricSeriesChartComponent`; thumbnails use the same ECharts
 option builder, including its historical band. No competing HRV renderer or baseline algorithm exists. Sources remain
 separate, and the full chart initially honors the user's Health highlight source preference. Source changes within
-the dashboard are local display choices, with selection haptics; the shared chart host owns tooltip feedback.
+the dashboard are local display choices, with selection haptics; the shared chart host owns tooltip feedback. HRV uses
+the same 8px vertical and 10px header inset as Sleep, dashboard title/value typography, and a title info action.
+Only its title row reserves room for range/menu controls; date and source context can use the full content width.
 
-HRV and Sleep share their saved date range/navigation, while HRV uses Health's calendar-day windows. Loading, empty and
+HRV and Sleep have independent saved date ranges and navigation; HRV uses Health's calendar-day windows. Loading, empty and
 failed reads remain explicit; incomplete Health loads do not produce a misleading personal range. Preview fallbacks
 remain labelled examples, and historical dashboard windows cannot masquerade as the current 14-day preview. HRV and
 Sleep remain independently addable/removable; HRV has no automatic tile or derived-metric identity.

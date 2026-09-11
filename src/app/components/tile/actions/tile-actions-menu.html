@@ -30,8 +30,8 @@
       <span>Move later</span>
     </button>
     <button mat-menu-item type="button" class="tile-action-menu-item" [disabled]="isSaving" (click)="openEditTile($event)">
-      <mat-icon>edit</mat-icon>
-      <span>{{ presentation.edit }}</span>
+      <mat-icon>{{ canConfigure ? 'edit' : 'info' }}</mat-icon>
+      <span>{{ canConfigure ? presentation.edit : presentation.details }}</span>
     </button>
 
     @if (user.settings.dashboardSettings.tiles.length > 0) {

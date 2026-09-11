@@ -229,22 +229,23 @@ describe('responsive chart picker interactions', () => {
   });
   it('returns from mobile settings to the chart without discarding unsaved properties', async () => {
     mobile = true;
-    await component.toggle(); await component.select(component.filtered()[0]);
+    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
+    await component.toggle(); await component.select(component.filtered().find(entry => entry.definition.category === 'custom')!);
     component.configure(); await settle();
     const editor = component.state.editor()!;
     editor.customEventRange = '30d'; component.state.refreshDraft();
     const draft = component.state.draft();
     haptics.selection.mockClear();
-    button('Back to KPI').click(); await settle();
+    button('Back to chart').click(); await settle();
     expect(component.state.configuring()).toBe(false);
     expect(component.state.editor()).toBe(editor);
     expect(component.state.draft()).toBe(draft);
     expect(editor.customEventRange).toBe('30d');
-    expect(button('KPI settings')).toBeDefined();
+    expect(button('Chart settings')).toBeDefined();
     expect(document.body.querySelector('app-dashboard-chart-preview')).not.toBeNull();
     expect(haptics.selection).toHaveBeenCalledOnce();
     expect(save).not.toHaveBeenCalled();
-    button('KPI settings').click(); await settle();
+    button('Chart settings').click(); await settle();
     expect(component.state.editor()).toBe(editor);
     component.state.busy.set(true); haptics.selection.mockClear();
     await component.back();
@@ -289,16 +290,17 @@ describe('responsive chart picker interactions', () => {
       expect(component.available()).toHaveLength(1);
     },
   );
-  it('keeps editing available when the section has no add action', async () => {
+  it('keeps fixed tile details available when the section has no add action', async () => {
     const entries = getDashboardChartCatalog().filter(entry => entry.lane === 'kpi');
     user.settings.dashboardSettings.tiles = entries.map((entry, order) => ({ ...entry.tile, order }));
     fixture.componentRef.setInput('seed', { tiles: user.settings.dashboardSettings.tiles });
     await settle();
     expect(fixture.nativeElement.querySelector('button')).toBeNull();
     await component.state.edit(user, 0); await settle();
-    expect(document.body.querySelector('.chart-library-heading h2')?.textContent).toContain('Edit KPI');
-    expect(document.body.querySelector('.chart-library-properties')).not.toBeNull();
-    expect(button('Save changes')).toBeDefined();
+    expect(document.body.querySelector('.chart-library-heading h2')?.textContent).toContain('KPI details');
+    expect(document.body.querySelector('.chart-library-properties')).toBeNull();
+    expect(button('Save changes')).toBeUndefined();
+    expect(button('KPI settings')).toBeUndefined();
   });
   it.each([
     ['kpi', 'Add KPI', 'KPIs'],
@@ -317,17 +319,21 @@ describe('responsive chart picker interactions', () => {
     expect(component.availableCountLabel()).toBe(`0 ${plural} available`);
     expect(haptics.selection).not.toHaveBeenCalled();
   });
-  it('identifies the activity calendar separately from charts in its list and settings', async () => {
-    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
-    const calendar = component.rowPreviews().find(entry => entry.format === 'Calendar')!;
-    expect(calendar).toBeDefined();
-    await component.toggle(); await component.select(calendar); await settle();
-    expect(button('Calendar settings')).toBeDefined();
-    component.configure(); await settle();
-    expect(document.body.querySelector('.chart-library-properties h3')?.textContent).toBe('Calendar properties');
-    expect(button('Back to calendar')).toBeDefined();
-    expect(save).not.toHaveBeenCalled();
-  });
+  it.each(['curated-activity-calendar', 'curated-recovery', 'curated-hrv', 'curated-sleep', 'kpi-acwr'])(
+    'previews %s without offering settings or blocking Add', async id => {
+      const entry = getDashboardChartCatalog().find(candidate => candidate.definition.id === id)!;
+      expect(entry).toBeDefined();
+      fixture.componentRef.setInput('lane', entry.lane); await settle();
+      await component.toggle(); await component.select(entry); await settle();
+      expect(document.body.querySelector('.chart-library-settings')).toBeNull();
+      expect(button('Add to dashboard')).toBeDefined();
+      haptics.selection.mockClear(); component.configure(); await settle();
+      expect(component.state.configuring()).toBe(false);
+      expect(haptics.selection).not.toHaveBeenCalled();
+      expect(save).not.toHaveBeenCalled();
+    },
+  );
+
   it('keeps custom creation available in Activity Overview when every preset is already added', async () => {
     fixture.componentRef.setInput('lane', 'section:activityOverview');
     fixture.componentRef.setInput('seed', { tiles: getDashboardChartCatalog().map(entry => entry.tile) });
@@ -346,8 +352,9 @@ describe('responsive chart picker interactions', () => {
     expect(save).not.toHaveBeenCalled();
   });
   it('opens properties from the visible settings action and returns to the chart', async () => {
-    await component.toggle(); await component.select(component.filtered()[0]); await settle();
-    const settings = button('KPI settings');
+    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
+    await component.toggle(); await component.select(component.filtered().find(entry => entry.definition.category === 'custom')!); await settle();
+    const settings = button('Chart settings');
     const preview = document.body.querySelector('.chart-library-preview')!;
     expect(settings.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     haptics.selection.mockClear();
@@ -356,7 +363,7 @@ describe('responsive chart picker interactions', () => {
     expect(document.body.querySelector('.chart-library-properties')).not.toBeNull();
     expect(haptics.selection).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(document.activeElement).toBe(document.body.querySelector('.chart-library-detail')));
-    button('Back to KPI').click(); await settle();
+    button('Back to chart').click(); await settle();
     expect(document.body.querySelector('.chart-library-browser')).not.toBeNull();
     expect(document.body.querySelector('.chart-library-properties')).toBeNull();
     expect(save).not.toHaveBeenCalled();
@@ -390,7 +397,8 @@ describe('responsive chart picker interactions', () => {
   });
   it('locks chart settings until the pending save completes', async () => {
     let resolve!: () => void; save.mockReturnValueOnce(new Promise<void>(done => resolve = done));
-    await component.toggle(); await component.select(component.filtered()[0]); component.state.configure(); await settle();
+    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
+    await component.toggle(); await component.select(component.filtered().find(entry => entry.definition.category === 'custom')!); component.state.configure(); await settle();
     const saving = component.state.save(); fixture.detectChanges();
     expect(document.body.querySelector('app-dashboard-tile-editor').hasAttribute('inert')).toBe(true);
     expect(button('Saving…').disabled).toBe(true);

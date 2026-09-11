@@ -1,4 +1,4 @@
-import { TileTypes } from '@sports-alliance/sports-lib';
+import { ChartTypes, TileTypes } from '@sports-alliance/sports-lib';
 import { DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, isDashboardKpiChartType } from './dashboard-special-chart-types';
 
 export type DashboardTileKind = 'chart' | 'kpi' | 'map' | 'calendar' | 'tile';
@@ -9,6 +9,7 @@ function presentation(kind: DashboardTileKind, label: string, singular: string, 
     kind, label, singular, plural,
     add: `Add ${singular}`,
     edit: `Edit ${singular}`,
+    details: `${label} details`,
     remove: `Remove ${singular}`,
     settings: `${label} settings`,
     properties: `${label} properties`,
@@ -41,4 +42,10 @@ export function resolveDashboardTilePresentation(tile: TilePresentationInput | n
 export function resolveDashboardTileCollectionPresentation(tiles: readonly TilePresentationInput[]): DashboardTilePresentation {
   const kinds = new Set(tiles.map(tile => resolveDashboardTilePresentation(tile).kind));
   return kinds.size === 1 ? DASHBOARD_TILE_PRESENTATIONS[kinds.values().next().value!] : DASHBOARD_TILE_PRESENTATIONS.tile;
+}
+
+/** Settings exist for metric charts and maps; curated tiles use their inline controls. */
+export function hasDashboardTileSettings(tile: TilePresentationInput | null | undefined): boolean {
+  return tile?.type === TileTypes.Map || tile?.type === TileTypes.Chart
+    && Object.values(ChartTypes).some(chartType => chartType === tile.chartType);
 }

@@ -2,9 +2,16 @@ import { ChartTypes, TileTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { getDashboardChartCatalog } from './dashboard-chart-catalog.helper';
 import { DASHBOARD_ACWR_KPI_CHART_TYPE, DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE } from './dashboard-special-chart-types';
-import { resolveDashboardTileCollectionPresentation, resolveDashboardTilePresentation } from './dashboard-tile-presentation.helper';
+import { hasDashboardTileSettings, resolveDashboardTileCollectionPresentation, resolveDashboardTilePresentation } from './dashboard-tile-presentation.helper';
 
 describe('dashboard tile presentation', () => {
+  it('offers settings only for charts and maps that have editable properties', () => {
+    for (const entry of getDashboardChartCatalog()) {
+      expect(hasDashboardTileSettings(entry.tile), entry.definition.id).toBe(['custom', 'map'].includes(entry.definition.category));
+    }
+    expect(hasDashboardTileSettings(null)).toBe(false);
+    expect(hasDashboardTileSettings({ type: TileTypes.Chart, chartType: 'FutureRenderer' })).toBe(false);
+  });
   it.each([
     [ChartTypes.Line, 'chart'],
     [DASHBOARD_ACWR_KPI_CHART_TYPE, 'kpi'],

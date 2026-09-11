@@ -87,7 +87,7 @@ export class DashboardChartLibraryComponent {
     return 'Activity data · ' + (DASHBOARD_TILE_EVENT_RANGE_OPTIONS.find(option => option.range === range)?.label || range);
   });
   readonly creatingCustom = computed(() => this.state.editor()?.mode === 'add' && !this.state.selected());
-  readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? this.draftPresentation().edit : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? this.draftPresentation().settings : `Add ${this.sectionPresentation().plural}`);
+  readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? (this.state.canConfigure() ? this.draftPresentation().edit : this.draftPresentation().details) : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? this.draftPresentation().settings : `Add ${this.sectionPresentation().plural}`);
   readonly pickerHeading = computed(() => this.sectionLabel().toLowerCase() === this.sectionPresentation().plural.toLowerCase() ? this.pickerTitle() : `${this.pickerTitle()} · ${this.sectionLabel()}`);
   readonly expanded = computed(() => this.state.activeLane() === this.lane());
   readonly destination = computed(() => {

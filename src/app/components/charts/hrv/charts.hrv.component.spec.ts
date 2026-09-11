@@ -40,6 +40,17 @@ describe('dashboard HRV chart', () => {
     expect(fixture.nativeElement.textContent).toContain(context.charts[0].status!.detailText);
     expect(haptics.selection).not.toHaveBeenCalled();
   });
+  it('exposes the chart explanation through the same accessible info action as other tiles', () => {
+    const fixture = TestBed.createComponent(ChartsHrvComponent);
+    fixture.componentRef.setInput('context', context);
+    fixture.componentRef.setInput('infoTooltip', 'Recorded HRV with your personal range.');
+    fixture.componentRef.setInput('reserveTitleActionSpace', true); fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector('button[aria-label="How this chart is calculated"]');
+    expect(button).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.hrv-title-row.hrv-reserve-actions')).not.toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    button.click(); expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('honors Health’s preferred source and gives feedback only on a changed selection', () => {
     const first = context.charts[0];
     context.charts.push({ ...first, key: 'another-source', model: { ...first.model, series: { ...first.model.series, id: 'another-source', sourceLabel: 'Another source' } } });

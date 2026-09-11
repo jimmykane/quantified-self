@@ -1,3 +1,4 @@
+import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
 import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -297,6 +298,7 @@ class MockEventIntensityZonesComponent {
 
 @Component({ selector: 'app-hrv-chart', template: '', standalone: false })
 class MockHrvChartComponent {
+  @Input() infoTooltip: string;
   @Input() context: unknown;
   @Input() unitSettings: unknown;
   @Input() preferredSource: string;
@@ -573,7 +575,7 @@ describe('TileChartComponent', () => {
     const chart = getPowerCurveComponent();
     expect(chart.title).toBe('Running Power Curve');
     expect(chart.powerCurve).toBe(powerCurve);
-    expect(chart.infoTooltip).toContain('Power Curve compares');
+    expect(chart.infoTooltip).toBe(resolveDashboardChartInfoTooltip(DASHBOARD_POWER_CURVE_CHART_TYPE));
     expect(chart.reserveTitleActionSpace).toBe(true);
     expect(getEventFiltersComponent()).toBeUndefined();
     const rangeSelector = getRangeSelectorComponents().find(selector => selector.ariaLabel === 'Select Power Curve range');
@@ -950,7 +952,7 @@ describe('TileChartComponent', () => {
     expect(sleepTrend.sleepWindowLabel).toBe('Last 30 days');
     expect(sleepTrend.canNavigateOlder).toBe(true);
     expect(sleepTrend.canNavigateNewer).toBe(false);
-    expect(sleepTrend.infoTooltip).toContain('Sleep Trend');
+    expect(sleepTrend.infoTooltip).toBe(resolveDashboardChartInfoTooltip(DASHBOARD_SLEEP_TREND_CHART_TYPE));
     expect(sleepTrend.reserveTitleActionSpace).toBe(true);
   });
 
@@ -962,6 +964,7 @@ describe('TileChartComponent', () => {
     component.showActions = true;
     fixture.detectChanges();
     const chart = fixture.debugElement.query(By.directive(MockHrvChartComponent)).componentInstance as MockHrvChartComponent;
+    expect(chart.infoTooltip).toBe(resolveDashboardChartInfoTooltip(DASHBOARD_HRV_TREND_CHART_TYPE));
     expect(chart.context).toBe(component.hrvTrend);
     expect(fixture.debugElement.query(By.directive(MockSleepTrendChartComponent))).toBeNull();
     expect(chart.unitSettings).toBe(component.user.settings.unitSettings);

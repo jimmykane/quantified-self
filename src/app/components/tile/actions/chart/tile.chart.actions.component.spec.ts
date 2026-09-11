@@ -41,7 +41,7 @@ describe('TileChartActionsComponent', () => {
           tiles: [
             {
               order: 0,
-              chartType: ChartTypes.Bar,
+              chartType: ChartTypes.ColumnsVertical,
               dataType: 'Distance',
               dataValueType: ChartDataValueTypes.Total,
               dataCategoryType: ChartDataCategoryTypes.ActivityType,
@@ -50,7 +50,7 @@ describe('TileChartActionsComponent', () => {
             },
             {
               order: 1,
-              chartType: ChartTypes.Line,
+              chartType: ChartTypes.LinesVertical,
               dataType: 'Duration',
               dataValueType: ChartDataValueTypes.Total,
               dataCategoryType: ChartDataCategoryTypes.ActivityType,
@@ -92,14 +92,14 @@ describe('TileChartActionsComponent', () => {
     component = fixture.componentInstance;
     component.user = userMock;
     component.order = 0;
-    component.chartType = ChartTypes.Bar;
+    component.chartType = ChartTypes.ColumnsVertical;
     component.size = { columns: 1, rows: 1 };
     component.type = 'Chart' as any;
     fixture.detectChanges();
   });
 
   it.each([
-    [ChartTypes.Line, 'Chart', 'chart'],
+    [ChartTypes.LinesVertical, 'Chart', 'chart'],
     [DASHBOARD_ACWR_KPI_CHART_TYPE, 'KPI', 'KPI'],
     [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, 'Calendar', 'calendar'],
   ])('renders type-specific actions for %s and updates when inputs change', async (chartType, label, noun) => {
@@ -109,17 +109,18 @@ describe('TileChartActionsComponent', () => {
     expect(trigger.getAttribute('aria-label')).toBe(`${label} actions`);
     trigger.click(); fixture.detectChanges(); await fixture.whenStable();
     const menu = document.body.querySelector('[role="menu"]')!;
-    expect(menu.textContent).toContain(`Edit ${noun}`);
+    const editLabel = chartType === ChartTypes.LinesVertical ? `Edit ${noun}` : `${label} details`;
+    expect(menu.textContent).toContain(editLabel);
     expect(menu.textContent).toContain(`Remove ${noun}`);
     hapticsMock.selection.mockClear();
     const emitted = vi.spyOn(component.editTile, 'emit');
-    const edit = Array.from(menu.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.includes(`Edit ${noun}`))!;
+    const edit = Array.from(menu.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.includes(editLabel))!;
     edit.click(); fixture.detectChanges();
     expect(emitted).toHaveBeenCalledWith(0);
     expect(hapticsMock.selection).toHaveBeenCalledOnce();
   });
   it.each([
-    [ChartTypes.Line, 'chart'],
+    [ChartTypes.LinesVertical, 'chart'],
     [DASHBOARD_ACWR_KPI_CHART_TYPE, 'KPI'],
     [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, 'calendar'],
   ])('includes Remove %s in keyboard navigation and persists it once', async (chartType, noun) => {
@@ -285,8 +286,8 @@ describe('TileChartActionsComponent', () => {
 
     expect(analyticsMock.logEvent).toHaveBeenCalledWith('dashboard_tile_action', { method: 'moveTileForward' });
     expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
-    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.Line);
-    expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Bar);
+    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.LinesVertical);
+    expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.ColumnsVertical);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
@@ -295,7 +296,7 @@ describe('TileChartActionsComponent', () => {
     userMock.settings.dashboardSettings.tiles = [
       {
         order: 0,
-        chartType: ChartTypes.Bar,
+        chartType: ChartTypes.ColumnsVertical,
         dataType: 'Distance',
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.ActivityType,
@@ -332,7 +333,7 @@ describe('TileChartActionsComponent', () => {
       {
         name: 'Activity chart',
         order: 1,
-        chartType: ChartTypes.Bar,
+        chartType: ChartTypes.ColumnsVertical,
         dataType: 'Distance',
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.ActivityType,
@@ -367,8 +368,8 @@ describe('TileChartActionsComponent', () => {
     await component.moveTileBackward();
 
     expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
-    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.Bar);
-    expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Line);
+    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.LinesVertical);
     expect(userMock.updateUserProperties).not.toHaveBeenCalled();
   });
 
@@ -385,7 +386,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     component.chartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE as any;
     component.order = 0;
@@ -409,16 +410,16 @@ describe('TileChartActionsComponent', () => {
     userMock.settings.dashboardSettings.tiles = [
       {
         order: 0,
-        chartType: ChartTypes.LinesVertical,
+        chartType: ChartTypes.LinesVerticalsVertical,
         dataType: DataRecoveryTime.type,
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.DateType,
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
-    component.chartType = ChartTypes.LinesVertical as any;
+    component.chartType = ChartTypes.LinesVerticalsVertical as any;
     component.order = 0;
     fixture.detectChanges();
 
@@ -445,7 +446,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
     component.order = 0;
@@ -474,7 +475,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 2, rows: 2 },
         type: TileTypes.Chart,
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: TileTypes.Chart },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: TileTypes.Chart },
     ];
     component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE as any;
     component.order = 0;
@@ -509,7 +510,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     userMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
     component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
@@ -556,7 +557,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE as any;
     component.order = 0;
@@ -584,7 +585,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
     component.order = 0;

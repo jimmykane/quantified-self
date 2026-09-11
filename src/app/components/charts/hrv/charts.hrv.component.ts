@@ -1,4 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -9,7 +13,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Component({
   selector: 'app-hrv-chart', standalone: true,
-  imports: [MatTabsModule, MatProgressSpinnerModule, HealthMetricSeriesChartComponent],
+  imports: [MatTabsModule, MatProgressSpinnerModule, MatButtonModule, MatIconModule, MatTooltipModule, AppChartSharedModule, HealthMetricSeriesChartComponent],
   templateUrl: './charts.hrv.component.html', styleUrls: ['./charts.hrv.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -18,6 +22,7 @@ export class ChartsHrvComponent {
   readonly darkTheme = input(false);
   readonly isLoading = input(false);
   readonly reserveTitleActionSpace = input(false);
+  readonly infoTooltip = input('');
   readonly unitSettings = input<UserUnitSettingsInterface | null>(null);
   readonly timelineNotes = input<TimelineNoteChartContext | null>(null);
   readonly preferredSource = input<string | null>(null);

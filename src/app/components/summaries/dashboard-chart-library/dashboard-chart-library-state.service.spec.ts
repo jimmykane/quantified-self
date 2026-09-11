@@ -60,13 +60,24 @@ describe('inline chart library state', () => {
     expect(haptics.selection).not.toHaveBeenCalled(); expect(persistence.save).not.toHaveBeenCalled();
   });
   it('does not release a configured or changed draft when the chart list is filtered', async () => {
-    await state.select(user, calendar); state.configure();
+    await state.select(user, getDashboardChartCatalog().find(entry => entry.definition.category === 'custom')!); state.configure();
     const editor = state.editor();
     state.clearPreview(); expect(state.editor()).toBe(editor);
     state.configuring.set(false);
-    editor!.category = 'custom'; state.refreshDraft();
+    editor!.customEventRange = '30d'; state.refreshDraft();
     state.clearPreview(); expect(state.editor()).toBe(editor);
     expect(dialog.open).not.toHaveBeenCalled(); expect(persistence.save).not.toHaveBeenCalled();
+  });
+  it('keeps fixed tile details read-only and ignores settings without feedback', async () => {
+    user.settings.dashboardSettings.tiles = [calendar.tile];
+    await state.edit(user, calendar.tile.order);
+    haptics.selection.mockClear();
+    state.configure();
+    expect(state.canConfigure()).toBe(false);
+    expect(state.configuring()).toBe(false);
+    expect(state.draft()).not.toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    expect(persistence.save).not.toHaveBeenCalled();
   });
   it('does not release a preview while its save is pending', async () => {
     let resolve!: () => void; persistence.save.mockReturnValueOnce(new Promise<void>(done => resolve = done));

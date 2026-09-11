@@ -1,5 +1,5 @@
-import { resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
-import { inject, Injectable, OnDestroy, signal } from '@angular/core';
+import { hasDashboardTileSettings, resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
+import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom, Subject } from 'rxjs';
 import { TileSettingsInterface } from '@sports-alliance/sports-lib';
@@ -30,6 +30,7 @@ export class DashboardChartLibraryState implements OnDestroy {
   readonly draft = signal<TileSettingsInterface | null>(null);
   readonly editor = signal<DashboardTileConfiguration | null>(null);
   readonly configuring = signal(false);
+  readonly canConfigure = computed(() => hasDashboardTileSettings(this.draft()));
   readonly busy = signal(false);
   readonly error = signal('');
   readonly undoAvailable = signal(false);
@@ -92,10 +93,13 @@ export class DashboardChartLibraryState implements OnDestroy {
     this.clearSelection();
     this.activeLane.set(resolveDashboardTileLaneKey(tile));
     this.createEditor(user, tile, true);
-    this.configuring.set(true);
+    this.configuring.set(this.canConfigure());
   }
 
-  configure(): void { if (!this.configuring()) { this.haptics.selection(); this.configuring.set(true); } }
+  configure(): void {
+    if (this.busy() || this.configuring() || !this.canConfigure()) return;
+    this.haptics.selection(); this.configuring.set(true);
+  }
 
   async back(): Promise<void> {
     if (this.busy()) return;

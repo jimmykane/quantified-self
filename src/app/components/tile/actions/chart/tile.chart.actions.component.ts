@@ -1,4 +1,4 @@
-import { resolveDashboardTilePresentation } from '../../../../helpers/dashboard-tile-presentation.helper';
+import { hasDashboardTileSettings, resolveDashboardTilePresentation } from '../../../../helpers/dashboard-tile-presentation.helper';
 import { Component, Input, OnInit } from '@angular/core';
 import {
   TileTypes,
@@ -36,6 +36,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   private currentChartType: DashboardChartType;
   @Input() set chartType(value: DashboardChartType) {
     this.currentChartType = value;
+    this.canConfigure = hasDashboardTileSettings({ type: TileTypes.Chart, chartType: value });
     this.presentation = resolveDashboardTilePresentation({ type: TileTypes.Chart, chartType: value });
   }
   get chartType(): DashboardChartType { return this.currentChartType; }

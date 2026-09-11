@@ -41,7 +41,7 @@
     <div #detail class="chart-library-detail qs-scrollbar" [class.is-configuring]="state.configuring()" tabindex="-1">
       <div class="chart-library-detail-heading" [class.chart-library-preview-heading]="!state.configuring()">
         <button class="chart-library-back" mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>{{ backLabel() }}</button>
-        @if (!state.configuring()) {
+        @if (!state.configuring() && state.canConfigure()) {
           <button class="chart-library-settings" mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>{{ draftPresentation().settings }}</button>
         }
       </div>
@@ -73,7 +73,7 @@
       </div>
     }
   </div>
-  @if (state.draft()) {
+  @if (state.draft() && (state.editor()?.mode !== 'edit' || state.canConfigure())) {
       <div class="chart-library-save">
         @if (state.error()) { <p class="chart-library-error" role="alert">{{ state.error() }}</p> }
         <button mat-flat-button [disabled]="state.busy() || state.editor()?.isSaveDisabled" (click)="state.save()"><span class="chart-library-button-content"><span class="chart-library-button-icon">@if (state.busy()) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>{{ state.editor()?.mode === 'edit' ? 'check' : 'add' }}</mat-icon> }</span><span>{{ state.busy() ? 'Saving…' : state.editor()?.mode === 'edit' ? 'Save changes' : 'Add to dashboard' }}</span></span></button>

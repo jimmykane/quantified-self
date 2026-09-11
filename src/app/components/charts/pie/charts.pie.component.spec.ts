@@ -283,6 +283,28 @@ describe('ChartsPieComponent', () => {
     dateNowSpy.mockRestore();
   });
 
+  it.each([280, 340])('fits a long recovery summary in a narrow %spx preview without changing its values', async width => {
+    const now = Date.UTC(2026, 8, 11);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+    component.enableRecoveryNowMode = true;
+    component.chartDataType = DataRecoveryTime.type;
+    component.recoveryNow = { totalSeconds: 4 * 86400 + 3500, endTimeMs: now - 3600000 };
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', { value: width, configurable: true });
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientHeight', { value: 260, configurable: true });
+    fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    const [label, value, meta] = option.graphic[0].children;
+    expect(option.series[0].radius).toEqual(['54%', '74%']);
+    expect(label.style.fontSize).toBeLessThan(ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE);
+    expect(value.style.fontSize).toBeLessThan(22);
+    expect(value.style.text).toBe(formatDashboardNumericValue(DataDuration.type, 4 * 86400 - 100, undefined as any));
+    expect(meta.style.text).toBe(`Total recovery:\n${formatDashboardNumericValue(DataDuration.type, 4 * 86400 + 3500, undefined as any)}`);
+    expect(meta.style.width).toBeLessThan(260 * 0.54);
+    expect(meta.style.overflow).toBe('break');
+    nowSpy.mockRestore();
+  });
+
   it('should compute recovery total from currently active segments only', async () => {
     const nowMs = Date.UTC(2024, 0, 10, 12, 0, 0);
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
