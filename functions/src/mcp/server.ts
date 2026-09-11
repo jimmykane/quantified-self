@@ -940,6 +940,7 @@ export function createMcpServer(
       outputSchema: outputSchemas.get_sleep_trend,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('get_sleep_trend', () => dataService.getSleepTrend({
+      scopes: auth.scopes,
       uid: auth.uid,
       startTimeMs: parseMcpDateTime(input.start, 'start'),
       endTimeMs: parseMcpDateTime(input.end, 'end'),
@@ -961,6 +962,7 @@ export function createMcpServer(
       outputSchema: outputSchemas.list_sleep_vitals,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_sleep_vitals', () => dataService.listSleepVitals({
+      scopes: auth.scopes,
       uid: auth.uid,
       startTimeMs: parseMcpDateTime(input.start, 'start'),
       endTimeMs: parseMcpDateTime(input.end, 'end'),
@@ -982,6 +984,7 @@ export function createMcpServer(
       outputSchema: outputSchemas.list_sleep_sessions,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('list_sleep_sessions', () => dataService.listSleepSessions({
+      scopes: auth.scopes,
       uid: auth.uid,
       connectionId: auth.connectionId,
       startTimeMs: parseMcpDateTime(input.start, 'start'),
@@ -1006,6 +1009,7 @@ export function createMcpServer(
       outputSchema: outputSchemas.query_sleep_summary,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('query_sleep_summary', () => dataService.querySleepSummary({
+      scopes: auth.scopes,
       uid: auth.uid,
       startTimeMs: parseMcpDateTime(input.start, 'start'),
       endTimeMs: parseMcpDateTime(input.end, 'end'),
@@ -1034,6 +1038,7 @@ export function createMcpServer(
     }, input => runReadOnlyTool(
       'get_today_readiness',
       () => dataService.getTodayReadiness({
+        scopes: auth.scopes,
         uid: auth.uid,
         timeZone: input.timeZone,
       }),
@@ -1051,6 +1056,7 @@ export function createMcpServer(
       outputSchema: outputSchemas.get_daily_report,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     }, input => runReadOnlyTool('get_daily_report', () => dataService.getDailyReport({
+      scopes: auth.scopes,
       uid: auth.uid,
       timeZone: input.timeZone,
     })));

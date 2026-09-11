@@ -26,6 +26,7 @@ import {
     UserDeletionGuardReadError,
 } from '../shared/user-deletion-guard';
 import { generateIDFromParts } from '../shared/id-generator';
+import { healthAccountIdentityParts } from '../../../shared/nightly-hrv';
 import {
     areTokenCredentialSnapshotsEqual,
     getTokenCredentialSnapshot,
@@ -290,12 +291,7 @@ export async function buildHealthSourceRecordWrite(
 ): Promise<BuiltHealthSourceRecordWrite> {
     validateWriteContext(userID, nowMs);
     const input = canonicalizeInput(validateHealthSourceRecordInput(value));
-    const accountKey = await generateOpaqueId(generateId, [
-        'health-account-v1',
-        userID,
-        input.provider,
-        input.providerAccountId,
-    ]);
+    const accountKey = await generateOpaqueId(generateId, healthAccountIdentityParts(userID, input.provider, input.providerAccountId));
     const opaqueSourceRecordKey = await generateOpaqueId(generateId, [
         'health-source-key-v1',
         userID,

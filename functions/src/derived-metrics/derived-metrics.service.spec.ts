@@ -386,8 +386,8 @@ describe('fetchTrainingBuildSleepDocs', () => {
         hoisted.where.mockReturnValue(query);
         hoisted.select.mockReturnValue({ get: hoisted.get });
         hoisted.get
-            .mockResolvedValueOnce({ docs: [{ id: 'historical-sleep' }] })
-            .mockResolvedValueOnce({ docs: [{ id: 'recent-sleep' }] });
+            .mockResolvedValueOnce({ docs: [{ id: 'historical-sleep', data: () => ({}) }] })
+            .mockResolvedValueOnce({ docs: [{ id: 'recent-sleep', data: () => ({}) }] });
     });
 
     it('queries only the merged recent and configured benchmark sleep-date ranges', async () => {
@@ -414,6 +414,7 @@ describe('fetchTrainingBuildSleepDocs', () => {
         expect(hoisted.select).toHaveBeenCalledTimes(2);
         expect(hoisted.select).toHaveBeenCalledWith(
             'source.provider',
+            'source.providerUserId',
             'sleepDate',
             'startTimeMs',
             'endTimeMs',
@@ -477,7 +478,7 @@ describe('fetchTrainingReadinessSleepDocs', () => {
         const query = { where: hoisted.where, select: hoisted.select };
         hoisted.where.mockReturnValue(query);
         hoisted.select.mockReturnValue({ get: hoisted.get });
-        hoisted.get.mockResolvedValue({ docs: [{ id: 'readiness-sleep' }] });
+        hoisted.get.mockResolvedValue({ docs: [{ id: 'readiness-sleep', data: () => ({}) }] });
     });
 
     it('queries the bounded sleep envelope required by every historical cutoff without loading events or activities', async () => {
@@ -492,6 +493,7 @@ describe('fetchTrainingReadinessSleepDocs', () => {
         ]);
         expect(hoisted.select).toHaveBeenCalledWith(
             'source.provider',
+            'source.providerUserId',
             'sleepDate',
             'startTimeMs',
             'endTimeMs',

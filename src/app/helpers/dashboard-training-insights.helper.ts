@@ -225,6 +225,8 @@ export function buildDashboardReadinessSignalsContext(input: {
       id: point.id,
       sleepDate: point.sleepDate,
       provider: point.provider,
+      sourceKey: point.sourceKey,
+      hrvSourceKey: point.hrvSourceKey,
       startTimeMs: toFiniteNumber(point.startTimeMs),
       endTimeMs: toFiniteNumber(point.endTimeMs),
       totalSeconds: toFiniteNumber(point.totalSeconds),

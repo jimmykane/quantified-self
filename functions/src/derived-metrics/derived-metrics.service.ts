@@ -1,3 +1,5 @@
+import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
+import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -144,6 +146,7 @@ import {
 import {
     buildReadinessSignals,
     READINESS_FORMULA_VERSION,
+    READINESS_EVIDENCE_VERSION,
     READINESS_SLEEP_LOOKBACK_MS,
     type ReadinessSleepEvidencePoint,
 } from '../../../shared/readiness';
@@ -213,6 +216,7 @@ const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'tags', '
 const DERIVED_METRICS_ACTIVITY_FIELDS = ['eventID', 'startDate', 'endDate', 'type', 'stats', 'creator', 'serviceName', 'sourceServiceName'] as const;
 const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
     'source.provider',
+    'source.providerUserId',
     'sleepDate',
     'startTimeMs',
     'endTimeMs',
@@ -229,6 +233,7 @@ const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
 ] as const;
 const DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS = [
     'source.provider',
+    'source.providerUserId',
     'sleepDate',
     'startTimeMs',
     'endTimeMs',
@@ -304,7 +309,7 @@ const HEART_RATE_ZONE_STAT_TYPES = [
     DataHeartRateZoneSevenDuration.type,
 ] as const;
 
-type FirestoreQueryDocumentSnapshot = FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>;
+type FirestoreQueryDocumentSnapshot = Pick<FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>, 'id' | 'data'>;
 
 interface DerivedMetricBuildResult<TPayload> {
     sourceEventCount: number;
@@ -3497,6 +3502,7 @@ function buildTrainingBuildEventSuggestions(
 }
 
 interface ResolvedTrainingSleepNight {
+    hrvSourceKey?: string;
     provider: SleepProvider;
     sleepDayMs: number;
     durationSeconds: number;
@@ -3506,6 +3512,8 @@ interface ResolvedTrainingSleepNight {
 }
 
 interface TrainingSleepNightCandidate {
+    accountNightKey: string;
+    hrvSourceKey?: string;
     provider: SleepProvider;
     sleepDayMs: number;
     durationSeconds: number;
@@ -3591,6 +3599,7 @@ function resolveTrainingSleepNights(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
 ): ResolvedTrainingSleepNight[] {
     const candidates = new Map<string, TrainingSleepNightCandidate>();
+    const hrvByAccountNight = new Map<string, Array<{ averageHrvMs: number | null; hrvSourceKey?: string }>>();
     sleepDocs.forEach((doc) => {
         const data = decodeTrainingSleepDocument(doc);
         if (!data) return;
@@ -3632,8 +3641,12 @@ function resolveTrainingSleepNights(
         const vitals = data.vitals && typeof data.vitals === 'object' && !Array.isArray(data.vitals)
             ? data.vitals as Record<string, unknown>
             : {};
-        const overnightHrvMs = toFinitePositiveNumber(vitals.overnightHrvMs)
-            ?? toFinitePositiveNumber(vitals.averageHrvMs);
+        const overnightHrvMs = toFinitePositiveNumber(vitals.averageHrvMs)
+            ?? toFinitePositiveNumber(vitals.overnightHrvMs);
+        const accountNightKey = JSON.stringify([sleepEvidenceSourceKey(data as unknown as SleepSession), sleepDayMs]);
+        hrvByAccountNight.set(accountNightKey, [...(hrvByAccountNight.get(accountNightKey) || []), {
+            averageHrvMs: overnightHrvMs, hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
+        }]);
         const hasValidEndTime = hasValidTrainingSleepEndTime(startTimeMs, endTimeMs);
         const key = `${provider}:${formatUtcDayKey(sleepDayMs)}`;
         const existing = candidates.get(key);
@@ -3665,6 +3678,7 @@ function resolveTrainingSleepNights(
             return;
         }
         candidates.set(key, {
+            accountNightKey,
             provider,
             sleepDayMs,
             durationSeconds,
@@ -3672,22 +3686,27 @@ function resolveTrainingSleepNights(
             endTimeMs,
             timezoneOffsetSeconds,
             overnightHrvMs,
+            hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
         });
     });
 
-    return [...candidates.values()].map((night): ResolvedTrainingSleepNight => ({
-        provider: night.provider,
-        sleepDayMs: night.sleepDayMs,
-        durationSeconds: night.durationSeconds,
-        localBedtimeMinutes: night.timezoneOffsetSeconds === null
-            ? null
-            : resolveLocalClockMinutes(night.startTimeMs, night.timezoneOffsetSeconds),
-        localWakeTimeMinutes: night.timezoneOffsetSeconds === null
-            || !hasValidTrainingSleepEndTime(night.startTimeMs, night.endTimeMs)
-            ? null
-            : resolveLocalClockMinutes(night.endTimeMs, night.timezoneOffsetSeconds),
-        overnightHrvMs: night.overnightHrvMs,
-    }));
+    return [...candidates.values()].map((night): ResolvedTrainingSleepNight => {
+        const hrv = aggregateNightlyHrvEvidence(hrvByAccountNight.get(night.accountNightKey) || []);
+        return {
+            provider: night.provider,
+            sleepDayMs: night.sleepDayMs,
+            durationSeconds: night.durationSeconds,
+            localBedtimeMinutes: night.timezoneOffsetSeconds === null
+                ? null
+                : resolveLocalClockMinutes(night.startTimeMs, night.timezoneOffsetSeconds),
+            localWakeTimeMinutes: night.timezoneOffsetSeconds === null
+                || !hasValidTrainingSleepEndTime(night.startTimeMs, night.endTimeMs)
+                ? null
+                : resolveLocalClockMinutes(night.endTimeMs, night.timezoneOffsetSeconds),
+            overnightHrvMs: hrv.averageHrvMs,
+            hrvSourceKey: hrv.hrvSourceKey,
+        };
+    });
 }
 
 function resolveTrainingReadinessSleepEvidence(
@@ -3726,6 +3745,8 @@ function resolveTrainingReadinessSleepEvidence(
             id: doc.id,
             sleepDate: formatUtcDayKey(sleepDayMs),
             provider,
+            sourceKey: sleepEvidenceSourceKey(data as unknown as SleepSession),
+            hrvSourceKey: sleepHrvSourceKey(data as unknown as SleepSession),
             startTimeMs,
             endTimeMs,
             totalSeconds: durationSeconds,
@@ -3734,7 +3755,7 @@ function resolveTrainingReadinessSleepEvidence(
             averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
         };
-        const key = `${point.sleepDate}:${provider}`;
+        const key = JSON.stringify([point.sleepDate, point.sourceKey]);
         groups.set(key, [...(groups.get(key) || []), point]);
     });
 
@@ -3745,9 +3766,6 @@ function resolveTrainingReadinessSleepEvidence(
             || left.id.localeCompare(right.id)
         ));
         const latest = sortedPoints[sortedPoints.length - 1];
-        const averageHrvValues = points
-            .map(point => point.averageHrvMs)
-            .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
         const averageHeartRateValues = points
             .map(point => point.averageHeartRateBpm)
             .filter((value): value is number => Number.isFinite(value) && (value as number) > 0);
@@ -3760,9 +3778,7 @@ function resolveTrainingReadinessSleepEvidence(
             startTimeMs: Math.min(...points.map(point => point.startTimeMs as number)),
             endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
             totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
-            averageHrvMs: averageHrvValues.length
-                ? averageHrvValues.reduce((total, value) => total + value, 0) / averageHrvValues.length
-                : null,
+            ...aggregateNightlyHrvEvidence(points),
             averageHeartRateBpm: averageHeartRateValues.length
                 ? averageHeartRateValues.reduce((total, value) => total + value, 0) / averageHeartRateValues.length
                 : null,
@@ -3879,6 +3895,7 @@ export function buildTrainingReadinessMetricPayload(
         sourceEventCount,
         payload: {
             formulaVersion: READINESS_FORMULA_VERSION,
+            evidenceVersion: READINESS_EVIDENCE_VERSION,
             dayBoundary: 'UTC',
             asOfDayMs,
             generatedAtMs: nowMs,
@@ -4155,7 +4172,9 @@ function buildTrainingRecoveryWindow(
             && night.sleepDayMs >= windowStartDayMs
             && night.sleepDayMs <= windowEndDayMs)
         : [];
-    const hrvValues = selectedNights.flatMap(night => night.overnightHrvMs === null ? [] : [night.overnightHrvMs]);
+    const hrvSources = new Set(selectedNights.filter(night => night.overnightHrvMs !== null).map(night => night.hrvSourceKey));
+    const hrvValues = hrvSources.size > 1 ? []
+        : selectedNights.flatMap(night => night.overnightHrvMs === null ? [] : [night.overnightHrvMs]);
     const localBedtimes = selectedNights.flatMap(
         night => night.localBedtimeMinutes === null ? [] : [night.localBedtimeMinutes],
     );
@@ -4243,8 +4262,13 @@ function buildTrainingRecoveryComparison(
     const sharedProvider = comparableProviders[0]?.provider || null;
     const currentProvider = sharedProvider || resolveDominantTrainingSleepProvider(nights, currentStartDayMs, currentEndDayMs);
     const referenceProvider = sharedProvider || resolveDominantTrainingSleepProvider(nights, referenceStartDayMs, referenceEndDayMs);
-    const current = buildTrainingRecoveryWindow(nights, currentProvider, currentStartDayMs, currentEndDayMs);
-    const reference = buildTrainingRecoveryWindow(nights, referenceProvider, referenceStartDayMs, referenceEndDayMs);
+    const hrvSources = new Set(nights.filter(night => night.overnightHrvMs !== null && (
+        (night.provider === currentProvider && night.sleepDayMs >= currentStartDayMs && night.sleepDayMs <= currentEndDayMs)
+        || (night.provider === referenceProvider && night.sleepDayMs >= referenceStartDayMs && night.sleepDayMs <= referenceEndDayMs)
+    )).map(night => night.hrvSourceKey));
+    const comparableNights = currentProvider === referenceProvider && hrvSources.size > 1 ? nights.map(night => ({ ...night, overnightHrvMs: null })) : nights;
+    const current = buildTrainingRecoveryWindow(comparableNights, currentProvider, currentStartDayMs, currentEndDayMs);
+    const reference = buildTrainingRecoveryWindow(comparableNights, referenceProvider, referenceStartDayMs, referenceEndDayMs);
     const sameProvider = current.provider !== null && current.provider === reference.provider;
     return {
         current,
@@ -5633,9 +5657,10 @@ export async function fetchTrainingBuildSleepDocs(
         .select(...DERIVED_METRICS_TRAINING_SLEEP_FIELDS)
         .get()));
     const docsById = new Map<string, FirestoreQueryDocumentSnapshot>();
-    snapshots.forEach(snapshot => snapshot.docs.forEach((doc) => {
-        docsById.set(doc.id, doc);
-    }));
+    for (const snapshot of snapshots) {
+        const enriched = await supplementNightlyHrvSleepDocuments(uid, snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() })));
+        enriched.forEach(doc => docsById.set(doc.id, { id: doc.id, data: () => doc.data }));
+    }
     return [...docsById.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 
@@ -5655,7 +5680,8 @@ export async function fetchTrainingReadinessSleepDocs(
         .where('endTimeMs', '<=', nowMs)
         .select(...DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS)
         .get();
-    return snapshot.docs;
+    const enriched = await supplementNightlyHrvSleepDocuments(uid, snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() })));
+    return enriched.map(doc => ({ id: doc.id, data: () => doc.data }));
 }
 
 export interface DerivedFormSnapshotSeed {

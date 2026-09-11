@@ -1,3 +1,5 @@
+import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
+import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
 import { firestoreHrvRangeReads, HrvRangeInput, queryHrvPersonalRange } from './hrv-personal-range.service';
 import {
@@ -57,6 +59,7 @@ import {
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
   DerivedFormMetricPayload,
   DerivedFormNowMetricPayload,
@@ -179,6 +182,7 @@ import {
 import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
   MCP_TRAINING_METRIC_SCHEMA_VERSION,
+  MCP_TRAINING_RECOVERY_VERSION,
 } from './derived-output-schemas';
 import { ActivityIdentityLike } from '../shared/activity-identity-matcher';
 import {
@@ -481,6 +485,7 @@ export interface McpDataServiceDependencies {
     limit: number,
     cursor?: SleepCursor,
   ) => Promise<RawDocument[]>;
+  supplementSleepDocuments?: typeof supplementNightlyHrvSleepDocuments;
   fetchReadinessSleepDocuments: (
     uid: string,
     startTimeMs: number,
@@ -752,6 +757,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .limit(limit)
       .select(
         new FieldPath('source', 'provider'),
+        new FieldPath('source', 'providerUserId'),
         'sleepDate',
         'startTimeMs',
         'endTimeMs',
@@ -777,6 +783,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     }));
   },
+  supplementSleepDocuments: supplementNightlyHrvSleepDocuments,
   fetchReadinessSleepDocuments: async (
     uid,
     startTimeMs,
@@ -795,6 +802,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .limit(limit)
       .select(
         new FieldPath('source', 'provider'),
+        new FieldPath('source', 'providerUserId'),
         'sleepDate',
         'startTimeMs',
         'endTimeMs',
@@ -3288,7 +3296,7 @@ function projectTrainingBuildComparisonForMcp(payload: unknown): unknown {
     return null;
   }
   return {
-    recoveryVersion: source.recoveryVersion,
+    recoveryVersion: source.recoveryVersion === DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION ? MCP_TRAINING_RECOVERY_VERSION : source.recoveryVersion,
     dayBoundary: source.dayBoundary,
     asOfDayMs: source.asOfDayMs,
     excludesMergedEvents: source.excludesMergedEvents,
@@ -3395,6 +3403,11 @@ export function projectDerivedMetricPayloadForMcp(
 ): unknown {
   try {
     switch (metricKind) {
+      case DERIVED_METRIC_KINDS.TrainingReadiness: {
+        const source = payload as DerivedTrainingReadinessMetricPayload;
+        return { formulaVersion: source.formulaVersion, dayBoundary: source.dayBoundary,
+          asOfDayMs: source.asOfDayMs, generatedAtMs: source.generatedAtMs, historyDays: source.historyDays, points: source.points };
+      }
       case DERIVED_METRIC_KINDS.TrainingSummary:
         return projectTrainingSummaryForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingExplanation:
@@ -3419,6 +3432,7 @@ export function projectDerivedMetricPayloadForMcp(
 }
 
 const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
+  DERIVED_METRIC_KINDS.TrainingReadiness,
   DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
@@ -3581,6 +3595,7 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
 }
 
 export interface ListSleepSessionsInput {
+  scopes?: readonly string[];
   uid: string;
   connectionId: string;
   startTimeMs: number;
@@ -3592,6 +3607,7 @@ export interface ListSleepSessionsInput {
 }
 
 export interface ListSleepVitalsInput {
+  scopes?: readonly string[];
   uid: string;
   startTimeMs: number;
   endTimeMs: number;
@@ -3611,6 +3627,7 @@ export interface ListSleepVitalsResult {
 export type McpSleepSummaryGroupBy = 'day' | 'week' | 'month';
 
 export interface QuerySleepSummaryInput {
+  scopes?: readonly string[];
   uid: string;
   startTimeMs: number;
   endTimeMs: number;
@@ -3648,6 +3665,7 @@ export interface GetSleepTrendResult extends QuerySleepSummaryResult {
 }
 
 export interface GetDailyBriefingInput {
+  scopes?: readonly string[];
   uid: string;
   timeZone: string;
 }
@@ -3655,6 +3673,7 @@ export interface GetDailyBriefingInput {
 export type GetDailyReportInput = GetDailyBriefingInput;
 
 export interface GetTodayReadinessInput {
+  scopes?: readonly string[];
   uid: string;
   timeZone: string;
 }
@@ -3855,7 +3874,7 @@ function projectDailyBriefingReadiness(
 
   const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[
     DERIVED_METRIC_KINDS.TrainingReadiness
-  ].safeParse(snapshot.payload);
+  ].safeParse(projectDerivedMetricPayloadForMcp(DERIVED_METRIC_KINDS.TrainingReadiness, snapshot.payload));
   if (!parsed.success) {
     return unavailableDailyBriefingReadiness('not_ready');
   }
@@ -4147,6 +4166,8 @@ function buildTodayReadinessSleepNights(
       id: document.id,
       sleepDate: resolveTodayReadinessSleepDate(document.data, session),
       provider: session.provider,
+      sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
+      hrvSourceKey: sleepHrvSourceKey({ ...document.data, vitals: session.vitals } as unknown as SleepSession),
       startTimeMs: session.startTimeMs,
       endTimeMs: session.endTimeMs,
       totalSeconds: session.durationSeconds,
@@ -4157,7 +4178,7 @@ function buildTodayReadinessSleepNights(
       averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
       minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
     };
-    const key = `${evidence.sleepDate}:${evidence.provider}`;
+    const key = JSON.stringify([evidence.sleepDate, evidence.sourceKey]);
     grouped.set(key, [
       ...(grouped.get(key) || []),
       {
@@ -4179,13 +4200,6 @@ function buildTodayReadinessSleepNights(
     );
     const overnightHrvValues = positiveValues(
       entries.map(entry => entry.session.vitals?.overnightHrvMs ?? null),
-    );
-    const selectedHrvValues = positiveValues(
-      entries.map(entry => (
-        entry.session.vitals?.averageHrvMs
-        ?? entry.session.vitals?.overnightHrvMs
-        ?? null
-      )),
     );
     const averageHeartRateValues = positiveValues(
       entries.map(entry => entry.session.vitals?.averageHeartRateBpm ?? null),
@@ -4213,7 +4227,7 @@ function buildTodayReadinessSleepNights(
       startTimeMs,
       endTimeMs,
       totalSeconds: durationSeconds,
-      averageHrvMs: average(selectedHrvValues),
+      ...aggregateNightlyHrvEvidence(entries.map(entry => entry.evidence)),
       averageHeartRateBpm: average(averageHeartRateValues),
       minimumHeartRateBpm: minimumHeartRateValues.length
         ? Math.min(...minimumHeartRateValues)
@@ -4462,7 +4476,7 @@ async function loadTodayReadiness(
     rampRateSnapshot,
     nowTimeMs,
   );
-  const sleepNights = buildTodayReadinessSleepNights(sleepDocuments);
+  const sleepNights = buildTodayReadinessSleepNights(await supplementAuthorizedSleep(dependencies, input, sleepDocuments));
   const evaluation = buildReadinessEvaluation({
     form: load.form,
     rampRate: load.rampRate,
@@ -4489,6 +4503,7 @@ function projectDailyReportSleep(
   const baseline = latestNight
     ? sleepNights.filter(night => (
       night.provider === latestNight.provider
+      && night.evidence.sourceKey === latestNight.evidence.sourceKey
       && night.sleepDate !== latestNight.sleepDate
       && night.endTimeMs < latestNight.endTimeMs
     )).slice(0, MAX_DAILY_REPORT_BASELINE_NIGHTS)
@@ -5778,6 +5793,20 @@ async function getActivityChartData(
   }
 }
 
+async function supplementAuthorizedSleep(
+  dependencies: McpDataServiceDependencies, input: { uid: string; scopes?: readonly string[] }, docs: RawDocument[],
+): Promise<RawDocument[]> {
+  if (!input.scopes?.includes('health:read') || !input.scopes.includes('sleep:read')) return docs;
+  if (!dependencies.supplementSleepDocuments) return docs;
+  try { return await dependencies.supplementSleepDocuments(input.uid, docs); }
+  catch (error) {
+    if (error instanceof Error && /limit|bounded|page|cursor/i.test(error.message)) {
+      throw new McpDataError('query_too_large', 'Nightly Health HRV exceeds the complete-read limit.');
+    }
+    throw new McpDataError('temporarily_unavailable', 'Nightly Health HRV is temporarily unavailable.');
+  }
+}
+
 export function createMcpDataService(
   dependencies: McpDataServiceDependencies = defaultDependencies,
 ) {
@@ -5796,7 +5825,7 @@ export function createMcpDataService(
         `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
       );
     }
-    return docs.flatMap((doc) => {
+    return (await supplementAuthorizedSleep(dependencies, input, docs)).flatMap((doc) => {
       const session = toSafeSleepSession(doc.data);
       return session
         && (input.includeNaps || !session.isNap)
@@ -7062,7 +7091,7 @@ export function createMcpDataService(
         scanLimit + 1,
         cursor,
       );
-      const scannedDocs = docs.slice(0, scanLimit);
+      const scannedDocs = await supplementAuthorizedSleep(dependencies, input, docs.slice(0, scanLimit));
       const matches = scannedDocs.flatMap((doc) => {
         const session = toSafeSleepSession(doc.data);
         if (

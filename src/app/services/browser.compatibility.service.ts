@@ -42,6 +42,10 @@ export class BrowserCompatibilityService {
         }
     }
 
+    public checkWebCryptoSupport(): boolean {
+        return typeof globalThis.crypto?.subtle?.digest === 'function';
+    }
+
     public createRandomUUID(): string | null {
         try {
             return typeof globalThis.crypto?.randomUUID === 'function'

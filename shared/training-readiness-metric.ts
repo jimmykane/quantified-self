@@ -6,6 +6,7 @@ import {
   calculateReadinessScore,
   combineReadinessOvernightHeartRateRatios,
   READINESS_FORMULA_VERSION,
+  READINESS_EVIDENCE_VERSION,
   READINESS_SLEEP_MAX_AGE_MS,
   resolveReadinessConfidence,
 } from './readiness';
@@ -35,6 +36,7 @@ export function normalizeDerivedTrainingReadinessMetricPayload(
   if (
     !source
     || source.formulaVersion !== READINESS_FORMULA_VERSION
+    || source.evidenceVersion !== READINESS_EVIDENCE_VERSION
     || source.dayBoundary !== 'UTC'
     || source.historyDays !== 14
     || asOfDayMs === null
@@ -65,6 +67,7 @@ export function normalizeDerivedTrainingReadinessMetricPayload(
   }
   return {
     formulaVersion: READINESS_FORMULA_VERSION,
+    evidenceVersion: READINESS_EVIDENCE_VERSION,
     dayBoundary: 'UTC',
     asOfDayMs,
     generatedAtMs,

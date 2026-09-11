@@ -1106,6 +1106,18 @@ the same normalized sleep fields and safe value rules for its allowed latest-nig
 physiology stays absent/null and is never converted to zero. Server and bundled-skill instructions explicitly route
 multi-day physiology questions to `get_sleep_trend` and availability-only questions to `list_sleep_vitals`.
 
+With both `health:read` and `sleep:read`, these Sleep reads, `get_daily_report`, and `get_today_readiness` can also fill
+missing nightly HRV from a matching canonical Health overnight-average summary. Matching is by owner, provider/account,
+provider date, and overlapping main-sleep interval. Native Sleep HRV is preserved, each night is supplemented once,
+and conflicts, spot/activity/manual HRV, and unidentified legacy accounts are excluded. Health is never read through
+Sleep permission alone. The backend scans complete summary pages (32 per read; at most 2,048 records and 16 MiB),
+using the existing metric/calendar-date/document-ID index with owner/deletion guards. Incomplete reads fail with a bounded
+or temporary-unavailability error rather than a partial value. No samples or provider API calls are needed. Existing
+history works without reimport. Internal source keys keep HRV baselines comparable and never enter public results.
+The internal readiness evidence version and recovery version can advance while the registered MCP formula/recovery
+versions and schemas remain frozen. This implementation-only fix needs no plugin rebuild or new grant beyond the
+existing Health permission; clients that previously omitted Health must authorize it to use the supplement.
+
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
 provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests

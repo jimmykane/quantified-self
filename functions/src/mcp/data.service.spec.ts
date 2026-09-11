@@ -1,3 +1,5 @@
+import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
+import { nightlyHealthAccountKey, type NightlyHrvRecord } from '../../../shared/nightly-hrv';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
@@ -4537,7 +4539,7 @@ describe('MCP data service', () => {
 
     const result = await createMcpDataService(dependencies).getTrainingMetric(
       'user-1',
-      DERIVED_METRIC_KINDS.TrainingReadiness,
+      DERIVED_METRIC_KINDS.FormNow,
     );
 
     expect(result.schemaVersion).toBe(MCP_TRAINING_METRIC_SCHEMA_VERSION);
@@ -5583,6 +5585,50 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
     });
+  });
+
+
+  it('projects the updated internal recovery snapshots onto the frozen MCP versions', async () => {
+    const { buildTrainingReadinessMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('../derived-metrics/derived-metrics.service');
+    const now = Date.parse('2026-07-27T12:00:00Z');
+    const readiness = buildTrainingReadinessMetricPayload([], 0, [], now).payload;
+    const recovery = buildTrainingBuildComparisonMetricPayload([], {}, now).payload;
+    expect(readiness.evidenceVersion).toBe(1);
+    expect(recovery.recoveryVersion).toBe(4);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(async (_uid, kind) => ({status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: kind === DERIVED_METRIC_KINDS.TrainingReadiness ? readiness : recovery}));
+    const service = createMcpDataService(dependencies);
+    const publicReadiness = await service.getTrainingMetric('user-1', DERIVED_METRIC_KINDS.TrainingReadiness);
+    const publicRecovery = await service.getTrainingMetric('user-1', DERIVED_METRIC_KINDS.TrainingBuildComparison);
+    expect(publicReadiness.payload).not.toHaveProperty('evidenceVersion');
+    expect(publicReadiness.payload).toMatchObject({formulaVersion: 3});
+    expect(publicRecovery.payload).toMatchObject({recoveryVersion: 3});
+  });
+
+  it('supplements daily-report HRV only with explicit Health and Sleep grants', async () => {
+    const endTimeMs = Date.parse('2026-07-27T06:00:00Z');
+    const original = sleepDocument({sleepDate: '2026-07-27', startTimeMs: endTimeMs - 28800000, endTimeMs, vitals: null});
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([original]);
+    const record: NightlyHrvRecord = {userID: 'user-1', schemaVersion: 1, kind: 'interval_summary',
+      source: {provider: 'GarminAPI', accountKey: await nightlyHealthAccountKey('user-1', 'GarminAPI', 'private-provider-user')},
+      calendarDate: '2026-07-27', startTimeMs: endTimeMs - 28800000, endTimeMs,
+      metrics: [{kind: 'value', metricId: 'heart_rate_variability', valueType: 'number', aggregation: 'average',
+        semanticVariant: 'overnight_rmssd', origin: 'provider_summary', recordingMethod: 'provider_calculated',
+        normalizationStatus: 'canonical', canonical: {value: 44, unit: 'ms'}}]};
+    dependencies.supplementSleepDocuments = vi.fn((uid, docs) => supplementNightlyHrvSleepDocuments(uid, docs, async () => ({records: [record]})));
+    const service = createMcpDataService(dependencies);
+    const without = await service.getDailyReport({uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read']});
+    expect(without.sleep.latestSession?.vitals.overnightHrvMs).toBeNull();
+    expect(dependencies.supplementSleepDocuments).not.toHaveBeenCalled();
+    const withHealth = await service.getDailyReport({uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read', 'health:read']});
+    expect(withHealth.sleep.latestSession?.vitals.overnightHrvMs).toBe(44);
+    expect(withHealth.readiness.drivers.hrv.latestMs).toBe(44);
+    expect(JSON.stringify(withHealth)).not.toContain('private-provider-user');
+    expect(JSON.stringify(withHealth)).not.toContain('SourceKey');
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([original]);
+    const vitals = await service.listSleepVitals({uid: 'user-1', startTimeMs: endTimeMs - 86400000, endTimeMs,
+      scopes: ['health:read', 'sleep:read']});
+    expect(vitals.vitals).toContainEqual(expect.objectContaining({type: 'overnightHrvMs', sessionCount: 1}));
   });
 
   it('returns one bounded daily report with safe sleep HRV, heart rate, and live readiness', async () => {

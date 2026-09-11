@@ -46,6 +46,17 @@ describe('BrowserCompatibilityService', () => {
         expect(service).toBeTruthy();
     });
 
+    it('detects Web Crypto without prompting when it is unavailable', () => {
+        expect(service.checkWebCryptoSupport()).toBe(true);
+        vi.stubGlobal('crypto', undefined);
+        try {
+            expect(service.checkWebCryptoSupport()).toBe(false);
+            expect(dialog.open).not.toHaveBeenCalled();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     describe('checkCompressionSupport', () => {
         const originalCompressionStream = globalThis.CompressionStream;
         const originalDecompressionStream = globalThis.DecompressionStream;

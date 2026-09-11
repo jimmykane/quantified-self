@@ -5,6 +5,8 @@ export type ReadinessConfidence = 'high' | 'medium' | 'low';
 
 export interface ReadinessSleepEvidencePoint {
   id: string;
+  sourceKey?: string;
+  hrvSourceKey?: string;
   sleepDate: string;
   provider: SleepProvider | null;
   startTimeMs: number | null;
@@ -61,9 +63,10 @@ interface WeightedReadinessSignal {
 }
 
 export const READINESS_TOTAL_SIGNAL_COUNT = 4 as const;
-// Version 3 adds the average sleep-HR source field to historical readiness builds.
-// It intentionally invalidates only the persisted readiness series, not all derived metrics.
+// Formula version remains stable; source interpretation is versioned separately.
 export const READINESS_FORMULA_VERSION = 3 as const;
+/** Internal snapshot freshness; not part of the registered MCP formula contract. */
+export const READINESS_EVIDENCE_VERSION = 1 as const;
 export const READINESS_SLEEP_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 export const READINESS_SLEEP_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 export const READINESS_SLEEP_BASELINE_NIGHTS = 14;
@@ -119,6 +122,7 @@ export function buildReadinessEvaluation(input: {
       point.id !== latestSleep.id
       && point.sleepDate !== latestSleep.sleepDate
       && point.provider === latestSleep.provider
+      && (point.sourceKey ?? null) === (latestSleep.sourceKey ?? null)
     )).slice(-READINESS_SLEEP_BASELINE_NIGHTS)
     : [];
 
@@ -127,7 +131,8 @@ export function buildReadinessEvaluation(input: {
   const sleepScore = resolveSleepScore(latestSleep);
   const hrv = resolveRatioEvidence(
     latestSleep?.averageHrvMs,
-    baselineSleep.map(point => point.averageHrvMs),
+    baselineSleep.filter(point => (point.hrvSourceKey ?? null) === (latestSleep?.hrvSourceKey ?? null))
+      .map(point => point.averageHrvMs),
   );
   const averageHeartRate = resolveRatioEvidence(
     latestSleep?.averageHeartRateBpm,

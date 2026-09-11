@@ -674,7 +674,7 @@ Training state and Readiness are fixed inside the optional Today summary:
   backend-derived
   `training_readiness` snapshot containing 14 UTC-aligned daily cutoffs. Each historical day uses the Form state for that
   day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff; a night older than 48 hours is
-  ineligible. HRV, average-heart-rate, and minimum-heart-rate baselines use up to 14 prior nights from the same provider
+  ineligible. HRV, average-heart-rate, and minimum-heart-rate baselines use up to 14 prior nights from the same provider and account
   and require at least three prior values for the matching measure. Average and minimum HR are not independent score
   drivers: their ratios are bounded to `0.8..1.2`, then combined into one Overnight HR ratio at 70% average and 30%
   minimum, with fallback to whichever is available. Lower HR relative to personal baseline supports that driver. The
@@ -697,6 +697,19 @@ Training state and Readiness are fixed inside the optional Today summary:
   exposes only an explicit identity-free driver projection with safe aggregate HRV/heart-rate values and evidence
   states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
   compact Training Summary; the frozen daily briefing remains unchanged.
+- **Nightly HRV evidence** comes from the shared read-time resolver in `shared/nightly-hrv.ts`. Native normalized Sleep
+  HRV wins; otherwise a canonical overnight-average Health summary may fill a missing main night only for the same
+  owner, provider/account, provider date, and overlapping sleep interval. A reading contributes once across fragments.
+  Spot/activity/manual HRV and conflicting sources remain unavailable. HRV baselines also require the same measurement
+  source/semantic; switching between Sleep averages and dedicated Health overnight measurements starts separate HRV
+  evidence. No all-day/resting HR value substitutes for overnight HR. Live Dashboard/Training listeners observe every
+  bounded Health page. Historical readiness and recovery builders use the same resolver over their bounded Sleep windows;
+  separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
+  HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
+  `training_readiness.payload.evidenceVersion = 1` lets the frontend and backend freshness gate rebuild old readiness
+  inputs without changing formula version 3. Recovery version 4 withholds HRV comparison across incompatible sources.
+  MCP projects out the internal readiness evidence version and retains its registered recovery version 3; its formulas
+  and wire shapes are unchanged. Rebuilds use the ordinary targeted ensure lifecycle, without a production migration.
 - **Body-weight trend** first reads positive canonical `body_weight` point measurements from Health. Provider and manual
   measurements are independent sources; each provider/account series reduces multiple values on one UTC day to a median.
   If any real Health Weight exists in the retained source window, workout profile Weight is excluded globally. Otherwise,

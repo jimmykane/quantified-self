@@ -171,6 +171,7 @@ describe('training-readiness.helper', () => {
       historyStatus: 'ready',
       history: {
         formulaVersion: 3,
+        evidenceVersion: 1,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),
@@ -235,6 +236,7 @@ describe('training-readiness.helper', () => {
       historyStatus: 'ready',
       history: {
         formulaVersion: 3,
+        evidenceVersion: 1,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 15, 12),
@@ -273,6 +275,7 @@ describe('training-readiness.helper', () => {
       historyStatus: 'failed',
       history: {
         formulaVersion: 3,
+        evidenceVersion: 1,
         dayBoundary: 'UTC',
         asOfDayMs,
         generatedAtMs: Date.UTC(2026, 6, 16, 11),

@@ -167,6 +167,32 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 8. For health/wellness support, add provider metric mappings to the unified health writer rather than expanding the stable catalog with provider field names. Record native semantics, coverage, quality, and revision behavior explicitly.
 9. Validate field semantics against the provider's published examples, including signed event values and inclusive sample endpoints. Cap or compact provider arrays against the shared metric and sample write budgets before handing a normalized record to the writer; do not let a provider-valid payload fail only at the generic persistence boundary.
 
+### Nightly HRV across Sleep and Health
+
+A provider may deliver nightly HRV inside Sleep (Suunto/COROS) or as a separate Health summary (Garmin).
+`shared/nightly-hrv.ts` is the shared read-time resolver for Dashboard, Training, and MCP Sleep/report reads.
+Preserve native normalized Sleep HRV. When absent, match canonical Health HRV by owner, provider, opaque account
+identity, provider calendar date, and overlapping sleep interval. The Health account identity is SHA-256 of the
+JSON-framed `healthAccountIdentityParts`; Sleep must retain the same provider account ID used by the Health writer.
+Unidentified legacy accounts are not guessed. Native records and existing canonical Sports Lib records work without
+reimport or a Sleep rewrite. Only missing main nights are supplemented, once across fragments; late delivery,
+corrections, and removal are reflected at read time.
+
+New providers should use an approved canonical overnight-average semantic from `HRV_PERSONAL_RANGE_VARIANTS`,
+`average` aggregation, milliseconds, and recorded/provider-summary origin with device/provider-calculated recording
+method. Register a new semantic only after establishing its meaning and testing it. Spot checks, activity intervals,
+five-minute maxima, manual readings, unknown semantics, and conflicting summaries cannot fill nightly Sleep HRV.
+Do not substitute daily/resting heart rate for overnight heart rate. Raw Health/Sleep samples remain separate.
+
+Health reads reuse the existing metric/date/document-ID index and bounded owner Rules (32 records per page plus
+look-ahead, 2,048 records and 16 MiB total). Backend pages recheck owner/deletion state before and after reads.
+MCP supplementation requires both Health and Sleep grants; raw provider/account identities never enter its projection.
+Frontend pages stay subscribed so Health changes update an open dashboard; failed supplemental reads retain native
+Sleep evidence. HRV Health mutations invalidate the Training readiness and build-comparison snapshots. See
+[Training workspace](training-workspace.md) for baseline comparability and targeted version transitions.
+Include native-only, separate-summary, arrival-order, correction/deletion, exact-account, conflicting-source, legacy,
+and bounded-read cases in every provider's integration tests. There is no provider-name branch in the resolver.
+
 ## 4. OAuth and provider identity
 
 OAuth is a server-owned integration. The browser starts and completes the user experience, but it must never receive client secrets, access tokens, refresh tokens, or raw provider account mappings.

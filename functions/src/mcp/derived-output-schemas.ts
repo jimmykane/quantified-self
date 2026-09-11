@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   DERIVED_METRIC_KINDS,
-  DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
   DERIVED_TRAINING_POWER_SYSTEMS_HISTORY_DAYS,
   DERIVED_TRAINING_POWER_SYSTEMS_POLICY_VERSION,
   DERIVED_TRAINING_POWER_SYSTEMS_WINDOW_DAYS,
@@ -32,6 +31,7 @@ const nullableBoundedString = boundedString.nullable();
  * before this public contract is validated.
  */
 export const MCP_TRAINING_METRIC_SCHEMA_VERSION = 15 as const;
+export const MCP_TRAINING_RECOVERY_VERSION = 3 as const;
 
 const trainingDiscipline = z.enum(PUBLIC_TRAINING_DISCIPLINES);
 const powerCapacityDiscipline = z.enum(POWER_CAPACITY_DISCIPLINES);
@@ -649,9 +649,7 @@ const buildComparisonDiscipline = z.strictObject({
   suggestedEvents: z.array(buildSuggestion),
 }).meta({ title: 'McpDerivedBuildComparisonDiscipline' });
 const trainingBuildComparisonPayload = z.strictObject({
-  recoveryVersion: z.literal(
-    DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
-  ),
+  recoveryVersion: z.literal(MCP_TRAINING_RECOVERY_VERSION),
   dayBoundary: utcBoundary,
   asOfDayMs: timestampMs,
   excludesMergedEvents: z.boolean(),
