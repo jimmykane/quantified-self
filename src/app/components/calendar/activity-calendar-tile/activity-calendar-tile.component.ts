@@ -8,12 +8,16 @@ import {
   inject,
   input,
   signal,
+  type Signal,
 } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import type { EventInterface, User } from '@sports-alliance/sports-lib';
-import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import { catchError, combineLatest, finalize, map, of, startWith, switchMap, take } from 'rxjs';
+import { isTimelineNoteVisible, timelineNoteOverlaps } from '@shared/timeline-notes';
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
 import {
   type ActivityCalendarDayViewModel,
   buildActivityCalendarViewModel,
@@ -70,6 +74,13 @@ export class ActivityCalendarTileComponent {
   private readonly today = signal(new Date());
 
   readonly user = input<User | null | undefined>(null);
+  /** Keep the workspace signal live even when the month popup is replaced by a day sheet. */
+  readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
+  private readonly notesContext = computed(() => {
+    const context = this.timelineNotes()?.();
+    return this.user()?.uid && context?.ownerUid === this.user()?.uid ? context : null;
+  });
+  private readonly reportNotesRange = computed(() => this.notesContext()?.reportRange);
   readonly showHeading = input(true);
   readonly showNavigation = input(false);
   readonly eventState = toSignal(combineLatest([
@@ -122,6 +133,14 @@ export class ActivityCalendarTileComponent {
     now: this.today(),
   }));
   readonly isLoading = computed(() => this.eventState().status === 'loading');
+  readonly notesByDate = computed(() => calendarTimelineNotesByDate(this.calendarModel(), this.notesContext()?.notes ?? [], this.today().getTime()));
+  private readonly notesRange = computed(() => calendarTimelineNoteRange(this.calendarModel()));
+  private readonly notesRangeEffect = effect(onCleanup => {
+    const report = this.reportNotesRange();
+    if (!report) return;
+    report(this, this.notesRange());
+    onCleanup(() => report(this, null));
+  });
   readonly hasError = computed(() => this.eventState().status === 'error');
   readonly hasEvents = computed(() => this.calendarModel().months.some(month => (
     month.days.some(day => day.inPrimaryPeriod && day.eventCount > 0)
@@ -169,6 +188,11 @@ export class ActivityCalendarTileComponent {
     }
   }
 
+  @HostListener('document:visibilitychange')
+  refreshVisibleCalendarDate(): void {
+    if (document.visibilityState === 'visible') this.refreshCalendarDate();
+  }
+
   retry(): void {
     this.reloadSequence.update(value => value + 1);
   }
@@ -183,10 +207,24 @@ export class ActivityCalendarTileComponent {
     if (!userId) {
       return;
     }
-    this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData>(CalendarDayDetailsComponent, {
+    const source = this.timelineNotes();
+    const range = { startDate: day.dateKey, endDate: day.dateKey };
+    const context = source?.();
+    const report = context?.ownerUid === userId ? context.reportRange : undefined;
+    const rangeKey = {};
+    // The month sheet is destroyed when Material opens the day sheet. Retain its selected day's
+    // range and the workspace signal until that sheet closes, independently of this tile's lifetime.
+    report?.(rangeKey, range);
+    const timelineNotes = computed(() => {
+      const current = source?.();
+      return current?.ownerUid === userId
+        ? current.notes.filter(note => isTimelineNoteVisible(note) && timelineNoteOverlaps(note, range)) : [];
+    });
+    const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, string>(CalendarDayDetailsComponent, {
       data: {
         day,
         userId,
+        timelineNotes,
         locale: this.locale,
         unitSettings: this.user()?.settings?.unitSettings ?? null,
         summariesSettings: this.user()?.settings?.summariesSettings ?? null,
@@ -194,6 +232,10 @@ export class ActivityCalendarTileComponent {
         plannedWorkoutsSource: () => this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
         plannedWorkoutsStatusSource: () => this.plansState().status,
       },
+    });
+    sheet.afterDismissed().pipe(take(1), finalize(() => report?.(rangeKey, null))).subscribe(noteId => {
+      const note = timelineNotes().find(note => note.id === noteId);
+      if (note) source?.()?.select([note]);
     });
   }
 }

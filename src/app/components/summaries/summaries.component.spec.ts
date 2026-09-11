@@ -1,3 +1,6 @@
+import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
+import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
+import { By } from '@angular/platform-browser';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { buildDashboardExamplePreview } from '../../helpers/dashboard-chart-preview.helper';
@@ -6,11 +9,11 @@ import type { DashboardChartTileViewModel } from '../../helpers/dashboard-tile-v
 import { EMPTY } from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { HapticTapDirective } from '../../directives/haptic-tap.directive';
+import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
-import { LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
+import { LOCALE_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { of, Subject, Subscription } from 'rxjs';
@@ -175,10 +178,14 @@ describe('SummariesComponent', () => {
     });
 
     await TestBed.configureTestingModule({
-      declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent, HapticTapDirective],
-      imports: [PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule],
+      declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
+      imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule],
       schemas: [NO_ERRORS_SCHEMA],
       providers: [
+        { provide: AppTimelineNotesService, useValue: {
+          uid: signal('owner-user'), showOnCharts: signal(true), changes$: new Subject<void>(),
+          loadRange: vi.fn().mockResolvedValue({ notes: [], incomplete: null }), invalidate: vi.fn(), isOwner: (uid: string) => uid === 'owner-user',
+        } },
         { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => mockUserService.updateUserProperties(component.user, { settings: { dashboardSettings: patch } }) } },
         { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
         { provide: AppThemeService, useValue: mockThemeService },
@@ -233,6 +240,28 @@ describe('SummariesComponent', () => {
     component['unsubscribeHrv']();
     expect(component['hrvTrend']).toBeNull();
     expect(rebuild).toHaveBeenCalled();
+  });
+
+  it('shares one private notes workspace with tiles and the calendar, and removes it on another profile', async () => {
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    fixture.detectChanges(); await Promise.resolve(); TestBed.flushEffects(); fixture.detectChanges();
+    const workspace = fixture.debugElement.query(By.directive(TimelineNotesWorkspaceComponent)).componentInstance as TimelineNotesWorkspaceComponent;
+    const source = component.timelineNotes;
+    expect(source()).toBe(workspace.context());
+    expect(source()?.ownerUid).toBe('owner-user');
+    const charts = fixture.debugElement.queryAll(By.css('app-tile-chart'));
+    expect(charts.length).toBeGreaterThan(0);
+    expect(charts.every(chart => chart.properties.timelineNotes === source)).toBe(true);
+    component.openDashboardCalendar();
+    expect(mockBottomSheet.open.mock.calls.at(-1)?.[1].data.timelineNotes).toBe(source);
+    fixture.componentRef.setInput('eventUser', { uid: 'other-profile' });
+    fixture.componentRef.setInput('showActions', false);
+    fixture.detectChanges(); await Promise.resolve(); TestBed.flushEffects(); fixture.detectChanges();
+    expect(fixture.debugElement.query(By.directive(TimelineNotesWorkspaceComponent))).toBeNull();
+    expect(source()).toBeNull();
+    workspace.open();
+    expect(mockDialog.open).not.toHaveBeenCalled();
   });
 
   it('keeps the dashboard layout stable during address-bar height changes but updates column breakpoints', () => {
@@ -739,7 +768,7 @@ describe('SummariesComponent', () => {
     expect(todayCalendarButton?.querySelector('.dashboard-today-calendar-cue')?.getAttribute('aria-hidden')).toBe('true');
     todayCalendarButton?.click();
     expect(mockBottomSheet.open).toHaveBeenCalledWith(CalendarMonthPickerBottomSheetComponent, {
-      data: { user: component.user },
+      data: { user: component.user, timelineNotes: component.timelineNotes },
       panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
     });
     expect(dashboardHeader?.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');

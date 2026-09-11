@@ -29,6 +29,7 @@
       </button>
       }
       @if (showActions && isOwnerDashboard) {
+      <app-timeline-notes-workspace [ownerUid]="user?.uid" />
       <button mat-icon-button appHapticTap aria-label="Dashboard options" [matMenuTriggerFor]="dashboardOptions" [disabled]="library.busy()"><mat-icon>more_horiz</mat-icon></button>
       <mat-menu #dashboardOptions="matMenu" class="qs-menu-panel">
         <button mat-menu-item (click)="library.bulk($any(user), 'today')"><mat-icon>{{ showTodaySummary ? 'visibility_off' : 'visibility' }}</mat-icon><span>{{ showTodaySummary ? 'Hide Today summary' : 'Show Today summary' }}</span></button>
@@ -131,7 +132,7 @@
         [cdkDragPreviewContainer]="'parent'"
         [cdkDragDisabled]="!desktopTileDragEnabled || kpiLaneTiles.length < 2"
         [class.desktop-draggable-tile]="desktopTileDragEnabled && kpiLaneTiles.length > 1">
-        <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
+        <app-tile-chart [timelineNotes]="timelineNotes" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
           [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
           [compactKpiRow]="true"
           [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
@@ -214,7 +215,7 @@
           [rows]="tile.size.rows"
           [maxColumns]="section.columns">
           @if (tile.type === tileTypes.Chart) {
-          <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
+          <app-tile-chart [timelineNotes]="timelineNotes" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
             [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
             [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
             [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"

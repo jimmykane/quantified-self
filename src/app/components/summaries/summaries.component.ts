@@ -4,11 +4,14 @@ import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/das
 import { DashboardConfigurationService, cloneDashboardSettings } from '../../services/dashboard-configuration.service';
 import { DashboardChartLibraryState } from './dashboard-chart-library/dashboard-chart-library-state.service';
 import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-preview.helper';
+import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
+import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  computed,
   DoCheck,
   HostListener,
   Inject,
@@ -19,6 +22,7 @@ import {
   OnDestroy,
   OnInit,
   SimpleChanges,
+  viewChild,
 } from '@angular/core';
 import { firstValueFrom, Subscription, take } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
@@ -311,6 +315,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public desktopTileDragEnabled = false;
   private readonly configuration = inject(DashboardConfigurationService);
   readonly library = inject(DashboardChartLibraryState);
+  private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
+  /** One live, owner-fenced source shared by tiles and calendar sheets. */
+  readonly timelineNotes = computed<TimelineNoteChartContext | null>(() => this.notesWorkspace()?.context() ?? null);
   public previewInput: DashboardPreviewInput = { tiles: [] };
   private librarySubscription?: Subscription;
   private libraryRefresh = Promise.resolve();
@@ -618,7 +625,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.bottomSheet.open<CalendarMonthPickerBottomSheetComponent, CalendarMonthPickerBottomSheetData>(
       CalendarMonthPickerBottomSheetComponent,
       {
-        data: { user: this.user },
+        data: { user: this.user, timelineNotes: this.timelineNotes },
         panelClass: ['qs-bottom-sheet-container', 'qs-calendar-month-picker-sheet'],
       },
     );

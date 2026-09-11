@@ -9,7 +9,8 @@ account, independently of Training plan checks. The workspace supplies a shared 
 freshness forecast, body-weight, power-system history, swimming trends and weekly durability charts. Notes preserve each
 chart's existing calendar convention; weekly tooltips retain actual dates. They never change Training inputs, formulas,
 readiness, forecasts, persisted snapshots or sport filters. The manager owns editing and account-scoped settings; charts
-never fetch private notes. Dashboard, public previews and non-calendar charts are not opted in.
+never fetch private notes. The owner’s Dashboard reuses these adapters for Form and Freshness Forecast alongside HRV,
+Sleep, and its calendars through one shared notes workspace. Public/library previews and non-calendar charts are not opted in.
 
 Current compatibility baseline:
 

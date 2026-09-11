@@ -1,7 +1,7 @@
 # Timeline notes
 
 Timeline notes are private, user-created calendar context, independent of Health metrics, Sleep sessions, and workouts.
-Every authenticated account can use the compact **Timeline notes** header action in Health, Training, and Calendar, without a
+Every authenticated account can use the compact **Timeline notes** header action in Dashboard, Health, Training, and Calendar, without a
 subscription or connected provider. Existing workspace entry-point rollout and provider import checks are unchanged.
 
 ## Contract and lifecycle
@@ -110,7 +110,7 @@ Titles wrap above their actual dates, grouped notes remain separate, and the cha
 Opt-in surfaces: Health Highlights and detailed metrics (recorded timezone), normalized Sleep (sleepDate), Training readiness,
 load/Form, freshness forecast (existing viewer-calendar convention), body weight, power-system history, weekly swimming
 and weekly durability. Weekly overlays identify overlapping buckets but retain actual note dates in tooltips. All shared
-inputs default null. Dashboard, workout details, public previews and non-calendar charts are unchanged.
+inputs default null. Dashboard HRV, Sleep, Form, and Freshness Forecast opt in through the same adapters. Workout details, public previews and non-calendar charts remain unchanged.
 The authenticated full Calendar integration is described below.
 
 ## Calendar boundary
@@ -133,7 +133,22 @@ Selecting a day opens its
 existing Material sheet, with a plain-text notes list above activities. Selecting a note dismisses the sheet and opens
 the shared note editor. Sheet notes stay reactive to loading/edits, visibility, and account changes; delayed selections
 are checked against the current owner and notes before opening. Note and activity failures remain independent.
-The shared grid's notes input defaults empty; dashboard tiles/popovers and public calendars remain unannotated.
+The dashboard Activity Calendar tile and Today month popup reuse the same grid and date helpers. The shared grid's notes input defaults empty; public calendars remain unannotated.
+
+## Dashboard ownership and reuse
+
+`SummariesComponent` mounts one `TimelineNotesWorkspaceComponent` only for the owner's dashboard controls, with an
+explicit `ownerUid` that must match the authenticated notes account. The workspace's reactive context includes that owner
+and is empty immediately on a profile/account mismatch. `TileChartComponent.timelineNotes` accepts the shared context
+signal, forwarding its current value to supported chart adapters. This keeps all date ranges in one bounded union,
+without adding per-tile fetches. New date-based tiles should reuse this input and the existing ECharts notes binding;
+non-date charts, library previews, and other users' profiles must keep the null default.
+
+The Today popup receives the same signal rather than a snapshot or a second notes loader. Calendar tiles register their
+visible month and unregister on removal. Opening a day retains that day's range until its sheet closes, including when
+Material destroys the replaced month popup. The day list keeps reading the live workspace signal, filters its owner and
+visibility, and resolves selections against the latest notes before opening the manager. Release the retained range after
+selection/dismissal, not when the replaced calendar component is destroyed. Destroyed workspaces reject delayed actions.
 
 ## Verification and release
 

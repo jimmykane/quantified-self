@@ -10,6 +10,8 @@ import { timelineNoteGroupColor } from './timeline-note-appearance.helper';
 
 type Option = Parameters<EChartsType['setOption']>[0];
 export interface TimelineNoteChartContext {
+  /** Private workspace owner. Omitted only for explicit synthetic previews. */
+  ownerUid?: string | null;
   notes: readonly TimelineNote[];
   select: (notes: readonly TimelineNote[]) => void;
   reportRange: (key: object, range: TimelineNoteRange | null) => void;

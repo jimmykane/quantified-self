@@ -161,4 +161,32 @@ describe('Timeline notes workspace ownership', () => {
     service.loadRange.mockResolvedValueOnce({ notes: [note], incomplete: 'records' }); component.refresh(); await flush();
     expect(component.incomplete()).toBe('records'); expect(component.error()).toBe(false);
   });
+
+  it('fences a dashboard profile independently of the signed-in account and rejects destroyed selections', async () => {
+    const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+    fixture.componentRef.setInput('ownerUid', 'someone-else');
+    fixture.componentRef.setInput('visibleRange', { startDate: '2026-01-01', endDate: '2026-01-10' });
+    fixture.detectChanges(); await flush();
+    expect(service.loadRange).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.context().notes).toEqual([]);
+    fixture.componentInstance.open();
+    expect(dialogs.open).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('ownerUid', 'owner');
+    fixture.detectChanges(); await flush();
+    const context = fixture.componentInstance.context();
+    expect(context.ownerUid).toBe('owner');
+    expect(context.notes).toEqual([note]);
+    fixture.componentRef.setInput('ownerUid', 'someone-else');
+    fixture.detectChanges();
+    context.select([note]);
+    expect(fixture.componentInstance.context().notes).toEqual([]);
+    expect(dialogs.open).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('ownerUid', 'owner');
+    fixture.detectChanges(); await flush();
+    fixture.destroy();
+    context.select([note]);
+    expect(dialogs.open).not.toHaveBeenCalled();
+  });
 });

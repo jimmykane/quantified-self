@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import { AppHapticsService } from '../../../services/app.haptics.service';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { of } from 'rxjs';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
@@ -17,10 +19,13 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
 
   it('shows a pageable month grid with a stable header', async () => {
     const dismiss = vi.fn();
+    const selection = vi.fn();
+    const timelineNotes = signal(null);
     await TestBed.configureTestingModule({
       imports: [CalendarMonthPickerBottomSheetComponent],
       providers: [
-        { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
+        { provide: MAT_BOTTOM_SHEET_DATA, useValue: { ...data, timelineNotes } },
+        { provide: AppHapticsService, useValue: { selection } },
         { provide: MatBottomSheetRef, useValue: { dismiss } },
         { provide: MatBottomSheet, useValue: { open: vi.fn() } },
         { provide: ActivityCalendarService, useValue: { watchEvents: vi.fn().mockReturnValue(of([])) } },
@@ -45,9 +50,12 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
     expect(fixture.nativeElement.querySelector('.activity-calendar-tile-navigation')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[aria-label="Previous month"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[aria-label="Next month"]')).not.toBeNull();
+    expect(fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance.timelineNotes()).toBe(timelineNotes);
+    expect(selection).not.toHaveBeenCalled();
 
     (fixture.nativeElement.querySelector('[aria-label="Close calendar"]') as HTMLButtonElement).click();
     expect(dismiss).toHaveBeenCalledOnce();
+    expect(selection).toHaveBeenCalledOnce();
   });
 
   it('keeps its header outside the scrollable month grid', () => {

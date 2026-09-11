@@ -1,5 +1,6 @@
 import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, EventEmitter, input, Input, Output, type Signal } from '@angular/core';
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -114,6 +115,10 @@ type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing
 })
 
 export class TileChartComponent extends TileAbstractDirective {
+  /** Explicit workspace source; shared and library previews default to no private notes. */
+  readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
+  readonly notesContext = computed(() => this.timelineNotes()?.() ?? null);
+
   @Input() tileName = '';
   @Input() previewMode = false;
   @Input() chartType: DashboardChartType;

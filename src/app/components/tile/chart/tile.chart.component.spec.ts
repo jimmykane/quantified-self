@@ -1,6 +1,7 @@
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { resolveDashboardChartInfoTooltip } from '../../../helpers/dashboard-chart-info.helper';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
-import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output } from '@angular/core';
+import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { readFileSync } from 'node:fs';
@@ -152,6 +153,7 @@ class MockPieChartComponent {
   standalone: false
 })
 class MockFormChartComponent {
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() isLoading = false;
   @Input() data: any;
   @Input() darkTheme = false;
@@ -208,6 +210,7 @@ class MockKpiChartComponent {
   standalone: false
 })
 class MockFreshnessForecastChartComponent {
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() isLoading = false;
   @Input() darkTheme = false;
   @Input() forecast: any;
@@ -254,6 +257,7 @@ class MockEfficiencyTrendChartComponent {
   standalone: false
 })
 class MockSleepTrendChartComponent {
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() displayMode: string;
   @Input() unitSettings: unknown;
   @Input() isLoading = false;
@@ -298,6 +302,7 @@ class MockEventIntensityZonesComponent {
 
 @Component({ selector: 'app-hrv-chart', template: '', standalone: false })
 class MockHrvChartComponent {
+  @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() infoTooltip: string;
   @Input() context: unknown;
   @Input() unitSettings: unknown;
@@ -349,6 +354,28 @@ describe('TileChartComponent', () => {
     const columnsDebugElement = fixture.debugElement.query(By.directive(MockColumnsChartComponent));
     return columnsDebugElement.componentInstance as MockColumnsChartComponent;
   };
+
+  it.each([
+    [DASHBOARD_HRV_TREND_CHART_TYPE, MockHrvChartComponent],
+    [DASHBOARD_FORM_CHART_TYPE, MockFormChartComponent],
+    [DASHBOARD_SLEEP_TREND_CHART_TYPE, MockSleepTrendChartComponent],
+    [DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE, MockFreshnessForecastChartComponent],
+  ])('shares live notes with %s and leaves library previews unannotated', (chartType, chartComponent) => {
+    fixture.componentRef.setInput('chartType', chartType);
+    fixture.detectChanges();
+    const chart = () => fixture.debugElement.query(By.directive(chartComponent)).componentInstance;
+    expect(chart().timelineNotes).toBeNull();
+    const source = signal<TimelineNoteChartContext | null>({ notes: [], ownerUid: 'owner', select: () => {}, reportRange: () => {} });
+    fixture.componentRef.setInput('timelineNotes', source);
+    fixture.detectChanges();
+    expect(chart().timelineNotes).toBe(source());
+    source.set({ ...source()!, notes: [{ id: 'a'.repeat(64), title: 'Trip', category: 'travel', startDate: '2026-09-01', endDate: null, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] });
+    fixture.detectChanges();
+    expect(chart().timelineNotes.notes).toHaveLength(1);
+    fixture.componentRef.setInput('previewMode', true);
+    fixture.detectChanges();
+    expect(chart().timelineNotes).toBeNull();
+  });
 
   const getXYComponent = (): MockXYChartComponent => {
     const xyDebugElement = fixture.debugElement.query(By.directive(MockXYChartComponent));

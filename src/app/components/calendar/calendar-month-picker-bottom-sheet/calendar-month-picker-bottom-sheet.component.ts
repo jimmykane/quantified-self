@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, type Signal } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import type { User } from '@sports-alliance/sports-lib';
 import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarTileComponent } from '../activity-calendar-tile/activity-calendar-tile.component';
 
 export interface CalendarMonthPickerBottomSheetData {
   user: User;
+  timelineNotes?: Signal<TimelineNoteChartContext | null>;
 }
 
 @Component({

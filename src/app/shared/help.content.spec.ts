@@ -53,6 +53,10 @@ describe('help.content', () => {
     expect(calendar).toContain('overlapping notes keep their different colors as separate segments');
     expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
+    expect(calendar).toContain('Today calendar popup show the same private notes');
+    const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
+    expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');
+    expect(dashboard).toContain('shared profiles and chart-library previews do not include them');
     expect(CONNECTED_SERVICES_POLICY_SECTION.content.join(' ')).toContain('content-free deletion receipt');
   });
   it('documents the supported activity catalog without overpromising source data', () => {
