@@ -10,7 +10,9 @@
         <button mat-list-item type="button" [activated]="data.selected === 'sleep'" [attr.cdkFocusInitial]="data.selected === 'sleep' ? '' : null" [attr.aria-pressed]="data.selected === 'sleep'" (click)="select('sleep')">
           <mat-icon matListItemIcon aria-hidden="true">{{ healthMetricIcon('sleep') }}</mat-icon>
           <span matListItemTitle>Sleep overview</span>
-          @if (data.selected === 'sleep') { <mat-icon matListItemMeta aria-hidden="true">check</mat-icon> }
+          @if (data.selected === 'sleep') {
+            <span matListItemMeta class="health-metric-selected-check" aria-hidden="true"><mat-icon>check</mat-icon></span>
+          }
         </button>
       }
       @for (group of data.groups(); track group.id) {
@@ -19,7 +21,9 @@
           <button mat-list-item type="button" [activated]="data.selected === metric.id" [attr.cdkFocusInitial]="data.selected === metric.id ? '' : null" [attr.aria-pressed]="data.selected === metric.id" (click)="select(metric.id)">
             <mat-icon matListItemIcon aria-hidden="true">{{ healthMetricIcon(metric.id) }}</mat-icon>
             <span matListItemTitle>{{ metric.label }}</span>
-            @if (data.selected === metric.id) { <mat-icon matListItemMeta aria-hidden="true">check</mat-icon> }
+            @if (data.selected === metric.id) {
+              <span matListItemMeta class="health-metric-selected-check" aria-hidden="true"><mat-icon>check</mat-icon></span>
+            }
           </button>
         }
       }

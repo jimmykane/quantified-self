@@ -58,6 +58,7 @@ export class TrainingBodyWeightTrendChartComponent implements AfterViewInit, OnC
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[TrainingBodyWeightTrendChartComponent]',

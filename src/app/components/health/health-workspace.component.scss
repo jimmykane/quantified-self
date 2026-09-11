@@ -38,6 +38,10 @@
   margin: 0;
 }
 
+.health-detail-heading h2 {
+  scroll-margin-block-start: 1rem;
+}
+
 .health-section-heading > p,
 .health-detail-header p {
   color: var(--mat-sys-on-surface-variant);

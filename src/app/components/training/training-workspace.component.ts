@@ -1895,11 +1895,12 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       formNowFromSeries ? this.derivedState.formStatus : this.derivedState.formNowStatus,
       rampRateFromSeries ? this.derivedState.formStatus : this.derivedState.rampRateStatus,
     ];
-    const isUpdating = this.readinessSleepLoading
-      || !this.hasReceivedDerivedState
+    const isInitialLoading = this.readinessSleepLoading || !this.hasReceivedDerivedState;
+    const isUpdating = isInitialLoading
       || loadStatuses
         .some(status => isDerivedMetricPendingStatus(status));
-    const context = buildDashboardReadinessSignalsContext({
+    // An unresolved listener is not missing evidence: wait before showing a partial score.
+    const context = isInitialLoading ? null : buildDashboardReadinessSignalsContext({
       formNow,
       rampRate,
       sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),

@@ -1004,9 +1004,10 @@ mixed, or strained and directs attention to the drivers rather than choosing a w
 failed sleep listener are identified separately from genuinely missing evidence. Sleep already loaded before a listener
 failure remains visible only while it is still eligible; load-only readiness remains available afterward.
 
-Dashboard Today withholds the readiness score, category, confidence, and signal count until both the initial derived
-snapshot emission and the bounded sleep listener have resolved for the current account. It shows **Loading readiness…**
-with a Material progress indicator during that interval; an uninitialized sleep list must never render as **No eligible
+Dashboard Today and Training withhold the readiness score, category, confidence, and signal count until both the initial
+derived snapshot emission and the bounded sleep listener have resolved for the current account. Dashboard shows
+**Loading readiness…** with a Material progress indicator; Training shows its preparing state during that interval.
+An uninitialized sleep list must never render as **No eligible
 night** or produce an interim load-only score. A successful empty sleep result settles loading and permits the normal
 load-only calculation. A failed first sleep read also settles loading, with explicit unavailable copy alongside any
 available load result. A later listener failure retains eligible sleep evidence, shows a refresh warning, and continues
@@ -1766,6 +1767,12 @@ UI principles:
 - Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
   containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
+- Readiness, body-weight, power-systems, swimming-performance, and durability plots use the shared
+  `EChartsHostController.deferUntilNearViewport` queue. Their titles, summaries, and controls render immediately;
+  ECharts initialization waits until near the scroll viewport and is spread across frames after the library loads.
+  The queue skips non-scrolling tab bodies and horizontal-only wrappers when finding the vertical scroll container.
+  Initialized plots stay mounted when scrolling away; leaving a route or replacing a sport's plot cancels pending work.
+  This changes presentation scheduling only; derived queries and metric calculations remain unchanged.
 - Responsive icon-only Training actions use plain Material buttons rather than outlined containers, hide only their
   projected text label, and reset Material's icon-and-text margins. This keeps their visible icons consistent with
   Dashboard header actions while preserving Material focus, ripple, and touch-target elements.

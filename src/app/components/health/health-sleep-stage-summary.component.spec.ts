@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DashboardSleepTrendPoint } from '../../helpers/dashboard-sleep-chart.helper';
+import { chartViewportQueue } from '../../helpers/chart-viewport-queue';
 import { AppColors } from '../../services/color/app.colors';
 import { EChartsLoaderService } from '../../services/echarts-loader.service';
 import { LoggerService } from '../../services/logger.service';
@@ -82,6 +83,7 @@ describe('HealthSleepStageSummaryComponent', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     if (originalResizeObserver) {
       globalThis.ResizeObserver = originalResizeObserver;
     } else {
@@ -133,5 +135,25 @@ describe('HealthSleepStageSummaryComponent', () => {
     expect(host.querySelector('.sleep-stage-chart')).toBeNull();
     expect(host.textContent).toContain('Sleep stages were not provided for this session.');
     expect(mockLoader.init).not.toHaveBeenCalled();
+  });
+
+  it('keeps stage labels visible while deferring the plot, then cancels it when the card is removed', async () => {
+    let finish!: (visible: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { finish = resolve; });
+    const cancel = vi.fn(() => finish(false));
+    vi.spyOn(chartViewportQueue, 'wait').mockReturnValue({ ready, cancel });
+    fixture.componentRef.setInput('point', sleepPoint());
+    fixture.componentRef.setInput('sourceLabel', 'Suunto');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(chartViewportQueue.wait).toHaveBeenCalled());
+
+    expect(fixture.nativeElement.textContent).toContain('Deep02h 00m');
+    expect(mockLoader.init).not.toHaveBeenCalled();
+    fixture.destroy();
+    await Promise.resolve();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mockLoader.init).not.toHaveBeenCalled();
+    expect(mockLoader.setOption).not.toHaveBeenCalled();
   });
 });

@@ -145,8 +145,28 @@ describe('chart viewport queue', () => {
   it('uses the nearest scrolling container so the preload margin works inside the app shell and sheets', () => {
     const queue = new ChartViewportQueue();
     const shell = document.createElement('div'); shell.style.overflowY = 'auto';
+    Object.defineProperties(shell, { clientHeight: { value: 800 }, scrollHeight: { value: 2400 } });
     const clippedTile = document.createElement('div'); clippedTile.style.overflowY = 'hidden';
     const chart = document.createElement('div'); shell.append(clippedTile); clippedTile.append(chart);
+    document.body.append(shell);
+    const wait = queue.wait(chart);
+    expect(IntersectionObserver).toHaveBeenCalledWith(expect.any(Function), { root: shell, rootMargin: '600px 0px' });
+    wait.cancel(); shell.remove();
+  });
+
+  it('skips non-scrolling tab bodies and horizontal chart wrappers', () => {
+    const queue = new ChartViewportQueue();
+    const shell = document.createElement('div'); shell.style.overflowY = 'auto';
+    Object.defineProperties(shell, { clientHeight: { value: 800 }, scrollHeight: { value: 2400 } });
+    const tabBody = document.createElement('div'); tabBody.style.overflowY = 'auto';
+    Object.defineProperties(tabBody, { clientHeight: { value: 400 }, scrollHeight: { value: 400 } });
+    const horizontalWrapper = document.createElement('div'); horizontalWrapper.style.overflow = 'auto';
+    Object.defineProperties(horizontalWrapper, {
+      clientHeight: { value: 300 }, scrollHeight: { value: 300 },
+      clientWidth: { value: 400 }, scrollWidth: { value: 1200 },
+    });
+    const chart = document.createElement('div');
+    shell.append(tabBody); tabBody.append(horizontalWrapper); horizontalWrapper.append(chart);
     document.body.append(shell);
     const wait = queue.wait(chart);
     expect(IntersectionObserver).toHaveBeenCalledWith(expect.any(Function), { root: shell, rootMargin: '600px 0px' });

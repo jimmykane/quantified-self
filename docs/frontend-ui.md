@@ -108,10 +108,13 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
-Dashboard plot components and Health metric plots opt into `EChartsHostController.deferUntilNearViewport`.
+Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, body-weight, power-systems,
+swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
 `ChartViewportQueue` observes the nearest scroll container (including the app shell and bottom sheets) with a 600px
 preload margin and admits one plot per animation frame after the shared ECharts library is ready, so a cold
-import cannot release multiple queued plots into the same render frame. Only plot initialization is deferred: Angular titles,
+import cannot release multiple queued plots into the same render frame. Non-scrolling tab bodies and horizontal-only
+wrappers are skipped when choosing that root, so their offscreen charts still wait for the page viewport.
+Only plot initialization is deferred: Angular titles,
 values, accessible descriptions, and controls remain present. Initialized plots stay mounted when scrolled away.
 Destroyed or replaced plot hosts cancel their pending work, including waits for a previous theme. A chart that
 leaves the preload area while the library loads stays deferred until it returns. When data changes before first visibility, only the latest waiting
@@ -133,6 +136,8 @@ their existing Sports Lib formatting, data loading, accessible chart description
 
 Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces. Sleep-stage
 legend columns wrap to the available card width, including the narrow columns in tablet Highlights.
+Highlight **Open** actions scroll to and focus the explorer heading, including when that metric is already selected.
+They preserve the selected date range and source filters; opening the current metric does not save preferences again.
 
 ### Bounded surfaces
 

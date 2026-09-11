@@ -101,8 +101,11 @@ export class ChartViewportQueue {
 function scrollRoot(element: HTMLElement): HTMLElement | null {
   // The app shell and bottom sheets scroll independently of the document. Using
   // their scrollport lets the preload margin reach beyond the currently visible plots.
+  // Tabs and horizontal chart wrappers also compute overflow-y: auto, but must
+  // not become roots when they don't scroll vertically: they can be far offscreen.
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-    if (/(auto|scroll)/.test(getComputedStyle(parent).overflowY)) return parent;
+    if (/(auto|scroll)/.test(getComputedStyle(parent).overflowY)
+      && parent.scrollHeight > parent.clientHeight) return parent;
   }
   return null;
 }

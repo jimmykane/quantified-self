@@ -6,6 +6,12 @@
 
 .health-metrics-sheet { flex-direction: column; }
 
+.health-metric-selected-check {
+  display: inline-flex;
+  align-items: center;
+  color: var(--mat-sys-primary);
+}
+
 .health-metrics-sheet h3 {
   font: var(--mat-sys-label-medium);
   color: var(--mat-sys-on-surface-variant);

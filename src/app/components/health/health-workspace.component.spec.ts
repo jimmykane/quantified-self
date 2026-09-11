@@ -848,6 +848,8 @@ describe('HealthWorkspaceComponent', () => {
     await createComponent();
     const host = fixture.nativeElement as HTMLElement;
     const openHeartRate = host.querySelector<HTMLButtonElement>('[aria-label="Open Today’s heart rate"]');
+    const heading = host.querySelector<HTMLElement>('#health-detail-title')!;
+    heading.scrollIntoView = vi.fn();
 
     openHeartRate?.click();
     fixture.detectChanges();
@@ -858,6 +860,16 @@ describe('HealthWorkspaceComponent', () => {
     expect(host.querySelector('.health-priority-card-selected')).toBeNull();
     expect(openHeartRate?.getAttribute('aria-pressed')).toBeNull();
     expect(host.querySelector('.health-metric-option-selected')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(heading);
+    expect(heading.scrollIntoView).toHaveBeenCalledWith({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+
+    // Reopening the same metric must still take the user from its highlight to the chart.
+    openHeartRate?.click();
+    expect(document.activeElement).toBe(heading);
+    expect(heading.scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(component.selectedRange()).toBe('30d');
   });
 
   it('removes unavailable highlights instead of rendering empty cards', async () => {

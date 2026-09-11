@@ -1,5 +1,5 @@
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -194,6 +194,7 @@ export class HealthWorkspaceComponent {
   private metricPickerRef: MatBottomSheetRef<HealthMetricsBottomSheetComponent, HealthWorkspaceMetricSelection> | null = null;
   readonly metricPickerOpen = signal(false);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly metricDetail = viewChild<ElementRef<HTMLElement>>('metricDetail');
   private manualDialogRef: MatDialogRef<unknown> | null = null;
   private manualAccountGeneration = 0;
   private readonly snackBar = inject(MatSnackBar);
@@ -1087,7 +1088,12 @@ export class HealthWorkspaceComponent {
   }
 
   selectPriorityMetric(metric: HealthWorkspaceMetricSelection): void {
-    this.selectMetric(metric);
+    // Opening an already selected metric is still navigation from the highlights.
+    this.haptics.selection();
+    this.selectAndSaveMetric(metric);
+    const heading = this.metricDetail()?.nativeElement;
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView?.({ block: 'start', inline: 'nearest', behavior: 'auto' });
   }
 
   selectMetric(metric: HealthWorkspaceMetricSelection): void {
