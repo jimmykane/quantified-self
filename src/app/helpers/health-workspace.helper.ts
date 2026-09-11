@@ -190,7 +190,7 @@ export interface HealthPriorityRow {
   contextText: string;
   observedAtMs: number;
   details?: readonly HealthPriorityDetail[];
-  sleepPoint?: DashboardSleepTrendPoint;
+  sleepPoint?: Omit<DashboardSleepTrendPoint, 'sourceKey' | 'hrvSourceKey'>;
 }
 
 export interface HealthPriorityTrendSelectionOptions {
@@ -938,7 +938,14 @@ export function buildSleepPriorityRows(
     }
   }
   return [...latestBySource.entries()].map(([key, { session, provider }], index) => {
+    const id = `sleep-priority-${index + 1}`;
     const sleepPoint = buildDashboardSleepTrendContext([session], { nowMs }).latestPoint || undefined;
+    if (sleepPoint) {
+      // This fresh display point does not need the internal identities used for readiness source matching.
+      sleepPoint.id = id;
+      delete sleepPoint.sourceKey;
+      delete sleepPoint.hrvSourceKey;
+    }
     const scoreText = formatSleepMetricValue(
       SLEEP_SPORTS_LIB_METRIC_FIELDS.Score,
       session.score?.value,
@@ -960,7 +967,7 @@ export function buildSleepPriorityRows(
       heartRateText !== '—' ? { label: 'Avg HR', valueText: heartRateText } : null,
     ].filter((detail): detail is HealthPriorityDetail => detail !== null);
     return {
-      id: `sleep-priority-${index + 1}`,
+      id,
       sourceSelectionKey: opaqueHealthSeriesId(key),
       provider,
       providerLabel: providerLabel(provider),

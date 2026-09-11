@@ -1289,6 +1289,28 @@ describe('Health workspace helpers', () => {
       providerLabel: 'Garmin',
     });
     expect(JSON.stringify(rows)).not.toContain('provider-user');
+    for (const row of rows) {
+      expect(row.sleepPoint).not.toHaveProperty('sourceKey');
+      expect(row.sleepPoint).not.toHaveProperty('hrvSourceKey');
+      expect(row.sleepPoint?.id).toBe(row.id);
+    }
+  });
+
+  it.each(Object.values(SLEEP_PROVIDERS))('keeps %s account and HRV identities out of Sleep priority display points', provider => {
+    const session = {
+      ...sleepSession({id: undefined, source: {
+        provider, providerUserId: 'private-provider-user', sourceSessionKey: 'private-session-key',
+      }}),
+      nightlyHrvSourceKey: 'private-health-hrv-source',
+    };
+    const original = structuredClone(session);
+    const [row] = buildSleepPriorityRows([session]);
+    expect(row.sleepPoint?.averageHrvMs).toBe(62);
+    expect(row.sleepPoint?.id).toBe(row.id);
+    expect(row.sleepPoint).not.toHaveProperty('sourceKey');
+    expect(row.sleepPoint).not.toHaveProperty('hrvSourceKey');
+    expect(JSON.stringify(row)).not.toContain('private-');
+    expect(session).toEqual(original);
   });
 
   it('uses the explicit Sports Lib Sleep classes for Health workspace session rows', () => {

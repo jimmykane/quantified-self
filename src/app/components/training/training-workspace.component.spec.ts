@@ -235,7 +235,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('main.training-workspace')?.lastElementChild).toBe(bodyContextSection);
     expect(element.querySelector('app-durability-reading-guide[context="training"]')).toBeNull();
     expect(element.querySelector('app-tile-chart')).toBeNull();
-    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
+    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training load only');
+    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('Sleep and other recovery signals appear separately');
     const recoveryContext = element.querySelector('.training-recovery-context');
     const importedRecovery = recoveryContext?.querySelector('.training-readiness-imported-recovery');
     const sleepHistory = recoveryContext?.querySelector('.training-recovery-history');

@@ -3,6 +3,7 @@ import { firstValueFrom, of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { READINESS_EVIDENCE_VERSION, READINESS_FORMULA_VERSION } from '@shared/readiness';
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
@@ -746,7 +747,7 @@ describe('DashboardDerivedMetricsService', () => {
     });
   });
 
-  it('maps a formula-consistent readiness snapshot and marks a mismatched score stale', async () => {
+  it('maps current readiness evidence and marks mismatched scores or outdated evidence stale', async () => {
     const uid = 'user-1';
     const nowMs = Date.now();
     const now = new Date(nowMs);
@@ -769,7 +770,8 @@ describe('DashboardDerivedMetricsService', () => {
       overnightHeartRateRatio: null,
     }));
     const payload = {
-      formulaVersion: 3,
+      formulaVersion: READINESS_FORMULA_VERSION,
+      evidenceVersion: READINESS_EVIDENCE_VERSION,
       dayBoundary: 'UTC',
       asOfDayMs,
       generatedAtMs: nowMs,
@@ -790,6 +792,11 @@ describe('DashboardDerivedMetricsService', () => {
           ...payload,
           points: points.map((point, index) => index === 13 ? { ...point, score: 66 } : point),
         },
+      }))
+      .mockReturnValueOnce(of({
+        status: 'ready',
+        schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+        payload: { ...payload, evidenceVersion: undefined },
       }));
 
     const validState = await firstValueFrom(service.watch({ uid }, {
@@ -798,11 +805,16 @@ describe('DashboardDerivedMetricsService', () => {
     const invalidState = await firstValueFrom(service.watch({ uid }, {
       metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
     }));
+    const outdatedState = await firstValueFrom(service.watch({ uid }, {
+      metricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+    }));
 
     expect(validState.trainingReadiness).toEqual(payload);
     expect(validState.trainingReadinessStatus).toBe('ready');
     expect(invalidState.trainingReadiness).toBeNull();
     expect(invalidState.trainingReadinessStatus).toBe('stale');
+    expect(outdatedState.trainingReadiness).toBeNull();
+    expect(outdatedState.trainingReadinessStatus).toBe('stale');
   });
 
   it('maps a valid body-weight trend and self-heals a malformed ready snapshot', async () => {

@@ -128,7 +128,9 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('No settings or data writes');
     expect(text).toContain('External clients have their own privacy and retention practices');
     expect(mcpFixture.debugElement.queryAll(By.directive(CompactRowComponent))).toHaveLength(9);
-    expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(7);
+    expect(mcpFixture.nativeElement.querySelectorAll('.faq-item')).toHaveLength(PUBLIC_SEO_PAGES.mcpServer.faqItems.length);
+    expect(text).toContain('Can I analyze detailed workout samples instead of the 400-point chart?');
+    expect(text).toContain('no new permission or provider reconnection is required');
     expect(text).toContain('Activity descriptions');
     expect(text).toContain('Timeline notes');
     expect(text).toContain('sensitive health or personal');

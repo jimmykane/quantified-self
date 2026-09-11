@@ -1956,6 +1956,10 @@ or persisted write paths change.
 
 ### Frontend
 
+Readiness service fixtures must include the current `READINESS_FORMULA_VERSION` and `READINESS_EVIDENCE_VERSION`.
+Keep separate stale-state coverage for an inconsistent score and missing evidence version, so a valid-fixture failure
+cannot mask the intended contract check. Freshness tooltip tests must preserve the training-load/recovery distinction.
+
 Run the closest helper/component specs, including:
 
 ```text
