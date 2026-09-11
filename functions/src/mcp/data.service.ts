@@ -5665,15 +5665,17 @@ function extractActivityChartSourceFiles(
     const bucket = source.bucket === undefined
       ? undefined
       : asBoundedString(source.bucket, 200, /^[A-Za-z0-9._-]+$/);
-    if (!path || (source.bucket !== undefined && !bucket)) {
+    const generation = source.generation === undefined
+      ? undefined
+      : asBoundedString(source.generation, 40, /^\d+$/);
+    if (!path || (source.bucket !== undefined && !bucket)
+      || (source.generation !== undefined && !generation)) {
       return [];
     }
     return [{
       path,
       ...(bucket ? { bucket } : {}),
-      ...(asBoundedString(source.generation, 40, /^\d+$/)
-        ? { generation: `${source.generation}` }
-        : {}),
+      ...(generation ? { generation } : {}),
       startDate: new Date(0),
       ...(asBoundedString(source.originalFilename, 255)
         ? { originalFilename: `${source.originalFilename}` }

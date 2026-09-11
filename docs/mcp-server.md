@@ -953,7 +953,7 @@ available and within budgets; no backfill or persistent cache is created.
 ## Detailed activity samples
 
 `get_activity_samples` is additive. The registered chart tool, catalog, point limits and response shape remain unchanged.
-Use charts for compact overviews, persisted metrics for existing summaries, and samples for interval calculations or
+Use charts for compact visual overviews, persisted metrics for workout summaries, and samples for interval calculations or
 complete requested series. The same `activity-details:read` grant registers and authorizes this tool; there is no new
 OAuth scope, consent step, provider connection or reimport requirement. Clients with cached metadata must discover the
 new tool after a server/app refresh. Client-specific tool approvals are separate from QS OAuth grants.
@@ -990,7 +990,8 @@ Pagination is stateless. Encrypted cursors are bound to owner, connection, activ
 and a digest of selected canonical data; they expire 30 minutes after the first page. Source or parser-output changes
 require restarting instead of joining different revisions. Each page checks active-account state, current event and
 activity identity, approved Storage paths and the existence of exact object generations before and after projection.
-Sources without stored generations are pinned to the current immutable generation for each read. A deleted object,
+Sources without stored generations are pinned to the current immutable generation for each read. Malformed stored
+generations make the source unavailable rather than silently falling back to the latest file. A deleted object,
 changed parent or removed account cannot be served from cached data. Bearer revocation remains checked by the HTTP
 boundary on every request.
 

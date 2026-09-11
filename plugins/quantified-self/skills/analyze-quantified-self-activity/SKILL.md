@@ -21,9 +21,10 @@ Resolve activities through opaque public references and request only the detail 
    swim-length, and chart capabilities actually available. Request granular data only when relevant to the activity
    type and question. For a description-only request, read the separately authorized description directly after
    resolving the activity; a numeric overview or chart is unnecessary.
-3. Discover the shared chart/sample metric catalog supported for the activity type. Use compact chart data for an
-   overview and the detailed-sample capability for interval analysis, calculations, or complete sample requests.
-   Prefer persisted summary metrics when they already answer the question. Request only the needed metrics and range.
+3. Prefer persisted summary metrics when they already answer the question. For charts or detailed samples, discover
+   the shared chart/sample metric catalog supported for the activity type. Use compact chart data for a visual overview
+   and the detailed-sample capability for interval analysis, calculations, or complete sample requests. Request only
+   the needed metrics and range.
 4. Chart points represent whole-activity downsampling. Never calculate workout averages, time in zones, or correlations
    from them. Detailed sample pages use aligned elapsed-second arrays; preserve null gaps, canonical units, range and
    page counts. Missing readings are not zero and must not be interpolated. Distinguish the source stream length from

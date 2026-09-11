@@ -554,7 +554,7 @@ export function summarizeMcpOutputValidationIssues(
   }));
 }
 
-export const MCP_ACTIVITY_SAMPLES_INSTRUCTIONS = 'For an activity overview use get_activity_chart_data. For detailed samples, interval analysis or calculations, discover metrics with list_activity_chart_metrics and use get_activity_samples with only the needed metrics and elapsed-second range. Keep the same query and limit when following nextCursor; finish the requested range before claiming complete coverage. Null means a missing reading. Never calculate whole-activity averages, time in zones or correlations from downsampled chart points; prefer persisted summary metrics when they answer the question.';
+export const MCP_ACTIVITY_SAMPLES_INSTRUCTIONS = 'Use existing activity summaries for ordinary workout overviews. Use get_activity_chart_data for a visual overview. For detailed samples, interval analysis or calculations, discover metrics with list_activity_chart_metrics and use get_activity_samples with only the needed metrics and elapsed-second range. Keep the same query and limit when following nextCursor; finish the requested range before claiming complete coverage. Null means a missing reading. Never calculate whole-activity averages, time in zones or correlations from downsampled chart points; prefer persisted summary metrics when they answer the question.';
 
 function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   const instructions = [
@@ -1302,7 +1302,7 @@ export function createMcpServer(
 
     registerMcpTool(server, 'get_activity_samples', {
       title: 'Get activity samples',
-      description: 'Read all available selected activity samples in bounded pages on an elapsed-second axis, without chart downsampling. Discover metrics and canonical units with list_activity_chart_metrics. Use for interval analysis, calculations or detailed data requests; prefer chart data for an overview. Missing readings are null, never zero-filled. Requires existing Activity details access; never returns coordinates, absolute timestamps, original files or provider/device metadata. Reads existing original files only, so unavailable sources cannot be reconstructed. Follow nextCursor with the same activity, metrics, range and limit; cursors expire after 30 minutes and a changed source requires restarting.',
+      description: 'Read all available selected activity samples in bounded pages on an elapsed-second axis, without chart downsampling. Discover metrics and canonical units with list_activity_chart_metrics. Use for interval analysis, calculations or detailed data requests; prefer persisted summaries for workout overviews and chart data for visual overviews. Missing readings are null, never zero-filled. Requires existing Activity details access; never returns coordinates, absolute timestamps, original files or provider/device metadata. Reads existing original files only, so unavailable sources cannot be reconstructed. Follow nextCursor with the same activity, metrics, range and limit; cursors expire after 30 minutes and a changed source requires restarting.',
       inputSchema: z.strictObject({
         activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
         metrics: z.array(z.string().min(1).max(120)).min(1).max(4),

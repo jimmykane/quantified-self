@@ -777,6 +777,29 @@ describe('MCP HTTP scope enforcement', () => {
     }
   });
 
+  it.each([false, true])('reserves chart parsing for visual overviews with metrics access %s', async includeMetrics => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, ...(includeMetrics ? [MCP_OAUTH_SCOPES.MetricsRead] : [])],
+    }, 'https://quantified-self.io');
+    const client = new Client({name: 'sample-routing-test-client', version: '1.0.0'});
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      expect(instructions).toContain('Use existing activity summaries for ordinary workout overviews');
+      expect(instructions).toContain('Use get_activity_chart_data for a visual overview');
+      expect(instructions).not.toContain('For an activity overview use get_activity_chart_data');
+      expect(instructions.includes('Use get_activity_overview before granular activity reads')).toBe(includeMetrics);
+      const sampleTool = (await client.listTools()).tools.find(tool => tool.name === 'get_activity_samples');
+      expect(sampleTool?.description).toContain('prefer persisted summaries for workout overviews and chart data for visual overviews');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('advertises recent-jump discovery with activity-detail access alone', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer({

@@ -734,6 +734,38 @@ describe('MCP data service', () => {
     return {service, input: {...input, scopes: ['activity-details:read'], metrics: ['hr'], limit: 2}, reads, context};
   }
 
+  it.each(['broken', '', ' ', null, 123, -1, '9'.repeat(41)])('rejects invalid stored source generation %j before reading charts or samples', async generation => {
+    const {service, input, reads, context} = await samplesFixture();
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      ...context, event: {...context.event, data: {
+        originalFile: {...context.event.data.originalFile, generation},
+      }},
+    });
+    try {
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available'});
+      await expect(service.getActivityChartData(input)).rejects.toMatchObject({code: 'detail_not_available'});
+      expect(reads.sourceVersions).not.toHaveBeenCalled();
+      expect(dependencies.consumeActivityChartRateLimit).not.toHaveBeenCalled();
+      expect(dependencies.downloadActivityChartSource).not.toHaveBeenCalled();
+      expect(dependencies.buildActivityChartData).not.toHaveBeenCalled();
+    } finally { reads.cache.clear(); }
+  });
+
+  it.each([undefined, '123', ' 123 '])('preserves legacy sources and normalizes valid stored source generation %j', async generation => {
+    const {service, input, reads, context} = await samplesFixture();
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      ...context, event: {...context.event, data: {
+        originalFile: {...context.event.data.originalFile, ...(generation === undefined ? {} : {generation})},
+      }},
+    });
+    try {
+      await service.getActivitySamples(input);
+      expect(reads.sourceVersions.mock.calls[0][2][0].generation).toBe(generation?.trim());
+      await service.getActivityChartData(input);
+      expect(vi.mocked(dependencies.buildActivityChartData).mock.calls[0][0].sourceFiles[0].generation).toBe(generation?.trim());
+    } finally { reads.cache.clear(); }
+  });
+
   it('reads sample pages through the shared owner context and existing parser rate limit with real opaque cursors', async () => {
     const {service, input, reads} = await samplesFixture();
     try {
