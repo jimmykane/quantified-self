@@ -303,7 +303,7 @@ export const redriveRejectedRouteOriginalCleanup = onSchedule({
   schedule: 'every 30 minutes',
   region: 'europe-west2',
   timeoutSeconds: 540,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 1,
 }, async () => {
   await redriveRejectedRouteOriginalCleanupTasks();
