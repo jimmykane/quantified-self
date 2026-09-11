@@ -38,6 +38,8 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-editor-layout > section { min-height: 0; overflow: auto; }
 .chart-library-properties h3, .chart-library-editor-layout .chart-library-preview h3 { margin-block: 0 16px; }
 @media (max-width: 959.98px) {
+  /* A desktop dialog can stay open while the viewport becomes mobile-sized. Sheets already supply this inset. */
+  .chart-library-dialog { padding-inline: 16px; box-sizing: border-box; }
   .chart-library-heading, .chart-library-layout, .chart-library-save { padding-inline: 0; }
   .chart-library-layout { grid-template-columns: minmax(0, 1fr); }
   .chart-library-browser { border-inline-end: 0; padding-inline-end: 0; }

@@ -35,6 +35,7 @@ export class DashboardChartLibraryComponent {
   readonly seed = input<DashboardPreviewInput>({ tiles: [] });
   readonly darkTheme = input(false);
   readonly search = signal('');
+  readonly usesBottomSheet = signal(false);
   readonly group = signal('all');
   readonly sectionLabel = computed(() => this.lane() === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(this.lane().slice(8) as never).label);
   readonly available = computed(() => getAvailableDashboardCharts(this.lane(), this.seed().tiles));
@@ -127,7 +128,8 @@ export class DashboardChartLibraryComponent {
     let opened$: Observable<unknown>;
     let backdrop$: Observable<MouseEvent>;
     let keydown$: Observable<KeyboardEvent>;
-    if (this.breakpoints.isMatched('(max-width: 959.98px)')) {
+    this.usesBottomSheet.set(this.breakpoints.isMatched('(max-width: 959.98px)'));
+    if (this.usesBottomSheet()) {
       const ref = this.bottomSheet.open(template, { ...options, height: '92dvh', maxHeight: '92dvh', panelClass: ['qs-bottom-sheet-container', 'qs-chart-picker-sheet'] });
       close = () => ref.dismiss(); closed$ = ref.afterDismissed(); opened$ = ref.afterOpened(); backdrop$ = ref.backdropClick(); keydown$ = ref.keydownEvents();
     } else {

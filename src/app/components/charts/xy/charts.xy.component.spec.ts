@@ -220,6 +220,19 @@ describe('ChartsXYComponent', () => {
     );
   });
 
+  it('hides overlapping value labels while retaining the full data and tooltip values', async () => {
+    component.data = Array.from({ length: 20 }, (_, index) => ({
+      type: `Activity ${index}`, [ChartDataValueTypes.Total]: 10000 + index, count: 1,
+    }));
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', { configurable: true, value: 248 });
+    fixture.detectChanges(); await waitForChartStabilization();
+    const option = getLastOption();
+    expect(option.series[0].data).toHaveLength(20);
+    expect(option.series[0].labelLayout.hideOverlap).toBe(true);
+    expect(option.tooltip.formatter({ dataIndex: 19 })).toContain('Activity 19');
+    expect(option.tooltip.formatter({ dataIndex: 19 })).toContain(formatDashboardNumericValue(DataDistance.type, 10019));
+  });
+
   it('should render summary meta as "per activity type" for activity categories', async () => {
     fixture.detectChanges();
     await waitForChartStabilization();

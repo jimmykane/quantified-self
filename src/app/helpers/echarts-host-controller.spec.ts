@@ -314,6 +314,31 @@ describe('EChartsHostController', () => {
     controller.dispose();
   });
 
+  it('keeps chart reuse and size callbacks working without ResizeObserver', async () => {
+    delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const onContainerResize = vi.fn();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, onContainerResize });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 400 });
+    await controller.init(container); await controller.init(container);
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(resizeObserverRecords).toHaveLength(0);
+    const viewportChanged = loader.subscribeToViewportResize.mock.calls[0][0] as () => void;
+    viewportChanged(); frames.shift()!(0);
+    viewportChanged(); frames.shift()!(16);
+    expect(onContainerResize).toHaveBeenCalledExactlyOnceWith({ width: 800, height: 400 });
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 280 });
+    viewportChanged(); frames.shift()!(32);
+    expect(onContainerResize).toHaveBeenLastCalledWith({ width: 280, height: 400 });
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    controller.dispose();
+    expect(frames).toHaveLength(0);
+  });
+
   it('waits for the viewport and only lets the newest pending refresh apply its data', async () => {
     let show: (ready: boolean) => void;
     const ready = new Promise<boolean>(resolve => { show = resolve; });

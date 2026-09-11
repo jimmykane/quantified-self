@@ -106,6 +106,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
+  private layoutSize: { width: number; height: number } | null = null;
   private readonly dateTypePalette: string[] = [
     AppColors.Blue,
     AppColors.Green,
@@ -138,6 +139,10 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsPieComponent]',
+      // Resizing the canvas does not rebuild the legend or donut-center typography.
+      onContainerResize: size => {
+        if (this.layoutSize?.width !== size.width || this.layoutSize.height !== size.height) void this.refreshChart();
+      },
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
@@ -218,6 +223,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     aggregateData: ReturnType<typeof getDashboardAggregateData>
   ): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
+    this.layoutSize = { width: chartWidth, height: this.chartDiv?.nativeElement?.clientHeight || 0 };
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const textColor = chartStyle.textColor;
     const isCompactLayout = chartStyle.isCompactLayout;

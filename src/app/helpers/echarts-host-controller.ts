@@ -45,6 +45,8 @@ export interface EChartsHostControllerConfig {
   enableMobileTapFeedback?: boolean;
   mobileTapFeedbackOptions?: MobileTapFeedbackOptionsResolver;
   deferUntilNearViewport?: boolean;
+  /** Update size-dependent chart options after a real container resize. */
+  onContainerResize?: (size: { width: number; height: number }) => void;
 }
 
 export class EChartsHostController {
@@ -226,6 +228,8 @@ export class EChartsHostController {
   }
 
   private observeContainer(container: HTMLElement): void {
+    // Retain the host even when only the shared viewport-resize fallback is available.
+    this.observedContainer = container;
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
@@ -237,8 +241,6 @@ export class EChartsHostController {
       this.scheduleResize();
     });
     this.resizeObserver.observe(container);
-
-    this.observedContainer = container;
   }
 
   private resizeToContainer(): void {
@@ -264,6 +266,7 @@ export class EChartsHostController {
       silent: true,
     });
     this.lastResizeSize = { width, height, pixelRatio };
+    this.config.onContainerResize?.({ width, height });
   }
 
   private getContainerSize(container: HTMLElement): { width: number; height: number } {

@@ -373,6 +373,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
               return this.formatValue(point.value);
             }
           },
+          labelLayout: { hideOverlap: true },
           emphasis: {
             focus: 'series'
           },

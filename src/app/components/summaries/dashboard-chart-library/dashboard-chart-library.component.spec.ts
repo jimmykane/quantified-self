@@ -53,6 +53,7 @@ describe('responsive chart picker interactions', () => {
   it('opens a wide dialog without expanding the dashboard', async () => {
     await component.toggle(); await settle();
     expect(document.body.querySelector('mat-dialog-container')).not.toBeNull();
+    expect(document.body.querySelector('.chart-library-dialog')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('mat-action-list')).toBeNull();
     expect(document.body.querySelector('.chart-library-detail')).not.toBeNull();
     expect(document.body.querySelectorAll('app-dashboard-chart-preview')).toHaveLength(1);
@@ -68,6 +69,7 @@ describe('responsive chart picker interactions', () => {
     const entry = button('Add KPI'); entry.focus();
     await component.toggle(); await settle();
     expect(document.body.querySelector('mat-bottom-sheet-container')).not.toBeNull();
+    expect(document.body.querySelector('.chart-library-dialog')).toBeNull();
     expect(document.body.querySelector('mat-dialog-container')).toBeNull();
     expect(open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ height: '92dvh', disableClose: true }));
     await component.close(); await settle();

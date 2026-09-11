@@ -5,7 +5,7 @@
   </button>
 }
 <ng-template #picker>
-<section class="chart-library bottom-sheet-container" [attr.aria-busy]="state.busy()">
+<section class="chart-library bottom-sheet-container" [class.chart-library-dialog]="!usesBottomSheet()" [attr.aria-busy]="state.busy()">
   <div class="chart-library-heading">
     <h2>{{ pickerHeading() }}</h2>
     <button mat-icon-button aria-label="Close library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>

@@ -117,15 +117,22 @@ Destroyed or replaced plot hosts cancel their pending work, including waits for 
 leaves the preload area while the library loads stays deferred until it returns. When data changes before first visibility, only the latest waiting
 refresh may apply its data. Browsers without viewport observation use ordinary immediate initialization.
 The shared host resizes only when its container dimensions or pixel ratio change, while preserving the first
-resize that releases fixed preview dimensions. Dashboard section layout is recalculated only when its column count
+resize that releases fixed preview dimensions. Charts with size-dependent options can use its `onContainerResize`
+callback; Recovery and generic pies rebuild their legend and center typography after real size changes, retaining
+the ECharts instance. The host remains reusable and resizable without `ResizeObserver` through the shared viewport
+fallback. Dashboard section layout is recalculated only when its column count
 or row-height mode changes, so browser toolbar height changes do not rebuild an unchanged layout.
+
+An open chart picker keeps its original Material shell when the viewport crosses a breakpoint. Its mobile sheet
+can widen to accommodate the desktop list and preview, while a desktop dialog retains content insets when narrowed.
 
 `title`, optional `titleId`, and `headingLevel` (2, 3, or 4) own heading semantics; `summary`, `icon`, and `iconTone`
 provide optional context. Default projected content can contain existing charts, tables, or metric displays.
 `compactRowAction` projects a Material control into the action slot. The row is presentational: consumers retain
 their existing Sports Lib formatting, data loading, accessible chart descriptions, and single haptic action owner.
 
-Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces.
+Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces. Sleep-stage
+legend columns wrap to the available card width, including the narrow columns in tablet Highlights.
 
 ### Bounded surfaces
 
