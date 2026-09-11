@@ -85,6 +85,9 @@ The following rules are architectural constraints:
   0–100 bars. Those metrics retain exact values, semantic status/delta treatments, or their existing time-series charts.
   The shared indicator is native HTML/CSS for accessibility and low per-row cost; ECharts remains reserved for actual
   trends, distributions, forecasts, and interactive chart surfaces.
+  These display-only indicators use pointer pass-through so dragging over their tracks, fills, or coverage segments
+  reaches the surrounding scroll surface in Training and Dashboard Today. Their progressbar roles and accessible
+  labels remain exposed; they must not become sliders or intercept touch gestures.
 
 ## Ownership: Sports-lib Versus Quantified Self
 

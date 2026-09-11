@@ -1,4 +1,10 @@
-:host { display: block; min-width: 0; }
+:host {
+  display: block;
+  min-width: 0;
+  // Display-only indicators must not become gesture targets inside a scrolling page.
+  // Pointer pass-through preserves the progressbar/label in the accessibility tree.
+  pointer-events: none;
+}
 .metric-indicator-track { position: relative; display: block; width: 100%; height: 8px; overflow: hidden; border-radius: 999px; background: var(--mat-sys-surface-container-highest); }
 .metric-indicator-track.compact { height: 6px; }
 .metric-indicator-fill, .metric-indicator-deviation-fill { position: absolute; z-index: 1; inset-block: 0; border-radius: inherit; background: var(--mat-sys-primary); }
