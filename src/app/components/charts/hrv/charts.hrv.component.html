@@ -9,15 +9,25 @@
     </div>
     <div class="hrv-window">{{ context()?.window?.label }}</div>
   </header>
-  @if (isLoading() || context()?.loading) {
+  @if (!chart() && (isLoading() || context()?.loading)) {
     <div class="hrv-state" role="status"><mat-spinner diameter="24" aria-hidden="true" />Loading HRV…</div>
-  } @else if (context()?.error) {
+  } @else if (!chart() && context()?.error) {
     <div class="hrv-state" role="status">Could not load HRV history. Choose a range to try again.</div>
   } @else if (chart(); as selected) {
+    @if (isLoading() || context()?.loading || context()?.error) {
+      <div class="hrv-update" role="status">
+        @if (isLoading() || context()?.loading) {
+          <mat-progress-bar mode="indeterminate" aria-label="Updating HRV" />
+          <span>Updating HRV{{ context()?.requestedWindow ? ' · ' + context()!.requestedWindow!.label : '' }}. Previous chart shown.</span>
+        } @else {
+          <span>Could not load the requested range. Previous chart shown. Choose a range to retry.</span>
+        }
+      </div>
+    }
     @if (charts().length > 1) {
       <mat-tab-group animationDuration="0ms" [selectedIndex]="selectedIndex()" (selectedIndexChange)="selectSource($event)" aria-label="HRV source">
         @for (source of charts(); track source.key) {
-          <mat-tab [label]="source.model.series.sourceLabel + ' · ' + source.model.series.semanticLabel" />
+          <mat-tab [disabled]="isLoading() || context()?.loading" [label]="source.model.series.sourceLabel + ' · ' + source.model.series.semanticLabel" />
         }
       </mat-tab-group>
     }

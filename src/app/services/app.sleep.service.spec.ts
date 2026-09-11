@@ -15,6 +15,7 @@ import {
   where,
 } from 'app/firebase/firestore';
 import { AppSleepService } from './app.sleep.service';
+import { HrvHistoryService } from './hrv-history.service';
 
 vi.mock('app/firebase/firestore', () => {
   class MockFirestore { }
@@ -115,6 +116,28 @@ describe('AppSleepService', () => {
   it('returns an empty stream without a user id', async () => {
     await expect(firstValueFrom(service.watchForDashboard('', null, null))).resolves.toEqual([]);
     expect(collection).not.toHaveBeenCalled();
+  });
+
+  it('shares exact HRV history listeners, isolates owners and drops them after the last subscriber', () => {
+    const records$ = new BehaviorSubject([]);
+    vi.mocked(collectionData).mockReturnValue(records$);
+    const history = TestBed.inject(HrvHistoryService);
+    const first = history.watch('owner', '2026-07-01', '2026-09-11').subscribe();
+    const second = history.watch('owner', '2026-07-01', '2026-09-11').subscribe();
+    expect(collectionData).toHaveBeenCalledOnce();
+    const other = history.watch('other', '2026-07-01', '2026-09-11').subscribe();
+    expect(collectionData).toHaveBeenCalledTimes(2);
+    first.unsubscribe(); second.unsubscribe(); other.unsubscribe();
+    expect(records$.observed).toBe(false);
+    const fresh = history.watch('owner', '2026-07-01', '2026-09-11').subscribe();
+    expect(collectionData).toHaveBeenCalledTimes(3);
+    fresh.unsubscribe();
+  });
+
+  it('rejects an overfull HRV page instead of projecting partial data', async () => {
+    vi.mocked(collectionData).mockReturnValue(of(Array.from({ length: 34 }, () => ({}))));
+    await expect(firstValueFrom(TestBed.inject(HrvHistoryService).watch('owner', '2026-07-01', '2026-09-11')))
+      .rejects.toThrow('read limit');
   });
 
   it('returns false for sleep availability without a user id', async () => {

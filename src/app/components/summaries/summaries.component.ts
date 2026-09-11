@@ -335,6 +335,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private readonly hrvService = inject(DashboardHrvService);
   private hrvSubscription: Subscription | null = null;
   private hrvListenerKey: string | null = null;
+  private hrvDisplayKey: string | null = null;
   private hrvTrend: DashboardHrvContext | null = null;
   private sleepSubscription: Subscription | null = null;
   private sleepListenerKey: string | null = null;
@@ -976,14 +977,22 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     const visible = dashboardHrvWindows(this.hrvTrendRange, endMs).visible;
     const key = JSON.stringify([uid, visible.startDate, visible.endDate, units]);
     if (key === this.hrvListenerKey) return;
+    const displayKey = JSON.stringify([uid, units]);
+    const previous = this.hrvDisplayKey === displayKey && this.hrvTrend?.charts.length ? this.hrvTrend : null;
     this.unsubscribeHrv();
     this.hrvListenerKey = key;
-    this.hrvTrend = { window: visible, charts: [], loading: true, error: false };
+    this.hrvDisplayKey = displayKey;
+    this.hrvTrend = previous
+      ? { ...previous, requestedWindow: visible, loading: true, error: false }
+      : { window: visible, charts: [], loading: true, error: false };
     this.hrvSubscription = this.hrvService.watch(uid, this.hrvTrendRange, endMs, units).subscribe({
       next: context => { this.hrvTrend = context; void this.rebuildTilesFromCurrentState(); },
       error: () => {
         this.hrvListenerKey = null;
-        this.hrvTrend = { window: visible, charts: [], loading: false, error: true };
+        const retained = this.hrvTrend?.charts.length ? this.hrvTrend : previous;
+        this.hrvTrend = retained
+          ? { ...retained, requestedWindow: visible, loading: false, error: true }
+          : { window: visible, charts: [], loading: false, error: true };
         void this.rebuildTilesFromCurrentState();
       },
     });
@@ -993,6 +1002,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.hrvSubscription?.unsubscribe();
     this.hrvSubscription = null;
     this.hrvListenerKey = null;
+    this.hrvDisplayKey = null;
     this.hrvTrend = null;
   }
 

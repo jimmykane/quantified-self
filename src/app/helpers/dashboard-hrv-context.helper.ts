@@ -12,7 +12,7 @@ import {
 
 const DAY_MS = 86_400_000;
 
-/** Match Health's calendar windows, with a separate 60-day baseline query so 1y stays within read limits. */
+/** Match Health's calendar windows; project the visible and 60-day baseline windows separately. */
 export function dashboardHrvWindows(range: AppDashboardSleepTrendRange = '14d', endMs = Date.now()) {
   const visible = resolveHealthWorkspaceWindow({ metric: HEALTH_METRIC_IDS.HeartRateVariability, range, endDate: localCalendarDate(endMs) });
   const startDayMs = Date.parse(visible.startDate);
@@ -53,4 +53,7 @@ export function buildDashboardHrvContext(
   return { charts, window, loading: false, error: false };
 }
 
-export type DashboardHrvContext = ReturnType<typeof buildDashboardHrvContext>;
+export type DashboardHrvContext = ReturnType<typeof buildDashboardHrvContext> & {
+  /** While updating, window and charts still describe the last complete result. */
+  requestedWindow?: ReturnType<typeof dashboardHrvWindows>['visible'];
+};

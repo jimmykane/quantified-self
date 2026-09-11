@@ -5,6 +5,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { AppChartSharedModule } from '../../../modules/app-chart-shared.module';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
@@ -13,7 +14,7 @@ import { AppHapticsService } from '../../../services/app.haptics.service';
 
 @Component({
   selector: 'app-hrv-chart', standalone: true,
-  imports: [MatTabsModule, MatProgressSpinnerModule, MatButtonModule, MatIconModule, MatTooltipModule, AppChartSharedModule, HealthMetricSeriesChartComponent],
+  imports: [MatTabsModule, MatProgressSpinnerModule, MatProgressBarModule, MatButtonModule, MatIconModule, MatTooltipModule, AppChartSharedModule, HealthMetricSeriesChartComponent],
   templateUrl: './charts.hrv.component.html', styleUrls: ['./charts.hrv.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

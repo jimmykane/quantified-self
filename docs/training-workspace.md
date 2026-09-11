@@ -703,7 +703,10 @@ Training state and Readiness are fixed inside the optional Today summary:
   Spot/activity/manual HRV and conflicting sources remain unavailable. HRV baselines also require the same measurement
   source/semantic; switching between Sleep averages and dedicated Health overnight measurements starts separate HRV
   evidence. No all-day/resting HR value substitutes for overnight HR. Live Dashboard/Training listeners observe every
-  bounded Health page. Historical readiness and recovery builders use the same resolver over their bounded Sleep windows;
+  bounded Health page. `AppSleepService` delegates those live reads to `HrvHistoryService`, which shares matching
+  owner/date subscriptions until the last consumer leaves. The Dashboard HRV tile reuses its own complete Health
+  history for Sleep enrichment; source matching and native-HRV precedence remain the same. Historical readiness and
+  recovery builders use the same resolver over their bounded Sleep windows;
   separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
   HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
   `training_readiness.payload.evidenceVersion = 1` lets the frontend and backend freshness gate rebuild old readiness

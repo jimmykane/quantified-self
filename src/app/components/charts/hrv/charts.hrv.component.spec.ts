@@ -62,9 +62,26 @@ describe('dashboard HRV chart', () => {
     fixture.componentInstance.selectSource(0);
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
-  it('clears the chart during loading, on errors and in empty windows', () => {
+  it('keeps the mounted chart and its original axes while another range loads or fails', () => {
     const fixture = TestBed.createComponent(ChartsHrvComponent);
-    for (const value of [{ ...context, loading: true }, { ...context, error: true }, { ...context, charts: [] }]) {
+    fixture.componentRef.setInput('context', context); fixture.detectChanges();
+    const original = fixture.debugElement.query(By.directive(HealthChartStub)).componentInstance;
+    const requestedWindow = { ...context.window, label: 'Requested window', startTimeMs: context.window.startTimeMs - 86400000 };
+    for (const state of [{ loading: true, error: false }, { loading: false, error: true }]) {
+      fixture.componentRef.setInput('context', { ...context, ...state, requestedWindow }); fixture.detectChanges();
+      const chart = fixture.debugElement.query(By.directive(HealthChartStub)).componentInstance;
+      expect(chart).toBe(original);
+      expect(chart.startTimeMs).toBe(context.window.startTimeMs);
+      expect(fixture.nativeElement.querySelector('.hrv-window').textContent).toContain(context.window.label);
+      expect(fixture.nativeElement.querySelector('[role="status"]').textContent).toContain('Previous chart shown');
+    }
+    fixture.componentRef.setInput('context', context); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="status"]')).toBeNull();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('shows initial loading, errors and confirmed empty windows without an old chart', () => {
+    const fixture = TestBed.createComponent(ChartsHrvComponent);
+    for (const value of [{ ...context, charts: [], loading: true }, { ...context, charts: [], error: true }, { ...context, charts: [] }]) {
       fixture.componentRef.setInput('context', value); fixture.detectChanges();
       expect(fixture.debugElement.query(By.directive(HealthChartStub))).toBeNull();
       expect(fixture.nativeElement.querySelector('[role="status"]')).not.toBeNull();

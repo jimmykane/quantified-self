@@ -192,9 +192,14 @@ and on failure. Calendar previews use the stateless calendar grid, so browsing c
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
 
 The optional HRV preset (`HrvTrend`) belongs in Training State beside Sleep. `DashboardHrvService` supplies both the
-saved tile and picker with the same normalized Health/Sleep sources as the Health workspace. It reads the visible
-Health window and a separate 60-day history window through the existing owner-scoped `AppHealthService.loadMetricRange`
-API, plus the corresponding Sleep history. Splitting the reads preserves the Health query limit for a one-year view.
+saved tile and picker with the same normalized Health/Sleep sources as the Health workspace. It reads one bounded,
+live Health HRV history alongside native Sleep history. The same Health records supply Sleep enrichment and separate
+visible-window/60-day-baseline projections through `projectLoadedHealthRange`; each projection preserves the Health
+query window limit even for a one-year view. Rare provider dates outside that history request only the additional
+non-overlapping days needed for Sleep enrichment. `HrvHistoryService` shares matching owner/date reads with Sleep
+consumers, and `DashboardHrvService` shares complete matching tile/preview contexts. Both release their cached result
+and listeners when the last subscriber leaves. Every Health page stays live, with 32-record pages and a combined
+2,048-record/16 MiB budget; incomplete or oversized history fails rather than producing a partial personal range.
 `dashboard-hrv-context.helper.ts` reuses Health's series models, personal-range calculation, status colors and canonical
 Sports Lib display. `ChartsHrvComponent` renders `HealthMetricSeriesChartComponent`; thumbnails use the same ECharts
 option builder, including its historical band. No competing HRV renderer or baseline algorithm exists. Sources remain
@@ -204,7 +209,9 @@ the same 8px vertical and 10px header inset as Sleep, dashboard title/value typo
 Only its title row reserves room for range/menu controls; date and source context can use the full content width.
 
 HRV and Sleep have independent saved date ranges and navigation; HRV uses Health's calendar-day windows. Loading, empty and
-failed reads remain explicit; incomplete Health loads do not produce a misleading personal range. Preview fallbacks
+failed reads remain explicit; incomplete Health loads do not produce a misleading personal range. While paging, the
+last complete chart keeps its original dates and an update notice identifies the requested period. A failed refresh
+retains that chart with an error notice. Changing owner or units clears the previous display. Preview fallbacks
 remain labelled examples, and historical dashboard windows cannot masquerade as the current 14-day preview. HRV and
 Sleep remain independently addable/removable; HRV has no automatic tile or derived-metric identity.
 

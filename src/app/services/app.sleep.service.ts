@@ -10,12 +10,11 @@ import {
   orderBy,
   query,
   where,
-  documentId,
-  startAfter,
 } from 'app/firebase/firestore';
 import { Observable, of, from } from 'rxjs';
 import { map, switchMap, catchError } from 'rxjs/operators';
-import { enrichSleepWithNightlyHrv, nightlyHrvDateRange, assertNightlyHrvRecordBudget, NIGHTLY_HRV_LIMITS, type NightlyHrvRecord } from '@shared/nightly-hrv';
+import { enrichSleepWithNightlyHrv, nightlyHrvDateRange } from '@shared/nightly-hrv';
+import { HrvHistoryService } from './hrv-history.service';
 import {
   SleepProvider,
   SleepSession,
@@ -35,6 +34,7 @@ export class AppSleepService {
 
   private firestore = inject(Firestore);
   private browserCompatibility = inject(BrowserCompatibilityService);
+  private hrvHistory = inject(HrvHistoryService);
 
   watchHasAnySleepSession(userID: string | null | undefined): Observable<boolean> {
     const uid = `${userID || ''}`.trim();
@@ -50,6 +50,26 @@ export class AppSleepService {
   }
 
   watchForDashboard(
+    userID: string | null | undefined,
+    startDate: Date | number | null | undefined,
+    endDate: Date | number | null | undefined,
+  ): Observable<SleepSession[]> {
+    const uid = `${userID || ''}`.trim();
+    return this.watchSessions(userID, startDate, endDate).pipe(
+      switchMap(sessions => {
+        const range = nightlyHrvDateRange(sessions);
+        if (!range || !this.browserCompatibility.checkWebCryptoSupport()) return of(sessions);
+        return this.hrvHistory.watch(uid, range.startDate, range.endDate).pipe(
+          switchMap(records => from(enrichSleepWithNightlyHrv(uid, sessions, records))),
+          // A failed or incomplete optional Health read must not erase native Sleep evidence.
+          catchError(() => of(sessions)),
+        );
+      }),
+    );
+  }
+
+  /** Native Sleep records for consumers that already own a complete Health HRV read. */
+  watchSessions(
     userID: string | null | undefined,
     startDate: Date | number | null | undefined,
     endDate: Date | number | null | undefined,
@@ -78,40 +98,6 @@ export class AppSleepService {
         .map(decodeSleepSessionSportsLibData)
         .filter((session) => this.overlapsDashboardRange(session, startTimeMs, endTimeMs))
         .sort((left, right) => left.startTimeMs - right.startTimeMs)),
-      switchMap(sessions => {
-        const range = nightlyHrvDateRange(sessions);
-        if (!range || !this.browserCompatibility.checkWebCryptoSupport()) return of(sessions);
-        return this.watchNightlyHrvRecords(uid, range.startDate, range.endDate).pipe(
-          switchMap(records => from(enrichSleepWithNightlyHrv(uid, sessions, records))),
-          // A failed or incomplete optional Health read must not erase native Sleep evidence.
-          catchError(() => of(sessions)),
-        );
-      }),
-    );
-  }
-
-  /** Every page is live; a late HRV delivery or correction must update an open dashboard. */
-  private watchNightlyHrvRecords(
-    uid: string, startDate: string, endDate: string,
-    cursor?: { date: string; id: string }, prefix: NightlyHrvRecord[] = [],
-  ): Observable<NightlyHrvRecord[]> {
-    const remaining = NIGHTLY_HRV_LIMITS.records - prefix.length;
-    const pageSize = Math.min(NIGHTLY_HRV_LIMITS.pageSize, remaining);
-    const q = query(collection(this.firestore, 'users', uid, 'healthSourceRecords'),
-      where('metricIds', 'array-contains', 'heart_rate_variability'),
-      where('calendarDate', '>=', startDate), where('calendarDate', '<=', endDate),
-      orderBy('calendarDate', 'asc'), orderBy(documentId(), 'asc'),
-      ...(cursor ? [startAfter(cursor.date, cursor.id)] : []), limit(pageSize + 1));
-    return (collectionData(q, { idField: 'id' }) as Observable<Array<NightlyHrvRecord & {id: string}>>).pipe(
-      switchMap(page => {
-        if (page.length > pageSize + 1 || (remaining === 0 && page.length)) throw new Error('Nightly HRV exceeds the read limit.');
-        const records = [...prefix, ...page.slice(0, pageSize)];
-        assertNightlyHrvRecordBudget(records);
-        if (page.length <= pageSize) return of(records);
-        const last = page[pageSize - 1];
-        if (!last?.id || (last.id === cursor?.id && last.calendarDate === cursor.date)) throw new Error('Invalid nightly HRV page.');
-        return this.watchNightlyHrvRecords(uid, startDate, endDate, {date: last.calendarDate, id: last.id}, records);
-      }),
     );
   }
 

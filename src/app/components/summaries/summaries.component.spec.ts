@@ -1,5 +1,8 @@
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
+import { buildDashboardExamplePreview } from '../../helpers/dashboard-chart-preview.helper';
+import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
+import type { DashboardChartTileViewModel } from '../../helpers/dashboard-tile-view-model.helper';
 import { EMPTY } from 'rxjs';
 import { MatMenuModule } from '@angular/material/menu';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -228,6 +231,32 @@ describe('SummariesComponent', () => {
     component['unsubscribeHrv']();
     expect(component['hrvTrend']).toBeNull();
     expect(rebuild).toHaveBeenCalled();
+  });
+
+  it('retains the last complete HRV window through rapid paging and failed refreshes', () => {
+    const first$ = new Subject<DashboardHrvContext>();
+    const second$ = new Subject<DashboardHrvContext>();
+    const third$ = new Subject<DashboardHrvContext>();
+    const service = TestBed.inject(DashboardHrvService);
+    vi.mocked(service.watch).mockReturnValueOnce(first$).mockReturnValueOnce(second$).mockReturnValueOnce(third$);
+    vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-hrv')!.tile;
+    const context = (buildDashboardExamplePreview(tile).tile as DashboardChartTileViewModel).hrvTrend!;
+    component.user = { uid: 'owner' } as SummariesComponent['user'];
+    component['syncHrvSubscription'](); first$.next(context);
+    component.onHrvTrendNavigate('older');
+    expect(first$.observed).toBe(false);
+    expect(component['hrvTrend']).toMatchObject({ charts: context.charts, window: context.window, loading: true });
+    expect(component['hrvTrend']?.requestedWindow).not.toEqual(context.window);
+    const pendingWindow = component['hrvTrend']?.requestedWindow;
+    component.onHrvTrendNavigate('older');
+    expect(second$.observed).toBe(false);
+    expect(component['hrvTrend']?.requestedWindow).not.toEqual(pendingWindow);
+    third$.next({ ...context, window: component['hrvTrend']!.requestedWindow! });
+    const latest = component['hrvTrend'];
+    third$.error(new Error('refresh failed'));
+    expect(component['hrvTrend']).toMatchObject({ charts: latest!.charts, window: latest!.window, loading: false, error: true });
+    expect(component['hrvTrend']?.requestedWindow).toEqual(latest!.window);
   });
 
   it('keeps HRV range, navigation and persistence independent of Sleep in both directions', async () => {
