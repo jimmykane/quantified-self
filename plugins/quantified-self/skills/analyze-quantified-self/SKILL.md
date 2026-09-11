@@ -29,7 +29,12 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    filters across bounded scan cursors until the scan is complete. For saved routes, use the same canonical type filter
    and optional case-insensitive route-name search, preserving both filters with every cursor.
 4. Align results only on comparable time buckets. Preserve each result's units, aggregation, coverage, freshness,
-   pagination state, and missing values.
+   pagination state, and missing values. For within-workout calculations, discover the detailed activity-sample
+   capability and read only the required metrics and elapsed-second range with Activity details access. Complete that
+   range through unchanged-query continuations before calculating; preserve aligned null gaps and never substitute
+   downsampled chart points. Elapsed workout seconds are not absolute Health or Sleep timestamps. Use summaries for
+   daily comparisons when they already answer the question. A missing sample tool may require a client catalog
+   refresh, not a new data permission.
 5. Describe association rather than causation. Call out sparse or mismatched coverage that weakens the comparison.
 6. For a current readiness or recovery-aware score, prefer the server's advertised live-readiness capability when
    `metrics:read` and `sleep:read` are available. Preserve its UTC-day scoring boundary, local-day context, current load

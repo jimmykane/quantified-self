@@ -1,3 +1,6 @@
+import { ActivitySampleCache } from './activity-sample-cache';
+import { ActivitySampleContext, ActivitySamplesInput, ActivitySamplesDependencies, ActivitySamplesError, queryActivitySamples } from './activity-samples.service';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
 import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
@@ -358,6 +361,7 @@ type OpaqueValueKind =
   | 'route_ref'
   | 'activity_cursor'
   | 'route_cursor'
+  | 'activity_samples_cursor'
   | 'activity_detail_cursor'
   | 'activity_nearby_cursor'
   | 'route_nearby_cursor';
@@ -440,12 +444,36 @@ export function resolveMcpActivitySourcePath(
   return path;
 }
 
+function resolveActivitySourceLocation(uid: string, eventId: string, sourceFile: OriginalFileMetaData) {
+  const defaultBucketName = admin.storage().bucket().name;
+  const projectId = `${process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ''}`.trim();
+  const approvedBuckets = [defaultBucketName, ...(projectId ? [projectId, `${projectId}.appspot.com`] : [])];
+  const path = resolveMcpActivitySourcePath(uid, eventId, sourceFile, approvedBuckets);
+  return {path, bucketName: `${sourceFile.bucket || ''}`.trim() || defaultBucketName};
+}
+
+const activitySampleCache = new ActivitySampleCache();
+const defaultActivitySamplesReads: NonNullable<McpDataServiceDependencies['activitySamplesReads']> = {
+  cache: activitySampleCache,
+  activeOwner: async uid => !(await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip,
+  sourceVersions: async (uid, eventId, sources) => Promise.all(sources.map(async source => {
+    const {bucketName, path} = resolveActivitySourceLocation(uid, eventId, source);
+    const [metadata] = await admin.storage().bucket(bucketName).file(path, source.generation ? {generation: source.generation} : undefined).getMetadata();
+    const generation = `${metadata.generation || ''}`;
+    if (!/^\d{1,40}$/.test(generation) || (source.generation && source.generation !== generation)) {
+      throw new McpDataError('detail_not_available', 'The original activity revision is unavailable.');
+    }
+    return {...source, generation};
+  })),
+};
+
 interface ActivityChartContextDocuments {
   event: RawDocument;
   activities: RawDocument[];
 }
 
 export interface McpDataServiceDependencies {
+  activitySamplesReads?: Pick<ActivitySamplesDependencies, 'activeOwner' | 'sourceVersions' | 'cache' | 'parseSource'>;
   activityDescriptionReads?: McpActivityDescriptionReads;
   timelineNotesReads?: McpTimelineNotesReads;
   healthReads?: McpHealthReadDependencies;
@@ -1101,20 +1129,7 @@ const defaultDependencies: McpDataServiceDependencies = {
     sourceFile,
     maxBytes,
   ) => {
-    const defaultBucketName = admin.storage().bucket().name;
-    const projectId = `${process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ''}`
-      .trim();
-    const approvedBuckets = [
-      defaultBucketName,
-      ...(projectId ? [projectId, `${projectId}.appspot.com`] : []),
-    ];
-    const path = resolveMcpActivitySourcePath(
-      uid,
-      eventId,
-      sourceFile,
-      approvedBuckets,
-    );
-    const bucketName = `${sourceFile.bucket || ''}`.trim() || defaultBucketName;
+    const {bucketName, path} = resolveActivitySourceLocation(uid, eventId, sourceFile);
     return readStorageFileWithinLimit(
       bucketName,
       path,
@@ -5641,7 +5656,7 @@ function extractActivityChartSourceFiles(
     : eventData.originalFile
       ? [eventData.originalFile]
       : [];
-  return values.flatMap((value) => {
+  const sources = values.flatMap((value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return [];
     }
@@ -5665,6 +5680,10 @@ function extractActivityChartSourceFiles(
         : {}),
     }];
   });
+  if (sources.length !== values.length) {
+    throw new McpDataError('detail_not_available', 'The original activity source metadata is incomplete.');
+  }
+  return sources;
 }
 
 function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
@@ -5689,17 +5708,11 @@ function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
   };
 }
 
-async function getActivityChartData(
-  dependencies: McpDataServiceDependencies,
-  input: GetActivityChartDataInput,
-) {
-  const reference = decodeActivityReference(
-    input.activityRef,
-    input.uid,
-    input.connectionId,
-  );
+async function resolveActivityStreamContext(
+  dependencies: McpDataServiceDependencies, uid: string, reference: ActivityReference, metrics: readonly string[],
+): Promise<ActivitySampleContext> {
   const context = await dependencies.fetchActivityChartContext(
-    input.uid,
+    uid,
     reference.eventId,
   );
   if (
@@ -5710,7 +5723,7 @@ async function getActivityChartData(
   ) {
     throw new McpDataError(
       'detail_not_available',
-      'The original activity source is not available for charting.',
+      'The original activity source is not available for detailed reading.',
     );
   }
   const targetExistingIndex = context.activities.findIndex(document => (
@@ -5720,7 +5733,7 @@ async function getActivityChartData(
   if (targetExistingIndex < 0) {
     throw new McpDataError(
       'detail_not_available',
-      'The referenced activity is not available for charting.',
+      'The referenced activity is not available for detailed reading.',
     );
   }
   const targetActivityType = normalizeActivityType(
@@ -5729,16 +5742,16 @@ async function getActivityChartData(
   if (!targetActivityType) {
     throw new McpDataError(
       'detail_not_available',
-      'The referenced activity type is not available for charting.',
+      'The referenced activity type is not available for detailed reading.',
     );
   }
   if (
-    getUnsupportedActivityChartMetrics(input.metrics, targetActivityType)
+    getUnsupportedActivityChartMetrics(metrics, targetActivityType)
       .length > 0
   ) {
     throw new McpDataError(
       'invalid_metric',
-      'One or more chart metrics are not supported for this activity type.',
+      'One or more activity metrics are not supported for this activity type.',
     );
   }
   const sourceFiles = extractActivityChartSourceFiles(context.event.data);
@@ -5752,16 +5765,39 @@ async function getActivityChartData(
     );
   }
 
+  const existingActivities = context.activities.map(toActivityChartIdentity);
+  // Hash only the bounded identity/source inputs used by the parser. Never serialize whole documents.
+  const identities = existingActivities.map((activity, index) => [
+    asBoundedString(context.activities[index].id, 1_500),
+    typeof activity.startDate === 'string' ? asBoundedString(activity.startDate, 64) : asTimestampMs(activity.startDate),
+    typeof activity.endDate === 'string' ? asBoundedString(activity.endDate, 64) : asTimestampMs(activity.endDate),
+    asBoundedString(activity.type, 120), activity.sourceActivityKey ?? null,
+    activity.getStat?.(DataDuration.type)?.getValue?.() ?? null,
+    activity.getStat?.(DataDistance.type)?.getValue?.() ?? null,
+  ]);
+  return {
+    sourceFiles, existingActivities, targetExistingIndex,
+    identityFingerprint: createHash('sha256').update(JSON.stringify([identities, sourceFiles])).digest('hex'),
+  };
+}
+
+async function getActivityChartData(
+  dependencies: McpDataServiceDependencies,
+  input: GetActivityChartDataInput,
+) {
+  const reference = decodeActivityReference(
+    input.activityRef,
+    input.uid,
+    input.connectionId,
+  );
+  const context = await resolveActivityStreamContext(dependencies, input.uid, reference, input.metrics);
+
   try {
     await dependencies.consumeActivityChartRateLimit(
       input.uid,
       input.connectionId,
     );
-    return await dependencies.buildActivityChartData({
-      sourceFiles,
-      existingActivities: context.activities.map(toActivityChartIdentity),
-      targetExistingIndex,
-    }, input, {
+    return await dependencies.buildActivityChartData(context, input, {
       loadSource: (sourceFile, maximumBytes) => dependencies.downloadActivityChartSource(
         input.uid,
         reference.eventId,
@@ -6626,6 +6662,31 @@ export function createMcpDataService(
 
     async rankActivitiesByMetric(input: RankActivitiesByMetricInput) {
       return rankActivitiesByMetric(dependencies, input);
+    },
+
+    async getActivitySamples(input: ActivitySamplesInput) {
+      const reads = dependencies.activitySamplesReads
+        ?? (dependencies === defaultDependencies ? defaultActivitySamplesReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Activity sample reads are unavailable.');
+      try {
+        return await queryActivitySamples(input, {
+          ...reads, now: dependencies.now,
+          context: (uid, eventId, activityId, metrics) => resolveActivityStreamContext(dependencies, uid, {eventId, activityId}, metrics),
+          loadSource: dependencies.downloadActivityChartSource,
+          consumeParse: dependencies.consumeActivityChartRateLimit,
+        }, {
+          reference: decodeActivityReference,
+          encode: (value, uid, connectionId) => encodeOpaqueValue('activity_samples_cursor', value, uid, connectionId),
+          decode: (value, uid, connectionId) => decodeOpaqueValue('activity_samples_cursor', value, uid, connectionId, 'activity sample cursor'),
+        });
+      } catch (error) {
+        if (error instanceof McpDataError) throw error;
+        if (error instanceof ActivitySamplesError) throw new McpDataError(error.code, error.message);
+        if (error instanceof McpActivityChartRateLimitError) {
+          throw new McpDataError('temporarily_unavailable', 'Activity parsing is temporarily rate limited. Retry later.');
+        }
+        throw new McpDataError('detail_not_available', 'The original activity samples could not be read safely.');
+      }
     },
 
     async getActivityChartData(input: GetActivityChartDataInput) {

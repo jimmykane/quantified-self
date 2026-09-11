@@ -1,3 +1,4 @@
+import { MCP_ACTIVITY_SAMPLES_SCHEMA } from './activity-samples.schema';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -68,6 +69,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'list_activity_jumps',
   'list_activity_swim_lengths',
   'list_activity_chart_metrics',
+  'get_activity_samples',
   'get_activity_chart_data',
   'get_activity_metrics',
   'get_activity_overview',
@@ -1553,6 +1555,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         maximumLocation: z.literal(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS),
       }),
     }),
+    get_activity_samples: MCP_ACTIVITY_SAMPLES_SCHEMA,
     get_activity_chart_data: chartDataOutput(scope.activityLocation),
     get_activity_metrics: z.strictObject({
       selectedMetricCount: count,

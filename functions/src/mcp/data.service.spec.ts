@@ -1,3 +1,4 @@
+import { ActivitySampleCache } from './activity-sample-cache';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
 import { nightlyHealthAccountKey, type NightlyHrvRecord } from '../../../shared/nightly-hrv';
 import {
@@ -19,6 +20,7 @@ import {
   DataEndPosition,
   DataEnergy,
   DataHeartRateAvg,
+  DataHeartRate,
   DataJumpDistanceMax,
   DataJumpEvent,
   DataLatitudeDegrees,
@@ -711,6 +713,73 @@ describe('MCP data service', () => {
     });
     expect(jumps.items[0]).not.toHaveProperty('latitudeDegrees');
     expect(jumps.items[0]).not.toHaveProperty('longitudeDegrees');
+  });
+
+  async function samplesFixture() {
+    const {service, input} = await descriptionFixture();
+    const startDate = Date.parse('2026-07-01T08:00:00Z');
+    const activity = activityDocument({startDate, endDate: startDate + 4000, sourceActivityKey: undefined, stats: {}});
+    const context = {event: {id: 'event-1', data: {originalFile: {path: 'users/user-1/events/event-1/original.fit'}}}, activities: [activity]};
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue(context);
+    const cache = new ActivitySampleCache();
+    const reads = {
+      cache, activeOwner: vi.fn().mockResolvedValue(true),
+      sourceVersions: vi.fn(async (_uid: string, _event: string, files: readonly import('../../../shared/app-event.interface').OriginalFileMetaData[]) => files.map(file => ({...file, generation: '123'}))),
+      parseSource: vi.fn(async () => EventImporterJSON.getEventFromJSON({
+        name: 'Private name', startDate, endDate: startDate + 4000, stats: {},
+        activities: [{...activity.data, streams: {[DataHeartRate.type]: [100, null, 0, 140, 150]}, laps: [], intensityZones: [], events: []}],
+      } as never)),
+    };
+    dependencies.activitySamplesReads = reads;
+    return {service, input: {...input, scopes: ['activity-details:read'], metrics: ['hr'], limit: 2}, reads, context};
+  }
+
+  it('reads sample pages through the shared owner context and existing parser rate limit with real opaque cursors', async () => {
+    const {service, input, reads} = await samplesFixture();
+    try {
+      const first = await service.getActivitySamples(input);
+      expect(first.series[0].values).toEqual([100, null]); expect(first.nextCursor!.length).toBeLessThanOrEqual(512);
+      const second = await service.getActivitySamples({...input, cursor: first.nextCursor!});
+      expect(second.series[0].values).toEqual([0, 140]);
+      expect(dependencies.consumeActivityChartRateLimit).toHaveBeenCalledTimes(1);
+      expect(dependencies.consumeActivityChartRateLimit).toHaveBeenCalledWith('user-1', 'connection-1');
+      expect(dependencies.downloadActivityChartSource).toHaveBeenCalledWith('user-1', 'event-1', expect.objectContaining({generation: '123'}), expect.any(Number));
+      expect(dependencies.buildActivityChartData).not.toHaveBeenCalled();
+      for (const change of [{scopes: []}, {uid: 'other'}, {connectionId: 'other'}, {cursor: first.nextCursor!.slice(0, -8) + 'tampered'}]) {
+        await expect(service.getActivitySamples({...input, cursor: first.nextCursor!, ...change})).rejects.toMatchObject({code: 'invalid_request'});
+      }
+      const otherConnection = await service.listActivities({uid: input.uid, connectionId: 'other', appBaseUrl: 'https://quantified-self.io'});
+      await expect(service.getActivitySamples({...input, connectionId: 'other', activityRef: otherConnection.activities[0].activityRef, cursor: first.nextCursor!}))
+        .rejects.toMatchObject({code: 'invalid_request'});
+      expect(JSON.stringify(first)).not.toMatch(/Private|private|event-1|activity-1|original.fit|generation/);
+    } finally { reads.cache.clear(); }
+  });
+
+  it('rejects changed, missing or oversized sample parents and sanitizes storage and parser errors', async () => {
+    const {service, input, reads, context} = await samplesFixture();
+    try {
+      const first = await service.getActivitySamples(input);
+      for (const value of [null, {...context, event: {...context.event, id: 'other'}}, {...context, activities: []},
+        {...context, activities: Array(101).fill(context.activities[0])},
+        {...context, activities: [{...context.activities[0], data: {...context.activities[0].data, eventID: 'other'}}]}]) {
+        vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValueOnce(value);
+        await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'detail_not_available'});
+      }
+      vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValueOnce({
+        ...context, event: {...context.event, data: {originalFiles: [context.event.data.originalFile, {bucket: 'missing-path'}]}},
+      });
+      await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'detail_not_available'});
+      context.activities[0].data.endDate += 1000;
+      await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'invalid_request'});
+      context.activities[0].data.endDate -= 1000;
+      reads.cache.clear();
+      vi.mocked(dependencies.consumeActivityChartRateLimit).mockRejectedValueOnce(new McpActivityChartRateLimitError());
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'temporarily_unavailable'});
+      reads.sourceVersions.mockRejectedValueOnce(new Error('private storage path'));
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available', message: 'The original activity samples could not be read safely.'});
+      reads.parseSource.mockRejectedValueOnce(new Error('private original payload'));
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available', message: 'The original activity samples could not be read safely.'});
+    } finally { reads.cache.clear(); }
   });
 
   it('resolves chart sources from the connection-bound activity and rate-limits before reading', async () => {

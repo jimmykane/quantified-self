@@ -59,7 +59,7 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'activity-details:read': {
     title: 'Individual activity details',
-    description: 'Read non-location activity summaries, laps, swim lengths, MTB jump measurements, selected activity metrics, and bounded on-demand chart series from existing original files. Exact locations and breadcrumb traces require the separate activity-location permission.',
+    description: 'Read non-location activity summaries, laps, swim lengths, MTB jump measurements, selected activity metrics, bounded on-demand chart series, and paginated detailed samples for selected metrics from existing original files. Detailed samples include every available elapsed-second value with missing readings marked. Exact locations and breadcrumb traces require the separate activity-location permission.',
   },
   'activity-location:read': {
     title: 'Activity locations',

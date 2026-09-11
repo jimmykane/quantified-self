@@ -45,11 +45,18 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   nearby search, and chart breadcrumbs require dependent `activity-location:read` in addition to
   `activity-details:read`.
 - **On-demand activity chart stream:** add deliberate aliases and canonical units to
-  `functions/src/mcp/activity-chart.service.ts`, request only the stream and Sports Lib derivation dependencies, and
+  `functions/src/mcp/activity-stream.service.ts` (re-exported by the chart service), request only the stream and Sports Lib derivation dependencies, and
   preserve the existing original-file-only workflow. Keep file, raw/decompressed byte, selected-sample, runtime,
   response, point, and per-connection/user parse budgets. Downsample the complete domain; never crop, persist parsed
   output, invoke reparse/auto-healing, or return original files, full-resolution streams, absolute sample timestamps,
   source metadata, or unrequested streams.
+- **Detailed activity samples:** preserve the additive `get_activity_samples` contract and existing
+  `activity-details:read` grant. Share the chart catalog, selective original-file parser, identity matcher and source
+  budgets; project only selected canonical numeric arrays on an elapsed-second grid. Keep aligned null gaps, complete
+  range pagination, exact units, whole-result byte bounds, owner/connection/query/source-bound expiring cursors, and
+  source revision and access checks on every page. Cache only the safe selected projection within the documented
+  short-lived process-memory limits; never persist streams, cache raw files or parser objects, expose coordinates,
+  call provider APIs, backfill data or silently truncate a parse. Review external-client versus Assistant routing.
 - **Saved-route field or parser output:** decide whether it belongs in the explicit route summary, preview, or waypoint
   projection. Never forward original files, raw points/streams, Storage paths, source/delivery provenance, waypoint text,
   links, or extensions. Exact route bounds, preview geometry, nearby search, and waypoint coordinates require dependent

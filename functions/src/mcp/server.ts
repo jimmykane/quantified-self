@@ -1,3 +1,4 @@
+import { activitySampleResultBytes, MCP_ACTIVITY_SAMPLES_LIMITS } from './activity-samples.service';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { DEFAULT_NEGOTIATED_PROTOCOL_VERSION, McpServer, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 import { onRequest, Request } from 'firebase-functions/v2/https';
@@ -515,6 +516,9 @@ function createReadOnlyToolRunner(outputSchemas: McpOutputSchemaRegistry) {
         && Buffer.byteLength(JSON.stringify(result), 'utf8') > MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES - 1024) {
         throw new McpDataError('query_too_large', 'The activity description exceeds the MCP response limit. Read it in Quantified Self.');
       }
+      if (name === 'get_activity_samples' && activitySampleResultBytes(validated) > MCP_ACTIVITY_SAMPLES_LIMITS.responseBytes) {
+        throw new McpDataError('query_too_large', 'The activity samples exceed the MCP response limit. Request a smaller page.');
+      }
       return result;
     } catch (error) {
       if (!(error instanceof McpDataError)) {
@@ -550,6 +554,8 @@ export function summarizeMcpOutputValidationIssues(
   }));
 }
 
+export const MCP_ACTIVITY_SAMPLES_INSTRUCTIONS = 'For an activity overview use get_activity_chart_data. For detailed samples, interval analysis or calculations, discover metrics with list_activity_chart_metrics and use get_activity_samples with only the needed metrics and elapsed-second range. Keep the same query and limit when following nextCursor; finish the requested range before claiming complete coverage. Null means a missing reading. Never calculate whole-activity averages, time in zones or correlations from downsampled chart points; prefer persisted summary metrics when they answer the question.';
+
 function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
   const instructions = [
     'Use only the read-only tools exposed for the permissions this connection was granted.',
@@ -572,6 +578,9 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     );
     instructions.push(
       'For recent or latest jump details, query activities newest first, select the first activity with jumpCount greater than zero, then read that activity with list_activity_jumps; preserve the cursor and continue only if no activity in the page has jumps. With activity-location:read, use jump-record coordinates for a jump location, never an activity start or end position.',
+    );
+    instructions.push(
+      MCP_ACTIVITY_SAMPLES_INSTRUCTIONS,
     );
   }
   if (
@@ -1291,6 +1300,26 @@ export function createMcpServer(
       async () => dataService.listActivityChartMetrics(input.activityType),
     ));
 
+    registerMcpTool(server, 'get_activity_samples', {
+      title: 'Get activity samples',
+      description: 'Read all available selected activity samples in bounded pages on an elapsed-second axis, without chart downsampling. Discover metrics and canonical units with list_activity_chart_metrics. Use for interval analysis, calculations or detailed data requests; prefer chart data for an overview. Missing readings are null, never zero-filled. Requires existing Activity details access; never returns coordinates, absolute timestamps, original files or provider/device metadata. Reads existing original files only, so unavailable sources cannot be reconstructed. Follow nextCursor with the same activity, metrics, range and limit; cursors expire after 30 minutes and a changed source requires restarting.',
+      inputSchema: z.strictObject({
+        activityRef: MCP_OPAQUE_REFERENCE_SCHEMA,
+        metrics: z.array(z.string().min(1).max(120)).min(1).max(4),
+        startOffsetSeconds: z.number().int().min(0).max(MCP_ACTIVITY_SAMPLES_LIMITS.maxOffsetSeconds).default(0)
+          .describe('Inclusive elapsed-second start; omit for the beginning.'),
+        endOffsetSeconds: z.number().int().min(1).max(MCP_ACTIVITY_SAMPLES_LIMITS.maxOffsetSeconds).optional()
+          .describe('Exclusive elapsed-second end; omit for the remainder of the available streams.'),
+        limit: z.number().int().min(1).max(MCP_ACTIVITY_SAMPLES_LIMITS.maxRows).default(MCP_ACTIVITY_SAMPLES_LIMITS.defaultRows)
+          .describe('Maximum aligned rows per page. The byte budget can produce fewer rows; use nextCursor until the requested range is complete.'),
+        cursor: MCP_CURSOR_SCHEMA.optional(),
+      }),
+      outputSchema: outputSchemas.get_activity_samples,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_activity_samples', () => dataService.getActivitySamples({
+      ...input, uid: auth.uid, connectionId: auth.connectionId, scopes: auth.scopes,
+    })));
+
     registerMcpTool(server, 'get_activity_chart_data', {
       title: 'Get activity chart data',
       description: 'Parse the existing original source on demand and return bounded, whole-activity chart series. Original files, full-resolution recordings, absolute sample timestamps, and unrequested streams are never returned. Breadcrumb coordinates require activity-location access.',
@@ -1593,6 +1622,7 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
     'list_activity_swim_lengths',
     'list_activity_chart_metrics',
     'get_activity_chart_data',
+    'get_activity_samples',
   ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.ActivityDetailsRead];
   }

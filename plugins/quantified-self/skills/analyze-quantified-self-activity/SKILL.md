@@ -1,6 +1,6 @@
 ---
 name: analyze-quantified-self-activity
-description: Analyze one or more authorized Quantified Self activities through its read-only MCP tools. Use for individual workouts, activity descriptions, activity summaries, canonical metrics, laps, MTB jumps, swim lengths, pace or power charts, breadcrumb traces, or finding activities near a place; use the training skill for aggregate trends across many activities.
+description: Analyze one or more authorized Quantified Self activities through its read-only MCP tools. Use for individual workouts, activity descriptions, activity summaries, canonical metrics, laps, MTB jumps, swim lengths, pace or power charts, detailed workout samples, interval analysis, breadcrumb traces, or finding activities near a place; use the training skill for aggregate trends across many activities.
 ---
 
 # Analyze Activity Performance
@@ -21,11 +21,18 @@ Resolve activities through opaque public references and request only the detail 
    swim-length, and chart capabilities actually available. Request granular data only when relevant to the activity
    type and question. For a description-only request, read the separately authorized description directly after
    resolving the activity; a numeric overview or chart is unnecessary.
-3. Before charting, discover the chart metrics supported for the activity type. Request only the needed series and
-   axis, and use bounded points appropriate for the requested presentation.
-4. Treat returned chart points as whole-activity downsampling rather than full-resolution raw samples. Preserve axes,
-   canonical units, source and returned counts, missing counts, and processing limitations.
-5. Continue pagination only when the requested analysis needs the remaining detail.
+3. Discover the shared chart/sample metric catalog supported for the activity type. Use compact chart data for an
+   overview and the detailed-sample capability for interval analysis, calculations, or complete sample requests.
+   Prefer persisted summary metrics when they already answer the question. Request only the needed metrics and range.
+4. Chart points represent whole-activity downsampling. Never calculate workout averages, time in zones, or correlations
+   from them. Detailed sample pages use aligned elapsed-second arrays; preserve null gaps, canonical units, range and
+   page counts. Missing readings are not zero and must not be interpolated. Distinguish the source stream length from
+   the number of observed, non-null readings. These are parsed canonical metrics, not original-file exports.
+5. For detailed samples, follow the returned continuation with exactly the same activity, metrics, range and page
+   limit until the requested range is complete. A byte limit may shorten a page. Do not claim complete coverage while
+   a continuation remains. Restart the range after an expired cursor or changed source; do not join incompatible
+   pages. Temporary parse limits call for a delayed retry, not repeated immediate calls. A narrower range reduces
+   output, but cannot make an oversized original file or source parse fit. Continue other pagination only when needed.
 6. For highest, lowest, best, or worst requests tied to one persisted numeric metric, use the bounded ranking
    capability instead of downloading activity pages and sorting them client-side. Preserve its metric unit, date range,
    activity filter, scan coverage, and deterministic order. When stating when a ranked result happened, use its returned
@@ -45,12 +52,14 @@ Resolve activities through opaque public references and request only the detail 
 
 ## Permissions and Privacy
 
-- `activity-details:read` gates activity summaries, subrecords, and non-location charts.
+- `activity-details:read` gates activity summaries, subrecords, non-location charts, and detailed samples; detailed samples add no new grant.
 - Selected per-activity metrics also require `metrics:read`.
 - `activity-location:read` separately gates start and end positions, nearby-activity searches, jump coordinates, and
   breadcrumb traces. Reject an explicit location request rather than silently downgrading it.
 - Request location only when it materially helps. Do not expose internal IDs, source keys, original files, absolute
   sample timestamps, provider or device provenance, or parser details.
+- If the sample tool is missing despite Activity details access, refresh the client tool catalog; do not request an
+  unrelated permission or reconnect the provider. Availability depends on supported original files and streams.
 - Treat a missing permission, unavailable original source, processing budget, incompatible metric, and missing stream
   as different outcomes.
 

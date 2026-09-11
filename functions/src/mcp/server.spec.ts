@@ -255,6 +255,11 @@ describe('MCP HTTP scope enforcement', () => {
     })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
   });
 
+  it('authorizes detailed samples with the existing Activity details grant', () => {
+    expect(requiredScopesForRequest({method: 'tools/call', params: {name: 'get_activity_samples'}}))
+      .toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+  });
+
   it('requires sleep scope for sleep tools', () => {
     expect(requiredScopesForRequest({
       method: 'tools/call',
@@ -529,6 +534,7 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
       'get_activity_chart_data',
+      'get_activity_samples',
       'list_activities',
       'list_activity_chart_metrics',
       'list_activity_jumps',
@@ -544,6 +550,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_activity_chart_data',
       'get_activity_metrics',
       'get_activity_overview',
+      'get_activity_samples',
       'get_training_metric',
       'list_activities',
       'list_activity_chart_metrics',
@@ -579,6 +586,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'find_activities_near_location',
       'get_activity_chart_data',
+      'get_activity_samples',
       'list_activities',
       'list_activity_chart_metrics',
       'list_activity_jumps',
@@ -595,6 +603,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'find_activities_near_location',
       'get_activity_chart_data',
+      'get_activity_samples',
       'list_activities',
       'list_activity_chart_metrics',
       'list_activity_jumps',

@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import {
   createMcpServer,
+  MCP_ACTIVITY_SAMPLES_INSTRUCTIONS,
   type AuthenticatedMcpRequest,
 } from '../mcp/server';
 import type { McpDataErrorCode } from '../mcp/data.service';
@@ -324,7 +325,8 @@ export async function createAssistantMcpSession(
     }
 
     return {
-      instructions: client.getInstructions() || '',
+      // The Assistant keeps its compact evidence budget; detailed sample pagination is an external-client workflow.
+      instructions: (client.getInstructions() || '').replace(MCP_ACTIVITY_SAMPLES_INSTRUCTIONS, '').trim(),
       tools,
       callTool: async (name, args) => {
         if (!isAssistantToolName(name) || !expectedToolNames.includes(name)) {

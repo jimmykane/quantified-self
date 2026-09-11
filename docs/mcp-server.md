@@ -509,6 +509,7 @@ The analytics and map entries follow the
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
 | `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
+| `get_activity_samples` | `activity-details:read` | Paginated selected canonical samples on an elapsed-second grid, without chart downsampling |
 | `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
 | `list_routes` | `routes:read` | Bounded newest-first scans with optional activity-type and case-insensitive name filters, opaque references, and signed-in app links; exact bounds require `route-location:read` |
 | `find_routes_near_location` | `routes:read` + `route-location:read` | Frozen compatibility tool for nearby saved-route scans |
@@ -948,6 +949,64 @@ Responses contain parallel chart arrays, canonical units, and source/returned/mi
 original files, internal IDs, source keys, provider/device metadata, parser extensions, absolute sample timestamps,
 unrequested streams, and full-resolution recordings. Historical availability depends on the original source remaining
 available and within budgets; no backfill or persistent cache is created.
+
+## Detailed activity samples
+
+`get_activity_samples` is additive. The registered chart tool, catalog, point limits and response shape remain unchanged.
+Use charts for compact overviews, persisted metrics for existing summaries, and samples for interval calculations or
+complete requested series. The same `activity-details:read` grant registers and authorizes this tool; there is no new
+OAuth scope, consent step, provider connection or reimport requirement. Clients with cached metadata must discover the
+new tool after a server/app refresh. Client-specific tool approvals are separate from QS OAuth grants.
+
+The input is `activityRef`, one to four metrics from `list_activity_chart_metrics`, optional `startOffsetSeconds`
+(inclusive, default zero), `endOffsetSeconds` (exclusive, default available stream end), `limit` (default 2,000, maximum
+10,000 aligned rows), and `cursor`. Limits and offsets are integers; offsets are bounded to 250,000 seconds. Canonical
+aliases are normalized and deduplicated. Repeat the same filters and limit with every continuation. Requesting a small
+interval reduces output but still requires parsing the bounded original source on a cache miss.
+
+The strict output contains `activityType`, `sampling: all_available`, `timeUnit: seconds`, `sampleIntervalSeconds: 1`,
+`range` and `page` with inclusive starts/exclusive ends and counts, one shared `elapsedTimeSeconds` array, `series`, and
+nullable `nextCursor`. Each series has a canonical metric/unit pair, `sourceSampleCount` (stream length including missing
+slots), `missingSampleCount` for this page, and aligned `values`. Null preserves a missing/non-finite reading or an absent
+stream; zero remains zero. The range is clamped to the longest selected available stream, including its final sample.
+All selected streams absent produces a zero-length range with empty value arrays. These are Sports Lib canonical
+parsed values, including supported derivations, not a promise of raw device packets or data absent from the source.
+Do not calculate full-range statistics until the continuation is null; exclude missing readings and disclose coverage.
+
+Both projections use `activity-stream.service.ts` for the single allowlisted metric catalog, selective parser options,
+file handling, budgets, multi-file merge and identity matching. `data.service.ts` shares owner-scoped event/activity
+context validation and approved source-path/download checks. There are no provider branches: current and future
+providers work when they retain a supported original file with supported streams. New formats or metrics require a
+separate parser/catalog change. The detailed projection never returns coordinates (even with a location grant), absolute
+sample timestamps, source metadata, device identity, arbitrary streams or original files.
+
+Pages fit a **256 KiB complete MCP result**, counting both structured content and its escaped JSON-text copy and reserving
+1 KiB for protocol metadata. The page shortens automatically to fit, and its cursor starts at the exact following second.
+The shared source limits remain four files, 12 MiB cumulative raw bytes, 64 MiB decompressed bytes, 250,000 selected/parser
+dependency samples and 20 seconds of parsing/projection. A hard source or runtime limit rejects the request; it never
+silently returns a partial parse.
+
+Pagination is stateless. Encrypted cursors are bound to owner, connection, activity, normalized query, source generations
+and a digest of selected canonical data; they expire 30 minutes after the first page. Source or parser-output changes
+require restarting instead of joining different revisions. Each page checks active-account state, current event and
+activity identity, approved Storage paths and the existence of exact object generations before and after projection.
+Sources without stored generations are pinned to the current immutable generation for each read. A deleted object,
+changed parent or removed account cannot be served from cached data. Bearer revocation remains checked by the HTTP
+boundary on every request.
+
+`activity-sample-cache.ts` reuses only frozen selected numeric arrays and canonical descriptors in process memory:
+120-second TTL with active eviction, eight entries, 24 MiB conservatively accounted total, 12 MiB per entry, and two
+concurrent different cache builds. Identical concurrent requests share one build. The key includes owner, connection,
+activity, metrics and source revision. Raw files, parser objects and derivation-only streams are discarded. Nothing is
+written to Firestore or Storage except existing parse-rate counters. A warm page does not consume another parse allowance;
+a cold instance or expired/evicted entry safely reparses the pinned source and uses the existing six-per-connection /
+twelve-per-user-per-minute limiter. Cache reuse is best effort, not a session-affinity guarantee. Normal HTTP limits
+still apply to every page. No backfill, provider API call, migration or derived-schema change is required.
+
+The built-in Assistant retains its explicit compact-evidence allowlist and omits this tool and its routing instruction.
+Detailed sample pagination is currently an external MCP workflow. Deploying this additive public tool requires the normal
+digest-bound developer refresh/rescan; bundled activity and cross-domain skill changes require validation and a later
+explicit local `npm run plugin:sync`. Local tests do not deploy, promote the registered contract or install a real profile.
 
 ## Saved-route projection
 
@@ -1438,6 +1497,8 @@ after validation, but no additional server deployment or registered-app rescan o
   raw/compressed bytes, 64 MiB cumulative decompressed bytes, and 250,000 selected samples, with a 20-second internal
   runtime and 256 KiB response limit. Larger valid streams are downsampled over the complete domain; hard point,
   source, sample, runtime, decompression, and response overruns fail the whole request.
+- Detailed activity samples share the source/parse limits, return at most 10,000 rows and 256 KiB including both MCP
+  result copies, and use bounded transient memory reuse and 30-minute query/revision-bound cursors as described above.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
   decompression to 8 MiB, and waypoint output to 500 entries and 256 KiB.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was

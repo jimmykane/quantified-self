@@ -101,6 +101,8 @@ describe('Assistant MCP session', () => {
       expect(session.tools.find(tool => tool.name === 'list_activity_jumps')?.description)
         .toContain('coordinates redacted');
       expect(session.instructions).toContain('server expands the group to every canonical type');
+      expect(session.instructions).not.toContain('get_activity_samples');
+      expect(session.tools.map(tool => tool.name)).not.toContain('get_activity_samples');
       expect(session.instructions).toContain('Maximum Jump Distance');
       expect(session.instructions).toContain('Treat the ranked metric value as authoritative');
       expect(session.instructions).toContain('only when jump-level details are requested');
