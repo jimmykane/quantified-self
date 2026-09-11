@@ -70,6 +70,7 @@ export class AdminUserHistoryComponent implements OnDestroy {
     private cadenceChartRef?: ElementRef<HTMLDivElement>;
     private isDark = false;
     private destroyed = false;
+    private renderQueued = false;
 
     @Input()
     set history(value: AdminDashboardHistoryResponse | null) {
@@ -265,10 +266,16 @@ export class AdminUserHistoryComponent implements OnDestroy {
     }
 
     private scheduleRender(): void {
-        if (this.destroyed) {
+        if (this.destroyed || this.renderQueued) {
             return;
         }
-        void Promise.resolve().then(() => this.renderCharts());
+        // Inputs and ViewChild setters can all change in the same view update.
+        // Render their final state once instead of redrawing every chart for each setter.
+        this.renderQueued = true;
+        void Promise.resolve().then(() => {
+            this.renderQueued = false;
+            return this.renderCharts();
+        });
     }
 
     private async renderCharts(): Promise<void> {

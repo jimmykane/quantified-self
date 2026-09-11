@@ -57,6 +57,7 @@ describe('AdminUserHistoryComponent', () => {
 
     afterEach(() => {
         restoreDateNow();
+        vi.unstubAllGlobals();
     });
 
     it('shows collection progress until eight selected-range snapshots exist', () => {
@@ -69,11 +70,16 @@ describe('AdminUserHistoryComponent', () => {
         expect(loader.init).not.toHaveBeenCalled();
     });
 
-    it('renders five focused charts once enough current daily snapshots exist', async () => {
+    it.each([true, false])('renders each chart once when enough snapshots exist (ResizeObserver: %s)', async hasResizeObserver => {
+        vi.stubGlobal('ResizeObserver', hasResizeObserver ? class {
+            observe = vi.fn();
+            disconnect = vi.fn();
+        } : undefined);
         fixture.componentRef.setInput('history', history(8));
         fixture.detectChanges();
         await fixture.whenStable();
         await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledTimes(5));
+        expect(loader.init).toHaveBeenCalledTimes(5);
 
         const text = (fixture.nativeElement as HTMLElement).textContent || '';
         expect(text).toContain('Authentication activity');
