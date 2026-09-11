@@ -64,6 +64,8 @@ export class EChartsHostController {
   private lastResizeSize: { width: number; height: number; pixelRatio: number } | null = null;
   private cancelViewportWait: (() => void) | null = null;
   private initRequestID = 0;
+  private pendingContainer: HTMLElement | null = null;
+  private pendingTheme: string | undefined;
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
 
@@ -84,6 +86,13 @@ export class EChartsHostController {
       this.dispose();
     }
 
+    // A removed off-screen host will never intersect. Cancel that wait rather
+    // than making its replacement (or a new theme) depend on the old container.
+    if (this.initPromise && this.cancelViewportWait
+      && (this.pendingContainer !== container || this.pendingTheme !== requestedTheme)) {
+      this.dispose();
+    }
+
     if (this.initPromise) {
       const lifecycleVersion = this.lifecycleVersion;
       const pendingInitialization = this.initPromise;
@@ -99,10 +108,12 @@ export class EChartsHostController {
     }
 
     const lifecycleVersion = this.lifecycleVersion;
+    this.pendingContainer = container;
+    this.pendingTheme = requestedTheme;
     const initialization = (async () => {
       try {
         if (this.config.deferUntilNearViewport) {
-          const gate = chartViewportQueue.wait(container);
+          const gate = chartViewportQueue.wait(container, () => this.config.eChartsLoader.load());
           this.cancelViewportWait = gate.cancel;
           const ready = await gate.ready;
           if (this.cancelViewportWait === gate.cancel) this.cancelViewportWait = null;
@@ -141,6 +152,8 @@ export class EChartsHostController {
     } finally {
       if (this.initPromise === initialization) {
         this.initPromise = null;
+        this.pendingContainer = null;
+        this.pendingTheme = undefined;
       }
     }
   }

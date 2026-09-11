@@ -4,6 +4,10 @@ interface PendingChart {
   element: HTMLElement;
   root: HTMLElement | null;
   resolve: (render: boolean) => void;
+  reject: (error: unknown) => void;
+  prepare?: () => Promise<unknown>;
+  preparing: boolean;
+  prepared: boolean;
 }
 
 /** Prepare nearby plots one frame at a time, without hiding their Angular headers or controls. */
@@ -13,7 +17,7 @@ export class ChartViewportQueue {
   private readonly nearby = new Set<PendingChart>();
   private frame: number | null = null;
 
-  wait(element: HTMLElement): { ready: Promise<boolean>; cancel: () => void } {
+  wait(element: HTMLElement, prepare?: () => Promise<unknown>): { ready: Promise<boolean>; cancel: () => void } {
     if (!BrowserCompatibilityService.checkIntersectionObserverSupport()) {
       return { ready: Promise.resolve(true), cancel: () => undefined };
     }
@@ -24,7 +28,10 @@ export class ChartViewportQueue {
         for (const entry of entries) {
           for (const job of this.pending) {
             if (job.element !== entry.target) continue;
-            if (entry.isIntersecting) this.nearby.add(job);
+            if (entry.isIntersecting) {
+              this.nearby.add(job);
+              this.prepare(job);
+            }
             else this.nearby.delete(job);
           }
         }
@@ -35,22 +42,41 @@ export class ChartViewportQueue {
     }
     this.observers.set(root, observer);
     let resolve: PendingChart['resolve'];
-    const ready = new Promise<boolean>(done => { resolve = done; });
-    const job: PendingChart = { element, root, resolve: resolve! };
+    let reject: PendingChart['reject'];
+    const ready = new Promise<boolean>((done, fail) => { resolve = done; reject = fail; });
+    const job: PendingChart = {
+      element, root, resolve: resolve!, reject: reject!, prepare, preparing: false, prepared: !prepare,
+    };
     this.pending.add(job);
     try { observer.observe(element); } catch { this.finish(job, true); }
     return { ready, cancel: () => this.finish(job, false) };
   }
 
+  private prepare(job: PendingChart): void {
+    if (job.prepared || job.preparing) return;
+    job.preparing = true;
+    // Load the shared library before releasing a render frame. Otherwise every
+    // frame released during a cold import would draw together when it completes.
+    void Promise.resolve().then(() => job.prepare!()).then(() => {
+      if (!this.pending.has(job)) return;
+      job.prepared = true;
+      this.schedule();
+    }, error => {
+      if (!this.pending.has(job)) return;
+      job.reject(error);
+      this.finish(job, false);
+    });
+  }
+
   private schedule(): void {
-    if (this.frame !== null || !this.nearby.size) return;
+    if (this.frame !== null || ![...this.nearby].some(job => job.prepared)) return;
     if (typeof requestAnimationFrame === 'undefined') {
-      for (const job of [...this.nearby]) this.finish(job, true);
+      for (const job of [...this.nearby]) if (job.prepared) this.finish(job, true);
       return;
     }
     this.frame = requestAnimationFrame(() => {
       this.frame = null;
-      const job = this.nearby.values().next().value as PendingChart | undefined;
+      const job = [...this.nearby].find(candidate => candidate.prepared);
       if (job) this.finish(job, true);
       this.schedule();
     });

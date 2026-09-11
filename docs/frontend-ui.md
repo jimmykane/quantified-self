@@ -110,9 +110,11 @@ extra padding is needed.
 
 Dashboard plot components and Health metric plots opt into `EChartsHostController.deferUntilNearViewport`.
 `ChartViewportQueue` observes the nearest scroll container (including the app shell and bottom sheets) with a 600px
-preload margin and admits one plot per animation frame. Only plot initialization is deferred: Angular titles,
+preload margin and admits one plot per animation frame after the shared ECharts library is ready, so a cold
+import cannot release multiple queued plots into the same render frame. Only plot initialization is deferred: Angular titles,
 values, accessible descriptions, and controls remain present. Initialized plots stay mounted when scrolled away.
-Destroyed plots cancel their pending work; when data changes before first visibility, only the latest waiting
+Destroyed or replaced plot hosts cancel their pending work, including waits for a previous theme. A chart that
+leaves the preload area while the library loads stays deferred until it returns. When data changes before first visibility, only the latest waiting
 refresh may apply its data. Browsers without viewport observation use ordinary immediate initialization.
 The shared host resizes only when its container dimensions or pixel ratio change, while preserving the first
 resize that releases fixed preview dimensions. Dashboard section layout is recalculated only when its column count

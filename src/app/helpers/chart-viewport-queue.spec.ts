@@ -71,6 +71,77 @@ describe('chart viewport queue', () => {
     await expect(queue.wait(document.createElement('div')).ready).resolves.toBe(true);
   });
 
+  it('spreads rendering across frames after a shared cold library load completes', async () => {
+    const queue = new ChartViewportQueue();
+    let loaded: () => void;
+    const loading = new Promise<void>(resolve => { loaded = resolve; });
+    const prepare = vi.fn(() => loading);
+    const firstElement = document.createElement('div');
+    const secondElement = document.createElement('div');
+    const first = queue.wait(firstElement, prepare); const second = queue.wait(secondElement, prepare);
+    const secondReady = vi.fn(); void second.ready.then(secondReady);
+    expect(prepare).not.toHaveBeenCalled();
+    notify(entry(firstElement), entry(secondElement));
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
+    expect(frames).toHaveLength(0);
+    loaded!();
+    await vi.waitFor(() => expect(frames).toHaveLength(1));
+    frames.shift()!(0);
+    await expect(first.ready).resolves.toBe(true);
+    expect(secondReady).not.toHaveBeenCalled();
+    frames.shift()!(16);
+    await expect(second.ready).resolves.toBe(true);
+  });
+
+  it('keeps a chart deferred if it leaves the preload area while the library loads', async () => {
+    const queue = new ChartViewportQueue();
+    let loaded: () => void;
+    const prepare = vi.fn(() => new Promise<void>(resolve => { loaded = resolve; }));
+    const element = document.createElement('div');
+    const wait = queue.wait(element, prepare);
+    notify(entry(element));
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    notify(entry(element, false)); loaded!();
+    // Drain the preparation promise before re-entering the viewport.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(frames).toHaveLength(0);
+    notify(entry(element));
+    expect(prepare).toHaveBeenCalledOnce();
+    frames.shift()!(0);
+    await expect(wait.ready).resolves.toBe(true);
+  });
+
+  it.each(['resolve', 'reject'])('ignores a library load that later %ss after cancellation', async outcome => {
+    const queue = new ChartViewportQueue();
+    let resolveLoad: () => void; let rejectLoad: (error: Error) => void;
+    const loading = new Promise<void>((resolve, reject) => { resolveLoad = resolve; rejectLoad = reject; });
+    const prepare = vi.fn(() => loading);
+    const element = document.createElement('div');
+    const wait = queue.wait(element, prepare);
+    notify(entry(element));
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    wait.cancel();
+    if (outcome === 'resolve') resolveLoad!(); else rejectLoad!(new Error('offline'));
+    await expect(wait.ready).resolves.toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(frames).toHaveLength(0);
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('cleans up a failed preparation and allows a fresh attempt', async () => {
+    const queue = new ChartViewportQueue();
+    const element = document.createElement('div');
+    const wait = queue.wait(element, () => Promise.reject(new Error('offline')));
+    const failure = expect(wait.ready).rejects.toThrow('offline');
+    notify(entry(element)); await failure;
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+    const retry = queue.wait(element, () => Promise.resolve());
+    notify(entry(element));
+    await vi.waitFor(() => expect(frames).toHaveLength(1));
+    frames.shift()!(0);
+    await expect(retry.ready).resolves.toBe(true);
+  });
+
   it('uses the nearest scrolling container so the preload margin works inside the app shell and sheets', () => {
     const queue = new ChartViewportQueue();
     const shell = document.createElement('div'); shell.style.overflowY = 'auto';

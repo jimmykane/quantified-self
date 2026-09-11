@@ -348,6 +348,26 @@ describe('EChartsHostController', () => {
     wait.mockRestore();
   });
 
+  it.each(['container', 'theme'])('replaces an off-screen pending %s without waiting for its old intersection', async change => {
+    const firstContainer = document.createElement('div');
+    const replacementContainer = change === 'container' ? document.createElement('div') : firstContainer;
+    let finish: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { finish = resolve; });
+    const cancel = vi.fn(() => finish!(false));
+    const wait = vi.spyOn(chartViewportQueue, 'wait')
+      .mockReturnValueOnce({ ready, cancel })
+      .mockReturnValue({ ready: Promise.resolve(true), cancel: vi.fn() });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const first = controller.init(firstContainer, 'light');
+    const latest = controller.init(replacementContainer, change === 'theme' ? 'dark' : 'light');
+    await expect(first).resolves.toBeNull();
+    await expect(latest).resolves.toBe(chartMock);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(loader.init).toHaveBeenCalledExactlyOnceWith(replacementContainer, change === 'theme' ? 'dark' : 'light', undefined);
+    controller.dispose(); wait.mockRestore();
+  });
+
   it('should hide the active tooltip after initialization', async () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({
