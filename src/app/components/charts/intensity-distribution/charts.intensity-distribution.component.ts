@@ -101,6 +101,7 @@ export class ChartsIntensityDistributionComponent implements AfterViewInit, OnCh
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsIntensityDistributionComponent]',

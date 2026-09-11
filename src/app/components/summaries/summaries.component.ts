@@ -434,9 +434,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   @HostListener('window:resize', ['$event'])
   @HostListener('window:orientationchange', ['$event'])
   resizeOROrientationChange() {
-    this.numberOfCols = this.getNumberOfColumns();
-    this.rowHeight = this.getRowHeight();
-    this.refreshMainGridSectionLayout();
+    const columns = this.getNumberOfColumns();
+    const rowHeight = this.getRowHeight();
+    if (columns !== this.numberOfCols || rowHeight !== this.rowHeight) {
+      this.numberOfCols = columns;
+      this.rowHeight = rowHeight;
+      this.refreshMainGridSectionLayout();
+    }
     this.updateDesktopTileDragCapability();
   }
 

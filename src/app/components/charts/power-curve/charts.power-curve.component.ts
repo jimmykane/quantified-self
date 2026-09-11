@@ -104,6 +104,7 @@ export class ChartsPowerCurveComponent implements AfterViewInit, OnChanges, OnDe
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsPowerCurveComponent]',

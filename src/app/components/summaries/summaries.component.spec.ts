@@ -233,6 +233,19 @@ describe('SummariesComponent', () => {
     expect(rebuild).toHaveBeenCalled();
   });
 
+  it('keeps the dashboard layout stable during address-bar height changes but updates column breakpoints', () => {
+    const columns = vi.spyOn(component, 'getNumberOfColumns' as never).mockReturnValue(1 as never);
+    vi.spyOn(component, 'getRowHeight' as never).mockReturnValue('40vh' as never);
+    const layout = vi.spyOn(component, 'refreshMainGridSectionLayout' as never);
+    component.numberOfCols = 1; component.rowHeight = '40vh';
+    component.resizeOROrientationChange(); component.resizeOROrientationChange();
+    expect(layout).not.toHaveBeenCalled();
+    columns.mockReturnValue(2 as never);
+    component.resizeOROrientationChange();
+    expect(layout).toHaveBeenCalledOnce();
+    expect(component.numberOfCols).toBe(2);
+  });
+
   it('retains the last complete HRV window through rapid paging and failed refreshes', () => {
     const first$ = new Subject<DashboardHrvContext>();
     const second$ = new Subject<DashboardHrvContext>();

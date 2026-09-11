@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EChartsHostController } from './echarts-host-controller';
+import { chartViewportQueue } from './chart-viewport-queue';
 import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome } from './dashboard-echarts-style.helper';
 
 type ResizeObserverRecord = {
@@ -292,6 +293,59 @@ describe('EChartsHostController', () => {
     frames.shift()!(0);
     expect(loader.resize).toHaveBeenCalledTimes(2);
     expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 'auto', height: 'auto', silent: true });
+  });
+
+  it('ignores repeated viewport-height events when the chart size is unchanged', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 360 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 240 });
+    await controller.init(container);
+    for (let frame = 0; frame < 30; frame++) {
+      controller.scheduleResize(); frames.shift()!(frame * 16);
+    }
+    expect(loader.resize).toHaveBeenCalledTimes(1);
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 600 });
+    controller.scheduleResize(); frames.shift()!(500);
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    controller.dispose();
+  });
+
+  it('waits for the viewport and only lets the newest pending refresh apply its data', async () => {
+    let show: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { show = resolve; });
+    const wait = vi.spyOn(chartViewportQueue, 'wait').mockReturnValue({ ready, cancel: vi.fn() });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const container = document.createElement('div');
+    const old = controller.init(container);
+    const latest = controller.init(container);
+    expect(loader.init).not.toHaveBeenCalled();
+    show!(true);
+    await expect(old).resolves.toBeNull();
+    await expect(latest).resolves.toBe(chartMock);
+    expect(loader.init).toHaveBeenCalledOnce();
+    await expect(controller.init(container)).resolves.toBe(chartMock);
+    expect(wait).toHaveBeenCalledOnce();
+    controller.dispose(); wait.mockRestore();
+  });
+
+  it('cancels an off-screen chart without mounting it after disposal', async () => {
+    let finish: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { finish = resolve; });
+    const cancel = vi.fn(() => finish!(false));
+    const wait = vi.spyOn(chartViewportQueue, 'wait').mockReturnValue({ ready, cancel });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const pending = controller.init(document.createElement('div'));
+    controller.dispose();
+    await expect(pending).resolves.toBeNull();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(loader.init).not.toHaveBeenCalled();
+    wait.mockRestore();
   });
 
   it('should hide the active tooltip after initialization', async () => {

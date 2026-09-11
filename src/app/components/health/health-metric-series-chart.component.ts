@@ -57,6 +57,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[HealthMetricSeriesChartComponent]',

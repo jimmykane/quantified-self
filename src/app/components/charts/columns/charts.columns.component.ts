@@ -123,6 +123,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     private logger: LoggerService
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsColumnsComponent]',

@@ -99,6 +99,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsEfficiencyTrendComponent]',

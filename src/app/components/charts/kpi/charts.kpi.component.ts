@@ -193,6 +193,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsKpiComponent]',

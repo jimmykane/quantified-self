@@ -154,6 +154,7 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsFormComponent]',

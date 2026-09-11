@@ -2,6 +2,7 @@ import type { EChartsType } from 'echarts/core';
 import { TimelineNotesChartBinding, type TimelineNoteChartContext, type TimelineNoteAxisHints } from './timeline-notes-chart.helper';
 import { EChartsLoaderService } from '../services/echarts-loader.service';
 import type { EChartsMobileTapFeedbackOptions } from './echarts-tooltip-interaction.helper';
+import { chartViewportQueue } from './chart-viewport-queue';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
@@ -43,6 +44,7 @@ export interface EChartsHostControllerConfig {
   initOptions?: ChartInitSettings;
   enableMobileTapFeedback?: boolean;
   mobileTapFeedbackOptions?: MobileTapFeedbackOptionsResolver;
+  deferUntilNearViewport?: boolean;
 }
 
 export class EChartsHostController {
@@ -59,6 +61,9 @@ export class EChartsHostController {
   private unsubscribeTapFeedback: (() => void) | null = null;
   private currentTheme: string | undefined;
   private lifecycleVersion = 0;
+  private lastResizeSize: { width: number; height: number; pixelRatio: number } | null = null;
+  private cancelViewportWait: (() => void) | null = null;
+  private initRequestID = 0;
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
 
@@ -66,6 +71,8 @@ export class EChartsHostController {
     if (!container) {
       return null;
     }
+
+    const requestID = ++this.initRequestID;
 
     const requestedTheme = theme || undefined;
 
@@ -81,6 +88,7 @@ export class EChartsHostController {
       const lifecycleVersion = this.lifecycleVersion;
       const pendingInitialization = this.initPromise;
       await pendingInitialization;
+      if (this.config.deferUntilNearViewport && requestID !== this.initRequestID) return null;
       if (this.initPromise === pendingInitialization) {
         this.initPromise = null;
       }
@@ -93,6 +101,13 @@ export class EChartsHostController {
     const lifecycleVersion = this.lifecycleVersion;
     const initialization = (async () => {
       try {
+        if (this.config.deferUntilNearViewport) {
+          const gate = chartViewportQueue.wait(container);
+          this.cancelViewportWait = gate.cancel;
+          const ready = await gate.ready;
+          if (this.cancelViewportWait === gate.cancel) this.cancelViewportWait = null;
+          if (!ready || lifecycleVersion !== this.lifecycleVersion) return null;
+        }
         const chart = await this.config.eChartsLoader.init(container, requestedTheme, this.config.initOptions);
         if (!chart) {
           return null;
@@ -120,7 +135,9 @@ export class EChartsHostController {
     })();
     this.initPromise = initialization;
     try {
-      return await initialization;
+      const chart = await initialization;
+      // Only the newest waiting refresh may apply its captured data after scrolling into view.
+      return this.config.deferUntilNearViewport && requestID !== this.initRequestID ? null : chart;
     } finally {
       if (this.initPromise === initialization) {
         this.initPromise = null;
@@ -170,6 +187,8 @@ export class EChartsHostController {
   public dispose(): void {
     this.timelineNotes.dispose();
     this.lifecycleVersion += 1;
+    this.cancelViewportWait?.();
+    this.cancelViewportWait = null;
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -177,6 +196,7 @@ export class EChartsHostController {
     }
 
     this.observedContainer = null;
+    this.lastResizeSize = null;
     this.unsubscribeViewportResize?.();
     this.unsubscribeViewportResize = null;
     this.unsubscribeTapFeedback?.();
@@ -215,8 +235,13 @@ export class EChartsHostController {
 
     const { width, height } = this.getContainerSize(this.observedContainer);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      this.lastResizeSize = null;
       return;
     }
+
+    const pixelRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+    if (this.lastResizeSize?.width === width && this.lastResizeSize.height === height
+      && this.lastResizeSize.pixelRatio === pixelRatio) return;
 
     this.config.eChartsLoader.resize(this.chart, {
       // ECharts retains explicit initialization dimensions unless resize replaces them.
@@ -225,6 +250,7 @@ export class EChartsHostController {
       height: 'auto',
       silent: true,
     });
+    this.lastResizeSize = { width, height, pixelRatio };
   }
 
   private getContainerSize(container: HTMLElement): { width: number; height: number } {
