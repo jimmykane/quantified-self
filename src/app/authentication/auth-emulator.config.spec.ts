@@ -37,7 +37,7 @@ describe('maybeConnectAuthEmulator', () => {
     expect(result).toBe(mockAuth);
     expect(connectAuthEmulatorMock).toHaveBeenCalledWith(
       mockAuth,
-      'http://localhost:9099',
+      'http://127.0.0.1:9099',
       { disableWarnings: true }
     );
   });

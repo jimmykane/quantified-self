@@ -45,8 +45,6 @@ function mapFallbackUploadErrorMessage(statusCode: number): string {
     providedIn: 'root'
 })
 export class AppFitUploadService {
-    private static readonly LOCAL_FUNCTIONS_EMULATOR_HOST = 'localhost';
-    private static readonly LOCAL_FUNCTIONS_EMULATOR_PORT = 5001;
     private app = inject(FirebaseApp);
     private auth = inject(Auth);
     private appCheckReadiness = inject(AppCheckReadinessService);
@@ -61,7 +59,9 @@ export class AppFitUploadService {
         }
 
         const idToken = await this.auth.currentUser.getIdToken(true);
-        const appCheckToken = await this.appCheckReadiness.getToken();
+        const appCheckToken = this.shouldUseFunctionsEmulator()
+            ? null
+            : await this.appCheckReadiness.getToken();
 
         const projectID = this.app.options.projectId;
         if (!projectID) {
@@ -78,10 +78,12 @@ export class AppFitUploadService {
 
         const headers = new Headers({
             'Authorization': `Bearer ${idToken}`,
-            'X-Firebase-AppCheck': appCheckToken,
             'X-File-Extension': normalizedExtension,
             'Content-Type': 'application/octet-stream',
         });
+        if (appCheckToken) {
+            headers.set('X-Firebase-AppCheck', appCheckToken);
+        }
 
         const trimmedOriginalFilename = originalFilename?.trim();
         if (trimmedOriginalFilename) {
@@ -122,13 +124,17 @@ export class AppFitUploadService {
 
     private resolveUploadFunctionUrl(region: string, functionName: string, projectID: string): string {
         if (this.shouldUseFunctionsEmulator()) {
-            return `http://${AppFitUploadService.LOCAL_FUNCTIONS_EMULATOR_HOST}:${AppFitUploadService.LOCAL_FUNCTIONS_EMULATOR_PORT}/${projectID}/${region}/${functionName}`;
+            const emulatorConfig = environment.emulatorConfig;
+            if (!emulatorConfig) {
+                throw new Error('Functions emulator configuration is missing.');
+            }
+            return `http://${emulatorConfig.host}:${emulatorConfig.ports.functions}/${projectID}/${region}/${functionName}`;
         }
 
         return `https://${region}-${projectID}.cloudfunctions.net/${functionName}`;
     }
 
     private shouldUseFunctionsEmulator(): boolean {
-        return environment.localhost === true && environment.useFunctionsEmulator === true;
+        return environment.backendMode === 'emulator' && environment.useFunctionsEmulator === true;
     }
 }

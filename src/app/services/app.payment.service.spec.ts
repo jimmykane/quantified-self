@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { AppPaymentService } from './app.payment.service';
+import { AppPaymentService, LOCAL_BILLING_DISABLED_MESSAGE } from './app.payment.service';
 import { Firestore } from 'app/firebase/firestore';
 import { Auth } from 'app/firebase/auth';
 import { Functions } from 'app/firebase/functions';
@@ -8,7 +8,9 @@ import { FirebaseApp } from 'app/firebase/app';
 import { AppWindowService } from './app.window.service';
 import { AppFunctionsService } from './app.functions.service';
 import { defer, firstValueFrom, Observable, of, Subject, throwError } from 'rxjs';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { environment } from '../../environments/environment';
+import type { AppEnvironment } from '../../environments/environment.interface';
 
 const { mockHttpsCallableFromURL } = vi.hoisted(() => {
     return {
@@ -96,6 +98,7 @@ describe('AppPaymentService', () => {
     let generatedCheckoutDocSequence = 0;
 
     beforeEach(() => {
+        (environment as AppEnvironment).billingMode = 'stripe';
         vi.clearAllMocks(); // Reset spies
         generatedCheckoutDocSequence = 0;
 
@@ -141,8 +144,26 @@ describe('AppPaymentService', () => {
         service = TestBed.inject(AppPaymentService);
     });
 
+    afterEach(() => {
+        (environment as AppEnvironment).billingMode = 'disabled';
+    });
+
     it('should be created', () => {
         expect(service).toBeTruthy();
+    });
+
+    it('should keep every Stripe entry point inert when local billing is disabled', async () => {
+        (environment as AppEnvironment).billingMode = 'disabled';
+
+        await expect(firstValueFrom(service.getProducts())).resolves.toEqual([]);
+        await expect(service.appendCheckoutSession('price_local')).rejects.toThrow(LOCAL_BILLING_DISABLED_MESSAGE);
+        await expect(service.manageSubscriptions()).rejects.toThrow(LOCAL_BILLING_DISABLED_MESSAGE);
+        await expect(service.restorePurchases()).rejects.toThrow(LOCAL_BILLING_DISABLED_MESSAGE);
+        await expect(service.getUpcomingRenewalAmount()).resolves.toEqual({ status: 'no_upcoming_charge' });
+
+        expect(mockGetDocsFromServer).not.toHaveBeenCalled();
+        expect(mockSetDoc).not.toHaveBeenCalled();
+        expect(mockFunctionsService.call).not.toHaveBeenCalled();
     });
 
     it('should refresh auth and recover a permission-denied subscription listener', async () => {

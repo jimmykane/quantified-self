@@ -17,6 +17,22 @@
     letter-spacing: 0.2px;
   }
 
+  .local-billing-notice {
+    width: min(100%, 760px);
+    margin: 0 0 22px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface-container-low);
+
+    mat-card-content {
+      padding: 16px;
+      line-height: 1.5;
+    }
+
+    code {
+      overflow-wrap: anywhere;
+    }
+  }
+
   .loading-state {
     display: flex;
     flex-direction: column;

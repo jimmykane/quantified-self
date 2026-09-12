@@ -13,6 +13,8 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 import { LoggerService } from '../../services/logger.service';
+import { environment } from '../../../environments/environment';
+import type { AppEnvironment } from '../../../environments/environment.interface';
 
 class MockAppPaymentService {
     getProducts() {
@@ -60,7 +62,7 @@ class MockMatDialog {
     }
 }
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 describe('PricingComponent', () => {
     let component: PricingComponent;
@@ -78,6 +80,7 @@ describe('PricingComponent', () => {
 
 
     beforeEach(async () => {
+        (environment as AppEnvironment).billingMode = 'stripe';
         authServiceMock.user$ = of(acceptedPoliciesUser as any);
         authServiceMock.currentUser = { uid: 'test-uid' };
 
@@ -125,8 +128,28 @@ describe('PricingComponent', () => {
         fixture.detectChanges();
     });
 
+    afterEach(() => {
+        (environment as AppEnvironment).billingMode = 'disabled';
+    });
+
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should explain the synthetic role workflow when local billing is disabled', async () => {
+        fixture.destroy();
+        (environment as AppEnvironment).billingMode = 'disabled';
+        fixture = TestBed.createComponent(PricingComponent);
+        component = fixture.componentInstance;
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const notice = fixture.nativeElement.querySelector('.local-billing-notice');
+        expect(component.billingDisabled).toBe(true);
+        expect(notice?.textContent).toContain('Stripe and billing are disabled');
+        expect(notice?.textContent).toContain('npm run local:role');
+        expect(fixture.nativeElement.querySelector('.manage-actions')).toBeNull();
     });
 
     it('should not attach a subscription listener after destruction during initialization', async () => {

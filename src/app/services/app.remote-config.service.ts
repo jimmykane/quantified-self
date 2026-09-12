@@ -1,5 +1,5 @@
 import { APP_STORAGE } from './storage/app.storage.token';
-import { Inject, PLATFORM_ID, Injectable, inject, signal, Signal, computed } from '@angular/core';
+import { PLATFORM_ID, Injectable, inject, signal, Signal, computed } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
@@ -20,7 +20,7 @@ import { fetchAndActivate, getString } from 'firebase/remote-config';
     providedIn: 'root'
 })
 export class AppRemoteConfigService {
-    private readonly remoteConfig = inject(RemoteConfig);
+    private readonly remoteConfig = inject(RemoteConfig, { optional: true });
     private readonly windowService = inject(AppWindowService);
     private readonly userService = inject(AppUserService);
     private readonly logger = inject(LoggerService);
@@ -73,6 +73,12 @@ export class AppRemoteConfigService {
     readonly isLoading = computed(() => !this._configLoaded());
 
     constructor() {
+        if (!this.remoteConfig) {
+            this._isAdmin.set(false);
+            this._configLoaded.set(true);
+            return;
+        }
+
         // Set minimum fetch interval:
         // - Production: 1 hour (3,600,000ms) - balance between freshness and throttle limits
         // - Dev/Beta: 5 minutes (300,000ms) - faster updates for testing
@@ -96,7 +102,7 @@ export class AppRemoteConfigService {
     }
 
     private async initializeConfig(): Promise<void> {
-        if (!isPlatformBrowser(this.platformId)) {
+        if (!this.remoteConfig || !isPlatformBrowser(this.platformId)) {
             return;
         }
 
@@ -115,6 +121,10 @@ export class AppRemoteConfigService {
     }
 
     private updateMaintenanceState(): void {
+        if (!this.remoteConfig) {
+            return;
+        }
+
         try {
             const env = this.environmentName;
 

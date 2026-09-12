@@ -12,11 +12,11 @@ import {
 
 import {
   ALLOWED_CORS_ORIGINS,
-  ENFORCE_APP_CHECK,
   assertEventWriteUserActive,
   hasBasicAccess,
   hasProAccess,
   setEventDocumentIfUserActive,
+  shouldEnforceAppCheck,
 } from '../utils';
 import { EventWriter, FirestoreAdapter, OriginalFile, StorageAdapter } from '../shared/event-writer';
 import { generateActivityID } from '../shared/id-generator';
@@ -377,7 +377,7 @@ async function verifyFirebaseUserIDFromAuthorizationHeader(
 }
 
 async function verifyAppCheckHeader(appCheckHeader?: string): Promise<void> {
-  if (!ENFORCE_APP_CHECK) {
+  if (!shouldEnforceAppCheck()) {
     return;
   }
 

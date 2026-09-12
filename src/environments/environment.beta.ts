@@ -2,17 +2,25 @@
 // The build system defaults to the dev environment which uses `environment.ts`, but if you do
 // `ng build --env=beta` then `environment.beta.ts` will be used instead.
 // The list of which env maps to which file can be found in `.angular-cli.json`.
+import type { AppEnvironment } from './environment.interface';
 declare function require(moduleName: string): any;
 const appVersion = require('../../package.json').version;
 
-export const environment = {
+export const environment: AppEnvironment = {
   appVersion: appVersion,
   supportEmail: 'support@quantified-self.io',
   appUrl: 'https://beta.quantified-self.io',
   production: false,
   beta: true,
   localhost: false,
+  backendMode: 'hosted',
+  billingMode: 'stripe',
+  analyticsEnabled: true,
   forceAnalyticsCollection: true,
+  remoteConfigEnabled: true,
+  appCheckEnabled: true,
+  performanceEnabled: true,
+  observabilityEnabled: true,
   useAuthEmulator: false,
   useFunctionsEmulator: false,
   firebase: {

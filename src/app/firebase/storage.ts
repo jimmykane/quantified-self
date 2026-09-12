@@ -2,7 +2,7 @@ import { EnvironmentProviders, InjectionToken, makeEnvironmentProviders } from '
 import type { FirebaseStorage } from 'firebase/storage';
 import { FirebaseApp } from './app';
 
-export { getBytes, getMetadata, getStorage, ref } from 'firebase/storage';
+export { connectStorageEmulator, getBytes, getMetadata, getStorage, ref } from 'firebase/storage';
 export type { FirebaseStorage as FirebaseStorageType } from 'firebase/storage';
 
 export const Storage = new InjectionToken<FirebaseStorage>('Storage');

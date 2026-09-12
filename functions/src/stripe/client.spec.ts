@@ -56,6 +56,12 @@ describe('Stripe Client', () => {
         await expect(getStripe()).rejects.toThrow('STRIPE_SECRET_KEY is unavailable to this Function invocation.');
     });
 
+    it('should reject the local emulator sentinel before initializing Stripe', async () => {
+        process.env.STRIPE_SECRET_KEY = 'LOCAL_EMULATOR_DISABLED';
+
+        await expect(getStripe()).rejects.toThrow('STRIPE_SECRET_KEY is unavailable to this Function invocation.');
+    });
+
     it('should initialize Stripe with the bound STRIPE_SECRET_KEY', async () => {
         process.env.STRIPE_SECRET_KEY = 'sk_test_123';
 
