@@ -671,6 +671,9 @@ describe('SummariesComponent', () => {
     fixture.destroy();
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    // Clearing the shared notes context notifies Angular's one-shot render scheduler. Let that
+    // cleanup settle; a leaked greeting boundary would run and schedule another timer here.
+    vi.runOnlyPendingTimers();
     expect(vi.getTimerCount()).toBe(0);
   });
 

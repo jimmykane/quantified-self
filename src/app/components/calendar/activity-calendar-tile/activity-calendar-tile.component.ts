@@ -14,7 +14,7 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import type { EventInterface, User } from '@sports-alliance/sports-lib';
-import { catchError, combineLatest, finalize, map, of, startWith, switchMap, take } from 'rxjs';
+import { catchError, finalize, map, of, shareReplay, startWith, Subscription, switchMap, take } from 'rxjs';
 import { isTimelineNoteVisible, timelineNoteOverlaps } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
@@ -83,39 +83,37 @@ export class ActivityCalendarTileComponent {
   private readonly reportNotesRange = computed(() => this.notesContext()?.reportRange);
   readonly showHeading = input(true);
   readonly showNavigation = input(false);
-  readonly eventState = toSignal(combineLatest([
-    toObservable(this.user),
-    toObservable(this.anchorDate),
-    toObservable(this.reloadSequence),
-  ]).pipe(
-    switchMap(([user, anchorDate]) => {
-      if (!user?.uid) {
-        return of({ status: 'ready', events: [] } as ActivityCalendarTileState);
-      }
-      const queryWindow = resolveActivityCalendarQueryWindow(
-        'month',
-        anchorDate,
-        user.settings?.unitSettings?.startOfTheWeek,
-      );
-      return this.calendarService.watchEvents(user, queryWindow).pipe(
-        map(events => ({ status: 'ready', events }) as ActivityCalendarTileState),
-        startWith({ status: 'loading', events: [] } as ActivityCalendarTileState),
-        catchError(() => of({ status: 'error', events: [] } as ActivityCalendarTileState)),
-      );
-    }),
-  ), { initialValue: { status: 'loading', events: [] } as ActivityCalendarTileState });
-  readonly plansState = toSignal(toObservable(this.user).pipe(
-    switchMap(user => {
-      if (!user?.uid) {
-        return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
-      }
-      return this.plansService.watchSchedule(user.uid).pipe(
-        map(schedule => ({ status: 'ready', schedule }) as ActivityCalendarTilePlansState),
-        startWith({ status: 'loading', schedule: null } as ActivityCalendarTilePlansState),
-        catchError(() => of({ status: 'error', schedule: null } as ActivityCalendarTilePlansState)),
-      );
-    }),
-  ), { initialValue: { status: 'loading', schedule: null } as ActivityCalendarTilePlansState });
+  // Share each concrete query with an open day sheet. Material destroys the month popup when
+  // replacing it, but the selected day's pending data must continue until its own sheet closes.
+  private readonly eventsSource = computed(() => {
+    const user = this.user();
+    const anchorDate = this.anchorDate();
+    this.reloadSequence();
+    if (!user?.uid) return of({ status: 'ready', events: [] } as ActivityCalendarTileState);
+    const queryWindow = resolveActivityCalendarQueryWindow(
+      'month', anchorDate, user.settings?.unitSettings?.startOfTheWeek,
+    );
+    return this.calendarService.watchEvents(user, queryWindow).pipe(
+      map(events => ({ status: 'ready', events }) as ActivityCalendarTileState),
+      startWith({ status: 'loading', events: [] } as ActivityCalendarTileState),
+      catchError(() => of({ status: 'error', events: [] } as ActivityCalendarTileState)),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+  });
+  readonly eventState = toSignal(toObservable(this.eventsSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'loading', events: [] } as ActivityCalendarTileState });
+  private readonly plansSource = computed(() => {
+    const user = this.user();
+    if (!user?.uid) return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
+    return this.plansService.watchSchedule(user.uid).pipe(
+      map(schedule => ({ status: 'ready', schedule }) as ActivityCalendarTilePlansState),
+      startWith({ status: 'loading', schedule: null } as ActivityCalendarTilePlansState),
+      catchError(() => of({ status: 'error', schedule: null } as ActivityCalendarTilePlansState)),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+  });
+  readonly plansState = toSignal(toObservable(this.plansSource).pipe(switchMap(source => source)),
+    { initialValue: { status: 'loading', schedule: null } as ActivityCalendarTilePlansState });
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
     if (!schedule) return {};
@@ -203,7 +201,8 @@ export class ActivityCalendarTileComponent {
   }
 
   openDay(day: ActivityCalendarDayViewModel): void {
-    const userId = `${this.user()?.uid || ''}`.trim();
+    const user = this.user();
+    const userId = `${user?.uid || ''}`.trim();
     if (!userId) {
       return;
     }
@@ -220,23 +219,57 @@ export class ActivityCalendarTileComponent {
       return current?.ownerUid === userId
         ? current.notes.filter(note => isTimelineNoteVisible(note) && timelineNoteOverlaps(note, range)) : [];
     });
-    const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, string>(CalendarDayDetailsComponent, {
-      data: {
-        day,
-        userId,
-        timelineNotes,
-        locale: this.locale,
-        unitSettings: this.user()?.settings?.unitSettings ?? null,
-        summariesSettings: this.user()?.settings?.summariesSettings ?? null,
-        plannedWorkouts: this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
-        plannedWorkoutsSource: () => this.plannedWorkoutsByDate()[day.dateKey]?.entries ?? [],
-        plannedWorkoutsStatusSource: () => this.plansState().status,
-      },
+    const subscriptions = new Subscription();
+    const eventState = signal(this.eventState());
+    const plansState = signal(this.plansState());
+    const monthOptions = {
+      view: 'month' as const,
+      anchorDate: day.date,
+      startOfWeek: user.settings?.unitSettings?.startOfTheWeek,
+      locale: this.locale,
+      now: this.today(),
+    };
+    const activities = computed(() => {
+      const state = eventState();
+      const currentDay = buildActivityCalendarViewModel(state.events, monthOptions).months
+        .flatMap(month => month.days).find(candidate => candidate.dateKey === day.dateKey);
+      return { status: state.status, day: currentDay ?? day };
     });
-    sheet.afterDismissed().pipe(take(1), finalize(() => report?.(rangeKey, null))).subscribe(noteId => {
-      const note = timelineNotes().find(note => note.id === noteId);
-      if (note) source?.()?.select([note]);
+    const plannedWorkouts = computed(() => {
+      const schedule = plansState().schedule;
+      return schedule ? buildPlannedWorkoutCalendarOverlay(
+        selectCalendarVisibleScheduledWorkouts(schedule), schedule.plans, schedule.state.activePlanId,
+      )[day.dateKey]?.entries ?? [] : [];
     });
+    const release = () => {
+      subscriptions.unsubscribe();
+      report?.(rangeKey, null);
+    };
+    try {
+      subscriptions.add(this.eventsSource().subscribe(state => eventState.set(state)));
+      subscriptions.add(this.plansSource().subscribe(state => plansState.set(state)));
+      const sheet = this.bottomSheet.open<CalendarDayDetailsComponent, CalendarDayDetailsData, string>(CalendarDayDetailsComponent, {
+        data: {
+          day,
+          userId,
+          timelineNotes,
+          activities,
+          locale: this.locale,
+          unitSettings: user.settings?.unitSettings ?? null,
+          summariesSettings: user.settings?.summariesSettings ?? null,
+          plannedWorkouts: plannedWorkouts(),
+          plannedWorkoutsSource: plannedWorkouts,
+          plannedWorkoutsStatusSource: () => plansState().status,
+        },
+      });
+      sheet.afterDismissed().pipe(take(1), finalize(release)).subscribe(noteId => {
+        const note = timelineNotes().find(note => note.id === noteId);
+        if (note) source?.()?.select([note]);
+      });
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 }
 

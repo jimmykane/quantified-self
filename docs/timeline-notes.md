@@ -148,7 +148,13 @@ The Today popup receives the same signal rather than a snapshot or a second note
 visible month and unregister on removal. Opening a day retains that day's range until its sheet closes, including when
 Material destroys the replaced month popup. The day list keeps reading the live workspace signal, filters its owner and
 visibility, and resolves selections against the latest notes before opening the manager. Release the retained range after
-selection/dismissal, not when the replaced calendar component is destroyed. Destroyed workspaces reject delayed actions.
+selection/dismissal, not when the replaced calendar component is destroyed. Destroyed workspaces clear their reactive
+context and reject delayed actions, range registrations, and load results.
+
+Calendar day sheets retain the calendar's existing activity and schedule streams until dismissal, without issuing duplicate
+queries. Loading and failures stay explicit rather than becoming zero activities; pending updates survive replacement of
+the Today month popup. Each sheet keeps the selected day's query even if its source calendar moves to another month.
+Subscriptions and the notes range are released on dismissal or if the sheet cannot open.
 
 ## Verification and release
 

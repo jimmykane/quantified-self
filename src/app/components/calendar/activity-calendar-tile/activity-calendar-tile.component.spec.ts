@@ -115,6 +115,87 @@ describe('ActivityCalendarTileComponent', () => {
     expect(ranges.size).toBe(0);
   });
 
+  it.each([false, true])('finishes loading a note day after its tile / month popup closes without duplicate queries (navigation: %s)', async showNavigation => {
+    const dateKey = currentLocalDate(2);
+    const events$ = new Subject<EventInterface[]>();
+    const plans$ = new Subject<CurrentTrainingScheduleV1>();
+    const dismissed$ = new Subject<string>();
+    const note: TimelineNote = { id: 'a'.repeat(64), title: 'Rest day', category: 'other', startDate: dateKey, endDate: dateKey, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    watchEvents.mockReturnValue(events$);
+    watchSchedule.mockReturnValue(plans$);
+    openBottomSheet.mockReturnValue({ afterDismissed: () => dismissed$ });
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('showNavigation', showNavigation);
+    fixture.componentRef.setInput('timelineNotes', signal({ ownerUid: user.uid, notes: [note], select: vi.fn(), reportRange: vi.fn() }));
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    vi.spyOn(fixture.debugElement.injector.get(MatBottomSheet), 'open').mockImplementation(openBottomSheet);
+    (fixture.nativeElement.querySelector('[aria-label*="1 Timeline note"]') as HTMLButtonElement).click();
+    const data = openBottomSheet.mock.calls[0][1].data as CalendarDayDetailsData;
+    expect(data.timelineNotes?.()).toEqual([note]);
+    expect(data.activities?.().status).toBe('loading');
+    expect(data.plannedWorkoutsStatusSource?.()).toBe('loading');
+    expect(watchEvents).toHaveBeenCalledOnce();
+    expect(watchSchedule).toHaveBeenCalledOnce();
+    expect(events$.observers).toHaveLength(1);
+    expect(plans$.observers).toHaveLength(1);
+    fixture.destroy();
+    expect(events$.observed).toBe(true);
+    expect(plans$.observed).toBe(true);
+    const now = new Date();
+    const event = createEvent(new Date(now.getFullYear(), now.getMonth(), 2, 8));
+    events$.next([event]);
+    plans$.next(scheduleForDate(dateKey));
+    expect(data.activities?.()).toMatchObject({ status: 'ready', day: { dateKey, events: [event], eventCount: 1 } });
+    expect(data.plannedWorkoutsStatusSource?.()).toBe('ready');
+    expect(data.plannedWorkoutsSource?.().map(entry => entry.workout.id)).toEqual(['active-workout', 'standalone-workout']);
+    dismissed$.next(undefined); dismissed$.complete();
+    expect(events$.observed).toBe(false);
+    expect(plans$.observed).toBe(false);
+  });
+
+  it('preserves activity and schedule failures in note day details instead of reporting empty results', async () => {
+    const events$ = new Subject<EventInterface[]>();
+    watchEvents.mockReturnValue(events$);
+    watchSchedule.mockReturnValue(throwError(() => new Error('offline')));
+    const dismissed$ = new Subject<string>();
+    openBottomSheet.mockReturnValue({ afterDismissed: () => dismissed$ });
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.detectChanges(); await fixture.whenStable();
+    vi.spyOn(fixture.debugElement.injector.get(MatBottomSheet), 'open').mockImplementation(openBottomSheet);
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === currentLocalDate(2))!;
+    fixture.componentInstance.openDay(day);
+    const data = openBottomSheet.mock.calls[0][1].data as CalendarDayDetailsData;
+    expect(data.activities?.().status).toBe('loading');
+    expect(data.plannedWorkoutsStatusSource?.()).toBe('error');
+    fixture.destroy();
+    events$.error(new Error('offline'));
+    expect(data.activities?.().status).toBe('error');
+    dismissed$.next(undefined); dismissed$.complete();
+  });
+
+  it('releases the selected day range and retained subscriptions if opening the sheet fails', async () => {
+    const events$ = new Subject<EventInterface[]>();
+    const plans$ = new Subject<CurrentTrainingScheduleV1>();
+    const ranges = new Map<object, TimelineNoteRange>();
+    const reportRange = (key: object, range: TimelineNoteRange | null) => range ? ranges.set(key, range) : ranges.delete(key);
+    watchEvents.mockReturnValue(events$); watchSchedule.mockReturnValue(plans$);
+    openBottomSheet.mockImplementation(() => { throw new Error('Sheet could not open'); });
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('timelineNotes', signal({ ownerUid: user.uid, notes: [], select: vi.fn(), reportRange }));
+    fixture.detectChanges(); await fixture.whenStable();
+    vi.spyOn(fixture.debugElement.injector.get(MatBottomSheet), 'open').mockImplementation(openBottomSheet);
+    const day = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === currentLocalDate(2))!;
+    expect(() => fixture.componentInstance.openDay(day)).toThrow('Sheet could not open');
+    expect(ranges.size).toBe(1); // Only the mounted calendar remains registered.
+    fixture.destroy();
+    expect(ranges.size).toBe(0);
+    expect(events$.observed).toBe(false);
+    expect(plans$.observed).toBe(false);
+  });
+
   it('clears private notes on visibility/account changes and rejects a stale day selection', async () => {
     const note: TimelineNote = { id: 'a'.repeat(64), title: 'Private', category: 'other', startDate: currentLocalDate(2), endDate: currentLocalDate(2), timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
     const select = vi.fn();

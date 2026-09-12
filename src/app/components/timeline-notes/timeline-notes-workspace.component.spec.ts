@@ -162,6 +162,38 @@ describe('Timeline notes workspace ownership', () => {
     expect(component.incomplete()).toBe('records'); expect(component.error()).toBe(false);
   });
 
+  it('clears a retained context on destruction and ignores late loads and range registrations', async () => {
+    const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+    fixture.componentRef.setInput('ownerUid', 'owner');
+    fixture.componentRef.setInput('visibleRange', { startDate: '2026-01-01', endDate: '2026-01-10' });
+    fixture.detectChanges(); await flush();
+    const workspace = fixture.componentInstance;
+    const retainedSource = workspace.context;
+    const oldContext = retainedSource();
+    expect(oldContext.notes).toEqual([note]);
+    fixture.destroy();
+    expect(retainedSource()).toMatchObject({ ownerUid: null, notes: [] });
+    oldContext.select([note]);
+    oldContext.reportRange({}, { startDate: '2026-02-01', endDate: '2026-02-10' });
+    await flush();
+    expect(service.loadRange).toHaveBeenCalledOnce();
+    expect(dialogs.open).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementation(() => new Promise(resolve => { resolveLoad = resolve; }));
+    const pending = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+    pending.componentRef.setInput('visibleRange', { startDate: '2026-01-01', endDate: '2026-01-10' });
+    pending.detectChanges(); await flush();
+    expect(pending.componentInstance.loading()).toBe(true);
+    pending.destroy();
+    resolveLoad({ notes: [note], incomplete: 'records' });
+    await flush();
+    expect(pending.componentInstance.context()).toMatchObject({ ownerUid: null, notes: [] });
+    expect(pending.componentInstance.loading()).toBe(false);
+    expect(pending.componentInstance.incomplete()).toBeNull();
+  });
+
   it('fences a dashboard profile independently of the signed-in account and rejects destroyed selections', async () => {
     const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
     fixture.componentRef.setInput('ownerUid', 'someone-else');

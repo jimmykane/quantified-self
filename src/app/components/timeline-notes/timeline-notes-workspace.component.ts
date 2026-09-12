@@ -43,6 +43,7 @@ export class TimelineNotesWorkspaceComponent {
   readonly visibleRange = input<TimelineNoteRange | null>(null);
   readonly service = inject(AppTimelineNotesService);
   readonly activeOwner = computed(() => {
+    if (this.destroyed()) return null;
     const uid = this.service.uid();
     return this.ownerUid() === undefined || this.ownerUid() === uid ? uid : null;
   });
@@ -57,10 +58,11 @@ export class TimelineNotesWorkspaceComponent {
   private readonly ranges = new Map<object, TimelineNoteRange>();
   private version = 0;
   private queued = false;
-  private destroyed = false;
+  private readonly destroyed = signal(false);
   private rangeKey = '';
   private readonly loadedOwner = signal<string | null>(null);
   private readonly reportRange = (key: object, range: TimelineNoteRange | null) => {
+    if (this.destroyed()) return;
     if (range) this.ranges.set(key, range); else this.ranges.delete(key);
     this.schedule();
   };
@@ -71,7 +73,7 @@ export class TimelineNotesWorkspaceComponent {
       notes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.notes().filter(isTimelineNoteVisible) : [],
       // ECharts callbacks run outside Angular; entering here lets Material own dialog/focus lifecycle.
       select: notes => this.zone.run(() => {
-        if (this.destroyed || !notes.length || !owner || owner !== this.activeOwner() || !this.service.isOwner(owner) || !this.service.showOnCharts() || owner !== this.loadedOwner()) return;
+        if (this.destroyed() || !notes.length || !owner || owner !== this.activeOwner() || !this.service.isOwner(owner) || !this.service.showOnCharts() || owner !== this.loadedOwner()) return;
         // A queued marker click must not reopen a note that was hidden or removed since it rendered.
         const ids = new Set(notes.map(note => note.id));
         const selected = this.notes().filter(note => ids.has(note.id) && isTimelineNoteVisible(note));
@@ -99,18 +101,19 @@ export class TimelineNotesWorkspaceComponent {
       document.addEventListener('visibilitychange', returned);
       this.destroy.onDestroy(() => { window.removeEventListener('focus', returned); document.removeEventListener('visibilitychange', returned); });
     }
-    this.destroy.onDestroy(() => { this.destroyed = true; this.version++; this.ranges.clear(); });
+    this.destroy.onDestroy(() => { this.destroyed.set(true); this.version++; this.ranges.clear();
+      this.notes.set([]); this.loadedOwner.set(null); this.loading.set(false); this.error.set(false); this.incomplete.set(null); });
   }
   open(notes?: readonly TimelineNote[]): void {
     const uid = this.activeOwner();
-    if (this.destroyed || !uid || !this.service.isOwner(uid)) return;
+    if (this.destroyed() || !uid || !this.service.isOwner(uid)) return;
     this.dialogs.open(TimelineNotesDialogComponent, { width: '560px', maxWidth: 'calc(100vw - 32px)', data: { uid, notes } });
   }
   refresh(): void { this.service.invalidate(); }
   private schedule(): void {
-    if (this.queued || this.destroyed) return;
+    if (this.queued || this.destroyed()) return;
     this.queued = true;
-    queueMicrotask(() => { this.queued = false; if (!this.destroyed) void this.load(); });
+    queueMicrotask(() => { this.queued = false; if (!this.destroyed()) void this.load(); });
   }
   private async load(): Promise<void> {
     const uid = this.activeOwner();
@@ -132,7 +135,7 @@ export class TimelineNotesWorkspaceComponent {
       if (version !== this.version || uid !== this.activeOwner() || !this.service.isOwner(uid)) return;
       this.notes.set(result.notes); this.incomplete.set(result.incomplete);
     } catch {
-      if (version === this.version && this.service.isOwner(uid)) this.error.set(true);
+      if (version === this.version && uid === this.activeOwner() && this.service.isOwner(uid)) this.error.set(true);
     } finally { if (version === this.version) this.loading.set(false); }
   }
 }
