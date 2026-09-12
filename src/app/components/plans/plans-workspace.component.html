@@ -7,6 +7,8 @@
     [status]="pageStatus()">
     @if (browsing()) {
     <div pageHeaderActions class="plans-header-actions">
+      <app-training-delivery-button scope="history" entityId="current" title="All provider deliveries"
+        [disabled]="busyAction() !== null"></app-training-delivery-button>
       <a mat-button routerLink="/calendar" appHapticTap>
         <mat-icon aria-hidden="true">calendar_month</mat-icon>
         <span>Main Calendar</span>
@@ -131,6 +133,8 @@
             </mat-select>
           </mat-form-field>
             <div class="plan-actions">
+              <app-training-delivery-button scope="plan" [entityId]="plan.id" [title]="plan.name"
+                [disabled]="busyAction() !== null"></app-training-delivery-button>
               <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="planActionsMenu"
                 [disabled]="busyAction() !== null" matTooltip="Plan actions"
                 [attr.aria-label]="selectedPlanActionBusy() ? 'Updating plan' : 'Plan actions'">
@@ -401,6 +405,10 @@
           </section>
           </fieldset>
         <div class="form-actions editor-save-actions">
+          @if (session.original; as workout) {
+            <app-training-delivery-button scope="workout" [entityId]="workout.id" [title]="workout.title"
+              [standalone]="workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
+          }
           <button appHapticTap mat-button type="button" (click)="cancelEditor()" [disabled]="busyAction() !== null">Cancel</button>
           <button appHapticTap mat-flat-button type="button" (click)="saveWorkout()"
             [disabled]="busyAction() !== null || !session.value.title.trim() || session.value.nodes.length === 0">
@@ -523,6 +531,8 @@
                   }
                 </ol>
               <div compactRowAction class="workout-row-actions">
+                <app-training-delivery-button scope="workout" [entityId]="row.workout.id" [title]="row.workout.title"
+                  [standalone]="row.workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
                 <button appHapticTap mat-button type="button" aria-label="Edit workout" (click)="editWorkout(row.workout)" [disabled]="busyAction() !== null">
                   <mat-icon aria-hidden="true">edit</mat-icon><span>Edit</span>
                 </button>

@@ -1,0 +1,9 @@
+:host { display: block; min-width: 0; }
+p, li { overflow-wrap: anywhere; }
+.delivery-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.delivery-review { display: flex; flex-direction: column; align-items: stretch; gap: 0.75rem; }
+.delivery-status { margin-block: 0.75rem; }
+.delivery-status p { margin-block: 0.25rem; }
+@media (max-width: 600px) {
+  .delivery-actions { flex-direction: column; align-items: stretch; }
+}

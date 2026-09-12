@@ -1,6 +1,16 @@
 {
   "indexes": [
     {
+      "collectionGroup": "trainingDeliverySettings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "scope", "order": "ASCENDING" },
+        { "fieldPath": "scopeId", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "timelineNotes",
       "queryScope": "COLLECTION",
       "fields": [

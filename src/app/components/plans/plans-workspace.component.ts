@@ -32,6 +32,7 @@ import {
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
+import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 import {
@@ -119,7 +120,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent],
+  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
