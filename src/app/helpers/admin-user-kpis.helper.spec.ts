@@ -91,7 +91,7 @@ describe('admin user KPI helper', () => {
         });
         expect(cards.find(card => card.id === 'marketing-consent')).toMatchObject({
             value: 35,
-            subtitle: 'Consent only · 29% of users',
+            subtitle: 'Consent only · 29.2% of users',
         });
         expect(cards.find(card => card.id === 'service-connected-users')).toMatchObject({
             value: 48,
@@ -101,6 +101,20 @@ describe('admin user KPI helper', () => {
         expect(cards.find(card => card.id === 'events')?.valueKind).toBe('compact');
         expect(cards.find(card => card.id === 'growth-12m')?.subtitle).toBe('12 onboarded');
         expect(cards.find(card => card.id === 'subscription-net-12m')?.value).toBe(6);
+    });
+
+    it.each([
+        [8, 2209, '0.4%'],
+        [1, 10000, '<0.1%'],
+        [1, 1000, '0.1%'],
+        [0, 2209, '0%'],
+        [12, 120, '10%'],
+    ])('displays a truthful MCP user share for %s of %s users', (mcpUsers, total, expected) => {
+        const stats = buildStats({ total });
+        stats.connections = { ...stats.connections!, mcpUsers };
+        const card = buildAdminUserKpiCards('full', stats, null, null)
+            .find(item => item.id === 'mcp-connected-users');
+        expect(card).toMatchObject({ value: mcpUsers, subtitle: `Active authorization · ${expected} of users` });
     });
 
     it('keeps optional cards stable when source data is unavailable', () => {

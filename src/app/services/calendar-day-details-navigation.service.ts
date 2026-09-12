@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { NavigationStart, Router } from '@angular/router';
 import { filter } from 'rxjs';
+import { isTrainingPlansUrl } from '../helpers/training-plans-navigation.helper';
 
 export interface CalendarDayDetailsRestoration {
   sourceUrl: string;
@@ -85,7 +86,7 @@ export class CalendarDayDetailsNavigationService {
       return;
     }
 
-    if (targetUrl && isEventDetailsUrl(targetUrl)) {
+    if (targetUrl && (isEventDetailsUrl(targetUrl) || isTrainingPlansUrl(targetUrl))) {
       return;
     }
 

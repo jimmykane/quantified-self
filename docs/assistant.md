@@ -78,6 +78,8 @@ sent as part of a coordinate-free chat. Route-location scope, saved-route bounds
 original source files, write tools, and dashboard settings remain unavailable in both modes. Coordinate-free chats can
 read bounded activity chart series but never their breadcrumb location stream. Precise-activity chats can request that
 existing location stream when an activity map is relevant.
+Detailed activity sample pagination remains an external MCP workflow. The first-party allowlist omits
+`get_activity_samples` and its routing instruction to preserve the Assistant's compact evidence and turn budgets.
 External MCP clients remain the path for separately approved saved-route location and geometry access. Saved-route names
 are included in summaries and can themselves contain user- or provider-assigned place information.
 

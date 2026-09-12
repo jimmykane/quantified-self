@@ -1,7 +1,7 @@
 # Timeline notes
 
 Timeline notes are private, user-created calendar context, independent of Health metrics, Sleep sessions, and workouts.
-Every authenticated account can use the compact **Timeline notes** header action in Health, Training, and Calendar, without a
+Every authenticated account can use the compact **Timeline notes** header action in Dashboard, Health, Training, and Calendar, without a
 subscription or connected provider. Existing workspace entry-point rollout and provider import checks are unchanged.
 
 ## Contract and lifecycle
@@ -37,8 +37,9 @@ chart tooltips HTML-escape titles. This version does not change a measurement or
 ## Explicit read-only AI access
 
 The existing MCP endpoint exposes full titles/details, category, fixed dates and captured timezone through
-`query_timeline_notes` only with the independent `timeline-notes:read` grant. Consent starts unchecked and existing
-connections must reauthorize. Chart-hidden notes are included; color/visibility, IDs, revisions, audit timestamps and
+`query_timeline_notes` only with the independent `timeline-notes:read` grant. The external consent checkbox is selected
+by default when requested; the owner can uncheck it before approving. Existing connections must reauthorize.
+Chart-hidden notes are included; color/visibility, IDs, revisions, audit timestamps and
 deletion receipts are not returned. External clients receive full private text and may retain received copies after
 revocation. The [MCP guide](mcp-server.md#timeline-notes) defines overlap, frozen ongoing cutoffs, ordering, bounds and
 encrypted continuation. No additional notes storage, index, migration or Cloud Function is needed.
@@ -54,14 +55,29 @@ add Assistant chart overlays. Provider disconnect retains them and account clean
 `AppTimelineNotesService` scopes requests/cache to the active account. Closed periods query `endDate >= windowStart`
 and `startDate <= windowEnd`; ongoing notes query `endDate == null` and the same upper start bound. The collection index
 is `endDate ASC, startDate ASC, __name__ ASC`. Title and details have no automatic indexes. Each workspace load accepts
-at most 512 records / 2 MiB, across 64-record pages; it reports explicit incomplete results. The manager separately
+at most 512 records / 2 MiB, across 64-record pages; it reports explicit incomplete results. The two first pages load
+concurrently, then processing prioritizes ongoing notes within the shared caps. This removes a serial network wait
+without changing the indexed queries. If ongoing notes alone exhaust the budget, the closed first page (at most 65
+records including lookahead) has been prefetched but is not processed. The manager separately
 pages all notes, including future notes, newest start date first. No query parameters or navigation destination exist.
 
 `TimelineNotesWorkspaceComponent` coalesces chart range registrations into a union and supplies explicit chart inputs.
 Health Highlights register their own fixed trend windows alongside the metric explorer's selected window, so navigating
 the explorer into older history does not drop recent Highlight notes. All use the same bounded, account-scoped load.
-The service deduplicates overlapping covered requests, fences stale account/range results, and invalidates on mutations
-and returning to the workspace. Notes failing to load never block metric rendering. Provider/sport filters do not filter
+Charts register lazily as they approach the viewport. Range expansion/contraction retains the current owner's notes
+until the next result replaces them atomically; equivalent decoded snapshots retain their signal identity so already
+mounted charts do not redraw. A failed expansion retains known annotations and exposes Retry notes. Account/profile
+changes, disabling notes, an empty range union, destruction, and explicit service invalidation still clear stale notes;
+late responses cannot restore them. Mutation invalidation increments the request version immediately.
+The service keeps a bounded completed snapshot separately from pending requests. Covered results are fresh for 60 seconds;
+returning workspaces can display the last completed snapshot immediately while older data revalidates. Covered pending
+requests are shared, including refreshes; a late older window cannot overwrite the newest snapshot. Incomplete broad
+results must be requeried for a narrower window. Successful note mutations and account changes clear the snapshot and
+fence outstanding reads immediately.
+Window focus and visible-tab events perform passive revalidation, preserving annotations and avoiding duplicate pending
+loads. They do not invalidate the service. Unchanged notes retain the same chart context; ongoing periods reproject only
+when their captured-zone date changes. An explicit Retry notes bypasses freshness without clearing known annotations.
+Failed refreshes keep the last completed snapshot and expose retry. Notes failing to load never block metric rendering. Provider/sport filters do not filter
 notes. The global preference is `settings.appSettings.timelineNotes.showOnCharts`, default true. The Material manager
 supports create/edit, confirmed delete, End today, retries and explicit conflict reload while preserving unsaved drafts.
 Failed history-page requests retry that same page; failed visibility saves restore the persisted checkbox state.
@@ -89,19 +105,19 @@ they do not alter measurement series, axis bounds, legends, metric tooltips, gap
 Markers and period bands use the selected color; text retains its theme contrast. Mixed-color overlaps group into neutral
 markers instead of blending colors; same-color groups keep that color. Each note retains its category and actual dates
 in the escaped tooltip and manager. Date ranges have inward-facing native ECharts arrows at the start and inclusive end,
-joined by the existing subtle period band, with the title shown only at the start. Both boundaries open the same note/group.
+joined by the existing subtle period band, with the title shown only at the start. Both boundaries show the same note/group tooltip.
 Period fills are non-interactive (`markArea.silent`) with tooltips and emphasis disabled, so hovering/tapping anywhere
-inside the band retains the chart's metric tooltip. Note tooltips and selection live on the title and boundary markers;
-the binding ignores area clicks. Keep this boundary covered by real-renderer pointer tests, not only option assertions.
+inside the band retains the chart's metric tooltip. Note tooltips live on the title and boundary markers;
+the binding registers no click-to-edit handler. Keep this boundary covered by real-renderer pointer tests, not only option assertions.
 Ongoing periods use an open end marker at today in the note's zone; boundaries clipped by the visible window also use open
 markers, avoiding a false start/end. Single-day notes and periods collapsed into one weekly bucket retain one dot marker.
 Single markers display the note title as plain, single-line text, with native ECharts
 ellipsis for long titles (100px in compact charts, 160px otherwise). Compact charts stagger adjacent labels onto two rows
 without adding chart padding. A formatter callback prevents title text from being
 interpreted as ECharts template placeholders. The full title remains in the escaped tooltip and editor. Grouped markers
-keep their note count instead of labeling several notes as one. Single markers open the editor; grouped markers open the matching list. The header
-manager provides the keyboard-accessible alternative to click/tap, without requiring hover.
-Distinct dates projected onto the same weekly bucket or clipped endpoint share one selectable marker, preserving access
+keep their note count instead of labeling several notes as one. Chart markers only show tooltips and never open an editor or list. The header
+manager provides keyboard-accessible browsing and editing, without requiring hover.
+Distinct dates projected onto the same weekly bucket or clipped endpoint share one tooltip marker, preserving access
 to every note and its actual dates. Grouping single-day notes does not create a period band between them.
 Note tooltips reuse the shared ECharts tooltip card and chrome with the active chart theme and responsive typography.
 Titles wrap above their actual dates, grouped notes remain separate, and the chart's existing tooltip positioning is retained.
@@ -109,7 +125,7 @@ Titles wrap above their actual dates, grouped notes remain separate, and the cha
 Opt-in surfaces: Health Highlights and detailed metrics (recorded timezone), normalized Sleep (sleepDate), Training readiness,
 load/Form, freshness forecast (existing viewer-calendar convention), body weight, power-system history, weekly swimming
 and weekly durability. Weekly overlays identify overlapping buckets but retain actual note dates in tooltips. All shared
-inputs default null. Dashboard, workout details, public previews and non-calendar charts are unchanged.
+inputs default null. Dashboard HRV, Sleep, Form, and Freshness Forecast opt in through the same adapters. Workout details, public previews and non-calendar charts remain unchanged.
 The authenticated full Calendar integration is described below.
 
 ## Calendar boundary
@@ -132,7 +148,28 @@ Selecting a day opens its
 existing Material sheet, with a plain-text notes list above activities. Selecting a note dismisses the sheet and opens
 the shared note editor. Sheet notes stay reactive to loading/edits, visibility, and account changes; delayed selections
 are checked against the current owner and notes before opening. Note and activity failures remain independent.
-The shared grid's notes input defaults empty; dashboard tiles/popovers and public calendars remain unannotated.
+The dashboard Activity Calendar tile and Today month popup reuse the same grid and date helpers. The shared grid's notes input defaults empty; public calendars remain unannotated.
+
+## Dashboard ownership and reuse
+
+`SummariesComponent` mounts one `TimelineNotesWorkspaceComponent` only for the owner's dashboard controls, with an
+explicit `ownerUid` that must match the authenticated notes account. The workspace's reactive context includes that owner
+and is empty immediately on a profile/account mismatch. `TileChartComponent.timelineNotes` accepts the shared context
+signal, forwarding its current value to supported chart adapters. This keeps all date ranges in one bounded union,
+without adding per-tile fetches. New date-based tiles should reuse this input and the existing ECharts notes binding;
+non-date charts, library previews, and other users' profiles must keep the null default.
+
+The Today popup receives the same signal rather than a snapshot or a second notes loader. Calendar tiles register their
+visible month and unregister on removal. Opening a day retains that day's range until its sheet closes, including when
+Material destroys the replaced month popup. The day list keeps reading the live workspace signal, filters its owner and
+visibility, and resolves selections against the latest notes before opening the manager. Release the retained range after
+selection/dismissal, not when the replaced calendar component is destroyed. Destroyed workspaces clear their reactive
+context and reject delayed actions, range registrations, and load results.
+
+Calendar day sheets retain the calendar's existing activity and schedule streams until dismissal, without issuing duplicate
+queries. Loading and failures stay explicit rather than becoming zero activities; pending updates survive replacement of
+the Today month popup. Each sheet keeps the selected day's query even if its source calendar moves to another month.
+Subscriptions and the notes range are released on dismissal or if the sheet cannot open.
 
 ## Verification and release
 

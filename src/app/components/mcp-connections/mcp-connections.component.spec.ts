@@ -138,6 +138,9 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Copy endpoint');
     expect(content).toContain('Exact starts, ends, jump positions, and breadcrumb traces');
     expect(content).toContain('location permissions are independent');
+    expect(content).toContain('Activity descriptions is selected by default when requested');
+    expect(content).toContain('Uncheck it before approving to withhold access');
+    expect(content).toContain('Timeline notes is selected by default when requested. Uncheck it before approving to withhold access;');
     expect(content).toContain('ChatGPT app icon');
     expect(content).toContain('recommended size');
     expect(content).toContain('under its 10 KB limit');

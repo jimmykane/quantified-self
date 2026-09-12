@@ -1,12 +1,12 @@
 interface:
   display_name: "Analyze Activity Performance"
-  short_description: "Inspect activities, laps, charts, and metrics"
-  default_prompt: "Use $analyze-quantified-self-activity to plot pace and heart rate for my latest run."
+  short_description: "Inspect workout metrics, samples, and descriptions"
+  default_prompt: "Use $analyze-quantified-self-activity to summarize my latest run using its metrics and description when authorized."
 dependencies:
   tools:
     - type: "mcp"
       value: "quantified-self"
-      description: "Read-only Quantified Self activity details, metrics, and charts"
+      description: "Read-only Quantified Self activity details, metrics, charts, detailed samples, and opt-in descriptions"
       transport: "streamable_http"
       url: "https://quantified-self.io/mcp"
 policy:

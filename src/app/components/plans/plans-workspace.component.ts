@@ -11,14 +11,17 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
+import { Location } from '@angular/common';
+import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { catchError, map, of, startWith, switchMap } from 'rxjs';
+import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
@@ -30,8 +33,18 @@ import {
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { PlanScheduleCalendarComponent } from './plan-schedule-calendar.component';
+import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { resolvePlanScheduleDate } from '../../helpers/plan-schedule-calendar.helper';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
+import {
+  isTrainingPlansBrowseUrl,
+  parseTrainingPlansRoute,
+  trainingPlansBrowseRoute,
+  trainingPlansCreateRoute,
+  trainingPlansRouteKey,
+  trainingPlansWorkoutRoute,
+  type TrainingPlansRouteState,
+} from '../../helpers/training-plans-navigation.helper';
 import {
   createManualWorkoutEditorStep,
   createManualWorkoutEditorValue,
@@ -48,6 +61,7 @@ import {
 import {
   normalizeTrainingLocalDate,
   type DeleteTrainingPlanRequestV1,
+  type DeleteTrainingPlanResponseV1,
   type ExpectedTrainingScheduleRevision,
   type MutateTrainingScheduleRequestV1,
   type MutateTrainingScheduleResponseV1,
@@ -107,7 +121,7 @@ const EMPTY_SCHEDULE: CurrentTrainingScheduleV1 = {
 @Component({
   selector: 'app-plans-workspace',
   standalone: true,
-  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent],
+  imports: [SharedModule, CompactRowComponent, PlanScheduleCalendarComponent, TrainingDeliveryButtonComponent],
   templateUrl: './plans-workspace.component.html',
   styleUrls: ['./plans-workspace.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -118,6 +132,19 @@ export class PlansWorkspaceComponent {
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly location = inject(Location);
+  private readonly routeState = toSignal(combineLatest([
+    this.route.paramMap,
+    this.route.queryParamMap,
+    this.route.data,
+  ]).pipe(map(([pathParams, queryParams, data]) => parseTrainingPlansRoute(pathParams, queryParams, data))), {
+    initialValue: parseTrainingPlansRoute(
+      this.route.snapshot.paramMap,
+      this.route.snapshot.queryParamMap,
+      this.route.snapshot.data,
+    ),
+  });
   private readonly locale = inject(LOCALE_ID);
   private readonly destroyRef = inject(DestroyRef);
   readonly haptics = inject(AppHapticsService);
@@ -126,7 +153,10 @@ export class PlansWorkspaceComponent {
   private readonly addWorkoutButton = viewChild<unknown, ElementRef<HTMLButtonElement>>('addWorkoutButton', { read: ElementRef });
   private readonly scopeNavigation = viewChild<ElementRef<HTMLElement>>('scopeNavigation');
   private hadFocusedEditor = false;
-  private requestedEditorOpened = false;
+  private appliedRouteKey: string | null = null;
+  private editorGeneration = 0;
+  private navigationSequence = 0;
+  private routeOwner: string | undefined;
   private historyRequestSequence = 0;
   private nodeSequence = 1;
 
@@ -148,8 +178,9 @@ export class PlansWorkspaceComponent {
   ];
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
+  readonly hasTrainingPlanningUIAccess = computed(() => isTrainingPlanningUIAllowed(this.currentUser()?.uid));
   readonly scheduleState = toSignal(this.userService.user$.pipe(
-    switchMap(user => user?.uid
+    switchMap(user => isTrainingPlanningUIAllowed(user?.uid)
       ? this.plansService.watchSchedule(user.uid).pipe(
         map(schedule => ({ status: 'ready', schedule, message: null }) as ScheduleLoadState),
         startWith({ status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState),
@@ -193,7 +224,7 @@ export class PlansWorkspaceComponent {
   readonly planOptions = computed(() => {
     const plans = this.schedule().plans;
     const acknowledged = this.acknowledgedPlan();
-    return acknowledged?.uid === this.currentUser()?.uid && !plans.some(plan => plan.id === acknowledged.plan.id)
+    return acknowledged && acknowledged.uid === this.currentUser()?.uid && !plans.some(plan => plan.id === acknowledged.plan.id)
       ? [...plans, acknowledged.plan]
       : plans;
   });
@@ -288,38 +319,109 @@ export class PlansWorkspaceComponent {
   });
 
   private readonly requestedEditorEffect = effect(() => {
-    if (this.requestedEditorOpened || this.scheduleState().status !== 'ready') return;
-    const requestedWorkoutId = `${this.route.snapshot.queryParamMap.get('workout') || ''}`.trim();
-    if (requestedWorkoutId) {
-      const workout = this.schedule().workouts.find(candidate => (
-        candidate.id === requestedWorkoutId && candidate.lifecycle !== 'deleted'
-      ));
-      if (workout) {
-        this.requestedEditorOpened = true;
-        this.selectWorkoutScope(workout.planId, workout.localDate);
-        this.editWorkout(workout);
-        return;
-      }
+    const requested = this.routeState();
+    const uid = this.currentUser()?.uid;
+    if (this.routeOwner !== uid) {
+      this.routeOwner = uid;
+      this.appliedRouteKey = null;
+      this.editorGeneration += 1;
+      this.editor.set(null);
+      this.showPlanForm.set(false);
+      this.scheduleDateSelection.set(null);
+      this.closeHistory();
+      this.clearPlanActions();
     }
-    const requestedDate = this.route.snapshot.queryParamMap.get('date');
-    if (!requestedDate) {
-      this.requestedEditorOpened = true;
-      if (requestedWorkoutId) {
-        this.snackBar.open('That planned workout is no longer available.', 'Dismiss', { duration: 5000 });
+    if (!this.hasTrainingPlanningUIAccess() || this.scheduleState().status !== 'ready') return;
+    // Only a navigation/account change can replace a draft, never a live schedule or unit-settings update.
+    const key = trainingPlansRouteKey(uid, requested);
+    if (key === this.appliedRouteKey) {
+      // Keep a browse URL canonical when the selected plan is removed by this account in another session.
+      if (
+        requested.mode === 'browse'
+        && requested.planId
+        && !this.planOptions().some(plan => plan.id === requested.planId)
+        && !this.busyAction()
+      ) {
+        this.snackBar.open('That training plan is no longer available.', 'Dismiss', { duration: 5000 });
+        untracked(() => this.replaceUnavailableRoute());
       }
       return;
     }
-    try {
-      const localDate = normalizeTrainingLocalDate(requestedDate);
-      const standalone = this.route.snapshot.queryParamMap.get('scope') === 'standalone';
-      this.requestedEditorOpened = true;
-      const planId = standalone ? null : this.schedule().state.activePlanId;
-      this.selectWorkoutScope(planId, localDate);
-      this.openNewWorkout(planId, localDate);
-    } catch {
-      this.requestedEditorOpened = true;
-    }
+    untracked(() => this.applyRoute(requested));
   });
+
+  private applyRoute(requested: TrainingPlansRouteState): void {
+    this.appliedRouteKey = trainingPlansRouteKey(this.currentUser()?.uid, requested);
+    this.editorGeneration += 1;
+    this.editor.set(null);
+    this.showPlanForm.set(false);
+    this.closeHistory();
+    this.clearPlanActions();
+    if (!this.currentUser()?.uid) return;
+    if (requested.mode === 'edit' && requested.workoutId) {
+      const workout = this.schedule().workouts.find(candidate => (
+        candidate.id === requested.workoutId && candidate.lifecycle !== 'deleted'
+      ));
+      if (workout) {
+        this.selectWorkoutScope(workout.planId, workout.localDate);
+        this.startWorkoutEditor(workout);
+        return;
+      }
+      this.snackBar.open('That planned workout is no longer available.', 'Dismiss', { duration: 5000 });
+      this.replaceUnavailableRoute();
+      return;
+    }
+    const plan = this.planOptions().find(candidate => candidate.id === requested.planId);
+    if (requested.planId && !plan) {
+      this.snackBar.open('That training plan is no longer available.', 'Dismiss', { duration: 5000 });
+      this.replaceUnavailableRoute();
+      return;
+    }
+    const planId = requested.standalone ? null : plan?.id ?? this.schedule().state.activePlanId
+      ?? (requested.mode === 'create' ? null : this.planOptions()[0]?.id ?? null);
+    this.selectWorkoutScope(planId, requested.localDate ?? todayLocalDate());
+    if (!requested.localDate) this.scheduleDateSelection.set(null);
+    if (!planId && !requested.standalone && requested.mode === 'browse') this.view.set('plans');
+    if (requested.mode === 'create') {
+      this.startNewWorkoutEditor(planId, requested.localDate ?? todayLocalDate());
+    }
+  }
+
+  private browseRouteState(): TrainingPlansRouteState {
+    const standalone = this.view() === 'standalone';
+    return {
+      mode: 'browse',
+      workoutId: null,
+      planId: standalone ? null : this.selectedPlanId(),
+      standalone,
+      localDate: standalone ? null : this.planScheduleDate(),
+    };
+  }
+
+  private navigateWorkspace(
+    commands: string[],
+    requested: TrainingPlansRouteState,
+    options: { replaceUrl?: boolean; editorReturn?: boolean } = {},
+  ): void {
+    const sequence = ++this.navigationSequence;
+    this.appliedRouteKey = trainingPlansRouteKey(this.currentUser()?.uid, requested);
+    const navigation: NavigationExtras = {
+      queryParams: requested.localDate ? { date: requested.localDate } : undefined,
+      replaceUrl: options.replaceUrl,
+      ...(options.editorReturn ? { state: { trainingPlansEditorReturn: { uid: this.currentUser()?.uid, url: this.router.url } } } : {}),
+    };
+    void this.router.navigate(commands, navigation).then(navigated => {
+      if (!navigated && sequence === this.navigationSequence && !this.destroyRef.destroyed) {
+        this.appliedRouteKey = null;
+        this.applyRoute(this.routeState());
+      }
+    }).catch(error => {
+      if (sequence !== this.navigationSequence || this.destroyRef.destroyed) return;
+      this.appliedRouteKey = null;
+      this.applyRoute(this.routeState());
+      this.showError(error);
+    });
+  }
 
   @HostListener('window:focus')
   refreshToday(): void {
@@ -335,9 +437,10 @@ export class PlansWorkspaceComponent {
     if (view === this.view() || !this.browsing() || this.busyAction()) return;
     this.haptics.selection();
     this.view.set(view);
-    this.cancelEditor();
     this.closeHistory();
     this.clearPlanActions();
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route);
   }
 
   selectPlan(planId: string): void {
@@ -345,9 +448,10 @@ export class PlansWorkspaceComponent {
     this.haptics.selection();
     this.selectedPlanId.set(planId);
     this.view.set('plans');
-    this.cancelEditor();
     this.closeHistory();
     this.clearPlanActions();
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, false), route);
   }
 
   selectScheduleDate(localDate: string): void {
@@ -355,10 +459,12 @@ export class PlansWorkspaceComponent {
     const plan = this.selectedPlan();
     if (!uid || !plan || this.busyAction() || !this.browsing()) return;
     this.scheduleDateSelection.set({ uid, planId: plan.id, localDate });
+    // Date/keyboard navigation refines the current screen rather than filling browser history.
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, false), route, { replaceUrl: true });
   }
 
   editScheduledWorkout(workout: ScheduledWorkoutV1): void {
-    this.selectScheduleDate(workout.localDate);
     this.editWorkout(workout);
   }
 
@@ -409,6 +515,8 @@ export class PlansWorkspaceComponent {
     this.showPlanForm.set(false);
     this.selectedPlanId.set(planId);
     this.view.set('plans');
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, false), route, { replaceUrl: true });
     this.snackBar.open('Training plan created.', 'Dismiss', { duration: 3500 });
   }
 
@@ -515,7 +623,7 @@ export class PlansWorkspaceComponent {
     if (!confirmed) return;
     this.busyAction.set(`delete-plan-${plan.id}`);
     try {
-      await this.plansService.deletePlan({
+      const response = await this.plansService.deletePlan({
         mutationId: this.plansService.createMutationId('delete-plan'),
         planId: plan.id,
         expectedRevisions,
@@ -524,6 +632,7 @@ export class PlansWorkspaceComponent {
       });
       this.haptics.success();
       this.deletingPlanId.set(null);
+      this.navigateAfterPlanDeletion(response);
       this.snackBar.open('Training plan deleted.', 'Dismiss', { duration: 4000 });
     } catch (error) {
       this.showError(error);
@@ -539,20 +648,40 @@ export class PlansWorkspaceComponent {
     const defaultDestination = destinationPlanId === undefined
       ? (this.view() === 'plans' ? this.selectedPlanId() : null)
       : destinationPlanId;
+    this.startNewWorkoutEditor(defaultDestination ?? null, localDate);
+    const requested: TrainingPlansRouteState = {
+      mode: 'create', workoutId: null, planId: defaultDestination ?? null,
+      standalone: defaultDestination === null, localDate,
+    };
+    this.navigateWorkspace(trainingPlansCreateRoute(requested.planId, requested.standalone), requested, { editorReturn: true });
+  }
+
+  private startNewWorkoutEditor(destinationPlanId: string | null, localDate: string): void {
+    this.editorGeneration += 1;
     this.editor.set({
       mode: 'create',
       original: null,
       originalWorkoutRevision: null,
-      destinationPlanId: defaultDestination ?? null,
+      destinationPlanId,
       value: createManualWorkoutEditorValue(localDate, this.nextNodeId('step')),
     });
   }
 
   editWorkout(workout: ScheduledWorkoutV1): void {
     if (!this.browsing() || this.busyAction()) return;
+    this.selectWorkoutScope(workout.planId, workout.localDate);
+    if (this.startWorkoutEditor(workout)) {
+      this.navigateWorkspace(trainingPlansWorkoutRoute(workout.id), {
+        mode: 'edit', workoutId: workout.id, planId: null, standalone: false, localDate: null,
+      }, { editorReturn: true });
+    }
+  }
+
+  private startWorkoutEditor(workout: ScheduledWorkoutV1): boolean {
     try {
       this.closeHistory();
       this.clearPlanActions();
+      this.editorGeneration += 1;
       this.editor.set({
         mode: 'edit',
         original: workout,
@@ -560,13 +689,52 @@ export class PlansWorkspaceComponent {
         destinationPlanId: workout.planId,
         value: workoutStructureToManualEditor(workout.title, workout.localDate, workout.structure),
       });
+      return true;
     } catch (error) {
       this.showError(error);
+      return false;
     }
   }
 
   cancelEditor(): void {
+    if (this.busyAction() || !this.editor()) return;
+    this.editorGeneration += 1;
     this.editor.set(null);
+    const state = this.location.getState() as { trainingPlansEditorReturn?: { uid?: string; url?: string } } | null;
+    const previous = state?.trainingPlansEditorReturn;
+    // Only go Back for an entry we pushed from this owner's Plans screen; direct links get a safe local fallback.
+    if (previous?.uid === this.currentUser()?.uid && isTrainingPlansBrowseUrl(previous?.url)) {
+      this.location.back();
+    } else {
+      const route = this.browseRouteState();
+      this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
+    }
+  }
+
+  private replaceUnavailableRoute(): void {
+    const plans = this.planOptions();
+    const activePlanId = this.schedule().state.activePlanId;
+    const fallbackPlanId = plans.some(plan => plan.id === activePlanId) ? activePlanId : plans[0]?.id ?? null;
+    this.selectWorkoutScope(fallbackPlanId, todayLocalDate());
+    if (!fallbackPlanId) this.view.set('plans');
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
+  }
+
+  private navigateAfterPlanDeletion(response: DeleteTrainingPlanResponseV1): void {
+    const remainingPlans = this.planOptions().filter(plan => plan.id !== response.removedPlanId);
+    const fallbackPlanId = remainingPlans.some(plan => plan.id === response.state.activePlanId)
+      ? response.state.activePlanId
+      : remainingPlans[0]?.id ?? null;
+    const standalone = fallbackPlanId === null && response.convertedWorkoutIds.length > 0;
+    this.view.set(standalone ? 'standalone' : 'plans');
+    this.selectedPlanId.set(fallbackPlanId);
+    if (fallbackPlanId) {
+      const uid = this.currentUser()?.uid;
+      if (uid) this.scheduleDateSelection.set({ uid, planId: fallbackPlanId, localDate: todayLocalDate() });
+    }
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
   }
 
   private clearPlanActions(): void {
@@ -682,6 +850,8 @@ export class PlansWorkspaceComponent {
   async saveWorkout(): Promise<void> {
     const session = this.editor();
     if (!session) return;
+    const generation = this.editorGeneration;
+    const uid = this.currentUser()?.uid;
     const title = session.value.title.trim();
     if (!title) {
       this.snackBar.open('Enter a workout title.', 'Dismiss', { duration: 4000 });
@@ -712,9 +882,12 @@ export class PlansWorkspaceComponent {
           confirmPlanRangeExtension: false,
         },
       }, 'save-workout');
-      if (!response) return;
+      if (!response || this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
       this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
       this.editor.set(null);
+      this.editorGeneration += 1;
+      const route = this.browseRouteState();
+      this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
       this.snackBar.open('Workout added.', 'Dismiss', { duration: 3000 });
       return;
     }
@@ -737,9 +910,12 @@ export class PlansWorkspaceComponent {
         confirmPlanRangeExtension: false,
       },
     }, 'save-workout');
-    if (!response) return;
+    if (!response || this.destroyRef.destroyed || generation !== this.editorGeneration || uid !== this.currentUser()?.uid) return;
     this.selectWorkoutScope(session.destinationPlanId, session.value.localDate);
     this.editor.set(null);
+    this.editorGeneration += 1;
+    const route = this.browseRouteState();
+    this.navigateWorkspace(trainingPlansBrowseRoute(route.planId, route.standalone), route, { replaceUrl: true });
     this.snackBar.open('Workout updated.', 'Dismiss', { duration: 3000 });
   }
 

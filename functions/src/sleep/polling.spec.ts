@@ -28,11 +28,15 @@ const hoisted = vi.hoisted(() => ({
     suuntoRootLimit: vi.fn(),
     suuntoRootGet: vi.fn(),
     suuntoTokenOrderBy: vi.fn(),
+    scheduledOptions: new Map<unknown, unknown>(),
     installedTokenDocs: [] as MockTokenDocument[],
 }));
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
-    onSchedule: vi.fn((_options: unknown, handler: unknown) => handler),
+    onSchedule: vi.fn((options: unknown, handler: unknown) => {
+        hoisted.scheduledOptions.set(handler, options);
+        return handler;
+    }),
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -66,7 +70,7 @@ vi.mock('../coros/account', () => ({
     getActiveCOROSTokenSnapshot: (...args: unknown[]) => hoisted.getActiveCOROSTokenSnapshot(...args),
 }));
 
-import { sleepPollingTestInternals } from './polling';
+import { scheduleCOROSSleepSync, sleepPollingTestInternals } from './polling';
 import { addSleepSyncQueueItem } from './queue';
 import * as logger from 'firebase-functions/logger';
 
@@ -87,6 +91,12 @@ describe('sleep polling', () => {
         });
         hoisted.maintenanceCursorGet.mockResolvedValue({ exists: false, data: () => undefined });
         hoisted.maintenanceCursorSet.mockResolvedValue(undefined);
+    });
+
+    it('allocates 512 MiB to the daily COROS sleep scheduler', () => {
+        expect(hoisted.scheduledOptions.get(scheduleCOROSSleepSync)).toMatchObject({
+            memory: '512MiB',
+        });
     });
 
     function createTokenDoc(

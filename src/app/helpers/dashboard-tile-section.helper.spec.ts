@@ -28,6 +28,7 @@ import { DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE } from './dashboard-form.help
 import {
   DASHBOARD_TILE_SECTION_DEFINITIONS,
   DASHBOARD_TILE_SECTION_ORDER,
+  getDashboardTileSectionDefinition,
   orderDashboardTilesByIntentSections,
   resolveDashboardTileLaneKey,
   resolveDashboardTileSection,
@@ -40,7 +41,6 @@ describe('dashboard tile section metadata', () => {
       'performancePower',
       'activityOverview',
       'routesMaps',
-      'custom',
     ]);
     expect(DASHBOARD_TILE_SECTION_DEFINITIONS.map(definition => definition.id)).toEqual(DASHBOARD_TILE_SECTION_ORDER);
   });
@@ -81,21 +81,23 @@ describe('resolveDashboardTileSection', () => {
     ))).toBe('activityOverview');
   });
 
-  it('maps power and training load custom charts to their intent sections', () => {
-    expect(resolveDashboardTileSection(createChartTile(ChartTypes.LinesVertical, DataPower.type))).toBe('performancePower');
+  it('keeps custom power and training load charts in Activity Overview', () => {
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.LinesVertical, DataPower.type))).toBe('activityOverview');
     expect(resolveDashboardTileSection(createChartTile(
       ChartTypes.LinesVertical,
       DASHBOARD_FORM_TRAINING_STRESS_SCORE_TYPE,
-    ))).toBe('trainingState');
+    ))).toBe('activityOverview');
   });
 
-  it('maps legacy recovery metric tiles to Training State', () => {
-    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, DataRecoveryTime.type))).toBe('trainingState');
+  it('keeps legacy custom recovery metrics in Activity Overview', () => {
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, DataRecoveryTime.type))).toBe('activityOverview');
   });
 
-  it('maps unknown custom charts to Custom Charts', () => {
-    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, 'DeviceName'))).toBe('custom');
-    expect(resolveDashboardTileSection(null)).toBe('custom');
+  it('keeps unknown or missing custom metrics in Activity Overview', () => {
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, 'DeviceName'))).toBe('activityOverview');
+    expect(resolveDashboardTileSection(createChartTile(ChartTypes.Pie, ''))).toBe('activityOverview');
+    expect(resolveDashboardTileSection(null)).toBe('activityOverview');
+    expect(getDashboardTileSectionDefinition('custom' as never).id).toBe('activityOverview');
   });
 
   it('resolves KPI and section lane keys from the same section rules', () => {

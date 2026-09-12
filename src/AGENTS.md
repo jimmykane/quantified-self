@@ -5,6 +5,9 @@ Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first.
 Frontend-only rules:
 - `../.agent/rules/rules.md`
 - `../.agent/rules/material-design-strict.md`
+- When adding a new indexable public page, add it to `sitemap.xml` in the same change. Also verify its `robots.txt`
+  policy, SSR/prerender registration, route SEO metadata, public-route handling, internal links, and tests. Deliberately
+  exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.
 - Authenticated product workspace routes, except Settings, must apply the shared `qs-workspace-page` class to their route
   root. Do not add route-local outer width, margin, or padding rules. Settings intentionally retains its centered 760px
   form layout. See `docs/frontend-ui.md` for the shell contract.

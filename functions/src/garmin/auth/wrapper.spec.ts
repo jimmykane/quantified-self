@@ -3,6 +3,10 @@ import * as utils from '../../utils';
 import * as OAuth2 from '../../OAuth2';
 import * as functions from 'firebase-functions/v1';
 
+const hoisted = vi.hoisted(() => ({
+    callableOptions: new Map<unknown, { memory?: string }>(),
+}));
+
 // Define stable mocks
 const mockDelete = vi.fn().mockResolvedValue({});
 const mockSet = vi.fn().mockResolvedValue({});
@@ -56,7 +60,17 @@ vi.mock('firebase-functions/v1', async () => {
     return {
         ...actual,
         region,
-        runWith: () => ({ region }),
+        runWith: (options: { memory?: string }) => ({
+            region: () => ({
+                https: {
+                    onCall: (handler: unknown) => {
+                        hoisted.callableOptions.set(handler, options);
+                        return handler;
+                    },
+                    onRequest: (handler: unknown) => handler,
+                },
+            }),
+        }),
     };
 });
 
@@ -110,6 +124,13 @@ import * as logger from 'firebase-functions/logger';
 
 describe('Garmin Auth Wrapper', () => {
     let context: any;
+
+    it.each([
+        ['getGarminAPIAuthRequestTokenRedirectURI', getGarminAPIAuthRequestTokenRedirectURI],
+        ['requestAndSetGarminAPIAccessToken', requestAndSetGarminAPIAccessToken],
+    ])('configures %s with 512 MiB', (_name, callable) => {
+        expect(hoisted.callableOptions.get(callable)).toMatchObject({ memory: '512MB' });
+    });
 
     beforeEach(() => {
         vi.clearAllMocks();

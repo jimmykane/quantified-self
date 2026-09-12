@@ -1,0 +1,10 @@
+.chart-editor { display: grid; gap: 16px; }
+.chart-editor-section { margin: 0; }
+.chart-editor-section-title { font: var(--mat-sys-title-small); margin-block-end: 8px; }
+.chart-editor-fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.chart-editor-full-width { grid-column: 1 / -1; width: 100%; }
+.chart-editor-radio-group { display: grid; gap: 8px; }
+.chart-editor-inline-radio-group, .chart-editor-icon-label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chart-editor-option-description, .chart-editor-hint, .chart-editor-option-hint { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.chart-editor-option-warning { color: var(--mat-sys-error); }
+@media (max-width: 599px) { .chart-editor-fields-grid { grid-template-columns: minmax(0, 1fr); } }

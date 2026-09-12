@@ -551,7 +551,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     eyebrow: 'MCP Server',
     title: 'Read-only MCP Server for Training Data',
-    description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, and optional Timeline notes.',
+    description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, optional Timeline notes and activity descriptions.',
     h1: 'Connect ChatGPT or Claude to your training data',
     intro: 'Use the read-only Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze your training, review your season, or plan your next workout using only the data categories you approve.',
     chips: ['MCP server', 'ChatGPT', 'Claude', 'Read-only', 'Training', 'Sleep', 'Activities', 'Routes'],
@@ -574,12 +574,12 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'monitor_heart',
             title: 'Recorded Health metrics',
-            copy: 'Explore all-day heart rate, HRV, stress, Body Battery or resources, movement, energy and blood pressure with separate Health permission. Sources stay separate; Body Battery keeps its Garmin points scale. Bounded sample trends include UTC times. Body composition also needs Body measurements access. Reconnect an existing client to grant Health access.',
+            copy: 'Explore all-day heart rate, HRV, stress, Body Battery or resources, movement, energy and blood pressure with separate Health permission. Sources stay separate; Body Battery keeps its Garmin points scale. With Health and Sleep access, compare nightly HRV with the Health chart’s shared personal range. Bounded sample trends include UTC times. Body composition also needs Body measurements access. Reconnect an existing client to grant Health access.',
           },
           {
             icon: 'directions_run',
             title: 'Workout details and charts',
-            copy: 'Find recent activities, compare recorded metrics, and inspect workout summaries, laps, swim lengths, MTB jumps, and chart-ready data.',
+            copy: 'Find recent activities, compare recorded metrics, and inspect workout summaries, laps, swim lengths, MTB jumps, chart-ready data, and paginated detailed activity samples.',
           },
           {
             icon: 'bedtime',
@@ -602,7 +602,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Approve training metrics, Health metrics, measurements, workout details, sleep, routes, Timeline notes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
+            copy: 'Approve training metrics, Health metrics, measurements, workout details, activity descriptions, sleep, routes, Timeline notes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
           },
           {
             icon: 'lock',
@@ -612,7 +612,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'shield',
             title: 'Only the requested data is returned',
-            copy: 'Original files, full-resolution recordings, provider credentials, source keys, and unrequested streams are excluded. Exact coordinates require the matching location permission.',
+            copy: 'Original files, provider credentials, source keys, and unrequested streams are excluded. Selected detailed activity samples are available with Activity details access. Exact coordinates require the matching location permission.',
           },
           {
             icon: 'location_searching',
@@ -632,8 +632,16 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Yes. Add https://quantified-self.io/mcp as a custom MCP connection in a compatible ChatGPT or Claude client, sign in to Quantified Self, and approve the read-only permissions you want to grant. External clients have their own privacy and retention practices.',
       },
       {
+        question: 'Can I analyze detailed workout samples instead of the 400-point chart?',
+        answer: 'Yes. A separate read-only tool returns all available elapsed-second samples for selected supported metrics in bounded pages, including gaps. It uses your existing Individual activity details permission; no new permission or provider reconnection is required. Your client may need to refresh its available tools. It can request a particular interval and follow the continuation to complete it. Charts remain compact overviews, and original-file availability and processing limits still apply.',
+      },
+      {
+        question: 'Can an MCP client read my activity descriptions?',
+        answer: 'Only when Activity descriptions and Individual activity details are approved. Like every requested permission, the description checkbox starts checked; uncheck it before approving to withhold access. Existing clients must reauthorize. It returns the full event description for a selected activity; activities within one event share that text. Descriptions can contain sensitive health, personal or location information even without location permission. Revocation cannot erase received copies. Oversized text fails without truncation, and MCP cannot edit descriptions.',
+      },
+      {
         question: 'Can an MCP client read my Timeline notes?',
-        answer: 'Only with separate Timeline notes permission, which starts unchecked and requires reauthorization for existing clients. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
+        answer: 'Only with separate Timeline notes permission, which is selected by default when requested. Uncheck it before approving to withhold access. Existing clients must reauthorize. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
@@ -641,7 +649,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Does MCP access expose my original activity or route files?',
-        answer: 'No. An activity chart may selectively parse an existing original file in memory, but the file itself, full-resolution recording, absolute sample timestamps, unrequested streams, provider payloads, credentials, and storage paths are not returned or copied into another activity store.',
+        answer: 'No. Activity charts and detailed sample requests selectively parse existing originals in memory. Only requested numeric data are returned: compact chart points or paginated elapsed-second samples. Original files, absolute sample timestamps, unrequested streams, provider payloads, credentials, and storage paths are excluded. Selected detailed samples may be reused in bounded server memory for up to two minutes; no persistent sample store is created.',
       },
       {
         question: 'Can an MCP client see exact locations?',

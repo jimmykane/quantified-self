@@ -1,0 +1,63 @@
+<button mat-icon-button class="tile-actions-trigger" [disabled]="isSaving" [attr.aria-busy]="isSaving" (menuOpened)="restoreMenuFocus()" [matMenuTriggerFor]="tileOptions" [attr.aria-label]="presentation.actions"
+  (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
+  @if (isSaving) {
+  <mat-spinner diameter="18" aria-label="Saving dashboard changes"></mat-spinner>
+  } @else {
+  <mat-icon>more_vert</mat-icon>
+  }
+</button>
+<mat-menu #tileOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu qs-tile-actions-menu">
+  <div class="tile-actions-menu-shell">
+    @if (showLayoutControls) {
+    <button mat-menu-item type="button" class="tile-action-menu-item" [disabled]="isSaving" [matMenuTriggerFor]="columnsMenu" (menuOpened)="onLayoutMenuOpened()">
+      <mat-icon>view_column</mat-icon>
+      <span>Columns: {{ size.columns }}</span>
+    </button>
+    <button mat-menu-item type="button" class="tile-action-menu-item" [disabled]="isSaving" [matMenuTriggerFor]="rowsMenu" (menuOpened)="onLayoutMenuOpened()">
+      <mat-icon>table_rows</mat-icon>
+      <span>Rows: {{ size.rows }}</span>
+    </button>
+
+    <div class="tile-actions-divider" role="separator"></div>
+    }
+
+    <button mat-menu-item type="button" class="tile-action-menu-item" (click)="moveTileBackward()" [disabled]="isSaving || !canMoveTileBackward()">
+      <mat-icon>arrow_back</mat-icon>
+      <span>Move earlier</span>
+    </button>
+    <button mat-menu-item type="button" class="tile-action-menu-item" (click)="moveTileForward()" [disabled]="isSaving || !canMoveTileForward()">
+      <mat-icon>arrow_forward</mat-icon>
+      <span>Move later</span>
+    </button>
+    <button mat-menu-item type="button" class="tile-action-menu-item" [disabled]="isSaving" (click)="openEditTile($event)">
+      <mat-icon>{{ canConfigure ? 'edit' : 'info' }}</mat-icon>
+      <span>{{ canConfigure ? presentation.edit : presentation.details }}</span>
+    </button>
+
+    @if (user.settings.dashboardSettings.tiles.length > 0) {
+    <!-- Keep menu items in this view so MatMenu includes them in keyboard navigation. -->
+    <div class="tile-actions-divider" role="separator"></div>
+    <button mat-menu-item type="button" class="tile-action-menu-item tile-delete-menu-item" [disabled]="isSaving" (click)="deleteTile($event)">
+      <mat-icon>delete_outline</mat-icon>
+      <span>{{ presentation.remove }}</span>
+    </button>
+    }
+  </div>
+</mat-menu>
+
+<mat-menu #columnsMenu="matMenu" class="qs-menu-panel" aria-label="Columns">
+  @for (count of tileSizeOptions; track count) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="size.columns === count" [disabled]="isSaving" (click)="changeTileColumnSize({ value: count })">
+      <mat-icon>{{ size.columns === count ? 'check' : 'view_column' }}</mat-icon>
+      <span>{{ count }} {{ count === 1 ? 'column' : 'columns' }}</span>
+    </button>
+  }
+</mat-menu>
+<mat-menu #rowsMenu="matMenu" class="qs-menu-panel" aria-label="Rows">
+  @for (count of tileSizeOptions; track count) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="size.rows === count" [disabled]="isSaving" (click)="changeTileRowSize({ value: count })">
+      <mat-icon>{{ size.rows === count ? 'check' : 'table_rows' }}</mat-icon>
+      <span>{{ count }} {{ count === 1 ? 'row' : 'rows' }}</span>
+    </button>
+  }
+</mat-menu>

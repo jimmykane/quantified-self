@@ -354,7 +354,8 @@ describe('EventCardChartPanelComponent', () => {
     component.showZoomBar = true;
     await renderComponent();
 
-    expect(eChartsLoaderMock.init).toHaveBeenCalledTimes(2);
+    expect(eChartsLoaderMock.init).toHaveBeenCalledOnce();
+    expect(eChartsLoaderMock.dispose).not.toHaveBeenCalledWith(chart);
     expect(eChartsLoaderMock.setOption).toHaveBeenCalled();
     expect(chart.on).not.toHaveBeenCalledWith('click', expect.any(Function));
     expect(intersectionObserverObserveSpies).toHaveLength(1);

@@ -38,6 +38,10 @@
   margin: 0;
 }
 
+.health-detail-heading h2 {
+  scroll-margin-block-start: 1rem;
+}
+
 .health-section-heading > p,
 .health-detail-header p {
   color: var(--mat-sys-on-surface-variant);
@@ -65,8 +69,24 @@
   min-width: 0;
 }
 
-.health-mobile-metric-selector {
+.health-mobile-metric-title,
+.health-mobile-metric-empty {
   display: none;
+}
+
+.health-metric-title-content {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: normal;
+}
+
+.health-metric-title-content mat-icon {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  font-size: 24px;
+  line-height: 24px;
 }
 
 .health-metric-list {
@@ -372,16 +392,22 @@
     display: none;
   }
 
-  .health-mobile-metric-selector {
+  .health-desktop-metric-title { display: none; }
+
+  .health-mobile-metric-empty {
     display: block;
-    margin-bottom: 0.5rem;
   }
 
-  .health-mobile-metric-selector mat-form-field {
-    --mat-form-field-container-height: 48px;
-    --mat-form-field-container-vertical-padding: 12px;
-
-    width: min(100%, 420px);
+  .health-mobile-metric-title {
+    display: inline-flex;
+    --mat-button-text-container-height: auto;
+    min-height: 44px;
+    max-width: 100%;
+    padding-inline: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: left;
+    justify-content: flex-start;
   }
 }
 

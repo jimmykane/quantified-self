@@ -6,6 +6,7 @@ import {
   resolveDashboardFormXAxisMinIntervalMs,
   resolveDashboardFormXAxisLabelMode,
   resolveDashboardFormXAxisSplitNumber,
+  resolveDashboardFormXAxisTickIntervalMs,
 } from './dashboard-form-x-axis.helper';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -48,6 +49,14 @@ describe('dashboard-form-x-axis.helper', () => {
     expect(config.mode).toBe('yearly');
     expect(config.minIntervalMs).toBe(365 * DAY_MS);
     expect(config.splitNumber).toBeGreaterThanOrEqual(2);
+    expect(config.tickIntervalMs).toBe(365 * DAY_MS);
+  });
+
+  it('uses a sparse, regular tick interval for the weekly dashboard window', () => {
+    const spanMs = 84 * DAY_MS;
+
+    expect(resolveDashboardFormXAxisTickIntervalMs(spanMs, 'daily', 7)).toBe(14 * DAY_MS);
+    expect(resolveDashboardFormXAxisTickIntervalMs(spanMs, 'daily', 4)).toBe(28 * DAY_MS);
   });
 
   it('formats labels according to selected mode', () => {

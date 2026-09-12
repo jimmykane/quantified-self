@@ -1,3 +1,9 @@
+import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
+import { ActivityCalendarGridComponent } from '../components/calendar/activity-calendar-grid/activity-calendar-grid.component';
+import { DashboardChartPreviewComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-preview.component';
+import { DashboardChartThumbnailComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-thumbnail.component';
+import { DashboardTileEditorComponent } from '../components/summaries/dashboard-chart-library/dashboard-tile-editor.component';
+import { DashboardChartLibraryComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-library.component';
 import { NgModule } from '@angular/core';
 import { MaterialModule } from './material.module';
 import { SharedModule } from './shared.module';
@@ -11,11 +17,9 @@ import { TileMapComponent } from '../components/tile/map/tile.map.component';
 import { TileChartActionsComponent } from '../components/tile/actions/chart/tile.chart.actions.component';
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
 import { TileActionsHeaderComponent } from '../components/tile/actions/header/tile.actions.header.component';
-import { TileActionsFooterComponent } from '../components/tile/actions/footer/tile.actions.footer.component';
 import { BenchmarkModule } from './benchmark.module';
 import { AppChartsModule } from './app-charts.module';
 import { DragDropModule } from '@angular/cdk/drag-drop';
-import { DashboardManagerDialogComponent } from '../components/summaries/dashboard-manager-dialog/dashboard-manager-dialog.component';
 import { DashboardTileEventFiltersComponent } from '../components/tile/event-filters/dashboard-tile-event-filters.component';
 import { DashboardTileBoardComponent } from '../components/summaries/dashboard-tile-board/dashboard-tile-board.component';
 import { DashboardTileCellComponent } from '../components/summaries/dashboard-tile-cell/dashboard-tile-cell.component';
@@ -28,6 +32,7 @@ import { EventTableModule } from './event-table.module';
 @NgModule({
     imports: [
         CommonModule,
+        DashboardChartThumbnailComponent,
         SharedModule,
         MaterialModule,
         AppChartsModule,
@@ -37,6 +42,8 @@ import { EventTableModule } from './event-table.module';
         EventsMapComponent,
         RoutePreviewMapComponent,
         ActivityCalendarTileComponent,
+        ActivityCalendarGridComponent,
+        TimelineNotesWorkspaceComponent,
         UploadActivitiesComponent,
         EventTableModule,
     ],
@@ -44,14 +51,15 @@ import { EventTableModule } from './event-table.module';
     declarations: [
         DashboardComponent,
         SummariesComponent,
+        DashboardChartPreviewComponent,
+        DashboardTileEditorComponent,
+        DashboardChartLibraryComponent,
         TileChartActionsComponent,
         TileMapActionsComponent,
         TileActionsHeaderComponent,
-        TileActionsFooterComponent,
         TileChartComponent,
         TileMapComponent,
         DashboardTileEventFiltersComponent,
-        DashboardManagerDialogComponent,
         DashboardTileBoardComponent,
         DashboardTileCellComponent,
         DashboardActionPromptsComponent,

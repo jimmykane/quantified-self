@@ -10,6 +10,8 @@ import { timelineNoteGroupColor } from './timeline-note-appearance.helper';
 
 type Option = Parameters<EChartsType['setOption']>[0];
 export interface TimelineNoteChartContext {
+  /** Private workspace owner. Omitted only for explicit synthetic previews. */
+  ownerUid?: string | null;
   notes: readonly TimelineNote[];
   select: (notes: readonly TimelineNote[]) => void;
   reportRange: (key: object, range: TimelineNoteRange | null) => void;
@@ -96,7 +98,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       const start = projected.x(group.startDate, false);
       const end = projected.x(group.endDate, true);
       if (start === null || end === null || start > end) return;
-      // Different calendar days can share a weekly bucket or clipped endpoint. Keep one selectable marker.
+      // Different calendar days can share a weekly bucket or clipped endpoint. Keep one tooltip marker.
       const existing = positions.get(start);
       // Clipping a period to a one-day view must not turn it into a point
       // note. Preserve its original duration, including newly ongoing notes.
@@ -125,7 +127,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       const labelColor = (option.textStyle as { color?: string } | undefined)?.color ?? axis.axisLabel?.color;
       const color = timelineNoteGroupColor(group.notes);
       const label = group.notes.length > 1 ? `${group.notes.length} notes` : group.notes[0].title.replace(/\s+/g, ' ');
-      // A period collapsed into one weekly bucket still needs only one selectable marker.
+      // A period collapsed into one weekly bucket still needs only one tooltip marker.
       const showPeriod = group.hasPeriod && start < group.end;
       const startsBeforeWindow = group.notes.some(note => note.startDate < projected.range.startDate);
       const hasOpenEnd = group.notes.some(note => note.endDate === null || note.endDate > projected.range.endDate);
@@ -147,38 +149,28 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       xAxisIndex: axisIndex, yAxisIndex: matchingSeries[0].yAxisIndex ?? 0, animation: false,
       markLine: { silent: false, symbol: ['circle', 'none'], symbolSize: 8, data: markers },
       // Period fills must not intercept axis tooltips or taps intended for metric readings.
-      // Note tooltips and selection remain on the title and boundary markers.
+      // Note tooltips remain on the title and boundary markers.
       markArea: { silent: true, tooltip: { show: false }, emphasis: { disabled: true }, label: { show: false }, data: area } });
   });
   return { option: overlays.length ? { ...option, series: [...originalSeries, ...overlays] } as Option : option, range, groups };
 }
 
-/** No fetching here. The owning workspace supplies notes and handles navigation. */
+/** No fetching or navigation here. The owning workspace supplies notes for tooltips. */
 export class TimelineNotesChartBinding {
   private context: TimelineNoteChartContext | null = null;
   private hints: TimelineNoteAxisHints = {};
-  private chart: EChartsType | null = null;
-  private groups = new Map<string, readonly TimelineNote[]>();
   private rangeKey = '';
-  private readonly click = (event: { name?: string; componentType?: string }): void => {
-    if (event.componentType !== 'markLine') return;
-    const notes = this.groups.get(event.name ?? '');
-    if (notes) { this.chart?.dispatchAction?.({ type: 'hideTip' }); this.context?.select(notes); }
-  };
   set(context: TimelineNoteChartContext | null, hints: TimelineNoteAxisHints = {}): void {
     if (this.context?.reportRange !== context?.reportRange) { this.context?.reportRange(this, null); this.rangeKey = ''; }
     this.context = context; this.hints = hints;
   }
   apply(chart: EChartsType, option: Option, darkTheme = false): Option {
-    if (!this.context) { this.detach(); return option; }
-    if (this.chart !== chart) { this.detach(); this.chart = chart; chart.on('click', this.click); }
+    if (!this.context) return option;
     const style = buildDashboardEChartsStyleTokens(darkTheme, chart.getWidth());
     const result = addTimelineNotesToChart(option, this.context.notes, this.hints, Date.now(), style);
-    this.groups = result.groups;
     const key = JSON.stringify(result.range);
     if (key !== this.rangeKey) { this.rangeKey = key; this.context.reportRange(this, result.range); }
     return result.option;
   }
-  detach(): void { this.chart?.off('click', this.click); this.chart = null; this.groups.clear(); }
-  dispose(): void { this.detach(); this.context?.reportRange(this, null); this.context = null; this.rangeKey = ''; }
+  dispose(): void { this.context?.reportRange(this, null); this.context = null; this.rangeKey = ''; }
 }

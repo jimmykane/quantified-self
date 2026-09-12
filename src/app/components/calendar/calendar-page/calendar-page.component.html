@@ -73,12 +73,12 @@
     @if (eventState().status === 'ready' && !hasEvents()) {
     <span class="calendar-status-announcement" role="status">{{ emptyStateLabel() }}</span>
     }
-    @if (plansState().status === 'error') {
+    @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
     <span class="calendar-status-announcement" role="status">Planned workouts could not be loaded.</span>
     }
     <app-activity-calendar-grid [model]="calendarModel()"
       [timelineNotesByDate]="notesByDate()"
-      [plannedWorkoutsByDate]="plannedWorkoutsByDate()"
+      [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
       (daySelected)="openDay($event)">
     </app-activity-calendar-grid>
 

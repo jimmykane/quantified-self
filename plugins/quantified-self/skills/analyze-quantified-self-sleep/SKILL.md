@@ -38,6 +38,10 @@ returned.
 
 ## Limits
 
+- For personal HRV ranges, use the advertised shared personal-range capability when both `sleep:read` and `health:read`
+  are granted. Keep its source-separated nightly classifications distinct from its seven-day headline and from Training
+  readiness. If unavailable, report recorded HRV through the ordinary Sleep trend without reconstructing the range.
+
 - If `sleep:read` is missing, explain that Sleep summaries access must be granted through reconnection.
 - All-day Health HRV and stress are a different domain and need the focused Health workflow and `health:read`.
   Health does not resolve Sleep references; never use that permission as a workaround for missing Sleep access.
@@ -55,6 +59,9 @@ returned.
 - Discuss sleep and recovery patterns without diagnosing a condition or claiming that sleep caused another outcome.
 
 ## Optional Timeline notes context
+
+For before/during/after comparisons around a note, use the bundled cross-domain skill's notes-comparison workflow.
+Keep this focused workflow for normalized Sleep readings and their sleep-day convention.
 
 When relevant to the question, discover the separately authorized Timeline notes read capability. It requires
 `timeline-notes:read`; missing access requires reauthorization, never a substitute metric grant. Do not fetch notes for

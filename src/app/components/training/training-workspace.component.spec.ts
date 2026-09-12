@@ -235,7 +235,8 @@ describe('TrainingWorkspaceComponent', () => {
     expect(element.querySelector('main.training-workspace')?.lastElementChild).toBe(bodyContextSection);
     expect(element.querySelector('app-durability-reading-guide[context="training"]')).toBeNull();
     expect(element.querySelector('app-tile-chart')).toBeNull();
-    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training-load only');
+    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('training load only');
+    expect(fixture.componentInstance.freshnessForecastInfoTooltip).toContain('Sleep and other recovery signals appear separately');
     const recoveryContext = element.querySelector('.training-recovery-context');
     const importedRecovery = recoveryContext?.querySelector('.training-readiness-imported-recovery');
     const sleepHistory = recoveryContext?.querySelector('.training-recovery-history');
@@ -759,6 +760,65 @@ describe('TrainingWorkspaceComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it.each(['load', 'sleep'])('waits for both initial readiness reads when %s arrives first', async first => {
+    const nowMs = Date.now();
+    const load$ = new Subject<DashboardDerivedMetricsState>();
+    const sleep$ = new Subject<SleepSession[]>();
+    const user$ = new BehaviorSubject({ uid: 'user-1' });
+    const load = createRouteReadyDerivedState({
+      formNow: { latestDayMs: nowMs, value: 10, trend8Weeks: [] },
+      rampRate: { rampRate: 1 } as never,
+    });
+    const sleep: SleepSession = {
+      id: 'latest', userID: 'user-1',
+      source: { provider: SLEEP_PROVIDERS.GarminAPI, sourceSessionKey: 'latest', providerUserId: 'garmin-user-1' },
+      sleepDate: new Date(nowMs).toISOString().slice(0, 10),
+      startTimeMs: nowMs - 9 * 60 * 60 * 1000, endTimeMs: nowMs - 60 * 60 * 1000,
+      durationSeconds: 8 * 60 * 60, isNap: false, stages: [], stageDurationsSeconds: {},
+      score: { value: 80 }, createdAtMs: nowMs, updatedAtMs: nowMs,
+    };
+    await TestBed.configureTestingModule({
+      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      providers: [
+        { provide: AppAuthService, useValue: { user$ } },
+        { provide: DashboardDerivedMetricsService, useValue: { watch: () => load$, ensureForDashboard: vi.fn() } },
+        { provide: AppSleepService, useValue: { watchForDashboard: () => sleep$ } },
+        { provide: AppThemeService, useValue: { appTheme: () => AppThemes.Normal } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TrainingWorkspaceComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    if (first === 'load') load$.next(load);
+    else sleep$.next([sleep]);
+    fixture.detectChanges();
+
+    expect(component.trainingReadiness.state).toBe('preparing');
+    expect(component.trainingReadiness.score).toBeNull();
+    expect(fixture.nativeElement.querySelector('.training-readiness-summary')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Preparing readiness signals');
+    expect(component.trainingReadiness.metricRows).toEqual([]);
+
+    if (first === 'load') sleep$.next([sleep]);
+    else load$.next(load);
+    fixture.detectChanges();
+    expect(component.trainingReadiness.state).toBe('ready');
+    expect(component.trainingReadiness.availableSignalCount).toBe(2);
+
+    // A resolved empty listener is valid evidence, and later live changes still apply.
+    sleep$.next([]);
+    fixture.detectChanges();
+    expect(component.trainingReadiness.state).toBe('ready');
+    expect(component.trainingReadiness.availableSignalCount).toBe(1);
+
+    user$.next({ uid: 'user-2' });
+    fixture.detectChanges();
+    expect(component.trainingReadiness.state).toBe('preparing');
+    expect(component.trainingReadiness.score).toBeNull();
+    fixture.destroy();
   });
 
   it('shows a sleep read failure separately while retaining load-only readiness', async () => {

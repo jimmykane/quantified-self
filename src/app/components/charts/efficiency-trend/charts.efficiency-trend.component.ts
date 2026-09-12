@@ -99,6 +99,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsEfficiencyTrendComponent]',
@@ -192,6 +193,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
     const values = points.map(point => point.value);
     const valueAxis = buildDashboardValueAxisConfig(values, { rangeMode: 'data' });
     const labelMode = this.resolveXAxisLabelMode(points);
+    const xAxisSplitNumber = style.isCompactLayout ? 4 : 7;
 
     return {
       animation: false,
@@ -204,7 +206,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
         left: 6,
         right: 6,
         top: 8,
-        bottom: 22,
+        bottom: 6,
         outerBoundsMode: 'same',
         outerBoundsContain: 'axisLabel',
       },
@@ -229,6 +231,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
       },
       xAxis: {
         type: 'time',
+        splitNumber: xAxisSplitNumber,
         axisPointer: {
           show: true,
           snap: true,
@@ -243,6 +246,7 @@ export class ChartsEfficiencyTrendComponent implements AfterViewInit, OnChanges,
           color: style.textColor,
           fontSize: style.axisFontSize,
           hideOverlap: true,
+          margin: 3,
           formatter: (value: number) => this.formatXAxisLabel(Number(value), labelMode),
         },
       },

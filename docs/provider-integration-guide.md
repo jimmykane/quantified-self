@@ -52,6 +52,12 @@ authoring is free and independent of connected services. Any future provider syn
 directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
 connection alone never opts workouts into delivery.
 
+Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
+actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
+controls and generic provider-copy retention warnings. This does not authorize transport work, alter disconnect or
+deletion behavior, or enable a provider. See the [Training workspace source of truth](training-workspace.md) for the
+shared gate and account-change behavior.
+
 The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
 `functions/src/training-plans/providers/`. Every provider delivery flag is currently `false`:
 
@@ -101,9 +107,28 @@ that JSON and a valid 300 x 300 PNG.
 
 Fixture compatibility is not delivery readiness. Before any adapter flag changes, record sandbox evidence for create,
 update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and provider-specific horizon behavior. The
-shared delivery ledger, reconciliation queue, entitlement, disconnect/deletion behavior, provider certification,
-observability, and kill switches are tracked under epic #583. Do not hide an unmet gate in a code comment or silently
+shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved only with an excluded
+test transport. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
+source of truth for its contracts, operations, evidence and maintenance. Every real provider transport remains unavailable.
+Provider certification, production observability and kill switches remain tracked under epic #583. Do not hide an unmet gate in a code comment or silently
 narrow the epic acceptance criteria.
+
+Training is a distinct consent lifecycle: plans opt in per provider, standalone Send means ongoing sync, inactive plans
+withdraw eligible future copies, and Stop can suppress an individual plan workout. Pro expiry keeps preferences and copies
+while pausing writes; cleanup removals remain allowed with valid access. Subscription enforcement may revoke access and
+require same-account reconnect. Explicit disconnect invalidates Training consent atomically before provider I/O and leaves
+copies; authentication failure preserves consent but blocks the failed connection generation. A changed account requires
+fresh consent. Do not reuse activity/route auto-restoration rules for Training.
+
+An adapter must bind to the server-resolved owner/account, implement compatibility, horizon/deletion policy, execution,
+inspection and accepted-artifact checkpoints. Garmin workout/schedule IDs and Wahoo Plan/Workout IDs remain distinct;
+COROS keeps stable partner workout IDs and batches at most 30; Suunto delivers dated Guides, not native plan parity.
+Inspection must establish acceptance or definitive nonacceptance before an uncertain create is repeated. It cannot run
+against an auth/permission-blocked connection generation, and execution rechecks current admission after inspection.
+New revisions never discard accepted IDs. Delivery history keeps failed withdrawals reachable after authored-source
+deletion; recovery commands use the retained server-owned identity, never re-enrol a deleted source, and still enforce
+the exact account and explicit-disconnect epoch. Pausing a provider hides new Send actions, not existing status/removal controls. Neither a
+connected service nor a capability fixture grants readiness, scopes or user consent. No production setting selects the fake.
 
 ## 2. Choose the right architecture
 
@@ -166,6 +191,32 @@ Complete these shared changes early. Exhaustive unions and switch statements are
 7. Add or update Firestore indexes, Rules, Storage Rules, TTL policies, and Firebase configuration only when the provider data model needs them.
 8. For health/wellness support, add provider metric mappings to the unified health writer rather than expanding the stable catalog with provider field names. Record native semantics, coverage, quality, and revision behavior explicitly.
 9. Validate field semantics against the provider's published examples, including signed event values and inclusive sample endpoints. Cap or compact provider arrays against the shared metric and sample write budgets before handing a normalized record to the writer; do not let a provider-valid payload fail only at the generic persistence boundary.
+
+### Nightly HRV across Sleep and Health
+
+A provider may deliver nightly HRV inside Sleep (Suunto/COROS) or as a separate Health summary (Garmin).
+`shared/nightly-hrv.ts` is the shared read-time resolver for Dashboard, Training, and MCP Sleep/report reads.
+Preserve native normalized Sleep HRV. When absent, match canonical Health HRV by owner, provider, opaque account
+identity, provider calendar date, and overlapping sleep interval. The Health account identity is SHA-256 of the
+JSON-framed `healthAccountIdentityParts`; Sleep must retain the same provider account ID used by the Health writer.
+Unidentified legacy accounts are not guessed. Native records and existing canonical Sports Lib records work without
+reimport or a Sleep rewrite. Only missing main nights are supplemented, once across fragments; late delivery,
+corrections, and removal are reflected at read time.
+
+New providers should use an approved canonical overnight-average semantic from `HRV_PERSONAL_RANGE_VARIANTS`,
+`average` aggregation, milliseconds, and recorded/provider-summary origin with device/provider-calculated recording
+method. Register a new semantic only after establishing its meaning and testing it. Spot checks, activity intervals,
+five-minute maxima, manual readings, unknown semantics, and conflicting summaries cannot fill nightly Sleep HRV.
+Do not substitute daily/resting heart rate for overnight heart rate. Raw Health/Sleep samples remain separate.
+
+Health reads reuse the existing metric/date/document-ID index and bounded owner Rules (32 records per page plus
+look-ahead, 2,048 records and 16 MiB total). Backend pages recheck owner/deletion state before and after reads.
+MCP supplementation requires both Health and Sleep grants; raw provider/account identities never enter its projection.
+Frontend pages stay subscribed so Health changes update an open dashboard; failed supplemental reads retain native
+Sleep evidence. HRV Health mutations invalidate the Training readiness and build-comparison snapshots. See
+[Training workspace](training-workspace.md) for baseline comparability and targeted version transitions.
+Include native-only, separate-summary, arrival-order, correction/deletion, exact-account, conflicting-source, legacy,
+and bounded-read cases in every provider's integration tests. There is no provider-name branch in the resolver.
 
 ## 4. OAuth and provider identity
 

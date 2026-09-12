@@ -37,6 +37,10 @@ import {
 } from './server';
 
 describe('MCP HTTP scope enforcement', () => {
+  it('requires Health and Sleep before serving shared HRV ranges', () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'get_hrv_personal_range' } }))
+      .toEqual([MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]);
+  });
   it('bounds per-instance concurrency for memory-intensive chart requests', () => {
     expect(MCP_API_RUNTIME_OPTIONS).toMatchObject({
       region: 'europe-west2',
@@ -249,6 +253,11 @@ describe('MCP HTTP scope enforcement', () => {
       method: 'tools/call',
       params: { name: 'list_measurement_types' },
     })).toEqual([MCP_OAUTH_SCOPES.MeasurementsRead]);
+  });
+
+  it('authorizes detailed samples with the existing Activity details grant', () => {
+    expect(requiredScopesForRequest({method: 'tools/call', params: {name: 'get_activity_samples'}}))
+      .toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
   });
 
   it('requires sleep scope for sleep tools', () => {
@@ -525,6 +534,7 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
     await expect(listToolNames([MCP_OAUTH_SCOPES.ActivityDetailsRead])).resolves.toEqual([
       'get_activity_chart_data',
+      'get_activity_samples',
       'list_activities',
       'list_activity_chart_metrics',
       'list_activity_jumps',
@@ -540,6 +550,7 @@ describe('MCP HTTP scope enforcement', () => {
       'get_activity_chart_data',
       'get_activity_metrics',
       'get_activity_overview',
+      'get_activity_samples',
       'get_training_metric',
       'list_activities',
       'list_activity_chart_metrics',
@@ -575,6 +586,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'find_activities_near_location',
       'get_activity_chart_data',
+      'get_activity_samples',
       'list_activities',
       'list_activity_chart_metrics',
       'list_activity_jumps',
@@ -591,6 +603,7 @@ describe('MCP HTTP scope enforcement', () => {
     ])).resolves.toEqual([
       'find_activities_near_location',
       'get_activity_chart_data',
+      'get_activity_samples',
       'list_activities',
       'list_activity_chart_metrics',
       'list_activity_jumps',
@@ -758,6 +771,29 @@ describe('MCP HTTP scope enforcement', () => {
       const tools = (await client.listTools()).tools;
       expect(tools.find(tool => tool.name === 'get_sleep_trend')?.description)
         .toContain('recent sleep changes');
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it.each([false, true])('reserves chart parsing for visual overviews with metrics access %s', async includeMetrics => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer({
+      uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1',
+      scopes: [MCP_OAUTH_SCOPES.ActivityDetailsRead, ...(includeMetrics ? [MCP_OAUTH_SCOPES.MetricsRead] : [])],
+    }, 'https://quantified-self.io');
+    const client = new Client({name: 'sample-routing-test-client', version: '1.0.0'});
+    try {
+      await server.connect(serverTransport);
+      await client.connect(clientTransport);
+      const instructions = client.getInstructions() || '';
+      expect(instructions).toContain('Use existing activity summaries for ordinary workout overviews');
+      expect(instructions).toContain('Use get_activity_chart_data for a visual overview');
+      expect(instructions).not.toContain('For an activity overview use get_activity_chart_data');
+      expect(instructions.includes('Use get_activity_overview before granular activity reads')).toBe(includeMetrics);
+      const sampleTool = (await client.listTools()).tools.find(tool => tool.name === 'get_activity_samples');
+      expect(sampleTool?.description).toContain('prefer persisted summaries for workout overviews and chart data for visual overviews');
     } finally {
       await client.close();
       await server.close();

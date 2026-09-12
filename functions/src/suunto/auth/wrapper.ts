@@ -33,7 +33,7 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
   region: FUNCTIONS_MANIFEST.getSuuntoAPIAuthRequestTokenRedirectURI.region,
   secrets: FUNCTION_SECRET_BINDINGS.getSuuntoAPIAuthRequestTokenRedirectURI,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10
 }, async (request): Promise<GetAuthRedirectURIResponse> => {
   // App Check verification
@@ -84,7 +84,7 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   region: FUNCTIONS_MANIFEST.requestAndSetSuuntoAPIAccessToken.region,
   secrets: FUNCTION_SECRET_BINDINGS.requestAndSetSuuntoAPIAccessToken,
   cors: ALLOWED_CORS_ORIGINS,
-  memory: '256MiB',
+  memory: '512MiB',
   maxInstances: 10
 }, async (request): Promise<ServiceOAuthCompletionResult> => {
   // App Check verification

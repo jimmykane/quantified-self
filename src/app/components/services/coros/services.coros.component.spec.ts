@@ -54,6 +54,7 @@ describe('ServicesCorosComponent', () => {
             logActivitySyncRouteBackfill: vi.fn(),
         };
         mockUserService = {
+            user: vi.fn(() => ({ uid: 'user-1' })),
             isAdmin: vi.fn(),
             requestAndSetCurrentUserCOROSAPIAccessToken: vi.fn(),
             checkCurrentUserCOROSBindingState: vi.fn().mockResolvedValue({ status: 'bound', bound: true }),

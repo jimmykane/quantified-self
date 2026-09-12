@@ -7,6 +7,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as serviceOAuthAccess from '../../service-oauth-access';
 
 const hoisted = vi.hoisted(() => ({
+    callableOptions: new Map<unknown, { memory?: string; maxInstances?: number }>(),
     logger: {
         error: vi.fn(),
         info: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('firebase-functions/logger', () => hoisted.logger);
 vi.mock('firebase-functions/v2/https', () => {
     return {
         onCall: (options: any, handler: any) => {
+            hoisted.callableOptions.set(handler, options);
             return handler;
         },
         HttpsError: class HttpsError extends Error {
@@ -101,6 +103,16 @@ describe('Suunto Auth Wrapper', () => {
         vi.clearAllMocks();
         (utils.hasProAccess as any).mockResolvedValue(true);
         (serviceOAuthAccess.hasServiceOAuthConnectAccess as any).mockResolvedValue(true);
+    });
+
+    it.each([
+        ['getSuuntoAPIAuthRequestTokenRedirectURI', getSuuntoAPIAuthRequestTokenRedirectURI],
+        ['requestAndSetSuuntoAPIAccessToken', requestAndSetSuuntoAPIAccessToken],
+    ])('configures %s with 512 MiB while preserving its instance limit', (_name, callable) => {
+        expect(hoisted.callableOptions.get(callable)).toMatchObject({
+            memory: '512MiB',
+            maxInstances: 10,
+        });
     });
 
     describe('getSuuntoAPIAuthRequestTokenRedirectURI', () => {

@@ -686,6 +686,18 @@ mat-table {
   padding: 0 !important;
 }
 
+/* Documented Material overlay exception: the chart picker config sets a 92dvh pane.
+   Material's default 80vh container cap would leave the fixed footer floating above
+   the viewport edge. Fill this picker pane while its content owns scrolling.
+   A sheet kept open across the desktop breakpoint must also fit the two-column picker. */
+.cdk-overlay-pane.qs-chart-picker-sheet .mat-bottom-sheet-container {
+  min-width: 0;
+  width: min(1180px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  height: 100%;
+  max-height: 100%;
+}
+
 /* Normalize custom wrapper usage so inner content can own scrolling. */
 .mat-bottom-sheet-container>.bottom-sheet-container {
   flex: 1 1 auto;
@@ -869,7 +881,7 @@ tr.mat-row:focus,
   min-width: min(280px, calc(100vw - 24px)) !important;
 }
 
-/* Tile menu uses compact row/column selectors and does not need the wider config width. */
+/* Tile action menus use concise labels and do not need the wider config width. */
 .mat-mdc-menu-panel.qs-tile-actions-menu {
   min-width: 228px !important;
   max-width: min(320px, calc(100vw - 24px)) !important;

@@ -121,6 +121,7 @@ export async function queueRegistrationWelcomeEmail(
 export const sendRegistrationWelcomeEmail = onDocumentWritten({
     document: 'users/{uid}',
     region: 'europe-west3',
+    memory: '512MiB',
     retry: true,
 }, async (event) => {
     await queueRegistrationWelcomeEmail(

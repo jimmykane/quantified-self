@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId } from './help.content';
+import { HELP_ACTIONS, HELP_SECTIONS, HelpSectionId, getHelpSectionsForUser } from './help.content';
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { searchHelpSections } from '../helpers/help-search.helper';
 import { CONNECTED_SERVICES_POLICY_SECTION } from './policies.content';
 import { ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
@@ -14,9 +15,40 @@ import {
 } from './policies.content';
 
 describe('help.content', () => {
+  it.each([undefined, null, '', 'another-user'])('omits pre-release planning from public/searchable help for %s', uid => {
+    const sections = getHelpSectionsForUser(uid);
+    const copy = JSON.stringify(sections);
+    expect(copy).not.toMatch(/training\/plans|training-plans|Planned workouts|Planned-workout|Plan color|Add workout/);
+    expect(sections.some(section => section.id === 'training-analysis')).toBe(true);
+    expect(sections.some(section => section.id === 'plans-and-billing')).toBe(true);
+    expect(sections.some(section => section.id === 'activity-calendar')).toBe(true);
+    expect(HELP_SECTIONS.some(section => section.id === 'training-plans')).toBe(true);
+  });
+
+  it('retains complete planning guidance for the allowlisted account', () => {
+    expect(getHelpSectionsForUser(TRAINING_PLANNING_UI_ALLOWED_UIDS[0])).toBe(HELP_SECTIONS);
+  });
+  it('distinguishes Training consent, expiry, disconnect and the disabled provider launch boundary', () => {
+    const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
+    expect(content).toContain('not enabled yet');
+    expect(content).toContain('Stop sync before disconnecting');
+    expect(content).toContain('content, not old provider consent');
+    expect(content).toContain('Pro expiry pauses creates and updates');
+    expect(content).toContain('IANA time zone');
+  });
+  it('explains the compact mobile Health metric title picker and remembered selection', () => {
+    const health = HELP_SECTIONS.find(section => section.id === 'health')?.content;
+    expect(health).toContain('tap the metric title and its arrow');
+    expect(health).toContain('closing the picker changes nothing');
+    expect(health).toContain('Desktop keeps the metric list beside the chart');
+    expect(health).toContain('Your metric selection is remembered in your account settings');
+  });
   it('makes optional full-text notes access discoverable without implying chart visibility is consent', () => {
     const content = HELP_SECTIONS.map(section => section.content).join(' ');
     expect(content).toContain('**Timeline notes** is an independent read-only permission');
+    expect(content).toContain('It is selected by default when requested; uncheck it before approving to withhold access.');
+    expect(content).toContain('Every requested permission starts checked, including permissions added later');
+    expect(content).toContain('It is off by default. Changing notes or location access starts a fresh chat');
     expect(content).toContain('full private');
     expect(content).toContain('hidden from charts');
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
@@ -39,10 +71,14 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
     expect(calendar).toContain('a note icon marks days');
-    expect(calendar).toContain("A slim colored edge uses your note's selected color");
+    expect(calendar).toContain("Small color markers show your chosen note colors");
     expect(calendar).toContain('overlapping notes keep their different colors as separate segments');
     expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
+    expect(calendar).toContain('Today calendar popup show the same private notes');
+    const dashboard = HELP_SECTIONS.find(section => section.id === 'getting-started')?.content;
+    expect(dashboard).toContain('HRV, Sleep, Form, and Freshness Forecast show the same note markers');
+    expect(dashboard).toContain('shared profiles and chart-library previews do not include them');
     expect(CONNECTED_SERVICES_POLICY_SECTION.content.join(' ')).toContain('content-free deletion receipt');
   });
   it('documents the supported activity catalog without overpromising source data', () => {
@@ -142,7 +178,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('at least three observations');
     expect(healthSection?.content).toContain('60-day personal range');
     expect(healthSection?.content).toContain('Range on this date');
-    expect(healthSection?.content).toContain('Dates without enough baseline history stay unshaded');
+    expect(healthSection?.content).toContain('dates without enough baseline history stay unshaded');
+    expect(healthSection?.content).toContain('band continues across missing-reading days');
     expect(healthSection?.content).toContain('Until 14 nights exist');
     expect(healthSection?.content).toContain('seven-day average with at least three recent nights');
     expect(healthSection?.content).toContain('within, outside, or far outside');
@@ -328,6 +365,7 @@ describe('help.content', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
     expect(gettingStartedSection?.content).toContain('estimated local finish time as Training');
+    expect(gettingStartedSection?.content).toContain('remaining share of the active imported recovery estimates');
     expect(gettingStartedSection?.content).toContain('disappears when elapsed');
   });
 
@@ -340,12 +378,12 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('choice is saved');
   });
 
-  it('should document dashboard manager curated/custom/map categories', () => {
+  it('should document inline chart discovery, editing, examples, and categories', () => {
     const gettingStartedSection = HELP_SECTIONS.find(section => section.id === 'getting-started');
 
-    expect(gettingStartedSection?.content).toContain('Dashboard manager');
-    expect(gettingStartedSection?.content).toContain('Manual');
-    expect(gettingStartedSection?.content).toContain('Presets');
+    expect(gettingStartedSection?.content).toContain('Add and edit dashboard tiles');
+    expect(gettingStartedSection?.content).toContain('Select a row');
+    expect(gettingStartedSection?.content).toContain('Example data');
     expect(gettingStartedSection?.content).toContain('Curated');
     expect(gettingStartedSection?.content).toContain('KPI');
     expect(gettingStartedSection?.content).toContain('Custom');
@@ -371,17 +409,17 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Beyond the default Activity Calendar');
     expect(gettingStartedSection?.content).toContain('[Activity Calendar guide](/help#activity-calendar)');
     expect(gettingStartedSection?.content).toContain('It can add a **Routes** map once saved routes have generated previews');
-    expect(gettingStartedSection?.content).toContain('**Reset to default**');
+    expect(gettingStartedSection?.content).toContain('**Reset to recommended**');
     expect(gettingStartedSection?.content).toContain('replaces the current dashboard tiles');
-    expect(gettingStartedSection?.content).toContain('**Add everything**');
+    expect(gettingStartedSection?.content).toContain('**Add all presets**');
     expect(gettingStartedSection?.content).toContain('**Uploaded activities**');
     expect(gettingStartedSection?.content).toContain('**Training** remains the fixed analytical workspace');
     expect(gettingStartedSection?.content).toContain('**Aerobic Capacity**');
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
     expect(gettingStartedSection?.content).toContain('current **Readiness**');
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
-    expect(gettingStartedSection?.content).toContain('**Activity Overview**, **Routes & Maps**, and **Custom Charts**');
-    expect(gettingStartedSection?.content).toContain('Custom charts are placed in those dashboard sections automatically');
+    expect(gettingStartedSection?.content).toContain('**Training State**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
+    expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
     expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
     expect(gettingStartedSection?.content).toContain('**Cycling Power Curve** and **Running Power Curve** are curated derived snapshots');
@@ -395,9 +433,10 @@ describe('help.content', () => {
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
     expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
-    expect(calendarSection?.content).toContain('Dashboard and Training headers each include a **Calendar** action');
+    expect(calendarSection?.content).toContain('**Today** card opens a month calendar in a bottom sheet');
+    expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
     expect(calendarSection?.content).toContain('Existing editable dashboards that do not contain the Activity Calendar receive it once automatically');
-    expect(calendarSection?.content).toContain('Dashboard manager **Remove all** to keep it from returning');
+    expect(calendarSection?.content).toContain('Dashboard options **Remove all** to keep it from returning');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');
     expect(calendarSection?.content).toContain('size reflects recorded duration');
     expect(calendarSection?.content).toContain('individual activities with their available distance and elevation metrics');
@@ -446,6 +485,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('Its first weekday is marked and named below the grid');
     expect(planningSection?.content).toContain('Saturday and Sunday are subtly tinted wherever they fall in the week');
     expect(planningSection?.content).toContain('calendar cues, not rest-day recommendations');
+    expect(planningSection?.content).toContain('Each saved workout editor has its own link');
+    expect(planningSection?.content).toContain('browser Back and Forward');
     expect(planningSection?.content).toContain('**Plan actions -> Plan color**');
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
@@ -801,8 +842,8 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('Latest workout TSS');
     expect(gettingStartedSection?.content).toContain('weekly');
     expect(gettingStartedSection?.content).toContain('asynchronously');
-    expect(gettingStartedSection?.content).toContain('top summary-header slot');
-    expect(gettingStartedSection?.content).toContain('before **Today** and the tiles');
+    expect(gettingStartedSection?.content).toContain('**Preparing your dashboard…**');
+    expect(gettingStartedSection?.content).toContain('**Today** title, date, and calendar stay in place');
   });
 
   it('should document new derived KPI rows and curated charts', () => {
@@ -1325,7 +1366,7 @@ describe('help.content', () => {
     );
     expect(dataAndPrivacySection?.content).toContain('up to 25 explicitly selected canonical numeric Sports Lib metrics');
     expect(dataAndPrivacySection?.content).toContain('first-class body-measurement history');
-    expect(dataAndPrivacySection?.content).toContain('Removing a parent permission');
+    expect(dataAndPrivacySection?.content).toContain('Removing activity details also removes its descriptions and location permissions');
     expect(dataAndPrivacySection?.content).toContain('bounded ranges up to 366 days');
     expect(dataAndPrivacySection?.content).toContain('identity-free day, week, or month values');
     expect(dataAndPrivacySection?.content).toContain('provider or manual canonical Health Weight point measurements');
@@ -1390,4 +1431,12 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('Use **Stop sharing**');
     expect(dataAndPrivacySection?.content).toContain('cannot generate or save new reports');
   });
+});
+
+it('explains separately approved activity description access and event semantics', () => {
+  const content = JSON.stringify(HELP_SECTIONS);
+  expect(content).toContain('**Activity descriptions**');
+  expect(content).toContain('Activities in the same event share that description');
+  expect(content).toContain('refresh cannot add it');
+  expect(content).toContain('without truncation');
 });

@@ -1,3 +1,6 @@
+import { ActivitySampleCache } from './activity-sample-cache';
+import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
+import { nightlyHealthAccountKey, type NightlyHrvRecord } from '../../../shared/nightly-hrv';
 import {
   ActivityTypes,
   ChartDataCategoryTypes,
@@ -17,6 +20,7 @@ import {
   DataEndPosition,
   DataEnergy,
   DataHeartRateAvg,
+  DataHeartRate,
   DataJumpDistanceMax,
   DataJumpEvent,
   DataLatitudeDegrees,
@@ -285,6 +289,81 @@ describe('MCP data service', () => {
       consumeGeocodingRateLimit: vi.fn().mockResolvedValue(undefined),
       importEvent: vi.fn(),
     };
+  });
+
+  async function descriptionFixture() {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
+    const reads = { activeOwner: vi.fn().mockResolvedValue(true),
+      fetchActivity: vi.fn().mockResolvedValue({ id: 'activity-1', data: { eventID: 'event-1', description: 'Wrong activity text' } }),
+      fetchEvent: vi.fn().mockResolvedValue({ id: 'event-1', data: { description: 'Parent context\nFelt tired 🏃',
+        name: 'private-name', creator: 'private-device', sourceKey: 'private-source', notes: 'private-notes' } }),
+    };
+    dependencies.activityDescriptionReads = reads;
+    const service = createMcpDataService(dependencies);
+    const listed = await service.listActivities({ uid: 'user-1', connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io' });
+    const input = { uid: 'user-1', connectionId: 'connection-1',
+      scopes: ['activity-details:read', 'activity-descriptions:read'], activityRef: listed.activities[0].activityRef };
+    return { reads, service, input };
+  }
+
+  it('reads only the referenced parent description and preserves full text, null and empty values', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    const result = await service.getActivityDescription(input);
+    expect(result).toEqual({ activityRef: input.activityRef, description: 'Parent context\nFelt tired 🏃' });
+    expect(JSON.stringify(result)).not.toMatch(/private-|Wrong activity/);
+    expect(reads.fetchActivity).toHaveBeenCalledWith('user-1', 'activity-1');
+    expect(reads.fetchEvent).toHaveBeenCalledWith('user-1', 'event-1');
+    expect(reads.activeOwner).toHaveBeenCalledTimes(2);
+    for (const description of [undefined, null, '', '  keep whitespace  ', 'a'.repeat(65_536)]) {
+      reads.fetchEvent.mockResolvedValue({ id: 'event-1', data: { description } } as never);
+      expect((await service.getActivityDescription(input)).description).toBe(description ?? null);
+    }
+  });
+
+  it('denies description reads before database work for missing grants and replayed or tampered references', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    for (const change of [{ scopes: [] }, { scopes: ['activity-details:read'] },
+      { scopes: ['activity-descriptions:read'] }, { uid: 'other-owner' }, { connectionId: 'other-connection' },
+      { activityRef: input.activityRef.slice(0, -8) + 'tampered' }]) {
+      await expect(service.getActivityDescription({ ...input, ...change })).rejects.toMatchObject({ code: 'invalid_request' });
+    }
+    expect(reads.activeOwner).not.toHaveBeenCalled();
+    expect(reads.fetchActivity).not.toHaveBeenCalled();
+    expect(reads.fetchEvent).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for stale parent bindings, missing documents, malformed or oversized text and backend errors', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    for (const activity of [null, { id: 'different', data: { eventID: 'event-1' } },
+      { id: 'activity-1', data: { eventID: 'other-event' } }]) {
+      reads.fetchActivity.mockResolvedValue(activity as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'detail_not_available' });
+    }
+    expect(reads.fetchEvent).not.toHaveBeenCalled();
+    reads.fetchActivity.mockResolvedValue({ id: 'activity-1', data: { eventID: 'event-1' } } as never);
+    for (const event of [null, { id: 'different', data: { description: 'private' } },
+      { id: 'event-1', data: { description: { text: 'private' } } }]) {
+      reads.fetchEvent.mockResolvedValue(event as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'detail_not_available' });
+    }
+    for (const description of ['a'.repeat(65_537), '🏃'.repeat(16_385), '\u0000'.repeat(30_000)]) {
+      reads.fetchEvent.mockResolvedValue({ id: 'event-1', data: { description } } as never);
+      await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'query_too_large' });
+    }
+    reads.fetchEvent.mockRejectedValue(new Error('private description and backend path'));
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'temporarily_unavailable',
+      message: 'The activity description could not be read safely. Try again later.' });
+  });
+
+  it('checks account deletion before reading and again before releasing private description text', async () => {
+    const { reads, service, input } = await descriptionFixture();
+    reads.activeOwner.mockResolvedValueOnce(false);
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'invalid_request' });
+    expect(reads.fetchActivity).not.toHaveBeenCalled();
+    reads.activeOwner.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await expect(service.getActivityDescription(input)).rejects.toMatchObject({ code: 'invalid_request' });
+    expect(reads.fetchEvent).toHaveBeenCalledOnce();
   });
 
   it('redacts unexpected Health reader errors instead of disclosing backend details', async () => {
@@ -634,6 +713,105 @@ describe('MCP data service', () => {
     });
     expect(jumps.items[0]).not.toHaveProperty('latitudeDegrees');
     expect(jumps.items[0]).not.toHaveProperty('longitudeDegrees');
+  });
+
+  async function samplesFixture() {
+    const {service, input} = await descriptionFixture();
+    const startDate = Date.parse('2026-07-01T08:00:00Z');
+    const activity = activityDocument({startDate, endDate: startDate + 4000, sourceActivityKey: undefined, stats: {}});
+    const context = {event: {id: 'event-1', data: {originalFile: {path: 'users/user-1/events/event-1/original.fit'}}}, activities: [activity]};
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue(context);
+    const cache = new ActivitySampleCache();
+    const reads = {
+      cache, activeOwner: vi.fn().mockResolvedValue(true),
+      sourceVersions: vi.fn(async (_uid: string, _event: string, files: readonly import('../../../shared/app-event.interface').OriginalFileMetaData[]) => files.map(file => ({...file, generation: '123'}))),
+      parseSource: vi.fn(async () => EventImporterJSON.getEventFromJSON({
+        name: 'Private name', startDate, endDate: startDate + 4000, stats: {},
+        activities: [{...activity.data, streams: {[DataHeartRate.type]: [100, null, 0, 140, 150]}, laps: [], intensityZones: [], events: []}],
+      } as never)),
+    };
+    dependencies.activitySamplesReads = reads;
+    return {service, input: {...input, scopes: ['activity-details:read'], metrics: ['hr'], limit: 2}, reads, context};
+  }
+
+  it.each(['broken', '', ' ', null, 123, -1, '9'.repeat(41)])('rejects invalid stored source generation %j before reading charts or samples', async generation => {
+    const {service, input, reads, context} = await samplesFixture();
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      ...context, event: {...context.event, data: {
+        originalFile: {...context.event.data.originalFile, generation},
+      }},
+    });
+    try {
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available'});
+      await expect(service.getActivityChartData(input)).rejects.toMatchObject({code: 'detail_not_available'});
+      expect(reads.sourceVersions).not.toHaveBeenCalled();
+      expect(dependencies.consumeActivityChartRateLimit).not.toHaveBeenCalled();
+      expect(dependencies.downloadActivityChartSource).not.toHaveBeenCalled();
+      expect(dependencies.buildActivityChartData).not.toHaveBeenCalled();
+    } finally { reads.cache.clear(); }
+  });
+
+  it.each([undefined, '123', ' 123 '])('preserves legacy sources and normalizes valid stored source generation %j', async generation => {
+    const {service, input, reads, context} = await samplesFixture();
+    vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValue({
+      ...context, event: {...context.event, data: {
+        originalFile: {...context.event.data.originalFile, ...(generation === undefined ? {} : {generation})},
+      }},
+    });
+    try {
+      await service.getActivitySamples(input);
+      expect(reads.sourceVersions.mock.calls[0][2][0].generation).toBe(generation?.trim());
+      await service.getActivityChartData(input);
+      expect(vi.mocked(dependencies.buildActivityChartData).mock.calls[0][0].sourceFiles[0].generation).toBe(generation?.trim());
+    } finally { reads.cache.clear(); }
+  });
+
+  it('reads sample pages through the shared owner context and existing parser rate limit with real opaque cursors', async () => {
+    const {service, input, reads} = await samplesFixture();
+    try {
+      const first = await service.getActivitySamples(input);
+      expect(first.series[0].values).toEqual([100, null]); expect(first.nextCursor!.length).toBeLessThanOrEqual(512);
+      const second = await service.getActivitySamples({...input, cursor: first.nextCursor!});
+      expect(second.series[0].values).toEqual([0, 140]);
+      expect(dependencies.consumeActivityChartRateLimit).toHaveBeenCalledTimes(1);
+      expect(dependencies.consumeActivityChartRateLimit).toHaveBeenCalledWith('user-1', 'connection-1');
+      expect(dependencies.downloadActivityChartSource).toHaveBeenCalledWith('user-1', 'event-1', expect.objectContaining({generation: '123'}), expect.any(Number));
+      expect(dependencies.buildActivityChartData).not.toHaveBeenCalled();
+      for (const change of [{scopes: []}, {uid: 'other'}, {connectionId: 'other'}, {cursor: first.nextCursor!.slice(0, -8) + 'tampered'}]) {
+        await expect(service.getActivitySamples({...input, cursor: first.nextCursor!, ...change})).rejects.toMatchObject({code: 'invalid_request'});
+      }
+      const otherConnection = await service.listActivities({uid: input.uid, connectionId: 'other', appBaseUrl: 'https://quantified-self.io'});
+      await expect(service.getActivitySamples({...input, connectionId: 'other', activityRef: otherConnection.activities[0].activityRef, cursor: first.nextCursor!}))
+        .rejects.toMatchObject({code: 'invalid_request'});
+      expect(JSON.stringify(first)).not.toMatch(/Private|private|event-1|activity-1|original.fit|generation/);
+    } finally { reads.cache.clear(); }
+  });
+
+  it('rejects changed, missing or oversized sample parents and sanitizes storage and parser errors', async () => {
+    const {service, input, reads, context} = await samplesFixture();
+    try {
+      const first = await service.getActivitySamples(input);
+      for (const value of [null, {...context, event: {...context.event, id: 'other'}}, {...context, activities: []},
+        {...context, activities: Array(101).fill(context.activities[0])},
+        {...context, activities: [{...context.activities[0], data: {...context.activities[0].data, eventID: 'other'}}]}]) {
+        vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValueOnce(value);
+        await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'detail_not_available'});
+      }
+      vi.mocked(dependencies.fetchActivityChartContext).mockResolvedValueOnce({
+        ...context, event: {...context.event, data: {originalFiles: [context.event.data.originalFile, {bucket: 'missing-path'}]}},
+      });
+      await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'detail_not_available'});
+      context.activities[0].data.endDate += 1000;
+      await expect(service.getActivitySamples({...input, cursor: first.nextCursor!})).rejects.toMatchObject({code: 'invalid_request'});
+      context.activities[0].data.endDate -= 1000;
+      reads.cache.clear();
+      vi.mocked(dependencies.consumeActivityChartRateLimit).mockRejectedValueOnce(new McpActivityChartRateLimitError());
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'temporarily_unavailable'});
+      reads.sourceVersions.mockRejectedValueOnce(new Error('private storage path'));
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available', message: 'The original activity samples could not be read safely.'});
+      reads.parseSource.mockRejectedValueOnce(new Error('private original payload'));
+      await expect(service.getActivitySamples(input)).rejects.toMatchObject({code: 'detail_not_available', message: 'The original activity samples could not be read safely.'});
+    } finally { reads.cache.clear(); }
   });
 
   it('resolves chart sources from the connection-bound activity and rate-limits before reading', async () => {
@@ -4462,7 +4640,7 @@ describe('MCP data service', () => {
 
     const result = await createMcpDataService(dependencies).getTrainingMetric(
       'user-1',
-      DERIVED_METRIC_KINDS.TrainingReadiness,
+      DERIVED_METRIC_KINDS.FormNow,
     );
 
     expect(result.schemaVersion).toBe(MCP_TRAINING_METRIC_SCHEMA_VERSION);
@@ -5508,6 +5686,50 @@ describe('MCP data service', () => {
     })).rejects.toMatchObject<McpDataError>({
       code: 'query_too_large',
     });
+  });
+
+
+  it('projects the updated internal recovery snapshots onto the frozen MCP versions', async () => {
+    const { buildTrainingReadinessMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('../derived-metrics/derived-metrics.service');
+    const now = Date.parse('2026-07-27T12:00:00Z');
+    const readiness = buildTrainingReadinessMetricPayload([], 0, [], now).payload;
+    const recovery = buildTrainingBuildComparisonMetricPayload([], {}, now).payload;
+    expect(readiness.evidenceVersion).toBe(1);
+    expect(recovery.recoveryVersion).toBe(4);
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockImplementation(async (_uid, kind) => ({status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: kind === DERIVED_METRIC_KINDS.TrainingReadiness ? readiness : recovery}));
+    const service = createMcpDataService(dependencies);
+    const publicReadiness = await service.getTrainingMetric('user-1', DERIVED_METRIC_KINDS.TrainingReadiness);
+    const publicRecovery = await service.getTrainingMetric('user-1', DERIVED_METRIC_KINDS.TrainingBuildComparison);
+    expect(publicReadiness.payload).not.toHaveProperty('evidenceVersion');
+    expect(publicReadiness.payload).toMatchObject({formulaVersion: 3});
+    expect(publicRecovery.payload).toMatchObject({recoveryVersion: 3});
+  });
+
+  it('supplements daily-report HRV only with explicit Health and Sleep grants', async () => {
+    const endTimeMs = Date.parse('2026-07-27T06:00:00Z');
+    const original = sleepDocument({sleepDate: '2026-07-27', startTimeMs: endTimeMs - 28800000, endTimeMs, vitals: null});
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue([original]);
+    const record: NightlyHrvRecord = {userID: 'user-1', schemaVersion: 1, kind: 'interval_summary',
+      source: {provider: 'GarminAPI', accountKey: await nightlyHealthAccountKey('user-1', 'GarminAPI', 'private-provider-user')},
+      calendarDate: '2026-07-27', startTimeMs: endTimeMs - 28800000, endTimeMs,
+      metrics: [{kind: 'value', metricId: 'heart_rate_variability', valueType: 'number', aggregation: 'average',
+        semanticVariant: 'overnight_rmssd', origin: 'provider_summary', recordingMethod: 'provider_calculated',
+        normalizationStatus: 'canonical', canonical: {value: 44, unit: 'ms'}}]};
+    dependencies.supplementSleepDocuments = vi.fn((uid, docs) => supplementNightlyHrvSleepDocuments(uid, docs, async () => ({records: [record]})));
+    const service = createMcpDataService(dependencies);
+    const without = await service.getDailyReport({uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read']});
+    expect(without.sleep.latestSession?.vitals.overnightHrvMs).toBeNull();
+    expect(dependencies.supplementSleepDocuments).not.toHaveBeenCalled();
+    const withHealth = await service.getDailyReport({uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read', 'health:read']});
+    expect(withHealth.sleep.latestSession?.vitals.overnightHrvMs).toBe(44);
+    expect(withHealth.readiness.drivers.hrv.latestMs).toBe(44);
+    expect(JSON.stringify(withHealth)).not.toContain('private-provider-user');
+    expect(JSON.stringify(withHealth)).not.toContain('SourceKey');
+    vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([original]);
+    const vitals = await service.listSleepVitals({uid: 'user-1', startTimeMs: endTimeMs - 86400000, endTimeMs,
+      scopes: ['health:read', 'sleep:read']});
+    expect(vitals.vitals).toContainEqual(expect.objectContaining({type: 'overnightHrvMs', sessionCount: 1}));
   });
 
   it('returns one bounded daily report with safe sleep HRV, heart rate, and live readiness', async () => {

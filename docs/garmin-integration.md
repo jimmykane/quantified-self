@@ -23,6 +23,17 @@ Garmin Body Battery is retained as provider-native because the provider score is
 
 `epochs`, Women's Health, and enhanced beat-to-beat data are outside this phase. Epochs are tracked in issue #622 and Women's Health in issue #621. This phase does not add a new MCP, Training, or Health Hub surface.
 
+
+## Nightly HRV in Sleep and reports
+
+Garmin's `hrv.lastNightAvg` is stored as canonical overnight RMSSD in Health; the Sleep payload does not carry it.
+Dashboard, Training readiness/recovery, and MCP Sleep/report reads now resolve that separate summary through
+`shared/nightly-hrv.ts`, matching the same owner/account, calendar night, and overlapping sleep interval. Existing
+Health and Sleep history needs no reimport or persistent copy. Native Sleep HRV from other providers remains preferred.
+The five-minute high, samples, and Health Snapshot values cannot supply this nightly average. Overnight heart rate
+stays unavailable unless an actual normalized sleep heart-rate aggregate was recorded. MCP requires Health permission
+in addition to the existing Sleep grant for this supplement. See the shared
+[provider integration contract](provider-integration-guide.md#nightly-hrv-across-sleep-and-health).
 ## Delivery and trust boundary
 
 - Configure Garmin for **Ping/Pull**, not Push. Garmin's ping has no local request signature, so the public request is only an availability hint.

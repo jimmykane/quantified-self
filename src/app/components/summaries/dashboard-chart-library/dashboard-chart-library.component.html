@@ -1,0 +1,83 @@
+@if (showAddAction()) {
+  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" (click)="toggle()">
+    <mat-icon>add</mat-icon>
+    <span>{{ sectionPresentation().add }}</span>
+  </button>
+}
+<ng-template #picker>
+<section class="chart-library bottom-sheet-container" [class.chart-library-dialog]="!usesBottomSheet()" [attr.aria-busy]="state.busy()">
+  <div class="chart-library-heading">
+    <h2>{{ pickerHeading() }}</h2>
+    <button mat-icon-button aria-label="Close library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
+  </div>
+  <div #scrollContent class="chart-library-layout qs-scrollbar" [class.has-selection]="state.draft() && !state.configuring()" [class.is-configuring]="state.configuring()">
+    @if (!state.configuring()) {
+    <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [disabled]="state.busy()" [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
+      @if (lane() === 'kpi') {
+      <mat-chip-listbox aria-label="KPI group" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
+        <mat-chip-option value="all">All</mat-chip-option><mat-chip-option value="load">Load</mat-chip-option><mat-chip-option value="readiness">Readiness</mat-chip-option><mat-chip-option value="execution">Execution</mat-chip-option>
+      </mat-chip-listbox>
+      }
+      <p class="chart-library-count" aria-live="polite">{{ availableCountLabel() }}</p>
+      <mat-action-list class="chart-library-list qs-scrollbar" [attr.aria-label]="'Available ' + sectionPresentation().plural">
+        @for (entry of rowPreviews(); track entry.definition.id) {
+          <button mat-list-item type="button" [attr.data-preset-id]="entry.definition.id" [attr.aria-pressed]="state.selected()?.definition?.id === entry.definition.id" [attr.aria-label]="'Preview ' + entry.definition.label" [attr.aria-describedby]="'chart-source-' + entry.definition.id" [disabled]="state.busy()" (click)="select(entry)">
+            <span matListItemTitle>{{ entry.title }}</span>
+            <span matListItemLine [id]="'chart-source-' + entry.definition.id">{{ entry.format }} · {{ entry.preview.source === 'user' ? 'Your data' : 'Example data' }}</span>
+            <span matListItemMeta class="chart-library-row-meta" aria-hidden="true">
+              <app-dashboard-chart-thumbnail [preview]="entry.preview" [darkTheme]="darkTheme()"></app-dashboard-chart-thumbnail>
+              <mat-icon>chevron_right</mat-icon>
+            </span>
+          </button>
+        } @empty { <p class="chart-library-empty">{{ emptyMessage() }}</p> }
+      </mat-action-list>
+      @if (lane() === 'section:activityOverview') {
+      <button mat-button [disabled]="state.busy()" (click)="createCustom()"><mat-icon>tune</mat-icon>Create custom chart</button>
+      }
+    </div>
+    }
+    @if (state.draft(); as draft) {
+    <div #detail class="chart-library-detail qs-scrollbar" [class.is-configuring]="state.configuring()" tabindex="-1">
+      <div class="chart-library-detail-heading" [class.chart-library-preview-heading]="!state.configuring()">
+        <button class="chart-library-back" mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>{{ backLabel() }}</button>
+        @if (!state.configuring() && state.canConfigure()) {
+          <button class="chart-library-settings" mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>{{ draftPresentation().settings }}</button>
+        }
+      </div>
+      <div [class.chart-library-editor-layout]="state.configuring()" class="qs-scrollbar">
+        @if (state.configuring()) {
+        <section class="chart-library-properties qs-scrollbar" [attr.aria-label]="draftPresentation().properties">
+          <h3>{{ draftPresentation().properties }}</h3>
+          <app-dashboard-tile-editor [attr.inert]="state.busy() ? '' : null" [configuration]="state.editor()!" [showCategorySelector]="!creatingCustom()" (changed)="state.refreshDraft()"></app-dashboard-tile-editor>
+        </section>
+        }
+        <section class="chart-library-preview qs-scrollbar" [attr.aria-label]="draftPresentation().preview">
+          <h3>{{ state.configuring() ? 'Live preview' : previewTitle() }}</h3>
+          <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
+          @if (!creatingCustom()) {
+            <div class="chart-library-explanation">
+              @for (paragraph of explanationParagraphs(); track $index) { <p>{{ paragraph }}</p> }
+            </div>
+          }
+          <p class="chart-library-destination">{{ dataScope() }}</p>
+          <p class="chart-library-destination">{{ state.editor()?.mode === 'edit' ? 'Saved in' : 'Adds to' }} {{ destination() }}</p>
+        </section>
+      </div>
+    </div>
+    } @else if (!state.configuring()) {
+      <div class="chart-library-preview-placeholder">
+        <mat-icon aria-hidden="true">query_stats</mat-icon>
+        <h3>Select a {{ sectionPresentation().singular }}</h3>
+        <p>Choose a {{ sectionPresentation().singular }} from the list to see its preview and details.</p>
+      </div>
+    }
+  </div>
+  @if (state.draft() && (state.editor()?.mode !== 'edit' || state.canConfigure())) {
+      <div class="chart-library-save">
+        @if (state.error()) { <p class="chart-library-error" role="alert">{{ state.error() }}</p> }
+        <button mat-flat-button [disabled]="state.busy() || state.editor()?.isSaveDisabled" (click)="state.save()"><span class="chart-library-button-content"><span class="chart-library-button-icon">@if (state.busy()) { <mat-spinner diameter="18"></mat-spinner> } @else { <mat-icon>{{ state.editor()?.mode === 'edit' ? 'check' : 'add' }}</mat-icon> }</span><span>{{ state.busy() ? 'Saving…' : state.editor()?.mode === 'edit' ? 'Save changes' : 'Add to dashboard' }}</span></span></button>
+      </div>
+  }
+</section>
+</ng-template>

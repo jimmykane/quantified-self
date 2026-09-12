@@ -1,4 +1,5 @@
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -78,6 +79,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsFreshnessForecastComponent]',
@@ -183,6 +185,7 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
       ...points.map(point => point.formSameDay),
       ...points.map(point => point.formSameDay ?? point.formPriorDay),
     ]);
+    const includesZero = valueAxis.min <= 0 && valueAxis.max >= 0;
 
     return {
       animation: false,
@@ -192,11 +195,13 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
       },
       grid: {
+        // The forecast plots CTL, ATL, and Form on one shared numeric scale.
+        // Let ECharts reserve only the label space it needs, rather than
+        // taking a fixed wide gutter from already-compact tiles.
         left: 6,
         right: 6,
         top: 8,
-        bottom: 22,
-        containLabel: false,
+        ...trainingStateChartGrid(),
       },
       tooltip: {
         show: true,
@@ -221,9 +226,9 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: {
-          color: style.textColor,
-          fontSize: style.axisFontSize,
+          color: style.secondaryTextColor,
           hideOverlap: true,
+          ...TRAINING_STATE_AXIS_LABEL,
           formatter: (value: number) => new Date(value).toLocaleDateString(undefined, {
             month: 'short',
             day: 'numeric',
@@ -242,7 +247,11 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
           lineStyle: { color: style.gridColor },
         },
         axisLabel: {
-          show: false,
+          show: true,
+          color: style.textColor,
+          fontSize: style.axisFontSize,
+          hideOverlap: true,
+          formatter: (value: number) => this.formatValue(value),
         },
       },
       series: [
@@ -278,6 +287,19 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
             width: 1.2,
             color: '#4caf50',
           },
+          markLine: includesZero
+            ? {
+              symbol: 'none',
+              silent: true,
+              label: { show: false },
+              lineStyle: {
+                width: 1,
+                type: 'dashed',
+                color: style.axisColor,
+              },
+              data: [{ yAxis: 0 }],
+            }
+            : undefined,
         },
         {
           name: 'Form (forecast)',

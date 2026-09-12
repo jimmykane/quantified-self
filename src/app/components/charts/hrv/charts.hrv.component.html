@@ -1,0 +1,48 @@
+<section class="hrv-layout">
+  <header class="hrv-header">
+    <div class="hrv-title-row" [class.hrv-reserve-actions]="reserveTitleActionSpace()">
+      <div class="hrv-title qs-dashboard-chart-title">HRV</div>
+      @if (infoTooltip()) {
+        <button mat-icon-button class="title-info-button" appHapticTap appTooltipTap [matTooltip]="infoTooltip()"
+          matTooltipPosition="below" aria-label="How this chart is calculated"><mat-icon>info</mat-icon></button>
+      }
+    </div>
+    <div class="hrv-window">{{ context()?.window?.label }}</div>
+  </header>
+  @if (!chart() && (isLoading() || context()?.loading)) {
+    <div class="hrv-state" role="status"><mat-spinner diameter="24" aria-hidden="true" />Loading HRV…</div>
+  } @else if (!chart() && context()?.error) {
+    <div class="hrv-state" role="status">Could not load HRV history. Choose a range to try again.</div>
+  } @else if (chart(); as selected) {
+    @if (isLoading() || context()?.loading || context()?.error) {
+      <div class="hrv-update" role="status">
+        @if (isLoading() || context()?.loading) {
+          <mat-progress-bar mode="indeterminate" aria-label="Updating HRV" />
+          <span>Updating HRV{{ context()?.requestedWindow ? ' · ' + context()!.requestedWindow!.label : '' }}. Previous chart shown.</span>
+        } @else {
+          <span>Could not load the requested range. Previous chart shown. Choose a range to retry.</span>
+        }
+      </div>
+    }
+    @if (charts().length > 1) {
+      <mat-tab-group animationDuration="0ms" [selectedIndex]="selectedIndex()" (selectedIndexChange)="selectSource($event)" aria-label="HRV source">
+        @for (source of charts(); track source.key) {
+          <mat-tab [disabled]="isLoading() || context()?.loading" [label]="source.model.series.sourceLabel + ' · ' + source.model.series.semanticLabel" />
+        }
+      </mat-tab-group>
+    }
+    <div class="hrv-summary">
+      <div class="hrv-reading"><strong>{{ selected.latestValueText }}</strong><span>{{ selected.model.series.sourceLabel }}</span></div>
+      <div class="hrv-context">{{ selected.model.series.semanticLabel }}</div>
+      @if (selected.status; as status) {
+        <div class="hrv-status"><span class="hrv-status-dot" [style.background-color]="selected.statusOverlay?.statusColor" aria-hidden="true"></span>{{ status.label }}</div>
+        <div class="hrv-context">{{ status.detailText }}</div>
+      }
+    </div>
+    <app-health-metric-series-chart [fillHeight]="true" [model]="selected.model" [startTimeMs]="context()!.window.startTimeMs"
+      [endTimeMs]="context()!.window.endTimeMs" [darkTheme]="darkTheme()" [unitSettings]="unitSettings()"
+      [timelineNotes]="timelineNotes()" [statusOverlay]="selected.statusOverlay" [statusDescription]="selected.statusDescription" />
+  } @else {
+    <div class="hrv-state" role="status">No HRV readings in this window. Choose another range or sync a source that records HRV.</div>
+  }
+</section>

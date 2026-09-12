@@ -1,4 +1,5 @@
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
+import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -99,8 +100,6 @@ const VITAL_AVERAGES = [
   { key: 'minimumHeartRateBpm', label: 'Avg Min HR', color: MINIMUM_HEART_RATE_SERIES.color, field: SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate },
 ] as const;
 
-const GRID_BOTTOM_WITH_LEGEND = 58;
-const GRID_BOTTOM_COMPACT = 34;
 const MIN_SINGLE_SOURCE_AXIS_LABEL_WIDTH = 58;
 const MIN_MULTI_SOURCE_AXIS_LABEL_WIDTH = 72;
 const FALLBACK_MAX_AXIS_LABELS = 8;
@@ -172,6 +171,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     private logger: LoggerService,
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsSleepTrendComponent]',
@@ -188,7 +188,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       this.updateHeaderAndErrorState();
       return;
     }
-    if (changes.darkTheme || changes.isLoading || changes.sleepTrend || changes.unitSettings || changes.timelineNotes) {
+    if (changes.darkTheme || changes.isLoading || changes.sleepTrend || changes.unitSettings || changes.timelineNotes || changes.sleepRange) {
       void this.refreshChart();
     }
   }
@@ -214,6 +214,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
     this.chartHost.hideTooltip();
     this.chartHost.setTimelineNotes(this.timelineNotes, { categoryDates: points.map(point => point.sleepDate) });
     this.chartHost.setOption(this.buildOption(points), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+    this.unbindSleepBarHighlight();
     this.bindSleepBarHighlight(chart);
     this.chartHost.scheduleResize();
   }
@@ -223,6 +224,9 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
   }
 
   private updateHeaderAndErrorState(points: DashboardSleepTrendPoint[] = this.getPoints()): void {
+    this.noDataErrorMessage = 'No sleep data yet';
+    this.noDataErrorHint = 'Connect Garmin, Suunto, or COROS sleep sync to populate this chart.';
+    this.noDataErrorIcon = 'hotel';
     this.vitalAverages = VITAL_AVERAGES.flatMap(definition => {
       const average = this.averageMetric(points.map(point => this.toFiniteMetric(point[definition.key])));
       if (average === null) {
@@ -275,7 +279,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       }
       : { show: false };
     const showEveryDayLabel = this.sleepRange === DASHBOARD_SLEEP_TREND_DEFAULT_RANGE
-      && !isMobileTooltipViewport;
+      && !isMobileTooltipViewport
+      && !style.isCompactLayout;
     const xAxisLabelInterval = showEveryDayLabel ? 0 : this.buildXAxisLabelInterval(points, chartWidth);
     const xAxisLabelFormatter = this.buildXAxisLabelFormatter(points);
     const hrvData = points.map(point => this.toFiniteMetric(point.averageHrvMs));
@@ -375,7 +380,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       ? [this.buildVitalsLineSeries(SPO2_SERIES, spo2Data)]
       : [];
 
-    return {
+    const option: ChartOption = {
       animation: false,
       backgroundColor: 'transparent',
       textStyle: {
@@ -385,8 +390,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       grid: {
         left: 26,
         right: hasVitalsSeries ? 32 : 8,
-        top: 8,
-        bottom: style.isCompactLayout ? GRID_BOTTOM_COMPACT : GRID_BOTTOM_WITH_LEGEND,
+        top: style.isCompactLayout ? 8 : 32,
+        ...trainingStateChartGrid(),
       },
       tooltip: {
         show: true,
@@ -411,7 +416,8 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
       },
       legend: {
         show: !style.isCompactLayout,
-        bottom: 0,
+        top: 0,
+        type: 'scroll',
         itemWidth: 10,
         itemHeight: 8,
         textStyle: {
@@ -434,8 +440,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         axisLine: { lineStyle: { color: style.axisColor } },
         axisLabel: {
           color: style.secondaryTextColor,
-          fontSize: style.axisFontSize,
-          lineHeight: 14,
+          ...TRAINING_STATE_AXIS_LABEL,
           interval: xAxisLabelInterval,
           formatter: xAxisLabelFormatter,
           hideOverlap: !showEveryDayLabel,
@@ -451,6 +456,7 @@ export class ChartsSleepTrendComponent implements AfterViewInit, OnChanges, OnDe
         ...spo2Series,
       ],
     };
+    return option;
   }
 
   private formatTooltip(

@@ -41,6 +41,7 @@ describe('ServicesSuuntoComponent', () => {
 
     beforeEach(async () => {
         mockUserService = {
+            user: vi.fn(() => ({ uid: 'user-1' })),
             isAdmin: vi.fn(),
             requestAndSetCurrentUserSuuntoAppAccessToken: vi.fn(),
             getServiceToken: vi.fn().mockReturnValue(of([])),

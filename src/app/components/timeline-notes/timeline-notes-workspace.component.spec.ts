@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Subject } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimelineNotesWorkspaceComponent } from './timeline-notes-workspace.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -11,16 +11,87 @@ import { resolve } from 'node:path';
 
 describe('Timeline notes workspace ownership', () => {
   const note = { id: 'a'.repeat(64), category: 'other' as const, title: 'Private', startDate: '2026-01-02', endDate: '2026-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
-  const service = { uid: signal<string | null>('owner'), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), invalidate: vi.fn(), isOwner: (uid: string) => service.uid() === uid };
+  const service = { uid: signal<string | null>('owner'), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => service.uid() === uid };
   const dialogs = { open: vi.fn() };
   const haptics = { selection: vi.fn() };
   let component: TimelineNotesWorkspaceComponent;
   const flush = async () => { TestBed.flushEffects(); await Promise.resolve(); await Promise.resolve(); };
   beforeEach(() => {
     vi.clearAllMocks(); service.uid.set('owner'); service.showOnCharts.set(true); service.loadRange.mockResolvedValue({ notes: [note], incomplete: null });
+    service.cachedRange.mockReturnValue(null);
     service.invalidate.mockImplementation(() => service.changes$.next());
     TestBed.configureTestingModule({ providers: [{ provide: AppTimelineNotesService, useValue: service }, { provide: MatDialog, useValue: dialogs }, { provide: AppHapticsService, useValue: haptics }] });
     component = TestBed.runInInjectionContext(() => new TimelineNotesWorkspaceComponent());
+  });
+  let visibility: ReturnType<typeof vi.spyOn>;
+  let clock: ReturnType<typeof vi.spyOn>;
+  afterEach(() => { visibility?.mockRestore(); clock?.mockRestore(); });
+  it('keeps annotations visible through paired visibility and focus events, including a delayed refresh', async () => {
+    visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    await flush();
+    const rendered = component.context();
+    let finish!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+    expect(component.context()).toBe(rendered);
+    window.dispatchEvent(new Event('focus'));
+    await flush();
+    expect(service.loadRange).toHaveBeenCalledTimes(2);
+    expect(component.context()).toBe(rendered);
+    finish({ notes: [{ ...note }], incomplete: null });
+    await flush();
+    expect(component.context()).toBe(rendered);
+    expect(service.invalidate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+  it('hydrates a returning workspace from its completed cache while revalidation is pending', async () => {
+    const cached = { notes: [note], incomplete: null };
+    service.cachedRange.mockReturnValue(cached);
+    let finish!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    await flush();
+    expect(component.loading()).toBe(true);
+    expect(component.context().notes).toEqual([note]);
+    expect(service.invalidate).not.toHaveBeenCalled();
+    finish({ notes: [], incomplete: null }); await flush();
+    expect(component.context().notes).toEqual([]);
+  });
+  it('retains notes after a failed foreground refresh and allows an explicit retry', async () => {
+    visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    const rendered = component.context();
+    service.loadRange.mockRejectedValueOnce(new Error('offline'));
+    window.dispatchEvent(new Event('focus')); await flush();
+    expect(component.error()).toBe(true);
+    expect(component.context()).toBe(rendered);
+    service.loadRange.mockResolvedValueOnce({ notes: [{ ...note, title: 'Updated', revision: 2 }], incomplete: null });
+    component.refresh(); await flush();
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-01-01', endDate: '2026-01-10' }, true);
+    expect(component.context().notes[0].revision).toBe(2);
+    expect(component.error()).toBe(false);
+  });
+  it('ignores hidden-tab events and only reprojects unchanged ongoing notes when their local date changes', async () => {
+    clock = vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 0, 2, 21, 59));
+    const ongoing = { ...note, endDate: null, timeZone: 'Europe/Helsinki' };
+    service.loadRange.mockResolvedValue({ notes: [ongoing], incomplete: null });
+    component.context().reportRange({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    const rendered = component.context();
+    visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus')); await flush();
+    expect(service.loadRange).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue('visible');
+    window.dispatchEvent(new Event('focus')); await flush();
+    expect(component.context()).toBe(rendered);
+    clock.mockReturnValue(Date.UTC(2026, 0, 2, 22, 1));
+    window.dispatchEvent(new Event('focus')); await flush();
+    expect(component.context()).not.toBe(rendered);
+    expect(component.context().notes).toEqual([ongoing]);
+    const nextDay = component.context();
+    window.dispatchEvent(new Event('focus')); await flush();
+    expect(component.context()).toBe(nextDay);
   });
   it('provides tap feedback for management and retry, not background refreshes or disabled controls', async () => {
     const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
@@ -43,10 +114,106 @@ describe('Timeline notes workspace ownership', () => {
     component.context().reportRange({}, { startDate: '2025-12-01', endDate: '2026-01-04' });
     await flush();
     expect(service.loadRange).toHaveBeenCalledTimes(1);
-    expect(service.loadRange).toHaveBeenCalledWith('owner', { startDate: '2025-12-01', endDate: '2026-01-10' });
+    expect(service.loadRange).toHaveBeenCalledWith('owner', { startDate: '2025-12-01', endDate: '2026-01-10' }, false);
     expect(component.context().notes).toEqual([note]);
     component.context().select([note]); expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: [note] } }));
   });
+  it('keeps existing chart annotations stable while a newly visible chart expands the union', async () => {
+    const first = {}, second = {};
+    const report = component.context().reportRange;
+    report(first, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    await flush();
+    const renderedContext = component.context();
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveLoad = resolve; }));
+    report(second, { startDate: '2025-12-01', endDate: '2026-01-10' });
+    await flush();
+    expect(component.loading()).toBe(true);
+    expect(component.context()).toBe(renderedContext);
+    expect(component.context().notes).toEqual([note]);
+    resolveLoad({ notes: [{ ...note }], incomplete: null });
+    await flush();
+    // A server/cache response with unchanged notes must not refresh every mounted chart again.
+    expect(component.context()).toBe(renderedContext);
+    expect(component.loading()).toBe(false);
+    report(second, null); await flush();
+    expect(component.context()).toBe(renderedContext);
+  });
+
+  it('replaces the expanded result atomically and retains known annotations if another range fails', async () => {
+    const report = component.context().reportRange;
+    report({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    const olderNote = { ...note, id: 'b'.repeat(64), startDate: '2025-12-02', endDate: '2025-12-04' };
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveLoad = resolve; }));
+    report({}, { startDate: '2025-12-01', endDate: '2026-01-10' }); await flush();
+    expect(component.context().notes).toEqual([note]);
+    resolveLoad({ notes: [olderNote, { ...note }], incomplete: 'records' }); await flush();
+    expect(component.context().notes).toEqual([olderNote, note]);
+    expect(component.incomplete()).toBe('records');
+    const renderedContext = component.context();
+    service.loadRange.mockRejectedValueOnce(new Error('offline'));
+    report({}, { startDate: '2025-11-01', endDate: '2026-01-10' }); await flush();
+    expect(component.error()).toBe(true);
+    expect(component.context()).toBe(renderedContext);
+    expect(component.incomplete()).toBe('records');
+  });
+
+  it('rejects out-of-order range loads while keeping the most recent visible snapshot', async () => {
+    const report = component.context().reportRange;
+    const key = {};
+    report(key, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    let resolveOlder!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveOlder = resolve; }));
+    report(key, { startDate: '2025-12-01', endDate: '2026-01-10' }); await flush();
+    const updated = { ...note, revision: 2, title: 'Updated note', color: 'purple' as const };
+    service.loadRange.mockResolvedValueOnce({ notes: [updated], incomplete: null });
+    report(key, { startDate: '2025-11-01', endDate: '2026-01-10' }); await flush();
+    expect(component.context().notes).toEqual([updated]);
+    resolveOlder({ notes: [note], incomplete: 'records' }); await flush();
+    expect(component.context().notes).toEqual([updated]);
+    expect(component.incomplete()).toBeNull();
+  });
+
+  it.each(['account', 'profile', 'hidden', 'no ranges'] as const)(
+    'clears retained annotations when %s changes during a range load', async change => {
+      const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+      fixture.componentRef.setInput('ownerUid', 'owner'); fixture.detectChanges();
+      const workspace = fixture.componentInstance;
+      const key = {};
+      const report = workspace.context().reportRange;
+      report(key, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+      expect(workspace.context().notes).toEqual([note]);
+      let resolveLoad!: (value: unknown) => void;
+      service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveLoad = resolve; }));
+      report(key, { startDate: '2025-12-01', endDate: '2026-01-10' }); await flush();
+      expect(workspace.context().notes).toEqual([note]);
+      if (change === 'account') service.uid.set('another-owner');
+      if (change === 'profile') fixture.componentRef.setInput('ownerUid', 'someone-else');
+      if (change === 'hidden') service.showOnCharts.set(false);
+      if (change === 'no ranges') report(key, null);
+      fixture.detectChanges(); await flush();
+      expect(workspace.context().notes).toEqual([]);
+      resolveLoad({ notes: [note], incomplete: null }); await flush();
+      expect(workspace.context().notes).toEqual([]);
+      expect(workspace.loading()).toBe(false);
+    },
+  );
+
+  it('immediately invalidates stale annotations after a note mutation, including pending responses', async () => {
+    const report = component.context().reportRange;
+    report({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveLoad = resolve; }));
+    report({}, { startDate: '2025-12-01', endDate: '2026-01-10' }); await flush();
+    expect(component.context().notes).toEqual([note]);
+    service.loadRange.mockResolvedValueOnce({ notes: [], incomplete: null });
+    service.changes$.next();
+    expect(component.context().notes).toEqual([]);
+    resolveLoad({ notes: [note], incomplete: null }); await flush();
+    expect(component.context().notes).toEqual([]);
+  });
+
   it('keeps the Notes action mounted and available while range loading changes, with out-of-flow progress', async () => {
     let resolveLoad!: (value: unknown) => void;
     service.loadRange.mockImplementation(() => new Promise(value => { resolveLoad = value; }));
@@ -82,20 +249,20 @@ describe('Timeline notes workspace ownership', () => {
     report(hrv, { startDate: '2025-12-28', endDate: '2026-01-10' });
     report(explorer, { startDate: '2025-11-01', endDate: '2025-11-30' });
     await flush();
-    expect(service.loadRange).toHaveBeenCalledExactlyOnceWith('owner', { startDate: '2025-11-01', endDate: '2026-01-10' });
+    expect(service.loadRange).toHaveBeenCalledExactlyOnceWith('owner', { startDate: '2025-11-01', endDate: '2026-01-10' }, false);
     expect(component.context().notes).toEqual([note]);
     report(heartRate, null); report(hrv, null);
     await flush();
-    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2025-11-01', endDate: '2025-11-30' });
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2025-11-01', endDate: '2025-11-30' }, false);
   });
   it('loads an explicit calendar range, refreshes navigation, and honors the global visibility preference', async () => {
     const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
     fixture.componentRef.setInput('visibleRange', { startDate: '2026-01-01', endDate: '2026-01-31' });
     fixture.detectChanges(); await fixture.whenStable(); await flush();
-    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-01-01', endDate: '2026-01-31' });
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-01-01', endDate: '2026-01-31' }, false);
     fixture.componentRef.setInput('visibleRange', { startDate: '2026-02-01', endDate: '2026-02-28' });
     fixture.detectChanges(); await fixture.whenStable(); await flush();
-    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-02-01', endDate: '2026-02-28' });
+    expect(service.loadRange).toHaveBeenLastCalledWith('owner', { startDate: '2026-02-01', endDate: '2026-02-28' }, false);
     service.showOnCharts.set(false); await flush();
     expect(fixture.componentInstance.context().notes).toEqual([]);
     expect(haptics.selection).not.toHaveBeenCalled();
@@ -160,5 +327,65 @@ describe('Timeline notes workspace ownership', () => {
     expect(component.error()).toBe(true); expect(component.context().notes).toEqual([]);
     service.loadRange.mockResolvedValueOnce({ notes: [note], incomplete: 'records' }); component.refresh(); await flush();
     expect(component.incomplete()).toBe('records'); expect(component.error()).toBe(false);
+  });
+
+  it('clears a retained context on destruction and ignores late loads and range registrations', async () => {
+    const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+    fixture.componentRef.setInput('ownerUid', 'owner');
+    fixture.componentRef.setInput('visibleRange', { startDate: '2026-01-01', endDate: '2026-01-10' });
+    fixture.detectChanges(); await flush();
+    const workspace = fixture.componentInstance;
+    const retainedSource = workspace.context;
+    const oldContext = retainedSource();
+    expect(oldContext.notes).toEqual([note]);
+    fixture.destroy();
+    expect(retainedSource()).toMatchObject({ ownerUid: null, notes: [] });
+    oldContext.select([note]);
+    oldContext.reportRange({}, { startDate: '2026-02-01', endDate: '2026-02-10' });
+    await flush();
+    expect(service.loadRange).toHaveBeenCalledOnce();
+    expect(dialogs.open).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementation(() => new Promise(resolve => { resolveLoad = resolve; }));
+    const pending = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+    pending.componentRef.setInput('visibleRange', { startDate: '2026-01-01', endDate: '2026-01-10' });
+    pending.detectChanges(); await flush();
+    expect(pending.componentInstance.loading()).toBe(true);
+    pending.destroy();
+    resolveLoad({ notes: [note], incomplete: 'records' });
+    await flush();
+    expect(pending.componentInstance.context()).toMatchObject({ ownerUid: null, notes: [] });
+    expect(pending.componentInstance.loading()).toBe(false);
+    expect(pending.componentInstance.incomplete()).toBeNull();
+  });
+
+  it('fences a dashboard profile independently of the signed-in account and rejects destroyed selections', async () => {
+    const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+    fixture.componentRef.setInput('ownerUid', 'someone-else');
+    fixture.componentRef.setInput('visibleRange', { startDate: '2026-01-01', endDate: '2026-01-10' });
+    fixture.detectChanges(); await flush();
+    expect(service.loadRange).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.context().notes).toEqual([]);
+    fixture.componentInstance.open();
+    expect(dialogs.open).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('ownerUid', 'owner');
+    fixture.detectChanges(); await flush();
+    const context = fixture.componentInstance.context();
+    expect(context.ownerUid).toBe('owner');
+    expect(context.notes).toEqual([note]);
+    fixture.componentRef.setInput('ownerUid', 'someone-else');
+    fixture.detectChanges();
+    context.select([note]);
+    expect(fixture.componentInstance.context().notes).toEqual([]);
+    expect(dialogs.open).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('ownerUid', 'owner');
+    fixture.detectChanges(); await flush();
+    fixture.destroy();
+    context.select([note]);
+    expect(dialogs.open).not.toHaveBeenCalled();
   });
 });

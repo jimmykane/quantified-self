@@ -9,12 +9,17 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { of } from 'rxjs';
 import { ServiceConnectionStatusComponent } from './service-connection-status.component';
+import { signal } from '@angular/core';
+import { AppUserService } from '../../../services/app.user.service';
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 
 describe('ServiceConnectionStatusComponent', () => {
     let component: ServiceConnectionStatusComponent;
     let fixture: ComponentFixture<ServiceConnectionStatusComponent>;
+    const viewer = signal<{ uid: string } | null>(null);
 
     beforeEach(async () => {
+        viewer.set({ uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0] });
         await TestBed.configureTestingModule({
             declarations: [ServiceConnectionStatusComponent],
             imports: [
@@ -24,6 +29,7 @@ describe('ServiceConnectionStatusComponent', () => {
                 MatProgressBarModule,
             ],
             providers: [
+                { provide: AppUserService, useValue: { user: viewer } },
                 {
                     provide: MatIconRegistry,
                     useValue: {
@@ -83,6 +89,24 @@ describe('ServiceConnectionStatusComponent', () => {
         const providerIcon = fixture.nativeElement.querySelector('.service-connection-status__provider-icon');
 
         expect(providerIcon).toBeTruthy();
+    });
+    it('explains planned-workout consent and retained copies before disconnecting', () => {
+        component.providerIcon = 'garmin'; component.connected = true;
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Disconnecting ends any planned-workout sync opt-in');
+        expect(fixture.nativeElement.textContent).toContain('Use Stop sync in Training plans before disconnecting');
+        component.connected = false; fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).not.toContain('Disconnecting ends any planned-workout sync opt-in');
+    });
+
+    it.each([null, { uid: 'another-user' }])('hides planning instructions without hiding connection or retention details for %s', user => {
+        component.providerIcon = 'garmin'; component.connected = true;
+        fixture.detectChanges();
+        viewer.set(user); fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).not.toContain('Training plans');
+        expect(fixture.nativeElement.textContent).not.toContain('Stop sync');
+        expect(fixture.nativeElement.textContent).toContain('Connected');
+        expect(fixture.nativeElement.textContent).toContain('may remain there after disconnecting');
     });
 
     it('uses the app success green for connected status text', () => {

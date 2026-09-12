@@ -237,6 +237,7 @@ async function resolveNextPaymentAmountForZeroDueInvoice(
 export const getUpcomingRenewalAmount = onCall({
     region: FUNCTIONS_MANIFEST.getUpcomingRenewalAmount.region,
     secrets: FUNCTION_SECRET_BINDINGS.getUpcomingRenewalAmount,
+    memory: '512MiB',
     cors: ALLOWED_CORS_ORIGINS
 }, async (request): Promise<UpcomingRenewalAmountResult> => {
     if (!request.auth) {

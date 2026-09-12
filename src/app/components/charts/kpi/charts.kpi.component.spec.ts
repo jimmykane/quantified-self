@@ -149,10 +149,10 @@ describe('ChartsKpiComponent', () => {
     expect(component.primaryValueText).toBe('1.11');
     expect(component.secondaryLabel).toBe('Acute / Chronic');
     expect(component.secondaryValueText).toBe('210 / 190');
-    expect(mockLoader.init.mock.calls[0]?.[2]).toMatchObject({
+    await vi.waitFor(() => expect(mockLoader.init.mock.calls[0]?.[2]).toMatchObject({
       width: 96,
       height: 38,
-    });
+    }));
   });
 
   it('switches presentation for ramp rate', async () => {

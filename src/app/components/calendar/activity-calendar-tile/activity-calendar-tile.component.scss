@@ -92,3 +92,18 @@ app-activity-calendar-grid {
     padding-left: 10px;
   }
 }
+
+// Let the month popup's content area own scrolling instead of squeezing six weeks into a tile.
+:host(.activity-calendar-tile--auto-height) {
+  height: auto;
+  flex: 0 0 auto;
+
+  .activity-calendar-tile {
+    height: auto;
+  }
+
+  app-activity-calendar-grid {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+}

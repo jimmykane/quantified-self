@@ -171,7 +171,7 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(option.series[0].markPoint).toBeTruthy();
   });
 
-  it('adds selectable notes to compact Highlights while preserving both visible axes and personal range', async () => {
+  it('adds note tooltips to compact Highlights while preserving both visible axes and personal range', async () => {
     const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'Travel', startDate: '1970-01-01', endDate: '1970-01-02', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
     const context = { notes: [note], select: vi.fn(), reportRange: vi.fn() };
     fixture.componentRef.setInput('compact', true);
@@ -185,7 +185,7 @@ describe('HealthMetricSeriesChartComponent', () => {
     fixture.detectChanges(); await fixture.whenStable();
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(2));
     type Axis = { type: string; min: number; max: number; show: boolean };
-    type Option = { xAxis: Axis; yAxis: Axis; series: Array<{ id?: string; data: unknown[]; markArea?: unknown; markLine?: { data: Array<{ name: string }> } }> };
+    type Option = { xAxis: Axis; yAxis: Axis; series: Array<{ id?: string; data: unknown[]; markArea?: unknown; markLine?: { data: Array<{ name: string; tooltip: { formatter: () => string } }> } }> };
     const before = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
     expect(before.xAxis.show).toBe(true);
     expect(before.yAxis.show).toBe(true);
@@ -203,10 +203,10 @@ describe('HealthMetricSeriesChartComponent', () => {
     const overlay = annotated.series.at(-1)!;
     expect(overlay.id).toBe('timeline-note-overlay-0');
     expect(overlay.data).toEqual([]);
-    const marker = { componentType: 'markLine', name: overlay.markLine!.data[0].name };
-    expect(chart.on).toHaveBeenCalledOnce();
-    chart.on.mock.calls[0][1](marker);
-    expect(context.select).toHaveBeenCalledExactlyOnceWith([note]);
+    expect(overlay.markLine!.data[0].tooltip.formatter()).toContain('Travel');
+    // Notes use native tooltips; editing stays in the keyboard-accessible workspace manager.
+    expect(chart.on).not.toHaveBeenCalled();
+    expect(context.select).not.toHaveBeenCalled();
 
     fixture.componentRef.setInput('timelineNotes', { ...context, notes: [] });
     fixture.detectChanges(); await fixture.whenStable();
@@ -217,10 +217,9 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(hidden.series).toHaveLength(before.series.length);
     expect(hidden.series[0]).toMatchObject({ ...before.series[0], itemStyle: { color: expect.any(Function) } });
     expect(hidden.series.slice(1)).toEqual(before.series.slice(1));
-    chart.on.mock.calls[0][1](marker);
-    expect(context.select).toHaveBeenCalledOnce();
+    expect(context.select).not.toHaveBeenCalled();
     fixture.destroy();
-    expect(chart.off).toHaveBeenCalledWith('click', chart.on.mock.calls[0][1]);
+    expect(chart.off).not.toHaveBeenCalled();
     expect(context.reportRange).toHaveBeenLastCalledWith(expect.anything(), null);
   });
 });

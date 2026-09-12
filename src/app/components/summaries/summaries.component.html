@@ -5,14 +5,13 @@
   <app-page-header
     class="dashboard-summary-header"
     variant="compact"
-    [title]="derivedMetricsBanner ? derivedMetricsBanner.title : (showTodaySummary ? 'Today' : null)"
-    [titleId]="derivedMetricsBanner ? 'dashboard-derived-metrics-status-title' : (showTodaySummary ? 'dashboard-today-title' : null)"
+    [title]="showTodaySummary ? 'Today' : (derivedMetricsBanner ? 'Dashboard' : null)"
+    [titleId]="showTodaySummary ? 'dashboard-today-title' : null"
     [headingLevel]="2"
-    [subtitle]="derivedMetricsBanner ? derivedMetricsBanner.description : (showTodaySummary ? todayDateSubtitle : null)"
-    [status]="derivedMetricsBanner?.type || null"
-    [leadingAction]="!derivedMetricsBanner && showTodaySummary"
+    [subtitle]="showTodaySummary ? todayDateSubtitle : null"
+    [leadingAction]="showTodaySummary"
     [ariaLabel]="showTodaySummary || derivedMetricsBanner ? null : 'Dashboard controls'">
-    @if (!derivedMetricsBanner && showTodaySummary) {
+    @if (showTodaySummary) {
       <button pageHeaderLeading mat-icon-button type="button" class="dashboard-today-calendar-button" appHapticTap
         aria-label="Open this month's activity calendar" matTooltip="Open calendar" (click)="openDashboardCalendar()">
         <span class="dashboard-today-calendar-cue" aria-hidden="true"></span>
@@ -23,29 +22,44 @@
     <div pageHeaderActions class="dashboard-section-actions">
       @if (derivedMetricsBanner?.showRetry) {
       <button mat-stroked-button type="button" class="dashboard-derived-metrics-retry" appHapticTap
-        aria-label="Retry derived metrics update"
+        aria-label="Retry dashboard update"
         (click)="retryDerivedMetricsRebuild()">
         <mat-icon aria-hidden="true">refresh</mat-icon>
         <span class="dashboard-derived-metrics-retry-label">Retry</span>
       </button>
       }
-      @if (showActions) {
-      <button mat-flat-button class="qs-mat-primary dashboard-manager-button dashboard-manager-button-desktop" appHapticTap
-        (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen">
-        <mat-icon>add_chart</mat-icon>
-        <span>Dashboard manager</span>
-      </button>
-      <button mat-icon-button class="dashboard-manager-button dashboard-manager-button-mobile" appHapticTap
-        (click)="openDashboardManagerDialog()" [disabled]="isDashboardManagerOpen" aria-label="Dashboard manager">
-        <mat-icon>add_chart</mat-icon>
-      </button>
+      @if (showActions && isOwnerDashboard) {
+      <app-timeline-notes-workspace [ownerUid]="user?.uid" />
+      <button mat-icon-button appHapticTap aria-label="Dashboard options" [matMenuTriggerFor]="dashboardOptions" [disabled]="library.busy()"><mat-icon>more_horiz</mat-icon></button>
+      <mat-menu #dashboardOptions="matMenu" class="qs-menu-panel">
+        <button mat-menu-item (click)="library.bulk($any(user), 'today')"><mat-icon>{{ showTodaySummary ? 'visibility_off' : 'visibility' }}</mat-icon><span>{{ showTodaySummary ? 'Hide Today summary' : 'Show Today summary' }}</span></button>
+        <button mat-menu-item (click)="library.bulk($any(user), 'reset')"><mat-icon>restart_alt</mat-icon><span>Reset to recommended</span></button>
+        <button mat-menu-item (click)="library.bulk($any(user), 'all')"><mat-icon>library_add</mat-icon><span>Add all presets</span></button>
+        <button mat-menu-item (click)="library.bulk($any(user), 'clear')"><mat-icon>delete_sweep</mat-icon><span>Remove all</span></button>
+      </mat-menu>
       }
     </div>
     }
   </app-page-header>
-  @if (!derivedMetricsBanner && showTodaySummary && isOwnerDashboard && todayGreeting) {
-  <p class="dashboard-today-greeting">{{ todayGreeting }}</p>
-  }
+  <p class="dashboard-summary-status"
+    [class.dashboard-summary-status--warning]="derivedMetricsBanner?.type === 'warning'"
+    [attr.role]="derivedMetricsBanner?.type === 'warning' ? 'alert' : 'status'" aria-atomic="true">
+    <span class="dashboard-summary-message">
+      @if (derivedMetricsBanner) {
+        {{ derivedMetricsBanner.title }}
+        <span class="cdk-visually-hidden">{{ derivedMetricsBanner.description }}</span>
+      } @else if (showTodaySummary && isOwnerDashboard && todayGreeting) {
+        <span class="dashboard-today-greeting">{{ todayGreeting }}</span>
+      }
+    </span>
+    <span class="dashboard-summary-status-icon" aria-hidden="true">
+      @if (derivedMetricsBanner?.type === 'pending') {
+        <mat-spinner [diameter]="16"></mat-spinner>
+      } @else if (derivedMetricsBanner?.type === 'warning') {
+        <mat-icon>error_outline</mat-icon>
+      }
+    </span>
+  </p>
   </div>
   }
   @if (showTodaySummary) {
@@ -55,12 +69,16 @@
       <strong>{{ dashboardTodayTrainingState.label }}</strong>
       <small class="dashboard-training-state-caption">{{ dashboardTodayTrainingState.caption }} · TSS only</small>
     </div>
-    <div class="dashboard-current-state-primary">
+    <div class="dashboard-current-state-primary" [attr.aria-busy]="dashboardTodayReadiness.loading">
       <span>Readiness</span>
       <div class="dashboard-readiness-primary-value">
         <strong>{{ dashboardTodayReadiness.label }}</strong>
         <b>{{ dashboardTodayReadiness.scoreText }}</b>
       </div>
+      @if (dashboardTodayReadiness.loading) {
+      <mat-progress-bar mode="indeterminate" aria-label="Loading readiness"></mat-progress-bar>
+      <small>Waiting for load and sleep data</small>
+      } @else {
       <app-metric-indicator class="dashboard-readiness-score-indicator" label="Readiness"
         [value]="dashboardTodayReadiness.score" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"
         [showThresholds]="true"></app-metric-indicator>
@@ -69,8 +87,14 @@
       <app-metric-indicator variant="segments" label="Available readiness signals"
         [value]="dashboardTodayReadiness.availableSignalCount"
         [total]="4" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"></app-metric-indicator>
+      }
+      @if (dashboardTodayReadiness.warningText) {
+      <small role="status">{{ dashboardTodayReadiness.warningText }}</small>
+      }
       @if (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null) {
       <small class="dashboard-readiness-imported-recovery">Recovery left · {{ dashboardTodayReadiness.recoveryText }} remaining · until {{ dashboardTodayReadiness.recoveryFinishTimeMs | date:'shortTime' }} · separate from score</small>
+      <app-metric-indicator class="dashboard-readiness-recovery-indicator" label="Recovery remaining"
+        [value]="dashboardTodayReadiness.recoveryRemainingPercent" [max]="100" tone="recover" [compact]="true"></app-metric-indicator>
       }
     </div>
     <dl>
@@ -81,8 +105,18 @@
     </dl>
   </section>
   }
-  @if (kpiLaneTiles.length) {
-  <section class="dashboard-kpi-section">
+  @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }
+  @if (showActions && library.error() && !library.activeLane()) { <p role="alert">{{ library.error() }}</p> }
+  @if (showActions && library.undoAvailable()) { <div role="status" class="dashboard-chart-added">Chart added <button mat-button (click)="library.undo($any(user))" [disabled]="library.busy()">Undo</button></div> }
+  @if (kpiLaneTiles.length || (showActions && isOwnerDashboard)) {
+  <section class="dashboard-kpi-section" aria-label="KPIs">
+    @if (showActions && isOwnerDashboard) {
+    <div class="dashboard-section-header dashboard-main-section-header">
+      <h2>KPIs</h2>
+      <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library>
+    </div>
+    }
+    @if (kpiLaneTiles.length) {
     <div
       class="qs-glass-card-panel dashboard-kpi-lane"
       cdkDropList
@@ -93,12 +127,12 @@
       (cdkDropListDropped)="onKpiTilesDrop($event)">
       @for (tile of kpiLaneTiles; track trackByTile($index, tile)) {
       <div
-        class="dashboard-kpi-tile"
+        class="dashboard-kpi-tile" tabindex="-1" [attr.data-dashboard-tile-order]="tile.order"
         cdkDrag
         [cdkDragPreviewContainer]="'parent'"
         [cdkDragDisabled]="!desktopTileDragEnabled || kpiLaneTiles.length < 2"
         [class.desktop-draggable-tile]="desktopTileDragEnabled && kpiLaneTiles.length > 1">
-        <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
+        <app-tile-chart [timelineNotes]="timelineNotes" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
           [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
           [compactKpiRow]="true"
           [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
@@ -124,24 +158,26 @@
           [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
           [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
           [powerCurveCompareMode]="getChartTile(tile).displaySettings?.powerCurveCompareMode"
-          [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
+          [hrvTrend]="getChartTile(tile).hrvTrend" [hrvTrendRange]="hrvTrendRange" [hrvTrendCanNavigateNewer]="hrvTrendCanNavigateNewer" [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
           [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
           [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
           [powerCurve]="getChartTile(tile).powerCurve"
           [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
           [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled && kpiLaneTiles.length > 1"
-          (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+          (editTile)="openTileEditor($event)"
           (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
           (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
           (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
           (derivedChartRangeChange)="onTileDerivedChartRangeChange(tile.order, $event)"
           (formTimelineWindowChange)="onTileFormTimelineWindowChange(tile.order, $event)"
           (powerCurveCompareModeChange)="onTilePowerCurveCompareModeChange(tile.order, $event)"
+          (hrvTrendRangeChange)="onHrvTrendRangeChange($event)" (hrvTrendNavigate)="onHrvTrendNavigate($event)"
           (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
           (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
       </div>
       }
     </div>
+    }
   </section>
   }
   @if (mainGridSections.length) {
@@ -155,7 +191,9 @@
             <h2 [id]="'dashboard-section-' + section.id">{{ section.label }}</h2>
           </div>
         </div>
+      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
       </div>
+      @if (section.tiles.length) {
       <app-dashboard-tile-board
         cdkDropList
         cdkDropListOrientation="mixed"
@@ -168,7 +206,7 @@
         (cdkDropListDropped)="onTilesDrop($event, section.id)">
         @for (cell of section.cells; track trackByTile($index, cell.tile)) {
         @let tile = cell.tile;
-        <app-dashboard-tile-cell
+        <app-dashboard-tile-cell tabindex="-1" [attr.data-dashboard-tile-order]="tile.order"
           cdkDrag
           [cdkDragPreviewContainer]="'global'"
           [cdkDragDisabled]="!desktopTileDragEnabled || section.tiles.length < 2"
@@ -177,7 +215,7 @@
           [rows]="tile.size.rows"
           [maxColumns]="section.columns">
           @if (tile.type === tileTypes.Chart) {
-          <app-tile-chart [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
+          <app-tile-chart [timelineNotes]="timelineNotes" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
             [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
             [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
             [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
@@ -202,20 +240,21 @@
             [derivedChartRange]="getChartTile(tile).displaySettings?.derivedChartRange"
             [formTimelineWindow]="getChartTile(tile).displaySettings?.formTimelineWindow"
             [powerCurveCompareMode]="getChartTile(tile).displaySettings?.powerCurveCompareMode"
-            [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
+            [hrvTrend]="getChartTile(tile).hrvTrend" [hrvTrendRange]="hrvTrendRange" [hrvTrendCanNavigateNewer]="hrvTrendCanNavigateNewer" [sleepTrend]="getChartTile(tile).sleepTrend" [sleepTrendRange]="sleepTrendRange"
             [sleepTrendWindowLabel]="sleepTrendWindowLabel" [sleepTrendCanNavigateOlder]="sleepTrendCanNavigateOlder"
             [sleepTrendCanNavigateNewer]="sleepTrendCanNavigateNewer"
             [powerCurve]="getChartTile(tile).powerCurve"
             [absoluteLatestFormPoint]="getChartTile(tile).absoluteLatestFormPoint"
             [size]="tile.size" [order]="tile.order" [enableDesktopDrag]="desktopTileDragEnabled && section.tiles.length > 1"
-            (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+            (editTile)="openTileEditor($event)"
             (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
             (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
             (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"
             (derivedChartRangeChange)="onTileDerivedChartRangeChange(tile.order, $event)"
             (formTimelineWindowChange)="onTileFormTimelineWindowChange(tile.order, $event)"
             (powerCurveCompareModeChange)="onTilePowerCurveCompareModeChange(tile.order, $event)"
-            (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
+            (hrvTrendRangeChange)="onHrvTrendRangeChange($event)" (hrvTrendNavigate)="onHrvTrendNavigate($event)"
+          (sleepTrendRangeChange)="onSleepTrendRangeChange($event)"
             (sleepTrendNavigate)="onSleepTrendNavigate($event)"></app-tile-chart>
           }
           @if (tile.type === tileTypes.Map) {
@@ -229,7 +268,7 @@
             [size]="tile.size" [order]="tile.order"
             [enableDesktopDrag]="desktopTileDragEnabled && section.tiles.length > 1" [eventFilters]="getTileEventFilters(tile)"
             [canNavigateTileEventsNewer]="canNavigateTileEventsNewer(tile)"
-            (editInDashboardManager)="openDashboardManagerForTileOrder($event)"
+            (editTile)="openTileEditor($event)"
             (eventFilterRangeChange)="onTileEventFilterRangeChange(tile.order, $event)"
             (eventFilterActivityTypesChange)="onTileEventFilterActivityTypesChange(tile.order, $event)"
             (eventFilterNavigate)="onTileEventFilterNavigate(tile.order, $event)"></app-tile-map>
@@ -245,19 +284,9 @@
           [maxColumns]="section.columns"></app-dashboard-tile-cell>
         }
       </app-dashboard-tile-board>
+      }
     </section>
     }
-  </div>
-  }
-  @if (showActions && !mainGridSections.length) {
-  <div class="qs-glass-card-panel dashboard-empty-section-guidance" aria-label="Dashboard section guidance">
-    <div class="dashboard-empty-section-guidance-header">
-      <mat-icon aria-hidden="true">info</mat-icon>
-      <div>
-        <h3>Build your dashboard by intent</h3>
-        <p>Add tiles from Dashboard manager. Sections appear automatically when matching charts or maps exist.</p>
-      </div>
-    </div>
   </div>
   }
 </section>

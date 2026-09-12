@@ -172,7 +172,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
     fixture.detectChanges();
     const firstChartElement = fixture.nativeElement.querySelector('.durability-trajectory-chart');
     expect(firstChartElement).not.toBeNull();
-    expect(eChartsLoader.init).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(eChartsLoader.init).toHaveBeenCalledTimes(1));
 
     fixture.componentRef.setInput('trajectory', null);
     fixture.detectChanges();

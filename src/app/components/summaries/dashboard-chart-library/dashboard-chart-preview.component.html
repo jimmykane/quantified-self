@@ -1,0 +1,21 @@
+@if (preview(); as model) {
+<div class="chart-preview" [class.chart-preview-thumbnail]="thumbnail" [class.chart-preview-kpi]="isKpi()" [class.chart-preview-hrv]="isHrv()">
+  <div class="chart-preview-source" role="status">{{ model.loading ? 'Example data · Loading your data…' : model.source === 'user' ? 'Your data' : 'Example data' }}</div>
+  <div class="chart-preview-renderer" [attr.aria-busy]="model.loading">
+    @if (model.loading) { <mat-progress-bar mode="indeterminate" aria-label="Loading chart preview"></mat-progress-bar> }
+    @if (calendar(); as calendarModel) {
+      <div inert><app-activity-calendar-grid [model]="calendarModel" [compact]="true" [hideOutsideDays]="true"></app-activity-calendar-grid></div>
+    } @else if (chart(); as chartTile) {
+      <app-tile-chart [previewMode]="true" [derivedChartRange]="chartTile.displaySettings?.derivedChartRange" [formTimelineWindow]="chartTile.displaySettings?.formTimelineWindow" [powerCurveCompareMode]="chartTile.displaySettings?.powerCurveCompareMode" [user]="user" [type]="chartTile.type" [order]="0" [size]="chartTile.size" [tileName]="chartTile.name || ''" [chartType]="chartTile.chartType"
+        [showActions]="false" [isLoading]="false" [darkTheme]="darkTheme" [data]="chartTile.data" [dataType]="chartTile.dataType" [dataValueType]="chartTile.dataValueType" [dataCategoryType]="chartTile.dataCategoryType" [dataTimeInterval]="chartTile.timeInterval"
+        [recoveryNow]="chartTile.recoveryNow" [absoluteLatestFormPoint]="chartTile.absoluteLatestFormPoint" [acwr]="chartTile.acwr" [rampRate]="chartTile.rampRate" [monotonyStrain]="chartTile.monotonyStrain" [formNow]="chartTile.formNow" [fitnessCtl]="chartTile.fitnessCtl" [fatigueAtl]="chartTile.fatigueAtl" [formPlus7d]="chartTile.formPlus7d" [easyPercent]="chartTile.easyPercent" [hardPercent]="chartTile.hardPercent" [efficiencyDelta4w]="chartTile.efficiencyDelta4w" [freshnessForecast]="chartTile.freshnessForecast" [intensityDistribution]="chartTile.intensityDistribution" [efficiencyTrend]="chartTile.efficiencyTrend" [hrvTrend]="chartTile.hrvTrend" [sleepTrend]="chartTile.sleepTrend" [powerCurve]="chartTile.powerCurve" [aerobicCapacity]="chartTile.aerobicCapacity" [aerobicDurability]="chartTile.aerobicDurability" [recoveryNowStatus]="'ready'" [acwrStatus]="'ready'" [rampRateStatus]="'ready'" [monotonyStrainStatus]="'ready'" [formNowStatus]="'ready'" [fitnessCtlStatus]="'ready'" [fatigueAtlStatus]="'ready'" [formPlus7dStatus]="'ready'" [easyPercentStatus]="'ready'" [hardPercentStatus]="'ready'" [efficiencyDelta4wStatus]="'ready'" [freshnessForecastStatus]="'ready'" [intensityDistributionStatus]="'ready'" [efficiencyTrendStatus]="'ready'" [aerobicCapacityStatus]="'ready'" [aerobicDurabilityStatus]="'ready'" [formStatus]="'ready'" [sleepTrendRange]="'14d'" [sleepTrendWindowLabel]="model.source === 'example' ? 'Example 14 days' : 'Last 14 days'"></app-tile-chart>
+    } @else if (mapTile(); as map) {
+      <div class="chart-preview-map" inert>
+      @if (map.mapSource === 'routes') { <app-route-preview-map [routes]="map.routePreviews" [mapStyle]="map.mapStyle" [showEndpointMarkers]="map.showRouteEndpointMarkers !== false" [isLoading]="false"></app-route-preview-map> }
+      @else { <app-events-map [events]="map.events" [mapStyle]="map.mapStyle" [clusterMarkers]="map.clusterMarkers !== false" [isLoading]="false"></app-events-map> }
+      </div>
+    }
+  </div>
+  @if (!thumbnail && model.note) { <p class="chart-preview-note">{{ model.note }}</p> }
+</div>
+}

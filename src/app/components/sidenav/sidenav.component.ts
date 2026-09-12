@@ -1,6 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { isTrainingPlanningNavigationUIDAllowed } from '@shared/training-planning-rollout';
+import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
@@ -35,7 +35,7 @@ export class SideNavComponent {
   private analyticsService = inject(AppAnalyticsService);
   private hapticsService = inject(AppHapticsService);
   public readonly hasTrainingPlanningNavigationAccess = computed(() =>
-    isTrainingPlanningNavigationUIDAllowed(this.userService.user()?.uid));
+    isTrainingPlanningUIAllowed(this.userService.user()?.uid));
 
   constructor(
     public authService: AppAuthService,

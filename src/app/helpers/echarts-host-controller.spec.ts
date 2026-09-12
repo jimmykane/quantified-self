@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EChartsHostController } from './echarts-host-controller';
+import { chartViewportQueue } from './chart-viewport-queue';
 import { buildDashboardEChartsStyleTokens, buildDashboardEChartsTooltipChrome } from './dashboard-echarts-style.helper';
 
 type ResizeObserverRecord = {
@@ -266,8 +267,130 @@ describe('EChartsHostController', () => {
     expect(loader.setOption).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledTimes(1);
     expect(loader.resize).toHaveBeenCalledWith(chartMock, {
+      width: 'auto',
+      height: 'auto',
       silent: true,
     });
+  });
+
+  it('releases fixed initialization dimensions when a preview grows to its live container', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({
+      eChartsLoader: loader as any,
+      initOptions: { width: 96, height: 38 },
+    });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 540 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 100 });
+    await controller.init(container);
+    controller.scheduleResize();
+    frames.shift()!(0);
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 'auto', height: 'auto', silent: true });
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 280 });
+    resizeObserverRecords[0].trigger();
+    frames.shift()!(0);
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    expect(loader.resize).toHaveBeenLastCalledWith(chartMock, { width: 'auto', height: 'auto', silent: true });
+  });
+
+  it('ignores repeated viewport-height events when the chart size is unchanged', async () => {
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 360 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 240 });
+    await controller.init(container);
+    for (let frame = 0; frame < 30; frame++) {
+      controller.scheduleResize(); frames.shift()!(frame * 16);
+    }
+    expect(loader.resize).toHaveBeenCalledTimes(1);
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 600 });
+    controller.scheduleResize(); frames.shift()!(500);
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    controller.dispose();
+  });
+
+  it('keeps chart reuse and size callbacks working without ResizeObserver', async () => {
+    delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    const loader = buildLoaderMock();
+    const onContainerResize = vi.fn();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, onContainerResize });
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 800 });
+    Object.defineProperty(container, 'clientHeight', { configurable: true, value: 400 });
+    await controller.init(container); await controller.init(container);
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(resizeObserverRecords).toHaveLength(0);
+    const viewportChanged = loader.subscribeToViewportResize.mock.calls[0][0] as () => void;
+    viewportChanged(); frames.shift()!(0);
+    viewportChanged(); frames.shift()!(16);
+    expect(onContainerResize).toHaveBeenCalledExactlyOnceWith({ width: 800, height: 400 });
+    Object.defineProperty(container, 'clientWidth', { configurable: true, value: 280 });
+    viewportChanged(); frames.shift()!(32);
+    expect(onContainerResize).toHaveBeenLastCalledWith({ width: 280, height: 400 });
+    expect(loader.resize).toHaveBeenCalledTimes(2);
+    controller.dispose();
+    expect(frames).toHaveLength(0);
+  });
+
+  it('waits for the viewport and only lets the newest pending refresh apply its data', async () => {
+    let show: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { show = resolve; });
+    const wait = vi.spyOn(chartViewportQueue, 'wait').mockReturnValue({ ready, cancel: vi.fn() });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const container = document.createElement('div');
+    const old = controller.init(container);
+    const latest = controller.init(container);
+    expect(loader.init).not.toHaveBeenCalled();
+    show!(true);
+    await expect(old).resolves.toBeNull();
+    await expect(latest).resolves.toBe(chartMock);
+    expect(loader.init).toHaveBeenCalledOnce();
+    await expect(controller.init(container)).resolves.toBe(chartMock);
+    expect(wait).toHaveBeenCalledOnce();
+    controller.dispose(); wait.mockRestore();
+  });
+
+  it('cancels an off-screen chart without mounting it after disposal', async () => {
+    let finish: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { finish = resolve; });
+    const cancel = vi.fn(() => finish!(false));
+    const wait = vi.spyOn(chartViewportQueue, 'wait').mockReturnValue({ ready, cancel });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const pending = controller.init(document.createElement('div'));
+    controller.dispose();
+    await expect(pending).resolves.toBeNull();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(loader.init).not.toHaveBeenCalled();
+    wait.mockRestore();
+  });
+
+  it.each(['container', 'theme'])('replaces an off-screen pending %s without waiting for its old intersection', async change => {
+    const firstContainer = document.createElement('div');
+    const replacementContainer = change === 'container' ? document.createElement('div') : firstContainer;
+    let finish: (ready: boolean) => void;
+    const ready = new Promise<boolean>(resolve => { finish = resolve; });
+    const cancel = vi.fn(() => finish!(false));
+    const wait = vi.spyOn(chartViewportQueue, 'wait')
+      .mockReturnValueOnce({ ready, cancel })
+      .mockReturnValue({ ready: Promise.resolve(true), cancel: vi.fn() });
+    const loader = buildLoaderMock();
+    const controller = new EChartsHostController({ eChartsLoader: loader as any, deferUntilNearViewport: true });
+    const first = controller.init(firstContainer, 'light');
+    const latest = controller.init(replacementContainer, change === 'theme' ? 'dark' : 'light');
+    await expect(first).resolves.toBeNull();
+    await expect(latest).resolves.toBe(chartMock);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(loader.init).toHaveBeenCalledExactlyOnceWith(replacementContainer, change === 'theme' ? 'dark' : 'light', undefined);
+    controller.dispose(); wait.mockRestore();
   });
 
   it('should hide the active tooltip after initialization', async () => {

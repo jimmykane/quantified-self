@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
+import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
+import { ChangeDetectionStrategy, Component, computed, EventEmitter, input, Input, Output, type Signal } from '@angular/core';
+import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -56,6 +58,7 @@ import {
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
+  DASHBOARD_HRV_TREND_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   type DashboardChartType,
@@ -112,7 +115,12 @@ type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing
 })
 
 export class TileChartComponent extends TileAbstractDirective {
+  /** Explicit workspace source; shared and library previews default to no private notes. */
+  readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
+  readonly notesContext = computed(() => this.timelineNotes()?.() ?? null);
+
   @Input() tileName = '';
+  @Input() previewMode = false;
   @Input() chartType: DashboardChartType;
   @Input() dataType: string;
   @Input() dataValueType: ChartDataValueTypes;
@@ -141,10 +149,13 @@ export class TileChartComponent extends TileAbstractDirective {
   @Input() freshnessForecast?: DashboardFreshnessForecastContext | null;
   @Input() intensityDistribution?: DashboardIntensityDistributionContext | null;
   @Input() efficiencyTrend?: DashboardEfficiencyTrendContext | null;
+  @Input() hrvTrend?: DashboardHrvContext | null;
   @Input() sleepTrend?: DashboardSleepTrendContext | null;
   @Input() powerCurve?: DashboardPowerCurveContext | null;
   @Input() aerobicCapacity?: DashboardAerobicCapacityContext | null;
   @Input() aerobicDurability?: DashboardAerobicDurabilityContext | null;
+  @Input() hrvTrendRange?: AppDashboardSleepTrendRange;
+  @Input() hrvTrendCanNavigateNewer = false;
   @Input() sleepTrendRange?: AppDashboardSleepTrendRange;
   @Input() sleepTrendWindowLabel?: string | null;
   @Input() sleepTrendCanNavigateOlder = false;
@@ -186,10 +197,12 @@ export class TileChartComponent extends TileAbstractDirective {
   get powerCurveCompareMode(): AppDashboardPowerCurveCompareMode {
     return this.selectedPowerCurveCompareMode;
   }
-  @Output() editInDashboardManager = new EventEmitter<number>();
+  @Output() editTile = new EventEmitter<number>();
   @Output() derivedChartRangeChange = new EventEmitter<AppDashboardDerivedChartRange>();
   @Output() formTimelineWindowChange = new EventEmitter<AppDashboardFormTimelineWindow>();
   @Output() powerCurveCompareModeChange = new EventEmitter<AppDashboardPowerCurveCompareMode>();
+  @Output() hrvTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
+  @Output() hrvTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
   @Output() sleepTrendRangeChange = new EventEmitter<AppDashboardSleepTrendRange>();
   @Output() sleepTrendNavigate = new EventEmitter<DashboardSleepTrendNavigationDirection>();
   @Output() eventFilterRangeChange = new EventEmitter<AppDashboardTileEventFilterRange>();
@@ -221,6 +234,7 @@ export class TileChartComponent extends TileAbstractDirective {
   public intensityDistributionChartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE;
   public efficiencyTrendChartType = DASHBOARD_EFFICIENCY_TREND_CHART_TYPE;
   public sleepTrendChartType = DASHBOARD_SLEEP_TREND_CHART_TYPE;
+  public hrvTrendChartType = DASHBOARD_HRV_TREND_CHART_TYPE;
   public powerCurveChartType = DASHBOARD_POWER_CURVE_CHART_TYPE;
   public isTileActionSaving = false;
   private selectedDerivedChartRange: AppDashboardDerivedChartRange = DASHBOARD_DERIVED_CHART_DEFAULT_RANGE as AppDashboardDerivedChartRange;
@@ -277,7 +291,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showSleepRangeControls(): boolean {
-    return this.chartType === this.sleepTrendChartType;
+    return this.chartType === this.sleepTrendChartType || this.chartType === this.hrvTrendChartType;
   }
 
   get showPowerCurveCompareSelector(): boolean {
@@ -302,7 +316,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showHeaderControls(): boolean {
-    return this.showCalendarRouteAction || this.showSharedRangeControls || this.showActions;
+    return !this.previewMode && (this.showCalendarRouteAction || this.showSharedRangeControls || this.showActions);
   }
 
   get showCalendarRouteAction(): boolean {
@@ -310,7 +324,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showStackedMobileHeaderControls(): boolean {
-    return this.showPowerCurveCompareSelector && this.showPowerCurveRangeSelector;
+    return !this.previewMode && this.showPowerCurveCompareSelector && this.showPowerCurveRangeSelector;
   }
 
   onDerivedRangeSelection(value: unknown): void {
@@ -332,7 +346,8 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   onSleepRangeSelection(value: unknown): void {
-    this.sleepTrendRangeChange.emit(normalizeDashboardSleepTrendRange(value));
+    const output = this.chartType === this.hrvTrendChartType ? this.hrvTrendRangeChange : this.sleepTrendRangeChange;
+    output.emit(normalizeDashboardSleepTrendRange(value));
   }
 
   onPowerCurveCompareModeSelection(value: unknown): void {
@@ -352,8 +367,8 @@ export class TileChartComponent extends TileAbstractDirective {
     this.isTileActionSaving = isSaving === true;
   }
 
-  onEditInDashboardManager(order: number): void {
-    this.editInDashboardManager.emit(order);
+  onEditTile(order: number): void {
+    this.editTile.emit(order);
   }
 
 }

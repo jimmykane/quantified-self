@@ -125,6 +125,21 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         );
     });
 
+    it.each(['create', 'update', 'delete'])('refreshes recovery history after an HRV %s', async kind => {
+        await (onDashboardDerivedMetricsHealthWrite as any)({
+            params: {uid: 'user-1', sourceRecordId: 'nightly-hrv'},
+            data: {
+                before: {exists: kind !== 'create', data: () => kind === 'create' ? undefined : ({metricIds: ['heart_rate_variability']})},
+                after: {exists: kind !== 'delete', data: () => kind === 'delete' ? undefined : ({metricIds: ['heart_rate_variability']})},
+            },
+        });
+        expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', undefined, undefined, {
+            taskScope: 'health-training_build_comparison-training_readiness',
+            metricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingReadiness],
+            incrementEventMutationVersion: false,
+        });
+    });
+
     it('targets only derived metrics affected by a Health record mutation', async () => {
         await (onDashboardDerivedMetricsHealthWrite as any)({
             params: { uid: 'user-1', sourceRecordId: 'health-1' },

@@ -81,6 +81,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[TrainingPowerSystemsTrendChartComponent]',

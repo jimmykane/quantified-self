@@ -22,3 +22,8 @@
 .health-metric-series-chart-compact {
   height: 112px;
 }
+
+// Dashboard tiles own the available height, including at mobile widths.
+.health-metric-series-chart-fill-height {
+  height: 100%;
+}

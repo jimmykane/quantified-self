@@ -29,6 +29,16 @@ function sleepPoint(
 }
 
 describe('readiness', () => {
+  it('keeps account and HRV measurement sources separate in personal baselines', () => {
+    const baseline = [1, 2, 3].map(index => ({...sleepPoint(`baseline-${index}`, `2026-01-0${index}`, index * 1000, 60, 50),
+      sourceKey: 'account-a', hrvSourceKey: 'health-nightly', averageHrvMs: 50}));
+    const latest = {...sleepPoint('latest', '2026-01-04', 4000, 54, 48), sourceKey: 'account-a', hrvSourceKey: 'health-nightly', averageHrvMs: 55};
+    expect(buildReadinessSignals({sleepPoints: [...baseline, latest], nowMs: 5000})?.hrvRatio).toBe(1.1);
+    expect(buildReadinessSignals({sleepPoints: [...baseline, {...latest, hrvSourceKey: 'sleep-average'}], nowMs: 5000})?.hrvRatio).toBeNull();
+    const differentAccount = buildReadinessSignals({sleepPoints: [...baseline, {...latest, sourceKey: 'account-b'}], nowMs: 5000});
+    expect(differentAccount?.hrvRatio).toBeNull();
+    expect(differentAccount?.averageHeartRateRatio).toBeNull();
+  });
   it('blends average and minimum sleep heart rate into one bounded driver', () => {
     const baseline = [1, 2, 3].map(index => sleepPoint(
       `baseline-${index}`,

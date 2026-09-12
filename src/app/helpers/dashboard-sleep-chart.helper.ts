@@ -1,3 +1,4 @@
+import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '@shared/nightly-hrv';
 import {
   normalizeSleepProvider,
   SleepProvider,
@@ -10,6 +11,8 @@ import type { AppDashboardSleepTrendRange } from '../models/app-user.interface';
 import { dashboardSleepTrendRangeDays } from './dashboard-sleep-range.helper';
 
 export interface DashboardSleepTrendPoint {
+  sourceKey?: string;
+  hrvSourceKey?: string;
   id: string;
   sleepDate: string;
   provider: SleepProvider | null;
@@ -323,6 +326,8 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
   return {
     id: session.id || `${provider}:${session.source?.sourceSessionKey || startTimeMs}`,
     sleepDate: resolvedSleepDate,
+    sourceKey: sleepEvidenceSourceKey(session),
+    hrvSourceKey: sleepHrvSourceKey(session),
     provider,
     providerLabel: label,
     categoryLabel: dateLabel(resolvedSleepDate),
@@ -427,7 +432,7 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
     unknownSeconds: sumPointSeconds(primaryPoints, 'unknownSeconds'),
     averageHeartRateBpm: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHeartRateBpm)),
     minimumHeartRateBpm: minFiniteMetric(primaryPoints.map(point => point.minimumHeartRateBpm)),
-    averageHrvMs: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHrvMs)),
+    ...aggregateNightlyHrvEvidence(primaryPoints),
     maxSpo2Percent: maxFiniteMetric(primaryPoints.map(point => point.maxSpo2Percent)),
     isNap: sleepPoints.length === 0 && napPoints.length > 0,
     napSeconds: sleepPoints.length ? napSeconds : 0,
@@ -442,7 +447,7 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
 function aggregateSameProviderDatePoints(points: readonly DashboardSleepTrendPoint[]): DashboardSleepTrendPoint[] {
   const groupedPoints = new Map<string, DashboardSleepTrendPoint[]>();
   for (const point of points) {
-    const key = point.isPlaceholder ? point.id : `${point.sleepDate}:${point.provider}`;
+    const key = point.isPlaceholder ? point.id : JSON.stringify([point.sleepDate, point.provider, point.sourceKey]);
     const group = groupedPoints.get(key) || [];
     group.push(point);
     groupedPoints.set(key, group);

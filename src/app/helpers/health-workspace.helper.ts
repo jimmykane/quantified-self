@@ -64,6 +64,9 @@ import { heartRateSemanticLabel } from './health-heart-rate-summary.helper';
 import {
   calculatePersonalMetricPointRange,
   calculatePersonalMetricRange,
+  calculatePersonalMetricRangeTimeline,
+  HRV_PERSONAL_RANGE_OPTIONS,
+  HRV_PERSONAL_RANGE_VARIANTS,
   type PersonalMetricPointRangeResult,
   type PersonalMetricRangeResult,
   type PersonalMetricRangeTone,
@@ -187,7 +190,7 @@ export interface HealthPriorityRow {
   contextText: string;
   observedAtMs: number;
   details?: readonly HealthPriorityDetail[];
-  sleepPoint?: DashboardSleepTrendPoint;
+  sleepPoint?: Omit<DashboardSleepTrendPoint, 'sourceKey' | 'hrvSourceKey'>;
 }
 
 export interface HealthPriorityTrendSelectionOptions {
@@ -198,14 +201,7 @@ export interface HealthPriorityTrendSelectionOptions {
   semanticVariantPriority?: readonly string[];
 }
 
-export const HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS = [
-  // Ordered from the most recovery-specific provider summary to the broadest
-  // normalized Sleep fallback. The priority selector preserves this order.
-  'overnight_rmssd',
-  'overnight_average',
-  'sleep_overnight_hrv',
-  'sleep_session_average_hrv',
-] as const;
+export const HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS = HRV_PERSONAL_RANGE_VARIANTS;
 type HealthHrvPersonalRangeSemanticVariant = typeof HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS[number];
 
 export type HealthHrvPersonalRangeTone = PersonalMetricRangeTone;
@@ -218,6 +214,7 @@ export interface HealthHrvPersonalRangePointStatus {
 }
 
 export interface HealthHrvPersonalRangeStatus {
+  rangePoints?: readonly { timestampMs: number; normalRange: { min: number; max: number } | null }[];
   tone: HealthHrvPersonalRangeTone;
   label: string;
   detailText: string;
@@ -273,10 +270,10 @@ interface MetricDatum {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS = 36 * 60 * 60 * 1000;
-const HRV_PERSONAL_RANGE_DAYS = 60;
-const HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS = 14;
-const HRV_CURRENT_AVERAGE_DAYS = 7;
-const HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS = 3;
+const HRV_PERSONAL_RANGE_DAYS = HRV_PERSONAL_RANGE_OPTIONS.baselineWindowDays;
+const HRV_PERSONAL_RANGE_MINIMUM_OBSERVATION_DAYS = HRV_PERSONAL_RANGE_OPTIONS.baselineMinimumObservationDays;
+const HRV_CURRENT_AVERAGE_DAYS = HRV_PERSONAL_RANGE_OPTIONS.currentWindowDays;
+const HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS = HRV_PERSONAL_RANGE_OPTIONS.currentMinimumObservationDays;
 const SLEEP_HRV_SEMANTIC_VARIANTS = new Set([
   'sleep_session_average_hrv',
   'sleep_overnight_hrv',
@@ -786,6 +783,7 @@ export function buildHealthHrvPersonalRangeStatus(
   endTimeMs: number,
   unitSettings: UserUnitSettingsInterface | null = null,
   pointTimestampsMs: readonly number[] = series.points.map(point => point.timestampMs),
+  startTimeMs?: number,
 ): HealthHrvPersonalRangeStatus | null {
   if (!isHealthHrvPersonalRangeSemanticVariant(series.semanticVariant)) {
     return null;
@@ -801,6 +799,12 @@ export function buildHealthHrvPersonalRangeStatus(
     currentMinimumObservationDays: HRV_CURRENT_AVERAGE_MINIMUM_OBSERVATION_DAYS,
   };
   const status = calculatePersonalMetricRange(observations, endTimeMs, rangeOptions);
+  // The baseline exists independently of a reading on the inspected day.
+  // Include actual reading times too, keeping the band and point grades aligned.
+  const rangeTimes = new Set(pointTimestampsMs.filter(time => Number.isFinite(time) && time <= endTimeMs));
+  const firstTime = Math.max(Number.isFinite(startTimeMs) ? startTimeMs!
+    : [...rangeTimes].reduce((first, time) => Math.min(first, time), Infinity), endTimeMs - 366 * 86400000);
+  const rangePoints = calculatePersonalMetricRangeTimeline(observations, firstTime, endTimeMs, rangeOptions, [...rangeTimes]);
   const observationsByTimestamp = new Map(observations.map(observation => [observation.timestampMs, observation]));
   const pointStatuses = [...new Set(pointTimestampsMs)]
     .filter(timestampMs => Number.isFinite(timestampMs)
@@ -840,6 +844,7 @@ export function buildHealthHrvPersonalRangeStatus(
       currentAverage: null,
       normalRange: null,
       pointStatuses,
+      rangePoints,
     };
   }
   if (status.reason === 'insufficient_current') {
@@ -852,6 +857,7 @@ export function buildHealthHrvPersonalRangeStatus(
       currentAverage: null,
       normalRange: null,
       pointStatuses,
+      rangePoints,
     };
   }
   const currentAverage = status.currentAverage;
@@ -887,6 +893,7 @@ export function buildHealthHrvPersonalRangeStatus(
     currentAverage,
     normalRange,
     pointStatuses,
+    rangePoints,
   };
 }
 
@@ -931,7 +938,14 @@ export function buildSleepPriorityRows(
     }
   }
   return [...latestBySource.entries()].map(([key, { session, provider }], index) => {
+    const id = `sleep-priority-${index + 1}`;
     const sleepPoint = buildDashboardSleepTrendContext([session], { nowMs }).latestPoint || undefined;
+    if (sleepPoint) {
+      // This fresh display point does not need the internal identities used for readiness source matching.
+      sleepPoint.id = id;
+      delete sleepPoint.sourceKey;
+      delete sleepPoint.hrvSourceKey;
+    }
     const scoreText = formatSleepMetricValue(
       SLEEP_SPORTS_LIB_METRIC_FIELDS.Score,
       session.score?.value,
@@ -953,7 +967,7 @@ export function buildSleepPriorityRows(
       heartRateText !== '—' ? { label: 'Avg HR', valueText: heartRateText } : null,
     ].filter((detail): detail is HealthPriorityDetail => detail !== null);
     return {
-      id: `sleep-priority-${index + 1}`,
+      id,
       sourceSelectionKey: opaqueHealthSeriesId(key),
       provider,
       providerLabel: providerLabel(provider),

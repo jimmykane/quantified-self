@@ -109,6 +109,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
     private logger: LoggerService
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsXYComponent]',
@@ -372,6 +373,7 @@ export class ChartsXYComponent implements AfterViewInit, OnChanges, OnDestroy {
               return this.formatValue(point.value);
             }
           },
+          labelLayout: { hideOverlap: true },
           emphasis: {
             focus: 'series'
           },

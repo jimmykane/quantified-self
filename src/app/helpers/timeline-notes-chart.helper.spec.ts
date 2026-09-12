@@ -83,15 +83,17 @@ describe('timeline chart overlays', () => {
     expect(markers.filter(marker => marker.label.show).map(marker => marker.label.offset)).toEqual([[0, 0], [0, -14]]);
     expect(markers.map(marker => marker.name)).toEqual(['timeline-note-0-0', 'timeline-note-0-0', 'timeline-note-0-1', 'timeline-note-0-1']);
   });
-  it('opens the same group from either period boundary through the existing selection handler', () => {
+  it('shows the same group tooltip at either boundary without opening notes or hiding tooltips', () => {
     const chart = { on: vi.fn(), off: vi.fn(), getWidth: () => 320, dispatchAction: vi.fn() };
     const context = { notes: [note, { ...note, id: 'b' }], select: vi.fn(), reportRange: vi.fn() };
     const binding = new TimelineNotesChartBinding();
     binding.set(context);
     const markers = binding.apply(chart as never, option).series[1].markLine.data;
-    for (const marker of markers) chart.on.mock.calls[0][1]({ name: marker.name, componentType: 'markLine' });
-    expect(context.select.mock.calls).toEqual([[context.notes], [context.notes]]);
-    expect(chart.dispatchAction).toHaveBeenCalledTimes(2);
+    expect(markers).toHaveLength(2);
+    expect(markers[0].tooltip.formatter()).toBe(markers[1].tooltip.formatter());
+    expect(chart.on).not.toHaveBeenCalled();
+    expect(context.select).not.toHaveBeenCalled();
+    expect(chart.dispatchAction).not.toHaveBeenCalled();
     binding.dispose();
   });
   it.each(['2026-09-02', '2026-09-04'])('labels single-day and period markers with the note title (end: %s)', endDate => {
@@ -261,17 +263,15 @@ describe('timeline chart overlays', () => {
     expect(addTimelineNotesToChart({ series: [] }, [note]).range).toBeNull();
     expect(addTimelineNotesToChart({ xAxis: { type: 'value' }, series: [{ data: [1] }] }, [note]).range).toBeNull();
   });
-  it('annotates both Form axes and releases click handlers and range registrations', () => {
+  it('annotates both Form axes without registering edit handlers and releases range registrations', () => {
     const result = addTimelineNotesToChart({ ...option, xAxis: [option.xAxis, option.xAxis], series: [option.series[0], { ...option.series[0], xAxisIndex: 1, yAxisIndex: 1 }] }, [note]);
     expect(result.option.series).toHaveLength(4);
     const chart = { on: vi.fn(), off: vi.fn(), getWidth: () => 320 };
     const context = { notes: [note], select: vi.fn(), reportRange: vi.fn() };
     const binding = new TimelineNotesChartBinding(); binding.set(context); binding.apply(chart as never, option);
-    chart.on.mock.calls[0][1]({ name: 'timeline-note-0-0', componentType: 'markArea' });
+    expect(chart.on).not.toHaveBeenCalled();
     expect(context.select).not.toHaveBeenCalled();
-    chart.on.mock.calls[0][1]({ name: 'timeline-note-0-0', componentType: 'markLine' });
-    expect(context.select).toHaveBeenCalledWith([note]);
-    binding.dispose(); expect(chart.off).toHaveBeenCalledOnce(); expect(context.reportRange).toHaveBeenLastCalledWith(binding, null);
+    binding.dispose(); expect(context.reportRange).toHaveBeenLastCalledWith(binding, null);
   });
   it('uses the active chart theme and width for note tooltips on every render', () => {
     const chart = { on: vi.fn(), off: vi.fn(), getWidth: vi.fn().mockReturnValue(320) };

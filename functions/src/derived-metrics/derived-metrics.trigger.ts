@@ -87,6 +87,9 @@ async function handleDerivedMetricsSourceWrite(
     const healthMetricKinds = healthMetricIds
         ? [
             ...(healthMetricIds.has(HEALTH_METRIC_IDS.BodyWeight) ? [DERIVED_METRIC_KINDS.BodyWeightTrend] : []),
+            ...(healthMetricIds.has(HEALTH_METRIC_IDS.HeartRateVariability) ? [
+                DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingReadiness,
+            ] : []),
             ...(healthMetricIds.has(HEALTH_METRIC_IDS.Vo2Max) ? [DERIVED_METRIC_KINDS.TrainingCapacity] : []),
         ]
         : [];

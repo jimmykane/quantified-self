@@ -50,11 +50,13 @@ describe('explicit Timeline note chart adapters', () => {
     component.ngOnChanges({ timelineNotes: new SimpleChange(null, component.timelineNotes, false) });
     expect(refresh).toHaveBeenCalledOnce(); component.ngOnDestroy();
   });
-  it('opts in only the requested workspaces, leaving dashboard/public chart inputs at their private-data-free defaults', () => {
+  it('opts in through explicit workspace inputs and keeps public/library defaults private-data-free', () => {
     const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
     expect(source('src/app/components/health/health-workspace.component.html').match(/\[timelineNotes\]/g)).toHaveLength(3);
     expect(source('src/app/components/training/training-workspace.component.html').match(/\[timelineNotes\]/g)).toHaveLength(7);
     expect(source('src/app/components/health/health-priority-summary.component.html')).toContain('[timelineNotes]="timelineNotes()"');
+    expect(source('src/app/components/tile/chart/tile.chart.component.html').match(/previewMode \? null : notesContext\(\)/g)).toHaveLength(4);
+    expect(source('src/app/components/summaries/summaries.component.html')).toContain('<app-timeline-notes-workspace [ownerUid]="user?.uid"');
     const cleanup = source('extensions/delete-user-data.env');
     expect(cleanup).toContain('FIRESTORE_DELETE_MODE=recursive'); expect(cleanup).toContain('FIRESTORE_PATHS=users/{UID}');
   });

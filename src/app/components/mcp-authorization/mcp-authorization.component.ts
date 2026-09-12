@@ -18,27 +18,28 @@ type McpScope =
   | 'measurements:read'
   | 'sleep:read'
   | 'activity-details:read'
+  | 'activity-descriptions:read'
   | 'activity-location:read'
   | 'routes:read'
   | 'route-location:read';
 
 const MCP_SCOPE_PARENTS: Partial<Record<McpScope, McpScope>> = {
   'activity-location:read': 'activity-details:read',
+  'activity-descriptions:read': 'activity-details:read',
   'route-location:read': 'routes:read',
-};
-
-const MCP_SCOPE_CHILDREN: Partial<Record<McpScope, McpScope>> = {
-  'activity-details:read': 'activity-location:read',
-  'routes:read': 'route-location:read',
 };
 
 const MCP_SCOPE_CONTENT: Record<McpScope, {
   title: string;
   description: string;
 }> = {
+  'activity-descriptions:read': {
+    title: 'Activity descriptions',
+    description: 'Read the full private event description shown in the QS.io event editor for a selected activity. Activities within the same event share this text. Requires Individual activity details. Selected by default when requested; uncheck it before approving to keep descriptions private from this client. Existing connections must reauthorize. Text may include sensitive health, personal or location information, even without Activity locations permission. Revoking access cannot erase copies already received. No descriptions can be changed.',
+  },
   'timeline-notes:read': {
     title: 'Timeline notes',
-    description: 'Read full private note titles and details, categories, dates and captured time zones, including notes hidden from charts. This text may contain sensitive health or personal information. Off by default; existing connections must reauthorize. Revoking access cannot erase copies already received by the client. No notes or Training plans can be changed.',
+    description: 'Read full private note titles and details, categories, dates and captured time zones, including notes hidden from charts. This text may contain sensitive health or personal information. Selected by default when requested; uncheck it before approving to keep notes private from this client. Existing connections must reauthorize. Revoking access cannot erase copies already received by the client. No notes or Training plans can be changed.',
   },
   'health:read': {
     title: 'Health metrics',
@@ -58,7 +59,7 @@ const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'activity-details:read': {
     title: 'Individual activity details',
-    description: 'Read non-location activity summaries, laps, swim lengths, MTB jump measurements, selected activity metrics, and bounded on-demand chart series from existing original files. Exact locations and breadcrumb traces require the separate activity-location permission.',
+    description: 'Read non-location activity summaries, laps, swim lengths, MTB jump measurements, selected activity metrics, bounded on-demand chart series, and paginated detailed samples for selected metrics from existing original files. Detailed samples include every available elapsed-second value with missing readings marked. Exact locations and breadcrumb traces require the separate activity-location permission.',
   },
   'activity-location:read': {
     title: 'Activity locations',
@@ -139,7 +140,7 @@ export class McpAuthorizationComponent implements OnInit {
         McpAuthorizationRequest
       >('getMcpAuthorizationRequest', { requestId });
       this.request.set(result.data);
-      this.selectedScopes.set(result.data.scopes.filter(scope => scope !== 'timeline-notes:read'));
+      this.selectedScopes.set([...result.data.scopes]);
     } catch (error) {
       this.logger.error('[McpAuthorizationComponent] Failed to load authorization request', error);
       this.error.set('This authorization request is invalid, expired, or no longer available.');
@@ -157,8 +158,7 @@ export class McpAuthorizationComponent implements OnInit {
           ? scopes
           : [...new Set([...scopes, scope])];
       }
-      const child = MCP_SCOPE_CHILDREN[scope];
-      return scopes.filter(current => current !== scope && current !== child);
+      return scopes.filter(current => current !== scope && MCP_SCOPE_PARENTS[current] !== scope);
     });
     const current = this.selectedScopes();
     if (current.length !== previous.length || current.some(value => !previous.includes(value))) {

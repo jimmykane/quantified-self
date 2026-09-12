@@ -6,6 +6,11 @@ import { AppWindowService } from './app.window.service';
     providedIn: 'root'
 })
 export class BrowserCompatibilityService {
+    /** Also used by framework-independent chart lifecycle helpers. */
+    public static checkIntersectionObserverSupport(): boolean {
+        return typeof IntersectionObserver !== 'undefined';
+    }
+
     private dialog = inject(MatDialog);
     private windowService = inject(AppWindowService);
 
@@ -40,6 +45,10 @@ export class BrowserCompatibilityService {
         } catch {
             return false;
         }
+    }
+
+    public checkWebCryptoSupport(): boolean {
+        return typeof globalThis.crypto?.subtle?.digest === 'function';
     }
 
     public createRandomUUID(): string | null {

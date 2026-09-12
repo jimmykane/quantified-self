@@ -1,3 +1,4 @@
+import type { DashboardHrvContext } from './dashboard-hrv-context.helper';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import {
   ChartDataCategoryTypes,
@@ -101,7 +102,6 @@ import {
   DASHBOARD_RAMP_RATE_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE,
   DASHBOARD_RECOVERY_NOW_CHART_TYPE,
-  DASHBOARD_SLEEP_TREND_CHART_TYPE,
   DASHBOARD_POWER_CURVE_CHART_TYPE,
   DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE,
   DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE,
@@ -128,7 +128,7 @@ import {
   isDashboardRecoveryDebtKpiChartType,
   isDashboardRecoveryNowChartType,
   isRetiredDashboardReadinessConfidenceKpiChartType,
-  isDashboardSleepTrendChartType,
+  isDashboardSleepBackedChartType,
   isDashboardPowerCurveChartType,
   isDashboardTrainingBalanceKpiChartType,
 } from './dashboard-special-chart-types';
@@ -158,6 +158,7 @@ export interface DashboardChartTileViewModel extends AppDashboardChartTileSettin
   intensityDistribution?: DashboardIntensityDistributionContext | null;
   efficiencyTrend?: DashboardEfficiencyTrendContext | null;
   sleepTrend?: DashboardSleepTrendContext | null;
+  hrvTrend?: DashboardHrvContext | null;
   powerCurve?: DashboardPowerCurveContext | null;
   aerobicCapacity?: DashboardAerobicCapacityContext | null;
   aerobicDurability?: DashboardAerobicDurabilityContext | null;
@@ -182,6 +183,8 @@ interface BuildDashboardTileViewModelsInput {
   events?: EventInterface[] | null;
   tileEventsByOrder?: Record<number, EventInterface[] | undefined> | null;
   routePreviews?: FirestoreRouteJSON[] | null;
+  hrvTrend?: DashboardHrvContext | null;
+  hrvPreferredSource?: string | null;
   sleepSessions?: SleepSession[] | null;
   sleepTrendWindow?: DashboardSleepTrendWindow | null;
   preferences?: EventStatAggregationPreferences;
@@ -596,13 +599,14 @@ export function buildDashboardTileViewModels(
       return viewModels;
     }
 
-    if (isDashboardSleepTrendChartType(chartTile.chartType)) {
+    if (isDashboardSleepBackedChartType(chartTile.chartType)) {
       viewModels.push({
         ...chartTile,
-        chartType: DASHBOARD_SLEEP_TREND_CHART_TYPE as unknown as ChartTypes,
         timeInterval: TimeIntervals.Daily,
         data: [],
         sleepTrend: sleepTrendContext,
+        hrvTrend: input.hrvTrend ? { ...input.hrvTrend, charts: [...input.hrvTrend.charts].sort((left, right) =>
+          Number(right.key === input.hrvPreferredSource) - Number(left.key === input.hrvPreferredSource)) } : null,
       });
       return viewModels;
     }

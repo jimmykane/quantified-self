@@ -55,6 +55,7 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[TrainingReadinessTrendChartComponent]',

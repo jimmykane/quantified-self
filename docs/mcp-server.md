@@ -7,7 +7,7 @@ authenticated user's persisted numeric activity metrics, explicitly approved rec
 snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
 without granting browser or Firestore access.
 
-Separately authorized Timeline notes can also supply full private user-reported context. They are never inferred from
+Separately authorized Timeline notes and activity descriptions can also supply full private user-reported context. They are never inferred from
 metric or Sleep access and never become calculation inputs or write authority.
 
 The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
@@ -158,7 +158,7 @@ The bundled skills divide ownership deliberately:
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
 | `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
-| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, and optional locations | `activity-details:read`; optional metric/location grants |
+| `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, optional descriptions and locations | `activity-details:read`; optional metric/description/location grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
 All seven skills allow implicit or explicit invocation and declare the same hosted read-only MCP dependency. Their trigger
@@ -275,18 +275,22 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
 - `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
   selected metrics, and on-demand chart series;
+- `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
   nearby activity search, and chart breadcrumbs;
 - `routes:read` for non-location saved-route summaries; and
 - `route-location:read`, dependent on `routes:read`, for exact bounds, preview geometry, nearby route search, segment
   endpoints, and waypoints.
 
-The location scopes cannot exist without their matching parent data scope. Consent disables a child until its parent is
+The location scopes and activity-description scope cannot exist without their matching parent data scope. Consent disables a child until its parent is
 selected and removes the child when the parent is removed. Authorization approval, refresh narrowing, bearer
 validation, HTTP prechecks, and tool registration reject invalid child-only combinations. Activity and route location
 remain independent domains. Existing clients retain non-location data but must reconnect and approve a new location
 scope to regain coordinate-bearing tools. Consent explains that coordinates may reveal sensitive places and that
 place-name searches send only supplied location text to Mapbox; direct-coordinate searches do not call Mapbox.
+The consent page initializes its selection from the complete validated requested-scope list, so every current and future
+requested permission starts checked. The user can uncheck any independent permission before approval; removing a parent
+also removes its dependent children. Preselection never creates or expands a grant until the user explicitly approves.
 
 The `resource` value and token audience must exactly match the public `/mcp` URL. The authenticated Firebase UID is bound
 to server-side token records; a UID is never accepted from MCP input. OAuth access tokens are opaque, are stored only as
@@ -476,6 +480,7 @@ The analytics and map entries follow the
 | --- | --- | --- |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
+| `get_hrv_personal_range` | `health:read` + `sleep:read` | Shared rolling nightly HRV baseline, historical classifications and missing-day ranges, separated by source |
 | `list_measurement_types` | `measurements:read` | Supported first-class body-measurement types, units, aggregations, intervals, limits, and current-snapshot guidance |
 | `query_measurements` | `measurements:read` | Identity-free day/week/month body-measurement history and a bounded change summary |
 | `list_metrics` | `metrics:read` | Persisted numeric Sports Lib event metrics, derived kinds, and sleep capabilities |
@@ -494,6 +499,7 @@ The analytics and map entries follow the
 | `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
+| `get_activity_description` | `activity-details:read` + `activity-descriptions:read` | Full private parent event description for one opaque activity reference; opt-in, bounded, no truncation |
 | `query_timeline_notes` | `timeline-notes:read` | Full private user-reported context overlapping inclusive calendar dates, including chart-hidden notes; bounded full-text continuation |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
@@ -503,6 +509,7 @@ The analytics and map entries follow the
 | `list_activity_jumps` | `activity-details:read` | Paginated MTB jump measurements; coordinates are present only with `activity-location:read` |
 | `list_activity_swim_lengths` | `activity-details:read` | Paginated allowlisted pool-length and stroke fields |
 | `list_activity_chart_metrics` | `activity-details:read` | Static chart metric, unit, axis, and point-limit catalog; no activity or source read |
+| `get_activity_samples` | `activity-details:read` | Paginated selected canonical samples on an elapsed-second grid, without chart downsampling |
 | `get_activity_chart_data` | `activity-details:read`; add `activity-location:read` when `includeLocation` is true | On-demand bounded chart series and optional breadcrumb trace |
 | `list_routes` | `routes:read` | Bounded newest-first scans with optional activity-type and case-insensitive name filters, opaque references, and signed-in app links; exact bounds require `route-location:read` |
 | `find_routes_near_location` | `routes:read` + `route-location:read` | Frozen compatibility tool for nearby saved-route scans |
@@ -553,12 +560,12 @@ and granting one location domain never widens the other.
 
 `functions/src/mcp/derived-output-schemas.ts` defines one exact redacted payload schema for every
 `DERIVED_METRIC_KINDS` value. The runtime `metricKind` refinement and advertised JSON Schema conditionals bind each kind
-to its payload. Shared definitions keep the large `get_training_metric` schema and the complete 35-tool `tools/list`
+to its payload. Shared definitions keep the large `get_training_metric` schema and the complete `tools/list`
 response bounded. The chart metric/unit schemas derive from the same `MCP_ACTIVITY_CHART_METRICS` catalog used by the
 parser implementation, so a metric and canonical unit cannot drift independently.
 
 `functions/src/mcp/tool-output-schemas.spec.ts` connects an in-memory MCP client and server with every canonical scope,
-inspects all advertised schemas, calls all 35 tools, and validates successful `structuredContent` with direct Ajv 8 and
+inspects all advertised schemas, calls every registered tool, and validates successful `structuredContent` with direct Ajv 8 and
 `ajv-formats` dependencies. It also exercises all Training kinds, both chart axes, populated/empty and
 continuing/terminal pagination states, nullable/optional fields, parent-only location variants, JSON-text equivalence,
 expected errors, output-contract failures, and identity/provenance leakage canaries.
@@ -862,7 +869,7 @@ height, hang time, speed, rotations, and score. The jump `timestampMs` is an act
 milliseconds, not an epoch timestamp. With `activity-location:read`, jump records may also expose latitude/longitude,
 and activity summaries may expose validated `startPosition` and `endPosition` coordinates. Without that scope,
 coordinate fields are omitted and `locationRedacted` is true. Per-activity metric requests expose only selected finite numeric values
-from the canonical Sports Lib catalog. Activity names and notes, raw streams, precise-position metrics, nonnumeric and
+from the canonical Sports Lib catalog. Activity names and notes remain excluded from these metric/detail projections. Only the separately authorized description tool below reads parent event text. Raw streams, precise-position metrics, nonnumeric and
 unrequested stats, internal ID fields, device/provider creator data, source keys, original files, nested position
 metadata, and parser extensions are excluded.
 
@@ -942,6 +949,65 @@ Responses contain parallel chart arrays, canonical units, and source/returned/mi
 original files, internal IDs, source keys, provider/device metadata, parser extensions, absolute sample timestamps,
 unrequested streams, and full-resolution recordings. Historical availability depends on the original source remaining
 available and within budgets; no backfill or persistent cache is created.
+
+## Detailed activity samples
+
+`get_activity_samples` is additive. The registered chart tool, catalog, point limits and response shape remain unchanged.
+Use charts for compact visual overviews, persisted metrics for workout summaries, and samples for interval calculations or
+complete requested series. The same `activity-details:read` grant registers and authorizes this tool; there is no new
+OAuth scope, consent step, provider connection or reimport requirement. Clients with cached metadata must discover the
+new tool after a server/app refresh. Client-specific tool approvals are separate from QS OAuth grants.
+
+The input is `activityRef`, one to four metrics from `list_activity_chart_metrics`, optional `startOffsetSeconds`
+(inclusive, default zero), `endOffsetSeconds` (exclusive, default available stream end), `limit` (default 2,000, maximum
+10,000 aligned rows), and `cursor`. Limits and offsets are integers; offsets are bounded to 250,000 seconds. Canonical
+aliases are normalized and deduplicated. Repeat the same filters and limit with every continuation. Requesting a small
+interval reduces output but still requires parsing the bounded original source on a cache miss.
+
+The strict output contains `activityType`, `sampling: all_available`, `timeUnit: seconds`, `sampleIntervalSeconds: 1`,
+`range` and `page` with inclusive starts/exclusive ends and counts, one shared `elapsedTimeSeconds` array, `series`, and
+nullable `nextCursor`. Each series has a canonical metric/unit pair, `sourceSampleCount` (stream length including missing
+slots), `missingSampleCount` for this page, and aligned `values`. Null preserves a missing/non-finite reading or an absent
+stream; zero remains zero. The range is clamped to the longest selected available stream, including its final sample.
+All selected streams absent produces a zero-length range with empty value arrays. These are Sports Lib canonical
+parsed values, including supported derivations, not a promise of raw device packets or data absent from the source.
+Do not calculate full-range statistics until the continuation is null; exclude missing readings and disclose coverage.
+
+Both projections use `activity-stream.service.ts` for the single allowlisted metric catalog, selective parser options,
+file handling, budgets, multi-file merge and identity matching. `data.service.ts` shares owner-scoped event/activity
+context validation and approved source-path/download checks. There are no provider branches: current and future
+providers work when they retain a supported original file with supported streams. New formats or metrics require a
+separate parser/catalog change. The detailed projection never returns coordinates (even with a location grant), absolute
+sample timestamps, source metadata, device identity, arbitrary streams or original files.
+
+Pages fit a **256 KiB complete MCP result**, counting both structured content and its escaped JSON-text copy and reserving
+1 KiB for protocol metadata. The page shortens automatically to fit, and its cursor starts at the exact following second.
+The shared source limits remain four files, 12 MiB cumulative raw bytes, 64 MiB decompressed bytes, 250,000 selected/parser
+dependency samples and 20 seconds of parsing/projection. A hard source or runtime limit rejects the request; it never
+silently returns a partial parse.
+
+Pagination is stateless. Encrypted cursors are bound to owner, connection, activity, normalized query, source generations
+and a digest of selected canonical data; they expire 30 minutes after the first page. Source or parser-output changes
+require restarting instead of joining different revisions. Each page checks active-account state, current event and
+activity identity, approved Storage paths and the existence of exact object generations before and after projection.
+Sources without stored generations are pinned to the current immutable generation for each read. Malformed stored
+generations make the source unavailable rather than silently falling back to the latest file. A deleted object,
+changed parent or removed account cannot be served from cached data. Bearer revocation remains checked by the HTTP
+boundary on every request.
+
+`activity-sample-cache.ts` reuses only frozen selected numeric arrays and canonical descriptors in process memory:
+120-second TTL with active eviction, eight entries, 24 MiB conservatively accounted total, 12 MiB per entry, and two
+concurrent different cache builds. Identical concurrent requests share one build. The key includes owner, connection,
+activity, metrics and source revision. Raw files, parser objects and derivation-only streams are discarded. Nothing is
+written to Firestore or Storage except existing parse-rate counters. A warm page does not consume another parse allowance;
+a cold instance or expired/evicted entry safely reparses the pinned source and uses the existing six-per-connection /
+twelve-per-user-per-minute limiter. Cache reuse is best effort, not a session-affinity guarantee. Normal HTTP limits
+still apply to every page. No backfill, provider API call, migration or derived-schema change is required.
+
+The built-in Assistant retains its explicit compact-evidence allowlist and omits this tool and its routing instruction.
+Detailed sample pagination is currently an external MCP workflow. Deploying this additive public tool requires the normal
+digest-bound developer refresh/rescan; bundled activity and cross-domain skill changes require validation and a later
+explicit local `npm run plugin:sync`. Local tests do not deploy, promote the registered contract or install a real profile.
 
 ## Saved-route projection
 
@@ -1100,6 +1166,18 @@ the same normalized sleep fields and safe value rules for its allowed latest-nig
 physiology stays absent/null and is never converted to zero. Server and bundled-skill instructions explicitly route
 multi-day physiology questions to `get_sleep_trend` and availability-only questions to `list_sleep_vitals`.
 
+With both `health:read` and `sleep:read`, these Sleep reads, `get_daily_report`, and `get_today_readiness` can also fill
+missing nightly HRV from a matching canonical Health overnight-average summary. Matching is by owner, provider/account,
+provider date, and overlapping main-sleep interval. Native Sleep HRV is preserved, each night is supplemented once,
+and conflicts, spot/activity/manual HRV, and unidentified legacy accounts are excluded. Health is never read through
+Sleep permission alone. The backend scans complete summary pages (32 per read; at most 2,048 records and 16 MiB),
+using the existing metric/calendar-date/document-ID index with owner/deletion guards. Incomplete reads fail with a bounded
+or temporary-unavailability error rather than a partial value. No samples or provider API calls are needed. Existing
+history works without reimport. Internal source keys keep HRV baselines comparable and never enter public results.
+The internal readiness evidence version and recovery version can advance while the registered MCP formula/recovery
+versions and schemas remain frozen. This implementation-only fix needs no plugin rebuild or new grant beyond the
+existing Health permission; clients that previously omitted Health must authorize it to use the supplement.
+
 It never returns provider user IDs, provider session keys, callback URLs, provider-specific fields, score components, raw
 stage intervals, raw HRV samples, raw SpO2 samples, raw respiration samples, or the Firestore document ID. Adding a sleep
 provider or field therefore does not automatically expose it: update the safe projection and negative redaction tests
@@ -1187,6 +1265,33 @@ requires no new Firestore composite index.
 
 ## Recorded Health tools
 
+### Shared HRV personal range
+
+`get_hrv_personal_range` is additive and requires both `health:read` and `sleep:read`. It accepts explicit ISO `start`
+and `end` instants with timezone offsets, up to 366 days, and loads a bounded additional 60-day history. It uses
+`shared/personal-metric-range.ts`, also re-exported by the frontend helper, including shared HRV options and nightly
+semantic variants. Daily medians, mean/population deviation, 14-day minimum baseline, seven-day/three-day headline,
+historical classifications and missing-day baseline evaluation therefore share the Health chart's calculation.
+
+Only eligible canonical nightly Health scalars and normalized non-nap average/overnight Sleep HRV are used. The Sleep
+field mask also includes canonical duration, required by the shared Sports Lib decoder; it is never returned by this tool. Health
+Sleep references are skipped; normalized sessions are read through the separately required Sleep grant. Health and
+Sleep remain separately labelled series, including provider, response-local account ordinal and fixed semantics.
+The projection never guesses equivalence between opaque Health account keys and Sleep provider identities. The
+internal identities are used only to prevent blending and never appear in output. No spot-check/activity HRV, raw
+samples, device fields, callback URLs or persisted personal-range state are exposed. Reading dates remain the recorded
+calendar dates; daily range instants follow the explicitly requested window, not an inferred UTC calendar date.
+
+Complete reads are required: 2,048 Health records plus 1,000 Sleep records in 32-record pages, 16 MiB selected input,
+8,192 readings, 32 series and 512 KiB output. An over-budget request fails instead of grading a partial history.
+Owner deletion is checked before and after reading. Baseline context stays out of visible readings. A missing-day band
+is not an HRV reading, and insufficient history remains null. This is neither a medical interpretation nor Suunto's
+unpublished proprietary calculation. The internal Assistant allowlist is unchanged.
+
+No new Function, migration, index or stored data is introduced. Release requires separately approved deployment of
+the existing MCP endpoint, registered-app refresh/rescan and digest verification, then local `npm run plugin:sync`
+for the updated Health, Sleep and cross-domain skills. Preserve prior pending changes; do not promote before live verification.
+
 `health.service.ts` is the explicit read-only Health projection boundary. `list_health_metrics` describes 34 approved
 canonical metrics; it does not scan user data or claim availability. It routes Weight to `query_measurements` and
 normalized Sleep to `get_sleep_trend`. Shared-catalog additions do not automatically become public MCP metrics.
@@ -1256,10 +1361,52 @@ The pending record retains earlier unpromoted changes, and this implementation n
 
 ## Bounds and operational controls
 
+### Activity descriptions
+
+`get_activity_description({activityRef})` requires both `activity-details:read` and the new dependent
+`activity-descriptions:read` grant. The consent checkbox is selected by default when requested, including when all
+scopes are requested; the owner can uncheck it before approval.
+Legacy approvals that omit selected scopes exclude this grant. Removing activity details removes both descriptions
+and activity-location permission; approval, refresh, bearer validation, HTTP prechecks and tool registration enforce
+the dependencies. Existing clients must reauthorize; refresh cannot expand an old grant.
+
+The description is the parent event's `description` edited in QS.io, not an activity-level note or provider payload.
+Sibling activities in the same event therefore return the same text. Resolve an activity through existing discovery
+and pass its owner-and-connection-bound encrypted reference. The data boundary checks both grants before decoding or
+reading, verifies the current owner-scoped activity still points to the referenced event, and reads only the event's
+`description`. Firestore selects only `eventID` for the activity and `description` for the event, each by document ID
+with limit one. Owner existence and account-deletion tombstones are checked before the reads and before release.
+No new Function, collection, index, migration, original-file parse, or reparse is required. Existing stored descriptions
+are immediately readable after the separately approved release and consent.
+
+The strict output contains only `activityRef` and nullable `description`. Missing/null text returns null, empty text
+and whitespace are preserved, and malformed values or missing/stale documents fail safely. Full UTF-8 text is bounded
+to 64 KiB (also at most 65,536 UTF-16 code units), and the complete tool result to 128 KiB. The transport boundary
+counts both `structuredContent` and its JSON-text copy, including JSON escaping, with 1 KiB reserved for protocol
+metadata. The text-size ceiling alone does not guarantee that a description fits the response. Oversized descriptions fail without
+truncation; clients should direct the user to QS.io. Names, internal IDs, creator/device metadata and source fields
+remain excluded. Text itself may contain health, personal or location information even without activity-location
+permission. It is untrusted user-reported context, never instructions, verified diagnoses, causal proof, or authority to
+act. Descriptions never affect metric or readiness calculations. Logs/errors must not include text or backend identity.
+Revocation prevents future reads but cannot erase copies already received by an external client.
+
+The built-in Assistant retains its current scopes and allowlist; this change does not grant Gemini description access.
+The activity and cross-domain plugin skills discover the authorized tool only when the question needs this context.
+All seven bundled skills and their prompts were reviewed; other focused workflows, registry membership, hosted MCP
+dependencies and the three manifest starter prompts remain appropriate.
+
+Release the consent/Connections/Help/Policies frontend and updated existing MCP/OAuth Functions together before exposing
+the grant (`mcpApi`, `getMcpAuthorizationRequest`, `decideMcpAuthorization`, `listMcpConnections`,
+`revokeMcpConnection`). Deployment is separately authorized. Rescan the registered ChatGPT app, verify a new conversation
+and the exact pending digest, then promote through the documented lifecycle. The pending record preserves all earlier
+unpromoted changes. Run `npm run plugin:sync` separately after deployment/rescan; fixture validation does not install
+into a real profile.
+
 ### Timeline notes
 
 `timeline-notes.service.ts` reads the owner's existing `timelineNotes` collection only after checking its independent
-scope. The external consent checkbox starts unchecked, including for a notes-only authorization request. Existing grants
+scope. The external consent checkbox is selected by default when requested, including for a notes-only authorization
+request. The owner can uncheck it before approving; selection alone does not authorize access. Existing grants
 cannot gain this scope through refresh; the owner must reauthorize. External clients receive full private text, which
 may contain sensitive health or personal information. Revocation cannot erase copies already received.
 
@@ -1291,6 +1438,14 @@ readiness and briefing outputs remain unchanged. See [Assistant](assistant.md) a
 No new Function, storage, index, migration or write tool is introduced. Release the changed existing MCP/Assistant
 backend paths and consent UI before enabling access. Then separately approve the registered-app rescan, verify the live
 digest before contract promotion, and sync the changed local plugin. Preserve every earlier pending contract change.
+
+The bundled cross-domain skill guides note-to-Health/Sleep comparisons with existing read tools: bounded
+before/during/after periods, captured timezones and provider/sleep-day conventions, same-response source separation,
+coverage counts, optional historical HRV classifications and association-only conclusions. Comparisons do not prorate
+coarse aggregates across note boundaries or require the additional personal-range grants for ordinary recorded HRV.
+Health and Sleep skills route such
+comparisons there. Notes never become baseline or readiness inputs. This guidance-only change needs local plugin sync
+after validation, but no additional server deployment or registered-app rescan of its own.
 
 ### Other domains
 
@@ -1343,6 +1498,8 @@ digest before contract promotion, and sync the changed local plugin. Preserve ev
   raw/compressed bytes, 64 MiB cumulative decompressed bytes, and 250,000 selected samples, with a 20-second internal
   runtime and 256 KiB response limit. Larger valid streams are downsampled over the complete domain; hard point,
   source, sample, runtime, decompression, and response overruns fail the whole request.
+- Detailed activity samples share the source/parse limits, return at most 10,000 rows and 256 KiB including both MCP
+  result copies, and use bounded transient memory reuse and 30-minute query/revision-bound cursors as described above.
 - Route previews are limited to 20 segments, 5,000 decoded points, and 256 KiB. Route source reads are limited to 2 MiB,
   decompression to 8 MiB, and waypoint output to 500 entries and 256 KiB.
 - Metric discovery scans the latest 500 event documents, excludes benchmark merges, and reports whether the scan was

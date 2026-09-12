@@ -32,6 +32,11 @@ limited to the surrounding layout and domain-specific action groups.
 Guest and public marketing views may retain a distinct hero composition. Their heading styles must remain local to that
 public surface and must not become a new authenticated workspace-header pattern.
 
+Dashboard loading messages use a reserved single-line status/greeting row below the header. **Today**, its date,
+and its calendar action remain mounted through preparation, refresh, failure, and completion. A small Material spinner
+shows pending work; failures keep the accessible Retry action. The status row keeps its height when it clears, including
+when Today or the owner greeting is hidden. Do not replace the page title with changing loading messages.
+
 ## Workspace Shells
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
@@ -108,12 +113,36 @@ beside the metric list, with a minimum plot height for multi-row grids. Mobile, 
 retain their existing chart heights. The existing ECharts host observes the resized plot; no manual resize loop or
 extra padding is needed.
 
+Dashboard plots, Health metric/Sleep-stage plots, and Training's readiness, body-weight, power-systems,
+swimming-performance, and durability plots opt into `EChartsHostController.deferUntilNearViewport`.
+`ChartViewportQueue` observes the nearest scroll container (including the app shell and bottom sheets) with a 600px
+preload margin and admits one plot per animation frame after the shared ECharts library is ready, so a cold
+import cannot release multiple queued plots into the same render frame. Non-scrolling tab bodies and horizontal-only
+wrappers are skipped when choosing that root, so their offscreen charts still wait for the page viewport.
+Only plot initialization is deferred: Angular titles,
+values, accessible descriptions, and controls remain present. Initialized plots stay mounted when scrolled away.
+Destroyed or replaced plot hosts cancel their pending work, including waits for a previous theme. A chart that
+leaves the preload area while the library loads stays deferred until it returns. When data changes before first visibility, only the latest waiting
+refresh may apply its data. Browsers without viewport observation use ordinary immediate initialization.
+The shared host resizes only when its container dimensions or pixel ratio change, while preserving the first
+resize that releases fixed preview dimensions. Charts with size-dependent options can use its `onContainerResize`
+callback; Recovery and generic pies rebuild their legend and center typography after real size changes, retaining
+the ECharts instance. The host remains reusable and resizable without `ResizeObserver` through the shared viewport
+fallback. Dashboard section layout is recalculated only when its column count
+or row-height mode changes, so browser toolbar height changes do not rebuild an unchanged layout.
+
+An open chart picker keeps its original Material shell when the viewport crosses a breakpoint. Its mobile sheet
+can widen to accommodate the desktop list and preview, while a desktop dialog retains content insets when narrowed.
+
 `title`, optional `titleId`, and `headingLevel` (2, 3, or 4) own heading semantics; `summary`, `icon`, and `iconTone`
 provide optional context. Default projected content can contain existing charts, tables, or metric displays.
 `compactRowAction` projects a Material control into the action slot. The row is presentational: consumers retain
 their existing Sports Lib formatting, data loading, accessible chart descriptions, and single haptic action owner.
 
-Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces.
+Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces. Sleep-stage
+legend columns wrap to the available card width, including the narrow columns in tablet Highlights.
+Highlight **Open** actions scroll to and focus the explorer heading, including when that metric is already selected.
+They preserve the selected date range and source filters; opening the current metric does not save preferences again.
 
 ### Bounded surfaces
 
@@ -122,3 +151,126 @@ Both that primitive and default Material cards are intentionally flat through `-
 the primary separation from the workspace background. Floating menus, dialogs, datepickers, configuration submenus,
 and bottom sheets use `--qs-overlay-shadow` so their temporary layer remains visually distinct. Do not reuse the overlay
 shadow for in-flow cards or add route-local card shadows.
+
+## Dashboard calendar popup
+
+The Today month popup uses the existing compact calendar with `fillHeight=false` on both its tile and grid.
+The grid opts into `activity-calendar--picker`: readable 28px date badges, 64px rows, and a separate
+indicator row for activity circles and Timeline notes. Note colors sit under the note icon; planned workouts use
+a short bottom rail. Only wholly empty trailing weeks are omitted (4–6 weeks remain, with weekday alignment preserved).
+The sheet's content scrolls when the viewport cannot accommodate the month. The header stays outside that scroll area,
+and the content respects the bottom safe-area inset. Do not constrain this popup to the dashboard tile's fixed height.
+The default `fillHeight=true` preserves dashboard tiles and chart-library previews; full Month, Week, and Year grids
+do not opt into the compact height-filling class.
+
+## Dashboard chart picker
+
+Owners add tiles from compact, right-aligned section actions: Add KPI, Add chart, or Add map. Mixed sections such as Activity Overview use Add tile. The action is hidden when
+a section has no available presets; keep the library component mounted so existing tiles can still open for editing.
+Activity Overview retains its action for custom creation and opens properties directly when no presets remain. Empty
+owner sections retain an entry point;
+shared/read-only dashboards do not instantiate the library. A dashboard-scoped `DashboardChartLibraryState` permits one
+open section and one local draft. All custom metric charts and presets belong in Activity Overview, which is the only
+section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
+there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
+existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
+Rows show the title, format, data-source label, and a small chart beside the chevron; only the selected chart mounts a full preview renderer.
+Desktop opens with the first available chart selected, without extra haptic feedback or any save. Mobile starts with
+the list and opens details on selection. Back from a mobile preview restores focus to the selected row, scrolling it
+into view if needed. Selecting the same entry again is a silent no-op that preserves preview scroll
+and focus. Search/group changes release an unchanged preview if it no longer matches, so Add cannot target a hidden
+choice. Filtering never discards a configured or modified draft, and filter controls are locked during saves.
+The entry component opens its picker template in a wide Material dialog on desktop and a 92dvh Material bottom sheet
+below 960 px, using the shared overlay theme. The documented `qs-chart-picker-sheet` sizing exception lets the
+Material container fill the configured pane instead of applying its default 80vh cap. The gallery never expands the dashboard.
+Desktop gives the selected chart most of the width beside a compact list; each pane scrolls independently. Mobile
+selection opens details with Back. Full chart previews render at native text size without CSS scaling, and KPI details
+use a shorter preview suited to their headline and sparkline. The shared ECharts host explicitly
+returns to automatic dimensions on resize so initialization fallback sizes cannot pin a chart to a tiny canvas.
+Creating a custom chart, editing a configurable tile, or choosing its settings replaces the gallery with a dedicated properties
+workspace. Properties and the live preview scroll independently on desktop; mobile puts properties before the preview
+in a single scrolling column. New custom charts omit the redundant category selector and use an explicit Create custom
+chart title. The type-specific settings action sits above the preview so it is immediately discoverable, and stays
+right-aligned when longer labels wrap onto a second row on narrow screens. Settings are offered only for generic metric
+charts and maps, using `hasDashboardTileSettings`. Curated charts, KPIs and the calendar have fixed configuration:
+their menu opens details without properties or a Save button. Their existing inline range/source controls remain
+available on the dashboard, and library previews retain Add. Recovery uses smaller centre text and a wrapped total
+inside a larger donut opening at narrow chart widths; metric values still use canonical formatting.
+`dashboard-tile-presentation.helper.ts` owns the presentation kinds and terminology for chart, KPI, map, calendar,
+and generic tile. It resolves the existing stored renderer types; KPIs and Activity Calendar are stored as Chart but
+have their own UI kinds. Section terminology uses the full catalog, so adding presets or filtering the list cannot
+rename the section action. Draft terminology is recomputed after editor changes. Future renderer kinds belong in this
+resolver and label registry, with generic tile as the safe fallback. This does not change persistence or section routing.
+Chart and map action components use the same `tile-actions-menu.html` and base edit handler; chart-specific auto-tile
+dismissal remains in the chart component. Keep every `mat-menu-item`, including Remove, in the menu template itself:
+Material cannot include items inside a child component’s view in its keyboard navigation. All menu mutations and
+editing are disabled during a pending save, with a spinner in the original action button. Rows and Columns use
+standard Material submenus with checked choices so arrow-key navigation can reach every layout setting.
+The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
+recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
+dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,
+the dashboard waits for the overlay to close and the chart layout to refresh before focusing and revealing the saved
+chart; cancellation restores the original trigger focus. Existing-tile editing restores the tile's persistent action
+button instead of the dismissed menu item, including sections with no add action. Latest-add Undo stays on the dashboard.
+
+`dashboard-chart-catalog.helper.ts` adapts the shared preset registry and uses the same preset-equivalence rules for
+availability and bulk additions. Special chart identity includes power discipline; map identity includes its source.
+Custom equivalence uses metric, chart style, aggregation, axis, and time bucket rather than order, size, or activity filters.
+New catalog entries need an example and catalog coverage. Homepage signal fixtures are re-exported from the shared
+`dashboard-chart-example-signals.helper.ts`; homepage renderers and dashboard previews remain the existing app charts.
+
+`DashboardChartPreviewService` reads only. Row thumbnails use the shared ECharts host and a bounded, decorative shape
+from the existing preview view model, with no axes, values, tooltips, focus targets, or haptic handlers. The row's
+accessible description includes its format and data source. Preview models are cached across search/group filtering;
+closing the picker disposes its thumbnail charts. Thumbnail rendering uses loaded context or labelled examples and
+does not start additional reads. Selecting a
+chart lazily reads only the missing source (bounded activity window, 14 days of sleep, recent route previews, or the
+required prepared metric snapshots). Subscriptions are shared within a library and released when previews are destroyed.
+A historically navigated event/sleep window cannot supply a current preview. Preview event reads exclude merged events.
+Preview paths never call metric ensure/rebuild APIs or persist settings. Synthetic examples remain labelled during loading
+and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
+All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
+
+The optional HRV preset (`HrvTrend`) belongs in Training State beside Sleep. `DashboardHrvService` supplies both the
+saved tile and picker with the same normalized Health/Sleep sources as the Health workspace. It reads one bounded,
+live Health HRV history alongside native Sleep history. The same Health records supply Sleep enrichment and separate
+visible-window/60-day-baseline projections through `projectLoadedHealthRange`; each projection preserves the Health
+query window limit even for a one-year view. Rare provider dates outside that history request only the additional
+non-overlapping days needed for Sleep enrichment. `HrvHistoryService` shares matching owner/date reads with Sleep
+consumers, and `DashboardHrvService` shares complete matching tile/preview contexts. Both release their cached result
+and listeners when the last subscriber leaves. Every Health page stays live, with 32-record pages and a combined
+2,048-record/16 MiB budget; incomplete or oversized history fails rather than producing a partial personal range.
+`dashboard-hrv-context.helper.ts` reuses Health's series models, personal-range calculation, status colors and canonical
+Sports Lib display. `ChartsHrvComponent` renders `HealthMetricSeriesChartComponent`; thumbnails use the same ECharts
+option builder, including its historical band. No competing HRV renderer or baseline algorithm exists. Sources remain
+separate, and the full chart initially honors the user's Health highlight source preference. Source changes within
+the dashboard are local display choices, with selection haptics; the shared chart host owns tooltip feedback. HRV uses
+the same 8px vertical and 10px header inset as Sleep, dashboard title/value typography, and a title info action.
+Only its title row reserves room for range/menu controls; date and source context can use the full content width.
+
+HRV and Sleep have independent saved date ranges and navigation; HRV uses Health's calendar-day windows. Loading, empty and
+failed reads remain explicit; incomplete Health loads do not produce a misleading personal range. While paging, the
+last complete chart keeps its original dates and an update notice identifies the requested period. A failed refresh
+retains that chart with an error notice. Changing owner or units clears the previous display. Preview fallbacks
+remain labelled examples, and historical dashboard windows cannot masquerade as the current 14-day preview. HRV and
+Sleep remain independently addable/removable; HRV has no automatic tile or derived-metric identity.
+
+`DashboardConfigurationService` persists owner-scoped dashboard patches through Firestore transactions. It compares the
+fields being changed against the draft baseline and refuses stale saves. Both sides use the profile hydration
+normalizer, so defaults and legacy tile migrations do not look like concurrent edits. It merges only dashboard settings, preserving
+server-managed Training settings. Existing tile resize/reorder/removal and filter/display changes use the same transaction
+path. No backend callable or schema migration is introduced. Latest-add Undo retains before/after values only for the
+fields in the chart write, checks those fields locally and transactionally, and preserves auto-tile dismissal when
+removing the addition. Event-table filters and dates remain untouched and cannot cause an unrelated Undo conflict.
+Another change to the affected chart fields disables that Undo. Undo asks before discarding an open draft and closes
+its stale editor after success.
+Preview construction also covers duplicate selections that cannot be saved, so details and discard protection always
+follow the current form. Edits retain the original tile as the source of saved display settings; settings are inert while
+a save is pending. Failed saves retain drafts and report the error; tile menu mutations roll back only their own
+unchanged optimistic fields. Removing the final chart is supported.
+
+Visual verification uses synthetic data with the real Angular components and Material theme. Review captures:
+[desktop](images/dashboard-chart-library/desktop.png), [mobile list](images/dashboard-chart-library/mobile.png),
+and [mobile preview](images/dashboard-chart-library/mobile-preview.png).
+These captures contain no account data; the “Your data” label reflects synthetic input injected as loaded dashboard state.
+Physical haptics require a supported device; browser emulation only verifies interaction wiring and layout.

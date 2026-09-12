@@ -5,7 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
-import { isTimelineNoteVisible, type TimelineNote, type TimelineNoteRange, type TimelineNotesLoad } from '@shared/timeline-notes';
+import { isTimelineNoteVisible, timelineNoteEnd, type TimelineNote, type TimelineNoteRange, type TimelineNotesLoad } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -19,7 +19,7 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
   template: `
     <div class="timeline-notes-action" [attr.aria-busy]="loading()">
       <button mat-button type="button" class="timeline-notes-button" appHapticTap (click)="open()"
-        [disabled]="!service.uid()" aria-label="Timeline notes" matTooltip="Timeline notes">
+        [disabled]="!activeOwner()" aria-label="Timeline notes" matTooltip="Timeline notes">
         <mat-icon aria-hidden="true">event_note</mat-icon><span>Timeline notes</span>
       </button>
       <mat-progress-bar class="timeline-notes-progress" [class.timeline-notes-progress-visible]="loading()"
@@ -37,34 +37,53 @@ import { AppChartSharedModule } from '../../modules/app-chart-shared.module';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TimelineNotesWorkspaceComponent {
+  /** Shared/profile surfaces must explicitly match their displayed owner to the signed-in account. */
+  readonly ownerUid = input<string | null | undefined>(undefined);
   /** Non-chart workspaces can register an explicit visible calendar range. */
   readonly visibleRange = input<TimelineNoteRange | null>(null);
   readonly service = inject(AppTimelineNotesService);
+  readonly activeOwner = computed(() => {
+    if (this.destroyed()) return null;
+    const uid = this.service.uid();
+    return this.ownerUid() === undefined || this.ownerUid() === uid ? uid : null;
+  });
   private readonly dialogs = inject(MatDialog);
   private readonly haptics = inject(AppHapticsService);
   private readonly zone = inject(NgZone);
   private readonly destroy = inject(DestroyRef);
-  private readonly notes = signal<readonly TimelineNote[]>([]);
+  private readonly notes = signal<readonly TimelineNote[]>([], {
+    // Decoded notes contain only scalar fields. Equivalent cache/server results must not redraw every chart.
+    equal: (previous, next) => previous.length === next.length && previous.every((note, index) => {
+      const other = next[index];
+      const keys = Object.keys(note) as (keyof TimelineNote)[];
+      return note === other || (keys.length === Object.keys(other).length && keys.every(key => note[key] === other[key]));
+    }),
+  });
   readonly loading = signal(false);
   readonly error = signal(false);
   readonly incomplete = signal<TimelineNotesLoad['incomplete']>(null);
   private readonly ranges = new Map<object, TimelineNoteRange>();
   private version = 0;
   private queued = false;
-  private destroyed = false;
+  private readonly destroyed = signal(false);
   private rangeKey = '';
+  private forceRefresh = false;
+  private readonly ongoingDates = signal('');
   private readonly loadedOwner = signal<string | null>(null);
   private readonly reportRange = (key: object, range: TimelineNoteRange | null) => {
+    if (this.destroyed()) return;
     if (range) this.ranges.set(key, range); else this.ranges.delete(key);
     this.schedule();
   };
   readonly context = computed<TimelineNoteChartContext>(() => {
-    const owner = this.service.uid();
+    const owner = this.activeOwner();
+    this.ongoingDates(); // Reproject ongoing periods only when their captured-zone date changes.
     return {
+      ownerUid: owner,
       notes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.notes().filter(isTimelineNoteVisible) : [],
       // ECharts callbacks run outside Angular; entering here lets Material own dialog/focus lifecycle.
       select: notes => this.zone.run(() => {
-        if (!notes.length || !owner || !this.service.isOwner(owner) || !this.service.showOnCharts() || owner !== this.loadedOwner()) return;
+        if (this.destroyed() || !notes.length || !owner || owner !== this.activeOwner() || !this.service.isOwner(owner) || !this.service.showOnCharts() || owner !== this.loadedOwner()) return;
         // A queued marker click must not reopen a note that was hidden or removed since it rendered.
         const ids = new Set(notes.map(note => note.id));
         const selected = this.notes().filter(note => ids.has(note.id) && isTimelineNoteVisible(note));
@@ -78,35 +97,49 @@ export class TimelineNotesWorkspaceComponent {
   });
 
   constructor() {
-    // A new route instance means returning to the workspace, not reusing an old cache forever.
-    this.service.invalidate();
     effect(() => this.reportRange(this, this.visibleRange()));
     effect(() => {
-      this.service.uid(); this.service.showOnCharts();
+      this.activeOwner(); this.service.showOnCharts();
       untracked(() => { this.rangeKey = ''; this.schedule(); });
     });
-    this.service.changes$.pipe(takeUntilDestroyed()).subscribe(() => { this.rangeKey = ''; this.schedule(); });
-    const returned = () => { if (document.visibilityState === 'visible') this.refresh(); };
+    this.service.changes$.pipe(takeUntilDestroyed()).subscribe(() => {
+      // Explicit invalidation can follow an edit/hide/delete: discard that stale snapshot immediately.
+      this.version++;
+      this.notes.set([]); this.incomplete.set(null);
+      this.rangeKey = ''; this.schedule();
+    });
+    const returned = () => { if (document.visibilityState === 'visible') this.refresh(false); };
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', returned);
       document.addEventListener('visibilitychange', returned);
       this.destroy.onDestroy(() => { window.removeEventListener('focus', returned); document.removeEventListener('visibilitychange', returned); });
     }
-    this.destroy.onDestroy(() => { this.destroyed = true; this.version++; this.ranges.clear(); });
+    this.destroy.onDestroy(() => { this.destroyed.set(true); this.version++; this.ranges.clear();
+      this.notes.set([]); this.loadedOwner.set(null); this.loading.set(false); this.error.set(false); this.incomplete.set(null); });
   }
   open(notes?: readonly TimelineNote[]): void {
-    const uid = this.service.uid();
-    if (!uid || !this.service.isOwner(uid)) return;
+    const uid = this.activeOwner();
+    if (this.destroyed() || !uid || !this.service.isOwner(uid)) return;
     this.dialogs.open(TimelineNotesDialogComponent, { width: '560px', maxWidth: 'calc(100vw - 32px)', data: { uid, notes } });
   }
-  refresh(): void { this.service.invalidate(); }
+  refresh(force = true): void {
+    this.updateOngoingDates();
+    // Focus and visibilitychange commonly arrive separately; neither should restart a pending load.
+    if (this.loading() || this.destroyed()) return;
+    this.forceRefresh ||= force;
+    this.rangeKey = ''; this.schedule();
+  }
+  private updateOngoingDates(): void {
+    this.ongoingDates.set(this.notes().filter(note => note.endDate === null && isTimelineNoteVisible(note))
+      .map(note => `${note.id}:${timelineNoteEnd(note)}`).join('|'));
+  }
   private schedule(): void {
-    if (this.queued || this.destroyed) return;
+    if (this.queued || this.destroyed()) return;
     this.queued = true;
-    queueMicrotask(() => { this.queued = false; if (!this.destroyed) void this.load(); });
+    queueMicrotask(() => { this.queued = false; if (!this.destroyed()) void this.load(); });
   }
   private async load(): Promise<void> {
-    const uid = this.service.uid();
+    const uid = this.activeOwner();
     const ranges = [...this.ranges.values()];
     const range = ranges.length ? {
       startDate: ranges.map(value => value.startDate).sort()[0],
@@ -116,16 +149,26 @@ export class TimelineNotesWorkspaceComponent {
     if (key === this.rangeKey) return;
     this.rangeKey = key;
     const version = ++this.version;
-    this.notes.set([]); this.loadedOwner.set(uid);
-    this.error.set(false); this.incomplete.set(null); this.loading.set(false);
-    if (!uid || !range || !this.service.showOnCharts()) return;
+    const forceRefresh = this.forceRefresh; this.forceRefresh = false;
+    const canLoad = !!uid && !!range && this.service.showOnCharts();
+    // Lazy charts register as they approach the viewport. Retain this owner's annotations while their
+    // union expands/contracts, then replace the snapshot atomically; a new range is not a privacy reset.
+    if (!canLoad || uid !== this.loadedOwner()) {
+      this.notes.set([]); this.incomplete.set(null);
+    }
+    this.loadedOwner.set(uid);
+    this.error.set(false); this.loading.set(false);
+    if (!canLoad) return;
     this.loading.set(true);
     try {
-      const result = await this.service.loadRange(uid, range);
-      if (version !== this.version || !this.service.isOwner(uid)) return;
-      this.notes.set(result.notes); this.incomplete.set(result.incomplete);
+      const cached = this.service.cachedRange(uid, range);
+      if (cached) { this.notes.set(cached.notes); this.incomplete.set(cached.incomplete); }
+      this.updateOngoingDates();
+      const result = await this.service.loadRange(uid, range, forceRefresh);
+      if (version !== this.version || uid !== this.activeOwner() || !this.service.isOwner(uid)) return;
+      this.notes.set(result.notes); this.incomplete.set(result.incomplete); this.updateOngoingDates();
     } catch {
-      if (version === this.version && this.service.isOwner(uid)) this.error.set(true);
+      if (version === this.version && uid === this.activeOwner() && this.service.isOwner(uid)) this.error.set(true);
     } finally { if (version === this.version) this.loading.set(false); }
   }
 }

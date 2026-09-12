@@ -13,6 +13,8 @@ import {
 } from '../../../shared/training-plans';
 import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants';
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
+import { DELIVERY_LEDGER, DELIVERY_QUEUE, DELIVERY_SCOPES, DELIVERY_STATE } from '../training-plans/delivery/contracts';
+import { TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES } from '../../../shared/training-provider-delivery';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import {
     SLEEP_SYNC_QUEUE_COLLECTION_NAME,
@@ -134,6 +136,7 @@ const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
     COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
     GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
     WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
+    DELIVERY_QUEUE,
 ]);
 
 const LEGACY_PROVIDER_QUEUE_ORPHAN_SWEEP_LIMIT = 500;
@@ -320,6 +323,8 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
         { label: 'training plan state', ref: userRef.collection(TRAINING_PLAN_STATE_COLLECTION_ID) },
         { label: 'training plans', ref: userRef.collection(TRAINING_PLANS_COLLECTION_ID) },
         { label: 'scheduled workouts', ref: userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID) },
+        ...[DELIVERY_LEDGER, DELIVERY_STATE, DELIVERY_SCOPES, TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES]
+            .map(id => ({ label: id, ref: userRef.collection(id) })),
     ];
 
     for (const target of cleanupTargets) {
@@ -897,6 +902,7 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
         getExplicitFirebaseUidAssociation('failed_jobs', doc.data() as Record<string, unknown>) === uid;
 
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'training delivery queue', DELIVERY_QUEUE, 'uid', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);

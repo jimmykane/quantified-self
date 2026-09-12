@@ -67,8 +67,8 @@ describe('AssistantVisualChartComponent', () => {
   it('renders through the shared ECharts host and keeps nulls as gaps', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
-    await fixture.componentInstance.ngAfterViewInit();
-    expect(loader.setOption).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledOnce());
+    expect(loader.init).toHaveBeenCalledOnce();
 
     expect(loader.init).toHaveBeenCalledWith(
       expect.any(HTMLElement),
@@ -96,7 +96,7 @@ describe('AssistantVisualChartComponent', () => {
   it('disposes the shared chart host on teardown', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
-    await fixture.componentInstance.ngAfterViewInit();
+    await vi.waitFor(() => expect(loader.setOption).toHaveBeenCalledOnce());
     fixture.destroy();
 
     expect(loader.dispose).toHaveBeenCalledWith(chart);

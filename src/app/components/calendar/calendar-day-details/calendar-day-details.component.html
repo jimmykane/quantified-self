@@ -22,17 +22,18 @@
     </section>
     }
 
+    @if (hasTrainingPlanningUIAccess()) {
     <section class="calendar-day-planned" aria-labelledby="calendar-day-planned-title">
       <div class="calendar-day-section-heading">
         <h3 id="calendar-day-planned-title">Planned workouts</h3>
         <div class="calendar-day-plan-actions" aria-label="Add a workout">
-          <a mat-flat-button [routerLink]="['/training/plans']" [queryParams]="{ date: data.day.dateKey }"
+          <a mat-flat-button [routerLink]="['/training/plans/new']" [queryParams]="{ date: data.day.dateKey }"
             (click)="prepareWorkoutNavigation()">
             <mat-icon aria-hidden="true">add</mat-icon>
             Add workout
           </a>
-          <a mat-stroked-button [routerLink]="['/training/plans']"
-            [queryParams]="{ date: data.day.dateKey, scope: 'standalone' }"
+          <a mat-stroked-button [routerLink]="['/training/plans/standalone/new']"
+            [queryParams]="{ date: data.day.dateKey }"
             (click)="prepareWorkoutNavigation()">
             Standalone
           </a>
@@ -45,16 +46,20 @@
       } @else if (plannedWorkoutRows().length) {
       <mat-nav-list>
         @for (planned of plannedWorkoutRows(); track planned.id) {
-        <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/training/plans']"
-          [style.--planned-workout-color]="planned.color"
-          [queryParams]="{ workout: planned.id }" (click)="prepareWorkoutNavigation()">
-          <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"
-            aria-hidden="true"></app-activity-type-icon>
-          <span matListItemTitle>{{ planned.title }}</span>
-          <span matListItemLine>{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
-          <span matListItemLine class="calendar-day-planned-summary">{{ planned.summary.join(' · ') }}</span>
-          <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
-        </a>
+        <div class="calendar-day-planned-row" role="presentation" [style.--planned-workout-color]="planned.color">
+          <span class="calendar-day-planned-accent" aria-hidden="true"></span>
+          <a mat-list-item class="calendar-day-planned-item" [routerLink]="['/training/plans/workout', planned.id]"
+            (click)="prepareWorkoutNavigation()">
+            <app-activity-type-icon matListItemIcon [activityType]="planned.sport" size="24px"
+              aria-hidden="true"></app-activity-type-icon>
+            <span matListItemTitle>{{ planned.title }}</span>
+            <span matListItemLine>{{ planned.scopeLabel }} · {{ planned.lifecycleLabel }}</span>
+            <span matListItemLine class="calendar-day-planned-summary">{{ planned.summary.join(' · ') }}</span>
+            <span matListItemMeta class="calendar-day-item-meta" aria-hidden="true">
+              <mat-icon>chevron_right</mat-icon>
+            </span>
+          </a>
+        </div>
         }
       </mat-nav-list>
       } @else {
@@ -63,6 +68,7 @@
     </section>
 
     <mat-divider></mat-divider>
+    }
 
     @if (activityState().status === 'loading') {
     <p role="status">Loading activities…</p>
@@ -110,7 +116,9 @@
                 [stats]="event.metricStats"></app-activity-calendar-volume-stats>
               }
             </div>
-            <mat-icon matListItemMeta aria-hidden="true">chevron_right</mat-icon>
+            <span matListItemMeta class="calendar-day-item-meta" aria-hidden="true">
+              <mat-icon>chevron_right</mat-icon>
+            </span>
           </a>
           } @else {
           <div mat-list-item class="calendar-day-event-item"

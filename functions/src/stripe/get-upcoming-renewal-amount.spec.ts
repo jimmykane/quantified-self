@@ -53,13 +53,20 @@ const {
     };
 });
 
+const { callableOptions } = vi.hoisted(() => ({
+    callableOptions: new Map<unknown, unknown>(),
+}));
+
 vi.mock('firebase-admin', () => ({
     firestore: mockFirestore,
     auth: () => ({})
 }));
 
 vi.mock('firebase-functions/v2/https', () => ({
-    onCall: (_opts: unknown, handler: unknown) => handler,
+    onCall: (options: unknown, handler: unknown) => {
+        callableOptions.set(handler, options);
+        return handler;
+    },
     HttpsError: class extends Error {
         code: string;
         constructor(code: string, message: string) {
@@ -107,6 +114,12 @@ describe('getUpcomingRenewalAmount', () => {
             discounts: []
         });
         mockRetrieveCoupon.mockResolvedValue({ duration: 'once' });
+    });
+
+    it('allocates 512 MiB to the renewal amount callable', () => {
+        expect(callableOptions.get(getUpcomingRenewalAmount)).toMatchObject({
+            memory: '512MiB',
+        });
     });
 
     it('should throw unauthenticated when called without auth', async () => {

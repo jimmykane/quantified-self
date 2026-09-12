@@ -2,6 +2,7 @@ import type { EChartsType } from 'echarts/core';
 import { TimelineNotesChartBinding, type TimelineNoteChartContext, type TimelineNoteAxisHints } from './timeline-notes-chart.helper';
 import { EChartsLoaderService } from '../services/echarts-loader.service';
 import type { EChartsMobileTapFeedbackOptions } from './echarts-tooltip-interaction.helper';
+import { chartViewportQueue } from './chart-viewport-queue';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 type ChartSetOptionSettings = Parameters<EChartsType['setOption']>[1];
@@ -43,6 +44,9 @@ export interface EChartsHostControllerConfig {
   initOptions?: ChartInitSettings;
   enableMobileTapFeedback?: boolean;
   mobileTapFeedbackOptions?: MobileTapFeedbackOptionsResolver;
+  deferUntilNearViewport?: boolean;
+  /** Update size-dependent chart options after a real container resize. */
+  onContainerResize?: (size: { width: number; height: number }) => void;
 }
 
 export class EChartsHostController {
@@ -59,6 +63,11 @@ export class EChartsHostController {
   private unsubscribeTapFeedback: (() => void) | null = null;
   private currentTheme: string | undefined;
   private lifecycleVersion = 0;
+  private lastResizeSize: { width: number; height: number; pixelRatio: number } | null = null;
+  private cancelViewportWait: (() => void) | null = null;
+  private initRequestID = 0;
+  private pendingContainer: HTMLElement | null = null;
+  private pendingTheme: string | undefined;
 
   constructor(private readonly config: EChartsHostControllerConfig) { }
 
@@ -66,6 +75,8 @@ export class EChartsHostController {
     if (!container) {
       return null;
     }
+
+    const requestID = ++this.initRequestID;
 
     const requestedTheme = theme || undefined;
 
@@ -77,10 +88,18 @@ export class EChartsHostController {
       this.dispose();
     }
 
+    // A removed off-screen host will never intersect. Cancel that wait rather
+    // than making its replacement (or a new theme) depend on the old container.
+    if (this.initPromise && this.cancelViewportWait
+      && (this.pendingContainer !== container || this.pendingTheme !== requestedTheme)) {
+      this.dispose();
+    }
+
     if (this.initPromise) {
       const lifecycleVersion = this.lifecycleVersion;
       const pendingInitialization = this.initPromise;
       await pendingInitialization;
+      if (this.config.deferUntilNearViewport && requestID !== this.initRequestID) return null;
       if (this.initPromise === pendingInitialization) {
         this.initPromise = null;
       }
@@ -91,8 +110,17 @@ export class EChartsHostController {
     }
 
     const lifecycleVersion = this.lifecycleVersion;
+    this.pendingContainer = container;
+    this.pendingTheme = requestedTheme;
     const initialization = (async () => {
       try {
+        if (this.config.deferUntilNearViewport) {
+          const gate = chartViewportQueue.wait(container, () => this.config.eChartsLoader.load());
+          this.cancelViewportWait = gate.cancel;
+          const ready = await gate.ready;
+          if (this.cancelViewportWait === gate.cancel) this.cancelViewportWait = null;
+          if (!ready || lifecycleVersion !== this.lifecycleVersion) return null;
+        }
         const chart = await this.config.eChartsLoader.init(container, requestedTheme, this.config.initOptions);
         if (!chart) {
           return null;
@@ -120,10 +148,14 @@ export class EChartsHostController {
     })();
     this.initPromise = initialization;
     try {
-      return await initialization;
+      const chart = await initialization;
+      // Only the newest waiting refresh may apply its captured data after scrolling into view.
+      return this.config.deferUntilNearViewport && requestID !== this.initRequestID ? null : chart;
     } finally {
       if (this.initPromise === initialization) {
         this.initPromise = null;
+        this.pendingContainer = null;
+        this.pendingTheme = undefined;
       }
     }
   }
@@ -170,6 +202,8 @@ export class EChartsHostController {
   public dispose(): void {
     this.timelineNotes.dispose();
     this.lifecycleVersion += 1;
+    this.cancelViewportWait?.();
+    this.cancelViewportWait = null;
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -177,6 +211,7 @@ export class EChartsHostController {
     }
 
     this.observedContainer = null;
+    this.lastResizeSize = null;
     this.unsubscribeViewportResize?.();
     this.unsubscribeViewportResize = null;
     this.unsubscribeTapFeedback?.();
@@ -193,6 +228,8 @@ export class EChartsHostController {
   }
 
   private observeContainer(container: HTMLElement): void {
+    // Retain the host even when only the shared viewport-resize fallback is available.
+    this.observedContainer = container;
     if (typeof ResizeObserver === 'undefined') {
       return;
     }
@@ -204,8 +241,6 @@ export class EChartsHostController {
       this.scheduleResize();
     });
     this.resizeObserver.observe(container);
-
-    this.observedContainer = container;
   }
 
   private resizeToContainer(): void {
@@ -215,12 +250,23 @@ export class EChartsHostController {
 
     const { width, height } = this.getContainerSize(this.observedContainer);
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      this.lastResizeSize = null;
       return;
     }
 
+    const pixelRatio = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+    if (this.lastResizeSize?.width === width && this.lastResizeSize.height === height
+      && this.lastResizeSize.pixelRatio === pixelRatio) return;
+
     this.config.eChartsLoader.resize(this.chart, {
+      // ECharts retains explicit initialization dimensions unless resize replaces them.
+      // Switch back to the live host size once layout is available (including overlays).
+      width: 'auto',
+      height: 'auto',
       silent: true,
     });
+    this.lastResizeSize = { width, height, pixelRatio };
+    this.config.onContainerResize?.({ width, height });
   }
 
   private getContainerSize(container: HTMLElement): { width: number; height: number } {

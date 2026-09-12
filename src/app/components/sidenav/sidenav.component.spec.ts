@@ -19,9 +19,9 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
-import { TRAINING_PLANNING_NAVIGATION_ALLOWED_UIDS } from '@shared/training-planning-rollout';
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 
-const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = TRAINING_PLANNING_NAVIGATION_ALLOWED_UIDS[0];
+const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = TRAINING_PLANNING_UI_ALLOWED_UIDS[0];
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
@@ -315,24 +315,26 @@ describe('SideNavComponent', () => {
         expect(healthItem).toBeUndefined();
     });
 
-    it('highlights Plans independently of Training while preserving query-driven Training navigation', async () => {
+    it('highlights Plans independently of Training on a nested path while preserving Training query navigation', async () => {
         mockUserService.user = vi.fn().mockReturnValue({ uid: TRAINING_PLANNING_NAVIGATION_ALLOWED_UID });
         fixture.detectChanges();
         const router = TestBed.inject(Router);
         const trainingItem = fixture.nativeElement.querySelector('[routerlink="/training"]') as HTMLElement;
         const plansItem = fixture.nativeElement.querySelector('[routerlink="/training/plans"]') as HTMLElement;
 
-        await router.navigateByUrl('/training/plans?date=2026-08-03&scope=standalone');
+        await router.navigateByUrl('/training/plans/standalone?date=2026-08-03');
         await fixture.whenStable();
         fixture.detectChanges();
         expect(plansItem.classList.contains('active')).toBe(true);
         expect(trainingItem.classList.contains('active')).toBe(false);
+        expect(plansItem.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(true);
 
         await router.navigateByUrl('/training?tab=load#trends');
         await fixture.whenStable();
         fixture.detectChanges();
         expect(trainingItem.classList.contains('active')).toBe(true);
         expect(plansItem.classList.contains('active')).toBe(false);
+        expect(plansItem.parentElement?.classList.contains('sidenav-subitem-guide-active')).toBe(false);
     });
 
     it('shows Plans beneath the direct Training link for the staged user and closes on selection', () => {
@@ -350,8 +352,10 @@ describe('SideNavComponent', () => {
         expect(plansItem).toBeTruthy();
         expect(plansItem?.nativeElement.getAttribute('routerlink')).toBe('/training/plans');
         const trainingGroup = fixture.nativeElement.querySelector('[role="group"][aria-label="Training"]');
-        expect(plansItem?.nativeElement.parentElement).toBe(trainingGroup);
-        expect(plansItem?.nativeElement.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
+        const guide = plansItem?.nativeElement.parentElement;
+        expect(guide?.classList.contains('sidenav-subitem-guide')).toBe(true);
+        expect(guide?.parentElement).toBe(trainingGroup);
+        expect(guide?.previousElementSibling?.getAttribute('routerlink')).toBe('/training');
         expect(mockHapticsService.selection).not.toHaveBeenCalled();
         plansItem!.triggerEventHandler('click', new MouseEvent('click'));
         expect(mockSideNavService.close).toHaveBeenCalledOnce();

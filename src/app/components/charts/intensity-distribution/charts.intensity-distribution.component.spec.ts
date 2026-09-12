@@ -254,6 +254,43 @@ describe('ChartsIntensityDistributionComponent', () => {
     expect(tooltipHtml).not.toContain('Week of Apr 2026');
   });
 
+  it('uses compact x-axis bounds and label spacing', () => {
+    const weeks = [
+      {
+        weekStartMs: Date.UTC(2026, 0, 5),
+        easySeconds: 7200,
+        moderateSeconds: 3600,
+        hardSeconds: 1800,
+        source: 'power' as const,
+      },
+    ];
+
+    const option = (component as any).buildOption(weeks) as Record<string, any>;
+
+    expect(option.grid).toMatchObject({ bottom: 24, outerBoundsMode: 'auto', outerBounds: { bottom: 6 } });
+    expect(option.xAxis.axisLabel.margin).toBe(3);
+    expect(option.xAxis.axisLabel.interval).toBe(0);
+  });
+
+  it('thins weekly labels in compact tiles while retaining the first and last week', () => {
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', { configurable: true, value: 440 });
+    const weeks = Array.from({ length: 12 }, (_, index) => ({
+      weekStartMs: Date.UTC(2026, 5, 22) + (index * 7 * 24 * 60 * 60 * 1000),
+      easySeconds: 7200,
+      moderateSeconds: 3600,
+      hardSeconds: 1800,
+      source: 'power' as const,
+    }));
+
+    const option = (component as any).buildOption(weeks) as Record<string, any>;
+    const interval = option.xAxis.axisLabel.interval as (index: number) => boolean;
+    const visibleLabelCount = weeks.filter((_week, index) => interval(index)).length;
+
+    expect(interval(0)).toBe(true);
+    expect(interval(weeks.length - 1)).toBe(true);
+    expect(visibleLabelCount).toBeLessThanOrEqual(6);
+  });
+
   it('uses tap-only tooltip triggering on mobile viewport', () => {
     const originalMatchMedia = window.matchMedia;
     const matchMediaSpy = vi.fn().mockImplementation(() => ({

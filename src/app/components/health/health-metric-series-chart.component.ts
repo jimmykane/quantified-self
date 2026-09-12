@@ -47,6 +47,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() compact = false;
+  @Input() fillHeight = false;
   @Input() statusOverlay: HealthChartStatusOverlay | null = null;
   @Input() statusDescription: string | null = null;
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
@@ -56,6 +57,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
 
   constructor(eChartsLoader: EChartsLoaderService, logger: LoggerService) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader,
       logger,
       logPrefix: '[HealthMetricSeriesChartComponent]',

@@ -1,6 +1,6 @@
 ---
 name: mcp-metric-surface
-description: Keep the read-only Quantified Self MCP surface aligned when Sports Lib metrics, activity details, routes, Training-derived kinds, sleep sessions, or their persisted contracts change.
+description: Keep Quantified Self MCP tools, scopes, consent, projections, contracts, and bundled plugin workflows aligned when exposed data or authorization changes.
 ---
 
 # MCP Metric Surface
@@ -38,15 +38,25 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   intervals, or raw HRV, SpO2, or respiration samples.
 - **Activity-detail field:** decide whether it belongs in the explicit activity summary, lap, jump, or swim-length
   projection. Never forward whole activity documents, raw streams, creator/device metadata, source keys, names/notes,
-  internal identifier fields, arbitrary stats, or parser extensions. Exact activity start/end and jump coordinates,
+  internal identifier fields, arbitrary stats, or parser extensions. The separate `get_activity_description` tool may
+  read only the parent event description with both `activity-descriptions:read` and `activity-details:read`; this never
+  widens normal activity/metric projections. Preserve explicit consent, full-text bounds and untrusted-context semantics.
+  Exact activity start/end and jump coordinates,
   nearby search, and chart breadcrumbs require dependent `activity-location:read` in addition to
   `activity-details:read`.
 - **On-demand activity chart stream:** add deliberate aliases and canonical units to
-  `functions/src/mcp/activity-chart.service.ts`, request only the stream and Sports Lib derivation dependencies, and
+  `functions/src/mcp/activity-stream.service.ts` (re-exported by the chart service), request only the stream and Sports Lib derivation dependencies, and
   preserve the existing original-file-only workflow. Keep file, raw/decompressed byte, selected-sample, runtime,
   response, point, and per-connection/user parse budgets. Downsample the complete domain; never crop, persist parsed
   output, invoke reparse/auto-healing, or return original files, full-resolution streams, absolute sample timestamps,
   source metadata, or unrequested streams.
+- **Detailed activity samples:** preserve the additive `get_activity_samples` contract and existing
+  `activity-details:read` grant. Share the chart catalog, selective original-file parser, identity matcher and source
+  budgets; project only selected canonical numeric arrays on an elapsed-second grid. Keep aligned null gaps, complete
+  range pagination, exact units, whole-result byte bounds, owner/connection/query/source-bound expiring cursors, and
+  source revision and access checks on every page. Cache only the safe selected projection within the documented
+  short-lived process-memory limits; never persist streams, cache raw files or parser objects, expose coordinates,
+  call provider APIs, backfill data or silently truncate a parse. Review external-client versus Assistant routing.
 - **Saved-route field or parser output:** decide whether it belongs in the explicit route summary, preview, or waypoint
   projection. Never forward original files, raw points/streams, Storage paths, source/delivery provenance, waypoint text,
   links, or extensions. Exact route bounds, preview geometry, nearby search, and waypoint coordinates require dependent
@@ -57,6 +67,11 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   domain changes. Do not duplicate complete tool names or metric IDs in a skill; make it discover authoritative runtime
   tools and catalogs. Keep each skill's `agents/openai.yaml` prompt, one hosted MCP dependency, and implicit-invocation
   policy aligned. Keep the ChatGPT technical app ID and generated cache-busted bundle files out of Git.
+- **OAuth consent UI:** initialize selected permissions from the complete validated scope list returned for the
+  authorization request. Every requested current and future scope starts checked. Do not maintain per-scope default-off
+  filters. Users must remain able to uncheck independent scopes before approval; removing a parent scope must remove and
+  disable its dependent child scopes. Preselection is presentation state only and never creates or expands a grant
+  without explicit approval.
 
 ## Implementation Contract
 
@@ -120,7 +135,9 @@ Add or update focused tests for:
   opaque-reference binding, selective on-demand parsing, identity ambiguity, complete-domain downsampling, and every
   source/sample/runtime/point/response/rate limit;
 - IANA timezone/DST bucketing;
-- scope denial and query limits.
+- scope denial and query limits;
+- consent initialization with every requested scope checked, independent-scope unchecking, parent/child removal, and
+  approval as the only grant boundary.
 
 Then run `npm --prefix functions test -- src/mcp/tool-output-schemas.spec.ts` plus the focused Functions tests,
 `npm --prefix functions run mcp:contract:check`, the affected frontend tests, the Firestore rules suite when access changes,

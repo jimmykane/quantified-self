@@ -6,11 +6,40 @@
   margin: 0;
 }
 
-.dashboard-today-greeting {
+.dashboard-summary-status {
+  align-items: center;
   color: var(--mat-sys-on-surface-variant);
+  display: flex;
   font: var(--mat-sys-body-medium);
   font-weight: 500;
+  gap: 8px;
+  line-height: 1.5;
   margin: 0.35rem 0 0;
+  min-height: 1.5em;
+}
+
+.dashboard-summary-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-summary-status-icon {
+  align-items: center;
+  display: flex;
+  flex: 0 0 16px;
+  height: 16px;
+}
+
+.dashboard-summary-status-icon mat-icon {
+  font-size: 16px;
+  height: 16px;
+  width: 16px;
+}
+
+.dashboard-summary-status--warning {
+  color: var(--mat-sys-error);
 }
 
 .dashboard-kpi-section {
@@ -79,6 +108,12 @@
   border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   margin-top: 0.35rem;
   padding-top: 0.45rem;
+}
+
+.dashboard-readiness-recovery-indicator {
+  display: block;
+  margin-top: 0.35rem;
+  max-width: 240px;
 }
 
 .dashboard-readiness-score-indicator { margin: 0.45rem 0 0.35rem; max-width: 240px; }
@@ -177,8 +212,15 @@
   min-width: 0;
 }
 
-.dashboard-main-section-header {
+.dashboard-section-header.dashboard-main-section-header {
+  min-height: 40px;
   margin-bottom: 0.5rem;
+}
+
+.dashboard-main-section-header > app-dashboard-chart-library {
+  margin-inline-start: auto;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .dashboard-section-header.dashboard-main-section-header h2 {
@@ -267,13 +309,6 @@
   margin-left: auto;
 }
 
-.dashboard-manager-button {
-  max-width: 100%;
-}
-
-.dashboard-manager-button-mobile {
-  display: none;
-}
 
 .dashboard-section-divider {
   margin: 0 0 1.25rem;
@@ -404,13 +439,6 @@ section {
     gap: 0.75rem;
   }
 
-  .dashboard-manager-button-desktop {
-    display: none;
-  }
-
-  .dashboard-manager-button-mobile {
-    display: inline-flex;
-  }
 
   .dashboard-kpi-lane {
     grid-template-columns: minmax(0, 1fr);
@@ -442,3 +470,5 @@ section {
     width: 100%;
   }
 }
+
+.dashboard-chart-added { display: flex; align-items: center; gap: 12px; }

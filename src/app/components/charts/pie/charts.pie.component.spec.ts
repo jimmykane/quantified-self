@@ -27,6 +27,7 @@ import {
 } from '../../../helpers/echarts-theme.helper';
 
 type ResizeObserverRecord = {
+  trigger: () => void;
   observe: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
 };
@@ -63,8 +64,9 @@ describe('ChartsPieComponent', () => {
       public observe = vi.fn();
       public disconnect = vi.fn();
 
-      constructor(_: ResizeObserverCallback) {
+      constructor(callback: ResizeObserverCallback) {
         resizeObserverRecords.push({
+          trigger: () => callback([], this as unknown as ResizeObserver),
           observe: this.observe,
           disconnect: this.disconnect,
         });
@@ -281,6 +283,62 @@ describe('ChartsPieComponent', () => {
     expect(recoverySliceNames).toEqual(['Left now', 'Elapsed']);
 
     dateNowSpy.mockRestore();
+  });
+
+  it.each([280, 340])('fits a long recovery summary in a narrow %spx preview without changing its values', async width => {
+    const now = Date.UTC(2026, 8, 11);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+    component.enableRecoveryNowMode = true;
+    component.chartDataType = DataRecoveryTime.type;
+    component.recoveryNow = { totalSeconds: 4 * 86400 + 3500, endTimeMs: now - 3600000 };
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', { value: width, configurable: true });
+    Object.defineProperty(component.chartDiv.nativeElement, 'clientHeight', { value: 260, configurable: true });
+    fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+    const option = mockLoader.setOption.mock.calls.at(-1)?.[1] as Record<string, any>;
+    const [label, value, meta] = option.graphic[0].children;
+    expect(option.series[0].radius).toEqual(['54%', '74%']);
+    expect(label.style.fontSize).toBeLessThan(ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE);
+    expect(value.style.fontSize).toBeLessThan(22);
+    expect(value.style.text).toBe(formatDashboardNumericValue(DataDuration.type, 4 * 86400 - 100, undefined as any));
+    expect(meta.style.text).toBe(`Total recovery:\n${formatDashboardNumericValue(DataDuration.type, 4 * 86400 + 3500, undefined as any)}`);
+    expect(meta.style.width).toBeLessThan(260 * 0.54);
+    expect(meta.style.overflow).toBe('break');
+    nowSpy.mockRestore();
+  });
+
+  it('updates Recovery layout in both resize directions without rebuilding the chart or repeating unchanged work', async () => {
+    const now = Date.UTC(2026, 8, 11);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+    const frames: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = vi.fn(callback => { frames.push(callback); return frames.length; });
+    component.enableRecoveryNowMode = true;
+    component.chartDataType = DataRecoveryTime.type;
+    component.recoveryNow = { totalSeconds: 4 * 86400 + 3500, endTimeMs: now - 3600000 };
+    const resize = (width: number, height: number) => {
+      Object.defineProperty(component.chartDiv.nativeElement, 'clientWidth', { configurable: true, value: width });
+      Object.defineProperty(component.chartDiv.nativeElement, 'clientHeight', { configurable: true, value: height });
+    };
+    resize(800, 400); fixture.detectChanges(); await fixture.whenStable();
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalled());
+    const original = mockLoader.setOption.mock.calls.at(-1)![1] as any;
+    expect(original.legend.orient).toBe('vertical');
+    frames.shift()!(0);
+    const writes = mockLoader.setOption.mock.calls.length;
+    resize(280, 260); resizeObserverRecords[0].trigger(); frames.shift()!(16);
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalledTimes(writes + 1));
+    const mobile = mockLoader.setOption.mock.calls.at(-1)![1] as any;
+    expect(mobile.legend).toMatchObject({ orient: 'horizontal', top: 'bottom' });
+    expect(mobile.graphic[0].children[1].style.text).toBe(original.graphic[0].children[1].style.text);
+    expect(mobile.graphic[0].children[1].style.fontSize).toBeLessThan(original.graphic[0].children[1].style.fontSize);
+    resizeObserverRecords[0].trigger(); frames.shift()!(32); await fixture.whenStable();
+    expect(mockLoader.setOption).toHaveBeenCalledTimes(writes + 1);
+    resize(800, 400); resizeObserverRecords[0].trigger(); frames.shift()!(48);
+    await vi.waitFor(() => expect(mockLoader.setOption).toHaveBeenCalledTimes(writes + 2));
+    expect((mockLoader.setOption.mock.calls.at(-1)![1] as any).legend.orient).toBe('vertical');
+    expect(mockLoader.init).toHaveBeenCalledOnce();
+    expect(mockLoader.dispose).not.toHaveBeenCalled();
+    nowSpy.mockRestore();
   });
 
   it('should compute recovery total from currently active segments only', async () => {

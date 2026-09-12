@@ -42,7 +42,7 @@ describe('dashboard-kpi-explanation.helper', () => {
       locale: 'en-US',
     });
 
-    expect(explanation.description).toContain('current-state label');
+    expect(explanation.description).toContain('current training load');
     expect(explanation.rows).toContainEqual({ label: 'Metric state', value: 'Ready' });
     expect(explanation.rows).toContainEqual({ label: 'Current label', value: 'Building' });
     expect(explanation.rows).toContainEqual({ label: 'Reason', value: 'Productive load' });

@@ -9,7 +9,8 @@ account, independently of Training plan checks. The workspace supplies a shared 
 freshness forecast, body-weight, power-system history, swimming trends and weekly durability charts. Notes preserve each
 chart's existing calendar convention; weekly tooltips retain actual dates. They never change Training inputs, formulas,
 readiness, forecasts, persisted snapshots or sport filters. The manager owns editing and account-scoped settings; charts
-never fetch private notes. Dashboard, public previews and non-calendar charts are not opted in.
+never fetch private notes. The owner’s Dashboard reuses these adapters for Form and Freshness Forecast alongside HRV,
+Sleep, and its calendars through one shared notes workspace. Public/library previews and non-calendar charts are not opted in.
 
 Current compatibility baseline:
 
@@ -85,6 +86,9 @@ The following rules are architectural constraints:
   0–100 bars. Those metrics retain exact values, semantic status/delta treatments, or their existing time-series charts.
   The shared indicator is native HTML/CSS for accessibility and low per-row cost; ECharts remains reserved for actual
   trends, distributions, forecasts, and interactive chart surfaces.
+  These display-only indicators use pointer pass-through so dragging over their tracks, fills, or coverage segments
+  reaches the surrounding scroll surface in Training and Dashboard Today. Their progressbar roles and accessible
+  labels remain exposed; they must not become sliders or intercept touch gestures.
 
 ## Ownership: Sports-lib Versus Quantified Self
 
@@ -212,7 +216,7 @@ Features hub, homepage link, Help link, sitemap, and `robots.txt` aligned when t
 
 Training planning is a separate authored-workout workflow at authenticated `/training/plans`; it does not change the analytical
 meaning of `/training`. Manual planning is available without a provider connection. A scheduled workout may belong to a
-plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is a future Pro action
+plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is an opt-in Pro action
 and must never be inferred from merely connecting a service.
 
 ### Canonical workout boundary
@@ -308,9 +312,10 @@ inferred rest days. Outside-range and selected-date states override the weekend 
 reorder the grid without changing the selected date, schedule, or workout counts.
 Initial selection is today when within the range, otherwise the plan start. Explicit selection is account/plan-scoped,
 survives live refresh and editor cancellation, and resolves back inside the range when dates shift. Saving selects the
-workout's destination date and scope. Calendar-originated query parameters select the linked workout's scope/date or
-the requested add scope/date before opening the editor, so cancelling returns to that context rather than hiding the
-workout on today's date. Out-of-range add dates remain editor drafts until an explicitly confirmed range extension.
+workout's destination date and scope. Calendar-originated path routes select the linked workout or requested add scope,
+while the optional `date` query selects the requested day. Cancelling therefore returns to that context rather than
+hiding the workout on today's date. Out-of-range add dates remain editor drafts until an explicitly confirmed range
+extension.
 The local-today marker refreshes each minute and immediately on window focus or mobile-tab visibility restoration.
 Clock refreshes are silent and never replace an explicitly selected date or an open editor draft. Standalone creation
 resolves its default date when Add is clicked, not when the workspace was first opened. The browser-only clock is
@@ -349,22 +354,167 @@ on phones rather than being truncated in single-line list slots. Failed history 
 The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
 workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and
 marked. Every rendered date is selectable, including empty dates. Day details keep **Planned workouts** and completed
-activities in separate sections. Planned workouts never enter recorded activity counts, durations, distance, elevation,
+activities in separate sections. Their navigation rows retain a visible trailing affordance at narrow widths, with
+supporting text yielding before that affordance. Planned workouts never enter recorded activity counts, durations, distance, elevation,
 group bars, activity tables, or Training-derived metrics.
 Planned and skipped icons use their current plan's color; standalone icons stay theme-neutral. The day-details planned
-rows repeat that accent on their leading edge. The overlay resolves colors from the live plans, so recoloring or moving
+rows repeat that accent as a rounded rail outside the Material row highlight, keeping the selection surface and color
+edge visually separate. Trailing navigation chevrons stay vertically centered for multi-line rows. The overlay resolves
+colors from the live plans, so recoloring or moving
 a workout changes its appearance without rewriting workout snapshots. Up to two icons are shown, reserving one for
 each scope when standalone and active-plan workouts share a day; extra workouts retain an overflow count. Compact and
 Year views turn these into slim right-edge color segments (dashed for skipped workouts), below any note icon and opposite
 the note-color edge. They omit the visual overflow count to avoid collisions; the date's accessible name and day details
 retain complete counts. Completed activity circles, note colors, and global weekend shading stay independent.
 
-`/training/plans` is authenticated, client-rendered, and excluded from the sitemap. Its route metadata is `noindex, follow`
-and hosting also supplies `noindex` headers; `robots.txt` permits crawling so those directives can be read. It is a
-full-page route registered before the analytical `/training` route, not embedded in the analysis workspace. Training
-Planning is not live yet: `/plans` is not registered and has no compatibility redirect. Calendar and help links use
-`/training/plans`, preserving date, standalone-scope, and workout query parameters. The sidebar entry remains indented
-beneath Training and UID-gated for presentation only; direct owner-scoped access is unchanged.
+The Training Planning route family is authenticated, client-rendered, and excluded from the sitemap. Route metadata is
+`noindex, follow` and hosting also supplies `noindex` headers; `robots.txt` permits crawling so those directives can be
+read. It is registered before the analytical `/training` route, not embedded in the analysis workspace. Stable entity
+identifiers are path segments, matching the rest of the app: `/training/plans/plan/:planId` browses a plan and
+`/training/plans/workout/:workoutId` edits a saved workout. `/training/plans/standalone` browses independent workouts;
+new-workout routes append `/new` to the selected plan or Standalone path, while `/training/plans/new` applies the normal
+active-plan-or-standalone default. The optional `date` query parameter selects or prefills a local calendar date; plan
+and workout identifiers, scope, editor mode, and unsaved form values never use query parameters.
+
+Opening an editor pushes a browser-history entry. Back and Forward restore the previous browse/editor state, including
+the selected plan and date, and Calendar-originated Back restores the open day detail. Cancel uses the recorded Plans
+return entry when available and otherwise replaces a direct deep link with its safe owner-scoped browse destination.
+Route changes may replace a draft, but live schedule and unit-setting updates do not. A pending save captures the owner
+and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. Training
+Planning is not live yet: `/plans` and the former query-parameter editor shapes are not registered and have no
+compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail.
+
+The shared `isTrainingPlanningUIAllowed` rollout in `shared/training-planning-rollout.ts` limits all planning UI to the
+explicitly allowlisted account. Other signed-in users are silently redirected from every `/training/plans` route to
+`/training`; signed-out navigation keeps the existing authentication flow. The workspace also clears/hides its editor
+on account changes. Full Calendar, Activity Calendar tiles and Today mini-calendars omit planning listeners, overlays,
+empty-day planning announcements and day-sheet planning actions for other accounts, while completed activities,
+Timeline notes and selectable dates remain unchanged. An already-open day sheet hides planning when its owner changes.
+Help filters planning articles, links and mixed-section text before search and Markdown rendering, including public
+prerendering and account changes. Planning-specific disconnect/deletion instructions use the same gate; generic
+provider-copy retention warnings and public privacy disclosures remain available. Existing Training analysis is not
+gated. This is a frontend presentation rollout, **not backend authorization**: owner-scoped APIs, Rules, provider
+readiness flags and delivery entitlement enforcement are unchanged. Broader rollout remains tracked by #655.
+
+### Provider delivery foundation (#646)
+
+The common delivery implementation lives in `functions/src/training-plans/delivery/`, with browser-safe v1 contracts in
+`shared/training-provider-delivery.ts`. It is independent of schedule history and leaves the exact `WorkoutStructureV1`
+JSON and Sports Lib conversion/formatting boundary unchanged. Real transports remain unavailable; the deterministic
+fake exists only in `delivery/test-support/`, is excluded from the Functions build, and has no browser/configuration switch.
+
+`previewTrainingProviderDelivery` and `mutateTrainingProviderDelivery` are focused, authenticated, App Check-enforced
+commands. Backend execution is necessary to resolve privileged connection authority and create background work; owner
+Rules/client transactions cannot authorize server-held provider credentials. Commands accept expected schedule, scope,
+and delivery-settings revisions and a mutation ID, never a UID, provider account ID, credential, or remote artifact ID.
+Receipts reject reuse with a different request and carry a 30-day `expireAt`; production TTL configuration is part of #655,
+not an operation performed by tests or this implementation. Manual authoring does not acquire a Pro requirement.
+
+Data ownership:
+
+| Path below `users/{uid}` | Access and purpose |
+| --- | --- |
+| `trainingDeliverySettings/{scope_scopeId_provider}` | Owner-readable consent, saved IANA zone, opaque destination fingerprint and revision; callable writes only. |
+| `trainingDeliveryStatuses/{deliveryId}` | Owner-readable allowlisted status, mapping warnings, artifact-presence flags, last attempt/acceptance timestamps, failure count and next retry time; no remote IDs, operation payloads or credentials. |
+| `trainingDeliveryState/current` and `receipts/*` | Private global settings revision, per-provider explicit-disconnect epochs and command receipts. |
+| `trainingDeliveryScopes/{workoutId}` | Private association generation; transfers/deletions cannot revive earlier standalone consent or suppressions. |
+| `trainingDeliveryLedger/{deliveryId}` and `attempts/*` | Private desired generation, independent actual artifact IDs, leases, operation-start and acceptance journals. Retained independently of deleted plan/workout roots. |
+
+`trainingDeliveryQueue` is a top-level server-only collection of compact **leaf** jobs. Schedule mutations, restore, plan
+deletion and delivery commands write a reconciliation marker in the same transaction, not a batch of provider payloads.
+The reconciler scans 25 current workouts per page (up to four destinations each), then 25 existing ledger identities per
+page, including deleted/historical sources. Each page rechecks schedule/settings revisions, plan-deletion locks and the
+account-deletion fence; obsolete scans restart. At most 100 compact ledgers/projections/jobs are considered in a current
+workout page. It never writes 400 workout payloads into a single document or transaction. Never-enrolled users have their
+marker removed without recurring scans. The pre-existing large manual-operation hardening remains #657.
+
+`onTrainingDeliveryQueued` dispatches due jobs, `processTrainingDeliveryTask` processes one bounded page or delivery,
+and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
+and queue-depth helpers. Reservation precedes enqueue, so lost acknowledgements and crashes are recoverable. A finished
+scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
+changes. Tasks may be duplicated; stable per-user/provider/account/workout identities, independent desired generations,
+180-second delivery leases and operation journals own idempotency. Shared retry limits/backoff and longer adapter delays
+apply. The 120-second worker timeout remains below its lease.
+
+Before transport work the worker rereads current intent, deletion locks, Pro, provider readiness and exact connection
+generation. A current OAuth credential generation and an unambiguous matching provider account are required; stale or
+ambiguous metadata produces connection repair, not a guessed account or account picker. A verified same-account reconnect
+can inspect the original unfinished operation with renewed authority. Auth/permission failures remain blocked against the
+failed connection generation. Explicit disconnect increments the consent epoch in the existing OAuth disconnect's initial
+transaction; subscription-driven disconnect and authentication failures do not invalidate consent.
+Recovery is transport work too: an auth/permission-blocked generation cannot inspect an unfinished operation. After
+inspection proves nonacceptance, the worker repeats admission before executing; Stop, edits, Pro expiry, disconnect or
+account deletion during inspection cannot release the obsolete operation.
+
+Every accepted artifact checkpoint survives a newer authored revision. The final acceptance records which operation and
+content were accepted, then reconciles current intent. Final upsert acceptance must identify at least one artifact and
+final removal must return none; inconsistent acknowledgements keep the operation unresolved for inspection instead of
+publishing false success. An interrupted/ambiguous operation is inspected before any repeat;
+only adapter-proven nonacceptance permits execution with the same operation identity. Uncertain inspection stops in
+`needs_attention`; Retry does not clear that evidence or blindly repeat a create. Account deletion fences all further local
+writes, including late acceptance checkpoints. Provider-held copies may remain after revoked access. Account cleanup
+recursively removes all five new user subtrees and all UID-associated top-level jobs; the recovery dispatcher also removes
+deletion-fenced leaf jobs after an interrupted cleanup.
+
+Consent/lifecycle rules:
+
+- Plans retain provider preferences while paused/archived, but only the active plan delivers. Pausing or activating another
+  plan withdraws eligible future copies; reactivation reconciles current content.
+- Permanent plan deletion retires its four provider-setting leaves atomically; independent delivery ledgers remain
+  available for withdrawal. Reusing an authored plan ID cannot revive deleted consent.
+- Standalone Send establishes ongoing opt-in. Copies never inherit it. Transfers adopt destination-plan settings while
+  retaining remote identity for the same account; moving back to Standalone requires a fresh Send. Workout-level Stop
+  suppresses inherited plan delivery until explicit Resume. Restore never restores provider consent.
+- Retry preserves consent, suppression and the saved zone. It can inspect unfinished operations or retry withdrawals
+  without Pro, but cannot authorize a create/update after Pro expires.
+- Pro expiry retains preferences and copies, pauses creates/updates, and permits eligible removal while access remains.
+  Resubscription reconciles only the latest eligible intent. Existing subscription enforcement may require reconnecting
+  the same account first; it never reactivates paused plans. A different account requires fresh consent.
+- Initial opt-in captures an explicit IANA zone, defaulted from the browser. Travel never changes it. Plan workouts inherit
+  the plan destination's zone; change that zone in the plan's provider settings. Eligibility starts at today in that zone,
+  respects adapter horizons/deletion restrictions and never automatically rewrites/removes past or completed workouts.
+- Compatibility combines canonical capability checks with serializer-specific losses. Approval binds to destination,
+  mapping version, date, zone, title and recipe digest. Unsupported/unapproved updates retain the old artifact and expose
+  the mismatch. A separate authored-content fingerprint avoids labelling unchanged Pro-paused copies as mismatches.
+
+The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
+Unavailable Send/configuration actions stay hidden, but existing settings, problems, reconnect links and Stop remain
+readable. Status details expand in groups of 25 using a live loaded-prefix query, so subsequent pages cannot retain stale
+statuses or miss records moving across page boundaries. Plan workouts retain Stop even when their first delivery fails.
+The workspace's **Delivery history** entry appears only when delivery records exist and remains reachable after deleting
+their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
+only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
+cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
+but cannot bypass explicit-disconnect epochs. Preview precedes consent; an uncertain callable response retains the
+same mutation ID for Retry. Account changes clear drafts/results and close the dialog. The planning UI rollout described
+above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
+Completed activity totals are unchanged.
+Connected-provider summaries and account-deletion confirmation explain that local cleanup does not guarantee removal
+of provider-held copies, and direct planning-enabled users to Stop sync before revoking access.
+
+Verification: `npm run test:training-delivery` runs unit and real loopback Firestore transaction fixtures without provider
+HTTP calls, including changes during inspection and failed withdrawals after source deletion. CI runs this command in
+addition to the Functions unit suite. Use `npm run test:rules` for owner/cross-user/write/internal-record denial. Frontend coverage includes
+`training-delivery-dialog.component.spec.ts`, `training-delivery.service.spec.ts` and the existing Plans/calendar suites.
+Build Functions and run `npm --prefix functions run secrets:check`; there are no new secrets. Deploy indexes/Functions and
+any receipt TTL policy only with separate approval. Do not add provider HTTP transports until #645 and #647–#650 pass
+their contract/sandbox gates; completion matching remains #651 and Sports Lib extraction #654.
+
+For isolated visual QA, create a temporary directory and set `TRAINING_DELIVERY_QA_DIR` to it when running
+`npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts`. The test exports synthetic Material
+dialog DOM for status, settings, preview, pending, Retry, history and deleted-source recovery states, including the real component SCSS compiled with the
+Angular build's Sass dependency. Build the local app, then link/copy `dist/browser/styles.css` and `dist/browser/media`
+beside the HTML. Open those fixtures in a browser at 320, 390 and 1440px in light/dark themes; verify readable status,
+labelled inputs, named dialog, wrapping, scrolling, Close, and disabled pending controls with no horizontal overflow.
+These rendered fixtures contain no application backend or selectable transport. Component tests exercise actual actions
+and account reset; emulator tests exercise backend lifecycle. Browser emulation does not establish physical vibration.
+
+Allowlisted diagnostics use the `[TrainingDelivery]` message with `event`, `provider`, `operation`, `category`, `retryCount`,
+`latencyMs`, `inspected`, and `dispatched` fields only. They exclude workout titles, recipes, IDs, tokens and provider errors.
+Cloud Logging filters: `jsonPayload.message="[TrainingDelivery]"`; add `jsonPayload.event="failure"` and group by
+`jsonPayload.category`/`jsonPayload.provider` for failures or missing permissions; use `accepted` with `latencyMs` for
+delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptance`/`recovery_dispatch` for recovery.
+Production dashboards, alerts, certification and manual enablement remain #655.
 
 ### Provider proof status
 
@@ -380,9 +530,10 @@ ELEMNT behavior, unsupported Wahoo relative references frozen to their stored ab
 Wahoo FTP/heart-rate header references, Suunto relative targets frozen to absolute values, Wahoo relative HR/speed
 target support limited to treadmill workouts in its app, cadence converted from rpm to hertz, Unicode-safe text
 truncation, and Suunto text outside the guaranteed minimum watch character set. Unsupported sport, ending, or target
-combinations fail instead of being approximated. Sandbox CRUD, idempotency, retry/reconnect, deletion, reconciliation,
-rollout, AI, templates, completion matching, and the Sports Lib extraction remain separately tracked by subissues
-#645–#655 and #657 under epic #583; they must not be left as anonymous TODOs.
+combinations fail instead of being approximated. The common lifecycle is proved with the #646 test transport above;
+real provider HTTP, callbacks and sandbox certification remain #645 and #647–#650. Rollout, AI, templates, completion
+matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
+These are explicit tracked slices, not anonymous TODOs.
 
 ### Product analytics
 
@@ -659,7 +810,7 @@ Training state and Readiness are fixed inside the optional Today summary:
   backend-derived
   `training_readiness` snapshot containing 14 UTC-aligned daily cutoffs. Each historical day uses the Form state for that
   day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff; a night older than 48 hours is
-  ineligible. HRV, average-heart-rate, and minimum-heart-rate baselines use up to 14 prior nights from the same provider
+  ineligible. HRV, average-heart-rate, and minimum-heart-rate baselines use up to 14 prior nights from the same provider and account
   and require at least three prior values for the matching measure. Average and minimum HR are not independent score
   drivers: their ratios are bounded to `0.8..1.2`, then combined into one Overnight HR ratio at 70% average and 30%
   minimum, with fallback to whichever is available. Lower HR relative to personal baseline supports that driver. The
@@ -682,6 +833,22 @@ Training state and Readiness are fixed inside the optional Today summary:
   exposes only an explicit identity-free driver projection with safe aggregate HRV/heart-rate values and evidence
   states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
   compact Training Summary; the frozen daily briefing remains unchanged.
+- **Nightly HRV evidence** comes from the shared read-time resolver in `shared/nightly-hrv.ts`. Native normalized Sleep
+  HRV wins; otherwise a canonical overnight-average Health summary may fill a missing main night only for the same
+  owner, provider/account, provider date, and overlapping sleep interval. A reading contributes once across fragments.
+  Spot/activity/manual HRV and conflicting sources remain unavailable. HRV baselines also require the same measurement
+  source/semantic; switching between Sleep averages and dedicated Health overnight measurements starts separate HRV
+  evidence. No all-day/resting HR value substitutes for overnight HR. Live Dashboard/Training listeners observe every
+  bounded Health page. `AppSleepService` delegates those live reads to `HrvHistoryService`, which shares matching
+  owner/date subscriptions until the last consumer leaves. The Dashboard HRV tile reuses its own complete Health
+  history for Sleep enrichment; source matching and native-HRV precedence remain the same. Historical readiness and
+  recovery builders use the same resolver over their bounded Sleep windows;
+  separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
+  HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
+  `training_readiness.payload.evidenceVersion = 1` lets the frontend and backend freshness gate rebuild old readiness
+  inputs without changing formula version 3. Recovery version 4 withholds HRV comparison across incompatible sources.
+  MCP projects out the internal readiness evidence version and retains its registered recovery version 3; its formulas
+  and wire shapes are unchanged. Rebuilds use the ordinary targeted ensure lifecycle, without a production migration.
 - **Body-weight trend** first reads positive canonical `body_weight` point measurements from Health. Provider and manual
   measurements are independent sources; each provider/account series reduces multiple values on one UTC day to a median.
   If any real Health Weight exists in the retained source window, workout profile Weight is excluded globally. Otherwise,
@@ -692,10 +859,11 @@ Training state and Readiness are fixed inside the optional Today summary:
   never exposes source-account keys. This remains neutral context, not a health assessment, training prescription, or
   input to Readiness, Form, or the TSS-only Training state.
 
-Dashboard Manager recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
+Dashboard **Reset to recommended** recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
 useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
 its default 14-day window, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild
-merely because the manager dialog was opened.
+merely because the inline chart library was opened. Selecting a chart reads existing prepared snapshots only;
+thumbnail examples and preview fallback data never enter Training calculations or trigger a rebuild.
 
 ### Writes and ingress
 
@@ -971,6 +1139,16 @@ timestamp. The training implication is deliberately non-prescriptive: it summari
 mixed, or strained and directs attention to the drivers rather than choosing a workout. Failed Form/ramp reads and a
 failed sleep listener are identified separately from genuinely missing evidence. Sleep already loaded before a listener
 failure remains visible only while it is still eligible; load-only readiness remains available afterward.
+
+Dashboard Today and Training withhold the readiness score, category, confidence, and signal count until both the initial
+derived snapshot emission and the bounded sleep listener have resolved for the current account. Dashboard shows
+**Loading readiness…** with a Material progress indicator; Training shows its preparing state during that interval.
+An uninitialized sleep list must never render as **No eligible
+night** or produce an interim load-only score. A successful empty sleep result settles loading and permits the normal
+load-only calculation. A failed first sleep read also settles loading, with explicit unavailable copy alongside any
+available load result. A later listener failure retains eligible sleep evidence, shows a refresh warning, and continues
+the normal age/baseline refresh timer. Hiding Today or switching accounts clears its sleep state, and re-entering waits
+for that account's first reads again. Later live evidence updates still recalculate readiness normally.
 
 Readiness is the recovery-aware companion to the load model, not a replacement for it. It adds recorded sleep, HRV, and
 overnight heart-rate evidence to the Form/ramp driver when those signals are available. Form/Freshness, CTL, ATL, Ramp,
@@ -1725,6 +1903,12 @@ UI principles:
 - Training-specific ECharts tooltips use the shared viewport-safe tooltip surface on larger screens so card and scroll
   containers cannot crop them. Narrow screens retain tap-triggered interaction; charts that fit their card remain
   confined, while the horizontally scrollable durability chart also uses the viewport-safe surface.
+- Readiness, body-weight, power-systems, swimming-performance, and durability plots use the shared
+  `EChartsHostController.deferUntilNearViewport` queue. Their titles, summaries, and controls render immediately;
+  ECharts initialization waits until near the scroll viewport and is spread across frames after the library loads.
+  The queue skips non-scrolling tab bodies and horizontal-only wrappers when finding the vertical scroll container.
+  Initialized plots stay mounted when scrolling away; leaving a route or replacing a sport's plot cancels pending work.
+  This changes presentation scheduling only; derived queries and metric calculations remain unchanged.
 - Responsive icon-only Training actions use plain Material buttons rather than outlined containers, hide only their
   projected text label, and reset Material's icon-and-text margins. This keeps their visible icons consistent with
   Dashboard header actions while preserving Material focus, ripple, and touch-target elements.
@@ -1927,6 +2111,10 @@ or persisted write paths change.
 
 ### Frontend
 
+Readiness service fixtures must include the current `READINESS_FORMULA_VERSION` and `READINESS_EVIDENCE_VERSION`.
+Keep separate stale-state coverage for an inconsistent score and missing evidence version, so a valid-fixture failure
+cannot mask the intended contract check. Freshness tooltip tests must preserve the training-load/recovery distinction.
+
 Run the closest helper/component specs, including:
 
 ```text
@@ -1966,7 +2154,10 @@ git diff --check
 For `/training/plans`, create synthetic paused plans with multiple workouts across weeks, months, and December/January,
 including a maximum 366-day range. Check forward/backward navigation through every month, exact inclusive boundaries,
 empty days, three or more same-day workouts, long titles, overflow-to-detail order, mobile editing/skip actions, and
-reload persistence at desktop and narrow-mobile widths. Verify all seven week-start choices, weekday header order,
+reload persistence at desktop and narrow-mobile widths. Open plan, Standalone, create, and saved-workout path URLs
+directly; verify refresh, Back, and Forward restore the correct scope/date/editor, Calendar Back reopens the originating
+day detail, invalid owner-scoped IDs fall back safely, and no entity ID appears in a query parameter. Verify all seven
+week-start choices, weekday header order,
 Saturday/Sunday tint across month/year boundaries, and selected/today/outside-range states. Use component fixtures for
 alternate preferences rather than changing the signed-in account's settings solely for QA. Keep the existing active plan
 unchanged and provider delivery disabled; test-data deletion requires its own explicit approval.

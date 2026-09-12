@@ -23,6 +23,13 @@
         @if (description) {
         <p>{{ description }}</p>
         }
+        @if (connected && (providerIcon === 'garmin' || providerIcon === 'coros' || providerIcon === 'suunto' || providerIcon === 'wahoo')) {
+        @if (hasTrainingPlanningUIAccess()) {
+        <p>Disconnecting ends any planned-workout sync opt-in and leaves provider copies. Use Stop sync in Training plans before disconnecting to remove eligible future copies.</p>
+        } @else {
+        <p>Copies previously sent to a provider may remain there after disconnecting.</p>
+        }
+        }
       </div>
 
       @if (proRequired) {

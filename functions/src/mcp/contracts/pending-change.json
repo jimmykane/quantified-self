@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "540d60767548ac9cdd3084ebb66b6cae350289ae257aa031c9f4f1104ee2ae61",
+  "candidateSha256": "486791db6ed3651f2f900b4e0230fd68c37886629e4845fcca261413aa31c050",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add opt-in full-text Timeline notes reads and consent-aware routing, preserving pending Health discovery/trends with provider semantics and Garmin stress availability, daily reports, safe activity/nearby-search replacements, multi-metric queries, Training discovery, activity overviews, all-history ISO-time rankings, jump-superlative/recent-jump and sleep-vital routing, and RS256 private_key_jwt alongside public PKCE.",
+  "summary": "Add paginated activity samples with existing grants, bounded parse reuse and client guidance; opt-in descriptions; shared Health/Sleep HRV ranges. Preserve Timeline notes/comparisons, Health provider/stress semantics, daily reports, safe activity/nearby search, multi-metric queries, Training discovery, activity overviews, all-history ISO rankings, jump/sleep-vital routing, and RS256 private_key_jwt plus public PKCE.",
   "rescanRequired": true
 }

@@ -23,6 +23,7 @@ export const MCP_OAUTH_SCOPES = {
   MeasurementsRead: 'measurements:read',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
+  ActivityDescriptionsRead: 'activity-descriptions:read',
   ActivityLocationRead: 'activity-location:read',
   RoutesRead: 'routes:read',
   RouteLocationRead: 'route-location:read',
@@ -35,7 +36,8 @@ export function hasValidMcpScopeDependencies(
 ): boolean {
   const selected = new Set(scopes);
   return !(
-    selected.has(MCP_OAUTH_SCOPES.ActivityLocationRead)
+    (selected.has(MCP_OAUTH_SCOPES.ActivityLocationRead)
+      || selected.has(MCP_OAUTH_SCOPES.ActivityDescriptionsRead))
     && !selected.has(MCP_OAUTH_SCOPES.ActivityDetailsRead)
   ) && !(
     selected.has(MCP_OAUTH_SCOPES.RouteLocationRead)
@@ -2112,7 +2114,8 @@ export function createMcpOAuthService(
       // Legacy consent requests may omit the selection. Preserve their existing
       // permissions, but never implicitly opt them into full private note text.
       const grantedScopes = normalizeOAuthScopes(input.grantedScopes
-        ?? request.scopes.filter(scope => scope !== MCP_OAUTH_SCOPES.TimelineNotesRead));
+        ?? request.scopes.filter(scope => scope !== MCP_OAUTH_SCOPES.TimelineNotesRead
+          && scope !== MCP_OAUTH_SCOPES.ActivityDescriptionsRead));
       if (grantedScopes.some(scope => !request.scopes.includes(scope))) {
         throw new McpOAuthError('invalid_scope', 'A scope was not included in the original request.');
       }

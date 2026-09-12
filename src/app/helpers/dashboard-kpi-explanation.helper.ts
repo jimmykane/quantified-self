@@ -1,3 +1,4 @@
+import { resolveDashboardChartInfoTooltip } from './dashboard-chart-info.helper';
 import {
   formatDashboardWeekRangeLabel,
 } from './dashboard-chart-data.helper';
@@ -107,66 +108,31 @@ export function buildDashboardKpiExplanation(
 }
 
 function resolveDescription(inputs: DashboardKpiExplanationInputs): string {
-  switch (inputs.chartType) {
-    case DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE:
-      return 'Shows the latest stable imported VO2 max observation. It is not inferred from FTP or critical power.';
-    case DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE:
-      return inputs.aerobicDurability?.metric === 'pace-retention'
-        ? 'Shows pool durability from persisted eligible activity evidence; higher pace retention is steadier.'
-        : 'Shows long-session durability from persisted eligible activity evidence; lower aerobic decoupling is steadier.';
-    case DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE:
-      return 'Combines current Form, ramp rate, CTL, and ATL from the same UTC-day Form model into one current-state label. It is TSS-only; Today Readiness separately adds recorded recovery signals when available.';
-    case DASHBOARD_FORM_NOW_KPI_CHART_TYPE:
-      return 'Current Form is TSB: CTL minus ATL. It uses the same UTC-day Form series as the chart and decays through today after the latest workout. It is TSS-only; Today Readiness separately adds recorded recovery signals when available.';
-    case DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE:
-      return 'Fitness is current CTL, a 42-day exponential moving average of daily TSS, carried through empty UTC days with zero load.';
-    case DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE:
-      return 'Fatigue is current ATL, a 7-day exponential moving average of daily TSS, carried through empty UTC days with zero load.';
-    case DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE:
-      return 'Shows recent CTL direction so you can see whether chronic training load is rising or easing.';
-    case DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE:
-      return 'Shows recent ATL direction so you can see whether short-term fatigue is building or clearing.';
-    case DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE:
-      return 'Estimates zero-load days until current Form returns to neutral.';
-    case DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE:
-      return 'Projects TSS-only Form seven days ahead assuming no new training load. It does not forecast sleep or other recovery signals.';
-    case DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE:
-      return 'Summarizes the latest weekly Easy, Moderate, and Hard intensity mix.';
-    case DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE:
-      return 'Shows the latest weekly share of easy intensity work.';
-    case DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE:
-      return 'Shows the latest weekly share of hard intensity work.';
-    case DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE:
-      return 'Compares latest weekly efficiency with the previous baseline weeks.';
-    case DASHBOARD_RAMP_RATE_KPI_CHART_TYPE:
-      return 'Ramp Rate is CTL today minus CTL seven UTC days ago, calculated from the same current Form series.';
-    case DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE:
-      return 'Monotony captures day-to-day load variation; strain combines weekly load with monotony.';
-    case DASHBOARD_ACWR_KPI_CHART_TYPE:
-    default:
-      return 'ACWR compares acute 7-day load with chronic 28-day load normalized to one week.';
+  if (inputs.chartType === DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE && inputs.aerobicDurability?.metric === 'pace-retention') {
+    return 'Shows how well you maintain your pace during longer pool swims; higher pace retention is steadier. Only workouts with enough suitable recorded data contribute.';
   }
+  return resolveDashboardChartInfoTooltip(inputs.chartType) || '';
 }
 
 function resolveMissingHint(chartType: DashboardKpiChartType): string {
   switch (chartType) {
     case DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE:
-      return 'Needs a stable imported VO2 max observation from a running or cycling activity.';
+      return 'Needs a recorded VO2 max value from a running or cycling activity.';
     case DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE:
-      return 'Needs eligible persisted durability evidence from comparable long aerobic activities.';
+      return 'Needs longer aerobic workouts with enough suitable data to compare how steadily you maintain effort.';
     case DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE:
     case DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE:
     case DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE:
-      return 'Needs activities with usable power or heart-rate zone data to build weekly intensity buckets.';
+      return 'Needs workouts with recorded time in power or heart-rate zones.';
     case DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE:
       return 'Needs activities with both average power and average heart rate across enough recent weeks.';
     case DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE:
       return 'Needs several days of TSS load in the recent week to calculate monotony and strain.';
     case DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE:
     case DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE:
-      return 'Needs derived Form and Freshness Forecast data from activities with TSS.';
+      return 'Needs workouts with Training Stress Score (TSS) to estimate form and freshness.';
     default:
-      return 'Needs activities with Training Stress Score so derived training-load metrics can be calculated.';
+      return 'Needs workouts with Training Stress Score (TSS) to calculate training load.';
   }
 }
 

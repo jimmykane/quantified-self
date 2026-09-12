@@ -286,6 +286,26 @@ describe('Health metric chart helpers', () => {
       .toContain(`background:${AppDataColors.Stress}`);
   });
 
+  it.each([false, true])('renders baseline days independently of missing readings (compact=%s)', compact => {
+    const model = buildHealthChartModels([series({ metricId: HEALTH_METRIC_IDS.HeartRateVariability,
+      unit: 'millisecond', points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 40, qualityCode: null },
+        { timestampMs: DAY_MS * 4, calendarDate: '1970-01-05', value: 42, qualityCode: null },
+      ] })], 0, DAY_MS * 4)[0];
+    const option = buildHealthMetricEChartsOption(model, 0, DAY_MS * 4,
+      buildDashboardEChartsStyleTokens(false, 320), false, null, compact, {
+        normalRangeColor: AppDataColors.Altitude, statusColor: AppDataColors.Altitude,
+        rangePoints: Array.from({ length: 5 }, (_, day) => ({ timestampMs: day * DAY_MS,
+          normalRange: day === 3 ? null : { min: 30 + day, max: 45 + day } })),
+      });
+    const plots = option.series as Array<{ id?: string; data: unknown[]; connectNulls?: boolean; step?: string }>;
+    expect(plots.find(plot => plot.id === 'hrv-personal-range-lower')).toMatchObject({
+      data: [[0, 30], [DAY_MS, 31], [DAY_MS * 2, 32], [DAY_MS * 3, null], [DAY_MS * 4, 34]],
+      connectNulls: false, step: 'end',
+    });
+    expect(model.displayedPoints).toHaveLength(2);
+  });
+
   it('does not connect point-in-time HRV colors across missing nights', () => {
     const hrvSeries = series({
       metricId: HEALTH_METRIC_IDS.HeartRateVariability,

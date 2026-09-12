@@ -34,7 +34,7 @@
   <div class="activity-calendar-tile-status activity-calendar-tile-status--error" role="alert">
     <mat-icon aria-hidden="true">error_outline</mat-icon>
     <span>Calendar unavailable</span>
-    <button mat-icon-button type="button" matTooltip="Retry" aria-label="Retry loading calendar" (click)="retry()">
+    <button mat-icon-button type="button" appHapticTap matTooltip="Retry" aria-label="Retry loading calendar" (click)="retry()">
       <mat-icon>refresh</mat-icon>
     </button>
   </div>
@@ -42,14 +42,16 @@
   <app-activity-calendar-grid
     [model]="calendarModel()"
     [compact]="true"
+    [fillHeight]="fillHeight()"
     [hideOutsideDays]="true"
-    [plannedWorkoutsByDate]="plannedWorkoutsByDate()"
+    [plannedWorkoutsByDate]="hasTrainingPlanningUIAccess() ? plannedWorkoutsByDate() : null"
+    [timelineNotesByDate]="notesByDate()"
     (daySelected)="openDay($event)">
   </app-activity-calendar-grid>
   @if (eventState().status === 'ready' && !hasEvents()) {
   <div class="activity-calendar-tile-status" role="status">No completed activities this month</div>
   }
-  @if (plansState().status === 'error') {
+  @if (hasTrainingPlanningUIAccess() && plansState().status === 'error') {
   <div class="activity-calendar-tile-status" role="status">Planned workouts unavailable</div>
   }
 </section>

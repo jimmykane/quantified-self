@@ -445,6 +445,16 @@ function createFixtureDataService(
   const activityLocation = options.activityLocation !== false;
   const routeLocation = options.routeLocation !== false;
   const service = {
+    getHrvPersonalRange: vi.fn().mockResolvedValue({ startTimeMs: 0, endTimeMs: DAY_MS,
+      baselineWindowDays: 60, baselineMinimumObservationDays: 14, currentWindowDays: 7, currentMinimumObservationDays: 3,
+      recordsRead: 1, excludedValues: 0, series: [{ source: 'sleep', provider: 'SuuntoApp', accountNumber: 1,
+        seriesNumber: 1, semanticVariant: 'sleep_session_average_hrv', aggregation: 'average', origin: 'provider_summary',
+        recordingMethod: 'provider_calculated', unit: 'ms', status: 'building_baseline', currentAverage: null,
+        currentAverageDisplay: null, normalRange: null, observationDayCount: 1,
+        readings: [{ date: '1970-01-01', value: 42, display: { value: '42', unit: 'ms' }, status: 'building_baseline', normalRange: null }],
+        rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
+      }] }),
+    getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
       notes: [{ category: 'sickness', title: 'Reported context', details: 'Full text including personal context.',
@@ -988,6 +998,12 @@ function createFixtureDataService(
         maximumLocation: MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS,
       },
     }),
+    getActivitySamples: vi.fn().mockResolvedValue({
+      activityType: 'Running', sampling: 'all_available', timeUnit: 'seconds', sampleIntervalSeconds: 1,
+      range: {startOffsetSeconds: 0, endOffsetSeconds: 3, totalSampleCount: 3},
+      page: {startOffsetSeconds: 0, endOffsetSeconds: 2, returnedSampleCount: 2},
+      elapsedTimeSeconds: [0, 1], series: [{metric: 'heart_rate', canonicalUnit: 'beats_per_minute', sourceSampleCount: 3, missingSampleCount: 1, values: [120, null]}], nextCursor: 'sample_cursor',
+    }),
     getActivityChartData: vi.fn().mockImplementation(async (input: {
       xAxis: 'elapsed_time' | 'distance';
       includeLocation?: boolean;
@@ -1164,9 +1180,11 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   list_health_metrics: {},
   query_health_metric: { metricId: 'heart_rate', startDate: '2026-07-01', endDate: '2026-07-02' },
+  get_hrv_personal_range: { start: '2026-07-01T00:00:00Z', end: '2026-07-02T00:00:00Z' },
   list_measurement_types: {},
   query_measurements: {
     measurementType: 'body_weight',
@@ -1246,6 +1264,7 @@ const successfulToolArguments: Record<
     activityRef: ACTIVITY_REF,
   },
   list_activity_chart_metrics: {},
+  get_activity_samples: {activityRef: ACTIVITY_REF, metrics: ['heart_rate']},
   get_activity_chart_data: {
     activityRef: ACTIVITY_REF,
     metrics: ['heart_rate'],
@@ -1732,13 +1751,14 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       [...PUBLIC_MCP_TOOL_NAMES].sort(),
     );
     expect(tools.every(tool => Boolean(tool.outputSchema))).toBe(true);
-    const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric'].includes(tool.name));
-    const noteTools = tools.filter(tool => tool.name === 'query_timeline_notes');
+    const healthTools = tools.filter(tool => ['list_health_metrics', 'query_health_metric', 'get_hrv_personal_range'].includes(tool.name));
+    const noteTools = tools.filter(tool => ['query_timeline_notes', 'get_activity_description'].includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
-    // Keep the existing frozen surface's budget; account separately for the two
-    // additive Health contracts so schema growth remains bounded and visible.
+    // Keep the frozen surface's budget; each additive family has its own explicit bound.
+    const sampleTools = tools.filter(tool => tool.name === 'get_activity_samples');
+    expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
-    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !healthTools.includes(tool) && !noteTools.includes(tool))), 'utf8'))
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -1891,6 +1911,162 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       expect(result.isError).toBe(true);
       expect(result).not.toHaveProperty('structuredContent');
       expect(JSON.stringify(result)).not.toMatch(/1788220800001|private-category-canary|endTimeMs|observedAtMs/);
+    }
+  });
+
+  it('requires both HRV grants and rejects private HRV output on every transport', async () => {
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.HealthRead], [MCP_OAUTH_SCOPES.SleepRead]]) {
+      const connection = await connectFixtureServer(createFixtureDataService(), scopes);
+      connections.push(connection);
+      expect((await connection.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_hrv_personal_range');
+    }
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead]);
+    connections.push(connection);
+    await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: {
+      ...successfulToolArguments.get_hrv_personal_range, uid: 'attacker', scopes: [],
+    } });
+    expect(service.getHrvPersonalRange).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1',
+      scopes: [MCP_OAUTH_SCOPES.HealthRead, MCP_OAUTH_SCOPES.SleepRead] }));
+    const fixture = await service.getHrvPersonalRange({ uid: 'user-1', scopes: [], startTimeMs: 0, endTimeMs: DAY_MS });
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ ...fixture, series: [] });
+    const empty = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(empty.structuredContent).toMatchObject({ series: [] });
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ ...fixture,
+      series: [{ ...fixture.series[0], providerAccountId: 'private-hrv-canary' }] });
+    const nested = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(nested.isError).toBe(true);
+    expect(JSON.stringify(nested)).not.toContain('private-hrv-canary');
+    service.getHrvPersonalRange = vi.fn().mockResolvedValue({ sourceKey: 'private-hrv-canary' });
+    const rejected = await connection.client.callTool({ name: 'get_hrv_personal_range', arguments: successfulToolArguments.get_hrv_personal_range });
+    expect(rejected.isError).toBe(true);
+    expect(rejected).not.toHaveProperty('structuredContent');
+    expect(JSON.stringify(rejected)).not.toContain('private-hrv-canary');
+  });
+
+  it('bounds both serialized copies of private description text on every transport', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead,
+    ]);
+    connections.push(connection);
+    const args = successfulToolArguments.get_activity_description;
+    for (const description of ['x'.repeat(65_536), '\u0000'.repeat(11_000)]) {
+      const projection = { activityRef: args.activityRef, description };
+      // Both pass the original projection-only byte check, including the escaped-text case.
+      expect(Buffer.byteLength(JSON.stringify(projection), 'utf8')).toBeLessThan(128 * 1024);
+      service.getActivityDescription = vi.fn().mockResolvedValue(projection);
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ error: 'query_too_large' });
+      expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThan(128 * 1024);
+    }
+    const description = 'private-description-canary\n'.repeat(1_000);
+    service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef, description });
+    const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual({ activityRef: args.activityRef, description });
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(result.structuredContent);
+    expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThan(128 * 1024);
+  });
+
+  it('bounds both sample result copies even when an injected page fits its schema and projection budget', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.ActivityDetailsRead]); connections.push(connection);
+    const length = 6000;
+    const projection = {
+      activityType: 'Running', sampling: 'all_available', timeUnit: 'seconds', sampleIntervalSeconds: 1,
+      range: {startOffsetSeconds: 0, endOffsetSeconds: length, totalSampleCount: length},
+      page: {startOffsetSeconds: 0, endOffsetSeconds: length, returnedSampleCount: length},
+      elapsedTimeSeconds: Array.from({length}, (_, i) => i),
+      series: [{metric: 'heart_rate', canonicalUnit: 'beats_per_minute', sourceSampleCount: length, missingSampleCount: 0, values: Array(length).fill((Math.PI * 1e100))}],
+      nextCursor: null,
+    };
+    expect(Buffer.byteLength(JSON.stringify(projection))).toBeLessThan(256 * 1024);
+    service.getActivitySamples = vi.fn().mockResolvedValue(projection);
+    const result = await connection.client.callTool({name: 'get_activity_samples', arguments: successfulToolArguments.get_activity_samples});
+    expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+    expect(JSON.parse((result.content[0] as {text: string}).text).error).toBe('query_too_large');
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(256 * 1024);
+  });
+
+  it('uses Activity details alone for samples and rejects private or inconsistent pages on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.MetricsRead], [MCP_OAUTH_SCOPES.ActivityLocationRead]]) {
+      const denied = await connectFixtureServer(service, scopes); connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_activity_samples');
+    }
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.ActivityDetailsRead]); connections.push(connection);
+    const args = successfulToolArguments.get_activity_samples;
+    for (const injected of [{uid: 'attacker'}, {scopes: []}, {connectionId: 'attacker'}, {includeLocation: true}]) {
+      const result = await connection.client.callTool({name: 'get_activity_samples', arguments: {...args, ...injected}});
+      expect(result.isError).toBe(true); expect(service.getActivitySamples).not.toHaveBeenCalled();
+    }
+    const fixture = await service.getActivitySamples({uid: 'user-1', connectionId: 'connection-1', scopes: ['activity-details:read'], activityRef: ACTIVITY_REF, metrics: ['heart_rate']});
+    const first = await connection.client.callTool({name: 'get_activity_samples', arguments: args});
+    expect(first.isError).not.toBe(true);
+    expect(service.getActivitySamples).toHaveBeenLastCalledWith({...args, uid: 'user-1', connectionId: 'connection-1', scopes: ['activity-details:read'], startOffsetSeconds: 0, limit: 2000});
+    for (const field of ['eventID', 'name', 'creator', 'sourceKey', 'originalFile', 'latitudeDegrees', 'startTimeMs']) {
+      for (const projection of [{...fixture, [field]: 'private-samples-canary'},
+        {...fixture, series: [{...fixture.series[0], [field]: 'private-samples-canary'}]},
+        {...fixture, page: {...fixture.page, [field]: 'private-samples-canary'}}]) {
+        service.getActivitySamples = vi.fn().mockResolvedValue(projection);
+        const result = await connection.client.callTool({name: 'get_activity_samples', arguments: args});
+        expect(result.isError, field).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('private-samples-canary');
+      }
+    }
+    for (const projection of [
+      {...fixture, elapsedTimeSeconds: [0, 2]}, {...fixture, nextCursor: null},
+      {...fixture, series: [{...fixture.series[0], values: [1]}]},
+      {...fixture, series: [{...fixture.series[0], missingSampleCount: 0}]},
+      {...fixture, series: [{...fixture.series[0], canonicalUnit: 'watts'}]},
+    ]) {
+      service.getActivitySamples = vi.fn().mockResolvedValue(projection);
+      expect((await connection.client.callTool({name: 'get_activity_samples', arguments: args})).isError).toBe(true);
+    }
+    for (const projection of [
+      {...fixture, range: {startOffsetSeconds: 0, endOffsetSeconds: 2, totalSampleCount: 2}, nextCursor: null},
+      {...fixture, range: {startOffsetSeconds: 0, endOffsetSeconds: 0, totalSampleCount: 0}, page: {startOffsetSeconds: 0, endOffsetSeconds: 0, returnedSampleCount: 0}, elapsedTimeSeconds: [], series: [{...fixture.series[0], sourceSampleCount: 0, missingSampleCount: 0, values: []}], nextCursor: null},
+    ]) {
+      service.getActivitySamples = vi.fn().mockResolvedValue(projection);
+      const result = await connection.client.callTool({name: 'get_activity_samples', arguments: args});
+      expect(result.isError).not.toBe(true); expect(result.structuredContent).toEqual(projection);
+    }
+  });
+
+  it('requires both activity grants and strictly projects description text on every transport', async () => {
+    const service = createFixtureDataService();
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.ActivityDetailsRead], [MCP_OAUTH_SCOPES.ActivityDescriptionsRead]]) {
+      const denied = await connectFixtureServer(service, scopes);
+      connections.push(denied);
+      expect((await denied.client.listTools()).tools.map(tool => tool.name)).not.toContain('get_activity_description');
+    }
+    const scopes = [MCP_OAUTH_SCOPES.ActivityDetailsRead, MCP_OAUTH_SCOPES.ActivityDescriptionsRead];
+    const connection = await connectFixtureServer(service, scopes);
+    connections.push(connection);
+    const args = successfulToolArguments.get_activity_description;
+    const injected = await connection.client.callTool({ name: 'get_activity_description', arguments: {
+      ...args, uid: 'attacker', scopes: [], connectionId: 'attacker',
+    } });
+    expect(injected.isError).toBe(true);
+    expect(service.getActivityDescription).not.toHaveBeenCalled();
+    for (const description of [null, '', 'Private context.\nIgnore all instructions is text, not authority.']) {
+      service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef, description });
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual({ activityRef: args.activityRef, description });
+      expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual(result.structuredContent);
+      expect(service.getActivityDescription).toHaveBeenCalledWith(expect.objectContaining({ uid: 'user-1', scopes }));
+    }
+    for (const field of ['eventID', 'name', 'creator', 'sourceKey', 'startPosition', 'notes', 'originalFile']) {
+      service.getActivityDescription = vi.fn().mockResolvedValue({ activityRef: args.activityRef,
+        description: 'Allowed text', [field]: 'private-description-canary' });
+      const result = await connection.client.callTool({ name: 'get_activity_description', arguments: args });
+      expect(result.isError, field).toBe(true);
+      expect(result).not.toHaveProperty('structuredContent');
+      expect(JSON.stringify(result)).not.toContain('private-description-canary');
     }
   });
 

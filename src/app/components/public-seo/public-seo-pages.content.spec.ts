@@ -145,9 +145,13 @@ describe('public-seo-pages.content', () => {
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => (
       section.items?.some(item => item.copy.includes('recent training trends'))
     ))).toBe(true);
-    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, and optional Timeline notes');
+    expect(PUBLIC_SEO_PAGES.mcpServer.description).toContain('measurements, routes, optional Timeline notes and activity descriptions');
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my activity descriptions'))?.answer)
+      .toContain('description checkbox starts checked; uncheck it before approving to withhold access');
     expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)
       .toContain('sensitive health or personal information');
+    expect(PUBLIC_SEO_PAGES.mcpServer.faqItems.find(item => item.question.includes('read my Timeline notes'))?.answer)
+      .toContain('selected by default when requested. Uncheck it before approving to withhold access.');
     expect(PUBLIC_SEO_PAGES.mcpServer.intro).toContain('plan your next workout');
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.title === 'Ask about training, workouts, sleep, measurements, and routes')).toBe(true);
     expect(PUBLIC_SEO_PAGES.mcpServer.sections.some(section => section.copy.includes('disconnect it from Connections'))).toBe(true);

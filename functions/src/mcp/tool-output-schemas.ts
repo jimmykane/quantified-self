@@ -1,3 +1,4 @@
+import { MCP_ACTIVITY_SAMPLES_SCHEMA } from './activity-samples.schema';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -31,6 +32,8 @@ import {
 } from './derived-output-schemas';
 import { MCP_MEASUREMENT_TYPE_IDS } from './measurement-catalog';
 import { MCP_HEALTH_CATALOG_SCHEMA, MCP_HEALTH_QUERY_SCHEMA } from './health.service';
+import { MCP_HRV_RANGE_SCHEMA } from './hrv-personal-range.service';
+import { MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH } from './activity-description.service';
 import { MCP_TIMELINE_NOTES_SCHEMA } from './timeline-notes.service';
 import { MCP_SLEEP_VITAL_TYPES } from './sleep-vitals';
 import {
@@ -38,9 +41,11 @@ import {
 } from './training-metric-catalog';
 
 export const PUBLIC_MCP_TOOL_NAMES = [
+  'get_activity_description',
   'query_timeline_notes',
   'list_health_metrics',
   'query_health_metric',
+  'get_hrv_personal_range',
   'list_measurement_types',
   'query_measurements',
   'list_metrics',
@@ -64,6 +69,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'list_activity_jumps',
   'list_activity_swim_lengths',
   'list_activity_chart_metrics',
+  'get_activity_samples',
   'get_activity_chart_data',
   'get_activity_metrics',
   'get_activity_overview',
@@ -1338,6 +1344,11 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
   const registry = {
     list_health_metrics: MCP_HEALTH_CATALOG_SCHEMA,
     query_health_metric: MCP_HEALTH_QUERY_SCHEMA,
+    get_hrv_personal_range: MCP_HRV_RANGE_SCHEMA,
+    get_activity_description: z.strictObject({
+      activityRef: MCP_ACTIVITY_REFERENCE_OUTPUT_SCHEMA,
+      description: z.string().max(MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH).nullable(),
+    }),
     query_timeline_notes: MCP_TIMELINE_NOTES_SCHEMA,
     list_measurement_types: z.strictObject({
       measurementTypes: z.array(measurementDescriptor),
@@ -1544,6 +1555,7 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
         maximumLocation: z.literal(MCP_ACTIVITY_CHART_MAX_LOCATION_POINTS),
       }),
     }),
+    get_activity_samples: MCP_ACTIVITY_SAMPLES_SCHEMA,
     get_activity_chart_data: chartDataOutput(scope.activityLocation),
     get_activity_metrics: z.strictObject({
       selectedMetricCount: count,

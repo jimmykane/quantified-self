@@ -1,3 +1,5 @@
+import { DashboardConfigurationService } from '../../../../services/dashboard-configuration.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -5,10 +7,9 @@ import { TileMapActionsComponent } from './tile.map.actions.component';
 import { AppUserService } from '../../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { AppHapticsService } from '../../../../services/app.haptics.service';
-import { TileActionsFooterComponent } from '../footer/tile.actions.footer.component';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi } from 'vitest';
 import { TileTypes } from '@sports-alliance/sports-lib';
@@ -18,10 +19,11 @@ describe('TileMapActionsComponent', () => {
   let fixture: ComponentFixture<TileMapActionsComponent>;
   let userMock: any;
   let analyticsMock: any;
-  let hapticsMock: { selection: ReturnType<typeof vi.fn> };
+  let hapticsMock: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     userMock = {
+      uid: 'owner',
       settings: {
         appSettings: { theme: 'dark' },
         unitSettings: { startOfTheWeek: 1 },
@@ -39,18 +41,20 @@ describe('TileMapActionsComponent', () => {
       logEvent: vi.fn(),
     };
     hapticsMock = {
-      selection: vi.fn(),
+      selection: vi.fn(), success: vi.fn(), error: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TileMapActionsComponent, TileActionsFooterComponent],
+      declarations: [TileMapActionsComponent],
       imports: [
         MatMenuModule,
-        MatSelectModule,
         MatIconModule,
+        MatProgressSpinnerModule,
         BrowserAnimationsModule,
       ],
       providers: [
+        { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => userMock.updateUserProperties(userMock, { settings: { dashboardSettings: patch } }) } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: AppUserService, useValue: userMock },
         { provide: AppAnalyticsService, useValue: analyticsMock },
         { provide: AppHapticsService, useValue: hapticsMock },
@@ -67,25 +71,81 @@ describe('TileMapActionsComponent', () => {
     fixture.detectChanges();
   });
 
+  it('uses map wording and disables all actions while an open menu is saving', async () => {
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-label')).toBe('Map actions');
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).toContain('Edit map');
+    expect(menu.textContent).toContain('Remove map');
+    component.isSaving = true; fixture.detectChanges();
+    expect(Array.from(menu.querySelectorAll<HTMLButtonElement>('button')).every(button => button.disabled)).toBe(true);
+    hapticsMock.selection.mockClear();
+    const emitted = vi.spyOn(component.editTile, 'emit');
+    component.openEditTile(new MouseEvent('click'));
+    expect(emitted).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+  });
+  it('includes Remove map in keyboard navigation and persists it once', async () => {
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector<HTMLElement>('[role="menu"]')!;
+    hapticsMock.selection.mockClear();
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }));
+    const remove = document.activeElement as HTMLButtonElement;
+    expect(remove.textContent).toContain('Remove map');
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    remove.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalledOnce();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsMock.success).toHaveBeenCalledOnce();
+    expect(hapticsMock.error).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['columns', 'Columns: 1', '2 columns'],
+    ['rows', 'Rows: 1', '2 rows'],
+  ])('opens %s with arrow keys and saves the selected size once', async (dimension, label, choice) => {
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector<HTMLElement>('[role="menu"]')!;
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', keyCode: 36, bubbles: true }));
+    if (dimension === 'rows') menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }));
+    expect(document.activeElement?.textContent).toContain(label);
+    hapticsMock.selection.mockClear();
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', keyCode: 39, bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable();
+    const choices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+    expect(choices).toHaveLength(4);
+    expect(choices[0].getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(choices[0]);
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    hapticsMock.selection.mockClear();
+    choices.find(button => button.textContent?.includes(choice))!.click();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(userMock.settings.dashboardSettings.tiles[0].size[dimension]).toBe(2);
+    expect(userMock.updateUserProperties).toHaveBeenCalledOnce();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsMock.success).toHaveBeenCalledOnce();
+  });
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
   it('should use form menu panel classes', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/map/tile.map.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
     expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
   });
 
-  it('should use compact submenu panel classes for row and column size selects', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/map/tile.map.actions.component.html');
-    const template = readFileSync(templatePath, 'utf8');
-    const compactClassMatches = template.match(/panelClass="qs-config-submenu qs-config-submenu-compact"/g) ?? [];
-    expect(compactClassMatches.length).toBe(2);
-  });
-
   it('should remove type and map setting controls from the map tile menu', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/map/tile.map.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
 
     expect(template).not.toContain('<mat-label>Type');
@@ -94,19 +154,48 @@ describe('TileMapActionsComponent', () => {
     expect(template).toContain('Edit');
   });
 
-  it('should emit editInDashboardManager with current tile order', () => {
+  it('should emit editTile with current tile order', () => {
     const emittedOrders: number[] = [];
-    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+    component.editTile.subscribe((order) => emittedOrders.push(order));
     const preventDefault = vi.fn();
     const stopPropagation = vi.fn();
 
     component.order = 1;
-    component.openEditInDashboardManager({ preventDefault, stopPropagation } as any);
+    component.openEditTile({ preventDefault, stopPropagation } as any);
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(stopPropagation).toHaveBeenCalledTimes(1);
     expect(emittedOrders).toEqual([1]);
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['success', 'failure'])('shows progress until a layout save finishes with %s', async outcome => {
+    let resolveSave!: () => void;
+    let rejectSave!: (error: Error) => void;
+    userMock.updateUserProperties.mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+      resolveSave = resolve;
+      rejectSave = reject;
+    }));
+    const save = component.changeTileColumnSize({ value: 2 }).catch(error => error);
+    fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    expect(trigger.disabled).toBe(true);
+    expect(trigger.getAttribute('aria-busy')).toBe('true');
+    expect(trigger.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe('Saving dashboard changes');
+    expect(hapticsMock.success).not.toHaveBeenCalled();
+    expect(hapticsMock.error).not.toHaveBeenCalled();
+    await component.changeTileRowSize({ value: 3 });
+    expect(userMock.updateUserProperties).toHaveBeenCalledOnce();
+    if (outcome === 'success') resolveSave();
+    else rejectSave(new Error('Save failed'));
+    await save;
+    fixture.detectChanges();
+    expect(trigger.disabled).toBe(false);
+    expect(trigger.getAttribute('aria-busy')).toBe('false');
+    expect(trigger.querySelector('[role="progressbar"]')).toBeNull();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsMock.success).toHaveBeenCalledTimes(outcome === 'success' ? 1 : 0);
+    expect(hapticsMock.error).toHaveBeenCalledTimes(outcome === 'failure' ? 1 : 0);
   });
 
   it('should emit savingChange while persisting structural settings', async () => {
@@ -128,12 +217,19 @@ describe('TileMapActionsComponent', () => {
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
-  it('should hide layout controls when disabled', () => {
-    component.showLayoutControls = false;
-    fixture.detectChanges();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-size-actions')).toBeNull();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-actions-divider')).toBeNull();
+  it('omits layout choices for compact tiles and ignores resizing', async () => {
+    component.showLayoutControls = false; fixture.detectChanges();
+    fixture.nativeElement.querySelector('.tile-actions-trigger').click();
+    fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).not.toContain('Columns:');
+    expect(menu.textContent).not.toContain('Rows:');
+    expect(menu.textContent).toContain('Move earlier');
+    hapticsMock.selection.mockClear();
+    await component.changeTileColumnSize({ value: 3 });
+    expect(userMock.settings.dashboardSettings.tiles[0].size.columns).toBe(1);
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
   });
 
   it('should expose move boundaries for the first tile', () => {

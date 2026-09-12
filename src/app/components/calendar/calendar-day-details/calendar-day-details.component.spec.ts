@@ -1,7 +1,9 @@
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { AppUserService } from '../../../services/app.user.service';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
@@ -21,6 +23,15 @@ import type { PlannedWorkoutCalendarEntry } from '../../../helpers/planned-worko
 import { CalendarDayDetailsComponent, type CalendarDayDetailsData } from './calendar-day-details.component';
 
 describe('CalendarDayDetailsComponent', () => {
+  it.each(['another-user', null])('hides all planning UI for viewer %s, including a retained day sheet', async uid => {
+    const fixture = await renderDayDetails(createEvent(), { plannedWorkouts: [{ workout: createPlannedWorkout() }] });
+    const users = TestBed.inject(AppUserService);
+    (users.user as unknown as ReturnType<typeof signal>).set(uid ? { uid } : null);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href*="/training/plans"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Morning run');
+  });
   it('shows plain-text notes with actual dates, supports note-only days, and clears stale selections', async () => {
     const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', color: 'purple', title: '<b>Trip</b>', startDate: '2026-08-01', endDate: null, timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
     const notes = signal<readonly TimelineNote[]>([note]);
@@ -52,11 +63,11 @@ describe('CalendarDayDetailsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Running');
     expect(fixture.nativeElement.textContent).toContain('Morning run');
     expect(fixture.nativeElement.querySelector('.calendar-day-event-item')?.getAttribute('href'))
-      .toBe('/user/user-1/event/event-1');
+      .toBe(`/user/${TRAINING_PLANNING_UI_ALLOWED_UIDS[0]}/event/event-1`);
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-copy strong')?.textContent?.trim()).toBe('Running');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-value')?.textContent?.trim()).toBe('1h');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-row--link')?.getAttribute('href'))
-      .toBe('/user/user-1/event/event-1');
+      .toBe(`/user/${TRAINING_PLANNING_UI_ALLOWED_UIDS[0]}/event/event-1`);
     expect(fixture.nativeElement.querySelector('.calendar-day-number')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('.calendar-family-volume-count-value')?.textContent?.trim()).toBe('1');
     expect(fixture.nativeElement.querySelector('app-bottom-sheet-header h2')?.textContent?.trim())
@@ -77,17 +88,44 @@ describe('CalendarDayDetailsComponent', () => {
     const actions = [...fixture.nativeElement.querySelectorAll('.calendar-day-plan-actions a')] as HTMLAnchorElement[];
 
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.getAttribute('href'))
-      .toBe('/training/plans?workout=workout-1');
+      .toBe('/training/plans/workout/workout-1');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-item')?.textContent)
       .toContain('Autumn build · Planned');
     expect(fixture.nativeElement.querySelector('.calendar-day-planned-summary')?.textContent).toContain('30m 00s');
-    expect((fixture.nativeElement.querySelector('.calendar-day-planned-item') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
+    expect((fixture.nativeElement.querySelector('.calendar-day-planned-row') as HTMLElement).style.getPropertyValue('--planned-workout-color')).toBe('purple');
+    expect(fixture.nativeElement.querySelector('.calendar-day-planned-accent')?.getAttribute('aria-hidden')).toBe('true');
     expect(actions.map(action => action.getAttribute('href'))).toEqual([
-      '/training/plans?date=2026-08-03',
-      '/training/plans?date=2026-08-03&scope=standalone',
+      '/training/plans/new?date=2026-08-03',
+      '/training/plans/standalone/new?date=2026-08-03',
     ]);
     expect(fixture.nativeElement.textContent).toContain('No completed activities for this day.');
     expect(fixture.nativeElement.querySelector('[aria-labelledby="calendar-day-family-title"]')).toBeNull();
+  });
+
+  it('centers trailing navigation icons and keeps the rounded plan accent outside the Material row', async () => {
+    const fixture = await renderDayDetails(createEvent(), {
+      plannedWorkouts: [{ workout: createPlannedWorkout(), planName: 'Autumn build' }],
+    });
+    const metaSlots = [...fixture.nativeElement.querySelectorAll('.calendar-day-item-meta')] as HTMLElement[];
+    const styles = readFileSync(
+      resolve(process.cwd(), 'src/app/components/calendar/calendar-day-details/calendar-day-details.component.scss'),
+      'utf8',
+    );
+
+    expect(metaSlots).toHaveLength(2);
+    expect(metaSlots.every(slot => slot.tagName === 'SPAN' && slot.hasAttribute('matListItemMeta'))).toBe(true);
+    expect(metaSlots.map(slot => slot.querySelector('mat-icon')?.textContent?.trim()))
+      .toEqual(['chevron_right', 'chevron_right']);
+    expect(styles).toMatch(
+      /\.calendar-day-item-meta\s*\{[^}]*display:\s*inline-flex !important[^}]*align-self:\s*center !important[^}]*align-items:\s*center[^}]*justify-content:\s*center/s,
+    );
+    expect(styles).toMatch(
+      /\.calendar-day-planned-row\s*\{[^}]*margin-inline-start:\s*-7px[^}]*padding-inline-start:\s*7px/s,
+    );
+    expect(styles).toMatch(
+      /\.calendar-day-planned-accent\s*\{[^}]*position:\s*absolute[^}]*inset-block:\s*8px[^}]*inset-inline-start:\s*0[^}]*width:\s*3px[^}]*border-radius:\s*9999px/s,
+    );
+    expect(styles).not.toMatch(/\.calendar-day-planned-item\s*\{[^}]*border-inline-start:/s);
   });
 
   it('updates an already-open day when the planned-workout listener finishes', async () => {
@@ -150,7 +188,19 @@ describe('CalendarDayDetailsComponent', () => {
     const bottomSheetRef = TestBed.inject(MatBottomSheetRef);
     const prepareReturn = vi.spyOn(navigation, 'prepareReturn');
 
-    fixture.componentInstance.prepareEventNavigation(['/user', 'user-1', 'event', 'event-1']);
+    fixture.componentInstance.prepareEventNavigation(['/user', TRAINING_PLANNING_UI_ALLOWED_UIDS[0], 'event', 'event-1']);
+
+    expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
+    expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();
+  });
+
+  it('records the calendar day before opening a workout path and dismisses the sheet', async () => {
+    const fixture = await renderDayDetails([], { plannedWorkouts: [{ workout: createPlannedWorkout() }] });
+    const navigation = TestBed.inject(CalendarDayDetailsNavigationService);
+    const bottomSheetRef = TestBed.inject(MatBottomSheetRef);
+    const prepareReturn = vi.spyOn(navigation, 'prepareReturn');
+
+    fixture.componentInstance.prepareWorkoutNavigation();
 
     expect(prepareReturn).toHaveBeenCalledWith('/', '2026-08-03');
     expect(bottomSheetRef.dismiss).toHaveBeenCalledOnce();
@@ -272,7 +322,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
   });
   const data: CalendarDayDetailsData = {
     day: model.months[0].days.find(day => day.dateKey === '2026-08-03'),
-    userId: 'user-1',
+    userId: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
     locale: 'en-US',
     ...overrides,
   } as CalendarDayDetailsData;
@@ -281,6 +331,7 @@ async function renderDayDetails(eventOrEvents: EventInterface | EventInterface[]
     providers: [
       provideRouter([]),
       { provide: MAT_BOTTOM_SHEET_DATA, useValue: data },
+      { provide: AppUserService, useValue: { user: signal({ uid: data.userId }) } },
       { provide: MatBottomSheetRef, useValue: { dismiss: vi.fn() } },
       {
         provide: AppEventColorService,

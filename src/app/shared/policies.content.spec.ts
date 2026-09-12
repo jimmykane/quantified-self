@@ -28,8 +28,15 @@ describe('Built-in Assistant policy', () => {
     const external = CONNECTED_SERVICES_POLICY_SECTION.topics
       .find(candidate => candidate.id === POLICIES_MCP_CLIENTS_FRAGMENT)?.content.join(' ') ?? '';
     expect(assistant).toContain('Timeline notes');
+    expect(assistant).toContain('Timeline notes access is off by default');
     expect(assistant).toContain('full private');
     expect(external).toContain('Timeline notes permission');
+    expect(external).toContain('The checkbox is selected by default when requested; uncheck it before approving to withhold access.');
+    expect(external).toContain('Activity descriptions permission');
+    expect(external).toContain('Like every requested MCP permission, the checkbox is selected by default');
+    expect(external).toContain('Every requested current or future permission starts checked');
+    expect(external).toContain('64 KiB of UTF-8 text');
+    expect(external).toContain('even without Activity locations permission');
     expect(external).toContain('copies');
   });
   it('documents the bounded MCP-backed Gemini context, exclusions, and retention', () => {

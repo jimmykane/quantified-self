@@ -24,7 +24,8 @@
 .sleep-stage-legend {
   display: grid;
   gap: 0.15rem 0.65rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  // Highlights can occupy a narrow column on a wide viewport. Wrap to the actual card width.
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr));
   min-width: 0;
 }
 
@@ -55,10 +56,4 @@
   color: var(--mat-sys-on-surface-variant);
   font: var(--mat-sys-body-small);
   margin: 0.5rem 0 0;
-}
-
-@media (max-width: 420px) {
-  .sleep-stage-legend {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }

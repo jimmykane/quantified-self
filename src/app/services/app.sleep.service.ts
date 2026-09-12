@@ -1,3 +1,4 @@
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { Injectable, inject } from '@angular/core';
 import {
   Firestore,
@@ -10,8 +11,10 @@ import {
   query,
   where,
 } from 'app/firebase/firestore';
-import { Observable, of } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, of, from } from 'rxjs';
+import { map, switchMap, catchError } from 'rxjs/operators';
+import { enrichSleepWithNightlyHrv, nightlyHrvDateRange } from '@shared/nightly-hrv';
+import { HrvHistoryService } from './hrv-history.service';
 import {
   SleepProvider,
   SleepSession,
@@ -30,6 +33,8 @@ export class AppSleepService {
   private static readonly FALLBACK_LIMIT = 250;
 
   private firestore = inject(Firestore);
+  private browserCompatibility = inject(BrowserCompatibilityService);
+  private hrvHistory = inject(HrvHistoryService);
 
   watchHasAnySleepSession(userID: string | null | undefined): Observable<boolean> {
     const uid = `${userID || ''}`.trim();
@@ -45,6 +50,26 @@ export class AppSleepService {
   }
 
   watchForDashboard(
+    userID: string | null | undefined,
+    startDate: Date | number | null | undefined,
+    endDate: Date | number | null | undefined,
+  ): Observable<SleepSession[]> {
+    const uid = `${userID || ''}`.trim();
+    return this.watchSessions(userID, startDate, endDate).pipe(
+      switchMap(sessions => {
+        const range = nightlyHrvDateRange(sessions);
+        if (!range || !this.browserCompatibility.checkWebCryptoSupport()) return of(sessions);
+        return this.hrvHistory.watch(uid, range.startDate, range.endDate).pipe(
+          switchMap(records => from(enrichSleepWithNightlyHrv(uid, sessions, records))),
+          // A failed or incomplete optional Health read must not erase native Sleep evidence.
+          catchError(() => of(sessions)),
+        );
+      }),
+    );
+  }
+
+  /** Native Sleep records for consumers that already own a complete Health HRV read. */
+  watchSessions(
     userID: string | null | undefined,
     startDate: Date | number | null | undefined,
     endDate: Date | number | null | undefined,

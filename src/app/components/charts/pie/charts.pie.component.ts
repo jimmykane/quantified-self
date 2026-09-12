@@ -106,6 +106,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
+  private layoutSize: { width: number; height: number } | null = null;
   private readonly dateTypePalette: string[] = [
     AppColors.Blue,
     AppColors.Green,
@@ -134,9 +135,14 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     private logger: LoggerService
   ) {
     this.chartHost = new EChartsHostController({
+      deferUntilNearViewport: true,
       eChartsLoader: this.eChartsLoader,
       logger: this.logger,
       logPrefix: '[ChartsPieComponent]',
+      // Resizing the canvas does not rebuild the legend or donut-center typography.
+      onContainerResize: size => {
+        if (this.layoutSize?.width !== size.width || this.layoutSize.height !== size.height) void this.refreshChart();
+      },
       mobileTapFeedbackOptions: () => this.mobileTapFeedbackOptions,
     });
   }
@@ -217,6 +223,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
     aggregateData: ReturnType<typeof getDashboardAggregateData>
   ): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
+    this.layoutSize = { width: chartWidth, height: this.chartDiv?.nativeElement?.clientHeight || 0 };
     const chartStyle = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
     const textColor = chartStyle.textColor;
     const isCompactLayout = chartStyle.isCompactLayout;
@@ -261,6 +268,9 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.chartDataTimeInterval
     );
     const isFullyRecoveredLayout = recoverySummary?.layoutMode === 'fully-recovered';
+    const compactRecovery = isCompactLayout && !!recoverySummary;
+    // Fit the summary inside the donut using its shorter dimension, including shallow previews.
+    const recoveryTextWidth = Math.min(120, Math.min(chartWidth, this.chartDiv.nativeElement.clientHeight || chartWidth) * 0.42);
 
     return {
       animation: this.useAnimations === true,
@@ -315,7 +325,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
       series: [
         {
           type: 'pie',
-          radius: isCompactLayout ? ['42%', '64%'] : ['52%', '72%'],
+          radius: compactRecovery ? ['54%', '74%'] : isCompactLayout ? ['42%', '64%'] : ['52%', '72%'],
           center: ['50%', pieCenterY],
           avoidLabelOverlap: true,
           minAngle: 1.5,
@@ -379,7 +389,9 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                 type: 'text',
                 style: {
                   text: centerLabel,
-                  fontSize: ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+                  fontSize: compactRecovery ? 12 : ECHARTS_DASHBOARD_CHART_TITLE_FONT_SIZE,
+                  width: compactRecovery ? recoveryTextWidth : undefined,
+                  overflow: compactRecovery ? 'break' : undefined,
                   fontWeight: ECHARTS_DASHBOARD_CHART_TITLE_FONT_WEIGHT,
                   fill: textColor,
                   opacity: 0.86,
@@ -387,26 +399,29 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                   fontFamily: ECHARTS_DASHBOARD_CHART_TITLE_FONT_FAMILY,
                 },
                 left: 'center',
-                top: isCompactLayout ? -22 : -24
+                top: compactRecovery ? -30 : isCompactLayout ? -22 : -24
               },
               {
                 type: 'text',
                 style: {
                   text: centerValue,
-                  fontSize: isCompactLayout ? 22 : 26,
+                  fontSize: compactRecovery ? 18 : isCompactLayout ? 22 : 26,
                   fontWeight: 700,
                   fill: textColor,
                   textAlign: 'center',
                   fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
                 },
                 left: 'center',
-                top: isCompactLayout ? -2 : -4
+                top: compactRecovery ? -10 : isCompactLayout ? -2 : -4
               },
               {
                 type: 'text',
                 style: {
-                  text: centerSubLabel,
-                  fontSize: isCompactLayout ? 11 : 12,
+                  text: compactRecovery ? centerSubLabel.replace(': ', ':\n') : centerSubLabel,
+                  width: compactRecovery ? recoveryTextWidth : undefined,
+                  overflow: compactRecovery ? 'break' : undefined,
+                  lineHeight: compactRecovery ? 11 : undefined,
+                  fontSize: compactRecovery ? 9 : isCompactLayout ? 11 : 12,
                   fontWeight: 500,
                   fill: textColor,
                   opacity: 0.7,
@@ -414,7 +429,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
                   fontFamily: ECHARTS_GLOBAL_FONT_FAMILY,
                 },
                 left: 'center',
-                top: isCompactLayout ? 20 : 24
+                top: compactRecovery ? 14 : isCompactLayout ? 20 : 24
               }
             ]
         }

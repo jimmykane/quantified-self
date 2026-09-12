@@ -1,3 +1,5 @@
+import { DashboardConfigurationService } from '../../../../services/dashboard-configuration.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -5,10 +7,9 @@ import { TileChartActionsComponent } from './tile.chart.actions.component';
 import { AppUserService } from '../../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { AppHapticsService } from '../../../../services/app.haptics.service';
-import { TileActionsFooterComponent } from '../footer/tile.actions.footer.component';
 import { MatMenuModule } from '@angular/material/menu';
-import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
 import { ChartTypes, ChartDataValueTypes, ChartDataCategoryTypes, DataRecoveryTime, TileTypes } from '@sports-alliance/sports-lib';
@@ -27,10 +28,11 @@ describe('TileChartActionsComponent', () => {
   let fixture: ComponentFixture<TileChartActionsComponent>;
   let userMock: any;
   let analyticsMock: any;
-  let hapticsMock: { selection: ReturnType<typeof vi.fn> };
+  let hapticsMock: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     userMock = {
+      uid: 'owner',
       settings: {
         appSettings: { theme: 'dark' },
         unitSettings: { startOfTheWeek: 1 },
@@ -39,7 +41,7 @@ describe('TileChartActionsComponent', () => {
           tiles: [
             {
               order: 0,
-              chartType: ChartTypes.Bar,
+              chartType: ChartTypes.ColumnsVertical,
               dataType: 'Distance',
               dataValueType: ChartDataValueTypes.Total,
               dataCategoryType: ChartDataCategoryTypes.ActivityType,
@@ -48,7 +50,7 @@ describe('TileChartActionsComponent', () => {
             },
             {
               order: 1,
-              chartType: ChartTypes.Line,
+              chartType: ChartTypes.LinesVertical,
               dataType: 'Duration',
               dataValueType: ChartDataValueTypes.Total,
               dataCategoryType: ChartDataCategoryTypes.ActivityType,
@@ -65,19 +67,21 @@ describe('TileChartActionsComponent', () => {
       logEvent: vi.fn(),
     };
     hapticsMock = {
-      selection: vi.fn(),
+      selection: vi.fn(), success: vi.fn(), error: vi.fn(),
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TileChartActionsComponent, TileActionsFooterComponent],
+      declarations: [TileChartActionsComponent],
       imports: [
         MatMenuModule,
-        MatSelectModule,
         MatIconModule,
+        MatProgressSpinnerModule,
         BrowserAnimationsModule,
         FormsModule,
       ],
       providers: [
+        { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => userMock.updateUserProperties(userMock, { settings: { dashboardSettings: patch } }) } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: AppUserService, useValue: userMock },
         { provide: AppAnalyticsService, useValue: analyticsMock },
         { provide: AppHapticsService, useValue: hapticsMock },
@@ -88,10 +92,83 @@ describe('TileChartActionsComponent', () => {
     component = fixture.componentInstance;
     component.user = userMock;
     component.order = 0;
-    component.chartType = ChartTypes.Bar;
+    component.chartType = ChartTypes.ColumnsVertical;
     component.size = { columns: 1, rows: 1 };
     component.type = 'Chart' as any;
     fixture.detectChanges();
+  });
+
+  it.each([
+    [ChartTypes.LinesVertical, 'Chart', 'chart'],
+    [DASHBOARD_ACWR_KPI_CHART_TYPE, 'KPI', 'KPI'],
+    [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, 'Calendar', 'calendar'],
+  ])('renders type-specific actions for %s and updates when inputs change', async (chartType, label, noun) => {
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('chartType', chartType); fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    expect(trigger.getAttribute('aria-label')).toBe(`${label} actions`);
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    const editLabel = chartType === ChartTypes.LinesVertical ? `Edit ${noun}` : `${label} details`;
+    expect(menu.textContent).toContain(editLabel);
+    expect(menu.textContent).toContain(`Remove ${noun}`);
+    hapticsMock.selection.mockClear();
+    const emitted = vi.spyOn(component.editTile, 'emit');
+    const edit = Array.from(menu.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.includes(editLabel))!;
+    edit.click(); fixture.detectChanges();
+    expect(emitted).toHaveBeenCalledWith(0);
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+  });
+  it.each([
+    [ChartTypes.LinesVertical, 'chart'],
+    [DASHBOARD_ACWR_KPI_CHART_TYPE, 'KPI'],
+    [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, 'calendar'],
+  ])('includes Remove %s in keyboard navigation and persists it once', async (chartType, noun) => {
+    fixture.componentRef.setInput('chartType', chartType); fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector<HTMLElement>('[role="menu"]')!;
+    hapticsMock.selection.mockClear();
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', keyCode: 35, bubbles: true }));
+    const remove = document.activeElement as HTMLButtonElement;
+    expect(remove.textContent).toContain(`Remove ${noun}`);
+    expect(hapticsMock.selection).not.toHaveBeenCalled();
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    remove.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
+    expect(userMock.updateUserProperties).toHaveBeenCalledOnce();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsMock.success).toHaveBeenCalledOnce();
+    expect(hapticsMock.error).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['columns', 'Columns: 1', '2 columns'],
+    ['rows', 'Rows: 1', '2 rows'],
+  ])('opens %s with arrow keys and saves the selected size once', async (dimension, label, choice) => {
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector<HTMLElement>('[role="menu"]')!;
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', keyCode: 36, bubbles: true }));
+    if (dimension === 'rows') menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }));
+    expect(document.activeElement?.textContent).toContain(label);
+    hapticsMock.selection.mockClear();
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', keyCode: 39, bubbles: true }));
+    fixture.detectChanges(); await fixture.whenStable();
+    const choices = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'));
+    expect(choices).toHaveLength(4);
+    expect(choices[0].getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(choices[0]);
+    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    hapticsMock.selection.mockClear();
+    choices.find(button => button.textContent?.includes(choice))!.click();
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(userMock.settings.dashboardSettings.tiles[0].size[dimension]).toBe(2);
+    expect(userMock.updateUserProperties).toHaveBeenCalledOnce();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsMock.success).toHaveBeenCalledOnce();
   });
 
   it('should create', () => {
@@ -99,20 +176,13 @@ describe('TileChartActionsComponent', () => {
   });
 
   it('should use form menu panel classes', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
     expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
   });
 
-  it('should keep compact submenu panel classes for row and column size selects', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
-    const template = readFileSync(templatePath, 'utf8');
-    const compactClassMatches = template.match(/panelClass="qs-config-submenu qs-config-submenu-compact"/g) ?? [];
-    expect(compactClassMatches.length).toBe(2);
-  });
-
   it('should remove chart data configuration controls and add-new action from the tile menu', () => {
-    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+    const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/tile-actions-menu.html');
     const template = readFileSync(templatePath, 'utf8');
 
     expect(template).not.toContain('app-tile-actions-header');
@@ -124,19 +194,52 @@ describe('TileChartActionsComponent', () => {
     expect(template).toContain('Edit');
   });
 
-  it('should emit editInDashboardManager with current tile order', () => {
+  it('should emit editTile with current tile order', () => {
     const emittedOrders: number[] = [];
-    component.editInDashboardManager.subscribe((order) => emittedOrders.push(order));
+    component.editTile.subscribe((order) => emittedOrders.push(order));
     const preventDefault = vi.fn();
     const stopPropagation = vi.fn();
 
+    const trigger = { restoreFocus: true, closeMenu: vi.fn() };
+    (component as any).menuTrigger = trigger;
     component.order = 1;
-    component.openEditInDashboardManager({ preventDefault, stopPropagation } as any);
+    component.openEditTile({ preventDefault, stopPropagation } as any);
 
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(stopPropagation).toHaveBeenCalledTimes(1);
     expect(emittedOrders).toEqual([1]);
+    expect(trigger.closeMenu).toHaveBeenCalledOnce();
+    expect(trigger.restoreFocus).toBe(false);
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['success', 'failure'])('shows progress until a layout save finishes with %s', async outcome => {
+    let resolveSave!: () => void;
+    let rejectSave!: (error: Error) => void;
+    userMock.updateUserProperties.mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+      resolveSave = resolve;
+      rejectSave = reject;
+    }));
+    const save = component.changeTileColumnSize({ value: 2 }).catch(error => error);
+    fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('.tile-actions-trigger') as HTMLButtonElement;
+    expect(trigger.disabled).toBe(true);
+    expect(trigger.getAttribute('aria-busy')).toBe('true');
+    expect(trigger.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe('Saving dashboard changes');
+    expect(hapticsMock.success).not.toHaveBeenCalled();
+    expect(hapticsMock.error).not.toHaveBeenCalled();
+    await component.changeTileRowSize({ value: 3 });
+    expect(userMock.updateUserProperties).toHaveBeenCalledOnce();
+    if (outcome === 'success') resolveSave();
+    else rejectSave(new Error('Save failed'));
+    await save;
+    fixture.detectChanges();
+    expect(trigger.disabled).toBe(false);
+    expect(trigger.getAttribute('aria-busy')).toBe('false');
+    expect(trigger.querySelector('[role="progressbar"]')).toBeNull();
+    expect(hapticsMock.selection).toHaveBeenCalledOnce();
+    expect(hapticsMock.success).toHaveBeenCalledTimes(outcome === 'success' ? 1 : 0);
+    expect(hapticsMock.error).toHaveBeenCalledTimes(outcome === 'failure' ? 1 : 0);
   });
 
   it('should emit savingChange while persisting structural settings', async () => {
@@ -158,15 +261,16 @@ describe('TileChartActionsComponent', () => {
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
-  it('should hide and ignore layout controls when disabled', async () => {
-    component.showLayoutControls = false;
-    fixture.detectChanges();
-
-    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-size-actions')).toBeNull();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.tile-actions-divider')).toBeNull();
-
-    await component.changeTileColumnSize({ value: 3 } as any);
-
+  it('omits layout choices for compact tiles and ignores resizing', async () => {
+    component.showLayoutControls = false; fixture.detectChanges();
+    fixture.nativeElement.querySelector('.tile-actions-trigger').click();
+    fixture.detectChanges(); await fixture.whenStable();
+    const menu = document.body.querySelector('[role="menu"]')!;
+    expect(menu.textContent).not.toContain('Columns:');
+    expect(menu.textContent).not.toContain('Rows:');
+    expect(menu.textContent).toContain('Move earlier');
+    hapticsMock.selection.mockClear();
+    await component.changeTileColumnSize({ value: 3 });
     expect(userMock.settings.dashboardSettings.tiles[0].size.columns).toBe(1);
     expect(userMock.updateUserProperties).not.toHaveBeenCalled();
     expect(hapticsMock.selection).not.toHaveBeenCalled();
@@ -182,8 +286,8 @@ describe('TileChartActionsComponent', () => {
 
     expect(analyticsMock.logEvent).toHaveBeenCalledWith('dashboard_tile_action', { method: 'moveTileForward' });
     expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
-    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.Line);
-    expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Bar);
+    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.LinesVertical);
+    expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.ColumnsVertical);
     expect(userMock.updateUserProperties).toHaveBeenCalled();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
@@ -192,7 +296,7 @@ describe('TileChartActionsComponent', () => {
     userMock.settings.dashboardSettings.tiles = [
       {
         order: 0,
-        chartType: ChartTypes.Bar,
+        chartType: ChartTypes.ColumnsVertical,
         dataType: 'Distance',
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.ActivityType,
@@ -229,7 +333,7 @@ describe('TileChartActionsComponent', () => {
       {
         name: 'Activity chart',
         order: 1,
-        chartType: ChartTypes.Bar,
+        chartType: ChartTypes.ColumnsVertical,
         dataType: 'Distance',
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.ActivityType,
@@ -264,8 +368,8 @@ describe('TileChartActionsComponent', () => {
     await component.moveTileBackward();
 
     expect(userMock.settings.dashboardSettings.tiles.map((tile: any) => tile.order)).toEqual([0, 1]);
-    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.Bar);
-    expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.Line);
+    expect(userMock.settings.dashboardSettings.tiles[0].chartType).toBe(ChartTypes.ColumnsVertical);
+    expect(userMock.settings.dashboardSettings.tiles[1].chartType).toBe(ChartTypes.LinesVertical);
     expect(userMock.updateUserProperties).not.toHaveBeenCalled();
   });
 
@@ -282,7 +386,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     component.chartType = DASHBOARD_RECOVERY_NOW_CHART_TYPE as any;
     component.order = 0;
@@ -306,16 +410,16 @@ describe('TileChartActionsComponent', () => {
     userMock.settings.dashboardSettings.tiles = [
       {
         order: 0,
-        chartType: ChartTypes.LinesVertical,
+        chartType: ChartTypes.LinesVerticalsVertical,
         dataType: DataRecoveryTime.type,
         dataValueType: ChartDataValueTypes.Total,
         dataCategoryType: ChartDataCategoryTypes.DateType,
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
-    component.chartType = ChartTypes.LinesVertical as any;
+    component.chartType = ChartTypes.LinesVerticalsVertical as any;
     component.order = 0;
     fixture.detectChanges();
 
@@ -342,7 +446,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
     component.order = 0;
@@ -371,7 +475,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 2, rows: 2 },
         type: TileTypes.Chart,
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: TileTypes.Chart },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: TileTypes.Chart },
     ];
     component.chartType = DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE as any;
     component.order = 0;
@@ -406,7 +510,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     userMock.updateUserProperties.mockRejectedValueOnce(new Error('network down'));
     component.chartType = DASHBOARD_SLEEP_TREND_CHART_TYPE as any;
@@ -420,7 +524,7 @@ describe('TileChartActionsComponent', () => {
     expect(userMock.settings.dashboardSettings.autoTiles.sleepTrend).toEqual(previousAutoTileState);
   });
 
-  it('should not mark Sleep Trend dismissed when deleting the only tile is rejected', async () => {
+  it('allows removing the last Sleep tile and keeps it dismissed', async () => {
     userMock.settings.dashboardSettings.autoTiles = {};
     userMock.settings.dashboardSettings.tiles = [{
       order: 0,
@@ -435,11 +539,10 @@ describe('TileChartActionsComponent', () => {
     component.order = 0;
     fixture.detectChanges();
 
-    await expect(component.deleteTile({} as any)).rejects.toThrow('Cannot delete tile there is only one left');
-
-    expect(userMock.settings.dashboardSettings.autoTiles).toEqual({});
-    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(1);
-    expect(userMock.updateUserProperties).not.toHaveBeenCalled();
+    await component.deleteTile({} as any);
+    expect(userMock.settings.dashboardSettings.autoTiles.sleepTrend.state).toBe('dismissed');
+    expect(userMock.settings.dashboardSettings.tiles).toHaveLength(0);
+    expect(userMock.updateUserProperties).toHaveBeenCalled();
   });
 
   it('should persist KPI auto-tile dismissal when deleting a default KPI tile', async () => {
@@ -454,7 +557,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     component.chartType = DASHBOARD_ACWR_KPI_CHART_TYPE as any;
     component.order = 0;
@@ -482,7 +585,7 @@ describe('TileChartActionsComponent', () => {
         size: { columns: 1, rows: 1 },
         type: 'Chart',
       },
-      { order: 1, chartType: ChartTypes.Line, size: { columns: 1, rows: 1 }, type: 'Chart' },
+      { order: 1, chartType: ChartTypes.LinesVertical, size: { columns: 1, rows: 1 }, type: 'Chart' },
     ];
     component.chartType = DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE as any;
     component.order = 0;

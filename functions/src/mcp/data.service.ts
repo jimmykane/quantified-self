@@ -1,4 +1,14 @@
+import { ActivitySampleCache } from './activity-sample-cache';
+import { ActivitySampleContext, ActivitySamplesInput, ActivitySamplesDependencies, ActivitySamplesError, queryActivitySamples } from './activity-samples.service';
+import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
+import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
+import { firestoreHrvRangeReads, HrvRangeInput, queryHrvPersonalRange } from './hrv-personal-range.service';
+import {
+  firestoreActivityDescriptionReads, McpActivityDescriptionInput, McpActivityDescriptionReads,
+  MCP_ACTIVITY_DESCRIPTION_MAX_BYTES, MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH, MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES,
+} from './activity-description.service';
 import { firestoreTimelineNotesReads, queryMcpTimelineNotes, McpTimelineNotesError,
   McpTimelineNotesInput, McpTimelineNotesReads } from './timeline-notes.service';
 import {
@@ -52,6 +62,7 @@ import {
 import {
   DERIVED_METRIC_KINDS,
   DERIVED_METRIC_SCHEMA_VERSION,
+  DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
   DERIVED_METRICS_ENTRY_TYPES,
   DerivedFormMetricPayload,
   DerivedFormNowMetricPayload,
@@ -174,6 +185,7 @@ import {
 import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
   MCP_TRAINING_METRIC_SCHEMA_VERSION,
+  MCP_TRAINING_RECOVERY_VERSION,
 } from './derived-output-schemas';
 import { ActivityIdentityLike } from '../shared/activity-identity-matcher';
 import {
@@ -349,6 +361,7 @@ type OpaqueValueKind =
   | 'route_ref'
   | 'activity_cursor'
   | 'route_cursor'
+  | 'activity_samples_cursor'
   | 'activity_detail_cursor'
   | 'activity_nearby_cursor'
   | 'route_nearby_cursor';
@@ -431,12 +444,37 @@ export function resolveMcpActivitySourcePath(
   return path;
 }
 
+function resolveActivitySourceLocation(uid: string, eventId: string, sourceFile: OriginalFileMetaData) {
+  const defaultBucketName = admin.storage().bucket().name;
+  const projectId = `${process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ''}`.trim();
+  const approvedBuckets = [defaultBucketName, ...(projectId ? [projectId, `${projectId}.appspot.com`] : [])];
+  const path = resolveMcpActivitySourcePath(uid, eventId, sourceFile, approvedBuckets);
+  return {path, bucketName: `${sourceFile.bucket || ''}`.trim() || defaultBucketName};
+}
+
+const activitySampleCache = new ActivitySampleCache();
+const defaultActivitySamplesReads: NonNullable<McpDataServiceDependencies['activitySamplesReads']> = {
+  cache: activitySampleCache,
+  activeOwner: async uid => !(await getUserDeletionGuardState(admin.firestore(), uid)).shouldSkip,
+  sourceVersions: async (uid, eventId, sources) => Promise.all(sources.map(async source => {
+    const {bucketName, path} = resolveActivitySourceLocation(uid, eventId, source);
+    const [metadata] = await admin.storage().bucket(bucketName).file(path, source.generation ? {generation: source.generation} : undefined).getMetadata();
+    const generation = `${metadata.generation || ''}`;
+    if (!/^\d{1,40}$/.test(generation) || (source.generation && source.generation !== generation)) {
+      throw new McpDataError('detail_not_available', 'The original activity revision is unavailable.');
+    }
+    return {...source, generation};
+  })),
+};
+
 interface ActivityChartContextDocuments {
   event: RawDocument;
   activities: RawDocument[];
 }
 
 export interface McpDataServiceDependencies {
+  activitySamplesReads?: Pick<ActivitySamplesDependencies, 'activeOwner' | 'sourceVersions' | 'cache' | 'parseSource'>;
+  activityDescriptionReads?: McpActivityDescriptionReads;
   timelineNotesReads?: McpTimelineNotesReads;
   healthReads?: McpHealthReadDependencies;
   now: () => number;
@@ -475,6 +513,7 @@ export interface McpDataServiceDependencies {
     limit: number,
     cursor?: SleepCursor,
   ) => Promise<RawDocument[]>;
+  supplementSleepDocuments?: typeof supplementNightlyHrvSleepDocuments;
   fetchReadinessSleepDocuments: (
     uid: string,
     startTimeMs: number,
@@ -746,6 +785,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .limit(limit)
       .select(
         new FieldPath('source', 'provider'),
+        new FieldPath('source', 'providerUserId'),
         'sleepDate',
         'startTimeMs',
         'endTimeMs',
@@ -771,6 +811,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     }));
   },
+  supplementSleepDocuments: supplementNightlyHrvSleepDocuments,
   fetchReadinessSleepDocuments: async (
     uid,
     startTimeMs,
@@ -789,6 +830,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       .limit(limit)
       .select(
         new FieldPath('source', 'provider'),
+        new FieldPath('source', 'providerUserId'),
         'sleepDate',
         'startTimeMs',
         'endTimeMs',
@@ -1087,20 +1129,7 @@ const defaultDependencies: McpDataServiceDependencies = {
     sourceFile,
     maxBytes,
   ) => {
-    const defaultBucketName = admin.storage().bucket().name;
-    const projectId = `${process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ''}`
-      .trim();
-    const approvedBuckets = [
-      defaultBucketName,
-      ...(projectId ? [projectId, `${projectId}.appspot.com`] : []),
-    ];
-    const path = resolveMcpActivitySourcePath(
-      uid,
-      eventId,
-      sourceFile,
-      approvedBuckets,
-    );
-    const bucketName = `${sourceFile.bucket || ''}`.trim() || defaultBucketName;
+    const {bucketName, path} = resolveActivitySourceLocation(uid, eventId, sourceFile);
     return readStorageFileWithinLimit(
       bucketName,
       path,
@@ -3282,7 +3311,7 @@ function projectTrainingBuildComparisonForMcp(payload: unknown): unknown {
     return null;
   }
   return {
-    recoveryVersion: source.recoveryVersion,
+    recoveryVersion: source.recoveryVersion === DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION ? MCP_TRAINING_RECOVERY_VERSION : source.recoveryVersion,
     dayBoundary: source.dayBoundary,
     asOfDayMs: source.asOfDayMs,
     excludesMergedEvents: source.excludesMergedEvents,
@@ -3389,6 +3418,11 @@ export function projectDerivedMetricPayloadForMcp(
 ): unknown {
   try {
     switch (metricKind) {
+      case DERIVED_METRIC_KINDS.TrainingReadiness: {
+        const source = payload as DerivedTrainingReadinessMetricPayload;
+        return { formulaVersion: source.formulaVersion, dayBoundary: source.dayBoundary,
+          asOfDayMs: source.asOfDayMs, generatedAtMs: source.generatedAtMs, historyDays: source.historyDays, points: source.points };
+      }
       case DERIVED_METRIC_KINDS.TrainingSummary:
         return projectTrainingSummaryForMcp(payload);
       case DERIVED_METRIC_KINDS.TrainingExplanation:
@@ -3413,6 +3447,7 @@ export function projectDerivedMetricPayloadForMcp(
 }
 
 const MCP_PROJECTED_TRAINING_METRIC_KINDS = new Set<DerivedMetricKind>([
+  DERIVED_METRIC_KINDS.TrainingReadiness,
   DERIVED_METRIC_KINDS.TrainingSummary,
   DERIVED_METRIC_KINDS.TrainingExplanation,
   DERIVED_METRIC_KINDS.TrainingBuildComparison,
@@ -3575,6 +3610,7 @@ function toSafeSleepSession(data: Record<string, unknown>): SafeSleepSession | n
 }
 
 export interface ListSleepSessionsInput {
+  scopes?: readonly string[];
   uid: string;
   connectionId: string;
   startTimeMs: number;
@@ -3586,6 +3622,7 @@ export interface ListSleepSessionsInput {
 }
 
 export interface ListSleepVitalsInput {
+  scopes?: readonly string[];
   uid: string;
   startTimeMs: number;
   endTimeMs: number;
@@ -3605,6 +3642,7 @@ export interface ListSleepVitalsResult {
 export type McpSleepSummaryGroupBy = 'day' | 'week' | 'month';
 
 export interface QuerySleepSummaryInput {
+  scopes?: readonly string[];
   uid: string;
   startTimeMs: number;
   endTimeMs: number;
@@ -3642,6 +3680,7 @@ export interface GetSleepTrendResult extends QuerySleepSummaryResult {
 }
 
 export interface GetDailyBriefingInput {
+  scopes?: readonly string[];
   uid: string;
   timeZone: string;
 }
@@ -3649,6 +3688,7 @@ export interface GetDailyBriefingInput {
 export type GetDailyReportInput = GetDailyBriefingInput;
 
 export interface GetTodayReadinessInput {
+  scopes?: readonly string[];
   uid: string;
   timeZone: string;
 }
@@ -3849,7 +3889,7 @@ function projectDailyBriefingReadiness(
 
   const parsed = MCP_DERIVED_PAYLOAD_SCHEMAS[
     DERIVED_METRIC_KINDS.TrainingReadiness
-  ].safeParse(snapshot.payload);
+  ].safeParse(projectDerivedMetricPayloadForMcp(DERIVED_METRIC_KINDS.TrainingReadiness, snapshot.payload));
   if (!parsed.success) {
     return unavailableDailyBriefingReadiness('not_ready');
   }
@@ -4141,6 +4181,8 @@ function buildTodayReadinessSleepNights(
       id: document.id,
       sleepDate: resolveTodayReadinessSleepDate(document.data, session),
       provider: session.provider,
+      sourceKey: sleepEvidenceSourceKey(document.data as unknown as SleepSession),
+      hrvSourceKey: sleepHrvSourceKey({ ...document.data, vitals: session.vitals } as unknown as SleepSession),
       startTimeMs: session.startTimeMs,
       endTimeMs: session.endTimeMs,
       totalSeconds: session.durationSeconds,
@@ -4151,7 +4193,7 @@ function buildTodayReadinessSleepNights(
       averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
       minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
     };
-    const key = `${evidence.sleepDate}:${evidence.provider}`;
+    const key = JSON.stringify([evidence.sleepDate, evidence.sourceKey]);
     grouped.set(key, [
       ...(grouped.get(key) || []),
       {
@@ -4173,13 +4215,6 @@ function buildTodayReadinessSleepNights(
     );
     const overnightHrvValues = positiveValues(
       entries.map(entry => entry.session.vitals?.overnightHrvMs ?? null),
-    );
-    const selectedHrvValues = positiveValues(
-      entries.map(entry => (
-        entry.session.vitals?.averageHrvMs
-        ?? entry.session.vitals?.overnightHrvMs
-        ?? null
-      )),
     );
     const averageHeartRateValues = positiveValues(
       entries.map(entry => entry.session.vitals?.averageHeartRateBpm ?? null),
@@ -4207,7 +4242,7 @@ function buildTodayReadinessSleepNights(
       startTimeMs,
       endTimeMs,
       totalSeconds: durationSeconds,
-      averageHrvMs: average(selectedHrvValues),
+      ...aggregateNightlyHrvEvidence(entries.map(entry => entry.evidence)),
       averageHeartRateBpm: average(averageHeartRateValues),
       minimumHeartRateBpm: minimumHeartRateValues.length
         ? Math.min(...minimumHeartRateValues)
@@ -4456,7 +4491,7 @@ async function loadTodayReadiness(
     rampRateSnapshot,
     nowTimeMs,
   );
-  const sleepNights = buildTodayReadinessSleepNights(sleepDocuments);
+  const sleepNights = buildTodayReadinessSleepNights(await supplementAuthorizedSleep(dependencies, input, sleepDocuments));
   const evaluation = buildReadinessEvaluation({
     form: load.form,
     rampRate: load.rampRate,
@@ -4483,6 +4518,7 @@ function projectDailyReportSleep(
   const baseline = latestNight
     ? sleepNights.filter(night => (
       night.provider === latestNight.provider
+      && night.evidence.sourceKey === latestNight.evidence.sourceKey
       && night.sleepDate !== latestNight.sleepDate
       && night.endTimeMs < latestNight.endTimeMs
     )).slice(0, MAX_DAILY_REPORT_BASELINE_NIGHTS)
@@ -5620,7 +5656,7 @@ function extractActivityChartSourceFiles(
     : eventData.originalFile
       ? [eventData.originalFile]
       : [];
-  return values.flatMap((value) => {
+  const sources = values.flatMap((value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return [];
     }
@@ -5629,21 +5665,27 @@ function extractActivityChartSourceFiles(
     const bucket = source.bucket === undefined
       ? undefined
       : asBoundedString(source.bucket, 200, /^[A-Za-z0-9._-]+$/);
-    if (!path || (source.bucket !== undefined && !bucket)) {
+    const generation = source.generation === undefined
+      ? undefined
+      : asBoundedString(source.generation, 40, /^\d+$/);
+    if (!path || (source.bucket !== undefined && !bucket)
+      || (source.generation !== undefined && !generation)) {
       return [];
     }
     return [{
       path,
       ...(bucket ? { bucket } : {}),
-      ...(asBoundedString(source.generation, 40, /^\d+$/)
-        ? { generation: `${source.generation}` }
-        : {}),
+      ...(generation ? { generation } : {}),
       startDate: new Date(0),
       ...(asBoundedString(source.originalFilename, 255)
         ? { originalFilename: `${source.originalFilename}` }
         : {}),
     }];
   });
+  if (sources.length !== values.length) {
+    throw new McpDataError('detail_not_available', 'The original activity source metadata is incomplete.');
+  }
+  return sources;
 }
 
 function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
@@ -5668,17 +5710,11 @@ function toActivityChartIdentity(document: RawDocument): ActivityIdentityLike {
   };
 }
 
-async function getActivityChartData(
-  dependencies: McpDataServiceDependencies,
-  input: GetActivityChartDataInput,
-) {
-  const reference = decodeActivityReference(
-    input.activityRef,
-    input.uid,
-    input.connectionId,
-  );
+async function resolveActivityStreamContext(
+  dependencies: McpDataServiceDependencies, uid: string, reference: ActivityReference, metrics: readonly string[],
+): Promise<ActivitySampleContext> {
   const context = await dependencies.fetchActivityChartContext(
-    input.uid,
+    uid,
     reference.eventId,
   );
   if (
@@ -5689,7 +5725,7 @@ async function getActivityChartData(
   ) {
     throw new McpDataError(
       'detail_not_available',
-      'The original activity source is not available for charting.',
+      'The original activity source is not available for detailed reading.',
     );
   }
   const targetExistingIndex = context.activities.findIndex(document => (
@@ -5699,7 +5735,7 @@ async function getActivityChartData(
   if (targetExistingIndex < 0) {
     throw new McpDataError(
       'detail_not_available',
-      'The referenced activity is not available for charting.',
+      'The referenced activity is not available for detailed reading.',
     );
   }
   const targetActivityType = normalizeActivityType(
@@ -5708,16 +5744,16 @@ async function getActivityChartData(
   if (!targetActivityType) {
     throw new McpDataError(
       'detail_not_available',
-      'The referenced activity type is not available for charting.',
+      'The referenced activity type is not available for detailed reading.',
     );
   }
   if (
-    getUnsupportedActivityChartMetrics(input.metrics, targetActivityType)
+    getUnsupportedActivityChartMetrics(metrics, targetActivityType)
       .length > 0
   ) {
     throw new McpDataError(
       'invalid_metric',
-      'One or more chart metrics are not supported for this activity type.',
+      'One or more activity metrics are not supported for this activity type.',
     );
   }
   const sourceFiles = extractActivityChartSourceFiles(context.event.data);
@@ -5731,16 +5767,39 @@ async function getActivityChartData(
     );
   }
 
+  const existingActivities = context.activities.map(toActivityChartIdentity);
+  // Hash only the bounded identity/source inputs used by the parser. Never serialize whole documents.
+  const identities = existingActivities.map((activity, index) => [
+    asBoundedString(context.activities[index].id, 1_500),
+    typeof activity.startDate === 'string' ? asBoundedString(activity.startDate, 64) : asTimestampMs(activity.startDate),
+    typeof activity.endDate === 'string' ? asBoundedString(activity.endDate, 64) : asTimestampMs(activity.endDate),
+    asBoundedString(activity.type, 120), activity.sourceActivityKey ?? null,
+    activity.getStat?.(DataDuration.type)?.getValue?.() ?? null,
+    activity.getStat?.(DataDistance.type)?.getValue?.() ?? null,
+  ]);
+  return {
+    sourceFiles, existingActivities, targetExistingIndex,
+    identityFingerprint: createHash('sha256').update(JSON.stringify([identities, sourceFiles])).digest('hex'),
+  };
+}
+
+async function getActivityChartData(
+  dependencies: McpDataServiceDependencies,
+  input: GetActivityChartDataInput,
+) {
+  const reference = decodeActivityReference(
+    input.activityRef,
+    input.uid,
+    input.connectionId,
+  );
+  const context = await resolveActivityStreamContext(dependencies, input.uid, reference, input.metrics);
+
   try {
     await dependencies.consumeActivityChartRateLimit(
       input.uid,
       input.connectionId,
     );
-    return await dependencies.buildActivityChartData({
-      sourceFiles,
-      existingActivities: context.activities.map(toActivityChartIdentity),
-      targetExistingIndex,
-    }, input, {
+    return await dependencies.buildActivityChartData(context, input, {
       loadSource: (sourceFile, maximumBytes) => dependencies.downloadActivityChartSource(
         input.uid,
         reference.eventId,
@@ -5772,6 +5831,20 @@ async function getActivityChartData(
   }
 }
 
+async function supplementAuthorizedSleep(
+  dependencies: McpDataServiceDependencies, input: { uid: string; scopes?: readonly string[] }, docs: RawDocument[],
+): Promise<RawDocument[]> {
+  if (!input.scopes?.includes('health:read') || !input.scopes.includes('sleep:read')) return docs;
+  if (!dependencies.supplementSleepDocuments) return docs;
+  try { return await dependencies.supplementSleepDocuments(input.uid, docs); }
+  catch (error) {
+    if (error instanceof Error && /limit|bounded|page|cursor/i.test(error.message)) {
+      throw new McpDataError('query_too_large', 'Nightly Health HRV exceeds the complete-read limit.');
+    }
+    throw new McpDataError('temporarily_unavailable', 'Nightly Health HRV is temporarily unavailable.');
+  }
+}
+
 export function createMcpDataService(
   dependencies: McpDataServiceDependencies = defaultDependencies,
 ) {
@@ -5790,7 +5863,7 @@ export function createMcpDataService(
         `The query matches more than ${MAX_SLEEP_QUERY_DOCUMENTS} sleep sessions. Narrow the date range.`,
       );
     }
-    return docs.flatMap((doc) => {
+    return (await supplementAuthorizedSleep(dependencies, input, docs)).flatMap((doc) => {
       const session = toSafeSleepSession(doc.data);
       return session
         && (input.includeNaps || !session.isNap)
@@ -5955,6 +6028,47 @@ export function createMcpDataService(
       return getMcpHealthCatalog();
     },
 
+    async getActivityDescription(input: McpActivityDescriptionInput) {
+      if (!input.scopes.includes('activity-details:read') || !input.scopes.includes('activity-descriptions:read')) {
+        throw new McpDataError('invalid_request', 'Individual activity details and Activity descriptions permissions are required. Reauthorize to enable them.');
+      }
+      const reference = decodeActivityReference(input.activityRef, input.uid, input.connectionId);
+      const reads = dependencies.activityDescriptionReads
+        ?? (dependencies === defaultDependencies ? firestoreActivityDescriptionReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Activity description reads are unavailable.');
+      try {
+        const assertOwner = async () => {
+          if (!await reads.activeOwner(input.uid)) {
+            throw new McpDataError('invalid_request', 'Activity descriptions are unavailable for this account.');
+          }
+        };
+        await assertOwner();
+        const activity = await reads.fetchActivity(input.uid, reference.activityId);
+        if (!activity || activity.id !== reference.activityId || activity.data.eventID !== reference.eventId) {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        const event = await reads.fetchEvent(input.uid, reference.eventId);
+        if (!event || event.id !== reference.eventId) {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        const description = event.data.description ?? null;
+        if (description !== null && typeof description !== 'string') {
+          throw new McpDataError('detail_not_available', 'The activity description is unavailable.');
+        }
+        if (description !== null && (description.length > MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH
+          || Buffer.byteLength(description, 'utf8') > MCP_ACTIVITY_DESCRIPTION_MAX_BYTES)) {
+          throw new McpDataError('query_too_large', 'The activity description exceeds the 64 KiB text limit. Read it in Quantified Self.');
+        }
+        const result = { activityRef: input.activityRef, description };
+        requireJsonBudget(result, MCP_ACTIVITY_DESCRIPTION_MAX_RESULT_BYTES, 'The activity description exceeds the MCP response limit. Read it in Quantified Self.');
+        await assertOwner();
+        return result;
+      } catch (error) {
+        if (error instanceof McpDataError) throw error;
+        throw new McpDataError('temporarily_unavailable', 'The activity description could not be read safely. Try again later.');
+      }
+    },
+
     async queryTimelineNotes(input: McpTimelineNotesInput) {
       const reads = dependencies.timelineNotesReads
         ?? (dependencies === defaultDependencies ? firestoreTimelineNotesReads : null);
@@ -5980,6 +6094,14 @@ export function createMcpDataService(
         if (error instanceof McpHealthError) throw new McpDataError(error.code, error.message);
         // Do not expose parser errors, provider content, or database identifiers.
         throw new McpDataError('temporarily_unavailable', 'Health data could not be read safely. Try again later.');
+      }
+    },
+
+    async getHrvPersonalRange(input: HrvRangeInput) {
+      try { return await queryHrvPersonalRange(input, firestoreHrvRangeReads); }
+      catch (error) {
+        if (error instanceof McpHealthError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'HRV history could not be read safely. Try again later.');
       }
     },
 
@@ -6544,6 +6666,31 @@ export function createMcpDataService(
       return rankActivitiesByMetric(dependencies, input);
     },
 
+    async getActivitySamples(input: ActivitySamplesInput) {
+      const reads = dependencies.activitySamplesReads
+        ?? (dependencies === defaultDependencies ? defaultActivitySamplesReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Activity sample reads are unavailable.');
+      try {
+        return await queryActivitySamples(input, {
+          ...reads, now: dependencies.now,
+          context: (uid, eventId, activityId, metrics) => resolveActivityStreamContext(dependencies, uid, {eventId, activityId}, metrics),
+          loadSource: dependencies.downloadActivityChartSource,
+          consumeParse: dependencies.consumeActivityChartRateLimit,
+        }, {
+          reference: decodeActivityReference,
+          encode: (value, uid, connectionId) => encodeOpaqueValue('activity_samples_cursor', value, uid, connectionId),
+          decode: (value, uid, connectionId) => decodeOpaqueValue('activity_samples_cursor', value, uid, connectionId, 'activity sample cursor'),
+        });
+      } catch (error) {
+        if (error instanceof McpDataError) throw error;
+        if (error instanceof ActivitySamplesError) throw new McpDataError(error.code, error.message);
+        if (error instanceof McpActivityChartRateLimitError) {
+          throw new McpDataError('temporarily_unavailable', 'Activity parsing is temporarily rate limited. Retry later.');
+        }
+        throw new McpDataError('detail_not_available', 'The original activity samples could not be read safely.');
+      }
+    },
+
     async getActivityChartData(input: GetActivityChartDataInput) {
       return getActivityChartData(dependencies, input);
     },
@@ -7007,7 +7154,7 @@ export function createMcpDataService(
         scanLimit + 1,
         cursor,
       );
-      const scannedDocs = docs.slice(0, scanLimit);
+      const scannedDocs = await supplementAuthorizedSleep(dependencies, input, docs.slice(0, scanLimit));
       const matches = scannedDocs.flatMap((doc) => {
         const session = toSafeSleepSession(doc.data);
         if (
