@@ -507,7 +507,7 @@ export const scheduleCOROSSleepSync = onSchedule({
     region: 'europe-west2',
     schedule: 'every 24 hours',
     timeoutSeconds: 300,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async () => {
     const queued = await enqueueProviderPolls(
         SLEEP_PROVIDERS.COROSAPI,

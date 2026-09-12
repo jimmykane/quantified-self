@@ -234,7 +234,9 @@ export function projectionRevisionKeyFromEventTime(eventTime: string | undefined
 }
 
 function projectionMemoryForService(serviceName: ProjectedServiceName): '256MiB' | '512MiB' {
-  return serviceName === ServiceNames.SuuntoApp ? '512MiB' : '256MiB';
+  return serviceName === ServiceNames.SuuntoApp || serviceName === ServiceNames.GarminAPI
+    ? '512MiB'
+    : '256MiB';
 }
 
 function tokenProjectionTrigger(
