@@ -389,9 +389,12 @@ explicitly allowlisted account. Other signed-in users are silently redirected fr
 `/training`; signed-out navigation keeps the existing authentication flow. The workspace also clears/hides its editor
 on account changes. Full Calendar, Activity Calendar tiles and Today mini-calendars omit planning listeners, overlays,
 empty-day planning announcements and day-sheet planning actions for other accounts, while completed activities,
-Timeline notes and selectable dates remain unchanged. An already-open day sheet hides planning when its owner changes.
+Timeline notes and selectable dates remain unchanged. Calendar planning checks the live signed-in viewer against the
+displayed owner, not just the popup's user snapshot. An already-open day sheet hides planning and its retained planning
+listener cancels on sign-out/account change, even after Material destroys the originating month popup.
 Help filters planning articles, links and mixed-section text before search and Markdown rendering, including public
-prerendering and account changes. Planning-specific disconnect/deletion instructions use the same gate; generic
+prerendering and account changes. Same-account profile refreshes preserve the rendered guide and its navigation state.
+Planning-specific disconnect/deletion instructions use the same gate; generic
 provider-copy retention warnings and public privacy disclosures remain available. Existing Training analysis is not
 gated. This is a frontend presentation rollout, **not backend authorization**: owner-scoped APIs, Rules, provider
 readiness flags and delivery entitlement enforcement are unchanged. Broader rollout remains tracked by #655.

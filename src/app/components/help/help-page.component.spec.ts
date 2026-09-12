@@ -8,6 +8,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { HelpPageComponent } from './help-page.component';
 import { HELP_ACTIONS, HELP_SECTIONS } from '../../shared/help.content';
+import { MarkdownPipe } from '../../helpers/markdown.pipe';
 
 describe('HelpPageComponent', () => {
   let component: HelpPageComponent;
@@ -32,6 +33,23 @@ describe('HelpPageComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('keeps public article HTML and navigation stable during same-account profile refreshes', async () => {
+    viewer.set({ uid: 'another-user' });
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    await vi.waitFor(() => expect(component.renderedSectionContent()['activity-calendar']).toBeTruthy());
+    component.openSection('activity-calendar'); fixture.detectChanges();
+    const sections = component.sections();
+    const rendered = component.renderedSectionContent();
+    const transform = vi.spyOn(fixture.debugElement.injector.get(MarkdownPipe), 'transform');
+    viewer.set({ uid: 'another-user' });
+    expect(component.sections()).toBe(sections);
+    expect(component.renderedSectionContent()).toBe(rendered);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(transform).not.toHaveBeenCalled();
+    expect(component.selectedSectionId()).toBe('activity-calendar');
+    expect(window.location.hash).toBe('#activity-calendar');
   });
 
   it.each([null, 'another-user'])('hides planning topics, search, links and retained articles for %s', async uid => {

@@ -7,6 +7,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { provideRouter } from '@angular/router';
 import { ActivityTypes, DataDuration, DaysOfTheWeek, type EventInterface } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
+import { AppUserService } from '../../../services/app.user.service';
 import type { TimelineNote, TimelineNoteRange } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import type { CalendarDayDetailsData } from '../calendar-day-details/calendar-day-details.component';
@@ -25,12 +26,16 @@ describe('ActivityCalendarTileComponent', () => {
   let watchEvents: ReturnType<typeof vi.fn>;
   let openBottomSheet: ReturnType<typeof vi.fn>;
   let watchSchedule: ReturnType<typeof vi.fn>;
+  let viewer: ReturnType<typeof signal<{ uid: string } | null>>;
+  let viewer$: BehaviorSubject<{ uid: string } | null>;
   let dayDetailsNavigation: {
     restorationFor: ReturnType<typeof vi.fn>;
     consumeRestoration: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
+    viewer = signal<{ uid: string } | null>(user);
+    viewer$ = new BehaviorSubject<{ uid: string } | null>(user);
     watchEvents = vi.fn().mockReturnValue(of([createEvent()]));
     watchSchedule = vi.fn().mockReturnValue(of(emptySchedule()));
     openBottomSheet = vi.fn().mockReturnValue({ afterDismissed: () => of(undefined) });
@@ -42,6 +47,7 @@ describe('ActivityCalendarTileComponent', () => {
       imports: [ActivityCalendarTileComponent],
       providers: [
         provideRouter([]),
+        { provide: AppUserService, useValue: { user: viewer, user$: viewer$ } },
         { provide: ActivityCalendarService, useValue: { watchEvents } },
         { provide: TrainingPlansService, useValue: { watchSchedule } },
         { provide: CalendarDayDetailsNavigationService, useValue: dayDetailsNavigation },
@@ -80,6 +86,48 @@ describe('ActivityCalendarTileComponent', () => {
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     expect(fixture.componentInstance.plannedWorkoutsByDate()).toEqual({});
     expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeNull();
+  });
+
+  it.each([null, { uid: 'another-user' }])('hides planning for live viewer %s while the popup retains its original user input', async currentViewer => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    const schedule$ = new BehaviorSubject(scheduleForDate(currentLocalDate(2)));
+    watchSchedule.mockReturnValue(schedule$);
+    fixture.componentRef.setInput('user', user);
+    fixture.componentRef.setInput('showNavigation', true);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+    expect(schedule$.observed).toBe(true);
+    viewer.set(currentViewer); viewer$.next(currentViewer);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.user()).toBe(user);
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[aria-label*="planned workout"]')).toBeNull();
+    expect(schedule$.observed).toBe(false);
+    expect(watchSchedule).toHaveBeenCalledOnce();
+  });
+
+  it('stops the retained day-sheet planning listener on sign-out after the tile is destroyed', async () => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    const dateKey = currentLocalDate(2);
+    const schedule$ = new BehaviorSubject(scheduleForDate(dateKey));
+    const dismissed$ = new Subject<string>();
+    watchSchedule.mockReturnValue(schedule$);
+    openBottomSheet.mockReturnValue({ afterDismissed: () => dismissed$ });
+    fixture.componentRef.setInput('user', user);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    vi.spyOn(fixture.debugElement.injector.get(MatBottomSheet), 'open').mockImplementation(openBottomSheet);
+    const day = fixture.componentInstance.calendarModel().months.flatMap(month => month.days).find(day => day.dateKey === dateKey)!;
+    fixture.componentInstance.openDay(day);
+    const data = openBottomSheet.mock.calls[0][1].data as CalendarDayDetailsData;
+    expect(data.plannedWorkoutsSource?.()).not.toHaveLength(0);
+    fixture.destroy();
+    expect(schedule$.observed).toBe(true);
+    viewer.set(null); viewer$.next(null);
+    expect(schedule$.observed).toBe(false);
+    expect(data.plannedWorkoutsSource?.()).toEqual([]);
+    schedule$.next(scheduleForDate(dateKey));
+    expect(data.plannedWorkoutsSource?.()).toEqual([]);
+    dismissed$.next(''); dismissed$.complete();
   });
 
   it('opens the shared day details sheet from an activity day', async () => {

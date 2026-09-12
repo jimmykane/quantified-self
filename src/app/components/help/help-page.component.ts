@@ -62,7 +62,9 @@ export class HelpPageComponent implements OnInit, OnDestroy {
   private onHashChange = () => this.selectSectionFromHash();
 
   private readonly users = inject(AppUserService);
-  readonly sections = computed(() => getHelpSectionsForUser(this.users.user()?.uid));
+  // Profile/settings refreshes must not blank the article and re-render every guide.
+  private readonly viewerUid = computed(() => this.users.user()?.uid);
+  readonly sections = computed(() => getHelpSectionsForUser(this.viewerUid()));
   readonly actions: readonly HelpActionCard[] = HELP_ACTIONS.map(action => ({
     ...action,
     description: HELP_ACTION_DESCRIPTIONS[action.id],
