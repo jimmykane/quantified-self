@@ -5,7 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
-import { isTimelineNoteVisible, type TimelineNote, type TimelineNoteRange, type TimelineNotesLoad } from '@shared/timeline-notes';
+import { isTimelineNoteVisible, timelineNoteEnd, type TimelineNote, type TimelineNoteRange, type TimelineNotesLoad } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -67,6 +67,8 @@ export class TimelineNotesWorkspaceComponent {
   private queued = false;
   private readonly destroyed = signal(false);
   private rangeKey = '';
+  private forceRefresh = false;
+  private readonly ongoingDates = signal('');
   private readonly loadedOwner = signal<string | null>(null);
   private readonly reportRange = (key: object, range: TimelineNoteRange | null) => {
     if (this.destroyed()) return;
@@ -75,6 +77,7 @@ export class TimelineNotesWorkspaceComponent {
   };
   readonly context = computed<TimelineNoteChartContext>(() => {
     const owner = this.activeOwner();
+    this.ongoingDates(); // Reproject ongoing periods only when their captured-zone date changes.
     return {
       ownerUid: owner,
       notes: this.service.showOnCharts() && owner === this.loadedOwner() ? this.notes().filter(isTimelineNoteVisible) : [],
@@ -94,8 +97,6 @@ export class TimelineNotesWorkspaceComponent {
   });
 
   constructor() {
-    // A new route instance means returning to the workspace, not reusing an old cache forever.
-    this.service.invalidate();
     effect(() => this.reportRange(this, this.visibleRange()));
     effect(() => {
       this.activeOwner(); this.service.showOnCharts();
@@ -107,7 +108,7 @@ export class TimelineNotesWorkspaceComponent {
       this.notes.set([]); this.incomplete.set(null);
       this.rangeKey = ''; this.schedule();
     });
-    const returned = () => { if (document.visibilityState === 'visible') this.refresh(); };
+    const returned = () => { if (document.visibilityState === 'visible') this.refresh(false); };
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', returned);
       document.addEventListener('visibilitychange', returned);
@@ -121,7 +122,17 @@ export class TimelineNotesWorkspaceComponent {
     if (this.destroyed() || !uid || !this.service.isOwner(uid)) return;
     this.dialogs.open(TimelineNotesDialogComponent, { width: '560px', maxWidth: 'calc(100vw - 32px)', data: { uid, notes } });
   }
-  refresh(): void { this.service.invalidate(); }
+  refresh(force = true): void {
+    this.updateOngoingDates();
+    // Focus and visibilitychange commonly arrive separately; neither should restart a pending load.
+    if (this.loading() || this.destroyed()) return;
+    this.forceRefresh ||= force;
+    this.rangeKey = ''; this.schedule();
+  }
+  private updateOngoingDates(): void {
+    this.ongoingDates.set(this.notes().filter(note => note.endDate === null && isTimelineNoteVisible(note))
+      .map(note => `${note.id}:${timelineNoteEnd(note)}`).join('|'));
+  }
   private schedule(): void {
     if (this.queued || this.destroyed()) return;
     this.queued = true;
@@ -138,6 +149,7 @@ export class TimelineNotesWorkspaceComponent {
     if (key === this.rangeKey) return;
     this.rangeKey = key;
     const version = ++this.version;
+    const forceRefresh = this.forceRefresh; this.forceRefresh = false;
     const canLoad = !!uid && !!range && this.service.showOnCharts();
     // Lazy charts register as they approach the viewport. Retain this owner's annotations while their
     // union expands/contracts, then replace the snapshot atomically; a new range is not a privacy reset.
@@ -149,9 +161,12 @@ export class TimelineNotesWorkspaceComponent {
     if (!canLoad) return;
     this.loading.set(true);
     try {
-      const result = await this.service.loadRange(uid, range);
+      const cached = this.service.cachedRange(uid, range);
+      if (cached) { this.notes.set(cached.notes); this.incomplete.set(cached.incomplete); }
+      this.updateOngoingDates();
+      const result = await this.service.loadRange(uid, range, forceRefresh);
       if (version !== this.version || uid !== this.activeOwner() || !this.service.isOwner(uid)) return;
-      this.notes.set(result.notes); this.incomplete.set(result.incomplete);
+      this.notes.set(result.notes); this.incomplete.set(result.incomplete); this.updateOngoingDates();
     } catch {
       if (version === this.version && uid === this.activeOwner() && this.service.isOwner(uid)) this.error.set(true);
     } finally { if (version === this.version) this.loading.set(false); }

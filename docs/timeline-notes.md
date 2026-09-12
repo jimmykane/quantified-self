@@ -55,7 +55,10 @@ add Assistant chart overlays. Provider disconnect retains them and account clean
 `AppTimelineNotesService` scopes requests/cache to the active account. Closed periods query `endDate >= windowStart`
 and `startDate <= windowEnd`; ongoing notes query `endDate == null` and the same upper start bound. The collection index
 is `endDate ASC, startDate ASC, __name__ ASC`. Title and details have no automatic indexes. Each workspace load accepts
-at most 512 records / 2 MiB, across 64-record pages; it reports explicit incomplete results. The manager separately
+at most 512 records / 2 MiB, across 64-record pages; it reports explicit incomplete results. The two first pages load
+concurrently, then processing prioritizes ongoing notes within the shared caps. This removes a serial network wait
+without changing the indexed queries. If ongoing notes alone exhaust the budget, the closed first page (at most 65
+records including lookahead) has been prefetched but is not processed. The manager separately
 pages all notes, including future notes, newest start date first. No query parameters or navigation destination exist.
 
 `TimelineNotesWorkspaceComponent` coalesces chart range registrations into a union and supplies explicit chart inputs.
@@ -66,8 +69,15 @@ until the next result replaces them atomically; equivalent decoded snapshots ret
 mounted charts do not redraw. A failed expansion retains known annotations and exposes Retry notes. Account/profile
 changes, disabling notes, an empty range union, destruction, and explicit service invalidation still clear stale notes;
 late responses cannot restore them. Mutation invalidation increments the request version immediately.
-The service deduplicates overlapping covered requests, fences stale account/range results, and invalidates on mutations
-and returning to the workspace. Notes failing to load never block metric rendering. Provider/sport filters do not filter
+The service keeps a bounded completed snapshot separately from pending requests. Covered results are fresh for 60 seconds;
+returning workspaces can display the last completed snapshot immediately while older data revalidates. Covered pending
+requests are shared, including refreshes; a late older window cannot overwrite the newest snapshot. Incomplete broad
+results must be requeried for a narrower window. Successful note mutations and account changes clear the snapshot and
+fence outstanding reads immediately.
+Window focus and visible-tab events perform passive revalidation, preserving annotations and avoiding duplicate pending
+loads. They do not invalidate the service. Unchanged notes retain the same chart context; ongoing periods reproject only
+when their captured-zone date changes. An explicit Retry notes bypasses freshness without clearing known annotations.
+Failed refreshes keep the last completed snapshot and expose retry. Notes failing to load never block metric rendering. Provider/sport filters do not filter
 notes. The global preference is `settings.appSettings.timelineNotes.showOnCharts`, default true. The Material manager
 supports create/edit, confirmed delete, End today, retries and explicit conflict reload while preserving unsaved drafts.
 Failed history-page requests retry that same page; failed visibility saves restore the persisted checkbox state.

@@ -12,6 +12,13 @@ import {
   type TimelineNote, type TimelineNoteRange, type TimelineNotesLoad, type SaveTimelineNoteRequest, type DeleteTimelineNoteRequest,
 } from '@shared/timeline-notes';
 
+const TIMELINE_NOTES_FRESH_MS = 60_000;
+interface TimelineNotesSnapshot { uid: string; range: TimelineNoteRange; result: TimelineNotesLoad; loadedAt: number; version: number }
+interface TimelineNotesRequest { uid: string; range: TimelineNoteRange; promise: Promise<TimelineNotesLoad>; version: number }
+const covers = (outer: TimelineNoteRange, inner: TimelineNoteRange): boolean =>
+  outer.startDate <= inner.startDate && outer.endDate >= inner.endDate;
+const sameRange = (a: TimelineNoteRange, b: TimelineNoteRange): boolean => a.startDate === b.startDate && a.endDate === b.endDate;
+
 export interface TimelineNotesPage { notes: TimelineNote[]; cursor: QueryDocumentSnapshot | null }
 export interface TimelineReadPage { rows: Array<{ id: string; data: unknown }>; cursor: unknown | null }
 
@@ -25,12 +32,16 @@ export async function loadTimelineNotePages(
   const notes = new Map<string, TimelineNote>();
   let count = 0;
   let bytes = 0;
-  for (const ongoing of [true, false]) {
+  if (!isCurrent()) throw new Error('Timeline request was cancelled.');
+  // Independent indexed queries share one network wait. Consume ongoing records first, preserving the shared caps.
+  // At most one extra first page is fetched if ongoing notes alone exhaust the projection budget.
+  const firstPages = await Promise.all([true, false].map(ongoing => read(ongoing, null, TIMELINE_NOTE_LIMITS.page + 1)));
+  for (const [index, ongoing] of [true, false].entries()) {
     let cursor: unknown | null = null;
     do {
       if (!isCurrent()) throw new Error('Timeline request was cancelled.');
       const size = Math.min(TIMELINE_NOTE_LIMITS.page, TIMELINE_NOTE_LIMITS.records - count);
-      const page = await read(ongoing, cursor, size + 1);
+      const page = cursor === null ? firstPages[index] : await read(ongoing, cursor, size + 1);
       if (!isCurrent()) throw new Error('Timeline request was cancelled.');
       for (const row of page.rows.slice(0, size)) {
         count++;
@@ -57,7 +68,9 @@ export class AppTimelineNotesService {
   private readonly users = inject(AppUserService);
   private user: AppUserInterface | null = null;
   private generation = 0;
-  private cache: { uid: string; range: TimelineNoteRange; promise: Promise<TimelineNotesLoad> } | null = null;
+  private cache: TimelineNotesSnapshot | null = null;
+  private readonly requests = new Set<TimelineNotesRequest>();
+  private requestVersion = 0;
   readonly uid = signal<string | null>(null);
   readonly showOnCharts = signal(true);
   readonly changes$ = new Subject<void>();
@@ -75,26 +88,43 @@ export class AppTimelineNotesService {
   private assertOwner(uid: string): void {
     if (!this.isOwner(uid)) throw new Error('Your account changed. Reopen Timeline notes.');
   }
-  invalidate(): void { this.generation++; this.cache = null; this.changes$.next(); }
+  invalidate(): void { this.generation++; this.cache = null; this.requests.clear(); this.changes$.next(); }
 
-  loadRange(uid: string, range: TimelineNoteRange): Promise<TimelineNotesLoad> {
+  /** Last completed snapshot for immediate display while revalidating; never crosses account/mutation boundaries. */
+  cachedRange(uid: string, range: TimelineNoteRange): TimelineNotesLoad | null {
+    this.assertOwner(uid);
+    const cached = this.cache;
+    if (cached?.uid !== uid || !covers(cached.range, range) || (cached.result.incomplete && !sameRange(cached.range, range))) return null;
+    return { ...cached.result, notes: cached.result.notes.filter(note => timelineNoteOverlaps(note, range)) };
+  }
+
+  loadRange(uid: string, range: TimelineNoteRange, refresh = false): Promise<TimelineNotesLoad> {
     this.assertOwner(uid);
     if (!isTimelineDate(range.startDate) || !isTimelineDate(range.endDate) || range.startDate > range.endDate) {
       return Promise.reject(new Error('Invalid timeline window.'));
     }
     const generation = this.generation;
-    const cached = this.cache;
-    if (cached?.uid === uid && cached.range.startDate <= range.startDate && cached.range.endDate >= range.endDate) {
-      return cached.promise.then(result => {
+    // Prefer the newest covering request, and never join one older than our completed snapshot.
+    const pending = [...this.requests].reverse().find(request => request.uid === uid
+      && request.version >= (this.cache?.version ?? 0) && covers(request.range, range));
+    if (pending) {
+      return pending.promise.then(result => {
         this.assertOwner(uid);
         if (generation !== this.generation) throw new Error('Timeline request was cancelled.');
-        if (result.incomplete && (cached.range.startDate !== range.startDate || cached.range.endDate !== range.endDate)) {
-          this.cache = null;
-          return this.loadRange(uid, range);
-        }
+        // A truncated broad window cannot stand in for a complete, narrower query.
+        if (result.incomplete && !sameRange(pending.range, range)) return this.loadRange(uid, range, refresh);
         return { ...result, notes: result.notes.filter(note => timelineNoteOverlaps(note, range)) };
       });
     }
+    const cached = this.cachedRange(uid, range);
+    if (!refresh && cached && Date.now() - this.cache!.loadedAt < TIMELINE_NOTES_FRESH_MS) {
+      return Promise.resolve().then(() => {
+        this.assertOwner(uid);
+        if (generation !== this.generation) throw new Error('Timeline request was cancelled.');
+        return cached;
+      });
+    }
+    const requestVersion = ++this.requestVersion;
     const promise = loadTimelineNotePages(range, async (ongoing, cursor, size) => {
       this.assertOwner(uid);
       const constraints: QueryConstraint[] = [
@@ -105,9 +135,15 @@ export class AppTimelineNotesService {
       if (cursor) constraints.push(startAfter(cursor));
       const snapshot = await getDocsFromServer(query(collection(this.db, 'users', uid, TIMELINE_NOTES_COLLECTION), ...constraints));
       return { rows: snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() })), cursor: snapshot.docs[size - 2] ?? null };
-    }, () => this.isOwner(uid) && this.generation === generation);
-    this.cache = { uid, range, promise };
-    void promise.catch(() => { if (this.cache?.promise === promise) this.cache = null; });
+    }, () => this.isOwner(uid) && this.generation === generation).then(result => {
+      this.assertOwner(uid);
+      if (generation !== this.generation) throw new Error('Timeline request was cancelled.');
+      // An older, slower request must not replace the snapshot from a more recent window/refresh.
+      if (requestVersion === this.requestVersion) this.cache = { uid, range: { ...range }, result, loadedAt: Date.now(), version: requestVersion };
+      return result;
+    }).finally(() => { this.requests.delete(request); });
+    const request = { uid, range: { ...range }, promise, version: requestVersion };
+    this.requests.add(request);
     return promise;
   }
 

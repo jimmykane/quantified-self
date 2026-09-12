@@ -56,7 +56,7 @@ describe('CalendarPageComponent', () => {
   let openBottomSheet: ReturnType<typeof vi.fn>;
   let dismissed: Subject<string | undefined>;
   const note: TimelineNote = { id: 'a'.repeat(64), category: 'travel', title: 'A trip', startDate: '2026-08-04', endDate: '2026-08-05', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
-  const notesService = { uid: signal<string | null>('user-1'), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), invalidate: vi.fn(), isOwner: (uid: string) => notesService.uid() === uid };
+  const notesService = { uid: signal<string | null>('user-1'), showOnCharts: signal(true), changes$: new Subject<void>(), loadRange: vi.fn(), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => notesService.uid() === uid };
   const haptics = { selection: vi.fn() };
   const dialogs = { open: vi.fn() };
   let watchSchedule: ReturnType<typeof vi.fn>;
@@ -355,7 +355,7 @@ describe('CalendarPageComponent', () => {
     const fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
     await vi.waitFor(() => expect(fixture.componentInstance.notesByDate().size).toBe(2));
-    expect(notesService.loadRange).toHaveBeenCalledWith('user-1', { startDate: '2026-07-27', endDate: '2026-09-06' });
+    expect(notesService.loadRange).toHaveBeenCalledWith('user-1', { startDate: '2026-07-27', endDate: '2026-09-06' }, false);
     const day = fixture.componentInstance.calendarModel().months[0].days.find(day => day.dateKey === note.startDate)!;
     fixture.componentInstance.openDay(day);
     const data = openBottomSheet.mock.calls.at(-1)?.[1].data as CalendarDayDetailsData;

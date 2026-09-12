@@ -184,7 +184,7 @@ describe('SummariesComponent', () => {
       providers: [
         { provide: AppTimelineNotesService, useValue: {
           uid: signal('owner-user'), showOnCharts: signal(true), changes$: new Subject<void>(),
-          loadRange: vi.fn().mockResolvedValue({ notes: [], incomplete: null }), invalidate: vi.fn(), isOwner: (uid: string) => uid === 'owner-user',
+          loadRange: vi.fn().mockResolvedValue({ notes: [], incomplete: null }), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => uid === 'owner-user',
         } },
         { provide: DashboardConfigurationService, useValue: { save: (_uid, _expected, patch) => mockUserService.updateUserProperties(component.user, { settings: { dashboardSettings: patch } }) } },
         { provide: AppHapticsService, useValue: { selection: vi.fn(), success: vi.fn(), error: vi.fn() } },
