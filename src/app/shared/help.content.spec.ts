@@ -49,7 +49,7 @@ describe('help.content', () => {
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id)).toEqual(expect.arrayContaining(['health', 'training-analysis']));
     const calendar = HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content;
     expect(calendar).toContain('a note icon marks days');
-    expect(calendar).toContain("A slim colored edge uses your note's selected color");
+    expect(calendar).toContain("Small color markers show your chosen note colors");
     expect(calendar).toContain('overlapping notes keep their different colors as separate segments');
     expect(calendar).toContain('Activity circles keep their own colors');
     expect(calendar).toContain('Show on charts and calendar');
@@ -411,7 +411,8 @@ describe('help.content', () => {
 
     expect(calendarSection?.content).toContain('**Week**, **Month**, and **Year** views');
     expect(calendarSection?.content).toContain('1 x 1 **Activity Calendar** tile');
-    expect(calendarSection?.content).toContain('Dashboard and Training headers each include a **Calendar** action');
+    expect(calendarSection?.content).toContain('**Today** card opens a month calendar in a bottom sheet');
+    expect(calendarSection?.content).toContain('Dashboard and Training headers also link to the full [Calendar](/calendar)');
     expect(calendarSection?.content).toContain('Existing editable dashboards that do not contain the Activity Calendar receive it once automatically');
     expect(calendarSection?.content).toContain('Dashboard options **Remove all** to keep it from returning');
     expect(calendarSection?.content).toContain('place multiple circles concentrically around the same center');

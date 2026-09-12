@@ -132,6 +132,12 @@
   cursor: pointer;
 }
 
+// These wrappers only reserve layout space in the month picker.
+.activity-calendar-day-indicators,
+.activity-calendar-day-notes {
+  display: contents;
+}
+
 .activity-calendar-note-colors {
   position: absolute;
   inset-block: 4px;
@@ -422,10 +428,93 @@
   }
 }
 
-// A popup can scroll: keep a complete date, activity marker, and comfortable tap target in each row.
-// Dashboard tiles and library previews retain their existing constrained layout by default.
-.activity-calendar--compact:not(.activity-calendar--fill-height) .activity-calendar-day {
-  min-height: 48px;
+// The scrollable month picker has its own readable density; other calendar layouts retain their existing sizes.
+.activity-calendar--picker {
+  .activity-calendar-weekdays {
+    min-height: 36px;
+  }
+
+  .activity-calendar-weekdays span {
+    font: var(--mat-sys-label-medium);
+  }
+
+  .activity-calendar-day {
+    min-height: 64px;
+    gap: 2px;
+    padding: 4px 0 7px;
+  }
+
+  .activity-calendar-day-number {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    font: var(--mat-sys-body-medium);
+  }
+
+  .activity-calendar-day-indicators {
+    display: flex;
+    height: 22px;
+    flex: 0 0 22px;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .activity-calendar-marker-stage {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+  }
+
+  .activity-calendar-marker {
+    width: calc(var(--calendar-marker-compact-diameter) + 4px);
+    height: calc(var(--calendar-marker-compact-diameter) + 4px);
+  }
+
+  .activity-calendar-day-notes {
+    position: relative;
+    display: flex;
+    width: 14px;
+    height: 20px;
+    flex: 0 0 14px;
+    align-items: flex-start;
+  }
+
+  .activity-calendar-note-indicator {
+    position: static;
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+    line-height: 14px;
+  }
+
+  .activity-calendar-note-colors {
+    inset: auto 0 1px;
+    width: 14px;
+    height: 2px;
+    flex-direction: row;
+  }
+
+  .planned-workout-markers {
+    top: auto;
+    right: 8px;
+    bottom: 3px;
+    left: 8px;
+    width: auto;
+    height: 3px;
+    flex-direction: row;
+  }
+
+  .planned-workout-markers mat-icon {
+    width: auto;
+    height: 3px;
+    border-inline-end: 0;
+    border-bottom: 3px solid currentColor;
+  }
+
+  .planned-workout-markers .planned-workout-marker--skipped {
+    border-bottom-style: dashed;
+  }
 }
 
 @media (max-width: 860px) {

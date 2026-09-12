@@ -3,9 +3,10 @@
   [class.activity-calendar--year]="model.view === 'year'"
   [class.activity-calendar--week]="model.view === 'week'"
   [class.activity-calendar--compact]="compact"
-  [class.activity-calendar--fill-height]="compact && fillHeight">
+  [class.activity-calendar--fill-height]="compact && fillHeight"
+  [class.activity-calendar--picker]="isMonthPicker">
   <div class="activity-calendar-months">
-    @for (month of model.months; track month.id) {
+    @for (month of visibleMonths; track month.id) {
     <section class="activity-calendar-month"
       [class.activity-calendar-month--surface]="!compact"
       [class.qs-glass-card-panel]="!compact"
@@ -32,29 +33,33 @@
             matRipple
             (click)="selectDay(day)">
             <span class="activity-calendar-day-number"><span class="activity-calendar-day-number-value">{{ day.dayNumber }}</span></span>
-            @if (dayNotes) {
-            <span class="activity-calendar-note-colors" aria-hidden="true">
-              @for (color of dayNotes.accentColors; track color) {
-              <span class="activity-calendar-note-color" [style.background-color]="color"></span>
+            <span class="activity-calendar-day-indicators">
+              @if (day.eventCount) {
+              <span class="activity-calendar-marker-stage"
+                [class.activity-calendar-marker-stage--concentric]="compact || model.view === 'year'">
+                @for (family of day.visibleFamilies; track family.id) {
+                <span class="activity-calendar-marker"
+                  [style.background-color]="family.color"
+                  [style.--calendar-marker-diameter]="family.diameterPx + 'px'"
+                  [style.--calendar-marker-compact-diameter]="family.compactDiameterPx + 'px'"
+                  [style.z-index]="$index + 1"></span>
+                }
+                @if (day.overflowFamilyCount) {
+                <span class="activity-calendar-marker-overflow">+{{ day.overflowFamilyCount }}</span>
+                }
+              </span>
+              }
+              @if (dayNotes) {
+              <span class="activity-calendar-day-notes">
+                <span class="activity-calendar-note-colors" aria-hidden="true">
+                  @for (color of dayNotes.accentColors; track color) {
+                  <span class="activity-calendar-note-color" [style.background-color]="color"></span>
+                  }
+                </span>
+                <mat-icon class="activity-calendar-note-indicator" [style.color]="dayNotes.color" aria-hidden="true">{{ dayNotes.icon }}</mat-icon>
+              </span>
               }
             </span>
-            <mat-icon class="activity-calendar-note-indicator" [style.color]="dayNotes.color" aria-hidden="true">{{ dayNotes.icon }}</mat-icon>
-            }
-            @if (day.eventCount) {
-            <span class="activity-calendar-marker-stage"
-              [class.activity-calendar-marker-stage--concentric]="compact || model.view === 'year'">
-              @for (family of day.visibleFamilies; track family.id) {
-              <span class="activity-calendar-marker"
-                [style.background-color]="family.color"
-                [style.--calendar-marker-diameter]="family.diameterPx + 'px'"
-                [style.--calendar-marker-compact-diameter]="family.compactDiameterPx + 'px'"
-                [style.z-index]="$index + 1"></span>
-              }
-              @if (day.overflowFamilyCount) {
-              <span class="activity-calendar-marker-overflow">+{{ day.overflowFamilyCount }}</span>
-              }
-            </span>
-            }
             @if (plannedWorkoutsByDate[day.dateKey]; as plannedDay) {
               <span class="planned-workout-markers" aria-hidden="true"
                 [class.planned-workout-markers--skipped]="plannedDay.hasSkipped">

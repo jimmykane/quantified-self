@@ -155,9 +155,11 @@ shadow for in-flow cards or add route-local card shadows.
 ## Dashboard calendar popup
 
 The Today month popup uses the existing compact calendar with `fillHeight=false` on both its tile and grid.
-Rows retain a 48px minimum so dates, activity circles, notes, and plan indicators fit; the sheet's content scrolls
-when the viewport cannot accommodate the month. The header stays outside that scroll area, and the content respects
-the bottom safe-area inset. Do not constrain this popup to the dashboard tile's fixed height.
+The grid opts into `activity-calendar--picker`: readable 28px date badges, 64px rows, and a separate
+indicator row for activity circles and Timeline notes. Note colors sit under the note icon; planned workouts use
+a short bottom rail. Only wholly empty trailing weeks are omitted (4–6 weeks remain, with weekday alignment preserved).
+The sheet's content scrolls when the viewport cannot accommodate the month. The header stays outside that scroll area,
+and the content respects the bottom safe-area inset. Do not constrain this popup to the dashboard tile's fixed height.
 The default `fillHeight=true` preserves dashboard tiles and chart-library previews; full Month, Week, and Year grids
 do not opt into the compact height-filling class.
 
