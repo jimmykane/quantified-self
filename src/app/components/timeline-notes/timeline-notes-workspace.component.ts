@@ -51,7 +51,14 @@ export class TimelineNotesWorkspaceComponent {
   private readonly haptics = inject(AppHapticsService);
   private readonly zone = inject(NgZone);
   private readonly destroy = inject(DestroyRef);
-  private readonly notes = signal<readonly TimelineNote[]>([]);
+  private readonly notes = signal<readonly TimelineNote[]>([], {
+    // Decoded notes contain only scalar fields. Equivalent cache/server results must not redraw every chart.
+    equal: (previous, next) => previous.length === next.length && previous.every((note, index) => {
+      const other = next[index];
+      const keys = Object.keys(note) as (keyof TimelineNote)[];
+      return note === other || (keys.length === Object.keys(other).length && keys.every(key => note[key] === other[key]));
+    }),
+  });
   readonly loading = signal(false);
   readonly error = signal(false);
   readonly incomplete = signal<TimelineNotesLoad['incomplete']>(null);
@@ -94,7 +101,12 @@ export class TimelineNotesWorkspaceComponent {
       this.activeOwner(); this.service.showOnCharts();
       untracked(() => { this.rangeKey = ''; this.schedule(); });
     });
-    this.service.changes$.pipe(takeUntilDestroyed()).subscribe(() => { this.rangeKey = ''; this.schedule(); });
+    this.service.changes$.pipe(takeUntilDestroyed()).subscribe(() => {
+      // Explicit invalidation can follow an edit/hide/delete: discard that stale snapshot immediately.
+      this.version++;
+      this.notes.set([]); this.incomplete.set(null);
+      this.rangeKey = ''; this.schedule();
+    });
     const returned = () => { if (document.visibilityState === 'visible') this.refresh(); };
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', returned);
@@ -126,9 +138,15 @@ export class TimelineNotesWorkspaceComponent {
     if (key === this.rangeKey) return;
     this.rangeKey = key;
     const version = ++this.version;
-    this.notes.set([]); this.loadedOwner.set(uid);
-    this.error.set(false); this.incomplete.set(null); this.loading.set(false);
-    if (!uid || !range || !this.service.showOnCharts()) return;
+    const canLoad = !!uid && !!range && this.service.showOnCharts();
+    // Lazy charts register as they approach the viewport. Retain this owner's annotations while their
+    // union expands/contracts, then replace the snapshot atomically; a new range is not a privacy reset.
+    if (!canLoad || uid !== this.loadedOwner()) {
+      this.notes.set([]); this.incomplete.set(null);
+    }
+    this.loadedOwner.set(uid);
+    this.error.set(false); this.loading.set(false);
+    if (!canLoad) return;
     this.loading.set(true);
     try {
       const result = await this.service.loadRange(uid, range);

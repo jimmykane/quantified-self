@@ -47,6 +47,102 @@ describe('Timeline notes workspace ownership', () => {
     expect(component.context().notes).toEqual([note]);
     component.context().select([note]); expect(dialogs.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: { uid: 'owner', notes: [note] } }));
   });
+  it('keeps existing chart annotations stable while a newly visible chart expands the union', async () => {
+    const first = {}, second = {};
+    const report = component.context().reportRange;
+    report(first, { startDate: '2026-01-01', endDate: '2026-01-10' });
+    await flush();
+    const renderedContext = component.context();
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveLoad = resolve; }));
+    report(second, { startDate: '2025-12-01', endDate: '2026-01-10' });
+    await flush();
+    expect(component.loading()).toBe(true);
+    expect(component.context()).toBe(renderedContext);
+    expect(component.context().notes).toEqual([note]);
+    resolveLoad({ notes: [{ ...note }], incomplete: null });
+    await flush();
+    // A server/cache response with unchanged notes must not refresh every mounted chart again.
+    expect(component.context()).toBe(renderedContext);
+    expect(component.loading()).toBe(false);
+    report(second, null); await flush();
+    expect(component.context()).toBe(renderedContext);
+  });
+
+  it('replaces the expanded result atomically and retains known annotations if another range fails', async () => {
+    const report = component.context().reportRange;
+    report({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    const olderNote = { ...note, id: 'b'.repeat(64), startDate: '2025-12-02', endDate: '2025-12-04' };
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveLoad = resolve; }));
+    report({}, { startDate: '2025-12-01', endDate: '2026-01-10' }); await flush();
+    expect(component.context().notes).toEqual([note]);
+    resolveLoad({ notes: [olderNote, { ...note }], incomplete: 'records' }); await flush();
+    expect(component.context().notes).toEqual([olderNote, note]);
+    expect(component.incomplete()).toBe('records');
+    const renderedContext = component.context();
+    service.loadRange.mockRejectedValueOnce(new Error('offline'));
+    report({}, { startDate: '2025-11-01', endDate: '2026-01-10' }); await flush();
+    expect(component.error()).toBe(true);
+    expect(component.context()).toBe(renderedContext);
+    expect(component.incomplete()).toBe('records');
+  });
+
+  it('rejects out-of-order range loads while keeping the most recent visible snapshot', async () => {
+    const report = component.context().reportRange;
+    const key = {};
+    report(key, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    let resolveOlder!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveOlder = resolve; }));
+    report(key, { startDate: '2025-12-01', endDate: '2026-01-10' }); await flush();
+    const updated = { ...note, revision: 2, title: 'Updated note', color: 'purple' as const };
+    service.loadRange.mockResolvedValueOnce({ notes: [updated], incomplete: null });
+    report(key, { startDate: '2025-11-01', endDate: '2026-01-10' }); await flush();
+    expect(component.context().notes).toEqual([updated]);
+    resolveOlder({ notes: [note], incomplete: 'records' }); await flush();
+    expect(component.context().notes).toEqual([updated]);
+    expect(component.incomplete()).toBeNull();
+  });
+
+  it.each(['account', 'profile', 'hidden', 'no ranges'] as const)(
+    'clears retained annotations when %s changes during a range load', async change => {
+      const fixture = TestBed.createComponent(TimelineNotesWorkspaceComponent);
+      fixture.componentRef.setInput('ownerUid', 'owner'); fixture.detectChanges();
+      const workspace = fixture.componentInstance;
+      const key = {};
+      const report = workspace.context().reportRange;
+      report(key, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+      expect(workspace.context().notes).toEqual([note]);
+      let resolveLoad!: (value: unknown) => void;
+      service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveLoad = resolve; }));
+      report(key, { startDate: '2025-12-01', endDate: '2026-01-10' }); await flush();
+      expect(workspace.context().notes).toEqual([note]);
+      if (change === 'account') service.uid.set('another-owner');
+      if (change === 'profile') fixture.componentRef.setInput('ownerUid', 'someone-else');
+      if (change === 'hidden') service.showOnCharts.set(false);
+      if (change === 'no ranges') report(key, null);
+      fixture.detectChanges(); await flush();
+      expect(workspace.context().notes).toEqual([]);
+      resolveLoad({ notes: [note], incomplete: null }); await flush();
+      expect(workspace.context().notes).toEqual([]);
+      expect(workspace.loading()).toBe(false);
+    },
+  );
+
+  it('immediately invalidates stale annotations after a note mutation, including pending responses', async () => {
+    const report = component.context().reportRange;
+    report({}, { startDate: '2026-01-01', endDate: '2026-01-10' }); await flush();
+    let resolveLoad!: (value: unknown) => void;
+    service.loadRange.mockImplementationOnce(() => new Promise(resolve => { resolveLoad = resolve; }));
+    report({}, { startDate: '2025-12-01', endDate: '2026-01-10' }); await flush();
+    expect(component.context().notes).toEqual([note]);
+    service.loadRange.mockResolvedValueOnce({ notes: [], incomplete: null });
+    service.changes$.next();
+    expect(component.context().notes).toEqual([]);
+    resolveLoad({ notes: [note], incomplete: null }); await flush();
+    expect(component.context().notes).toEqual([]);
+  });
+
   it('keeps the Notes action mounted and available while range loading changes, with out-of-flow progress', async () => {
     let resolveLoad!: (value: unknown) => void;
     service.loadRange.mockImplementation(() => new Promise(value => { resolveLoad = value; }));

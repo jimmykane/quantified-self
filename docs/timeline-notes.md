@@ -61,6 +61,11 @@ pages all notes, including future notes, newest start date first. No query param
 `TimelineNotesWorkspaceComponent` coalesces chart range registrations into a union and supplies explicit chart inputs.
 Health Highlights register their own fixed trend windows alongside the metric explorer's selected window, so navigating
 the explorer into older history does not drop recent Highlight notes. All use the same bounded, account-scoped load.
+Charts register lazily as they approach the viewport. Range expansion/contraction retains the current owner's notes
+until the next result replaces them atomically; equivalent decoded snapshots retain their signal identity so already
+mounted charts do not redraw. A failed expansion retains known annotations and exposes Retry notes. Account/profile
+changes, disabling notes, an empty range union, destruction, and explicit service invalidation still clear stale notes;
+late responses cannot restore them. Mutation invalidation increments the request version immediately.
 The service deduplicates overlapping covered requests, fences stale account/range results, and invalidates on mutations
 and returning to the workspace. Notes failing to load never block metric rendering. Provider/sport filters do not filter
 notes. The global preference is `settings.appSettings.timelineNotes.showOnCharts`, default true. The Material manager
