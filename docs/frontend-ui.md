@@ -152,6 +152,15 @@ the primary separation from the workspace background. Floating menus, dialogs, d
 and bottom sheets use `--qs-overlay-shadow` so their temporary layer remains visually distinct. Do not reuse the overlay
 shadow for in-flow cards or add route-local card shadows.
 
+## Dashboard calendar popup
+
+The Today month popup uses the existing compact calendar with `fillHeight=false` on both its tile and grid.
+Rows retain a 48px minimum so dates, activity circles, notes, and plan indicators fit; the sheet's content scrolls
+when the viewport cannot accommodate the month. The header stays outside that scroll area, and the content respects
+the bottom safe-area inset. Do not constrain this popup to the dashboard tile's fixed height.
+The default `fillHeight=true` preserves dashboard tiles and chart-library previews; full Month, Week, and Year grids
+do not opt into the compact height-filling class.
+
 ## Dashboard chart picker
 
 Owners add tiles from compact, right-aligned section actions: Add KPI, Add chart, or Add map. Mixed sections such as Activity Overview use Add tile. The action is hidden when

@@ -2,7 +2,8 @@
 <section class="activity-calendar"
   [class.activity-calendar--year]="model.view === 'year'"
   [class.activity-calendar--week]="model.view === 'week'"
-  [class.activity-calendar--compact]="compact">
+  [class.activity-calendar--compact]="compact"
+  [class.activity-calendar--fill-height]="compact && fillHeight">
   <div class="activity-calendar-months">
     @for (month of model.months; track month.id) {
     <section class="activity-calendar-month"

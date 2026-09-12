@@ -60,6 +60,7 @@ interface ActivityCalendarTilePlansState {
   templateUrl: './activity-calendar-tile.component.html',
   styleUrls: ['./activity-calendar-tile.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.activity-calendar-tile--auto-height]': '!fillHeight()' },
 })
 export class ActivityCalendarTileComponent {
   private readonly calendarService = inject(ActivityCalendarService);
@@ -82,6 +83,7 @@ export class ActivityCalendarTileComponent {
   });
   private readonly reportNotesRange = computed(() => this.notesContext()?.reportRange);
   readonly showHeading = input(true);
+  readonly fillHeight = input(true);
   readonly showNavigation = input(false);
   // Share each concrete query with an open day sheet. Material destroys the month popup when
   // replacing it, but the selected day's pending data must continue until its own sheet closes.

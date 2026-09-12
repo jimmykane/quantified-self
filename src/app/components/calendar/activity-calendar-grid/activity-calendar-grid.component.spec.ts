@@ -138,6 +138,26 @@ describe('ActivityCalendarGridComponent', () => {
       .not.toContain('qs-glass-card-panel');
   });
 
+  it('opts only scrollable compact pickers out of height-filling without changing day selection', async () => {
+    const fixture = await renderGrid('month', true, [
+      createEvent('run-1', new Date(2026, 7, 3, 8), ActivityTypes.Running, 3600),
+    ]);
+    const grid = fixture.nativeElement.querySelector('.activity-calendar');
+    expect(grid.classList).toContain('activity-calendar--fill-height');
+    const markerStyle = fixture.nativeElement.querySelector('.activity-calendar-marker').getAttribute('style');
+    const selected = vi.fn(); fixture.componentInstance.daySelected.subscribe(selected);
+    fixture.componentRef.setInput('fillHeight', false); fixture.detectChanges();
+    expect(grid.classList).not.toContain('activity-calendar--fill-height');
+    expect(grid.classList).toContain('activity-calendar--compact');
+    expect(fixture.nativeElement.querySelector('.activity-calendar-marker').getAttribute('style')).toBe(markerStyle);
+    fixture.nativeElement.querySelector('[aria-label*="1 activity"]').click();
+    expect(selected.mock.calls[0][0].dateKey).toBe('2026-08-03');
+    expect(fixture.componentRef.injector.get(AppHapticsService).selection).toHaveBeenCalledOnce();
+    fixture.componentRef.setInput('fillHeight', true);
+    fixture.componentRef.setInput('compact', false); fixture.detectChanges();
+    expect(grid.classList).not.toContain('activity-calendar--fill-height');
+  });
+
   it('uses a separate right-edge color rail in compact cells without covering date, note, or activity icons', () => {
     const styles = readFileSync(resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'), 'utf8');
     const rail = styles.match(/\.activity-calendar--compact \.planned-workout-markers\s*\{([^}]*)\}/)?.[1];
@@ -258,11 +278,13 @@ describe('ActivityCalendarGridComponent', () => {
     );
     const mobileStyles = styles.match(/@media \(max-width: 860px\)\s*\{([\s\S]*)\}\s*@media \(prefers-reduced-motion:/)?.[1];
 
+    expect(styles).toMatch(/\.activity-calendar--compact:not\(\.activity-calendar--fill-height\) \.activity-calendar-day\s*\{[^}]*min-height:\s*48px;/s);
+    expect(mobileStyles).not.toContain('.activity-calendar--compact');
     expect(mobileStyles).toMatch(
-      /\.activity-calendar--compact \.activity-calendar-days\s*\{[^}]*min-height:\s*0;[^}]*grid-template-rows:\s*repeat\(6, minmax\(0, 1fr\)\);/s,
+      /\.activity-calendar--fill-height \.activity-calendar-days\s*\{[^}]*min-height:\s*0;[^}]*grid-template-rows:\s*repeat\(6, minmax\(0, 1fr\)\);/s,
     );
     expect(mobileStyles).toMatch(
-      /\.activity-calendar--compact \.activity-calendar-day\s*\{[^}]*min-height:\s*0;[^}]*padding-block:\s*0;/s,
+      /\.activity-calendar--fill-height \.activity-calendar-day\s*\{[^}]*min-height:\s*0;[^}]*padding-block:\s*0;/s,
     );
   });
 

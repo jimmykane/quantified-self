@@ -422,25 +422,31 @@
   }
 }
 
+// A popup can scroll: keep a complete date, activity marker, and comfortable tap target in each row.
+// Dashboard tiles and library previews retain their existing constrained layout by default.
+.activity-calendar--compact:not(.activity-calendar--fill-height) .activity-calendar-day {
+  min-height: 48px;
+}
+
 @media (max-width: 860px) {
-  .activity-calendar--compact,
-  .activity-calendar--compact .activity-calendar-months,
-  .activity-calendar--compact .activity-calendar-month {
+  .activity-calendar--fill-height,
+  .activity-calendar--fill-height .activity-calendar-months,
+  .activity-calendar--fill-height .activity-calendar-month {
     height: 100%;
     min-height: 0;
   }
 
-  .activity-calendar--compact .activity-calendar-month {
+  .activity-calendar--fill-height .activity-calendar-month {
     display: grid;
     grid-template-rows: 28px minmax(0, 1fr);
   }
 
-  .activity-calendar--compact .activity-calendar-days {
+  .activity-calendar--fill-height .activity-calendar-days {
     min-height: 0;
     grid-template-rows: repeat(6, minmax(0, 1fr));
   }
 
-  .activity-calendar--compact .activity-calendar-day {
+  .activity-calendar--fill-height .activity-calendar-day {
     min-height: 0;
     padding-block: 0;
   }

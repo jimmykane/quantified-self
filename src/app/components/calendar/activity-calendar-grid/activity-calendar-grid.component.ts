@@ -19,6 +19,8 @@ import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-wor
 export class ActivityCalendarGridComponent {
   @Input({ required: true }) model: ActivityCalendarViewModel;
   @Input() compact = false;
+  /** Compact dashboard tiles fill their allocated height; scrollable pickers keep natural row sizes. */
+  @Input() fillHeight = true;
   @Input() hideOutsideDays = false;
   // Private notes are opt-in; dashboard/shared calendar instances do not fetch or receive them.
   @Input() timelineNotesByDate: ReadonlyMap<string, CalendarDayTimelineNotes> = new Map();

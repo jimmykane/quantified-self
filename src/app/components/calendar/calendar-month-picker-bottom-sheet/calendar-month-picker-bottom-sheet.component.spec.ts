@@ -51,6 +51,10 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
     expect(fixture.nativeElement.querySelector('[aria-label="Previous month"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[aria-label="Next month"]')).not.toBeNull();
     expect(fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance.timelineNotes()).toBe(timelineNotes);
+    const tile = fixture.debugElement.query(element => element.name === 'app-activity-calendar-tile').componentInstance;
+    expect(tile.fillHeight()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.activity-calendar--fill-height')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.activity-calendar-tile--auto-height')).not.toBeNull();
     expect(selection).not.toHaveBeenCalled();
 
     (fixture.nativeElement.querySelector('[aria-label="Close calendar"]') as HTMLButtonElement).click();
