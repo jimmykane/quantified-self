@@ -91,6 +91,9 @@ jobs:
       - name: Test interrupted provider disconnects against Firestore
         run: npm run test:disconnect
 
+      - name: Test training delivery lifecycle against Firestore
+        run: npm run test:training-delivery
+
       - name: Run app tests
         env:
           NODE_OPTIONS: --max-old-space-size=3072

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { retireTrainingPlanDeliverySettings, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
@@ -598,6 +599,8 @@ async function finalizePlanDeletion(
             ],
         };
         const applied = applyTrainingPlanDeletion(snapshot, finalRequest, lock.createdAtMs);
+        stageTrainingDeliveryReconciliation(transaction, db, uid);
+        retireTrainingPlanDeliverySettings(transaction, db, uid, request.planId);
         transaction.set(stateRef, applied.after.state);
         if (request.workoutDisposition === 'convert-to-standalone') {
             applied.convertedWorkouts.forEach((workout) => transaction.set(workoutsRef.doc(workout.id), workout));

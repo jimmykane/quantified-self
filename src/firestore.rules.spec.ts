@@ -1505,6 +1505,29 @@ describe('Firestore Security Rules', () => {
         });
 
         describe('Training plans and scheduled workouts', () => {
+            it('allows only owner reads of delivery projections and denies internal delivery state even to owners', async () => {
+                const owner = testEnv.authenticatedContext(userId).firestore();
+                const other = testEnv.authenticatedContext(otherId).firestore();
+                for (const collection of ['trainingDeliverySettings', 'trainingDeliveryStatuses']) {
+                    const path = `users/${userId}/${collection}/example`;
+                    await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(path).set({ schemaVersion: 1 }));
+                    await assertSucceeds(owner.doc(path).get());
+                    await assertFails(other.doc(path).get());
+                    await assertFails(testEnv.unauthenticatedContext().firestore().doc(path).get());
+                    await assertFails(owner.doc(path).set({ forged: true }));
+                    await assertFails(owner.doc(path).update({ forged: true }));
+                    await assertFails(owner.doc(path).delete());
+                    await assertFails(owner.doc(`${path}/internal/value`).get());
+                }
+                for (const path of [`users/${userId}/trainingDeliveryLedger/id`,
+                    `users/${userId}/trainingDeliveryLedger/id/attempts/attempt`,
+                    `users/${userId}/trainingDeliveryState/current`,
+                    `users/${userId}/trainingDeliveryState/current/receipts/mutation`,
+                    `users/${userId}/trainingDeliveryScopes/workout`, 'trainingDeliveryQueue/job']) {
+                    await assertFails(owner.doc(path).get());
+                    await assertFails(owner.doc(path).set({ forged: true }));
+                }
+            });
             const seedCurrentTrainingData = async () => {
                 await testEnv.withSecurityRulesDisabled(async context => {
                     const userRef = context.firestore().collection('users').doc(userId);

@@ -216,7 +216,7 @@ Features hub, homepage link, Help link, sitemap, and `robots.txt` aligned when t
 
 Training planning is a separate authored-workout workflow at authenticated `/training/plans`; it does not change the analytical
 meaning of `/training`. Manual planning is available without a provider connection. A scheduled workout may belong to a
-plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is a future Pro action
+plan or remain standalone, so a user can add a workout without creating a plan. Provider delivery is an opt-in Pro action
 and must never be inferred from merely connecting a service.
 
 ### Canonical workout boundary
@@ -385,6 +385,125 @@ Planning is not live yet: `/plans` and the former query-parameter editor shapes 
 compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail and remains UID-gated for
 presentation only; direct owner-scoped access is unchanged.
 
+### Provider delivery foundation (#646)
+
+The common delivery implementation lives in `functions/src/training-plans/delivery/`, with browser-safe v1 contracts in
+`shared/training-provider-delivery.ts`. It is independent of schedule history and leaves the exact `WorkoutStructureV1`
+JSON and Sports Lib conversion/formatting boundary unchanged. Real transports remain unavailable; the deterministic
+fake exists only in `delivery/test-support/`, is excluded from the Functions build, and has no browser/configuration switch.
+
+`previewTrainingProviderDelivery` and `mutateTrainingProviderDelivery` are focused, authenticated, App Check-enforced
+commands. Backend execution is necessary to resolve privileged connection authority and create background work; owner
+Rules/client transactions cannot authorize server-held provider credentials. Commands accept expected schedule, scope,
+and delivery-settings revisions and a mutation ID, never a UID, provider account ID, credential, or remote artifact ID.
+Receipts reject reuse with a different request and carry a 30-day `expireAt`; production TTL configuration is part of #655,
+not an operation performed by tests or this implementation. Manual authoring does not acquire a Pro requirement.
+
+Data ownership:
+
+| Path below `users/{uid}` | Access and purpose |
+| --- | --- |
+| `trainingDeliverySettings/{scope_scopeId_provider}` | Owner-readable consent, saved IANA zone, opaque destination fingerprint and revision; callable writes only. |
+| `trainingDeliveryStatuses/{deliveryId}` | Owner-readable allowlisted status, mapping warnings, artifact-presence flags, last attempt/acceptance timestamps, failure count and next retry time; no remote IDs, operation payloads or credentials. |
+| `trainingDeliveryState/current` and `receipts/*` | Private global settings revision, per-provider explicit-disconnect epochs and command receipts. |
+| `trainingDeliveryScopes/{workoutId}` | Private association generation; transfers/deletions cannot revive earlier standalone consent or suppressions. |
+| `trainingDeliveryLedger/{deliveryId}` and `attempts/*` | Private desired generation, independent actual artifact IDs, leases, operation-start and acceptance journals. Retained independently of deleted plan/workout roots. |
+
+`trainingDeliveryQueue` is a top-level server-only collection of compact **leaf** jobs. Schedule mutations, restore, plan
+deletion and delivery commands write a reconciliation marker in the same transaction, not a batch of provider payloads.
+The reconciler scans 25 current workouts per page (up to four destinations each), then 25 existing ledger identities per
+page, including deleted/historical sources. Each page rechecks schedule/settings revisions, plan-deletion locks and the
+account-deletion fence; obsolete scans restart. At most 100 compact ledgers/projections/jobs are considered in a current
+workout page. It never writes 400 workout payloads into a single document or transaction. Never-enrolled users have their
+marker removed without recurring scans. The pre-existing large manual-operation hardening remains #657.
+
+`onTrainingDeliveryQueued` dispatches due jobs, `processTrainingDeliveryTask` processes one bounded page or delivery,
+and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
+and queue-depth helpers. Reservation precedes enqueue, so lost acknowledgements and crashes are recoverable. A finished
+scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
+changes. Tasks may be duplicated; stable per-user/provider/account/workout identities, independent desired generations,
+180-second delivery leases and operation journals own idempotency. Shared retry limits/backoff and longer adapter delays
+apply. The 120-second worker timeout remains below its lease.
+
+Before transport work the worker rereads current intent, deletion locks, Pro, provider readiness and exact connection
+generation. A current OAuth credential generation and an unambiguous matching provider account are required; stale or
+ambiguous metadata produces connection repair, not a guessed account or account picker. A verified same-account reconnect
+can inspect the original unfinished operation with renewed authority. Auth/permission failures remain blocked against the
+failed connection generation. Explicit disconnect increments the consent epoch in the existing OAuth disconnect's initial
+transaction; subscription-driven disconnect and authentication failures do not invalidate consent.
+Recovery is transport work too: an auth/permission-blocked generation cannot inspect an unfinished operation. After
+inspection proves nonacceptance, the worker repeats admission before executing; Stop, edits, Pro expiry, disconnect or
+account deletion during inspection cannot release the obsolete operation.
+
+Every accepted artifact checkpoint survives a newer authored revision. The final acceptance records which operation and
+content were accepted, then reconciles current intent. Final upsert acceptance must identify at least one artifact and
+final removal must return none; inconsistent acknowledgements keep the operation unresolved for inspection instead of
+publishing false success. An interrupted/ambiguous operation is inspected before any repeat;
+only adapter-proven nonacceptance permits execution with the same operation identity. Uncertain inspection stops in
+`needs_attention`; Retry does not clear that evidence or blindly repeat a create. Account deletion fences all further local
+writes, including late acceptance checkpoints. Provider-held copies may remain after revoked access. Account cleanup
+recursively removes all five new user subtrees and all UID-associated top-level jobs; the recovery dispatcher also removes
+deletion-fenced leaf jobs after an interrupted cleanup.
+
+Consent/lifecycle rules:
+
+- Plans retain provider preferences while paused/archived, but only the active plan delivers. Pausing or activating another
+  plan withdraws eligible future copies; reactivation reconciles current content.
+- Permanent plan deletion retires its four provider-setting leaves atomically; independent delivery ledgers remain
+  available for withdrawal. Reusing an authored plan ID cannot revive deleted consent.
+- Standalone Send establishes ongoing opt-in. Copies never inherit it. Transfers adopt destination-plan settings while
+  retaining remote identity for the same account; moving back to Standalone requires a fresh Send. Workout-level Stop
+  suppresses inherited plan delivery until explicit Resume. Restore never restores provider consent.
+- Retry preserves consent, suppression and the saved zone. It can inspect unfinished operations or retry withdrawals
+  without Pro, but cannot authorize a create/update after Pro expires.
+- Pro expiry retains preferences and copies, pauses creates/updates, and permits eligible removal while access remains.
+  Resubscription reconciles only the latest eligible intent. Existing subscription enforcement may require reconnecting
+  the same account first; it never reactivates paused plans. A different account requires fresh consent.
+- Initial opt-in captures an explicit IANA zone, defaulted from the browser. Travel never changes it. Plan workouts inherit
+  the plan destination's zone; change that zone in the plan's provider settings. Eligibility starts at today in that zone,
+  respects adapter horizons/deletion restrictions and never automatically rewrites/removes past or completed workouts.
+- Compatibility combines canonical capability checks with serializer-specific losses. Approval binds to destination,
+  mapping version, date, zone, title and recipe digest. Unsupported/unapproved updates retain the old artifact and expose
+  the mismatch. A separate authored-content fingerprint avoids labelling unchanged Pro-paused copies as mismatches.
+
+The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
+Unavailable Send/configuration actions stay hidden, but existing settings, problems, reconnect links and Stop remain
+readable. Status details expand in groups of 25 using a live loaded-prefix query, so subsequent pages cannot retain stale
+statuses or miss records moving across page boundaries. Plan workouts retain Stop even when their first delivery fails.
+The workspace's **Delivery history** entry appears only when delivery records exist and remains reachable after deleting
+their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
+only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
+cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
+but cannot bypass explicit-disconnect epochs. Preview precedes consent; an uncertain callable response retains the
+same mutation ID for Retry. Account changes clear drafts/results and close the dialog. The UID restriction still applies
+only to sidenav presentation; it is not a delivery authorization boundary. Completed activity totals are unchanged.
+Connected-provider summaries and account-deletion confirmation explain that local cleanup does not guarantee removal
+of provider-held copies, and direct users to Stop sync before revoking access.
+
+Verification: `npm run test:training-delivery` runs unit and real loopback Firestore transaction fixtures without provider
+HTTP calls, including changes during inspection and failed withdrawals after source deletion. CI runs this command in
+addition to the Functions unit suite. Use `npm run test:rules` for owner/cross-user/write/internal-record denial. Frontend coverage includes
+`training-delivery-dialog.component.spec.ts`, `training-delivery.service.spec.ts` and the existing Plans/calendar suites.
+Build Functions and run `npm --prefix functions run secrets:check`; there are no new secrets. Deploy indexes/Functions and
+any receipt TTL policy only with separate approval. Do not add provider HTTP transports until #645 and #647–#650 pass
+their contract/sandbox gates; completion matching remains #651 and Sports Lib extraction #654.
+
+For isolated visual QA, create a temporary directory and set `TRAINING_DELIVERY_QA_DIR` to it when running
+`npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts`. The test exports synthetic Material
+dialog DOM for status, settings, preview, pending, Retry, history and deleted-source recovery states, including the real component SCSS compiled with the
+Angular build's Sass dependency. Build the local app, then link/copy `dist/browser/styles.css` and `dist/browser/media`
+beside the HTML. Open those fixtures in a browser at 320, 390 and 1440px in light/dark themes; verify readable status,
+labelled inputs, named dialog, wrapping, scrolling, Close, and disabled pending controls with no horizontal overflow.
+These rendered fixtures contain no application backend or selectable transport. Component tests exercise actual actions
+and account reset; emulator tests exercise backend lifecycle. Browser emulation does not establish physical vibration.
+
+Allowlisted diagnostics use the `[TrainingDelivery]` message with `event`, `provider`, `operation`, `category`, `retryCount`,
+`latencyMs`, `inspected`, and `dispatched` fields only. They exclude workout titles, recipes, IDs, tokens and provider errors.
+Cloud Logging filters: `jsonPayload.message="[TrainingDelivery]"`; add `jsonPayload.event="failure"` and group by
+`jsonPayload.category`/`jsonPayload.provider` for failures or missing permissions; use `accepted` with `latencyMs` for
+delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptance`/`recovery_dispatch` for recovery.
+Production dashboards, alerts, certification and manual enablement remain #655.
+
 ### Provider proof status
 
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four delivery switches remain
@@ -399,9 +518,10 @@ ELEMNT behavior, unsupported Wahoo relative references frozen to their stored ab
 Wahoo FTP/heart-rate header references, Suunto relative targets frozen to absolute values, Wahoo relative HR/speed
 target support limited to treadmill workouts in its app, cadence converted from rpm to hertz, Unicode-safe text
 truncation, and Suunto text outside the guaranteed minimum watch character set. Unsupported sport, ending, or target
-combinations fail instead of being approximated. Sandbox CRUD, idempotency, retry/reconnect, deletion, reconciliation,
-rollout, AI, templates, completion matching, and the Sports Lib extraction remain separately tracked by subissues
-#645–#655 and #657 under epic #583; they must not be left as anonymous TODOs.
+combinations fail instead of being approximated. The common lifecycle is proved with the #646 test transport above;
+real provider HTTP, callbacks and sandbox certification remain #645 and #647–#650. Rollout, AI, templates, completion
+matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
+These are explicit tracked slices, not anonymous TODOs.
 
 ### Product analytics
 

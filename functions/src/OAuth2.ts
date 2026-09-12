@@ -2,6 +2,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AccessToken } from 'simple-oauth2';
 import * as crypto from 'crypto';
 import * as admin from 'firebase-admin';
+import { stageTrainingDeliveryServiceDisconnect } from './training-plans/delivery/marker';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
 import {
@@ -472,6 +473,9 @@ async function beginExplicitDisconnectOperation(
     const invalidatedOAuthFlowGeneration = (previousLifecycle.disconnectOperationGeneration
       && previousLifecycle.oauthFlowGeneration) || crypto.randomUUID();
     const disconnectOperationGeneration = previousLifecycle.disconnectOperationGeneration || crypto.randomUUID();
+    if (!previousLifecycle.disconnectOperationGeneration) {
+      stageTrainingDeliveryServiceDisconnect(transaction, db, userID, serviceName);
+    }
     const nextRootData = {
       ...(rootSnapshot.exists ? rootSnapshot.data() as Record<string, unknown> : {}),
       [OAUTH_FLOW_GENERATION_FIELD]: invalidatedOAuthFlowGeneration,

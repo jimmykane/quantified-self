@@ -36,6 +36,11 @@ describe('DeleteAccountDialogComponent', () => {
     expect(hapticsService.warning).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledWith(true);
   });
+  it('explains local delivery cleanup separately from provider-held copies', () => {
+    const fixture = TestBed.createComponent(DeleteAccountDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('local delivery records are removed');
+    expect(fixture.nativeElement.textContent).toContain('Use Stop sync before deleting your account');
+  });
 
   it('keeps the dialog within narrow viewports and lets destructive actions wrap', () => {
     const styles = readFileSync(

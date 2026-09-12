@@ -26,6 +26,7 @@ import {
     type TrainingScheduleSnapshotV1,
 } from './mutation';
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
+import { invalidateTrainingWorkoutConsent, stageTrainingDeliveryReconciliation } from './delivery/marker';
 
 const MUTATION_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const FIRESTORE_TRANSACTION_WRITE_BUDGET = 490;
@@ -274,9 +275,11 @@ export function buildTrainingScheduleRevisionWrites(
         });
     }
 
-    const estimatedWriteCount = 2
+    const estimatedWriteCount = 3
         + applied.affectedPlanIds.length * 2
         + applied.changedWorkoutIds.length
+        + applied.changedWorkoutIds.filter(id => applied.before.workouts.get(id)?.planId !== applied.after.workouts.get(id)?.planId
+            || applied.after.workouts.get(id)?.lifecycle === 'deleted').length
         + applied.permanentlyDeletedWorkoutIds.length * 2
         + standaloneWorkoutRevisions.size
         + [...planRevisionChunks.values()].reduce((total, chunks) => total + chunks.length, 0);
@@ -455,6 +458,14 @@ export async function mutateTrainingScheduleForUser(
         const snapshot = await readTrainingScheduleSnapshotInTransaction(transaction, userRef, request);
         const applied = applyTrainingScheduleMutation(snapshot, request, nowMs);
         const revisions = buildTrainingScheduleRevisionWrites(applied, request, nowMs);
+
+        stageTrainingDeliveryReconciliation(transaction, db, uid);
+        for (const id of [...applied.changedWorkoutIds, ...applied.permanentlyDeletedWorkoutIds]) {
+            if (applied.before.workouts.get(id)?.planId !== applied.after.workouts.get(id)?.planId
+                || applied.after.workouts.get(id)?.lifecycle === 'deleted' || !applied.after.workouts.has(id)) {
+                invalidateTrainingWorkoutConsent(transaction, db, uid, id);
+            }
+        }
 
         transaction.set(stateRef, cloneValue(applied.after.state));
         for (const planId of applied.affectedPlanIds) {

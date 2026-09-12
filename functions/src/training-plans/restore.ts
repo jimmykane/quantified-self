@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { invalidateTrainingWorkoutConsent, stageTrainingDeliveryReconciliation } from './delivery/marker';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
@@ -483,6 +484,13 @@ export async function restoreTrainingScheduleRevisionForUser(
             operation: { kind: request.scope.kind === 'plan' ? 'restore-plan-revision' : 'restore-workout-revision' },
         };
         const revisions = buildTrainingScheduleRevisionWrites(restored.applied, revisionRequest, nowMs);
+        stageTrainingDeliveryReconciliation(transaction, db, uid);
+        for (const id of restored.applied.changedWorkoutIds) {
+            if (restored.applied.before.workouts.get(id)?.planId !== restored.applied.after.workouts.get(id)?.planId
+                || restored.applied.after.workouts.get(id)?.lifecycle === 'deleted') {
+                invalidateTrainingWorkoutConsent(transaction, db, uid, id);
+            }
+        }
         transaction.set(stateRef, restored.applied.after.state);
         restored.applied.affectedPlanIds.forEach((planId) => {
             const planRef = userRef.collection(TRAINING_PLANS_COLLECTION_ID).doc(planId);
