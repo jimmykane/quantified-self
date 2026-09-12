@@ -19,7 +19,11 @@
         }
     </ul>
 
+    @if (hasTrainingPlanningUIAccess()) {
     <p>Training plans, scheduled workouts and local delivery records are removed. Workout copies already sent to a provider may remain there after access is revoked. Use Stop sync before deleting your account to remove eligible future copies, or remove them in the provider app.</p>
+    } @else {
+    <p>Copies already sent to a provider may remain there after access is revoked. You can remove them in the provider app.</p>
+    }
 
     <p class="warning-text">
         <strong>This action is irreversible.</strong> Your data cannot be recovered.

@@ -10,6 +10,15 @@ import { calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-
 import type { PlannedWorkoutCalendarOverlay } from '../../../helpers/planned-workout-calendar.helper';
 
 describe('ActivityCalendarGridComponent', () => {
+  it('omits planning announcements when hidden and retains empty-day announcements when enabled', async () => {
+    const fixture = await renderGrid('month', false, []);
+    expect(fixture.nativeElement.querySelector('[aria-label*="planned workout"]')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day-button')).toHaveLength(42);
+    fixture.componentRef.setInput('plannedWorkoutsByDate', {}); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label*="No planned workouts."]')).toBeTruthy();
+    fixture.componentRef.setInput('plannedWorkoutsByDate', null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[aria-label*="planned workout"]')).toBeNull();
+  });
   it.each(['week', 'month', 'year'] as const)('marks note-only days without activity markers in %s view', async view => {
     const fixture = await renderGrid(view, false, []);
     const note: TimelineNote = { id: 'a'.repeat(64), category: 'vacation', title: 'Vacation', startDate: '2026-08-03', endDate: '2026-08-03', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
@@ -338,7 +347,7 @@ async function renderGrid(
   compact: boolean,
   events: EventInterface[],
   startOfWeek: DaysOfTheWeek | number = DaysOfTheWeek.Monday,
-  plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {},
+  plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay | null = null,
 ) {
   const fixture = await import('@angular/core/testing').then(async ({ TestBed }) => {
     await TestBed.configureTestingModule({

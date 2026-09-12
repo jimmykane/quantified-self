@@ -169,7 +169,7 @@
           </div>
 
           <div class="topic-grid">
-            @for (section of sections; track section.id) {
+            @for (section of sections(); track section.id) {
               <button mat-stroked-button type="button" class="topic-card" (click)="openSection(section.id)">
                 <span class="topic-avatar"><mat-icon>{{ section.icon }}</mat-icon></span>
                 <span class="topic-card-copy">

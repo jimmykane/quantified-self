@@ -19,9 +19,9 @@ import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { signal } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { SYSTEM_THEME_PREFERENCE } from '../../models/app-theme-preference.type';
-import { TRAINING_PLANNING_NAVIGATION_ALLOWED_UIDS } from '@shared/training-planning-rollout';
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 
-const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = TRAINING_PLANNING_NAVIGATION_ALLOWED_UIDS[0];
+const TRAINING_PLANNING_NAVIGATION_ALLOWED_UID = TRAINING_PLANNING_UI_ALLOWED_UIDS[0];
 
 describe('SideNavComponent', () => {
     let component: SideNavComponent;

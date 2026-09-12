@@ -5,13 +5,18 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DeleteAccountDialogComponent } from './delete-account-dialog.component';
+import { signal } from '@angular/core';
+import { AppUserService } from '../../services/app.user.service';
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 
 describe('DeleteAccountDialogComponent', () => {
   let component: DeleteAccountDialogComponent;
   let close: ReturnType<typeof vi.fn>;
   let hapticsService: any;
+  const viewer = signal<{ uid: string } | null>(null);
 
   beforeEach(() => {
+    viewer.set({ uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0] });
     close = vi.fn();
     hapticsService = {
       selection: vi.fn(),
@@ -22,6 +27,7 @@ describe('DeleteAccountDialogComponent', () => {
     TestBed.configureTestingModule({
       imports: [DeleteAccountDialogComponent],
       providers: [
+        { provide: AppUserService, useValue: { user: viewer } },
         { provide: MAT_DIALOG_DATA, useValue: { displayName: 'Runner' } },
         { provide: MatDialogRef, useValue: { close } },
         { provide: AppHapticsService, useValue: hapticsService },
@@ -40,6 +46,16 @@ describe('DeleteAccountDialogComponent', () => {
     const fixture = TestBed.createComponent(DeleteAccountDialogComponent); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('local delivery records are removed');
     expect(fixture.nativeElement.textContent).toContain('Use Stop sync before deleting your account');
+  });
+
+  it.each([null, { uid: 'another-user' }])('hides planning instructions but preserves provider retention warnings for %s', user => {
+    const fixture = TestBed.createComponent(DeleteAccountDialogComponent); fixture.detectChanges();
+    viewer.set(user); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Training plans');
+    expect(fixture.nativeElement.textContent).not.toContain('Stop sync');
+    expect(fixture.nativeElement.textContent).toContain('may remain there after access is revoked');
+    expect(fixture.nativeElement.textContent).toContain('This action is irreversible.');
+    expect(hapticsService.warning).not.toHaveBeenCalled();
   });
 
   it('keeps the dialog within narrow viewports and lets destructive actions wrap', () => {

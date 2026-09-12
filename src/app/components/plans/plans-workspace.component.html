@@ -1,3 +1,4 @@
+@if (hasTrainingPlanningUIAccess()) {
 <main class="plans-workspace qs-workspace-page" aria-labelledby="plans-title">
   <app-page-header
     [title]="editor() ? (editor()!.mode === 'create' ? 'Add workout' : 'Edit workout') : showPlanForm() ? 'New plan' : 'Plans'"
@@ -663,3 +664,4 @@
     }
   }
 </main>
+}

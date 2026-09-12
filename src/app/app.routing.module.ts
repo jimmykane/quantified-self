@@ -3,6 +3,7 @@ import { RouterModule } from '@angular/router';
 import type { Data, ResolveData, Route, Routes } from '@angular/router';
 import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
+import { trainingPlanningGuard } from './authentication/training-planning.guard';
 import { assistantGuard } from './authentication/assistant.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
@@ -97,7 +98,7 @@ function trainingPlansRoute(
     loadComponent: () => import('./components/plans/plans-workspace.component')
       .then(module => module.PlansWorkspaceComponent),
     data: { ...TRAINING_PLANS_ROUTE_DATA, trainingPlansMode: mode, trainingPlansScope: scope, preload },
-    canMatch: [authGuard, onboardingGuard],
+    canMatch: [authGuard, onboardingGuard, trainingPlanningGuard],
   };
 }
 

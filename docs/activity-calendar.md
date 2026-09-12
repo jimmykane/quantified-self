@@ -32,7 +32,11 @@ Dashboard migration state uses the shared automatic-tile framework:
 
 `src/app/services/activity-calendar.service.ts` reads lightweight event summary documents by `startDate`. It excludes merge and benchmark documents, maps only calendar-required fields into `EventInterface` values, and sorts results by start time. Exact user and query-window results are cached for five minutes with at most 12 entries; a cached value is emitted immediately while the live listener supplies current data.
 
-`TrainingPlansService.watchSchedule()` independently reads the owner-visible current plan, workout, and state documents.
+For accounts allowed by the shared Training Planning UI rollout, `TrainingPlansService.watchSchedule()` independently
+reads the owner-visible current plan, workout, and state documents. Other accounts do not start this listener and see
+no planning overlays, planning actions or planning-specific accessible announcements, including in an already-open day
+sheet after an account change. Dates, completed activities and Timeline notes remain available. The detailed rollout
+contract lives in [Training workspace](training-workspace.md); it is not backend authorization.
 `planned-workout-calendar.helper.ts` projects only standalone workouts and workouts belonging to the active plan into a
 local-date map. The activity and planning listeners stay separate so a plan read failure cannot turn recorded activity
 data into an empty result, and a planned workout can never become an `EventInterface` or enter activity summaries.

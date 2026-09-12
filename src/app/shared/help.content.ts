@@ -1,4 +1,5 @@
 import { environment } from '../../environments/environment';
+import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '../../../shared/limits';
 import {
   POLICIES_AI_AND_PROCESSORS_FRAGMENT,
@@ -156,6 +157,14 @@ const TRAINING_ANALYSIS_HELP_CONTENT = `## What Training is for
 - Missing or unreliable inputs remain explicit. Training does not infer LT1/LT2, race readiness, a universal athlete score, or workout-execution scoring.
 - Training power-profile callouts compare the best 90-day curve with the best one-year curve at 5 seconds, 1 minute, 5 minutes, 20 minutes, and 1 hour. They use bounded reciprocal-duration interpolation, never bridge duration brackets wider than 1.25×, show both activity counts, and call out the strongest retained duration and clearest gap. Missing comparable anchors stay explicit.`;
 
+const TRAINING_PLANNING_HELP_SNIPPETS = {
+  gettingStarted: "- **Plans** lets you create standalone workouts or organize them into dated plans without connecting a provider. Open the [Training plans guide](/help#training-plans).",
+  calendarDetails: "- Planned workouts appear in their own section with links to edit them and actions to add a workout for that date.",
+  calendarOverlays: "- The calendar shows standalone workouts plus workouts from the active plan. Inactive-plan workouts remain in [Plans](/training/plans), and skipped workouts stay visible with a separate marker.",
+  calendarColors: "- Planned-workout icons and the leading edge of their detail rows use the plan's color. Choose it in **Plans -> Plan actions -> Plan color**; **Default** follows the app theme. Standalone workouts stay neutral. The dashboard tile and Year view use slim color marks on the right edge, dashed for skipped workouts. The Today calendar popup places these marks below the day. Mixed days keep a mark for both the active plan and standalone workouts; open the day for all workouts and counts. Completed activity circles keep their sport colors.",
+  calendarTotals: "- Planned workouts never change recorded period totals, activity counts, activity-group bars, or the activity table.",
+} as const;
+
 const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 
 - Open [Plans](/training/plans) to create a dated workout. Its sidebar entry sits beneath **Training**. You do not need to create a plan first: choose **Standalone** to keep the workout independent, or use the active plan when you want it grouped into a date range.
@@ -206,9 +215,10 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 
 - A circle's color identifies an activity group and its size reflects recorded duration. Larger circles mean more recorded time, using a bounded scale so unusually long activities do not dominate the grid.
 - Week and Month views separate activity-group circles when space allows. Narrow layouts, the dashboard tile, and Year view place multiple circles concentrically around the same center so a day stays readable in a compact cell.
-- Select any date, including an empty one, to open its details sheet. Planned workouts appear in their own section with links to edit them and actions to add a workout for that date. Completed totals and activity-group bars remain separate, followed by individual activities with their available distance and elevation metrics.
-- The calendar shows standalone workouts plus workouts from the active plan. Inactive-plan workouts remain in [Plans](/training/plans), and skipped workouts stay visible with a separate marker.
-- Planned-workout icons and the leading edge of their detail rows use the plan's color. Choose it in **Plans -> Plan actions -> Plan color**; **Default** follows the app theme. Standalone workouts stay neutral. The dashboard tile and Year view use slim color marks on the right edge, dashed for skipped workouts. The Today calendar popup places these marks below the day. Mixed days keep a mark for both the active plan and standalone workouts; open the day for all workouts and counts. Completed activity circles keep their sport colors.
+- Select any date, including an empty one, to open its details sheet. Completed totals and activity-group bars appear above individual activities with their available distance and elevation metrics.
+${TRAINING_PLANNING_HELP_SNIPPETS.calendarDetails}
+${TRAINING_PLANNING_HELP_SNIPPETS.calendarOverlays}
+${TRAINING_PLANNING_HELP_SNIPPETS.calendarColors}
 - In Calendar and the dashboard calendar, a note icon marks days with **Timeline notes**, even when there is no workout. Small color markers show your chosen note colors; overlapping notes keep their different colors as separate segments. Activity circles keep their own colors. Select the day to see its notes, then select a note to open or edit it. Date ranges include their end day; ongoing notes stop at today in their original time zone and refresh when you return to the tab. Notes never affect activity totals or circle sizes. Use **Timeline notes** in the header to manage them and **Show on charts and calendar** to show or hide them across workspaces. The dashboard Activity calendar tile and Today calendar popup show the same private notes.
 - In day details, an activity group containing exactly one activity opens that activity directly, as does its individual activity row. Browser **Back** restores the same day's details sheet. Deleting an activity from its details page returns to the previous in-app page; the day sheet reopens when other activity remains on that day.
 - Calendar dates intentionally have no hover or touch tooltip. This keeps native vertical scrolling responsive on phones; day details remain available by selecting a date.
@@ -216,7 +226,7 @@ const ACTIVITY_CALENDAR_HELP_CONTENT = `## Open and navigate the calendar
 ## Understand period totals and activity bars
 
 - The summary above the full calendar shows recorded **Distance**, **Duration**, and **Ascent** for the selected week, month, or year. Month totals exclude adjacent dates shown only to complete the calendar grid.
-- Planned workouts never change recorded period totals, activity counts, activity-group bars, or the activity table.
+${TRAINING_PLANNING_HELP_SNIPPETS.calendarTotals}
 - Below the calendar, **Activities** compares activity groups by recorded duration. Each bar uses the same color as its circles and is scaled against the longest-duration group in the selected period. The info control beside the heading explains this comparison.
 - Available duration, distance, ascent, and descent totals appear with icons beneath each bar. A metric is omitted when no positive recorded value exists, and **--** beside an activity group means duration was not recorded.
 - Lift-served downhill activities such as alpine skiing, snowboarding, and downhill cycling do not add ascent but do contribute descent. Diving, Scuba Diving, Free Diving, Snorkeling, and Mermaiding do not contribute either elevation metric; their vertical movement is recorded as depth. Ascent and descent summary exclusions configured in **Settings** also apply.
@@ -260,6 +270,16 @@ export const HELP_ACTIONS: HelpAction[] = [
   },
 ];
 
+/** Filter before search and Markdown rendering; omit pre-release links from public/SSR help. */
+export function getHelpSectionsForUser(uid: string | null | undefined): readonly HelpSection[] {
+  if (isTrainingPlanningUIAllowed(uid)) return HELP_SECTIONS;
+  return HELP_SECTIONS.filter(section => section.id !== 'training-plans').map(section => ({
+    ...section,
+    content: Object.values(TRAINING_PLANNING_HELP_SNIPPETS).reduce((copy, snippet) => copy.replace(snippet, ''), section.content),
+    links: section.links.filter(link => !link.target.startsWith('/training/plans') && link.fragment !== 'training-plans'),
+  }));
+}
+
 export const HELP_SECTIONS: HelpSection[] = [
   {
     id: 'getting-started',
@@ -277,7 +297,7 @@ export const HELP_SECTIONS: HelpSection[] = [
 - **Dashboard** is your main activity overview.
 - **Health** compares supported Sleep and Health measurements source by source. Open the [Health guide](/help#health) for metric ranges, source separation, and sync-state guidance.
 - **Calendar** shows activities in Week, Month, and Year views. Open the [Activity Calendar guide](/help#activity-calendar) for display and summary details, or read the public [Activity Calendar overview](/features/activity-calendar).
-- **Plans** lets you create standalone workouts or organize them into dated plans without connecting a provider. Open the [Training plans guide](/help#training-plans).
+${TRAINING_PLANNING_HELP_SNIPPETS.gettingStarted}
 - **Supported activity types** lists the activity types Quantified Self recognizes and explains why the details shown depend on data in each activity. Open the [Supported activity types guide](/help#supported-activities) or public [Supported activity types page](/features/supported-activities).
 - **Training** is your fixed workspace for baseline comparisons, current readiness signals, load trajectory, training mix, capacity evidence, durability, sleep, and power interpretation. Open the [Training analysis guide](/help#training-analysis) for the detailed product guide, read the public [Training Analysis overview](/features/training-analysis) for the search-facing summary, or use its **Feedback** action to email support with Training-specific feedback.
 - **My Tracks** maps positional activities and supports date range, custom date, and activity type filters. Its activity filter lists only trackable types in the selected date range, while keeping an active no-match choice visible until you clear it. Detected trips list an inferred **Home** area first when available; use the sort button to choose newest-first or oldest-first, and the choice is saved.

@@ -1,3 +1,4 @@
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { signal } from '@angular/core';
 import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
@@ -23,7 +24,7 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
 
 describe('PlansWorkspaceComponent', () => {
-  const user = { uid: 'user-1', settings: { unitSettings: {} } };
+  const user = { uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0], settings: { unitSettings: {} } };
   let route: {
     snapshot: { paramMap: ParamMap; queryParamMap: ParamMap; data: Data };
     paramMap: Observable<ParamMap>;
@@ -353,7 +354,7 @@ describe('PlansWorkspaceComponent', () => {
       expect.objectContaining({ queryParams: undefined, replaceUrl: undefined }),
     );
     expect(navigate.mock.calls[0]?.[1]?.state).toMatchObject({
-      trainingPlansEditorReturn: { uid: 'user-1' },
+      trainingPlansEditorReturn: { uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0] },
     });
   });
 
@@ -390,7 +391,7 @@ describe('PlansWorkspaceComponent', () => {
     const back = vi.spyOn(location, 'back').mockImplementation(() => undefined);
     vi.spyOn(location, 'getState').mockReturnValue({
       trainingPlansEditorReturn: {
-        uid: 'user-1',
+        uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
         url: '/training/plans/plan/active-plan?date=2026-09-09',
       },
     });
@@ -1030,6 +1031,31 @@ describe('PlansWorkspaceComponent', () => {
     });
     expect(fixture.componentInstance.historyPanel()?.entries.map(entry => entry.revision)).toEqual([3, 2]);
     expect(fixture.componentInstance.historyPanel()?.nextBeforeRevision).toBeNull();
+  });
+
+  it('does not render or read planning for a non-allowlisted account', async () => {
+    const otherUser = { ...user, uid: 'another-user' };
+    TestBed.overrideProvider(AppUserService, { useValue: { user: signal(otherUser), user$: of(otherUser) } });
+    const fixture = await renderPlans();
+    expect(watchSchedule).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('main')).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('removes the editor on sign-out without invoking a mutation', async () => {
+    const viewer = signal<typeof user | null>(user);
+    const viewers$ = new BehaviorSubject<typeof user | null>(user);
+    TestBed.overrideProvider(AppUserService, { useValue: { user: viewer, user$: viewers$ } });
+    const fixture = await renderPlans();
+    fixture.componentInstance.editWorkout(schedule.workouts[0]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.workout-editor')).toBeTruthy();
+    viewer.set(null); viewers$.next(null);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('main')).toBeNull();
+    expect(fixture.componentInstance.editor()).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   async function renderPlans() {

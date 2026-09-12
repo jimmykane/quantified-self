@@ -25,7 +25,8 @@ export class ActivityCalendarGridComponent implements OnChanges {
   @Input() hideOutsideDays = false;
   // Private notes are opt-in; dashboard/shared calendar instances do not fetch or receive them.
   @Input() timelineNotesByDate: ReadonlyMap<string, CalendarDayTimelineNotes> = new Map();
-  @Input() plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay = {};
+  /** Null omits planning from both the visual and accessible calendar. */
+  @Input() plannedWorkoutsByDate: PlannedWorkoutCalendarOverlay | null = null;
   @Output() daySelected = new EventEmitter<ActivityCalendarDayViewModel>();
   private readonly hapticsService = inject(AppHapticsService);
 

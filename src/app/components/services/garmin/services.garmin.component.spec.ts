@@ -81,6 +81,7 @@ describe('ServicesGarminComponent', () => {
             logActivitySyncRouteBackfill: vi.fn(),
         };
         mockUserService = {
+            user: vi.fn(() => ({ uid: 'test-user-uid' })),
             isAdmin: vi.fn(),
             requestAndSetCurrentUserGarminAPIAccessToken: vi.fn(),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),

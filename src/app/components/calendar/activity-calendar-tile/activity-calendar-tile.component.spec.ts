@@ -1,3 +1,4 @@
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
@@ -18,7 +19,7 @@ import { STANDALONE_WORKOUT_COLOR, trainingPlanAppearance } from '../../../helpe
 
 describe('ActivityCalendarTileComponent', () => {
   const user = {
-    uid: 'user-1',
+    uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
     settings: { unitSettings: { startOfTheWeek: DaysOfTheWeek.Monday } },
   };
   let watchEvents: ReturnType<typeof vi.fn>;
@@ -62,6 +63,25 @@ describe('ActivityCalendarTileComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Activity calendar');
   });
 
+  it.each([false, true])('hides planning and stops its reads on account changes (mini calendar: %s)', async showNavigation => {
+    const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
+    watchSchedule.mockReturnValue(of(scheduleForDate(currentLocalDate(2))));
+    fixture.componentRef.setInput('user', { ...user, uid: 'another-user' });
+    fixture.componentRef.setInput('showNavigation', showNavigation);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(watchSchedule).not.toHaveBeenCalled();
+    expect(watchEvents).toHaveBeenCalledOnce();
+    expect(fixture.componentInstance.plannedWorkoutsByDate()).toEqual({});
+    fixture.componentRef.setInput('user', user);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(watchSchedule).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeTruthy();
+    fixture.componentRef.setInput('user', null);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.componentInstance.plannedWorkoutsByDate()).toEqual({});
+    expect(fixture.nativeElement.querySelector('.planned-workout-markers')).toBeNull();
+  });
+
   it('opens the shared day details sheet from an activity day', async () => {
     const fixture = TestBed.createComponent(ActivityCalendarTileComponent);
     fixture.componentRef.setInput('user', user);
@@ -76,7 +96,7 @@ describe('ActivityCalendarTileComponent', () => {
 
     expect(openBottomSheet).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
       data: expect.objectContaining({
-        userId: 'user-1',
+        userId: TRAINING_PLANNING_UI_ALLOWED_UIDS[0],
         unitSettings: user.settings.unitSettings,
       }),
     }));

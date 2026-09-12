@@ -28,6 +28,7 @@ import {
 import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
+import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import {
   TrainingPlansService,
   selectCalendarVisibleScheduledWorkouts,
@@ -75,6 +76,7 @@ export class ActivityCalendarTileComponent {
   private readonly today = signal(new Date());
 
   readonly user = input<User | null | undefined>(null);
+  readonly hasTrainingPlanningUIAccess = computed(() => isTrainingPlanningUIAllowed(this.user()?.uid));
   /** Keep the workspace signal live even when the month popup is replaced by a day sheet. */
   readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
   private readonly notesContext = computed(() => {
@@ -106,7 +108,7 @@ export class ActivityCalendarTileComponent {
     { initialValue: { status: 'loading', events: [] } as ActivityCalendarTileState });
   private readonly plansSource = computed(() => {
     const user = this.user();
-    if (!user?.uid) return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
+    if (!isTrainingPlanningUIAllowed(user?.uid)) return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
     return this.plansService.watchSchedule(user.uid).pipe(
       map(schedule => ({ status: 'ready', schedule }) as ActivityCalendarTilePlansState),
       startWith({ status: 'loading', schedule: null } as ActivityCalendarTilePlansState),
@@ -118,7 +120,7 @@ export class ActivityCalendarTileComponent {
     { initialValue: { status: 'loading', schedule: null } as ActivityCalendarTilePlansState });
   readonly plannedWorkoutsByDate = computed<PlannedWorkoutCalendarOverlay>(() => {
     const schedule = this.plansState().schedule;
-    if (!schedule) return {};
+    if (!this.hasTrainingPlanningUIAccess() || !schedule) return {};
     return buildPlannedWorkoutCalendarOverlay(
       selectCalendarVisibleScheduledWorkouts(schedule),
       schedule.plans,

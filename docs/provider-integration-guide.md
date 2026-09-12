@@ -52,6 +52,12 @@ authoring is free and independent of connected services. Any future provider syn
 directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
 connection alone never opts workouts into delivery.
 
+Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
+actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
+controls and generic provider-copy retention warnings. This does not authorize transport work, alter disconnect or
+deletion behavior, or enable a provider. See the [Training workspace source of truth](training-workspace.md) for the
+shared gate and account-change behavior.
+
 The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
 `functions/src/training-plans/providers/`. Every provider delivery flag is currently `false`:
 

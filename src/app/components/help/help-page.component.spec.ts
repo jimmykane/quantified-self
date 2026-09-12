@@ -1,4 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import { TRAINING_PLANNING_UI_ALLOWED_UIDS } from '@shared/training-planning-rollout';
+import { AppUserService } from '../../services/app.user.service';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -9,12 +12,15 @@ import { HELP_ACTIONS, HELP_SECTIONS } from '../../shared/help.content';
 describe('HelpPageComponent', () => {
   let component: HelpPageComponent;
   let fixture: ComponentFixture<HelpPageComponent>;
+  const viewer = signal<{ uid: string } | null>(null);
 
   beforeEach(async () => {
     window.history.replaceState(null, '', '/help');
+    viewer.set({ uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0] });
 
     await TestBed.configureTestingModule({
       imports: [HelpPageComponent, RouterTestingModule.withRoutes([]), NoopAnimationsModule],
+      providers: [{ provide: AppUserService, useValue: { user: viewer } }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(HelpPageComponent);
@@ -26,6 +32,39 @@ describe('HelpPageComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it.each([null, 'another-user'])('hides planning topics, search, links and retained articles for %s', async uid => {
+    component.openSection('training-plans'); fixture.detectChanges();
+    expect(component.isArticleOpen()).toBe(true);
+    viewer.set(uid ? { uid } : null);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.isArticleOpen()).toBe(false);
+    expect(component.sections().some(section => section.id === 'training-plans')).toBe(false);
+    component.onSearchQueryChange('training plans'); fixture.detectChanges();
+    expect(component.searchResults().some(section => section.id === 'training-plans')).toBe(false);
+    component.openSection('getting-started');
+    await vi.waitFor(() => expect(component.renderedSectionContent()['getting-started']).toBeTruthy());
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[href*="training/plans"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href*="#training-plans"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Training');
+    component.openSection('activity-calendar'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Planned workouts');
+    expect(fixture.nativeElement.textContent).not.toContain('Plan color');
+  });
+
+  it('does not render the planning hash for a signed-out initial visit, and restores it after allowlisted sign-in', async () => {
+    viewer.set(null);
+    window.history.replaceState(null, '', '/help#training-plans');
+    const otherFixture = TestBed.createComponent(HelpPageComponent);
+    otherFixture.detectChanges(); await otherFixture.whenStable();
+    expect(otherFixture.componentInstance.isArticleOpen()).toBe(false);
+    viewer.set({ uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0] });
+    otherFixture.detectChanges(); await otherFixture.whenStable(); otherFixture.detectChanges();
+    expect(otherFixture.componentInstance.selectedSectionId()).toBe('training-plans');
+    expect(otherFixture.componentInstance.isArticleOpen()).toBe(true);
+    otherFixture.destroy();
   });
 
   it('renders the documentation home with every topic and quick action', () => {

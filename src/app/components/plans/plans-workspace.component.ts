@@ -15,6 +15,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Location } from '@angular/common';
+import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -177,8 +178,9 @@ export class PlansWorkspaceComponent {
   ];
 
   readonly currentUser = computed(() => this.userService.user() as AppUserInterface | null);
+  readonly hasTrainingPlanningUIAccess = computed(() => isTrainingPlanningUIAllowed(this.currentUser()?.uid));
   readonly scheduleState = toSignal(this.userService.user$.pipe(
-    switchMap(user => user?.uid
+    switchMap(user => isTrainingPlanningUIAllowed(user?.uid)
       ? this.plansService.watchSchedule(user.uid).pipe(
         map(schedule => ({ status: 'ready', schedule, message: null }) as ScheduleLoadState),
         startWith({ status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState),
@@ -222,7 +224,7 @@ export class PlansWorkspaceComponent {
   readonly planOptions = computed(() => {
     const plans = this.schedule().plans;
     const acknowledged = this.acknowledgedPlan();
-    return acknowledged?.uid === this.currentUser()?.uid && !plans.some(plan => plan.id === acknowledged.plan.id)
+    return acknowledged && acknowledged.uid === this.currentUser()?.uid && !plans.some(plan => plan.id === acknowledged.plan.id)
       ? [...plans, acknowledged.plan]
       : plans;
   });
@@ -329,7 +331,7 @@ export class PlansWorkspaceComponent {
       this.closeHistory();
       this.clearPlanActions();
     }
-    if (this.scheduleState().status !== 'ready') return;
+    if (!this.hasTrainingPlanningUIAccess() || this.scheduleState().status !== 'ready') return;
     // Only a navigation/account change can replace a draft, never a live schedule or unit-settings update.
     const key = trainingPlansRouteKey(uid, requested);
     if (key === this.appliedRouteKey) {

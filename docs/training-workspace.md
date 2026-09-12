@@ -382,8 +382,19 @@ return entry when available and otherwise replaces a direct deep link with its s
 Route changes may replace a draft, but live schedule and unit-setting updates do not. A pending save captures the owner
 and editor generation so a response arriving after Back navigation cannot reopen or overwrite the new screen. Training
 Planning is not live yet: `/plans` and the former query-parameter editor shapes are not registered and have no
-compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail and remains UID-gated for
-presentation only; direct owner-scoped access is unchanged.
+compatibility redirects. The sidebar entry sits beneath Training on a compact guide rail.
+
+The shared `isTrainingPlanningUIAllowed` rollout in `shared/training-planning-rollout.ts` limits all planning UI to the
+explicitly allowlisted account. Other signed-in users are silently redirected from every `/training/plans` route to
+`/training`; signed-out navigation keeps the existing authentication flow. The workspace also clears/hides its editor
+on account changes. Full Calendar, Activity Calendar tiles and Today mini-calendars omit planning listeners, overlays,
+empty-day planning announcements and day-sheet planning actions for other accounts, while completed activities,
+Timeline notes and selectable dates remain unchanged. An already-open day sheet hides planning when its owner changes.
+Help filters planning articles, links and mixed-section text before search and Markdown rendering, including public
+prerendering and account changes. Planning-specific disconnect/deletion instructions use the same gate; generic
+provider-copy retention warnings and public privacy disclosures remain available. Existing Training analysis is not
+gated. This is a frontend presentation rollout, **not backend authorization**: owner-scoped APIs, Rules, provider
+readiness flags and delivery entitlement enforcement are unchanged. Broader rollout remains tracked by #655.
 
 ### Provider delivery foundation (#646)
 
@@ -475,10 +486,11 @@ their plan/workout. Each retained row opens delivery details independently of th
 only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
 cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
 but cannot bypass explicit-disconnect epochs. Preview precedes consent; an uncertain callable response retains the
-same mutation ID for Retry. Account changes clear drafts/results and close the dialog. The UID restriction still applies
-only to sidenav presentation; it is not a delivery authorization boundary. Completed activity totals are unchanged.
+same mutation ID for Retry. Account changes clear drafts/results and close the dialog. The planning UI rollout described
+above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
+Completed activity totals are unchanged.
 Connected-provider summaries and account-deletion confirmation explain that local cleanup does not guarantee removal
-of provider-held copies, and direct users to Stop sync before revoking access.
+of provider-held copies, and direct planning-enabled users to Stop sync before revoking access.
 
 Verification: `npm run test:training-delivery` runs unit and real loopback Firestore transaction fixtures without provider
 HTTP calls, including changes during inspection and failed withdrawals after source deletion. CI runs this command in
