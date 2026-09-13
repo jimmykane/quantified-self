@@ -497,7 +497,7 @@ The analytics and map entries follow the
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
 | `get_today_readiness` | `metrics:read` + `sleep:read` | Registered legacy formula-3 readiness; retained for compatibility |
 | `get_current_readiness` | `metrics:read` + `sleep:read` | Current app formula-4 readiness with the shared seven-day HRV average and 60-day range |
-| `get_readiness_history` | `metrics:read` + `sleep:read` | Ready current-formula 14-day UTC history with identity-free HRV range evidence |
+| `get_readiness_history` | `metrics:read` + `sleep:read` + `health:read` | Ready current-formula 14-day UTC history with identity-free HRV range evidence |
 | `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
@@ -1204,7 +1204,9 @@ chart range. Latest nightly HRV remains distinct from the weekly average. See `d
 canonical formula, source matching, confidence, missing-data and scoring rules. The strict output boundary verifies the
 score, label, weights, count, confidence and HRV cutoff; private neighboring fields fail the whole output.
 
-`get_readiness_history` has no inputs and requires the same two grants. It reads one ready `training_readiness` snapshot
+`get_readiness_history` has no inputs and requires `metrics:read`, `sleep:read` and `health:read`. Persisted history can
+contain absolute HRV values enriched from Health; it cannot safely reconstruct a Sleep-only alternative. Registration,
+HTTP prechecks and the data service enforce all three grants before reading. It reads one ready `training_readiness` snapshot
 and returns only validated formula-4 history: 14 contiguous UTC days, evaluation timestamps and identity-free signals,
 including each day's HRV range. `hrvRatio` here means seven-day average divided by the 60-day mean, not last-night HRV.
 Missing, old or inconsistent history returns `metric_not_ready`; this read-only tool never queues a rebuild. Internal
@@ -1214,7 +1216,8 @@ These tools are additive because registered schemas are frozen. The pending cont
 digest to a developer refresh; it does not promote the registered baseline. Server deployment and registered ChatGPT app
 rescan are required before clients can discover them. Updated bundled Training/Sleep/Health/cross-domain skills prefer
 the advertised current formula; validate and sync those bundles separately, without changing grants. The built-in
-Assistant allows both new tools and supplies its explicit timezone to the live tool only.
+Assistant allows the live tool and supplies its explicit timezone. It omits stored readiness history because its
+existing grants exclude Health; this change does not expand the Assistant's data permissions.
 
 ### Legacy live today readiness
 

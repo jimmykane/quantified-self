@@ -75,6 +75,10 @@ describe('Assistant MCP session', () => {
     try {
       expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_BASE_MCP_TOOL_NAMES);
       const productionToolNames = new Set(session.tools.map(tool => tool.name));
+      // Stored history can include Health evidence; the Assistant has no Health grant.
+      expect(productionToolNames.has('get_readiness_history' as never)).toBe(false);
+      await expect(session.callTool('get_readiness_history' as never, {}))
+        .rejects.toThrow('not available to the Assistant');
       for (const example of ASSISTANT_PROMPT_EXAMPLES) {
         expect(
           example.toolWorkflow.filter(toolName => !productionToolNames.has(

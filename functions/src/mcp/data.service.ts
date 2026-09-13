@@ -6302,8 +6302,13 @@ export function createMcpDataService(
       return currentResult;
     },
 
-    async getReadinessHistory(uid: string) {
-      const snapshot = await dependencies.fetchDerivedSnapshot(uid, DERIVED_METRIC_KINDS.TrainingReadiness);
+    async getReadinessHistory(input: { uid: string; scopes: readonly string[] }) {
+      // Persisted history can contain absolute HRV values enriched from Health.
+      // Its identity-free projection cannot reconstruct a Sleep-only alternative.
+      if (!['metrics:read', 'sleep:read', 'health:read'].every(scope => input.scopes.includes(scope))) {
+        throw new McpDataError('invalid_request', 'Readiness history requires Activity and Training metrics, Sleep and Health access.');
+      }
+      const snapshot = await dependencies.fetchDerivedSnapshot(input.uid, DERIVED_METRIC_KINDS.TrainingReadiness);
       const history = snapshot?.status === 'ready' && snapshot.schemaVersion === DERIVED_METRIC_SCHEMA_VERSION
         ? normalizeCurrentReadiness(snapshot.payload) : null;
       if (!history) throw new McpDataError('metric_not_ready', 'Readiness history is not ready.');

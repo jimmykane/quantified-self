@@ -5688,6 +5688,13 @@ describe('MCP data service', () => {
     });
   });
 
+  it.each([[], ['metrics:read', 'sleep:read'], ['metrics:read', 'health:read'], ['sleep:read', 'health:read']])(
+    'requires all readiness-history grants before reading a snapshot: %j', async (...scopes) => {
+      await expect(createMcpDataService(dependencies).getReadinessHistory({ uid: 'user-1', scopes }))
+        .rejects.toMatchObject({ code: 'invalid_request' });
+      expect(dependencies.fetchDerivedSnapshot).not.toHaveBeenCalled();
+    });
+
 
   it('projects the updated internal recovery snapshots onto the frozen MCP versions', async () => {
     const { buildTrainingReadinessMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('../derived-metrics/derived-metrics.service');
@@ -5733,7 +5740,7 @@ describe('MCP data service', () => {
     expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenLastCalledWith('user-1', now - 30 * day, now, 257);
     const payload = buildTrainingReadinessMetricPayload([], 0, documents.map(doc => ({ id: doc.id, data: () => doc.data })) as never, now).payload;
     vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({ status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload });
-    const history = await service.getReadinessHistory('user-1');
+    const history = await service.getReadinessHistory({ uid: 'user-1', scopes: ['metrics:read', 'sleep:read', 'health:read'] });
     expect(history.points.at(-1)?.hrvPersonalRange).toEqual(current.drivers.hrv.personalRange);
     expect(history).not.toHaveProperty('legacyPoints');
     expect(history).not.toHaveProperty('evidenceVersion');

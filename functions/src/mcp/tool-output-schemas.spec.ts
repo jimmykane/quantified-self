@@ -1738,6 +1738,10 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       uid: 'user-1',
       timeZone: 'Europe/Helsinki',
     });
+    const current = await createFixtureDataService().getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    expect(registry.get_current_readiness.safeParse({ ...current, drivers: { ...current.drivers,
+      hrv: { ...current.drivers.hrv, personalRange: { ...current.drivers.hrv.personalRange,
+        latestAtMs: current.asOfTimeMs - 8 * 86400000 } } } }).success).toBe(false);
 
     expect(registry.get_today_readiness.safeParse({
       ...fixture,
@@ -1951,10 +1955,16 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       expect(names).not.toContain('get_readiness_history');
     }
     const service = createFixtureDataService();
-    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead]);
+    const withoutHealth = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead]);
+    connections.push(withoutHealth);
+    const names = (await withoutHealth.client.listTools()).tools.map(tool => tool.name);
+    expect(names).toContain('get_current_readiness');
+    expect(names).not.toContain('get_readiness_history');
+    const scopes = [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead, MCP_OAUTH_SCOPES.HealthRead];
+    const connection = await connectFixtureServer(service, scopes);
     connections.push(connection);
     const current = await service.getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
-    const history = await service.getReadinessHistory('user-1');
+    const history = await service.getReadinessHistory({ uid: 'user-1', scopes });
     for (const field of ['sourceKey', 'providerUserId', 'rawSamples']) {
       service.getCurrentReadiness = vi.fn().mockResolvedValue({ ...current, drivers: { ...current.drivers,
         hrv: { ...current.drivers.hrv, personalRange: { ...current.drivers.hrv.personalRange, [field]: 'private-range-canary' } } } });

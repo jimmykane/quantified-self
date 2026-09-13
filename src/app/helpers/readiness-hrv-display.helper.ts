@@ -14,7 +14,7 @@ export function buildReadinessHrvDisplay(
     return display ? [display.value, display.unit].filter(Boolean).join(' ') : '—';
   };
   const valueText = format(range?.currentAverage);
-  const latestText = range?.latestMs ? `Latest night ${format(range.latestMs)}` : 'No recent HRV';
+  const latestText = range?.latestMs ? `Latest night ${format(range.latestMs)}` : '';
   if (!range || !range.normalRange) {
     const statusText = !range ? 'No recent HRV' : range.reason === 'building_baseline'
       ? `Building range · ${range.observationDayCount}/14 nights`

@@ -120,7 +120,8 @@ class HealthMetricChartStubComponent {
   @Input() chartStatuses: Readonly<Record<string, unknown>> = {};
 }
 
-const todayDate = localCalendarDate();
+const testNowMs = Date.UTC(2026, 8, 14, 12);
+const todayDate = localCalendarDate(testNowMs);
 
 @Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
 class TimelineNotesWorkspaceStubComponent { context = () => null; }
@@ -341,6 +342,12 @@ function hrvBaselineSleepSessions(): SleepSession[] {
 }
 
 describe('HealthWorkspaceComponent', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(testNowMs);
+  });
+  afterEach(() => vi.useRealTimers());
+
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let fixture: ComponentFixture<HealthWorkspaceComponent>;
   let component: HealthWorkspaceComponent;

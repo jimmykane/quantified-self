@@ -1,4 +1,4 @@
-import { normalizeReadinessHrvPersonalRange } from './readiness-hrv-validation';
+import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from './readiness-hrv-validation';
 import type {
   DerivedTrainingReadinessHistoryPoint,
   DerivedTrainingReadinessMetricPayload,
@@ -168,8 +168,7 @@ function isValidTrainingReadinessHistoryPoint(
   const expectedHrvRatio = range?.currentAverage !== null && range?.baselineAverage
     ? range.currentAverage / range.baselineAverage : null;
   if (!nullableNumbersMatch(point.hrvRatio, expectedHrvRatio)
-    || (range?.latestAtMs !== null && range?.latestAtMs !== undefined
-      && (range.latestAtMs > evaluatedAtMs || range.latestAtMs <= evaluatedAtMs - 60 * DAY_MS))) return false;
+    || (range !== null && !isReadinessHrvRangeValidAt(range, evaluatedAtMs))) return false;
   const expectedOvernightHeartRateRatio = combineReadinessOvernightHeartRateRatios(
     point.averageHeartRateRatio,
     point.minimumHeartRateRatio,

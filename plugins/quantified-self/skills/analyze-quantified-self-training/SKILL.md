@@ -26,7 +26,8 @@ Use the live metric catalog instead of assuming that a metric or Training-derive
    separate latest nightly HRV and overnight-heart-rate baselines,
    evidence counts, and explicit missing or insufficient-baseline states. Do not reconstruct those drivers from a
    historical readiness snapshot. Prefer the current formula capability over a tool labelled legacy; for historical
-   scores use its matching current-history capability with both grants. A legacy result is not today's app formula.
+   scores use its matching current-history capability with Training, Sleep and Health grants; saved HRV can include
+   overnight Health readings. A legacy result is not today's app formula.
    The HRV range matches Health for the same source and evaluation date, independent of the visible chart range.
 7. For a morning or daily readout, use the server's advertised daily report tool only when the user also granted
    `sleep:read`; supply an explicit IANA timezone. Lead with the latest sleep and recorded aggregate HRV/heart-rate

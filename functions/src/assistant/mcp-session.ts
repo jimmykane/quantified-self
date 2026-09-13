@@ -29,7 +29,6 @@ export const ASSISTANT_BASE_MCP_TOOL_NAMES = [
   'get_sleep_trend',
   'get_today_readiness',
   'get_current_readiness',
-  'get_readiness_history',
   'get_daily_report',
   'query_activities',
   'list_activity_laps',

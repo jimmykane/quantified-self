@@ -278,6 +278,8 @@ describe('SummariesComponent', () => {
   });
 
   it('retains the last complete HRV window through rapid paging and failed refreshes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 10, 12));
     const first$ = new Subject<DashboardHrvContext>();
     const second$ = new Subject<DashboardHrvContext>();
     const third$ = new Subject<DashboardHrvContext>();

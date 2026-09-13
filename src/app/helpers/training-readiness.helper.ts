@@ -180,7 +180,7 @@ export function buildTrainingReadinessViewModel(
       {
         label: 'HRV · 7-day average',
         valueText: hrv.valueText,
-        detailText: `${hrv.statusText} · ${hrv.rangeText} · ${hrv.latestText}`,
+        detailText: [hrv.statusText, hrv.rangeText, hrv.latestText].filter(Boolean).join(' · '),
         indicatorVariant: null,
         indicatorValue: null,
         indicatorTone: hrv.tone,

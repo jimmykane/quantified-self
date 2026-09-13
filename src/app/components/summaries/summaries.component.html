@@ -105,7 +105,9 @@
         <dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd>
         <small>{{ dashboardTodayReadiness.hrvStatusText }}</small>
         <small>{{ dashboardTodayReadiness.hrvRangeText }}</small>
-        <small>{{ dashboardTodayReadiness.hrvLatestText }}</small>
+        @if (dashboardTodayReadiness.hrvLatestText) {
+          <small>{{ dashboardTodayReadiness.hrvLatestText }}</small>
+        }
       </div>
       <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><app-metric-indicator variant="deviation" label="Overnight heart rate" [value]="dashboardTodayReadiness.overnightHeartRateDeviationPercent" [tone]="dashboardTodayReadiness.overnightHeartRateTone" [compact]="true"></app-metric-indicator><small>vs baseline · lower supports</small></div>
     </dl>

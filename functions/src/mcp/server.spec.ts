@@ -380,6 +380,8 @@ describe('MCP HTTP scope enforcement', () => {
   });
 
   it('requires separate activity-detail and route scopes for granular tools', () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'get_readiness_history' } }))
+      .toEqual([MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead, MCP_OAUTH_SCOPES.HealthRead]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'list_activity_jumps' },
@@ -518,7 +520,6 @@ describe('MCP HTTP scope enforcement', () => {
       'get_current_readiness',
       'get_daily_briefing',
       'get_daily_report',
-      'get_readiness_history',
       'get_sleep_trend',
       'get_today_readiness',
       'get_training_metric',

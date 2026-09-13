@@ -90,20 +90,22 @@ export function buildReadinessEvaluation(input: ReadinessInput): ReadinessEvalua
 export function buildReadinessHrvPersonalRange(
   points: readonly ReadinessSleepEvidencePoint[], nowMs: number,
 ): ReadinessHrvPersonalRange | null {
-  const eligible = points.filter(point => {
-    const timestampMs = resolveReadinessSleepPointTime(point);
-    return timestampMs > nowMs - READINESS_SLEEP_LOOKBACK_MS && timestampMs <= nowMs
-      && normalizeSleepProvider(point.provider) !== null
-      && /^\d{4}-\d{2}-\d{2}$/.test(point.sleepDate);
-  }).sort((a, b) => resolveReadinessSleepPointTime(a) - resolveReadinessSleepPointTime(b)
-    || a.id.localeCompare(b.id));
+  const inWindow = (time: number) => time > nowMs - READINESS_SLEEP_LOOKBACK_MS && time <= nowMs;
+  const eligible = points.flatMap(point => {
+    if (normalizeSleepProvider(point.provider) === null || !/^\d{4}-\d{2}-\d{2}$/.test(point.sleepDate)) return [];
+    const observations = readinessHrvObservations(point).filter(observation =>
+      Number.isFinite(observation.value) && observation.value > 0 && inWindow(observation.timestampMs));
+    const pointTime = resolveReadinessSleepPointTime(point);
+    // A grouped night may include a later fragment. Retain original completed HRV
+    // observations at historical cutoffs instead of withholding the entire group.
+    const selectedAtMs = inWindow(pointTime) ? pointTime : Math.max(-Infinity, ...observations.map(value => value.timestampMs));
+    return inWindow(selectedAtMs) ? [{ point, observations, selectedAtMs }] : [];
+  }).sort((a, b) => a.selectedAtMs - b.selectedAtMs || a.point.id.localeCompare(b.point.id));
   const latestSleep = eligible[eligible.length - 1];
   if (!latestSleep) return null;
-  const observations = eligible.filter(point => point.provider === latestSleep.provider
-    && (point.sourceKey ?? null) === (latestSleep.sourceKey ?? null))
-    .flatMap(readinessHrvObservations)
-    .filter(point => Number.isFinite(point.value) && point.value > 0
-      && point.timestampMs <= nowMs && point.timestampMs > nowMs - READINESS_SLEEP_LOOKBACK_MS)
+  const observations = eligible.filter(({ point }) => point.provider === latestSleep.point.provider
+    && (point.sourceKey ?? null) === (latestSleep.point.sourceKey ?? null))
+    .flatMap(entry => entry.observations)
     .sort((a, b) => a.timestampMs - b.timestampMs || (a.sourceKey ?? '').localeCompare(b.sourceKey ?? ''));
   const latest = observations[observations.length - 1];
   if (!latest) return null;

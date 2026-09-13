@@ -1,4 +1,13 @@
 import type { ReadinessHrvPersonalRange } from './readiness';
+import { HRV_PERSONAL_RANGE_OPTIONS } from './personal-metric-range';
+
+/** Every nonempty current window must contain a reading inside that window. */
+export function isReadinessHrvRangeValidAt(range: ReadinessHrvPersonalRange, evaluatedAtMs: number): boolean {
+  return range.latestAtMs !== null && range.latestAtMs <= evaluatedAtMs
+    && range.latestAtMs > evaluatedAtMs - HRV_PERSONAL_RANGE_OPTIONS.baselineWindowDays * 86400000
+    && (range.currentObservationDayCount === 0
+      || range.latestAtMs > evaluatedAtMs - HRV_PERSONAL_RANGE_OPTIONS.currentWindowDays * 86400000);
+}
 
 /** Strict identity-free normalization of persisted range evidence. */
 export function normalizeReadinessHrvPersonalRange(value: unknown): ReadinessHrvPersonalRange | null {
@@ -7,6 +16,7 @@ export function normalizeReadinessHrvPersonalRange(value: unknown): ReadinessHrv
   const count = (n: unknown, max: number): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= max;
   const positive = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
   if (!count(s.observationDayCount, 61) || !count(s.currentObservationDayCount, 8)
+    || s.currentObservationDayCount > s.observationDayCount
     || s.requiredObservationDayCount !== 14 || s.requiredCurrentObservationDayCount !== 3
     || !positive(s.latestMs) || !positive(s.latestAtMs) || !Number.isInteger(s.latestAtMs)) return null;
   const base = { observationDayCount: s.observationDayCount, currentObservationDayCount: s.currentObservationDayCount,

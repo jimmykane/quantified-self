@@ -1,5 +1,5 @@
 import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
-import { normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
+import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
 import { currentHrvRangeSchema, currentReadinessHistorySchema } from './readiness-output-schemas';
 import { MCP_ACTIVITY_SAMPLES_SCHEMA } from './activity-samples.schema';
 import {
@@ -890,7 +890,7 @@ function createCurrentReadinessOutputSchema() {
       || value.availableSignalCount !== (score?.availableSignalCount ?? 0)
       || value.availableWeightPercent !== (score?.availableWeight ?? 0)
       || value.confidence !== (score ? resolveReadinessConfidence(score.availableWeight, value.baselineEvidenceCount) : null)
-      || (range !== null && (range.latestAtMs! > value.asOfTimeMs || range.latestAtMs! <= value.asOfTimeMs - 60 * 86400000))) {
+      || (range !== null && !isReadinessHrvRangeValidAt(range, value.asOfTimeMs))) {
       context.addIssue({ code: 'custom', message: 'Readiness must match its current range and other drivers.' });
     }
   });

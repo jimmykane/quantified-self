@@ -1136,7 +1136,8 @@ missing evidence as zero.
 
 HRV uses `shared/personal-metric-range.ts`, exactly as the Health and Dashboard nightly HRV charts do. Multiple
 readings on the same provider calendar date reduce to a median; original fragment observations survive sleep grouping
-so the readiness input cannot become a different mean. The baseline is the mean ± one population standard deviation
+so the readiness input cannot become a different mean. Each original HRV observation is filtered at the cutoff before
+selecting its source; a later fragment of the same night cannot hide an already completed reading. The baseline is the mean ± one population standard deviation
 over the preceding 60 days, including current observations. At least 14 observed days are required, plus three observed
 days in the last seven days for the current average. Every historical date uses only observations completed by its own
 cutoff. Selecting a year of chart history changes the view, never these calculation windows. Dedicated overnight and
@@ -1155,7 +1156,8 @@ is needed. Deploy the verified Functions update before the frontend rollout so f
 The builder also stores identity-free `legacyPoints` calculated by the frozen `shared/readiness-legacy.ts` evaluator.
 Only registered legacy MCP projections consume those points; the current frontend and new tools strip them. Old scores
 are never relabelled as formula 4, and new scores are never relabelled as formula 3. The current history validator requires
-the full HRV evidence and recomputes the score, classification, ratios and cutoff bounds.
+the full HRV evidence and recomputes the score, classification, ratios and cutoff bounds. A nonempty current window
+must contain a latest reading within seven days, and current-day counts cannot exceed baseline-day counts.
 
 Provider coverage follows the normalized sleep document rather than assumptions about a device. The current Suunto
 mapper persists average and minimum sleep HR, the COROS mapper persists average sleep HR, and the Garmin Health sleep
@@ -2084,7 +2086,9 @@ daily-briefing schema is frozen. The additive `get_daily_report` shares that liv
 average/overnight HRV plus average/minimum sleep HR for the latest grouped main sleep, and adds the existing strict
 Training Summary projection. `shared/training-load.ts` owns the canonical daily load builder and CTL/ATL constants used
 by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and evidence
-selection. `get_readiness_history` provides the matching current snapshot and requires the same two grants.
+selection. `get_readiness_history` provides the matching current snapshot and additionally requires `health:read`,
+because its persisted HRV evidence can include absolute overnight Health values. The tool is withheld without all
+three grants, and the data service checks them before reading.
 `get_today_readiness` and generic readiness snapshot reads retain registered formula 3; clients must not present those
 as the current app formula. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
 

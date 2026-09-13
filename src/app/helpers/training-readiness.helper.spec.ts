@@ -36,6 +36,8 @@ describe('training-readiness.helper', () => {
       ['HRV · 7-day average', '—'],
       ['Overnight HR vs baseline', '-5%'],
     ]);
+    expect(view.metricRows.find(row => row.label === 'HRV · 7-day average')?.detailText)
+      .toBe('No recent HRV · 60-day personal range');
     expect(view.implicationTitle).toBe('Signals are broadly supportive');
     expect(view.implicationText).toContain('does not choose a workout');
     expect(view.sourceText).toContain('bounded sleep envelope');

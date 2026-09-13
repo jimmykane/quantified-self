@@ -91,6 +91,16 @@ describe('readiness shared HRV personal range', () => {
     expect(result.currentAverage).toBeCloseTo((31 * 6 + 30) / 7);
   });
 
+  it('keeps completed HRV fragments when another fragment of the same night ends after the cutoff', () => {
+    const points = history();
+    const last = points.at(-1)!;
+    const future = { ...last, endTimeMs: now + 3600000, averageHrvMs: 100 };
+    const grouped = { ...last, endTimeMs: future.endTimeMs,
+      hrvObservations: [last, future].flatMap(readinessHrvObservations) };
+    expect(buildReadinessHrvPersonalRange([...points.slice(0, -1), grouped], now))
+      .toEqual(buildReadinessHrvPersonalRange(points, now));
+  });
+
   it('keeps the weekly HRV signal when the latest sleep has no HRV, and leaves other drivers unchanged', () => {
     const points = history();
     points.at(-1)!.averageHrvMs = null;
@@ -118,6 +128,7 @@ describe('readiness shared HRV personal range', () => {
     expect(view.rangeText).toMatch(/^60-day range [\d.]+–[\d.]+ ms$/);
     expect(view.latestText).toBe('Latest night 32 ms');
     expect(JSON.stringify(view)).not.toContain('%');
+    expect(buildReadinessHrvDisplay(null)).toMatchObject({ valueText: '—', statusText: 'No recent HRV', latestText: '' });
     expect(buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(nights(Array(5).fill(40)), now)))
       .toMatchObject({ valueText: '—', statusText: 'Building range · 5/14 nights' });
   });
@@ -134,9 +145,13 @@ describe('readiness shared HRV personal range', () => {
     expect(normalizeDerivedTrainingReadinessMetricPayload(payload)).toEqual(payload);
     expect(normalizeDerivedTrainingReadinessMetricPayload({ ...payload, formulaVersion: 3 })).toBeNull();
     for (const change of [{ score: 99 }, { hrvPersonalRange: undefined }, { hrvRatio: 1.5 },
-      { hrvPersonalRange: { ...points.at(-1)!.hrvPersonalRange, latestAtMs: now + 1 } }]) {
+      { hrvPersonalRange: { ...points.at(-1)!.hrvPersonalRange, latestAtMs: now + 1 } },
+      { hrvPersonalRange: { ...points.at(-1)!.hrvPersonalRange, latestAtMs: now - 8 * day } }]) {
       expect(normalizeDerivedTrainingReadinessMetricPayload({ ...payload,
         points: [...points.slice(0, -1), { ...points.at(-1), ...change }] })).toBeNull();
     }
+    const insufficient = buildReadinessHrvPersonalRange(history().filter((_, i) => i < 53 || i > 57), now)!;
+    expect(normalizeReadinessHrvPersonalRange({ ...insufficient, observationDayCount: 1, currentObservationDayCount: 2,
+      reason: 'building_baseline' })).toBeNull();
   });
 });

@@ -40,7 +40,8 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    `metrics:read` and `sleep:read` are available. Preserve its UTC-day scoring boundary, local-day context, current load
    freshness, seven-day HRV average, same-source 60-day range, separate latest nightly HRV, and overnight-heart-rate
    medians, ratios and evidence states. Prefer the current formula capability; a tool labelled legacy is not the
-   current app score. For historical scores, use the matching current-history capability with both grants.
+   current app score. For historical scores, use the matching current-history capability with Training, Sleep and Health
+   grants; saved HRV can include overnight Health readings.
    Use a separate bounded sleep trend when the user asks whether those values changed over several days.
 7. For a request such as “good morning,” a daily report, or a current readout, prefer the server's advertised daily
    report tool when both `metrics:read` and `sleep:read` are available. Pass an explicit IANA timezone. Lead with the
