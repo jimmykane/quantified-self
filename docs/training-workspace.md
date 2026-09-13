@@ -78,8 +78,9 @@ The following rules are architectural constraints:
 - Bounded current scores use the shared lightweight metric indicator rather than a chart instance. Readiness uses a
   0–100 track with its canonical 55 and 75 category boundaries; eligible source sleep scores use a 0–100 track without
   inventing new thresholds. Four discrete segments communicate readiness signal coverage independently from score and
-  confidence. HRV and Overnight HR use a baseline-centered ±20% display while retaining the exact ratio text and the
-  metric-specific direction (lower Overnight HR may be supportive). Score fills start at zero and remain visible beneath
+  confidence. HRV shows its seven-day average, 60-day personal range, status and latest nightly value using the shared
+  `readiness-hrv-display.helper.ts` formatter. Overnight HR retains the baseline-centered ±20% display and exact ratio
+  text (lower Overnight HR may be supportive). Score fills start at zero and remain visible beneath
   their threshold markers. Missing evidence leaves an empty track, never zero.
 - Training-time and workout-count comparisons may use the same baseline-centered visual, but CTL, ATL, Form, ramp,
   ACWR, monotony, strain, FTP, VO2 max, recovery time, and power-system capacity must not be normalized into arbitrary
@@ -135,7 +136,7 @@ flowchart TD
     C --> F["Event/activity write ingress"]
     D --> F
     S["Sleep session write"] --> G["Targeted sleep ingress"]
-    S --> P["Bounded 30-day live sleep listener"]
+    S --> P["Bounded 60-day live sleep listener"]
     U["Training benchmark callable"] --> H["Training settings"]
     U --> I["Mark training_build_comparison dirty"]
     V["Destination and shortcuts"] --> W["Direct owner Firestore write: appSettings.trainingWorkspace"]
@@ -617,13 +618,13 @@ The join retains references to the selected child and parent data instead of clo
 
 Training uses main overnight sleep sessions for contextual comparisons. Naps are excluded. The backend has two narrow
 sleep sources: `training_build_comparison` fetches the 28/84-day and selected build ranges, while `training_readiness`
-fetches a bounded sleep-end envelope of about 43 days. That envelope lets each of the 14 daily cutoffs independently
-apply the canonical 30-day sleep lookback without querying event or activity history. Separately, Training Readiness and
+fetches a bounded sleep-end envelope of about 73 days. That envelope lets each of the 14 daily cutoffs independently
+apply the 60-day HRV lookback without querying event or activity history. Separately, Training Readiness and
 the fixed Dashboard Today Readiness summary each use the same bounded live-query contract: it is lower-bounded to the
-last 30 days, keeps an open upper bound for newly imported nights, and never loads event or activity history. A local
+last 60 days, keeps an open upper bound for newly imported nights, and never loads event or activity history. A local
 refresh timer re-evaluates the shared result when a future-dated record becomes eligible, the latest night reaches its
 48-hour limit,
-or a night leaves the 30-day baseline window; it reschedules after every boundary and caps long browser timers. Both
+or an observation leaves the 7-day HRV average, 30-day Overnight HR or 60-day HRV baseline window; it reschedules after every boundary and caps long browser timers. Both
 live and backend paths reject unknown providers or invalid sleep dates, ignore non-positive physiological samples, and
 discard unusable timezone offsets instead of letting malformed evidence change or break the result. The backend readiness
 projection must include average and minimum sleep HR as well as HRV fields; the shared formula gives average sleep HR
@@ -812,14 +813,16 @@ Training state and Readiness are fixed inside the optional Today summary:
   it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
   backend-derived
   `training_readiness` snapshot containing 14 UTC-aligned daily cutoffs. Each historical day uses the Form state for that
-  day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff; a night older than 48 hours is
-  ineligible. HRV, average-heart-rate, and minimum-heart-rate baselines use up to 14 prior nights from the same provider and account
+  day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff. Sleep and Overnight HR require
+  a latest night no older than 48 hours. HRV compares a seven-day average with the same rolling 60-day personal range
+  used by Health and the Dashboard HRV chart, with at least 14 baseline days and three current days. Average-heart-rate
+  and minimum-heart-rate baselines retain up to 14 prior nights from the same provider and account within 30 days
   and require at least three prior values for the matching measure. Average and minimum HR are not independent score
   drivers: their ratios are bounded to `0.8..1.2`, then combined into one Overnight HR ratio at 70% average and 30%
   minimum, with fallback to whichever is available. Lower HR relative to personal baseline supports that driver. The
-  live sleep query is lower-bounded to 30 days and keeps an open upper bound so an open page can
+  live sleep query is lower-bounded to 60 days and keeps an open upper bound so an open page can
   receive newly imported nights. The backend sleep query is bounded at both ends to the envelope required for all 14
-  cutoffs, and the formula then applies its own 30-day lookback at each cutoff. Future records are ignored. Training
+  cutoffs, and the formula applies each driver's own rolling lookback at each cutoff. Future records are ignored. Training
   replaces the final chart point with the live current result only when the retained snapshot is for the current UTC day,
   so the headline and today's dot stay in sync without plotting a new score on yesterday after a day rollover. Score,
   status, confidence, timestamp, driver freshness, baseline evidence count, and missing values stay separate. Persisting
@@ -831,11 +834,12 @@ Training state and Readiness are fixed inside the optional Today summary:
   retired pre-release raw value `KpiReadinessConfidence` has a narrow cleanup predicate for local preview settings; it
   is not part of the active dashboard chart-type union, renderer, manual choices, presets, or recommendations. Equal-time
   sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
-  cannot select different latest evidence because query order changed. MCP's additive `get_today_readiness` tool applies
-  this same live formula, current Form/ramp preference, bounded 30-day sleep source, and same-provider baselines. It
+  cannot select different latest evidence because query order changed. MCP's additive `get_current_readiness` tool applies
+  this same live formula, current Form/ramp preference, bounded 60-day sleep source, and source-separated HRV range. It
   exposes only an explicit identity-free driver projection with safe aggregate HRV/heart-rate values and evidence
   states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
-  compact Training Summary; the frozen daily briefing remains unchanged.
+  compact Training Summary. `get_readiness_history` exposes the current 14-day series. Registered
+  `get_today_readiness`, generic readiness snapshots and the frozen daily briefing retain formula 3 for compatibility.
 - **Nightly HRV evidence** comes from the shared read-time resolver in `shared/nightly-hrv.ts`. Native normalized Sleep
   HRV wins; otherwise a canonical overnight-average Health summary may fill a missing main night only for the same
   owner, provider/account, provider date, and overlapping sleep interval. A reading contributes once across fragments.
@@ -849,9 +853,10 @@ Training state and Readiness are fixed inside the optional Today summary:
   separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
   HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
   `training_readiness.payload.evidenceVersion = 1` lets the frontend and backend freshness gate rebuild old readiness
-  inputs without changing formula version 3. Recovery version 4 withholds HRV comparison across incompatible sources.
-  MCP projects out the internal readiness evidence version and retains its registered recovery version 3; its formulas
-  and wire shapes are unchanged. Rebuilds use the ordinary targeted ensure lifecycle, without a production migration.
+  inputs independently from the formula version. Readiness formula 4 adds the shared HRV range. Recovery version 4 withholds HRV comparison across incompatible sources.
+  MCP projects out the internal readiness evidence version. Registered readiness and recovery tools retain their
+  version-3 formulas and wire shapes; additive current-readiness tools expose formula 4. Rebuilds use the ordinary
+  targeted ensure lifecycle, without a production migration.
 - **Body-weight trend** first reads positive canonical `body_weight` point measurements from Health. Provider and manual
   measurements are independent sources; each provider/account series reduces multiple values on one UTC day to a median.
   If any real Health Weight exists in the retained source window, workout profile Weight is excluded globally. Otherwise,
@@ -913,7 +918,7 @@ seed and the bounded sleep envelope; it does not trigger an event or activity hi
 when the readiness payload evolves so backend freshness cannot call an invalid document fresh while the frontend remains
 indefinitely on Preparing.
 
-The readiness payload also carries `formulaVersion: 3`. This is intentionally independent of the global derived schema:
+The readiness payload also carries `formulaVersion: 4`. This is intentionally independent of the global derived schema:
 changing the current/historical readiness formula or its persisted input projection invalidates only
 `training_readiness`, preserving compatible snapshots for every unrelated kind.
 
@@ -1121,7 +1126,7 @@ combines only:
 
 - the current UTC-day Form series as one 40% Load driver (with the Form Now/Ramp snapshots used only when the series cannot provide the needed value);
 - sleep score when recorded, otherwise a duration-based score centered on eight hours, at 25%;
-- latest-night HRV versus up to 14 prior nights from the same provider, at 20%; and
+- seven-day average HRV versus the rolling 60-day personal range for the same provider/account/measurement source, at 20%; and
 - one 15% Overnight HR driver that blends same-provider average sleep HR (70%) and minimum sleep HR (30%).
 
 Each available HR ratio is bounded to 80–120% of its own baseline before blending; if one HR measure is unavailable,
@@ -1129,14 +1134,37 @@ the other supplies the driver. Lower HR supports the score only relative to the 
 and is not a universal medical claim. Missing drivers are excluded and available weights are renormalized rather than treating
 missing evidence as zero.
 
+HRV uses `shared/personal-metric-range.ts`, exactly as the Health and Dashboard nightly HRV charts do. Multiple
+readings on the same provider calendar date reduce to a median; original fragment observations survive sleep grouping
+so the readiness input cannot become a different mean. The baseline is the mean ± one population standard deviation
+over the preceding 60 days, including current observations. At least 14 observed days are required, plus three observed
+days in the last seven days for the current average. Every historical date uses only observations completed by its own
+cutoff. Selecting a year of chart history changes the view, never these calculation windows. Dedicated overnight and
+sleep-session-average sources remain separate; spot, workout and manual HRV are not readiness inputs.
+
+Formula 4 retains the HRV component's neutral score of 50 and its 20% weight when the weekly average is within the range.
+Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange / baselineMean)`. An unusually high value
+earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
+The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
+direction and latest nightly reading separately, instead of a percentage against a different short median. Weekly HRV
+can remain available without a night in the last 48 hours while at least three recent days remain.
+
+The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from
+the existing Form seed and bounded Sleep/Health evidence. No event reparse, global derived-schema bump or bulk migration
+is needed. Deploy the verified Functions update before the frontend rollout so formula-4 history can be generated.
+The builder also stores identity-free `legacyPoints` calculated by the frozen `shared/readiness-legacy.ts` evaluator.
+Only registered legacy MCP projections consume those points; the current frontend and new tools strip them. Old scores
+are never relabelled as formula 4, and new scores are never relabelled as formula 3. The current history validator requires
+the full HRV evidence and recomputes the score, classification, ratios and cutoff bounds.
+
 Provider coverage follows the normalized sleep document rather than assumptions about a device. The current Suunto
 mapper persists average and minimum sleep HR, the COROS mapper persists average sleep HR, and the Garmin Health sleep
 summary mapper currently persists neither normalized sleep-HR measure. The score therefore uses only the measures that
 are actually present; provider-specific omissions remain missing and do not become neutral or zero-valued evidence.
 
-The sleep listener is lower-bounded to 30 days, excludes naps, ignores future-dated records, and accepts a latest night
-only through 48 hours after its end. The card also refreshes when a future record becomes eligible or baseline evidence
-leaves the 30-day window, even if Firestore emits nothing. Score, status, confidence, calculation timestamp, signal
+The sleep listener is lower-bounded to 60 days, excludes naps and ignores future-dated records. Sleep and Overnight HR
+accept a latest night only through 48 hours after its end. The card also refreshes when a future record becomes eligible
+or evidence leaves the 7/30/60-day windows, even if Firestore emits nothing. Score, status, confidence, calculation timestamp, signal
 count, driver values, and driver freshness are shown separately. Combined Form/ramp freshness is the oldest contributing
 timestamp. The training implication is deliberately non-prescriptive: it summarizes whether evidence is supportive,
 mixed, or strained and directs attention to the drivers rather than choosing a workout. Failed Form/ramp reads and a
@@ -1162,7 +1190,7 @@ controls so athletes do not interpret a sleep change as a recalculation of train
 The same card plots a backend-derived 14-day series. `training_readiness` declares only `formDocs` and
 `trainingReadinessSleepDocs`; it never declares activities or settings. On a readiness-only refresh, the worker accepts a
 schema-compatible Form snapshot seed, avoids a full event scan, and queries a bounded sleep-end envelope covering every
-daily cutoff's own 30-day lookback. Each daily point evaluates the shared formula at that UTC day's final millisecond,
+daily cutoff's own 60-day HRV lookback (30 days for Overnight HR). Each daily point evaluates the shared formula at that UTC day's final millisecond,
 except today, which uses the worker build timestamp. Missing scores remain chart gaps and the frontend rejects malformed,
 non-contiguous, or internally inconsistent payloads, including confidence that does not match the recorded signal and
 baseline evidence counts. The latest complete series may remain visible while its status is updating or after a failed
@@ -2048,7 +2076,7 @@ ready/building/failed/stale/missing/schema-mismatch. It never returns payloads, 
 device/provider provenance. Clients should use it before `get_training_metric` so a missing or rebuilding snapshot is
 not mistaken for an unsupported Training capability.
 
-The explicitly named live `get_today_readiness` tool is not a derived-snapshot projection. It requires both
+The explicitly named live `get_current_readiness` tool is not a derived-snapshot projection. It requires both
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
 rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It
 exists because the persisted 14-day `training_readiness` point can lag newly imported sleep and because the registered
@@ -2056,7 +2084,9 @@ daily-briefing schema is frozen. The additive `get_daily_report` shares that liv
 average/overnight HRV plus average/minimum sleep HR for the latest grouped main sleep, and adds the existing strict
 Training Summary projection. `shared/training-load.ts` owns the canonical daily load builder and CTL/ATL constants used
 by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and evidence
-selection. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
+selection. `get_readiness_history` provides the matching current snapshot and requires the same two grants.
+`get_today_readiness` and generic readiness snapshot reads retain registered formula 3; clients must not present those
+as the current app formula. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
 
 The built-in Assistant consumes this same strict `get_training_metric` projection. Its optional deterministic chart
 adapter takes Training titles from the MCP catalog and plots only supported trend arrays. For the `form` payload it

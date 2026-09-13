@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "486791db6ed3651f2f900b4e0230fd68c37886629e4845fcca261413aa31c050",
+  "candidateSha256": "4850e50f4af44b8150ea09cf681b50a07085df3686e0f16d4740bff009b66ea9",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add paginated activity samples with existing grants, bounded parse reuse and client guidance; opt-in descriptions; shared Health/Sleep HRV ranges. Preserve Timeline notes/comparisons, Health provider/stress semantics, daily reports, safe activity/nearby search, multi-metric queries, Training discovery, activity overviews, all-history ISO rankings, jump/sleep-vital routing, and RS256 private_key_jwt plus public PKCE.",
+  "summary": "Add current formula-4 readiness/history and shared rolling HRV ranges; preserve registered formula-3 projections. Retain pending activity samples/parse reuse, opt-in descriptions, Timeline notes/comparisons, Health provider/stress semantics, daily reports, nearby activity/route search, multi-metric queries, Training discovery, activity overviews, ISO rankings, jump/sleep-vital routing, RS256 private_key_jwt and public PKCE.",
   "rescanRequired": true
 }

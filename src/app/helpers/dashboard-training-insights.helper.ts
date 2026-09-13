@@ -4,6 +4,7 @@ import {
   READINESS_SLEEP_LOOKBACK_MS,
   READINESS_SLEEP_MAX_AGE_MS,
   type ReadinessConfidence,
+  type ReadinessHrvPersonalRange,
   type ReadinessSleepEvidencePoint,
 } from '@shared/readiness';
 import type {
@@ -53,6 +54,7 @@ export interface DashboardReadinessSignalsContext {
   sleepScore: number | null;
   latestSleepAtMs: number | null;
   hrvRatio: number | null;
+  hrvPersonalRange: ReadinessHrvPersonalRange | null;
   averageHeartRateRatio: number | null;
   minimumHeartRateRatio: number | null;
   overnightHeartRateRatio: number | null;
@@ -84,7 +86,7 @@ export function resolveDashboardReadinessSleepRefreshAtMs(
   const safeNowMs = toFiniteNumber(nowMs) ?? Date.now();
   const sleepEndTimes = (sleepTrend?.points || [])
     .filter(point => point.isPlaceholder !== true && point.isNap !== true)
-    .map(resolveSleepPointTime)
+    .flatMap(point => [resolveSleepPointTime(point), ...(point.hrvObservations ?? []).map(value => value.timestampMs)])
     .filter(pointTime => pointTime > 0);
   const completedSleepEndTimes = sleepEndTimes.filter(pointTime => (
     pointTime <= safeNowMs
@@ -92,7 +94,7 @@ export function resolveDashboardReadinessSleepRefreshAtMs(
   ));
   const futureRefreshTimes = sleepEndTimes.filter(pointTime => pointTime > safeNowMs);
   const baselineExpiryTimes = completedSleepEndTimes
-    .map(pointTime => pointTime + DASHBOARD_READINESS_SLEEP_LOOKBACK_MS + 1)
+    .flatMap(pointTime => [7, 30, 60].map(days => pointTime + days * 86400000 + 1))
     .filter(refreshAtMs => refreshAtMs > safeNowMs);
   const latestCompletedSleepEndMs = completedSleepEndTimes.length
     ? Math.max(...completedSleepEndTimes)
@@ -227,6 +229,7 @@ export function buildDashboardReadinessSignalsContext(input: {
       provider: point.provider,
       sourceKey: point.sourceKey,
       hrvSourceKey: point.hrvSourceKey,
+      hrvObservations: point.hrvObservations,
       startTimeMs: toFiniteNumber(point.startTimeMs),
       endTimeMs: toFiniteNumber(point.endTimeMs),
       totalSeconds: toFiniteNumber(point.totalSeconds),

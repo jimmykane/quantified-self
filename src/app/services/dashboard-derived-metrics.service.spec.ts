@@ -765,6 +765,7 @@ describe('DashboardDerivedMetricsService', () => {
       sleepScore: null,
       latestSleepAtMs: null,
       hrvRatio: null,
+      hrvPersonalRange: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
       overnightHeartRateRatio: null,

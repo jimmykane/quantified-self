@@ -784,10 +784,14 @@ export function buildHealthHrvPersonalRangeStatus(
   unitSettings: UserUnitSettingsInterface | null = null,
   pointTimestampsMs: readonly number[] = series.points.map(point => point.timestampMs),
   startTimeMs?: number,
+  nowMs: number = Date.now(),
 ): HealthHrvPersonalRangeStatus | null {
   if (!isHealthHrvPersonalRangeSemanticVariant(series.semanticVariant)) {
     return null;
   }
+  // Today's range control ends at local midnight. Evaluate at now, like Readiness,
+  // so morning evidence does not fall out of the rolling windows hours too soon.
+  endTimeMs = Math.min(endTimeMs, nowMs);
   const observations = series.points.flatMap(point =>
     typeof point.value === 'number' && Number.isFinite(point.value)
       ? [{ timestampMs: point.timestampMs, calendarDate: point.calendarDate, value: point.value }]
@@ -875,7 +879,7 @@ export function buildHealthHrvPersonalRangeStatus(
       series.unit,
       series.nativeOnly,
       unitSettings,
-    )} · Range ${formatHealthValue(
+    )} · 60-day range ${formatHealthValue(
       series.metricId,
       normalRange.min,
       series.unit,
@@ -945,6 +949,7 @@ export function buildSleepPriorityRows(
       sleepPoint.id = id;
       delete sleepPoint.sourceKey;
       delete sleepPoint.hrvSourceKey;
+      delete sleepPoint.hrvObservations;
     }
     const scoreText = formatSleepMetricValue(
       SLEEP_SPORTS_LIB_METRIC_FIELDS.Score,

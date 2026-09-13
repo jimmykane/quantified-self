@@ -942,7 +942,7 @@ describe('HealthWorkspaceComponent', () => {
     const hrvCard = host.querySelector<HTMLElement>('[aria-labelledby="health-priority-card-heart_rate_variability"]');
     expect(hrvCard?.textContent).toContain('Within personal range');
     expect(hrvCard?.textContent).toContain('7-day average');
-    expect(hrvCard?.textContent).toContain('Range');
+    expect(hrvCard?.textContent).toContain('60-day range');
     expect(hrvCard?.querySelector<HTMLElement>('.health-priority-range-status-dot')?.style.backgroundColor).not.toBe('');
     const setOption = TestBed.inject(EChartsLoaderService).setOption as ReturnType<typeof vi.fn>;
     let hrvChartOption: { series?: Array<{ lineStyle?: { color?: string } }> } | undefined;

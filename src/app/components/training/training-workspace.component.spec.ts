@@ -672,6 +672,7 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const sleepSessions = [
       createSession('baseline-6', 6, 75, 50, 50),
+      ...Array.from({ length: 10 }, (_, index) => createSession(`baseline-${index + 6}`, index + 6, 75, 50, 50)),
       createSession('baseline-5', 5, 75, 50, 50),
       createSession('baseline-4', 4, 75, 50, 50),
       createSession('baseline-3', 3, 75, 50, 50),
@@ -688,7 +689,7 @@ describe('TrainingWorkspaceComponent', () => {
       rampRate: { rampRate: 1 } as any,
       trainingReadinessStatus: 'ready',
       trainingReadiness: {
-        formulaVersion: 3,
+        formulaVersion: 4,
         dayBoundary: 'UTC',
         asOfDayMs: Date.UTC(2026, 6, 16),
         generatedAtMs: nowMs - 1000,
@@ -705,7 +706,8 @@ describe('TrainingWorkspaceComponent', () => {
           rampRate: 1,
           sleepScore: 80,
           latestSleepAtMs: Date.UTC(2026, 6, 3 + index, 6),
-          hrvRatio: 1,
+          hrvRatio: null,
+          hrvPersonalRange: null,
           averageHeartRateRatio: 1,
           minimumHeartRateRatio: 1,
           overnightHeartRateRatio: 1,
@@ -738,7 +740,7 @@ describe('TrainingWorkspaceComponent', () => {
 
       expect(sleepService.watchForDashboard).toHaveBeenCalledWith(
         'user-1',
-        nowMs - (30 * 24 * 60 * 60 * 1000),
+        nowMs - (60 * 24 * 60 * 60 * 1000),
         Number.MAX_SAFE_INTEGER,
       );
       const panel = fixture.nativeElement.querySelector('.training-readiness-panel') as HTMLElement;
@@ -747,7 +749,9 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('4/4 signals');
       expect(panel.textContent).toContain('Sleep');
       expect(panel.textContent).toContain('90/100');
-      expect(panel.textContent).toContain('+10%');
+      expect(panel.textContent).toContain('HRV · 7-day average');
+      expect(panel.textContent).toContain('50.7 ms');
+      expect(panel.textContent).toContain('60-day range');
       expect(panel.textContent).toContain('-4%');
       expect(panel.textContent).toContain('14-day trend');
       expect(panel.textContent).toContain('14/14 days scored');

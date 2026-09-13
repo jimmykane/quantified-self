@@ -1,3 +1,5 @@
+import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { buildReadinessHrvDisplay } from './readiness-hrv-display.helper';
 import type { DerivedTrainingReadinessMetricPayload } from '@shared/derived-metrics';
 import type { DashboardReadinessSignalsContext } from './dashboard-training-insights.helper';
 
@@ -51,6 +53,7 @@ export interface TrainingReadinessViewModel {
 export function buildTrainingReadinessViewModel(
   context: DashboardReadinessSignalsContext | null | undefined,
   options: {
+    unitSettings?: UserUnitSettingsInterface | null;
     isPreparing?: boolean;
     isUpdating?: boolean;
     locale?: string;
@@ -62,7 +65,7 @@ export function buildTrainingReadinessViewModel(
   } = {},
 ): TrainingReadinessViewModel {
   const sourceText = 'The current score and backend-derived 14-day history use the same readiness formula. '
-    + 'History reads a Form snapshot seed and a bounded sleep envelope, with the same 30-day window applied at each daily cutoff; the browser does not load workout history. '
+    + 'History reads a Form snapshot seed and a bounded sleep envelope, with the same 60-day HRV window applied at each daily cutoff; the browser does not load workout history. '
     + 'This is training context, not a medical score or workout prescription.';
   const history = buildTrainingReadinessHistoryViewModel(context, options);
   if (!context) {
@@ -101,6 +104,7 @@ export function buildTrainingReadinessViewModel(
   }
 
   const locale = options.locale;
+  const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, options.unitSettings);
   const loadParts = [
     context.form === null ? null : `Form ${formatSignedNumber(context.form, locale, 1)}`,
     context.rampRate === null ? null : `Ramp ${formatSignedNumber(context.rampRate, locale, 1)}`,
@@ -174,12 +178,12 @@ export function buildTrainingReadinessViewModel(
         indicatorTone: 'neutral',
       },
       {
-        label: 'HRV vs baseline',
-        valueText: formatRatio(context.hrvRatio, locale),
-        detailText: 'Same-provider median; at least 3 prior nights required.',
-        indicatorVariant: 'deviation',
-        indicatorValue: context.hrvRatio === null ? null : (context.hrvRatio - 1) * 100,
-        indicatorTone: resolveRatioTone(context.hrvRatio, false),
+        label: 'HRV · 7-day average',
+        valueText: hrv.valueText,
+        detailText: `${hrv.statusText} · ${hrv.rangeText} · ${hrv.latestText}`,
+        indicatorVariant: null,
+        indicatorValue: null,
+        indicatorTone: hrv.tone,
       },
       {
         label: 'Overnight HR vs baseline',

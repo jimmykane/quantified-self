@@ -488,7 +488,7 @@ describe('fetchTrainingReadinessSleepDocs', () => {
         const docs = await fetchTrainingReadinessSleepDocs('user-1', nowMs);
 
         expect(hoisted.where.mock.calls).toEqual([
-            ['endTimeMs', '>=', firstHistoryCutoffMs - (30 * 24 * 60 * 60 * 1000)],
+            ['endTimeMs', '>=', firstHistoryCutoffMs - (60 * 24 * 60 * 60 * 1000)],
             ['endTimeMs', '<=', nowMs],
         ]);
         expect(hoisted.select).toHaveBeenCalledWith(
@@ -918,7 +918,7 @@ describe('buildTrainingReadinessMetricPayload', () => {
         const staleDay = result.payload.points.find(point => point.dayMs === Date.UTC(2026, 6, 13));
 
         expect(result.payload).toMatchObject({
-            formulaVersion: 3,
+            formulaVersion: 4,
             dayBoundary: 'UTC',
             asOfDayMs: Date.UTC(2026, 6, 16),
             generatedAtMs: nowMs,
@@ -927,18 +927,35 @@ describe('buildTrainingReadinessMetricPayload', () => {
         expect(result.payload.points).toHaveLength(14);
         expect(staleDay).toMatchObject({ score: null, availableSignalCount: 0 });
         expect(today).toMatchObject({
-            score: 72,
-            label: 'Mixed',
-            confidence: 'medium',
-            availableSignalCount: 3,
+            score: 78,
+            label: 'Ready',
+            confidence: 'low',
+            availableSignalCount: 2,
             baselineEvidenceCount: 5,
             latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
             sleepScore: 90,
-            hrvRatio: 1.1,
+            hrvRatio: null,
             averageHeartRateRatio: 0.9,
             minimumHeartRateRatio: 0.96,
         });
         expect(today?.overnightHeartRateRatio).toBeCloseTo(0.918);
+    });
+
+    it('does not copy a current weekly-HRV-only score into legacy history when the latest sleep has expired', async () => {
+        const { buildTrainingReadinessMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 8, 13, 12);
+        const docs = Array.from({ length: 60 }, (_, index) => {
+            const endTimeMs = nowMs - (index + 3) * 86400000;
+            return { id: `night-${index}`, data: () => ({ source: { provider: 'SuuntoApp' },
+                sleepDate: new Date(endTimeMs).toISOString().slice(0, 10), endTimeMs,
+                startTimeMs: endTimeMs - 28800000, durationSeconds: 28800, isNap: false,
+                vitals: { averageHrvMs: 40 } }) };
+        });
+        const { payload } = buildTrainingReadinessMetricPayload([], 0, docs as any, nowMs);
+        expect(payload.points[payload.points.length - 1]).toMatchObject({ score: 50, availableSignalCount: 1,
+            latestSleepAtMs: null, hrvPersonalRange: { currentObservationDayCount: 4 } });
+        expect(payload.legacyPoints![payload.legacyPoints!.length - 1]).toMatchObject({ score: null,
+            label: null, confidence: null, availableSignalCount: 0, hrvRatio: null });
     });
 
     it('produces the same readiness evidence from legacy and new-only Sports Lib sleep aggregates', async () => {

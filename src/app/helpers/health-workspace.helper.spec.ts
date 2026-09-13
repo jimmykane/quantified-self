@@ -733,7 +733,7 @@ describe('Health workspace helpers', () => {
     ), endTimeMs);
     expect(withinRange.tone).toBe('positive');
     expect(withinRange.label).toBe('Within personal range');
-    expect(withinRange.detailText).toMatch(/^7-day average .* ms · Range .* ms–.* ms$/);
+    expect(withinRange.detailText).toMatch(/^7-day average .* ms · 60-day range .* ms–.* ms$/);
 
     const caution = buildHealthHrvPersonalRangeStatus(hrvSeries([
       ...Array.from({ length: 15 }, (_, index) => ({ daysAgo: index + 5, value: 50 })),

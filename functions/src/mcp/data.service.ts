@@ -1,3 +1,8 @@
+import { readinessHrvObservations, buildReadinessEvaluation as buildCurrentReadinessEvaluation,
+  calculateReadinessScore as calculateCurrentReadinessScore, READINESS_SLEEP_LOOKBACK_MS as CURRENT_READINESS_LOOKBACK_MS,
+  type ReadinessEvaluation as CurrentReadinessEvaluation } from '../../../shared/readiness';
+import { normalizeDerivedTrainingReadinessMetricPayload as normalizeCurrentReadiness } from '../../../shared/training-readiness-metric';
+import { normalizeDerivedTrainingReadinessMetricPayload as normalizeLegacyReadiness } from '../../../shared/training-readiness-metric-legacy';
 import { ActivitySampleCache } from './activity-sample-cache';
 import { ActivitySampleContext, ActivitySamplesInput, ActivitySamplesDependencies, ActivitySamplesError, queryActivitySamples } from './activity-samples.service';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
@@ -119,7 +124,7 @@ import {
   ReadinessEvaluation,
   ReadinessRatioEvidence,
   ReadinessSleepEvidencePoint,
-} from '../../../shared/readiness';
+} from '../../../shared/readiness-legacy';
 import {
   buildTrainingLoadPoints,
 } from '../../../shared/training-load';
@@ -3420,8 +3425,10 @@ export function projectDerivedMetricPayloadForMcp(
     switch (metricKind) {
       case DERIVED_METRIC_KINDS.TrainingReadiness: {
         const source = payload as DerivedTrainingReadinessMetricPayload;
-        return { formulaVersion: source.formulaVersion, dayBoundary: source.dayBoundary,
-          asOfDayMs: source.asOfDayMs, generatedAtMs: source.generatedAtMs, historyDays: source.historyDays, points: source.points };
+        const legacy = source.formulaVersion === 4
+          ? normalizeLegacyReadiness({ ...source, formulaVersion: 3, points: source.legacyPoints }) : source;
+        return legacy ? { formulaVersion: legacy.formulaVersion, dayBoundary: legacy.dayBoundary,
+          asOfDayMs: legacy.asOfDayMs, generatedAtMs: legacy.generatedAtMs, historyDays: legacy.historyDays, points: legacy.points } : null;
       }
       case DERIVED_METRIC_KINDS.TrainingSummary:
         return projectTrainingSummaryForMcp(payload);
@@ -4193,6 +4200,7 @@ function buildTodayReadinessSleepNights(
       averageHeartRateBpm: session.vitals?.averageHeartRateBpm ?? null,
       minimumHeartRateBpm: session.vitals?.minimumHeartRateBpm ?? null,
     };
+    evidence.hrvObservations = readinessHrvObservations({ ...evidence, sleepDate: session.sleepDate });
     const key = JSON.stringify([evidence.sleepDate, evidence.sourceKey]);
     grouped.set(key, [
       ...(grouped.get(key) || []),
@@ -4243,6 +4251,7 @@ function buildTodayReadinessSleepNights(
       endTimeMs,
       totalSeconds: durationSeconds,
       ...aggregateNightlyHrvEvidence(entries.map(entry => entry.evidence)),
+      hrvObservations: entries.flatMap(entry => readinessHrvObservations(entry.evidence)),
       averageHeartRateBpm: average(averageHeartRateValues),
       minimumHeartRateBpm: minimumHeartRateValues.length
         ? Math.min(...minimumHeartRateValues)
@@ -4426,8 +4435,27 @@ function projectTodayReadiness(
   };
 }
 
+function projectCurrentReadiness(input: Parameters<typeof projectTodayReadiness>[0] & { current: CurrentReadinessEvaluation | null }) {
+  const previous = projectTodayReadiness(input);
+  const signals = input.current?.signals ?? null;
+  return {
+    ...previous,
+    formulaVersion: 4 as const,
+    status: signals ? 'available' as const : 'no_signal' as const,
+    score: signals?.score ?? null, label: signals?.label ?? null, confidence: signals?.confidence ?? null,
+    availableSignalCount: signals?.availableSignalCount ?? 0,
+    availableWeightPercent: signals ? calculateCurrentReadinessScore(signals)?.availableWeight ?? 0 : 0,
+    baselineEvidenceCount: signals?.baselineEvidenceCount ?? 0,
+    drivers: { ...previous.drivers,
+      hrv: { weightPercent: 20 as const, baselineWindowDays: 60 as const, currentWindowDays: 7 as const,
+        personalRange: signals?.hrvPersonalRange ?? null },
+    },
+  };
+}
+
 interface LoadedTodayReadiness {
   result: GetTodayReadinessResult;
+  currentResult: ReturnType<typeof projectCurrentReadiness>;
   sleepNights: DailyReportSleepNight[];
 }
 
@@ -4436,6 +4464,7 @@ async function loadTodayReadiness(
   input: GetTodayReadinessInput,
   options: {
     includeDailyReportFields?: boolean;
+    currentFormula?: boolean;
   } = {},
 ): Promise<LoadedTodayReadiness> {
   const timeZone = requireTimeZone(input.timeZone);
@@ -4448,14 +4477,14 @@ async function loadTodayReadiness(
   const sleepDocumentsPromise = options.includeDailyReportFields
     ? dependencies.fetchReadinessSleepDocuments(
         input.uid,
-        nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
+        nowTimeMs - (options.currentFormula ? CURRENT_READINESS_LOOKBACK_MS : READINESS_SLEEP_LOOKBACK_MS),
         nowTimeMs,
         MAX_LIVE_READINESS_SLEEP_DOCUMENTS + 1,
         true,
       )
     : dependencies.fetchReadinessSleepDocuments(
         input.uid,
-        nowTimeMs - READINESS_SLEEP_LOOKBACK_MS,
+        nowTimeMs - (options.currentFormula ? CURRENT_READINESS_LOOKBACK_MS : READINESS_SLEEP_LOOKBACK_MS),
         nowTimeMs,
         MAX_LIVE_READINESS_SLEEP_DOCUMENTS + 1,
       );
@@ -4506,6 +4535,11 @@ async function loadTodayReadiness(
       localDayEndTimeMs: localDay.endTimeMs,
       load,
       evaluation,
+    }),
+    currentResult: projectCurrentReadiness({
+      nowTimeMs, timeZone, localDayStartTimeMs: localDay.startTimeMs, localDayEndTimeMs: localDay.endTimeMs,
+      load, evaluation, current: buildCurrentReadinessEvaluation({ form: load.form, rampRate: load.rampRate,
+        sleepPoints: sleepNights.map(night => night.evidence), nowMs: nowTimeMs }),
     }),
     sleepNights,
   };
@@ -6262,6 +6296,24 @@ export function createMcpDataService(
       return result;
     },
 
+    async getCurrentReadiness(input: GetTodayReadinessInput) {
+      const { currentResult } = await loadTodayReadiness(dependencies, input, { currentFormula: true });
+      requireJsonBudget(currentResult, MAX_TODAY_READINESS_RESPONSE_BYTES, 'The current readiness response exceeds the MCP response limit.');
+      return currentResult;
+    },
+
+    async getReadinessHistory(uid: string) {
+      const snapshot = await dependencies.fetchDerivedSnapshot(uid, DERIVED_METRIC_KINDS.TrainingReadiness);
+      const history = snapshot?.status === 'ready' && snapshot.schemaVersion === DERIVED_METRIC_SCHEMA_VERSION
+        ? normalizeCurrentReadiness(snapshot.payload) : null;
+      if (!history) throw new McpDataError('metric_not_ready', 'Readiness history is not ready.');
+      const result = { formulaVersion: history.formulaVersion, dayBoundary: history.dayBoundary,
+        asOfDayMs: history.asOfDayMs, generatedAtMs: history.generatedAtMs,
+        historyDays: history.historyDays, points: history.points };
+      requireJsonBudget(result, MAX_DAILY_REPORT_RESPONSE_BYTES, 'The readiness history exceeds the MCP response limit.');
+      return result;
+    },
+
     async getDailyReport(input: GetDailyReportInput) {
       const timeZone = requireTimeZone(input.timeZone);
       const [
@@ -6273,6 +6325,7 @@ export function createMcpDataService(
           timeZone,
         }, {
           includeDailyReportFields: true,
+          currentFormula: true,
         }),
         dependencies.fetchDerivedSnapshot(
           input.uid,
@@ -6280,8 +6333,9 @@ export function createMcpDataService(
         ),
       ]);
       const result = {
-        sleep: projectDailyReportSleep(readiness.sleepNights),
-        readiness: readiness.result,
+        sleep: projectDailyReportSleep(readiness.sleepNights.filter(night =>
+          night.endTimeMs >= readiness.result.asOfTimeMs - READINESS_SLEEP_LOOKBACK_MS)),
+        readiness: readiness.currentResult,
         trainingSummary: projectDailyTrainingSummary(
           trainingSummarySnapshot,
           readiness.result.asOfTimeMs,

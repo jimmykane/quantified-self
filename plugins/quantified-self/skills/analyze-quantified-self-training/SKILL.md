@@ -22,9 +22,12 @@ Use the live metric catalog instead of assuming that a metric or Training-derive
    types unless the user requests an overall view.
 6. For the current recovery-aware readiness score, prefer the server's advertised live-readiness tool when the user
    also granted `sleep:read`; supply an explicit IANA timezone. Preserve its UTC-day score boundary, local-day context,
-   load freshness, recorded-versus-duration sleep score source, same-provider HRV and overnight-heart-rate baselines,
+   load freshness, recorded-versus-duration sleep score source, seven-day HRV average and source-matched 60-day range,
+   separate latest nightly HRV and overnight-heart-rate baselines,
    evidence counts, and explicit missing or insufficient-baseline states. Do not reconstruct those drivers from a
-   historical readiness snapshot.
+   historical readiness snapshot. Prefer the current formula capability over a tool labelled legacy; for historical
+   scores use its matching current-history capability with both grants. A legacy result is not today's app formula.
+   The HRV range matches Health for the same source and evaluation date, independent of the visible chart range.
 7. For a morning or daily readout, use the server's advertised daily report tool only when the user also granted
    `sleep:read`; supply an explicit IANA timezone. Lead with the latest sleep and recorded aggregate HRV/heart-rate
    values, summarize Readiness in one sentence using at most two relevant available drivers, then present the

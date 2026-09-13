@@ -1,3 +1,4 @@
+import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.helper';
 import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
@@ -217,7 +218,9 @@ interface DashboardTodayReadinessViewModel {
   sleepScore: number | null;
   sleepContextText: string;
   hrvText: string;
-  hrvDeviationPercent: number | null;
+  hrvStatusText: string;
+  hrvRangeText: string;
+  hrvLatestText: string;
   hrvTone: DashboardTodayReadinessTone;
   overnightHeartRateText: string;
   overnightHeartRateDeviationPercent: number | null;
@@ -247,7 +250,9 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     sleepScore: null,
     sleepContextText: loading ? 'Loading sleep…' : 'No eligible night',
     hrvText: '--',
-    hrvDeviationPercent: null,
+    hrvStatusText: 'No recent HRV',
+    hrvRangeText: '60-day personal range',
+    hrvLatestText: '',
     hrvTone: 'neutral',
     overnightHeartRateText: '--',
     overnightHeartRateDeviationPercent: null,
@@ -1890,6 +1895,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         recoveryFinishTimeMs,
       };
     }
+    const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, this.user?.settings?.unitSettings);
     return {
       loading: false,
       warningText,
@@ -1905,9 +1911,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       sleepContextText: warningText && context.latestSleepAtMs === null
         ? 'Sleep unavailable'
         : formatDashboardRelativeDay(context.latestSleepAtMs, { nowMs, locale: this.locale }),
-      hrvText: this.formatDashboardTodayRatio(context.hrvRatio),
-      hrvDeviationPercent: context.hrvRatio === null ? null : (context.hrvRatio - 1) * 100,
-      hrvTone: this.resolveDashboardTodayRatioTone(context.hrvRatio, false),
+      hrvText: hrv.valueText,
+      hrvStatusText: hrv.statusText,
+      hrvRangeText: hrv.rangeText,
+      hrvLatestText: hrv.latestText,
+      hrvTone: hrv.tone,
       overnightHeartRateText: this.formatDashboardTodayRatio(context.overnightHeartRateRatio),
       overnightHeartRateDeviationPercent: context.overnightHeartRateRatio === null
         ? null

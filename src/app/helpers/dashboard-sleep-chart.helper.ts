@@ -1,3 +1,4 @@
+import { readinessHrvObservations, type ReadinessSleepEvidencePoint } from '@shared/readiness';
 import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '@shared/nightly-hrv';
 import {
   normalizeSleepProvider,
@@ -13,6 +14,7 @@ import { dashboardSleepTrendRangeDays } from './dashboard-sleep-range.helper';
 export interface DashboardSleepTrendPoint {
   sourceKey?: string;
   hrvSourceKey?: string;
+  hrvObservations?: ReadinessSleepEvidencePoint['hrvObservations'];
   id: string;
   sleepDate: string;
   provider: SleepProvider | null;
@@ -328,6 +330,9 @@ function buildPoint(session: SleepSession): DashboardSleepTrendPoint | null {
     sleepDate: resolvedSleepDate,
     sourceKey: sleepEvidenceSourceKey(session),
     hrvSourceKey: sleepHrvSourceKey(session),
+    hrvObservations: readinessHrvObservations({ sleepDate: session.sleepDate || resolvedSleepDate,
+      startTimeMs, endTimeMs, hrvSourceKey: sleepHrvSourceKey(session),
+      averageHrvMs: toPositiveMetric(session.vitals?.averageHrvMs ?? session.vitals?.overnightHrvMs) }),
     provider,
     providerLabel: label,
     categoryLabel: dateLabel(resolvedSleepDate),
@@ -433,6 +438,7 @@ function aggregatePointGroup(points: readonly DashboardSleepTrendPoint[]): Dashb
     averageHeartRateBpm: aggregateFiniteMetrics(primaryPoints.map(point => point.averageHeartRateBpm)),
     minimumHeartRateBpm: minFiniteMetric(primaryPoints.map(point => point.minimumHeartRateBpm)),
     ...aggregateNightlyHrvEvidence(primaryPoints),
+    hrvObservations: primaryPoints.flatMap(readinessHrvObservations),
     maxSpo2Percent: maxFiniteMetric(primaryPoints.map(point => point.maxSpo2Percent)),
     isNap: sleepPoints.length === 0 && napPoints.length > 0,
     napSeconds: sleepPoints.length ? napSeconds : 0,

@@ -1,3 +1,5 @@
+import { readinessHrvObservations } from '../../../shared/readiness';
+import { buildReadinessSignals as buildLegacyReadinessSignals } from '../../../shared/readiness-legacy';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
 import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
@@ -3755,6 +3757,8 @@ function resolveTrainingReadinessSleepEvidence(
             averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
         };
+        point.hrvObservations = readinessHrvObservations({ ...point,
+            sleepDate: typeof data.sleepDate === 'string' ? data.sleepDate : point.sleepDate });
         const key = JSON.stringify([point.sleepDate, point.sourceKey]);
         groups.set(key, [...(groups.get(key) || []), point]);
     });
@@ -3779,6 +3783,7 @@ function resolveTrainingReadinessSleepEvidence(
             endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
             totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
             ...aggregateNightlyHrvEvidence(points),
+            hrvObservations: points.flatMap(readinessHrvObservations),
             averageHeartRateBpm: averageHeartRateValues.length
                 ? averageHeartRateValues.reduce((total, value) => total + value, 0) / averageHeartRateValues.length
                 : null,
@@ -3852,6 +3857,7 @@ export function buildTrainingReadinessMetricPayload(
     const loadPointsByDay = new Map(loadPoints.map(point => [point.dayMs, point]));
     const sleepPoints = resolveTrainingReadinessSleepEvidence(sleepDocs);
     const points: DerivedTrainingReadinessMetricPayload['points'] = [];
+    const legacyPoints: NonNullable<DerivedTrainingReadinessMetricPayload['legacyPoints']> = [];
 
     for (let dayMs = firstDayMs; dayMs <= asOfDayMs; dayMs += DAY_MS) {
         const loadPoint = loadPointsByDay.get(dayMs) || null;
@@ -3885,15 +3891,26 @@ export function buildTrainingReadinessMetricPayload(
             sleepScore: null,
             latestSleepAtMs: null,
             hrvRatio: null,
+            hrvPersonalRange: null,
             averageHeartRateRatio: null,
             minimumHeartRateRatio: null,
             overnightHeartRateRatio: null,
         });
     }
 
+    for (const point of points) {
+        const evaluatedAtMs = point.dayMs === asOfDayMs ? nowMs : point.dayMs + DAY_MS - 1;
+        const legacy = buildLegacyReadinessSignals({ form: point.form, rampRate: point.rampRate, sleepPoints, nowMs: evaluatedAtMs });
+        legacyPoints.push(legacy ? { dayMs: point.dayMs, ...legacy } : {
+            dayMs: point.dayMs, form: point.form, rampRate: point.rampRate, totalSignalCount: 4,
+            score: null, label: null, confidence: null, availableSignalCount: 0, baselineEvidenceCount: 0,
+            sleepScore: null, latestSleepAtMs: null, hrvRatio: null,
+            averageHeartRateRatio: null, minimumHeartRateRatio: null, overnightHeartRateRatio: null });
+    }
     return {
         sourceEventCount,
         payload: {
+            legacyPoints,
             formulaVersion: READINESS_FORMULA_VERSION,
             evidenceVersion: READINESS_EVIDENCE_VERSION,
             dayBoundary: 'UTC',

@@ -1,3 +1,4 @@
+import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
 import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import {
   ChartDataCategoryTypes,
@@ -1138,9 +1139,32 @@ function createFixtureDataService(
       waypointCount: 1,
     }),
   } as unknown as InjectedDataService;
+  service.getCurrentReadiness = vi.fn().mockImplementation(async input => {
+    const legacy = await service.getTodayReadiness(input);
+    const personalRange = { tone: 'positive' as const, reason: 'within_range' as const,
+      observationDayCount: 60, requiredObservationDayCount: 14, currentObservationDayCount: 7,
+      requiredCurrentObservationDayCount: 3, baselineAverage: 45, currentAverage: 41,
+      normalRange: { min: 40, max: 50 }, latestMs: 42, latestAtMs: DAY_MS - 3600000 };
+    const score = calculateCurrentReadinessScore({ form: legacy.drivers.load.form, rampRate: legacy.drivers.load.rampRate,
+      sleepScore: legacy.drivers.sleep.score, hrvPersonalRange: personalRange, overnightHeartRateRatio: legacy.drivers.overnightHeartRate.combinedRatio })!;
+    return { ...legacy, formulaVersion: 4, score: score.score, label: score.score >= 75 ? 'Ready' : score.score >= 55 ? 'Mixed' : 'Recover',
+      availableSignalCount: score.availableSignalCount, availableWeightPercent: score.availableWeight,
+      confidence: resolveReadinessConfidence(score.availableWeight, legacy.baselineEvidenceCount), drivers: { ...legacy.drivers,
+      hrv: { weightPercent: 20, baselineWindowDays: 60, currentWindowDays: 7, personalRange } } };
+  });
+  service.getReadinessHistory = vi.fn().mockResolvedValue({ formulaVersion: 4, dayBoundary: 'UTC',
+    asOfDayMs: DAY_MS, generatedAtMs: DAY_MS, historyDays: 14,
+    points: Array.from({ length: 14 }, (_, index) => ({ dayMs: DAY_MS - (13 - index) * 86400000,
+      score: 50, label: 'Recover', confidence: 'low', availableSignalCount: 1, baselineEvidenceCount: 0, totalSignalCount: 4,
+      form: null, rampRate: null, sleepScore: null, latestSleepAtMs: null, hrvRatio: 1,
+      hrvPersonalRange: { tone: 'positive', reason: 'within_range', observationDayCount: 60,
+        requiredObservationDayCount: 14, currentObservationDayCount: 7, requiredCurrentObservationDayCount: 3,
+        baselineAverage: 41, currentAverage: 41, normalRange: { min: 41, max: 41 }, latestMs: 41,
+        latestAtMs: DAY_MS - (13 - index) * 86400000 },
+      averageHeartRateRatio: null, minimumHeartRateRatio: null, overnightHeartRateRatio: null })) });
   service.getDailyReport = vi.fn().mockImplementation(async input => {
     const [readiness, briefing] = await Promise.all([
-      service.getTodayReadiness(input),
+      service.getCurrentReadiness(input),
       service.getDailyBriefing(input),
     ]);
     return {
@@ -1230,6 +1254,8 @@ const successfulToolArguments: Record<
     end: '2026-07-02T00:00:00.000Z',
     timeZone: 'Europe/Helsinki',
   },
+  get_current_readiness: { timeZone: 'Europe/Helsinki' },
+  get_readiness_history: {},
   get_today_readiness: {
     timeZone: 'Europe/Helsinki',
   },
@@ -1756,9 +1782,11 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
     const sampleTools = tools.filter(tool => tool.name === 'get_activity_samples');
+    const readinessTools = tools.filter(tool => ['get_current_readiness', 'get_readiness_history', 'get_daily_report'].includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(readinessTools), 'utf8')).toBeLessThan(32 * 1024);
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
-    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool))), 'utf8'))
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool) && !readinessTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -1911,6 +1939,34 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       expect(result.isError).toBe(true);
       expect(result).not.toHaveProperty('structuredContent');
       expect(JSON.stringify(result)).not.toMatch(/1788220800001|private-category-canary|endTimeMs|observedAtMs/);
+    }
+  });
+
+  it('requires both readiness grants and rejects private current/history evidence on every transport', async () => {
+    for (const scopes of [[], [MCP_OAUTH_SCOPES.MetricsRead], [MCP_OAUTH_SCOPES.SleepRead]]) {
+      const connection = await connectFixtureServer(createFixtureDataService(), scopes);
+      connections.push(connection);
+      const names = (await connection.client.listTools()).tools.map(tool => tool.name);
+      expect(names).not.toContain('get_current_readiness');
+      expect(names).not.toContain('get_readiness_history');
+    }
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead]);
+    connections.push(connection);
+    const current = await service.getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const history = await service.getReadinessHistory('user-1');
+    for (const field of ['sourceKey', 'providerUserId', 'rawSamples']) {
+      service.getCurrentReadiness = vi.fn().mockResolvedValue({ ...current, drivers: { ...current.drivers,
+        hrv: { ...current.drivers.hrv, personalRange: { ...current.drivers.hrv.personalRange, [field]: 'private-range-canary' } } } });
+      service.getReadinessHistory = vi.fn().mockResolvedValue({ ...history,
+        points: history.points.map(point => ({ ...point,
+          hrvPersonalRange: { ...point.hrvPersonalRange, [field]: 'private-range-canary' } })) });
+      for (const name of ['get_current_readiness', 'get_readiness_history'] as const) {
+        const result = await connection.client.callTool({ name, arguments: successfulToolArguments[name] });
+        expect(result.isError).toBe(true);
+        expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('private-range-canary');
+      }
     }
   });
 

@@ -5,7 +5,7 @@ import {
   calculateReadinessScore,
   combineReadinessOvernightHeartRateRatios,
   type ReadinessSleepEvidencePoint,
-} from '@shared/readiness';
+} from '@shared/readiness-legacy';
 
 function sleepPoint(
   id: string,

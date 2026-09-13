@@ -1251,7 +1251,7 @@ describe('SummariesComponent', () => {
     (component as any).derivedRampRateContext = { rampRate: 1, latestDayMs: nowMs };
     (component as any).derivedRecoveryNowContext = { totalSeconds: 7_200, endTimeMs: nowMs };
     (component as any).readinessSleepSessions = [
-      ...Array.from({ length: 5 }, (_, index) => ({
+      ...Array.from({ length: 15 }, (_, index) => ({
         id: `baseline-${index}`,
         sleepDate: new Date(nowMs - ((index + 2) * 86_400_000)).toISOString().slice(0, 10),
         startTimeMs: nowMs - ((index + 2) * 86_400_000) - (9 * 3_600_000),
@@ -1288,7 +1288,10 @@ describe('SummariesComponent', () => {
       .not.toContain('Imported recovery estimate');
     expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
       .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
-    expect(nativeElement.querySelector('dd[data-tone="positive"]')?.textContent).toContain('+10%');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('7-day average');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('60-day range');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night 55 ms');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv app-metric-indicator')).toBeNull();
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
@@ -1353,7 +1356,7 @@ describe('SummariesComponent', () => {
         formNowStatus: 'ready',
         rampRateStatus: 'ready',
       };
-      // Synthetic readings reproduce the reported 75 (load only) -> 62 (four signals) transition.
+      // Synthetic readings reproduce the reported 75 (load only) -> 67 (three signals; HRV range still building) transition.
       nights = Array.from({ length: 6 }, (_, index): SleepSession => ({
         id: `night-${index}`,
         userID: 'readiness-owner',
@@ -1389,8 +1392,8 @@ describe('SummariesComponent', () => {
       if (first === 'load') sleep$.next(nights);
       else load$.next(loadState);
 
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 62, availableSignalCount: 4 });
-      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('62/100');
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
+      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('67/100');
       expect(element.querySelector('[aria-label="Loading readiness"]')).toBeNull();
       expect(element.querySelector('.dashboard-current-state-primary[aria-busy="false"]')).not.toBeNull();
       expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
@@ -1403,7 +1406,7 @@ describe('SummariesComponent', () => {
       expect(render().querySelector('.dashboard-current-state-row')?.textContent).toContain('No eligible night');
       // Newly imported sleep continues updating the open dashboard.
       sleep$.next(nights);
-      expect(component.dashboardTodayReadiness.score).toBe(62);
+      expect(component.dashboardTodayReadiness.score).toBe(67);
     });
 
     it('settles an unchanged missing load result instead of remaining on loading', () => {
@@ -1425,7 +1428,7 @@ describe('SummariesComponent', () => {
       load$.next(loadState);
       sleep$.next(nights);
       sleep$.error(new Error('refresh failed'));
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 62, availableSignalCount: 4 });
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
       expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be refreshed');
       await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
@@ -2658,7 +2661,7 @@ describe('SummariesComponent', () => {
 
     const readinessStream = sleepStreams.find(({ startMs, endMs }) => (
       endMs === Number.MAX_SAFE_INTEGER
-      && startMs === nowMs - (30 * dayMs)
+      && startMs === nowMs - (60 * dayMs)
     ));
     expect(readinessStream).toBeTruthy();
     readinessStream?.stream.next([{ id: 'current-sleep' }]);
