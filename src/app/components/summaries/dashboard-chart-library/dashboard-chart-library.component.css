@@ -9,6 +9,12 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-browser { display: flex; flex-direction: column; overflow: hidden; border-inline-end: 1px solid var(--mat-sys-outline-variant); padding-inline-end: 16px; }
 .chart-library-detail { overflow: auto; }
 .chart-library-browser > mat-form-field { width: 100%; margin-block: 8px 12px; }
+/* Intrinsic width keeps Material's chip row from wrapping as selection/fonts settle.
+   The app-owned scroll rail preserves chip touch/focus space without styling Material internals. */
+.chart-library-filters { flex: 0 0 auto; min-width: 0; overflow-x: auto; padding-block: 4px; scrollbar-width: none; }
+/* Like the workspace navigation rail, keep scrolling without a scrollbar appearing and changing its height. */
+.chart-library-filters::-webkit-scrollbar { display: none; }
+.chart-library-filters > mat-chip-listbox { width: max-content; min-width: 100%; }
 .chart-library-list { min-height: 0; flex: 1 1 auto; overflow: auto; }
 .chart-library-list button { border-radius: 8px; border-inline-start: 3px solid transparent; }
 /* The action list keeps the preview selection visible independently of hover/focus. */

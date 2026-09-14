@@ -15,9 +15,11 @@
     <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [disabled]="state.busy()" [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
       @if (lane() === 'kpi') {
-      <mat-chip-listbox aria-label="KPI group" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
+      <div class="chart-library-filters">
+      <mat-chip-listbox aria-label="KPI group" [hideSingleSelectionIndicator]="true" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
         <mat-chip-option value="all">All</mat-chip-option><mat-chip-option value="load">Load</mat-chip-option><mat-chip-option value="readiness">Readiness</mat-chip-option><mat-chip-option value="execution">Execution</mat-chip-option>
       </mat-chip-listbox>
+      </div>
       }
       <p class="chart-library-count" aria-live="polite">{{ availableCountLabel() }}</p>
       <mat-action-list class="chart-library-list qs-scrollbar" [attr.aria-label]="'Available ' + sectionPresentation().plural">

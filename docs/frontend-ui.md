@@ -174,6 +174,9 @@ open section and one local draft. All custom metric charts and presets belong in
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
 there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
 existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
+KPI filters use one horizontally scrollable row with Material's single-selection indicator hidden, retaining the selected
+color and accessible state. Their height stays stable during opening and selection; the rail reserves touch/focus space
+and permits narrow-screen overflow without overriding Material internals.
 Rows show the title, format, availability label, and a small chart beside the chevron; only the selected chart mounts a full preview renderer.
 Desktop opens with the first available chart selected, without extra haptic feedback or any save. Mobile starts with
 the list and opens details on selection. Back from a mobile preview restores focus to the selected row, scrolling it
