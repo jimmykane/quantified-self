@@ -62,6 +62,21 @@ describe('Training provider delivery controls', () => {
     // single-action slot, where they squeeze the provider name at phone widths.
     expect(fixture.nativeElement.querySelector('[compactRowAction]')).toBeNull();
   });
+  it('explains stopping sync without suggesting disconnection or deleting the QS workout', () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
+    expect(guidance.hidden).toBe(true);
+    fixture.nativeElement.querySelector('[aria-controls="delivery-guidance-details"]').click();
+    fixture.detectChanges();
+    expect(guidance.hidden).toBe(false);
+    expect(guidance.textContent).toContain('asks the connected app to remove upcoming synced workouts');
+    expect(guidance.textContent).toContain('Your plans and workouts stay in Quantified Self');
+    expect(guidance.textContent).toContain('Your provider account stays connected');
+    expect(guidance.textContent).toContain('Past and completed workouts stay unchanged');
+    expect(guidance.textContent).toContain('If your Pro subscription ends, sync pauses');
+    expect(guidance.textContent).not.toMatch(/disconnect|account deletion|copies|withdraws/i);
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+  });
   it('separates plan controls from dated workout statuses and opens sync details, never the editor', async () => {
     const open = vi.fn();
     TestBed.overrideComponent(TrainingDeliveryDialogComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });

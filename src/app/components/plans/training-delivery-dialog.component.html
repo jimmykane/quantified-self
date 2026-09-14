@@ -167,9 +167,10 @@
       <mat-icon aria-hidden="true">{{ guidanceExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>How sync works
     </button>
     <div id="delivery-guidance-details" [hidden]="!guidanceExpanded()" class="delivery-caption">
-      <p>Sync is Pro and always opt-in. Manual planning stays free.</p>
-      <p>Plan workouts sync only while their plan is active. Pausing a plan withdraws eligible future copies; Pro expiry pauses changes and keeps copies.</p>
-      <p>To remove copies, use Stop sync before disconnecting. Disconnect or account deletion may leave copies with the provider.</p>
+      <p>Sync requires Pro and starts only when you enable it. Manual planning is free.</p>
+      <p>Stop sync turns off updates and asks the connected app to remove upcoming synced workouts. Your plans and workouts stay in Quantified Self. Your provider account stays connected.</p>
+      <p>Plan workouts sync only while their plan is active. Pausing a plan also requests removal of upcoming synced workouts. Past and completed workouts stay unchanged.</p>
+      <p>If your Pro subscription ends, sync pauses. Workouts already sent stay in the connected app.</p>
     </div>
   </div>
 </mat-dialog-content>

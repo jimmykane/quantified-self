@@ -556,6 +556,10 @@ After Resume, current-scope settings take precedence over an older stopped statu
 Account changes clear drafts/results and close the dialog. The planning UI rollout described
 above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
 Completed activity totals are unchanged.
+The sync dialog's **How sync works** guidance explains stopping updates and requesting removal of upcoming synced
+workouts in plain language. It explicitly preserves the QS plan/workout and provider connection, distinguishes plan
+pause from Pro expiry, and protects past/completed workouts. Do not suggest disconnecting or introduce account-deletion
+warnings in this normal sync guidance; those consequences belong in Help and the relevant account screens.
 Connected-provider summaries and account-deletion confirmation explain that local cleanup does not guarantee removal
 of provider-held copies, and direct planning-enabled users to Stop sync before revoking access.
 

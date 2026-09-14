@@ -33,7 +33,11 @@ describe('help.content', () => {
     expect(content).toContain('not enabled yet');
     expect(content).toContain('private evaluation pilot, not a public launch');
     expect(content).toContain('Older connections may need this even when activity imports work');
-    expect(content).toContain('Stop sync before disconnecting');
+    expect(content).toContain('Stopping workout sync keeps your provider account connected');
+    expect(content).toContain('If you separately choose to disconnect a provider or delete your Quantified Self account');
+    expect(content).toContain('workouts already sent may remain');
+    expect(content).toContain('Disconnecting turns off workout sync for that connection; reconnecting does not turn it back on');
+    expect(content).not.toContain('Stop sync before disconnecting');
     expect(content).toContain('content, not old provider consent');
     expect(content).toContain('Pro expiry pauses creates and updates');
     expect(content).toContain('IANA time zone');
