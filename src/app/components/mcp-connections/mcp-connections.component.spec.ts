@@ -103,11 +103,11 @@ describe('McpConnectionsComponent', () => {
     ));
     for (const label of ['Timeline notes', 'Activity descriptions']) {
       const row = rows.find(row => row.textContent?.includes(label))!;
-      expect(row.textContent).toContain('Not granted');
+      expect(row.textContent.trim()).toBe(label);
       expect(row.querySelector('input')?.checked).toBe(false);
     }
-    expect(rows.find(row => row.textContent?.includes('Health metrics'))?.textContent).toContain('Granted');
-    expect(content).toContain('To grant permissions marked “Not granted”, reconnect this app and approve those permissions during authorization.');
+    expect(rows.find(row => row.textContent?.includes('Health metrics'))?.textContent.trim()).toBe('Health metrics');
+    expect(content).toContain('Reconnect this app to approve unchecked permissions.');
     expect(functions.call).toHaveBeenCalledTimes(1);
   });
 

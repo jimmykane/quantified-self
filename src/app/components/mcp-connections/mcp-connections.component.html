@@ -40,11 +40,11 @@
                 <div class="mcp-connections__permissions" role="group" aria-label="Read-only permission status">
                   @for (permission of connection.permissions; track permission.scope) {
                     <mat-checkbox [checked]="permission.granted" disabled>
-                      {{ permission.label }} — {{ permission.granted ? 'Granted' : 'Not granted' }}
+                      {{ permission.label }}
                     </mat-checkbox>
                   }
                 </div>
-                <p>To grant permissions marked “Not granted”, reconnect this app and approve those permissions during authorization.</p>
+                <p>Reconnect this app to approve unchecked permissions.</p>
                 <p class="mcp-connections__dates">
                   Connected {{ connection.createdAtMs | date:'mediumDate' }}
                   @if (connection.lastUsedAtMs) {

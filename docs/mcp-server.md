@@ -102,7 +102,7 @@ Hosting routes these paths to `mcpApi`:
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
 the client successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
-Each connection lists every supported permission as a disabled checkbox with an explicit Granted or Not granted label.
+Each connection lists every supported permission as a disabled checkbox labelled with the permission name.
 Only scopes returned for that connection are checked; missing permissions, including scopes added since authorization,
 remain unchecked. This display does not expand grants. Users reconnect and review authorization to change permissions.
 The authorization overview shows compact permission names with individually labelled info buttons. Each opens a
