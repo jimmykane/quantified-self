@@ -217,12 +217,12 @@ function renderDashboardEChartsTooltipMetricRow(
 
   return (
     `<div aria-label="${escapeDashboardEChartsTooltipHtml(`${label}: ${value}${detail ? ` · ${detail}` : ''}`)}" style="min-width:0;">`
-    + `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:${typography.metricValueGapPx}px;min-width:0;">`
-    + `<div style="display:flex;align-items:center;min-width:0;">`
+    + `<div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;column-gap:${typography.metricValueGapPx}px;row-gap:3px;min-width:0;">`
+    + `<div style="display:flex;align-items:center;min-width:0;max-width:100%;">`
     + markerHtml
-    + `<span style="font-size:${typography.labelFontSize}px;line-height:${typography.textLineHeight};color:${labelColor};${detail ? 'white-space:normal;overflow-wrap:anywhere;' : 'white-space:nowrap;'}">${escapeDashboardEChartsTooltipHtml(label)}:</span>`
+    + `<span style="font-size:${typography.labelFontSize}px;line-height:${typography.textLineHeight};color:${labelColor};white-space:normal;overflow-wrap:anywhere;">${escapeDashboardEChartsTooltipHtml(label)}:</span>`
     + `</div>`
-    + `<div style="font-family:${ECHARTS_GLOBAL_FONT_FAMILY};font-size:${typography.valueFontSize}px;line-height:${typography.valueLineHeight};font-weight:700;color:${valueColor};text-align:right;white-space:nowrap;">${escapeDashboardEChartsTooltipHtml(value)}</div>`
+    + `<div style="min-width:0;max-width:100%;margin-inline-start:auto;font-family:${ECHARTS_GLOBAL_FONT_FAMILY};font-size:${typography.valueFontSize}px;line-height:${typography.valueLineHeight};font-weight:700;color:${valueColor};text-align:right;white-space:normal;overflow-wrap:anywhere;">${escapeDashboardEChartsTooltipHtml(value)}</div>`
     + `</div>`
     + (detail ? `<div style="margin-top:3px;font-size:${typography.labelFontSize}px;line-height:${typography.textLineHeight};color:${styleTokens.secondaryTextColor};white-space:normal;overflow-wrap:anywhere;">${escapeDashboardEChartsTooltipHtml(detail)}</div>` : '')
     + `</div>`

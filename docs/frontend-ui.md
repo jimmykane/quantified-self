@@ -286,6 +286,11 @@ Preview data paths never call metric ensure/rebuild APIs or persist settings. Ca
 and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
 
+Dashboard tooltip metric rows use the shared `dashboard-echarts-style.helper.ts` renderer. Labels and values can wrap
+within the card's bounded width, with wrapped values remaining aligned to the end. Column-chart sport breakdowns keep
+the canonical metric on the main row and put the percentage of the total and activity count on a separate detail line,
+so long durations do not overlap sport names in compact tiles. Percentages appear only for total aggregation.
+
 The optional HRV preset (`HrvTrend`) belongs in Training State beside Sleep. `DashboardHrvService` supplies both the
 saved tile and picker with the same normalized Health/Sleep sources as the Health workspace. It reads one bounded,
 live Health HRV history alongside native Sleep history. The same Health records supply Sleep enrichment and separate

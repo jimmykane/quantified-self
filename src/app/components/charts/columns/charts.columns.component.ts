@@ -765,10 +765,10 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
     const breakdownRows = additiveTypeBreakdown.map((entry, index) => {
       const color = this.resolveBreakdownColor(entry.activityLabel, index);
       const entryValueText = this.formatValue(entry.value);
-      const entryCountText = entry.count > 0 ? `, ${entry.count} Activities` : '';
       return {
         label: entry.activityLabel,
-        value: `${entryValueText}${entryCountText}`,
+        value: entryValueText,
+        detail: entry.count > 0 ? `${entry.count} ${entry.count === 1 ? 'activity' : 'activities'}` : undefined,
         markerColor: color,
       };
     });
@@ -818,11 +818,13 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
         const color = colorMap.get(segment.activityKey) || this.dateTypePalette[index % this.dateTypePalette.length];
         const segmentDisplayValue = isTotalAggregation ? segment.value : segment.rawValue;
         const valueText = this.formatValue(segmentDisplayValue);
-        const percentText = isTotalAggregation ? ` (${segment.percent.toFixed(1)}%)` : '';
-        const countText = segment.count > 0 ? `, ${segment.count} Activities` : '';
         return {
           label: segment.label,
-          value: `${valueText}${percentText}${countText}`,
+          value: valueText,
+          detail: [
+            ...(isTotalAggregation ? [`${segment.percent.toFixed(1)}% of total`] : []),
+            ...(segment.count > 0 ? [`${segment.count} ${segment.count === 1 ? 'activity' : 'activities'}`] : []),
+          ].join(' · '),
           markerColor: color,
         };
       });
