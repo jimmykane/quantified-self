@@ -1,3 +1,5 @@
+import { dashboardChartHasRecordedData, resolveDashboardChartAvailability, type DashboardChartAvailability } from './dashboard-chart-availability.helper';
+import type { DashboardDerivedMetricStatus } from './derived-metric-status.helper';
 import { normalizeDashboardTileEventFilters } from './dashboard-tile-event-filters.helper';
 import { getDashboardPowerCurveScopeDefinition, resolveDashboardPowerCurveTileDisplayScope } from './dashboard-power-curve-scope.helper';
 import { ActivityTypes, DataActivityTypes, DataAscent, DataDistance, DataDuration, DataEnergy, DataHeartRateAvg, DataStartPosition, EventInterface, FileType, Privacy, SportsLib, TileChartSettingsInterface, TileSettingsInterface, TileTypes, encodeRoutePolyline5 } from '@sports-alliance/sports-lib';
@@ -18,6 +20,7 @@ export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewMode
   tileEventAnchorsByOrder?: Record<number, number | null>;
   previewStates?: Record<string, DashboardPreviewLoadState>;
   previewEventsByRange?: Record<string, EventInterface[]>;
+  previewMetricStatuses?: Partial<Record<DerivedMetricKind, DashboardDerivedMetricStatus>>;
 };
 export function dashboardPreviewSourceKeys(tile: TileSettingsInterface): string[] {
   const kinds = dashboardPreviewMetricKinds(tile);
@@ -47,6 +50,7 @@ export function buildDashboardPreviewSeed(tile: TileSettingsInterface, seed: Das
 export interface DashboardChartPreview {
   tile: DashboardTileViewModel;
   source: 'user' | 'example';
+  availability?: DashboardChartAvailability;
   loading: boolean;
   note: string;
   calendarEvents: EventInterface[];
@@ -58,14 +62,16 @@ export interface DashboardChartPreview {
 export function buildDashboardThumbnailPreview(tile: TileSettingsInterface, seed: DashboardPreviewInput): DashboardChartPreview {
   const input = buildDashboardPreviewSeed(tile, seed);
   const existing = buildDashboardTileViewModels(input)[0];
-  const preview: DashboardChartPreview = dashboardPreviewHasData(existing, input)
+  const availability = resolveDashboardChartAvailability(existing, input,
+    dashboardPreviewSourceKeys(tile).map(key => input.previewStates?.[key]),
+    dashboardPreviewMetricKinds(tile).map(kind => input.previewMetricStatuses?.[kind]));
+  const preview: DashboardChartPreview = availability.hasData
     ? { tile: existing, source: 'user', loading: false, note: '', calendarEvents: input.events || [], anchorMs: Date.now() }
     : buildDashboardExamplePreview(tile);
-  preview.startOfWeek = seed.startOfWeek;
-  const states = dashboardPreviewSourceKeys(tile).map(key => input.previewStates?.[key]);
-  if (states.includes('loading')) return { ...preview, loading: true };
-  if (preview.source === 'example' && states.includes('error')) return { ...preview, note: 'Could not load your data. Showing an example.' };
-  return preview;
+  return { ...preview, startOfWeek: seed.startOfWeek, availability,
+    loading: availability.state === 'loading' || availability.state === 'updating',
+    note: availability.reason };
+
 }
 
 export function dashboardPreviewSourceLabel(preview: DashboardChartPreview): string {
@@ -113,18 +119,12 @@ export const DASHBOARD_PREVIEW_METRIC_CONTEXTS: Partial<Record<DerivedMetricKind
 export function dashboardPreviewMissingMetricKinds(tiles: readonly TileSettingsInterface[], seed: DashboardPreviewInput): DerivedMetricKind[] {
   return [...new Set(tiles.flatMap(dashboardPreviewMetricKinds))].filter(kind => {
     const value = seed.derivedMetrics?.[DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind]];
-    return value == null || Array.isArray(value) && !value.length;
+    return value == null || Array.isArray(value) && !value.length
+      || ['stale', 'building', 'queued', 'processing', 'failed', 'missing'].includes(seed.previewMetricStatuses?.[kind]);
   });
 }
 export function dashboardPreviewHasData(tile: DashboardTileViewModel, input: DashboardPreviewInput): boolean {
-  if (tile.type === TileTypes.Map) return tile['mapSource'] === 'routes' ? !!tile['routePreviews']?.length : !!tile['events']?.length;
-  const chart = tile as DashboardChartTileViewModel;
-  if (`${chart.chartType}` === K.DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE) return !!input.events?.length;
-  const context = contexts[chart.chartType];
-  if (C.isDashboardHrvTrendChartType(chart.chartType)) return !!chart.hrvTrend?.charts.length && !chart.hrvTrend.loading && !chart.hrvTrend.error;
-  if (context === 'sleepTrend') return chart.sleepTrend?.hasRealPoints === true;
-  if (context === 'powerCurve') return !!chart.powerCurve?.series?.length;
-  return context ? !!chart[context] : !!chart.data?.length;
+  return dashboardChartHasRecordedData(tile, input);
 }
 
 export function buildDashboardExampleEvents(anchorMs = ANCHOR): EventInterface[] {
@@ -204,5 +204,5 @@ export function buildDashboardExamplePreview(tile: TileSettingsInterface): Dashb
     chartVm.hrvTrend = buildDashboardHrvContext(emptyResult(windows.visible), emptyResult(windows.history), sessions, windows.visible);
     chartVm.hrvTrend.charts = chartVm.hrvTrend.charts.map(chart => ({ ...chart, model: { ...chart.model, series: { ...chart.model.series, sourceLabel: 'Example source' }, ariaLabel: chart.model.ariaLabel.replace('Suunto', 'Example source') } }));
   }
-  return { tile: vm, source: 'example', loading: false, note: 'Your data is not available for this chart yet.', calendarEvents: events, anchorMs: ANCHOR };
+  return { tile: vm, source: 'example', loading: false, note: 'Your data is not available for this chart yet.', availability: { state: 'no-data', label: 'Example data', reason: 'Your data is not available for this chart yet.', hasData: false }, calendarEvents: events, anchorMs: ANCHOR };
 }

@@ -13,11 +13,20 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { vi } from 'vitest';
 import { TileTypes } from '@sports-alliance/sports-lib';
+import { getDashboardChartCatalog } from '../../../../helpers/dashboard-chart-catalog.helper';
 
 describe('TileMapActionsComponent', () => {
   let component: TileMapActionsComponent;
   let fixture: ComponentFixture<TileMapActionsComponent>;
   let userMock: any;
+
+  it('persists suggestion dismissal when a saved-routes map is removed', async () => {
+    const entry = getDashboardChartCatalog().find(entry => entry.definition.id === 'map-routes-preview')!;
+    userMock.settings.dashboardSettings.tiles = [{ ...entry.tile, order: 0 }];
+    component.order = 0;
+    await component.deleteTile({});
+    expect(userMock.settings.dashboardSettings.autoTiles['preset:map-routes-preview'].state).toBe('dismissed');
+  });
   let analyticsMock: any;
   let hapticsMock: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService, isActionableProfileReadState } from './app.user.service';
 import { Auth, authState, user } from 'app/firebase/auth';
-import { Firestore, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, collectionData, doc, docData, setDoc, updateDoc, runTransaction } from 'app/firebase/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -40,6 +40,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
         docData: vi.fn().mockReturnValue(of({})),
         collectionData: vi.fn().mockReturnValue(of([])),
         setDoc: vi.fn().mockResolvedValue(undefined),
+        runTransaction: vi.fn(),
         updateDoc: vi.fn().mockResolvedValue(undefined),
     };
 });
@@ -63,6 +64,9 @@ describe('AppUserService', () => {
         (collectionData as any).mockReturnValue(of([]));
         (setDoc as any).mockReset();
         (setDoc as any).mockResolvedValue(undefined);
+        vi.mocked(runTransaction).mockImplementation(async (_db, callback) => callback({
+            get: async () => ({ data: () => ({}) }), set: setDoc,
+        } as never));
         (updateDoc as any).mockReset();
         (updateDoc as any).mockResolvedValue(undefined);
 
@@ -2111,6 +2115,20 @@ describe('AppUserService', () => {
                 },
             }, { merge: true });
             expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { displayName: 'New Name' });
+        });
+
+        it.each(['profile', 'properties'])('preserves newer chart acknowledgements in a stale %s save', async mode => {
+            const set = vi.fn();
+            vi.mocked(runTransaction).mockImplementation(async (_db, callback) => callback({
+                get: async () => ({ data: () => ({ appSettings: { dashboardChartLibrarySeen: { kpi: 4, 'section:trainingState': 3 } } }) }), set,
+            } as never));
+            const owner = { uid: 'u1', settings: { appSettings: { theme: 'dark', dashboardChartLibrarySeen: { kpi: 2 } } } } as AppUserInterface;
+            if (mode === 'profile') await service.updateUser(owner);
+            else await service.updateUserProperties(owner, { settings: owner.settings });
+            expect(set).toHaveBeenCalledWith(expect.anything(), { appSettings: {
+                theme: 'dark', dashboardChartLibrarySeen: { kpi: 4, 'section:trainingState': 3 },
+            } }, { merge: true });
+            expect(owner.settings.appSettings.dashboardChartLibrarySeen).toEqual({ kpi: 2 });
         });
 
         it('should split writes for legal fields', async () => {

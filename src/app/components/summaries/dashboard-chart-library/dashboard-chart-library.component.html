@@ -1,7 +1,7 @@
 @if (showAddAction()) {
   <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" (click)="toggle()">
     <mat-icon>add</mat-icon>
-    <span>{{ sectionPresentation().add }}</span>
+    <span matBadge="New" matBadgeSize="medium" [matBadgeOverlap]="false" [matBadgeHidden]="!unseen().length" [matBadgeDescription]="newBadgeDescription()">{{ sectionPresentation().add }}</span>
   </button>
 }
 <ng-template #picker>
@@ -21,10 +21,12 @@
       }
       <p class="chart-library-count" aria-live="polite">{{ availableCountLabel() }}</p>
       <mat-action-list class="chart-library-list qs-scrollbar" [attr.aria-label]="'Available ' + sectionPresentation().plural">
-        @for (entry of rowPreviews(); track entry.definition.id) {
+        @for (entry of rowPreviews(); track entry.definition.id; let index = $index) {
+          @if (index === 0 && suggested().length) { <h3 matSubheader>Suggested for you</h3> }
+          @if (index === suggested().length && suggested().length && rowPreviews().length > suggested().length) { <h3 matSubheader>More {{ sectionPresentation().plural }}</h3> }
           <button mat-list-item type="button" [attr.data-preset-id]="entry.definition.id" [attr.aria-pressed]="state.selected()?.definition?.id === entry.definition.id" [attr.aria-label]="'Preview ' + entry.definition.label" [attr.aria-describedby]="'chart-source-' + entry.definition.id" [disabled]="state.busy()" (click)="select(entry)">
-            <span matListItemTitle>{{ entry.title }}</span>
-            <span matListItemLine [id]="'chart-source-' + entry.definition.id">{{ entry.format }} · {{ entry.sourceLabel }}</span>
+            <span matListItemTitle>{{ entry.title }}@if (entry.isNew) { <span class="chart-library-new-label"> · New</span> }</span>
+            <span matListItemLine [id]="'chart-source-' + entry.definition.id" [matTooltip]="entry.sourceLabel">{{ entry.format }} · {{ entry.sourceLabel }}</span>
             <span matListItemMeta class="chart-library-row-meta" aria-hidden="true">
               <app-dashboard-chart-thumbnail [preview]="entry.preview" [darkTheme]="darkTheme()"></app-dashboard-chart-thumbnail>
               <mat-icon>chevron_right</mat-icon>

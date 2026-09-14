@@ -1,3 +1,4 @@
+import { DashboardChartDiscoveryService } from '../../../services/dashboard-chart-discovery.service';
 import { CommonModule } from '@angular/common';
 import { DashboardTileEditorComponent } from './dashboard-tile-editor.component';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
@@ -31,6 +32,7 @@ describe('responsive chart picker interactions', () => {
   let mobile = false;
   let discard = false;
   const save = vi.fn();
+  const discovery = { seenRevision: vi.fn((_owner: AppUserInterface, _lane: string) => 1), acknowledge: vi.fn().mockResolvedValue(undefined) };
   const events = { getEventsBy: vi.fn() };
   const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
@@ -42,10 +44,12 @@ describe('responsive chart picker interactions', () => {
   const button = (label: string): HTMLButtonElement => Array.from(document.body.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(element => element.textContent?.includes(label))!;
   beforeEach(async () => {
     vi.restoreAllMocks(); vi.clearAllMocks(); mobile = false; discard = false; save.mockResolvedValue(undefined);
+    discovery.seenRevision.mockImplementation((owner, lane) => owner.settings.appSettings?.dashboardChartLibrarySeen?.[lane] || 1);
+    discovery.acknowledge.mockResolvedValue(undefined);
     derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState()));
     events.getEventsBy.mockReturnValue(of([]));
     await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent, DashboardTileEditorComponent], imports: [CommonModule, MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
-      DashboardChartLibraryState, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
+      DashboardChartLibraryState, { provide: DashboardChartDiscoveryService, useValue: discovery }, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
       { provide: BreakpointObserver, useValue: { isMatched: () => mobile, observe: () => of({ matches: false, breakpoints: {} }) } },
       { provide: AppEventService, useValue: events }, { provide: AppSleepService, useValue: { watchForDashboard: () => of([]) } }, { provide: AppRouteService, useValue: { watchRecentRoutePreviews: () => of([]) } }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: DashboardHrvService, useValue: { watch: () => of(null) } },
     ] }).compileComponents();
@@ -57,6 +61,77 @@ describe('responsive chart picker interactions', () => {
     fixture = TestBed.createComponent(DashboardChartLibraryComponent); component = fixture.componentInstance;
     fixture.componentRef.setInput('user', user); fixture.componentRef.setInput('lane', 'kpi'); fixture.componentRef.setInput('seed', { tiles: [] }); fixture.detectChanges();
   });
+  it('shows new types without fetching chart data and acknowledges only an opened browse list', async () => {
+    const entry = component['catalog'].find(entry => entry.definition.id === 'kpi-acwr')!;
+    entry.definition = { ...entry.definition, introducedIn: 2 };
+    fixture.componentRef.setInput('seed', { tiles: [] }); await settle();
+    expect(component.unseen()).toHaveLength(1);
+    expect(component.addActionLabel()).toContain('1 new');
+    // Material's small size is a dot and suppresses its text in the app's M3 theme.
+    expect(fixture.nativeElement.querySelector('.mat-badge-medium .mat-badge-content')?.textContent).toContain('New');
+    expect(derived.watch).not.toHaveBeenCalled();
+    expect(discovery.acknowledge).not.toHaveBeenCalled();
+    await component.toggle(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledWith(user, 'kpi', 2);
+    expect(component.rowPreviews()[0].isNew).toBe(true);
+    const refreshed = { ...user, settings: { ...user.settings, appSettings: { dashboardChartLibrarySeen: { kpi: 2 } } } };
+    fixture.componentRef.setInput('user', refreshed); await settle();
+    expect(component.unseen()).toHaveLength(0);
+    expect(component.rowPreviews()[0].isNew).toBe(true);
+    expect(derived.watch).toHaveBeenCalledOnce();
+    await component.close(); await settle();
+    await component.toggle(); await settle();
+    expect(component.rowPreviews().some(entry => entry.isNew)).toBe(false);
+    expect(discovery.acknowledge).toHaveBeenCalledOnce();
+  });
+
+  it('does not acknowledge new types when an existing tile is opened for editing', async () => {
+    const entry = component['catalog'].find(entry => entry.definition.id === 'kpi-acwr')!;
+    entry.definition = { ...entry.definition, introducedIn: 2 };
+    const existing = component['catalog'].find(entry => entry.definition.id === 'kpi-form-now')!.tile;
+    user.settings.dashboardSettings.tiles = [existing];
+    fixture.componentRef.setInput('seed', { tiles: [existing] }); await settle();
+    await component.state.edit(user, existing.order); await settle();
+    expect(discovery.acknowledge).not.toHaveBeenCalled();
+    expect(component.unseen()).toHaveLength(1);
+    await component.back(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledWith(user, 'kpi', 2);
+  });
+
+  it('keeps browsing usable after acknowledgement fails and retries on the next opening', async () => {
+    mobile = true;
+    const entry = component['catalog'].find(entry => entry.definition.id === 'kpi-acwr')!;
+    entry.definition = { ...entry.definition, introducedIn: 2 };
+    fixture.componentRef.setInput('seed', { tiles: [] }); await settle();
+    discovery.acknowledge.mockRejectedValueOnce(new Error('offline'));
+    await component.toggle(); await settle();
+    expect(component.state.busy()).toBe(false);
+    expect(component.state.error()).toBe('');
+    await component.select(component.rowPreviews()[0]); await settle();
+    expect(component.state.draft()).toBeTruthy();
+    await component.back(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledOnce();
+    await component.close(); await settle();
+    await component.toggle(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledTimes(2);
+  });
+
+  it('groups at most two ready suggestions without duplicating rows or changing a selected draft', async () => {
+    const source$ = new Subject<ReturnType<typeof buildDashboardExampleEvents>>();
+    events.getEventsBy.mockReturnValue(source$);
+    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
+    await component.toggle(); await settle();
+    const selected = component.state.selected()?.definition.id;
+    source$.next(buildDashboardExampleEvents(Date.now())); await settle();
+    expect(component.suggested().map(entry => entry.definition.id)).toEqual(['custom-weekly-training-time', 'curated-activity-calendar']);
+    expect(new Set(component.rowPreviews().map(entry => entry.definition.id)).size).toBe(component.rowPreviews().length);
+    expect(component.state.selected()?.definition.id).toBe(selected);
+    expect(document.body.textContent).toContain('Suggested for you');
+    component.filter('distance'); await settle();
+    expect(component.suggested()).toHaveLength(0);
+    expect(component.rowPreviews().every(entry => entry.definition.label.toLowerCase().includes('distance'))).toBe(true);
+  });
+
   it('loads missing KPI data once per open picker, keeps filtering silent, and releases reads on close', async () => {
     const snapshots$ = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
     derived.watch.mockReturnValue(snapshots$);
@@ -201,7 +276,7 @@ describe('responsive chart picker interactions', () => {
     expect(document.body.querySelectorAll('button[mat-list-item]')).toHaveLength(17);
     expect(document.body.querySelectorAll('button[mat-list-item] app-dashboard-chart-thumbnail')).toHaveLength(17);
     expect(document.body.querySelector('button[mat-list-item] [matListItemIcon]')).toBeNull();
-    expect(document.body.querySelector('button[mat-list-item] [matListItemLine]')?.textContent).toContain('KPI · Example data');
+    expect(document.body.querySelector('button[mat-list-item] [matListItemLine]')?.textContent).toContain('KPI · Example · Waiting for chart data');
     expect(document.body.querySelector('[aria-label="Next charts"]')).toBeNull();
     component.selectGroup('execution'); component.filter('aerobic'); await settle();
     expect(document.body.querySelectorAll('button[mat-list-item]')).toHaveLength(2);

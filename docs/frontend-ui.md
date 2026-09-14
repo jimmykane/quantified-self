@@ -174,7 +174,7 @@ open section and one local draft. All custom metric charts and presets belong in
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
 there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
 existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
-Rows show the title, format, data-source label, and a small chart beside the chevron; only the selected chart mounts a full preview renderer.
+Rows show the title, format, availability label, and a small chart beside the chevron; only the selected chart mounts a full preview renderer.
 Desktop opens with the first available chart selected, without extra haptic feedback or any save. Mobile starts with
 the list and opens details on selection. Back from a mobile preview restores focus to the selected row, scrolling it
 into view if needed. Selecting the same entry again is a silent no-op that preserves preview scroll
@@ -201,13 +201,13 @@ and generic tile. It resolves the existing stored renderer types; KPIs and Activ
 have their own UI kinds. Section terminology uses the full catalog, so adding presets or filtering the list cannot
 rename the section action. Draft terminology is recomputed after editor changes. Future renderer kinds belong in this
 resolver and label registry, with generic tile as the safe fallback. This does not change persistence or section routing.
-Chart and map action components use the same `tile-actions-menu.html` and base edit handler; chart-specific auto-tile
-dismissal remains in the chart component. Keep every `mat-menu-item`, including Remove, in the menu template itself:
+Chart and map action components use the same `tile-actions-menu.html` and base edit handler; catalog dismissal is synchronized in the common action persistence path, with legacy
+chart dismissal retained in the chart component. Keep every `mat-menu-item`, including Remove, in the menu template itself:
 Material cannot include items inside a child component’s view in its keyboard navigation. All menu mutations and
 editing are disabled during a pending save, with a spinner in the original action button. Rows and Columns use
 standard Material submenus with checked choices so arrow-key navigation can reach every layout setting.
 The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
-recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
+suggestion dismissal, and preset identity rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
 dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,
 the dashboard waits for the overlay to close and the chart layout to refresh before focusing and revealing the saved
 chart; cancellation restores the original trigger focus. Existing-tile editing restores the tile's persistent action
@@ -218,6 +218,44 @@ availability and bulk additions. Special chart identity includes power disciplin
 Custom equivalence uses metric, chart style, aggregation, axis, and time bucket rather than order, size, or activity filters.
 New catalog entries need an example and catalog coverage. Homepage signal fixtures are re-exported from the shared
 `dashboard-chart-example-signals.helper.ts`; homepage renderers and dashboard previews remain the existing app charts.
+
+New accounts start with Today, Weekly Training Time (90-day weekly columns grouped by sport), and Calendar. The
+same fixed layout is available through **Reset to starter dashboard**, with a confirmation dialog. Reset requires no
+eligibility reads. Existing layouts, deliberate empty arrays, and saved ranges are preserved; there is no Calendar or
+Routes auto-add subscription. New Intensity/Efficiency tiles use 12 weeks; legacy missing-range normalization stays at
+one year. Sleep/HRV windows and personal-range calculations are unchanged.
+
+`dashboard-chart-discovery.helper.ts` ranks up to two ready, unadded, undismissed choices per section: Form → Sleep →
+HRV → Intensity; cycling → running Power Curve; Weekly Training Time → Calendar → Time by sport; Saved Routes →
+Activity Map; ACWR → Training Balance. Search and KPI groups apply before ranking. Suggestions appear once, followed
+by unseen releases and remaining entries. Availability updates never replace a selected draft. `autoTiles` now also
+stores `preset:<catalog-id>` states for every preset, falling back to legacy dismissal records. Tile-menu removal,
+Remove all, Add, and Undo share this state; dismissing suggestions never hides the manual catalog. Setup/provider
+prompts remain independent.
+
+`dashboard-chart-availability.helper.ts` supplies one status/reason to suggestions, thumbnails, and preview details.
+Readiness requires actual plotted values: usable TSS results, sleep points, individual or overnight HRV, sport-specific
+power-curve points, qualifying intensity/efficiency samples, valid GPS coordinates, or renderable route previews.
+Average power alone cannot qualify a curve; an HRV personal range is optional. Explicit insufficient-comparison history
+uses **Needs more history**. Completed empty sources use **No data in this period**, while loading, pending/stale metric
+snapshots, and errors remain distinct. Last available values may render during updates/errors but are not suggested.
+Synthetic examples are labelled and cannot qualify a suggestion.
+
+Catalog release notifications use each preset's explicit `introducedIn` revision and
+`appSettings.dashboardChartLibrarySeen[section]`. Keep `DASHBOARD_CHART_LIBRARY_BASELINE_REVISION` at 1 and stamp all
+original entries at 1. For an actual new chart type, increment `DASHBOARD_CHART_LIBRARY_CURRENT_REVISION` and stamp
+only the new entries; renames, styling, and description changes retain their revision. New accounts initialize all
+sections to the current revision; existing profiles without metadata use the rollout baseline. The Material **New**
+badge considers unseen, unadded catalog entries regardless of data eligibility. It is absent from shared/public views
+and included in the add action's accessible label.
+
+Opening a section's browse list snapshots its unseen IDs for that session and acknowledges that section only. Editing
+an existing tile does not acknowledge. `DashboardChartDiscoveryService` derives badges from bundled metadata and the
+already-loaded owner settings: no polling or chart reads. It writes only advancing acknowledgements using a Firestore
+transaction that keeps the maximum revision. Full profile settings saves preserve those maxima transactionally too,
+so an older device cannot replay stale acknowledgement state. Dashboard resets patch dashboard settings only.
+Acknowledgement failure never blocks navigation/Add and retries on a later opening, without a background retry loop.
+Successful local acknowledgements are cached by owner; profile-only refreshes do not restart preview subscriptions.
 
 `DashboardChartPreviewService` reads only. Row thumbnails use the shared ECharts host and a bounded, decorative shape
 from the existing preview view model, with no axes, values, tooltips, focus targets, or haptic handlers. The row's
@@ -238,7 +276,7 @@ or interactive overlays. A real headline without history stays real, with no inv
 live in `dashboard-chart-series.helper.ts`; public homepage examples remain synthetic.
 
 A historically navigated event/sleep window cannot supply a current preview. Preview event reads exclude merged events.
-Preview paths never call metric ensure/rebuild APIs or persist settings. Synthetic examples remain labelled during loading
+Preview data paths never call metric ensure/rebuild APIs or persist settings. Catalog acknowledgement is a separate settings-only action. Synthetic examples remain labelled during loading
 and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
 

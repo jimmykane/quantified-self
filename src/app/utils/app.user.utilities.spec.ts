@@ -189,8 +189,11 @@ describe('AppUserUtilities', () => {
     });
 
     describe('fillMissingAppSettings', () => {
-        it('should start new dashboard settings with only the activity calendar tile', () => {
+        it('starts new dashboards with weekly training time followed by the calendar', () => {
             expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([
+                expect.objectContaining({ name: 'Weekly Training Time', order: 0,
+                    chartType: ChartTypes.ColumnsVertical, dataCategoryType: ChartDataCategoryTypes.DateType,
+                    dataTimeInterval: TimeIntervals.Weekly, eventFilters: { range: '90d', activityTypes: [] } }),
                 expect.objectContaining({
                     chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE,
                     size: { columns: 1, rows: 1 },
@@ -424,7 +427,8 @@ describe('AppUserUtilities', () => {
 
             expect(defaultChart.eventFilters).toEqual({ range: '90d', activityTypes: [] });
             expect(defaultMap.eventFilters).toEqual({ range: '90d', activityTypes: [] });
-            expect(dashboardTiles.some(tile => tile.type === TileTypes.Map || !isDashboardSpecialChartType(tile.chartType))).toBe(false);
+            expect(dashboardTiles.filter(tile => !isDashboardSpecialChartType(tile.chartType))).toHaveLength(1);
+            expect(dashboardTiles[0].eventFilters).toEqual({ range: '90d', activityTypes: [] });
             const powerCurveTile = dashboardTiles.find(tile => tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE) as any;
             expect(powerCurveTile).toBeUndefined();
         });

@@ -192,7 +192,6 @@ import {
 } from '../../helpers/dashboard-tile-section.helper';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
-import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { WhereFilterOp } from 'firebase/firestore';
 
 interface DashboardDerivedMetricsBanner {
@@ -354,9 +353,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private readinessSleepSubscription: Subscription | null = null;
   private readinessSleepListenerKey: string | null = null;
   private readinessSleepRefreshTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
-  private dashboardAutoTileSubscription: Subscription | null = null;
-  private dashboardAutoTileListenerKey: string | null = null;
-  private dashboardAutoTileUser: AppUserInterface | null = null;
   private sleepTrendAnchorEndMs: number | null = null;
   private tileEventSubscriptions = new Map<number, Subscription>();
   private tileEventSubscriptionStates = new Map<number, DashboardTileEventSubscriptionState>();
@@ -428,7 +424,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private sleepService: AppSleepService,
     private eventService: AppEventService,
     private routeService: AppRouteService,
-    private dashboardAutoTileService: DashboardAutoTileService,
     private dialog: MatDialog,
     private bottomSheet: MatBottomSheet,
     changeDetector: ChangeDetectorRef,
@@ -493,13 +488,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         && equal(previousDependencySnapshot, currentDependencySnapshot)
         && equal(this.dashboardTileSettingsSnapshot, nextTileSettingsSnapshot)
       ) {
-        this.syncDashboardAutoTileSubscription();
         return;
       }
       return this.unsubscribeAndCreateCharts();
-    }
-    if (simpleChanges.showActions) {
-      this.syncDashboardAutoTileSubscription();
     }
   }
 
@@ -670,7 +661,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.syncSleepSubscription();
     this.syncHrvSubscription();
     this.syncReadinessSleepSubscription();
-    this.syncDashboardAutoTileSubscription();
     this.syncTileEventSubscriptions();
     this.syncRoutePreviewSubscription();
     await this.rebuildTilesFromCurrentState();
@@ -693,6 +683,24 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       preferences: this.getAggregationPreferences(),
       logger: this.logger,
       startOfWeek: this.user?.settings?.unitSettings?.startOfTheWeek ?? null,
+      previewMetricStatuses: {
+        form: this.derivedFormStatus,
+        recovery_now: this.derivedRecoveryNowStatus,
+        acwr: this.derivedAcwrStatus,
+        ramp_rate: this.derivedRampRateStatus,
+        monotony_strain: this.derivedMonotonyStrainStatus,
+        form_now: this.derivedFormNowStatus,
+        form_plus_7d: this.derivedFormPlus7dStatus,
+        easy_percent: this.derivedEasyPercentStatus,
+        hard_percent: this.derivedHardPercentStatus,
+        efficiency_delta_4w: this.derivedEfficiencyDelta4wStatus,
+        freshness_forecast: this.derivedFreshnessForecastStatus,
+        intensity_distribution: this.derivedIntensityDistributionStatus,
+        efficiency_trend: this.derivedEfficiencyTrendStatus,
+        power_curve: this.derivedPowerCurveStatus,
+        training_capacity: this.derivedTrainingCapacityStatus,
+        training_durability: this.derivedTrainingDurabilityStatus,
+      },
       derivedMetrics: {
         formPoints: this.derivedFormPoints,
         recoveryNow: this.derivedRecoveryNowContext,
@@ -1102,32 +1110,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.readinessSleepRefreshTimeoutHandle = null;
   }
 
-  private syncDashboardAutoTileSubscription(): void {
-    const listenerKey = this.resolveDashboardAutoTileListenerKey();
-    if (!listenerKey) {
-      this.unsubscribeDashboardAutoTileSubscription();
-      return;
-    }
-
-    const user = this.user as AppUserInterface;
-    if (
-      this.dashboardAutoTileListenerKey === listenerKey
-      && this.dashboardAutoTileSubscription
-      && this.dashboardAutoTileUser === user
-    ) {
-      return;
-    }
-
-    this.unsubscribeDashboardAutoTileSubscription();
-    this.dashboardAutoTileListenerKey = listenerKey;
-    this.dashboardAutoTileUser = user;
-    this.dashboardAutoTileSubscription = this.dashboardAutoTileService.watchForDashboard(user);
-  }
-
-  private resolveDashboardAutoTileListenerKey(): string | null {
-    return this.resolveOwnDashboardUID();
-  }
-
   private resolveOwnDashboardUID(): string | null {
     if (this.showActions !== true) {
       return null;
@@ -1148,15 +1130,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     return uid;
-  }
-
-  private unsubscribeDashboardAutoTileSubscription(): void {
-    if (this.dashboardAutoTileSubscription) {
-      this.dashboardAutoTileSubscription.unsubscribe();
-      this.dashboardAutoTileSubscription = null;
-    }
-    this.dashboardAutoTileListenerKey = null;
-    this.dashboardAutoTileUser = null;
   }
 
   private persistDashboardSettings(dashboardSettings: Partial<AppDashboardSettingsInterface>, expected: AppDashboardSettingsInterface): Promise<void> {
@@ -2522,7 +2495,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.sleepListenerKey = null;
     }
     this.unsubscribeReadinessSleepSubscription();
-    this.unsubscribeDashboardAutoTileSubscription();
     this.unsubscribeTileEventSubscriptions();
     this.unsubscribeRoutePreviewSubscription();
   }

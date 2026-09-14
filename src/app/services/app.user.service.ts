@@ -1,3 +1,4 @@
+import { mergeDashboardChartLibrarySeen, newDashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import { inject, Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 
@@ -82,7 +83,7 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, doc, docData, setDoc, updateDoc, runTransaction } from 'app/firebase/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '@shared/functions-manifest';
 import {
@@ -437,6 +438,7 @@ export class AppUserService implements OnDestroy {
     defaultNewUserSettings.appSettings = {
       ...defaultNewUserSettings.appSettings,
       unitSetupCompleted: false,
+      dashboardChartLibrarySeen: newDashboardChartLibrarySeen(),
     };
 
     // Use the current DB user or create a synthetic one only for a server-confirmed missing profile.
@@ -1635,6 +1637,20 @@ export class AppUserService implements OnDestroy {
     return clientWritableSettings;
   }
 
+  private writeClientSettings(uid: string, settings: Record<string, unknown>): Promise<void> {
+    const reference = doc(this.firestore, `users/${uid}/config/settings`);
+    const appSettings = settings['appSettings'] as AppUserInterface['settings']['appSettings'];
+    if (!appSettings?.dashboardChartLibrarySeen) return setDoc(reference, settings, { merge: true });
+    // An older tab can save an entire profile after another device has browsed a release.
+    // Only the acknowledgement requires a transaction; other settings keep their existing merge behavior.
+    return runTransaction(this.firestore, async transaction => {
+      const snapshot = await transaction.get(reference);
+      const seen = mergeDashboardChartLibrarySeen(snapshot.data()?.['appSettings']?.dashboardChartLibrarySeen,
+        appSettings.dashboardChartLibrarySeen);
+      transaction.set(reference, { ...settings, appSettings: { ...appSettings, dashboardChartLibrarySeen: seen } }, { merge: true });
+    });
+  }
+
   public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {
     const promises = [];
     const hasIncompleteProfileReads = this.hasIncompleteProfileReads(user?.uid);
@@ -1656,7 +1672,7 @@ export class AppUserService implements OnDestroy {
     if (propertiesToUpdate.settings) {
       const clientWritableSettings = this.getClientWritableSettings(propertiesToUpdate.settings);
       if (Object.keys(clientWritableSettings).length > 0) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), clientWritableSettings, { merge: true })
+        promises.push(this.writeClientSettings(user.uid, clientWritableSettings)
           .catch(err => {
             this.logger.error('[AppUserService] Settings update FAILED', err);
             throw err;
@@ -1791,7 +1807,7 @@ export class AppUserService implements OnDestroy {
     if (user.settings) {
       const clientWritableSettings = this.getClientWritableSettings(user.settings);
       if (Object.keys(clientWritableSettings).length > 0) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), clientWritableSettings, { merge: true }));
+        promises.push(this.writeClientSettings(user.uid, clientWritableSettings));
       }
     }
 

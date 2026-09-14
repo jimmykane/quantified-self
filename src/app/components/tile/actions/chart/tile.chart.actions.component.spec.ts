@@ -22,6 +22,7 @@ import {
   DASHBOARD_SLEEP_TREND_CHART_TYPE,
 } from '../../../../helpers/dashboard-special-chart-types';
 import { DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_SOURCE } from '../../../../helpers/dashboard-auto-tile.helper';
+import { getDashboardChartCatalog } from '../../../../helpers/dashboard-chart-catalog.helper';
 
 describe('TileChartActionsComponent', () => {
   let component: TileChartActionsComponent;
@@ -118,6 +119,20 @@ describe('TileChartActionsComponent', () => {
     edit.click(); fixture.detectChanges();
     expect(emitted).toHaveBeenCalledWith(0);
     expect(hapticsMock.selection).toHaveBeenCalledOnce();
+  });
+
+  it.each(['custom-weekly-training-time', 'curated-hrv'])('dismisses the %s suggestion from the tile menu and rolls back a failed removal', async id => {
+    const entry = getDashboardChartCatalog().find(entry => entry.definition.id === id)!;
+    const tile = { ...entry.tile, order: 0 };
+    userMock.settings.dashboardSettings.tiles = [tile];
+    userMock.updateUserProperties.mockRejectedValueOnce(new Error('offline'));
+    await expect(component.deleteTile({})).rejects.toThrow('offline');
+    expect(userMock.settings.dashboardSettings.tiles).toEqual([tile]);
+    expect(userMock.settings.dashboardSettings.autoTiles?.[`preset:${id}`]).toBeUndefined();
+    await component.deleteTile({});
+    expect(userMock.updateUserProperties).toHaveBeenLastCalledWith(userMock, { settings: { dashboardSettings: expect.objectContaining({
+      autoTiles: expect.objectContaining({ [`preset:${id}`]: expect.objectContaining({ state: 'dismissed' }) }),
+    }) } });
   });
   it.each([
     [ChartTypes.LinesVertical, 'chart'],

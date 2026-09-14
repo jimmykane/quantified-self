@@ -11,3 +11,6 @@ mat-progress-bar { position: absolute; inset: 0 0 auto; z-index: 1; }
   .chart-preview-renderer { height: 260px; }
   .chart-preview-hrv .chart-preview-renderer { height: 380px; }
 }
+
+.chart-preview-availability { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); margin-block: 0 8px; }
+.chart-preview-availability[data-state="error"] { color: var(--mat-sys-error); }

@@ -41,7 +41,6 @@ import type { SleepSession } from '@shared/sleep';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
-import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
@@ -76,7 +75,6 @@ describe('SummariesComponent', () => {
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
   let mockRouteService: { watchRecentRoutePreviews: ReturnType<typeof vi.fn> };
-  let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
   let mockBottomSheet: { open: ReturnType<typeof vi.fn> };
@@ -150,9 +148,6 @@ describe('SummariesComponent', () => {
     mockRouteService = {
       watchRecentRoutePreviews: vi.fn().mockReturnValue(of([])),
     };
-    mockDashboardAutoTileService = {
-      watchForDashboard: vi.fn().mockImplementation(() => new Subscription()),
-    };
     mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
     mockDialog = {
       open: vi.fn().mockReturnValue({
@@ -195,7 +190,7 @@ describe('SummariesComponent', () => {
         { provide: DashboardHrvService, useValue: { watch: vi.fn(() => EMPTY) } },
         { provide: AppEventService, useValue: mockEventService },
         { provide: AppRouteService, useValue: mockRouteService },
-        { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
+
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
         { provide: MatBottomSheet, useValue: mockBottomSheet },
@@ -1566,6 +1561,7 @@ describe('SummariesComponent', () => {
     });
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith({
+      previewMetricStatuses: expect.objectContaining({ form: 'missing', acwr: 'missing' }),
       tileEventAnchorsByOrder: {},
       hrvTrend: null,
       hrvPreferredSource: null,
@@ -1607,136 +1603,13 @@ describe('SummariesComponent', () => {
     expect(component.tiles).toBe(builtTiles);
   });
 
-  it('subscribes to dashboard auto tiles for editable owner dashboards', async () => {
-    const autoTileSubscription = new Subscription();
-    const unsubscribeSpy = vi.spyOn(autoTileSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard.mockReturnValueOnce(autoTileSubscription);
-    component.user = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
+  it('does not populate an intentionally empty dashboard during owner hydration', async () => {
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as never;
     component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      showActions: {
-        currentValue: true,
-        previousValue: false,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenCalledWith(component.user);
-
+    await component.ngOnChanges({ user: { currentValue: component.user, firstChange: true, isFirstChange: () => true } } as never);
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     component.ngOnDestroy();
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('resubscribes dashboard auto tiles when the owner user object refreshes with the same uid', async () => {
-    const firstSubscription = new Subscription();
-    const secondSubscription = new Subscription();
-    const firstUnsubscribeSpy = vi.spyOn(firstSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard
-      .mockReturnValueOnce(firstSubscription)
-      .mockReturnValueOnce(secondSubscription);
-    const originalUser = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [], testSettingsVersion: 'stale' } },
-    } as any;
-    const refreshedUser = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [], testSettingsVersion: 'fresh' } },
-    } as any;
-    component.user = originalUser;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: originalUser,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    component.user = refreshedUser;
-    await component.ngOnChanges({
-      user: {
-        currentValue: refreshedUser,
-        previousValue: originalUser,
-        firstChange: false,
-        isFirstChange: () => false,
-      } as any,
-    });
-
-    expect(firstUnsubscribeSpy).toHaveBeenCalledTimes(1);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenCalledTimes(2);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenNthCalledWith(1, originalUser);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenNthCalledWith(2, refreshedUser);
-  });
-
-  it('does not subscribe to dashboard auto tiles for shared target dashboards', async () => {
-    component.user = {
-      uid: 'viewer-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
-    component.eventUser = { uid: 'target-user' } as any;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      eventUser: {
-        currentValue: component.eventUser,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    expect(mockDashboardAutoTileService.watchForDashboard).not.toHaveBeenCalled();
-  });
-
-  it('unsubscribes dashboard auto tiles when dashboard actions become read-only', async () => {
-    const autoTileSubscription = new Subscription();
-    const unsubscribeSpy = vi.spyOn(autoTileSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard.mockReturnValueOnce(autoTileSubscription);
-    component.user = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    component.showActions = false;
-    await component.ngOnChanges({
-      showActions: {
-        currentValue: false,
-        previousValue: true,
-        firstChange: false,
-        isFirstChange: () => false,
-      } as any,
-    });
-
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should keep table date-range state out of tile view-model building', async () => {

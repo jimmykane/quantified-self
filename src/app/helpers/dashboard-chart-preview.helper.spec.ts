@@ -1,11 +1,12 @@
 import { dashboardHrvWindows } from './dashboard-hrv-context.helper';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getDashboardChartCatalog } from './dashboard-chart-catalog.helper';
 import { buildDashboardExamplePreview, buildDashboardPreviewSeed, buildDashboardThumbnailPreview, dashboardPreviewHasData, dashboardPreviewMetricKinds } from './dashboard-chart-preview.helper';
 import { DashboardChartTileViewModel } from './dashboard-tile-view-model.helper';
 import { DaysOfTheWeek, TileTypes } from '@sports-alliance/sports-lib';
 
 describe('dashboard example previews', () => {
+  afterEach(() => vi.useRealTimers());
   it('labels the running power example with the running discipline', () => {
     const entry = getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-running-power-curve')!;
     const chart = buildDashboardExamplePreview(entry.tile).tile as DashboardChartTileViewModel;
@@ -40,8 +41,10 @@ describe('dashboard example previews', () => {
   it('provides renderable, explicitly synthetic data for every catalog entry', () => {
     for (const entry of getDashboardChartCatalog()) {
       const preview = buildDashboardExamplePreview(entry.tile);
+      vi.useFakeTimers(); vi.setSystemTime(preview.anchorMs);
       expect(preview.source).toBe('example');
       expect(dashboardPreviewHasData(preview.tile, { tiles: [entry.tile], events: preview.calendarEvents }), entry.definition.id).toBe(true);
+      vi.useRealTimers();
       if (entry.tile.type === TileTypes.Chart && entry.definition.category === 'kpi') expect(dashboardPreviewMetricKinds(entry.tile).length).toBeGreaterThan(0);
     }
   });

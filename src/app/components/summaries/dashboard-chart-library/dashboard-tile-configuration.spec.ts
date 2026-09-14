@@ -1,6 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { BehaviorSubject, of, throwError } from 'rxjs';
-import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
+import { BehaviorSubject, of } from 'rxjs';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -220,8 +219,7 @@ describe('DashboardTileConfiguration', () => {
     };
 
     component = new DashboardTileConfiguration(dialogData, dialogRefMock, dialogMock as never,
-      userServiceMock as never, hapticsMock as never, sleepServiceMock as never,
-      eventServiceMock as never, routeServiceMock as never, derivedMetricsServiceMock as never);
+      userServiceMock as never, hapticsMock as never);
     component.initialize();
   });
 
@@ -982,6 +980,7 @@ describe('DashboardTileConfiguration', () => {
     dialogData.user.settings.dashboardSettings.tiles = [];
 
     expect(AppUserUtilities.getDefaultUserDashboardTiles()).toEqual([
+      expect.objectContaining({ name: 'Weekly Training Time' }),
       expect.objectContaining({ chartType: DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE }),
     ]);
     expect(component.dashboardTiles).toEqual([]);
@@ -1086,30 +1085,29 @@ describe('DashboardTileConfiguration', () => {
     expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
   });
 
-  it('resets the dashboard to the refreshed recommended tiles', async () => {
-    sleepServiceMock.watchForDashboard.mockReturnValueOnce(of([{ id: 'recent-sleep' }]));
-
-    expect(component.isResetToDefaultDisabled).toBe(false);
-
+  it('confirms the starter reset without reading chart data', async () => {
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(true) });
     await component.resetToDefault();
-
-    const tiles = dialogData.user.settings.dashboardSettings.tiles;
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => (
-      tile.chartType === ChartTypes.ColumnsVertical
-      && tile.dataType === DataDistance.type
-    ))).toBe(false);
+    expect(dialogMock.open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ data: expect.objectContaining({ title: 'Reset to starter dashboard?' }) }));
+    expect(dialogData.user.settings.dashboardSettings.tiles.map(tile => tile.name)).toEqual(['Weekly Training Time', 'Activity calendar']);
     expect(dialogData.user.settings.dashboardSettings.showTodaySummary).toBe(true);
-    expect(sleepServiceMock.watchForDashboard).toHaveBeenCalledWith(
-      'user-1',
-      expect.any(Number),
-      expect.any(Number),
-    );
+    expect(eventServiceMock.getEventsBy).not.toHaveBeenCalled();
+    expect(sleepServiceMock.watchForDashboard).not.toHaveBeenCalled();
+    expect(routeServiceMock.watchHasAnyRoutePreview).not.toHaveBeenCalled();
+    expect(derivedMetricsServiceMock.watch).not.toHaveBeenCalled();
     expectDashboardSettingsOnlyWrite(userServiceMock, dialogData);
-    expect(dialogRefMock.close).toHaveBeenCalledWith({ saved: true });
+  });
+
+  it('keeps the layout when reset is cancelled', async () => {
+    const before = structuredClone(dialogData.user.settings.dashboardSettings);
+    await component.resetToDefault();
+    expect(dialogData.user.settings.dashboardSettings).toEqual(before);
+    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
+    expect(hapticsMock.success).not.toHaveBeenCalled();
   });
 
   it('restores dashboard settings when resetting to default fails', async () => {
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(true) });
     const dashboardSettings = dialogData.user.settings.dashboardSettings;
     dashboardSettings.showTodaySummary = false;
     component.showTodaySummary = false;
@@ -1142,6 +1140,7 @@ describe('DashboardTileConfiguration', () => {
   });
 
   it('restores absent auto-tile metadata when resetting a legacy dashboard fails', async () => {
+    dialogMock.open.mockReturnValueOnce({ afterClosed: () => of(true) });
     const dashboardSettings = dialogData.user.settings.dashboardSettings;
     const recoveryTile = buildDashboardManagerPresetTile({
       presetId: DASHBOARD_MANAGER_PRESET_IDS.CURATED_RECOVERY,
@@ -1161,44 +1160,6 @@ describe('DashboardTileConfiguration', () => {
     expect(dashboardSettings.tiles).toStrictEqual([recoveryTile]);
     expect(dashboardSettings).not.toHaveProperty('autoTiles');
     expect(dashboardSettings).not.toHaveProperty('dismissedCuratedRecoveryNowTile');
-  });
-
-  it('keeps the current dashboard when recommendation evidence cannot be loaded', async () => {
-    const originalTiles = dialogData.user.settings.dashboardSettings.tiles.map((tile: any) => ({
-      ...tile,
-      size: tile.size ? { ...tile.size } : tile.size,
-    }));
-    eventServiceMock.getEventsBy.mockReturnValueOnce(throwError(() => new Error('events unavailable')));
-
-    await component.resetToDefault();
-
-    expect(component.saveError).toBe('Could not load recommended dashboard tiles. Please try again.');
-    expect(dialogData.user.settings.dashboardSettings.tiles).toStrictEqual(originalTiles);
-    expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
-    expect(hapticsMock.error).toHaveBeenCalledTimes(1);
-    expect(dialogRefMock.close).not.toHaveBeenCalledWith({ saved: true });
-  });
-
-  it('does not offer the retired Readiness Signals preview tile through recommendations', async () => {
-    dialogData.user.settings.dashboardSettings.tiles = [];
-    const staleEndTimeMs = Date.now() - (72 * 60 * 60 * 1000);
-    sleepServiceMock.watchForDashboard.mockReturnValue(of([{
-      id: 'stale-sleep',
-      sleepDate: '2026-01-01',
-      startTimeMs: staleEndTimeMs - (8 * 60 * 60 * 1000),
-      endTimeMs: staleEndTimeMs,
-      durationSeconds: 8 * 60 * 60,
-      isNap: false,
-      source: { provider: 'GarminAPI', sourceSessionKey: 'stale-sleep' },
-    }]));
-
-    await component.resetToDefault();
-
-    const tiles = dialogData.user.settings.dashboardSettings.tiles;
-    expect(tiles.some((tile: any) => tile.chartType === DASHBOARD_SLEEP_TREND_CHART_TYPE)).toBe(true);
-    expect(tiles.some((tile: any) => (
-      tile.chartType === RETIRED_DASHBOARD_READINESS_CONFIDENCE_KPI_CHART_TYPE
-    ))).toBe(false);
   });
 
   it('removes a retired Readiness Signals preview tile and compacts orders on the next settings save', async () => {
@@ -1235,69 +1196,6 @@ describe('DashboardTileConfiguration', () => {
           dashboardSettings: expect.objectContaining({ tiles: dashboardSettings.tiles }),
         }),
       }),
-    );
-  });
-
-  it('reads recommendation evidence only on reset, inside the default activity and sleep windows', async () => {
-    expect(eventServiceMock.getEventsBy).not.toHaveBeenCalled();
-    expect(sleepServiceMock.watchForDashboard).not.toHaveBeenCalled();
-    expect(derivedMetricsServiceMock.watch).not.toHaveBeenCalled();
-    await component.resetToDefault();
-    const dayMs = 24 * 60 * 60 * 1000;
-    const activityCall = eventServiceMock.getEventsBy.mock.calls[0];
-    const sleepCall = sleepServiceMock.watchForDashboard.mock.calls[0];
-
-    expect(activityCall?.[0]).toBe(dialogData.user);
-    expect(activityCall?.[2]).toBe('startDate');
-    expect(activityCall?.[3]).toBe(false);
-    expect(activityCall?.[4]).toBe(1);
-    expect(activityCall?.[1]?.[1]?.value - activityCall?.[1]?.[0]?.value).toBe(90 * dayMs);
-    expect(sleepCall?.[0]).toBe('user-1');
-    expect(sleepCall?.[2] - sleepCall?.[1]).toBe(14 * dayMs);
-  });
-
-  it('recommends only power disciplines with evidence in the prepared 1-year snapshot', async () => {
-    dialogData.user.settings.dashboardSettings.tiles = [];
-    const activePowerRange = {
-      sourceEventCount: 2,
-      matchedEventCount: 2,
-      latestActivity: null,
-      bestPoints: [60, 400, 0],
-      best30dPoints: [],
-      best30dEventCount: 0,
-      best90dPoints: [],
-      best90dEventCount: 0,
-    };
-    const emptyPowerRange = {
-      ...activePowerRange,
-      sourceEventCount: 0,
-      matchedEventCount: 0,
-      bestPoints: [],
-    };
-    derivedMetricsServiceMock.watch.mockReturnValue(of({
-      ...createDashboardDerivedMetricsMissingState(),
-      powerCurve: {
-        scopes: {
-          cycling: { ranges: { '1y': activePowerRange }, thisWeekByStartDay: {} },
-          running: { ranges: { '1y': emptyPowerRange }, thisWeekByStartDay: {} },
-        },
-      },
-    }));
-
-    await component.resetToDefault();
-
-    const tiles = dialogData.user.settings.dashboardSettings.tiles;
-    expect(tiles.some((tile: any) => (
-      tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
-      && tile.eventFilters?.activityTypes?.includes(ActivityTypes.Cycling)
-    ))).toBe(true);
-    expect(tiles.some((tile: any) => (
-      tile.chartType === DASHBOARD_POWER_CURVE_CHART_TYPE
-      && tile.eventFilters?.activityTypes?.includes(ActivityTypes.Running)
-    ))).toBe(false);
-    expect(derivedMetricsServiceMock.watch).toHaveBeenLastCalledWith(
-      dialogData.user,
-      expect.objectContaining({ metricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.PowerCurve]) }),
     );
   });
 

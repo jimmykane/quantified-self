@@ -1,6 +1,9 @@
 @if (preview(); as model) {
 <div class="chart-preview" [class.chart-preview-thumbnail]="thumbnail" [class.chart-preview-kpi]="isKpi()" [class.chart-preview-hrv]="isHrv()">
   <div class="chart-preview-source" role="status">{{ sourceLabel() }}</div>
+  @if (model.availability; as availability) {
+    <p class="chart-preview-availability" [attr.data-state]="availability.state">{{ availability.label }}</p>
+  }
   <div class="chart-preview-renderer" [attr.aria-busy]="model.loading">
     @if (model.loading) { <mat-progress-bar mode="indeterminate" aria-label="Loading chart preview"></mat-progress-bar> }
     @if (calendar(); as calendarModel) {

@@ -36,8 +36,8 @@ describe('read-only chart preview data', () => {
   expect(new Set(kinds).size).toBe(kinds.length);
   expect(kinds).not.toContain('form_now');
   expect(kinds).toEqual(expect.arrayContaining(['freshness_forecast', 'form_plus_7d', 'intensity_distribution', 'easy_percent', 'hard_percent']));
-  expect(result.formNow).toBeUndefined();
-  expect(result.formPlus7d).toEqual(state.formPlus7d);
+  expect(result.derivedMetrics.formNow).toBeUndefined();
+  expect(result.derivedMetrics.formPlus7d).toEqual(state.formPlus7d);
   subscription.unsubscribe(); expect(cleanup).toHaveBeenCalledOnce();
   expect(events.getEventsBy).not.toHaveBeenCalled(); expect(derived.ensureForDashboard).not.toHaveBeenCalled();
  });
@@ -117,7 +117,7 @@ describe('read-only chart preview data', () => {
   let result: DashboardChartPreview;
   TestBed.inject(DashboardChartPreviewService).watch(user, tile, { tiles: [], previewStates: { sleep: 'error' } }).subscribe(value => result = value);
   expect(result!.source).toBe('example'); expect(result!.loading).toBe(false);
-  expect(result!.note).toContain('Could not load'); expect(sleep.watchForDashboard).not.toHaveBeenCalled();
+  expect(result!.availability?.label).toContain('Could not load'); expect(sleep.watchForDashboard).not.toHaveBeenCalled();
  });
  it('does nothing until subscribed, shares a bounded event query and releases its listener', () => {
   const cleanup = vi.fn(); events.getEventsBy.mockReturnValue(new Observable(subscriber => { subscriber.next(buildDashboardExampleEvents()); return cleanup; }));
@@ -168,7 +168,7 @@ describe('read-only chart preview data', () => {
   const tile = getDashboardChartCatalog().find(entry => entry.definition.category === 'custom')!.tile;
   const values: DashboardChartPreview[] = [];
   TestBed.inject(DashboardChartPreviewService).watch(user, tile, { tiles: [] }).subscribe(value => values.push(value));
-  expect(values[0].loading).toBe(true); expect(values.at(-1)?.source).toBe('example'); expect(values.at(-1)?.note).toContain('Could not load');
+  expect(values[0].loading).toBe(true); expect(values.at(-1)?.source).toBe('example'); expect(values.at(-1)?.availability?.label).toContain('Could not load');
   expect(derived.ensureForDashboard).not.toHaveBeenCalled();
  });
 });

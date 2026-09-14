@@ -1,3 +1,4 @@
+import type { DashboardChartLibrarySeen } from '../helpers/dashboard-chart-library-revision.helper';
 import {
     User,
     ChartThemes,
@@ -205,6 +206,7 @@ export interface AppChartSettingsInterface extends Omit<UserChartSettingsInterfa
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {
     lastSeenChangelogDate?: AppDateValue;
+    dashboardChartLibrarySeen?: DashboardChartLibrarySeen;
     themePreference?: AppThemePreference;
     unitSetupCompleted?: boolean;
     dashboardActionPrompts?: AppDashboardActionPrompts;
