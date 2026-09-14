@@ -4,7 +4,7 @@ import { serializeGarminWorkoutV1 } from '../../providers/garmin-workout.seriali
 import { assessTrainingDeliveryMapping } from '../mapping';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
   type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport } from '../contracts';
-import { GarminTrainingHttpError, garminBody, garminId, type GarminTrainingClient, type GarminTrainingRequest } from './http';
+import { GarminTrainingHttpError, garminBody, garminId, type GarminTrainingClient, type GarminTrainingRequest, type GarminTrainingResponse } from './http';
 
 const STEPS = ['workout-create', 'workout-update', 'schedule-create', 'schedule-update', 'schedule-delete', 'workout-delete', 'finished'] as const;
 type Step = typeof STEPS[number];
@@ -61,10 +61,12 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
   private async read(request: GarminTrainingRequest, guard: DeliveryRequestGuard): Promise<unknown | null> {
     await guard(false);
     const result = await this.client(request, () => guard(false));
-    return result.status === 404 ? null : result.body;
+    if (result.status === 404) return null;
+    if (result.status !== 200 || result.body === null || result.body === undefined) throw new TrainingDeliveryTransportError('uncertain');
+    return result.body;
   }
   private async write(operation: DeliveryOperation, step: Step, request: GarminTrainingRequest,
-    checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<unknown | null> {
+    checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<GarminTrainingResponse> {
     await this.save(operation, checkpoint, operation.artifact, step, 'ready');
     await guard(true);
     try {
@@ -81,7 +83,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
           throw error;
         }
       });
-      return result.body;
+      return result;
     } catch (error) {
       if (error instanceof GarminTrainingHttpError && error.rejected) {
         await this.save(operation, checkpoint, operation.artifact, step, 'rejected');
@@ -151,7 +153,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     } else {
       const raw = await this.write(operation, 'workout-create', { method: 'POST', path: '/workoutportal/workout/v2',
         body: garminBody(payload as unknown as ObjectValue) }, checkpoint, guard);
-      const created = object(raw);
+      const created = object(raw.body);
       const ids: Record<string, string> = { workout: garminId(created.workoutId) };
       // Save an accepted workout ID even when the response omitted the owner needed
       // by future PUTs; GET can recover the owner without ever repeating this POST.
@@ -166,15 +168,15 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     if (artifact.ids.schedule && !currentSchedule) throw new TrainingDeliveryTransportError('uncertain');
     if (currentSchedule?.date !== workout.localDate) {
       const step = artifact.ids.schedule ? 'schedule-update' : 'schedule-create';
-      const body = await this.write(operation, step, {
+      const result = await this.write(operation, step, {
         method: artifact.ids.schedule ? 'PUT' : 'POST',
         path: artifact.ids.schedule ? `/training-api/schedule/${artifact.ids.schedule}` : '/training-api/schedule/',
         body: garminBody({ date: workout.localDate }, { workoutId: artifact.ids.workout,
           ...(artifact.ids.schedule ? { scheduleId: artifact.ids.schedule } : {}) }),
       }, checkpoint, guard);
       // Update permits an empty 204; its known schedule ID remains authoritative.
-      const saved = body === null && artifact.ids.schedule
-        ? { id: artifact.ids.schedule, workoutId: artifact.ids.workout, date: workout.localDate } : schedule(body);
+      const saved = result.status === 204 && artifact.ids.schedule
+        ? { id: artifact.ids.schedule, workoutId: artifact.ids.workout, date: workout.localDate } : schedule(result.body);
       if (saved.workoutId !== artifact.ids.workout || saved.date !== workout.localDate
         || (artifact.ids.schedule && saved.id !== artifact.ids.schedule)) throw new TrainingDeliveryTransportError('uncertain');
       await this.save(operation, checkpoint, { ...artifact, ids: { ...artifact.ids, schedule: saved.id }, localDate: saved.date }, step, 'accepted');

@@ -455,6 +455,10 @@ the request-start journal. Reads can inspect an obsolete attempt; writes require
 lease. A v1 private progress journal distinguishes `ready`, `started`, definitively `rejected`, and `accepted` steps.
 New operations start with explicit null progress; missing legacy progress is unknown, not permission to repeat a create.
 Request-start checkpoints require the current lease; late acceptance evidence is retained even when that lease expired.
+Starting a mutating request clears the previous fully accepted payload digests, while retaining all remote IDs. An
+interrupted edit or removal may already have changed the provider; reverting QS to an older version must inspect and
+reconcile that version again instead of treating its historical success digest as current. Status projections therefore
+show the retained copy as different until the complete current operation is confirmed.
 If another lease/attempt has taken over, accepted evidence goes into immutable-per-worker `attempts/*/lateAcceptances/*`
 instead of overwriting the newer journal. Recovery is blocked for operator inspection even on Retry; current workers
 lose admission. The existing recursive account cleanup covers these nested evidence records.
@@ -567,7 +571,13 @@ refresh leases and lifecycle fencing are reused; authority is rechecked after re
 The HTTP client admits only exact Garmin paths/host, rejects redirects, times out after 10 seconds and caps responses
 at 2 MiB. It never persists/logs raw response bodies, credentials or provider errors. HTTP 401 blocks for reconnect;
 403/412 block for permission repair; 429 honors Retry-After, defaulting conservatively to 24 hours when quota is unknown.
-There is no nested HTTP retry loop.
+The private ledger retains the adapter's not-before deadline independently of ordinary retry counters, so an edit,
+Stop/resume, or explicit Retry cannot shorten it. This is per-delivery backoff, not account/partner quota pacing; the
+latter remains part of #698's certification gate. There is no nested HTTP retry loop.
+Only documented synchronous success codes confirm completion. Unexpected successful statuses (including 202) remain
+unconfirmed; an empty/null successful GET never means the artifact is absent. Only an explicit 404 enters the missing
+artifact path, with actual provider 404 semantics still subject to certification. Schedule PUT accepts an empty 204;
+a 200 response must supply the validated schedule record before QS records the new date.
 
 Every accepted artifact is journaled before another write. An interrupted schedule create can recover through one exact
 workout/date match in the date-range lookup; empty or ambiguous results are not proof of nonacceptance. Retained-ID
@@ -581,7 +591,8 @@ retained with that observed date. No completed-activity matching or new provider
 
 Verification combines synthetic request/response fixtures (including signed-64-bit boundary IDs), HTTP/authorization/
 transport unit tests and real Firestore worker transactions through the excluded synthetic server. It covers duplicate
-workers, edits/Stop/expiry/lease expiry between artifacts, lost responses and persistence, same-account permission repair,
+workers, edits/Stop/expiry/lease expiry between artifacts, edit-then-revert after remote acceptance, Retry-After across
+edits and manual Retry, malformed/empty/asynchronous success responses, lost responses and persistence, same-account permission repair,
 changed-account reconnect, disconnect and account deletion. Run `npm run test:training-delivery` plus the existing Rules,
 secret registration and frontend suites. Sandbox/device certification remains a separate gate: confirm the documented
 create path in the evaluation tenant, actual response/404 semantics and schedule-list wrapper/pagination, quota/horizon,

@@ -114,7 +114,10 @@ synthetic HTTP fixtures and real Firestore transactions; all real provider trans
 The [Garmin adapter boundary](training-workspace.md#garmin-workoutcalendar-adapter-647) documents the per-request authority
 guard, step journal, exact endpoints, request bounds, permission flow and remaining certification checklist. In particular,
 Garmin's documented first workout POST has no external idempotency/lookup key: unknown acceptance remains blocked for
-attention, never retried blindly. Do not turn an empty schedule lookup into proof that a POST failed. Focused Garmin
+attention, never retried blindly. Do not turn an empty schedule lookup into proof that a POST failed. HTTP response
+tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from
+completed mutation. Interrupted edits invalidate the old fully accepted payload digest, and provider-imposed retry
+deadlines survive authored changes and manual Retry; these are tested locally, not certified provider semantics. Focused Garmin
 sandbox/device evidence, quota/pacing validation and operator recovery are tracked in epic subissue #698; #647 stays open
 until its original certification acceptance is satisfied.
 Provider certification, production observability and kill switches remain tracked under epic #583. Do not hide an unmet gate in a code comment or silently

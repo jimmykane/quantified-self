@@ -163,6 +163,49 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.calls.some(request => request.path.includes('schedule?startDate=2026-09-20'))).toBe(true);
   });
 
+  it('reconciles a revert after an intervening edit reached Garmin instead of trusting the old accepted digest', async () => {
+    const original = (await user().collection('scheduledWorkouts').doc('w').get()).data()!;
+    const id = await send(); await processTrainingDelivery(runtime, uid, id);
+    const first = await ledger();
+    await edit();
+    server.afterHandle = async request => {
+      if (request.method !== 'PUT' || !request.path.includes('workout')) return;
+      server.afterHandle = null;
+      await user().collection('scheduledWorkouts').doc('w').set({ ...original, revision: 3 });
+      await user().collection('trainingPlanState').doc('current').update({ revision: 3 });
+      await mark(); await drain();
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    expect(server.workouts.values().next().value?.workoutName).toBe('Revised run');
+    const projection = await user().collection('trainingDeliveryStatuses').doc(id).get();
+    expect(projection.data()?.differsFromQS).toBe(true);
+    await retry(id); await drain(); await retry(id);
+    expect((await ledger()).status).toBe('delivered');
+    expect((await ledger()).actual?.ids).toEqual(first.actual?.ids);
+    expect(server.workouts.values().next().value?.workoutName).toBe('Easy run');
+    expect(server.schedules.values().next().value?.date).toBe(original.localDate);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(2);
+  });
+
+  it.each(['edit', 'retry', 'stop-resume'] as const)('does not bypass a provider Retry-After after %s', async action => {
+    const id = await send();
+    server.beforeHandle = async () => {
+      server.beforeHandle = null; throw new GarminTrainingHttpError('retryable', true, 86_400_000);
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    const dueAt = (await ledger()).retryAtMs;
+    const requests = server.calls.length;
+    if (action === 'edit') await edit();
+    else if (action === 'stop-resume') { await command('stop'); await drain(); await command('resume'); await drain(); }
+    else { await command('retry'); await drain(); }
+    await processTrainingDelivery(runtime, uid, id);
+    expect(server.calls).toHaveLength(requests);
+    expect(await ledger()).toMatchObject({ status: 'retrying', retryAtMs: dueAt });
+    await retry(id); await drain(); await retry(id);
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+  });
+
   it.each(['replacement', 'completed'] as const)('retains late acceptance after a %s lease without permitting another POST', async state => {
     const id = await send();
     server.afterHandle = async request => {

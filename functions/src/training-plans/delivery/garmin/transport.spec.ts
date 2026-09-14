@@ -125,6 +125,31 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(await recover()).toEqual({ kind: 'accepted', artifact: operation.artifact });
     expect(server.calls).toHaveLength(count);
   });
+  it.each(['schedule', 'workout'] as const)('retains the %s identity when a successful lookup has no record body', async target => {
+    await execute();
+    if (target === 'workout') delete operation.artifact!.ids.schedule;
+    operation = { ...operation, kind: 'remove', workout: null, progress: null };
+    const artifact = structuredClone(operation.artifact);
+    const client = vi.fn(async () => ({ status: 200, body: null }));
+    transport = new GarminTrainingTransport(client, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.artifact).toEqual(artifact);
+    operation.progress = { version: 1, step: `${target}-delete`, state: 'started' };
+    await expect(recover()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.artifact).toEqual(artifact);
+    expect(client.mock.calls).toHaveLength(2);
+  });
+  it('requires a schedule record for PUT 200 and only accepts an empty PUT 204', async () => {
+    await execute(); operation = nextOperation(operation, { localDate: '2026-10-25' });
+    const artifact = structuredClone(operation.artifact);
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      if (request.method === 'PUT') { await beforeSend(); return { status: 200, body: null }; }
+      return server.request(request, beforeSend);
+    }, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.artifact).toEqual(artifact);
+    expect(operation.progress).toMatchObject({ step: 'schedule-update', state: 'started' });
+  });
   it('treats legacy operations without a transport journal as uncertain', async () => {
     delete operation.progress;
     expect(await recover()).toEqual({ kind: 'uncertain' });

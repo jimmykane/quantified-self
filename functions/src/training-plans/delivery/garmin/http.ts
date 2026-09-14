@@ -107,8 +107,16 @@ export function createGarminTrainingClient(authorize: () => Promise<string>,
         if (status === 408 || status >= 500) throw new GarminTrainingHttpError(mutating ? 'uncertain' : 'retryable', false);
         throw new GarminTrainingHttpError('terminal', status >= 400 && status < 500);
       }
+      // Only documented synchronous success confirms completion. In particular, 202
+      // is not proof a DELETE finished, and an empty GET is not evidence of absence.
+      if (response.status !== 200 && !(response.status === 204 && ['PUT', 'DELETE'].includes(request.method))) {
+        await response.body?.cancel();
+        throw new GarminTrainingHttpError(mutating ? 'uncertain' : 'retryable', false);
+      }
       const raw = await readBounded(response);
-      return { status: response.status, body: raw.trim() ? parseGarminTrainingJSON(raw) : null };
+      const body = raw.trim() ? parseGarminTrainingJSON(raw) : null;
+      if (request.method === 'GET' && body === null) throw new GarminTrainingHttpError('retryable', false);
+      return { status: response.status, body };
     } catch (error) {
       if (error instanceof GarminTrainingHttpError) throw error;
       throw new GarminTrainingHttpError(mutating ? 'uncertain' : 'retryable', false);

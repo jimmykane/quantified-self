@@ -105,6 +105,9 @@ export interface DeliveryLedgerV1 {
   lease: { id: string; expiresAtMs: number } | null;
   retries: number;
   retryAtMs: number;
+  /** Adapter-imposed minimum delay survives authored edits and explicit Retry.
+   * Optional only for older ledgers; this is not an account-wide quota scheduler. */
+  providerNotBeforeMs?: number;
   blockedConnectionGeneration: string | null;
   lastAttemptAtMs: number | null;
   lastAcceptedAtMs: number | null;

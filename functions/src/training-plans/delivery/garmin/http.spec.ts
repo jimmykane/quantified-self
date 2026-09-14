@@ -70,4 +70,21 @@ describe('Garmin Training HTTP boundary (no network)', () => {
         .rejects.toMatchObject({ kind: method === 'GET' ? 'retryable' : 'uncertain', rejected: false });
     }
   });
+  it.each(['', '   ', 'null'])('rejects an empty successful lookup (%j) instead of treating it as absence', async body => {
+    const client = createGarminTrainingClient(async () => 'fixture', vi.fn(async () => new Response(body)));
+    await expect(client({ method: 'GET', path: '/training-api/workout/v2/1' }, vi.fn()))
+      .rejects.toMatchObject({ kind: 'retryable', rejected: false });
+  });
+  it.each([
+    ['GET', 204, 'retryable'], ['GET', 206, 'retryable'],
+    ['POST', 202, 'uncertain'], ['PUT', 202, 'uncertain'], ['DELETE', 202, 'uncertain'],
+  ] as const)('does not mistake %s %s for confirmed completion', async (method, status, kind) => {
+    const client = createGarminTrainingClient(async () => 'fixture', vi.fn(async () => new Response(null, { status })));
+    await expect(client({ method, path: method === 'POST' ? '/workoutportal/workout/v2' : '/training-api/workout/v2/1' }, vi.fn()))
+      .rejects.toMatchObject({ kind, rejected: false });
+  });
+  it.each(['GET', 'DELETE'] as const)('preserves explicit %s 404 absence', async method => {
+    const client = createGarminTrainingClient(async () => 'fixture', vi.fn(async () => new Response(null, { status: 404 })));
+    await expect(client({ method, path: '/training-api/workout/v2/1' }, vi.fn())).resolves.toEqual({ status: 404, body: null });
+  });
 });

@@ -137,6 +137,13 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       ledger.actual = artifact;
       ledger.attempt.artifact = artifact;
       if (progress !== undefined) ledger.attempt.progress = progress;
+      if (progress?.state === 'started') {
+        // A provider write can invalidate the last fully accepted version even when
+        // its response is lost. Reverting to that version must reconcile the retained
+        // IDs, not reuse its old success digest after retiring a partial operation.
+        ledger.acceptedDigest = null;
+        ledger.acceptedContentDigest = null;
+      }
       if (complete) {
         ledger.lastAcceptedAtMs = runtime.now();
         ledger.acceptedDigest = operation.kind === 'upsert' ? operation.digest : null;
@@ -145,6 +152,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.lease = null;
         ledger.retries = 0;
         ledger.retryAtMs = 0;
+        ledger.providerNotBeforeMs = 0;
         ledger.status = ledger.desiredDigest === operation.digest ? operation.kind === 'upsert' ? 'delivered' : 'removed' : 'pending';
       }
       ledger.updatedAtMs = runtime.now();
@@ -251,7 +259,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
           : failure.kind === 'terminal' || ledger.retries >= MAX_RETRY_COUNT ? 'failed' : 'retrying';
       ledger.blockedConnectionGeneration = ['auth', 'permission'].includes(failure.kind) ? operation.connectionGeneration : null;
       if (failure.kind === 'permission') ledger.issues = ['Workout delivery permission is missing. Reconnect the provider and allow workout delivery.'];
-      ledger.retryAtMs = runtime.now() + Math.max(getCloudTaskRetryBackoffSeconds(ledger.retries) * 1000, failure.retryAfterMs);
+      ledger.providerNotBeforeMs = Math.max(ledger.providerNotBeforeMs ?? 0,
+        failure.retryAfterMs > 0 ? runtime.now() + failure.retryAfterMs : 0);
+      ledger.retryAtMs = Math.max(runtime.now() + getCloudTaskRetryBackoffSeconds(ledger.retries) * 1000, ledger.providerNotBeforeMs);
       ledger.updatedAtMs = runtime.now();
       writeDelivery(runtime, tx, uid, ledger);
       if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id, dueAtMs: ledger.retryAtMs, dispatchToken: randomUUID() });
