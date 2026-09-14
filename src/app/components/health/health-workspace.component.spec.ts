@@ -1146,7 +1146,10 @@ describe('HealthWorkspaceComponent', () => {
     });
 
     expect(component.metricCatalogGroups().flatMap(group => group.metrics))
-      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
+      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length - 3);
+    for (const metric of [HEALTH_METRIC_IDS.Distance, HEALTH_METRIC_IDS.ActiveDuration, HEALTH_METRIC_IDS.Altitude]) {
+      expect(component.availableMetricSelections()).not.toContain(metric);
+    }
     expect(component.showSleepMetric()).toBe(true);
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
     expect((fixture.nativeElement as HTMLElement).textContent)
@@ -1172,7 +1175,7 @@ describe('HealthWorkspaceComponent', () => {
     });
 
     expect(component.metricCatalogGroups().flatMap(group => group.metrics))
-      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
+      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length - 3);
     expect(component.showSleepMetric()).toBe(false);
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Sleep overview');
   });

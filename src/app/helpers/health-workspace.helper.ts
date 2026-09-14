@@ -80,7 +80,9 @@ export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRat
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
 const HEALTH_WORKSPACE_METRICS = new Set<HealthWorkspaceMetricSelection>([
   ...APP_HEALTH_WORKSPACE_METRICS,
-]);
+].filter(metric => metric !== HEALTH_METRIC_IDS.Distance
+  && metric !== HEALTH_METRIC_IDS.ActiveDuration
+  && metric !== HEALTH_METRIC_IDS.Altitude));
 
 export interface HealthWorkspaceRouteState {
   metric: HealthWorkspaceMetricSelection;
@@ -406,7 +408,9 @@ export function navigateHealthWorkspaceWindow(
 export function buildHealthMetricCatalogGroups(
   availableMetricIds?: readonly HealthMetricId[],
 ): HealthMetricCatalogGroup[] {
-  const definitions = Object.values(HEALTH_METRIC_CATALOG);
+  // Keep collection and the shared metric contract intact; this is an explorer display choice.
+  const definitions = Object.values(HEALTH_METRIC_CATALOG)
+    .filter(definition => HEALTH_WORKSPACE_METRICS.has(definition.id));
   const available = availableMetricIds === undefined ? null : new Set(availableMetricIds);
   return CATEGORY_ORDER.map(category => ({
     id: category,

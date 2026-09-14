@@ -360,11 +360,26 @@ describe('Health workspace helpers', () => {
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
   });
 
-  it('publishes every catalog metric once in category groups', () => {
+  it('publishes every visible catalog metric once in category groups', () => {
     const groups = buildHealthMetricCatalogGroups();
     const metricIds = groups.flatMap(group => group.metrics.map(metric => metric.id));
-    expect(metricIds).toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
+    expect(metricIds).toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length - 3);
     expect(new Set(metricIds).size).toBe(metricIds.length);
+  });
+
+  it('hides distance, active duration and altitude even with stored data and resets old selections', () => {
+    const hidden = [HEALTH_METRIC_IDS.Distance, HEALTH_METRIC_IDS.ActiveDuration, HEALTH_METRIC_IDS.Altitude];
+    expect(buildHealthMetricCatalogGroups(hidden)).toEqual([]);
+    const visible = buildHealthMetricCatalogGroups().flatMap(group => group.metrics.map(metric => metric.id));
+    for (const metric of hidden) {
+      expect(visible).not.toContain(metric);
+      expect(normalizeHealthWorkspaceMetric(metric)).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
+      expect(HEALTH_METRIC_CATALOG[metric]).toBeDefined();
+    }
+    expect(visible).toEqual(expect.arrayContaining([
+      HEALTH_METRIC_IDS.Steps, HEALTH_METRIC_IDS.FloorsClimbed,
+      HEALTH_METRIC_IDS.ModerateIntensityDuration, HEALTH_METRIC_IDS.VigorousIntensityDuration,
+    ]));
   });
 
   it('keeps category ordering while hiding catalog metrics without stored data', () => {
