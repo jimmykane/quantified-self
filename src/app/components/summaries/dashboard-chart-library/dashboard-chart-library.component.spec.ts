@@ -8,7 +8,9 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
+import { DashboardHrvService } from '../../../services/dashboard-hrv.service';
+import { createDashboardDerivedMetricsMissingState } from '../../../services/dashboard-derived-metrics.service';
 import { MaterialModule } from '../../../modules/material.module';
 import { DashboardChartLibraryComponent } from './dashboard-chart-library.component';
 import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
@@ -28,6 +30,7 @@ describe('responsive chart picker interactions', () => {
   let mobile = false;
   let discard = false;
   const save = vi.fn();
+  const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const settle = async () => {
     // Material portals attach outside the fixture; flush their async click handlers before checking both views.
@@ -37,10 +40,11 @@ describe('responsive chart picker interactions', () => {
   const button = (label: string): HTMLButtonElement => Array.from(document.body.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(element => element.textContent?.includes(label))!;
   beforeEach(async () => {
     vi.restoreAllMocks(); vi.clearAllMocks(); mobile = false; discard = false; save.mockResolvedValue(undefined);
+    derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState()));
     await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent, DashboardTileEditorComponent], imports: [CommonModule, MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
       DashboardChartLibraryState, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
       { provide: BreakpointObserver, useValue: { isMatched: () => mobile, observe: () => of({ matches: false, breakpoints: {} }) } },
-      { provide: AppEventService, useValue: {} }, { provide: AppSleepService, useValue: {} }, { provide: AppRouteService, useValue: {} }, { provide: DashboardDerivedMetricsService, useValue: {} },
+      { provide: AppEventService, useValue: {} }, { provide: AppSleepService, useValue: {} }, { provide: AppRouteService, useValue: {} }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: DashboardHrvService, useValue: {} },
     ] }).compileComponents();
     const dialog = TestBed.inject(MatDialog);
     const realOpen = dialog.open.bind(dialog);
@@ -49,6 +53,45 @@ describe('responsive chart picker interactions', () => {
     user = { uid: 'test-owner', settings: { unitSettings: { speedUnits: [] }, dashboardSettings: { tiles: [] } } } as unknown as AppUserInterface;
     fixture = TestBed.createComponent(DashboardChartLibraryComponent); component = fixture.componentInstance;
     fixture.componentRef.setInput('user', user); fixture.componentRef.setInput('lane', 'kpi'); fixture.componentRef.setInput('seed', { tiles: [] }); fixture.detectChanges();
+  });
+  it('loads missing KPI data once per open picker, keeps filtering silent, and releases reads on close', async () => {
+    const snapshots$ = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    derived.watch.mockReturnValue(snapshots$);
+    expect(derived.watch).not.toHaveBeenCalled();
+    await component.toggle(); await settle();
+    expect(derived.watch).toHaveBeenCalledOnce();
+    expect(component.rowPreviews()[0].preview.loading).toBe(true);
+    const state = createDashboardDerivedMetricsMissingState();
+    state.acwr = { ratio: 1.6, acuteLoad7: 160, chronicLoad28: 100, latestDayMs: 3,
+      trend8Weeks: [{ time: 1, value: 1.2 }, { time: 3, value: 1.6 }] };
+    snapshots$.next(state); await settle();
+    const row = component.rowPreviews().find(entry => entry.definition.id === 'kpi-acwr')!;
+    expect(row.preview.source).toBe('user');
+    expect(row.preview.tile['acwr']).toEqual(state.acwr);
+    expect(component.previewSeed().derivedMetrics?.acwr).toEqual(state.acwr);
+    component.filter('ACWR'); await settle();
+    expect(component.rowPreviews()[0]).toBe(row);
+    expect(derived.watch).toHaveBeenCalledOnce();
+    expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+    await component.close(); await settle();
+    expect(snapshots$.observed).toBe(false);
+    expect(component.previewSeed().derivedMetrics?.acwr).toBeUndefined();
+  });
+  it('drops another account’s fetched KPI data and unsubscribes before loading the new owner', async () => {
+    const old$ = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    const next$ = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    derived.watch.mockReturnValueOnce(old$).mockReturnValueOnce(next$);
+    await component.toggle(); await settle();
+    const state = createDashboardDerivedMetricsMissingState();
+    state.acwr = { ratio: 1.6, acuteLoad7: 160, chronicLoad28: 100, latestDayMs: 3, trend8Weeks: [] };
+    old$.next(state); await settle();
+    fixture.componentRef.setInput('user', { ...user, uid: 'next-owner' }); await settle();
+    expect(old$.observed).toBe(false);
+    expect(component.previewSeed().derivedMetrics?.acwr).toBeUndefined();
+    expect(component.rowPreviews().find(entry => entry.definition.id === 'kpi-acwr')?.preview.source).toBe('example');
+    expect(derived.watch).toHaveBeenLastCalledWith(expect.objectContaining({ uid: 'next-owner' }), expect.anything());
+    fixture.destroy();
+    expect(next$.observed).toBe(false);
   });
   it('opens a wide dialog without expanding the dashboard', async () => {
     await component.toggle(); await settle();

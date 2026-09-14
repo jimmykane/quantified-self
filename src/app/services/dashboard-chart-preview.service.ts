@@ -8,8 +8,8 @@ import { AppRouteService } from './app.route.service';
 import { AppSleepService } from './app.sleep.service';
 import { DashboardDerivedMetricsService } from './dashboard-derived-metrics.service';
 import { buildDashboardTileViewModels } from '../helpers/dashboard-tile-view-model.helper';
-import { buildDashboardExamplePreview, buildDashboardPreviewSeed, DashboardChartPreview, DashboardPreviewInput, dashboardPreviewHasData, dashboardPreviewMetricKinds } from '../helpers/dashboard-chart-preview.helper';
-import { isDashboardSleepBackedChartType, isDashboardHrvTrendChartType } from '../helpers/dashboard-special-chart-types';
+import { buildDashboardThumbnailPreview, dashboardPreviewMissingMetricKinds, DASHBOARD_PREVIEW_METRIC_CONTEXTS, buildDashboardExamplePreview, buildDashboardPreviewSeed, DashboardChartPreview, DashboardPreviewInput, dashboardPreviewHasData, dashboardPreviewMetricKinds } from '../helpers/dashboard-chart-preview.helper';
+import { isDashboardKpiChartType, isDashboardSleepBackedChartType, isDashboardHrvTrendChartType } from '../helpers/dashboard-special-chart-types';
 import { resolveDashboardTileEventWindow, normalizeDashboardTileEventFilters } from '../helpers/dashboard-tile-event-filters.helper';
 
 /** Scoped to the open library. No ensure/rebuild or settings API is available here. */
@@ -22,7 +22,18 @@ export class DashboardChartPreviewService {
   private readonly derived = inject(DashboardDerivedMetricsService);
   private readonly requests = new Map<string, Observable<DashboardPreviewInput>>();
 
+  /** One subscription for missing KPI dependencies, released when the picker closes. */
+  watchKpiContexts(user: AppUserInterface, tiles: readonly TileSettingsInterface[], seed: DashboardPreviewInput): Observable<DashboardPreviewInput['derivedMetrics']> {
+    const metricKinds = dashboardPreviewMissingMetricKinds(tiles, seed);
+    if (!metricKinds.length) return of({});
+    return this.derived.watch(user, { metricKinds }).pipe(map(state => Object.fromEntries(metricKinds.map(kind => {
+      const key = DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind];
+      return [key, state[key]];
+    }))));
+  }
+
   watch(user: AppUserInterface, tile: TileSettingsInterface, seed: DashboardPreviewInput): Observable<DashboardChartPreview> {
+    if (isDashboardKpiChartType(tile['chartType']) && seed.kpiPreviewState) return of(buildDashboardThumbnailPreview(tile, seed));
     const example = buildDashboardExamplePreview(tile);
     const input = { ...buildDashboardPreviewSeed(tile, seed), hrvPreferredSource: user.settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability };
     const existing = buildDashboardTileViewModels(input)[0];

@@ -30,6 +30,24 @@ describe('chart list thumbnail shapes', () => {
     const series = buildDashboardChartThumbnailOption(preview, false).series as SeriesOption[];
     expect(series[0].data).toEqual([[1, 1.4], [2, null], [3, .8]]);
   });
+  it.each([false, true])('uses the tile’s semantic colors in theme dark=%s', dark => {
+    const acwr = buildDashboardExamplePreview(catalog.find(entry => entry.definition.id === 'kpi-acwr')!.tile);
+    const chart = acwr.tile as import('./dashboard-tile-view-model.helper').DashboardChartTileViewModel;
+    const color = () => (buildDashboardChartThumbnailOption(acwr, dark).series as import('echarts').LineSeriesOption[])[0].lineStyle!.color;
+    chart.acwr!.ratio = 1.5; expect(color()).toBe('#c62828');
+    chart.acwr!.ratio = 1; expect(color()).toBe('#1b7f38');
+    chart.acwr!.ratio = .7; expect(color()).toBe('#8854d0');
+    const form = buildDashboardExamplePreview(catalog.find(entry => entry.definition.id === 'kpi-form-now')!.tile);
+    (form.tile as typeof chart).formNow!.value = -20;
+    expect((buildDashboardChartThumbnailOption(form, dark).series as import('echarts').LineSeriesOption[])[0].lineStyle!.color).toBe('#c62828');
+  });
+  it('uses the same Training Balance percentage trend as the KPI instead of intensity bars', () => {
+    const preview = buildDashboardExamplePreview(catalog.find(entry => entry.definition.id === 'kpi-training-balance')!.tile);
+    const tile = preview.tile as import('./dashboard-tile-view-model.helper').DashboardChartTileViewModel;
+    const series = buildDashboardChartThumbnailOption(preview, false).series as SeriesOption[];
+    expect(series.map(item => item.type)).toEqual(['line']);
+    expect(series[0].data).toEqual(tile.hardPercent!.trend8Weeks.map(point => [point.time, point.value]));
+  });
   it('reuses Health’s range band and colored points in the HRV thumbnail', () => {
     const entry = catalog.find(entry => entry.definition.id === 'curated-hrv')!;
     const preview = buildDashboardExamplePreview(entry.tile);
@@ -48,13 +66,13 @@ describe('chart list thumbnail shapes', () => {
     expect(types('custom-distance-columns')).toEqual(['bar']);
     expect(types('map-routes-preview')).toEqual(['line']);
   });
-  it.each([{ trend8Weeks: [] }, { trend8Weeks: [{ time: 1, value: null }] }])('labels the fallback when a loaded KPI has no drawable history: %j', ({ trend8Weeks }) => {
+  it.each([{ trend8Weeks: [] }, { trend8Weeks: [{ time: 1, value: null }] }])('keeps real headline data without inventing a trend: %j', ({ trend8Weeks }) => {
     const tile = catalog.find(entry => entry.definition.id === 'kpi-acwr')!.tile;
     const preview = buildDashboardThumbnailPreview(tile, { tiles: [], derivedMetrics: {
       acwr: { ratio: .8, acuteLoad7: 80, chronicLoad28: 100, latestDayMs: 3, trend8Weeks },
     } });
-    expect(preview.source).toBe('example');
+    expect(preview.source).toBe('user');
     const series = buildDashboardChartThumbnailOption(preview, false).series as SeriesOption[];
-    expect(series[0].data.length).toBeGreaterThan(0);
+    expect(series[0].data).toEqual(trend8Weeks.map(point => [point.time, point.value]));
   });
 });

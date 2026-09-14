@@ -11,7 +11,7 @@ import { Component, computed, inject, input, signal, ElementRef, effect, untrack
 import { AppUserInterface } from '../../../models/app-user.interface';
 import { getAvailableDashboardCharts, getDashboardChartCatalog, matchesDashboardPreset } from '../../../helpers/dashboard-chart-catalog.helper';
 import { DashboardTileLaneKey, getDashboardTileSectionDefinition, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
-import { DashboardPreviewInput, buildDashboardThumbnailPreview } from '../../../helpers/dashboard-chart-preview.helper';
+import { DashboardPreviewInput, buildDashboardThumbnailPreview, dashboardPreviewSourceLabel } from '../../../helpers/dashboard-chart-preview.helper';
 import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
 import { DashboardChartPreviewService } from '../../../services/dashboard-chart-preview.service';
 @Component({ selector: 'app-dashboard-chart-library', standalone: false, templateUrl: './dashboard-chart-library.component.html', styleUrls: ['./dashboard-chart-library.component.css'], providers: [DashboardChartPreviewService] })
@@ -33,6 +33,15 @@ export class DashboardChartLibraryComponent {
   readonly user = input.required<AppUserInterface>();
   readonly lane = input.required<DashboardTileLaneKey>();
   readonly seed = input<DashboardPreviewInput>({ tiles: [] });
+  private readonly previewData = inject(DashboardChartPreviewService);
+  private readonly kpiContexts = signal<{ uid: string; data: DashboardPreviewInput['derivedMetrics']; state: DashboardPreviewInput['kpiPreviewState'] } | null>(null);
+  readonly previewSeed = computed((): DashboardPreviewInput => {
+    const context = this.kpiContexts();
+    const seed = this.seed();
+    return this.expanded() && this.lane() === 'kpi' && context?.uid === this.user().uid
+      ? { ...seed, derivedMetrics: { ...seed.derivedMetrics, ...context.data }, kpiPreviewState: context.state }
+      : seed;
+  });
   readonly darkTheme = input(false);
   readonly search = signal('');
   readonly usesBottomSheet = signal(false);
@@ -49,11 +58,12 @@ export class DashboardChartLibraryComponent {
   readonly backLabel = computed(() => this.state.configuring() ? this.draftPresentation().back : `Back to ${this.sectionPresentation().plural}`);
   readonly addActionHint = computed(() => this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
   readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group())));
-  private readonly availablePreviews = computed(() => this.available().map(entry => ({
-    ...entry, preview: buildDashboardThumbnailPreview(entry.tile, this.seed()),
-    title: entry.definition.label.replace(/^KPI:\s*/, ''),
-    format: resolveDashboardTilePresentation(entry.tile).label,
-  })));
+  private readonly availablePreviews = computed(() => this.available().map(entry => {
+    const preview = buildDashboardThumbnailPreview(entry.tile, this.previewSeed());
+    return { ...entry, preview, sourceLabel: dashboardPreviewSourceLabel(preview),
+      title: entry.definition.label.replace(/^KPI:\s*/, ''),
+      format: resolveDashboardTilePresentation(entry.tile).label };
+  }));
   readonly rowPreviews = computed(() => {
     const visible = new Set(this.filtered().map(entry => entry.definition.id));
     return this.availablePreviews().filter(entry => visible.has(entry.definition.id));
@@ -97,6 +107,21 @@ export class DashboardChartLibraryComponent {
     return lane === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(lane.slice(8) as never).label;
   });
   constructor() {
+    effect(onCleanup => {
+      const user = this.user();
+      const open = this.expanded() && this.lane() === 'kpi';
+      untracked(() => {
+        this.kpiContexts.set(null);
+        if (!open) return;
+        this.kpiContexts.set({ uid: user.uid, data: {}, state: 'loading' });
+        const tiles = this.catalog.filter(entry => entry.lane === 'kpi').map(entry => entry.tile);
+        const subscription = this.previewData.watchKpiContexts(user, tiles, this.seed()).subscribe({
+          next: data => this.kpiContexts.set({ uid: user.uid, data, state: 'ready' }),
+          error: () => this.kpiContexts.set({ uid: user.uid, data: {}, state: 'error' }),
+        });
+        onCleanup(() => subscription.unsubscribe());
+      });
+    });
     effect(() => {
       const expanded = this.expanded();
       const template = this.picker();

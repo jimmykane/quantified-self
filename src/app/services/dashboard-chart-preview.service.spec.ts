@@ -22,6 +22,32 @@ describe('read-only chart preview data', () => {
   vi.clearAllMocks(); hrv.watch.mockReturnValue(of(null)); events.getEventsBy.mockReturnValue(of([])); derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState())); sleep.watchForDashboard.mockReturnValue(of([])); routes.watchRecentRoutePreviews.mockReturnValue(of([]));
   TestBed.configureTestingModule({ providers: [DashboardChartPreviewService, { provide: DashboardHrvService, useValue: hrv }, { provide: AppEventService, useValue: events }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: AppSleepService, useValue: sleep }, { provide: AppRouteService, useValue: routes }] });
  });
+ it('loads only missing deduplicated KPI snapshots and does not let them overwrite unrelated seeded contexts', () => {
+  const service = TestBed.inject(DashboardChartPreviewService);
+  const tiles = getDashboardChartCatalog().filter(entry => ['kpi-form-now', 'kpi-recovery-debt', 'kpi-training-balance'].includes(entry.definition.id)).map(entry => entry.tile);
+  const state = createDashboardDerivedMetricsMissingState();
+  state.formPlus7d = { value: 15, latestDayMs: 1, projectedDayMs: 2, trend8Weeks: [] };
+  const cleanup = vi.fn();
+  derived.watch.mockReturnValue(new Observable(subscriber => { subscriber.next(state); return cleanup; }));
+  const seed = { tiles: [], derivedMetrics: { formNow: { value: -20, latestDayMs: 1, trend8Weeks: [] } } };
+  let result;
+  const subscription = service.watchKpiContexts(user, tiles, seed).subscribe(value => result = value);
+  const kinds = derived.watch.mock.calls[0][1].metricKinds;
+  expect(new Set(kinds).size).toBe(kinds.length);
+  expect(kinds).not.toContain('form_now');
+  expect(kinds).toEqual(expect.arrayContaining(['freshness_forecast', 'form_plus_7d', 'intensity_distribution', 'easy_percent', 'hard_percent']));
+  expect(result.formNow).toBeUndefined();
+  expect(result.formPlus7d).toEqual(state.formPlus7d);
+  subscription.unsubscribe(); expect(cleanup).toHaveBeenCalledOnce();
+  expect(events.getEventsBy).not.toHaveBeenCalled(); expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+ });
+ it('uses the picker’s shared KPI seed without starting a second detail subscription', () => {
+  const entry = getDashboardChartCatalog().find(entry => entry.definition.id === 'kpi-acwr')!;
+  let result: DashboardChartPreview;
+  TestBed.inject(DashboardChartPreviewService).watch(user, entry.tile, { tiles: [], kpiPreviewState: 'loading' }).subscribe(value => result = value);
+  expect(result!.loading).toBe(true);
+  expect(derived.watch).not.toHaveBeenCalled();
+ });
  it('does nothing until subscribed, shares a bounded event query and releases its listener', () => {
   const cleanup = vi.fn(); events.getEventsBy.mockReturnValue(new Observable(subscriber => { subscriber.next(buildDashboardExampleEvents()); return cleanup; }));
   const service = TestBed.inject(DashboardChartPreviewService);

@@ -1,3 +1,4 @@
+import { resolveDashboardKpiSparklineStyle, resolveDashboardKpiThemeColor, resolveDashboardKpiTrend, resolveDashboardKpiTrendDelta, type KpiSparklineStyle } from '../../../helpers/dashboard-kpi-sparkline.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -99,12 +100,6 @@ interface KpiPresentation {
   secondaryValueText?: string;
   missingLabel?: string;
   trend: Array<{ time: number; value: number | null }>;
-}
-
-interface KpiSparklineStyle {
-  lineColor: string;
-  areaColor: string;
-  areaOpacity: number;
 }
 
 const KPI_SPARKLINE_INIT_WIDTH_PX = 96;
@@ -405,7 +400,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
           ? ''
           : `${context.changePct >= 0 ? '+' : ''}${this.formatPrimaryValue(context.changePct)}%`,
         missingLabel: 'No imported VO2 max',
-        trend: context?.trend || [],
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -420,7 +415,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         secondaryValueText: context ? `${context.sampleCount} samples` : '',
         primarySuffix: '%',
         missingLabel: 'No eligible durability evidence',
-        trend: context?.trend || [],
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -436,7 +431,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryLabel: 'Current TSB',
         secondaryLabel: 'Training-load balance',
         primarySigned: true,
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -447,7 +442,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryValue: context?.value ?? null,
         primaryLabel: 'Current CTL',
         secondaryLabel: '42-day TSS load',
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -458,7 +453,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryValue: context?.value ?? null,
         primaryLabel: 'Current ATL',
         secondaryLabel: '7-day TSS load',
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -482,7 +477,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryLabel: 'Projected TSB',
         secondaryLabel: 'Zero-load forecast',
         primarySigned: true,
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -498,7 +493,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryLabel: 'Latest weekly bucket',
         secondaryLabel: 'Weekly intensity split',
         primarySuffix: '%',
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -510,7 +505,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryLabel: 'Latest weekly bucket',
         secondaryLabel: 'Weekly intensity split',
         primarySuffix: '%',
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -526,7 +521,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         secondaryLabel: 'Percent delta',
         secondaryValueText: percentDeltaText,
         primarySigned: true,
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -541,7 +536,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryLabel: '7d CTL change',
         secondaryLabel: ctlTodayText ? 'Current CTL' : 'Fitness acceleration over the last 7 days',
         secondaryValueText: ctlTodayText,
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -556,7 +551,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         primaryLabel: 'Strain',
         secondaryLabel: monotonyText ? 'Monotony' : 'Weekly monotony and strain',
         secondaryValueText: monotonyText,
-        trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+        trend: resolveDashboardKpiTrend(this),
       };
     }
 
@@ -570,7 +565,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       primaryLabel: 'Ratio',
       secondaryLabel: acuteChronicText ? 'Acute / Chronic' : 'Acute 7-day vs chronic 28-day load',
       secondaryValueText: acuteChronicText,
-      trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      trend: resolveDashboardKpiTrend(this),
     };
   }
 
@@ -592,13 +587,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       primaryLabel: status.caption || 'Current state',
       secondaryLabel: detailParts.length ? 'Current signals' : 'Current form and ramp',
       secondaryValueText: detailParts.join(' / '),
-      trend: (this.formNow?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      trend: resolveDashboardKpiTrend(this),
     };
   }
 
   private resolveFitnessTrendPresentation(): KpiPresentation {
     const context = this.fitnessCtl || null;
-    const trendDelta = this.resolveTrendDelta(context?.trend8Weeks || [], 4);
+    const trendDelta = resolveDashboardKpiTrendDelta(context?.trend8Weeks || [], 4);
     const currentFitnessText = context?.value !== null && context?.value !== undefined
       ? this.formatPrimaryValue(context.value)
       : '';
@@ -610,13 +605,13 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       secondaryLabel: currentFitnessText ? 'Current CTL' : 'Recent CTL direction',
       secondaryValueText: currentFitnessText,
       primarySigned: true,
-      trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      trend: resolveDashboardKpiTrend(this),
     };
   }
 
   private resolveFatigueTrendPresentation(): KpiPresentation {
     const context = this.fatigueAtl || null;
-    const trendDelta = this.resolveTrendDelta(context?.trend8Weeks || [], 1);
+    const trendDelta = resolveDashboardKpiTrendDelta(context?.trend8Weeks || [], 1);
     const currentFatigueText = context?.value !== null && context?.value !== undefined
       ? this.formatPrimaryValue(context.value)
       : '';
@@ -628,7 +623,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       secondaryLabel: currentFatigueText ? 'Current ATL' : 'Short-term fatigue direction',
       secondaryValueText: currentFatigueText,
       primarySigned: true,
-      trend: (context?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      trend: resolveDashboardKpiTrend(this),
     };
   }
 
@@ -645,7 +640,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       primaryLabel: 'Zero-load days',
       secondaryLabel: formNowText ? 'Current TSB' : 'Estimated days to neutral',
       secondaryValueText: formNowText,
-      trend: (this.formNow?.trend8Weeks || []).map(point => ({ time: point.time, value: point.value })),
+      trend: resolveDashboardKpiTrend(this),
     };
   }
 
@@ -667,8 +662,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       primaryLabel: 'Latest week',
       secondaryLabel: secondaryParts.length ? 'Intensity mix' : 'Easy/moderate/hard split',
       secondaryValueText: secondaryParts.join(' / '),
-      trend: (this.hardPercent?.trend8Weeks || this.easyPercent?.trend8Weeks || [])
-        .map(point => ({ time: point.time, value: point.value })),
+      trend: resolveDashboardKpiTrend(this),
     };
   }
 
@@ -739,21 +733,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
     }
 
     return { days: 7, label: '7+ d' };
-  }
-
-  private resolveTrendDelta(
-    trend: ReadonlyArray<{ value: number | null | undefined }>,
-    preferredPointsAgo: number,
-  ): number | null {
-    const numericValues = trend
-      .map(point => this.toFiniteNumber(point.value))
-      .filter((value): value is number => value !== null);
-    if (numericValues.length < 2) {
-      return null;
-    }
-    const latest = numericValues[numericValues.length - 1];
-    const comparisonIndex = Math.max(0, numericValues.length - 1 - preferredPointsAgo);
-    return latest - numericValues[comparisonIndex];
   }
 
   private resolveCombinedStatus(
@@ -892,7 +871,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
   private buildOption(presentation: KpiPresentation): ChartOption {
     const chartWidth = this.chartDiv?.nativeElement?.clientWidth || 0;
     const style = buildDashboardEChartsStyleTokens(this.darkTheme, chartWidth);
-    const sparklineStyle = this.resolveSparklineStyle(style.trendLineColor);
+    const sparklineStyle = resolveDashboardKpiSparklineStyle(this, style.trendLineColor);
     const isMobileTooltipViewport = isEChartsMobileTooltipViewport();
     const rawTrendData = presentation.trend
       .filter(point => Number.isFinite(point.time))
@@ -919,7 +898,7 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
       hasNegativeTrend,
     );
     const negativeBandColor = this.withAlpha(
-      this.resolveThemeColor('--mat-sys-error', '#c62828'),
+      resolveDashboardKpiThemeColor('--mat-sys-error', '#c62828'),
       this.darkTheme ? 0.12 : 0.08,
     );
     const zeroGuideLineColor = this.withAlpha(style.axisColor, this.darkTheme ? 0.24 : 0.18);
@@ -1087,208 +1066,6 @@ export class ChartsKpiComponent implements AfterViewInit, OnChanges, OnDestroy {
         });
       },
     };
-  }
-
-  private resolveSparklineStyle(fallbackColor: string): KpiSparklineStyle {
-    const positiveColor = this.resolveThemeColor('--mat-sys-primary', '#1b7f38');
-    const negativeColor = this.resolveThemeColor('--mat-sys-error', '#c62828');
-    const neutralColor = this.resolveThemeColor('--mat-sys-secondary', '#2c6cb0');
-    const readinessColor = this.resolveThemeColor('--mat-sys-tertiary', '#7a3db8');
-    const hardLoadColor = this.resolveThemeColor('--mat-sys-error', '#e65100');
-    const monotonyColor = this.resolveThemeColor('--mat-sys-secondary', '#7b5e57');
-
-    if (
-      this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE
-      || this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE
-      || this.chartType === DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE
-    ) {
-      const readinessValue = this.chartType === DASHBOARD_FORM_NOW_KPI_CHART_TYPE
-        ? this.formNow?.value ?? null
-        : this.chartType === DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE
-          ? this.formPlus7d?.value ?? null
-          : this.formNow?.value ?? null;
-      return {
-        lineColor: this.resolveDirectionalColor(readinessValue, {
-          positiveColor,
-          negativeColor,
-          neutralColor: readinessColor,
-          neutralThreshold: 1,
-        }),
-        areaColor: readinessColor,
-        areaOpacity: 0.16,
-      };
-    }
-
-    if (
-      this.chartType === DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE
-      || this.chartType === DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE
-    ) {
-      return {
-        lineColor: positiveColor,
-        areaColor: positiveColor,
-        areaOpacity: 0.16,
-      };
-    }
-
-    if (this.chartType === DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE) {
-      return {
-        lineColor: hardLoadColor,
-        areaColor: hardLoadColor,
-        areaOpacity: 0.14,
-      };
-    }
-
-    if (this.chartType === DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE) {
-      const deltaValue = this.efficiencyDelta4w?.deltaAbs ?? null;
-      return {
-        lineColor: this.resolveDirectionalColor(deltaValue, {
-          positiveColor,
-          negativeColor,
-          neutralColor,
-          neutralThreshold: 0.02,
-        }),
-        areaColor: neutralColor,
-        areaOpacity: 0.14,
-      };
-    }
-
-    if (this.chartType === DASHBOARD_RAMP_RATE_KPI_CHART_TYPE) {
-      return {
-        lineColor: this.resolveDirectionalColor(this.rampRate?.rampRate ?? null, {
-          positiveColor,
-          negativeColor,
-          neutralColor,
-          neutralThreshold: 0.15,
-        }),
-        areaColor: neutralColor,
-        areaOpacity: 0.14,
-      };
-    }
-
-    if (this.chartType === DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE) {
-      return {
-        lineColor: this.resolveDirectionalColor(this.formNow?.value ?? null, {
-          positiveColor,
-          negativeColor,
-          neutralColor,
-          neutralThreshold: 5,
-        }),
-        areaColor: neutralColor,
-        areaOpacity: 0.14,
-      };
-    }
-
-    if (this.chartType === DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE) {
-      const fitnessDelta = this.resolveTrendDelta(this.fitnessCtl?.trend8Weeks || [], 4);
-      return {
-        lineColor: this.resolveDirectionalColor(fitnessDelta, {
-          positiveColor,
-          negativeColor,
-          neutralColor,
-          neutralThreshold: 0.5,
-        }),
-        areaColor: neutralColor,
-        areaOpacity: 0.14,
-      };
-    }
-
-    if (this.chartType === DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE) {
-      const fatigueDelta = this.resolveTrendDelta(this.fatigueAtl?.trend8Weeks || [], 1);
-      return {
-        lineColor: this.resolveDirectionalColor(fatigueDelta, {
-          positiveColor: hardLoadColor,
-          negativeColor: positiveColor,
-          neutralColor,
-          neutralThreshold: 0.5,
-        }),
-        areaColor: hardLoadColor,
-        areaOpacity: 0.12,
-      };
-    }
-
-    if (
-      this.chartType === DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE
-      || this.chartType === DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE
-    ) {
-      return {
-        lineColor: neutralColor,
-        areaColor: neutralColor,
-        areaOpacity: 0.14,
-      };
-    }
-
-    if (this.chartType === DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE) {
-      return {
-        lineColor: monotonyColor,
-        areaColor: monotonyColor,
-        areaOpacity: 0.12,
-      };
-    }
-
-    if (this.chartType === DASHBOARD_ACWR_KPI_CHART_TYPE) {
-      const acwrRatio = this.acwr?.ratio ?? null;
-      // Training-risk zones: <0.8 too low stimulus, >1.3 spike risk.
-      if (Number.isFinite(acwrRatio as number) && (acwrRatio as number) > 1.3) {
-        return {
-          lineColor: negativeColor,
-          areaColor: negativeColor,
-          areaOpacity: 0.14,
-        };
-      }
-      if (Number.isFinite(acwrRatio as number) && (acwrRatio as number) < 0.8) {
-        return {
-          lineColor: this.resolveThemeColor('--mat-sys-tertiary', '#8854d0'),
-          areaColor: this.resolveThemeColor('--mat-sys-tertiary', '#8854d0'),
-          areaOpacity: 0.12,
-        };
-      }
-      return {
-        lineColor: positiveColor,
-        areaColor: positiveColor,
-        areaOpacity: 0.16,
-      };
-    }
-
-    return {
-      lineColor: fallbackColor,
-      areaColor: fallbackColor,
-      areaOpacity: 0.12,
-    };
-  }
-
-  private resolveThemeColor(cssVariableName: string, fallbackColor: string): string {
-    if (typeof window === 'undefined') {
-      return fallbackColor;
-    }
-    const color = window.getComputedStyle(document.documentElement)
-      .getPropertyValue(cssVariableName)
-      .trim();
-    if (!color || color.startsWith('var(')) {
-      return fallbackColor;
-    }
-    return color;
-  }
-
-  private resolveDirectionalColor(
-    value: number | null | undefined,
-    options: {
-      positiveColor: string;
-      negativeColor: string;
-      neutralColor: string;
-      neutralThreshold: number;
-    },
-  ): string {
-    const numericValue = Number(value);
-    if (!Number.isFinite(numericValue)) {
-      return options.neutralColor;
-    }
-    if (numericValue > options.neutralThreshold) {
-      return options.positiveColor;
-    }
-    if (numericValue < -options.neutralThreshold) {
-      return options.negativeColor;
-    }
-    return options.neutralColor;
   }
 
   private withAlpha(color: string, alpha: number): string {

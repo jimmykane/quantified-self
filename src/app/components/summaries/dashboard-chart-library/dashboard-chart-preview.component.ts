@@ -3,7 +3,7 @@ import { Subscription } from 'rxjs';
 import { TileSettingsInterface, TileTypes } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import { DashboardChartPreviewService } from '../../../services/dashboard-chart-preview.service';
-import { DashboardPreviewInput, DashboardChartPreview, buildDashboardThumbnailPreview } from '../../../helpers/dashboard-chart-preview.helper';
+import { DashboardPreviewInput, DashboardChartPreview, buildDashboardThumbnailPreview, dashboardPreviewSourceLabel } from '../../../helpers/dashboard-chart-preview.helper';
 import { DashboardChartTileViewModel, DashboardMapTileViewModel } from '../../../helpers/dashboard-tile-view-model.helper';
 import { buildActivityCalendarViewModel } from '../../../helpers/activity-calendar.helper';
 import { DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE, isDashboardKpiChartType, isDashboardHrvTrendChartType } from '../../../helpers/dashboard-special-chart-types';
@@ -17,6 +17,7 @@ export class DashboardChartPreviewComponent implements OnChanges, OnDestroy {
   @Input() thumbnail = false;
   @Input() darkTheme = false;
   readonly preview = signal<DashboardChartPreview | null>(null);
+  readonly sourceLabel = computed(() => this.preview() ? dashboardPreviewSourceLabel(this.preview()!) : '');
   readonly chart = computed(() => this.preview()?.tile.type === TileTypes.Chart ? this.preview()!.tile as DashboardChartTileViewModel : null);
   readonly isHrv = computed(() => isDashboardHrvTrendChartType(this.chart()?.chartType));
   readonly isKpi = computed(() => isDashboardKpiChartType(this.chart()?.chartType));

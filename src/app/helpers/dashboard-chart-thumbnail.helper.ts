@@ -3,7 +3,7 @@ import type { EChartsOption, LineSeriesOption, SeriesOption } from 'echarts';
 import type { DashboardChartPreview } from './dashboard-chart-preview.helper';
 import type { DashboardChartTileViewModel, DashboardMapTileViewModel } from './dashboard-tile-view-model.helper';
 import type { DashboardFormPoint } from './dashboard-form.helper';
-import type { DashboardDerivedTrendPoint } from './dashboard-derived-metrics.helper';
+import { resolveDashboardKpiSparklineStyle, resolveDashboardKpiTrend } from './dashboard-kpi-sparkline.helper';
 import { buildDashboardCartesianPoints } from './dashboard-echarts-cartesian.helper';
 import { buildOfficialEChartsThemeTokens } from './echarts-theme.helper';
 import { buildRoutePreviewMapTracks } from './route-preview-map.helper';
@@ -101,7 +101,7 @@ export function buildDashboardChartThumbnailOption(preview: DashboardChartPrevie
       line(points.map(point => [point.dayMs, point.atl]), '#e91e63'),
       line(points.map(point => [point.dayMs, point.formSameDay]), '#4caf50', false, true)]);
   }
-  if (type === C.DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE || type === C.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) {
+  if (type === C.DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE) {
     const weeks = (tile.intensityDistribution?.weeks || []).slice(-12);
     return bars([weeks.map(week => week.easySeconds), weeks.map(week => week.moderateSeconds), weeks.map(week => week.hardSeconds)],
       ['#43a047', '#fb8c00', '#e53935'], true);
@@ -132,25 +132,9 @@ export function buildDashboardChartThumbnailOption(preview: DashboardChartPrevie
       [AppColors.DeepBlue, AppColors.Blue, AppColors.Purple], true);
   }
   if (C.isDashboardKpiChartType(type)) {
-    const trends: Record<string, DashboardDerivedTrendPoint[] | undefined> = {
-      [C.DASHBOARD_ACWR_KPI_CHART_TYPE]: tile.acwr?.trend8Weeks,
-      [C.DASHBOARD_RAMP_RATE_KPI_CHART_TYPE]: tile.rampRate?.trend8Weeks,
-      [C.DASHBOARD_MONOTONY_STRAIN_KPI_CHART_TYPE]: tile.monotonyStrain?.trend8Weeks,
-      [C.DASHBOARD_LOAD_STATUS_KPI_CHART_TYPE]: tile.formNow?.trend8Weeks,
-      [C.DASHBOARD_FORM_NOW_KPI_CHART_TYPE]: tile.formNow?.trend8Weeks,
-      [C.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE]: tile.formNow?.trend8Weeks,
-      [C.DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE]: tile.fitnessCtl?.trend8Weeks,
-      [C.DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE]: tile.fitnessCtl?.trend8Weeks,
-      [C.DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE]: tile.fatigueAtl?.trend8Weeks,
-      [C.DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE]: tile.fatigueAtl?.trend8Weeks,
-      [C.DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE]: tile.formPlus7d?.trend8Weeks,
-      [C.DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE]: tile.easyPercent?.trend8Weeks,
-      [C.DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE]: tile.hardPercent?.trend8Weeks,
-      [C.DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE]: tile.efficiencyDelta4w?.trend8Weeks,
-      [C.DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE]: tile.aerobicCapacity?.trend,
-      [C.DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE]: tile.aerobicDurability?.trend,
-    };
-    return cartesian([line((trends[type] || []).map(point => [point.time, point.value]), AppColors.Blue, true)]);
+    const style = resolveDashboardKpiSparklineStyle(tile, theme.trendLineColor);
+    const series = line(resolveDashboardKpiTrend(tile).map(point => [point.time, point.value]), style.lineColor);
+    return cartesian([{ ...series, smooth: true, areaStyle: { color: style.areaColor, opacity: style.areaOpacity } }]);
   }
 
   const points = sample(buildDashboardCartesianPoints({ data: tile.data, chartDataValueType: tile.dataValueType,

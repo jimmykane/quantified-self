@@ -222,9 +222,13 @@ New catalog entries need an example and catalog coverage. Homepage signal fixtur
 `DashboardChartPreviewService` reads only. Row thumbnails use the shared ECharts host and a bounded, decorative shape
 from the existing preview view model, with no axes, values, tooltips, focus targets, or haptic handlers. The row's
 accessible description includes its format and data source. Preview models are cached across search/group filtering;
-closing the picker disposes its thumbnail charts. Thumbnail rendering uses loaded context or labelled examples and
-does not start additional reads. Selecting a
-chart lazily reads only the missing source (bounded activity window, 14 days of sleep, recent route previews, or the
+closing the picker disposes its thumbnail charts. Opening the KPI picker subscribes once to its missing prepared
+metric dependencies, deduplicated by kind and scoped to the current owner. It reuses already loaded contexts, shares
+the resulting seed with list and detail previews, and releases those reads on close or owner change. Filtering does
+not resubscribe. KPI trends and semantic theme colors come from `dashboard-kpi-sparkline.helper.ts`, shared with the
+full KPI renderer; Training Balance uses the same percentage trend. A real headline without history stays real,
+with no invented sparkline. Other thumbnails use loaded context or labelled examples without additional reads.
+Selecting a chart lazily reads only the missing source (bounded activity window, 14 days of sleep, recent route previews, or the
 required prepared metric snapshots). Subscriptions are shared within a library and released when previews are destroyed.
 A historically navigated event/sleep window cannot supply a current preview. Preview event reads exclude merged events.
 Preview paths never call metric ensure/rebuild APIs or persist settings. Synthetic examples remain labelled during loading

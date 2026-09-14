@@ -13,7 +13,7 @@ import type { SleepSession } from '@shared/sleep';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
 import type { DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
 
-export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & { tileEventAnchorsByOrder?: Record<number, number | null> };
+export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & { tileEventAnchorsByOrder?: Record<number, number | null>; kpiPreviewState?: 'loading' | 'ready' | 'error' };
 /** Reuse only a current window; saved orders cannot be used for candidate previews. */
 export function buildDashboardPreviewSeed(tile: TileSettingsInterface, seed: DashboardPreviewInput, now = Date.now()): DashboardPreviewInput {
   const range = normalizeDashboardTileEventFilters(tile['eventFilters']).range;
@@ -42,14 +42,17 @@ export function buildDashboardThumbnailPreview(tile: TileSettingsInterface, seed
   const input = buildDashboardPreviewSeed(tile, seed);
   const existing = buildDashboardTileViewModels(input)[0];
   const type = `${tile['chartType'] || ''}`;
-  if (C.isDashboardKpiChartType(type) && type !== C.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) {
-    const context = existing[contexts[type]] as { trend8Weeks?: { value: number | null }[]; trend?: { value: number | null }[] } | undefined;
-    // A headline alone cannot draw a sparkline. Keep its illustrative fallback labelled as example data.
-    if (!(context?.trend8Weeks || context?.trend)?.some(point => Number.isFinite(point.value))) return buildDashboardExamplePreview(tile);
-  }
-  return dashboardPreviewHasData(existing, input)
+  const preview: DashboardChartPreview = dashboardPreviewHasData(existing, input)
     ? { tile: existing, source: 'user', loading: false, note: '', calendarEvents: input.events || [], anchorMs: Date.now() }
     : buildDashboardExamplePreview(tile);
+  if (C.isDashboardKpiChartType(type) && input.kpiPreviewState === 'loading'
+    && dashboardPreviewMissingMetricKinds([tile], input).length) return { ...preview, loading: true };
+  return preview;
+}
+
+export function dashboardPreviewSourceLabel(preview: DashboardChartPreview): string {
+  const source = preview.source === 'user' ? 'Your data' : 'Example data';
+  return preview.loading ? `${source} · Loading your data…` : source;
 }
 
 const DAY = 86400000;
@@ -76,7 +79,24 @@ const metricKinds: Partial<Record<keyof DashboardChartTileViewModel, DerivedMetr
   powerCurve: [M.PowerCurve], aerobicCapacity: [M.TrainingCapacity], aerobicDurability: [M.TrainingDurability],
 };
 export function dashboardPreviewMetricKinds(tile: TileSettingsInterface): DerivedMetricKind[] {
+  if (`${tile['chartType']}` === K.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE) return [M.FormNow, M.FreshnessForecast, M.FormPlus7d];
+  if (`${tile['chartType']}` === K.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) return [M.IntensityDistribution, M.EasyPercent, M.HardPercent];
   return metricKinds[contexts[(tile as TileChartSettingsInterface).chartType]] || [];
+}
+/** Snapshot context keys used by the picker; these are read-only dependencies, never rebuild requests. */
+export const DASHBOARD_PREVIEW_METRIC_CONTEXTS: Partial<Record<DerivedMetricKind, keyof NonNullable<DashboardPreviewInput['derivedMetrics']>>> = {
+  [M.Form]: 'formPoints', [M.FormNow]: 'formNow', [M.RecoveryNow]: 'recoveryNow', [M.Acwr]: 'acwr',
+  [M.RampRate]: 'rampRate', [M.MonotonyStrain]: 'monotonyStrain', [M.FormPlus7d]: 'formPlus7d',
+  [M.EasyPercent]: 'easyPercent', [M.HardPercent]: 'hardPercent', [M.EfficiencyDelta4w]: 'efficiencyDelta4w',
+  [M.FreshnessForecast]: 'freshnessForecast', [M.IntensityDistribution]: 'intensityDistribution',
+  [M.EfficiencyTrend]: 'efficiencyTrend', [M.PowerCurve]: 'powerCurve',
+  [M.TrainingCapacity]: 'trainingCapacity', [M.TrainingDurability]: 'trainingDurability',
+};
+export function dashboardPreviewMissingMetricKinds(tiles: readonly TileSettingsInterface[], seed: DashboardPreviewInput): DerivedMetricKind[] {
+  return [...new Set(tiles.flatMap(dashboardPreviewMetricKinds))].filter(kind => {
+    const value = seed.derivedMetrics?.[DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind]];
+    return value == null || Array.isArray(value) && !value.length;
+  });
 }
 export function dashboardPreviewHasData(tile: DashboardTileViewModel, input: DashboardPreviewInput): boolean {
   if (tile.type === TileTypes.Map) return tile['mapSource'] === 'routes' ? !!tile['routePreviews']?.length : !!tile['events']?.length;
