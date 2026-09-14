@@ -66,7 +66,9 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
     actual: previous?.actual ?? null, acceptedDigest: previous?.acceptedDigest ?? null,
     contentDigest: deliveryContentDigest(context.workout, intent.timeZone), acceptedContentDigest: previous?.acceptedContentDigest ?? null,
     attempt: previous?.attempt ?? null, lease: previous?.lease ?? null,
-    retries: changed || retried ? 0 : previous.retries, retryAtMs: changed || retried ? 0 : previous.retryAtMs,
+    retries: changed || retried ? 0 : previous.retries,
+    retryAtMs: Math.max(changed || retried ? 0 : previous.retryAtMs, previous?.providerNotBeforeMs ?? 0),
+    providerNotBeforeMs: previous?.providerNotBeforeMs ?? 0,
     blockedConnectionGeneration: previous?.blockedConnectionGeneration ?? null,
     lastAttemptAtMs: previous?.lastAttemptAtMs ?? null, lastAcceptedAtMs: previous?.lastAcceptedAtMs ?? null,
     updatedAtMs: runtime.now() };
@@ -78,6 +80,9 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   if (previous?.status === 'needs_attention' && previous.attempt && !retried) record.status = 'needs_attention';
   if (previous?.status === 'failed' && !changed && !retried) record.status = 'failed';
   if (previous?.status === 'retrying' && !changed && !retried && previous.retryAtMs > runtime.now()) record.status = 'retrying';
+  if ((record.providerNotBeforeMs ?? 0) > runtime.now() && ['pending', 'stopped', 'paused_plan'].includes(record.status)
+    && (record.attempt || (record.desired === 'present' && record.acceptedDigest !== record.desiredDigest)
+      || (record.desired === 'absent' && record.actual))) record.status = 'retrying';
   if (record.desired === 'absent' && !record.actual && !record.attempt) record.status = 'removed';
   return record;
 }

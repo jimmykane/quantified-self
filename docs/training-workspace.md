@@ -404,8 +404,9 @@ readiness flags and delivery entitlement enforcement are unchanged. Broader roll
 
 The common delivery implementation lives in `functions/src/training-plans/delivery/`, with browser-safe v1 contracts in
 `shared/training-provider-delivery.ts`. It is independent of schedule history and leaves the exact `WorkoutStructureV1`
-JSON and Sports Lib conversion/formatting boundary unchanged. Real transports remain unavailable; the deterministic
-fake exists only in `delivery/test-support/`, is excluded from the Functions build, and has no browser/configuration switch.
+JSON and Sports Lib conversion/formatting boundary unchanged. Real transports remain unavailable behind disabled
+provider switches. The Garmin adapter is implemented and tested offline under #647 (see below); deterministic fakes
+exist only in `delivery/test-support/`, are excluded from the Functions build, and have no browser/configuration switch.
 
 `previewTrainingProviderDelivery` and `mutateTrainingProviderDelivery` are focused, authenticated, App Check-enforced
 commands. Backend execution is necessary to resolve privileged connection authority and create background work; owner
@@ -447,14 +448,27 @@ can inspect the original unfinished operation with renewed authority. Auth/permi
 failed connection generation. Explicit disconnect increments the consent epoch in the existing OAuth disconnect's initial
 transaction; subscription-driven disconnect and authentication failures do not invalidate consent.
 Recovery is transport work too: an auth/permission-blocked generation cannot inspect an unfinished operation. After
-inspection proves nonacceptance, the worker repeats admission before executing; Stop, edits, Pro expiry, disconnect or
+inspection proves nonacceptance or a safely resumable partial operation, the worker repeats admission before executing; Stop, edits, Pro expiry, disconnect or
 account deletion during inspection cannot release the obsolete operation.
+Adapters receive the same admission guard before each individual HTTP request, including after credential refresh and
+the request-start journal. Reads can inspect an obsolete attempt; writes require its exact current intent and an unexpired
+lease. A v1 private progress journal distinguishes `ready`, `started`, definitively `rejected`, and `accepted` steps.
+New operations start with explicit null progress; missing legacy progress is unknown, not permission to repeat a create.
+Request-start checkpoints require the current lease; late acceptance evidence is retained even when that lease expired.
+Starting a mutating request clears the previous fully accepted payload digests, while retaining all remote IDs. An
+interrupted edit or removal may already have changed the provider; reverting QS to an older version must inspect and
+reconcile that version again instead of treating its historical success digest as current. Status projections therefore
+show the retained copy as different until the complete current operation is confirmed.
+If another lease/attempt has taken over, accepted evidence goes into immutable-per-worker `attempts/*/lateAcceptances/*`
+instead of overwriting the newer journal. Recovery is blocked for operator inspection even on Retry; current workers
+lose admission. The existing recursive account cleanup covers these nested evidence records.
 
 Every accepted artifact checkpoint survives a newer authored revision. The final acceptance records which operation and
 content were accepted, then reconciles current intent. Final upsert acceptance must identify at least one artifact and
 final removal must return none; inconsistent acknowledgements keep the operation unresolved for inspection instead of
 publishing false success. An interrupted/ambiguous operation is inspected before any repeat;
-only adapter-proven nonacceptance permits execution with the same operation identity. Uncertain inspection stops in
+only adapter-proven nonacceptance or a retained-ID, safely resumable partial operation permits continued execution.
+Superseded partial operations retain actual IDs for current-intent reconciliation and withdrawal. Uncertain inspection stops in
 `needs_attention`; Retry does not clear that evidence or blindly repeat a create. Account deletion fences all further local
 writes, including late acceptance checkpoints. Provider-held copies may remain after revoked access. Account cleanup
 recursively removes all five new user subtrees and all UID-associated top-level jobs; the recovery dispatcher also removes
@@ -501,7 +515,7 @@ HTTP calls, including changes during inspection and failed withdrawals after sou
 addition to the Functions unit suite. Use `npm run test:rules` for owner/cross-user/write/internal-record denial. Frontend coverage includes
 `training-delivery-dialog.component.spec.ts`, `training-delivery.service.spec.ts` and the existing Plans/calendar suites.
 Build Functions and run `npm --prefix functions run secrets:check`; there are no new secrets. Deploy indexes/Functions and
-any receipt TTL policy only with separate approval. Do not add provider HTTP transports until #645 and #647–#650 pass
+any receipt TTL policy only with separate approval. Do not enable provider HTTP transports until #645 and #647–#650 pass
 their contract/sandbox gates; completion matching remains #651 and Sports Lib extraction #654.
 
 For isolated visual QA, create a temporary directory and set `TRAINING_DELIVERY_QA_DIR` to it when running
@@ -523,8 +537,9 @@ Production dashboards, alerts, certification and manual enablement remain #655.
 ### Provider proof status
 
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four delivery switches remain
-false. Garmin, COROS, Wahoo, and Suunto are `fixture-only`: pure serializers and redacted fixtures prove documented
-mapping behavior, but there is no provider transport, token use, schedule write, ZIP upload, or production action. The
+false. Garmin, COROS, Wahoo, and Suunto remain `fixture-only`: serializers prove documented mapping, and Garmin now
+also has an offline-tested HTTP adapter. No real provider request, token use, schedule write, ZIP upload, or production
+action was performed for this implementation. COROS, Wahoo and Suunto have no production transport binding yet. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -538,6 +553,53 @@ combinations fail instead of being approximated. The common lifecycle is proved 
 real provider HTTP, callbacks and sandbox certification remain #645 and #647–#650. Rollout, AI, templates, completion
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
+
+### Garmin workout/calendar adapter (#647)
+
+`delivery/garmin/` binds the existing serializer to Training API V2. It creates workout content using the partner
+contract's exact `POST /workoutportal/workout/v2` path; GET/PUT/DELETE use `/training-api/workout/v2/{workoutId}`.
+Calendar entries use a separate `/training-api/schedule/` lifecycle. No private endpoint is guessed and no callback is
+added. Updates inspect and retain workout, schedule and owner IDs; the workout's owner ID is not its OAuth user ID.
+Decimal Long IDs stay exact strings in the private ledger and numeric Long values on the wire. A date-only change
+updates the retained schedule without rewriting unchanged content. Withdrawal deletes the schedule before the workout,
+and source deletion does not delete the delivery ledger needed to finish that withdrawal.
+
+Each request resolves one active server-owned Garmin credential with `WORKOUT_IMPORT`, a current connection generation
+and one unambiguous account. Missing permission produces a safe reconnect explanation in preview/status. Shared token
+refresh leases and lifecycle fencing are reused; authority is rechecked after refresh and before HTTP. Only
+`processTrainingDeliveryTask` gains the existing Garmin OAuth secret pair; commands/dispatchers gain no secrets.
+The HTTP client admits only exact Garmin paths/host, rejects redirects, times out after 10 seconds and caps responses
+at 2 MiB. It never persists/logs raw response bodies, credentials or provider errors. HTTP 401 blocks for reconnect;
+403/412 block for permission repair; 429 honors Retry-After, defaulting conservatively to 24 hours when quota is unknown.
+The private ledger retains the adapter's not-before deadline independently of ordinary retry counters, so an edit,
+Stop/resume, or explicit Retry cannot shorten it. This is per-delivery backoff, not account/partner quota pacing; the
+latter remains part of #698's certification gate. There is no nested HTTP retry loop.
+Only documented synchronous success codes confirm completion. Unexpected successful statuses (including 202) remain
+unconfirmed; an empty/null successful GET never means the artifact is absent. Only an explicit 404 enters the missing
+artifact path, with actual provider 404 semantics still subject to certification. Schedule PUT accepts an empty 204;
+a 200 response must supply the validated schedule record before QS records the new date.
+
+Every accepted artifact is journaled before another write. An interrupted schedule create can recover through one exact
+workout/date match in the date-range lookup; empty or ambiguous results are not proof of nonacceptance. Retained-ID
+PUT/DELETE operations are inspected before safe continuation. The documented API supplies neither a first-workout-create
+idempotency key nor a lookup by external workout identity: an accepted first POST with a lost ID stops in
+`needs_attention`, including on explicit Retry. It must not be retried by title, `workoutSourceId`, a guessed endpoint or
+a fresh operation ID. Such copies require operator/provider reconciliation; the adapter does not claim exactly-once
+first creates. The QS scheduling horizon is 365 days as a conservative product policy, not a documented Garmin maximum.
+Past/provider-confirmed completed artifacts are not rewritten or removed; a schedule observed moved into the past is
+retained with that observed date. No completed-activity matching or new provider hook is claimed (#651).
+
+Verification combines synthetic request/response fixtures (including signed-64-bit boundary IDs), HTTP/authorization/
+transport unit tests and real Firestore worker transactions through the excluded synthetic server. It covers duplicate
+workers, edits/Stop/expiry/lease expiry between artifacts, edit-then-revert after remote acceptance, Retry-After across
+edits and manual Retry, malformed/empty/asynchronous success responses, lost responses and persistence, same-account permission repair,
+changed-account reconnect, disconnect and account deletion. Run `npm run test:training-delivery` plus the existing Rules,
+secret registration and frontend suites. Sandbox/device certification remains a separate gate: confirm the documented
+create path in the evaluation tenant, actual response/404 semantics and schedule-list wrapper/pagination, quota/horizon,
+Workout Import approval, all CRUD/recovery scenarios and representative device rendering before enabling Garmin.
+The focused epic subissue #698 owns this remaining sandbox/device evidence, request-pacing validation and operator
+recovery procedure. Keep #647 open until its certification acceptance is evidenced; #645 owns access/contract questions
+and #655 owns production rollout. None of these tests constitutes a real Garmin sandbox or watch result.
 
 ### Product analytics
 

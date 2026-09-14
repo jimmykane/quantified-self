@@ -27,8 +27,8 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   // Explicit disconnect ends consent, but must NOT withdraw provider copies.
   if (setting && setting.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
   if (!setting && ledger && ledger.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
-  if (connection.state !== 'connected') return result('preserve', connection.state);
-  if (ledger?.blockedConnectionGeneration === connection.generation) return result('preserve', ledger.status);
+  if (connection.state !== 'connected') return result('preserve', connection.state, '', connection.issues ?? []);
+  if (ledger?.blockedConnectionGeneration === connection.generation) return result('preserve', ledger.status, '', ledger.issues);
   if (ledger && ledger.destinationKey !== connection.destinationKey) return result('preserve', 'fresh_consent_required');
   if (setting && setting.destinationKey !== connection.destinationKey) return result('preserve', 'fresh_consent_required');
   const validConsent = setting?.enabled && (setting.scope === 'plan'

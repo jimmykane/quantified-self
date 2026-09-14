@@ -35,6 +35,8 @@ describe('help.content', () => {
     expect(content).toContain('content, not old provider consent');
     expect(content).toContain('Pro expiry pauses creates and updates');
     expect(content).toContain('IANA time zone');
+    expect(content).toContain('Workout Import');
+    expect(content).toContain('Retry may still require support');
   });
   it('explains the compact mobile Health metric title picker and remembered selection', () => {
     const health = HELP_SECTIONS.find(section => section.id === 'health')?.content;
