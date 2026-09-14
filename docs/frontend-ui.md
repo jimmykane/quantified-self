@@ -160,7 +160,10 @@ indicator row for activity circles and Timeline notes. Note colors sit under the
 a short bottom rail. Only wholly empty trailing weeks are omitted (4–6 weeks remain, with weekday alignment preserved).
 The sheet's content scrolls when the viewport cannot accommodate the month. The header stays outside that scroll area,
 and the content respects the bottom safe-area inset. Do not constrain this popup to the dashboard tile's fixed height.
-The default `fillHeight=true` preserves dashboard tiles and chart-library previews; full Month, Week, and Year grids
+The default `fillHeight=true` makes dashboard tiles and chart-library previews distribute their visible weeks evenly
+across the available height at all viewport widths. Compact month grids with hidden outside dates omit wholly empty
+trailing weeks in both layouts, while retaining leading blanks and the original 42-day source/query model. Preview
+wrappers pass their fixed height through to the grid. Full Month, Week, and Year grids retain their existing rows and
 do not opt into the compact height-filling class.
 
 ## Dashboard chart picker
