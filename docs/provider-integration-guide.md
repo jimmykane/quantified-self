@@ -535,12 +535,14 @@ Garmin's connection overview displays all known permissions per browser-safe acc
 Workout/Course Import grants. Explicit empty arrays mean not granted; absent or malformed arrays mean not reported,
 not denial or endless loading. Extra provider permission names remain visible as text, and separate accounts' grants
 are never combined for display or authority. The rows are a last-reported snapshot, not a live Garmin check or local
-consent toggles. **Manage in Garmin** opens the existing connected-app management path; **Reconnect** uses the existing
-Pro-gated OAuth flow even when the account still appears connected. Do not require an explicit disconnect to refresh
-consent: it disables other sync routes. Pending disconnect/reconnect actions cannot overlap, and merely rendering the
+consent toggles. **Manage in Garmin** opens the existing connected-app management path. Healthy connections have no
+**Reconnect** or reauthorization upsell, including when grants are missing or unknown. **Reconnect** remains only for
+reconnect-required or manual-review disconnect recovery; disconnected accounts retain **Connect**. Permission callbacks
+update the saved grants. Do not require an explicit disconnect to refresh consent: it disables other sync routes.
+Pending disconnect/reconnect actions cannot overlap, and merely rendering the
 view does not contact Garmin, refresh credentials, change grants, or opt workouts into delivery.
 History and route-upload tools distinguish a pending projection from an unreported/malformed permission snapshot;
-the latter shows a reconnect recovery instruction instead of a permanent spinner. Permission checks normalize the
+the latter directs users to Garmin permission management or support instead of a permanent spinner. Permission checks normalize the
 same grant names as the overview. Locked Garmin tools use explicit keyboard-accessible Pro buttons, not clickable
 panels, with one selection haptic per action.
 

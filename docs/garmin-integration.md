@@ -85,13 +85,14 @@ Each account keeps its own grants: `Granted`, `Not granted` for an explicitly ab
 saved permissions array is missing/malformed. The view includes all six documented permission families and any extra
 provider-reported scope names without implying QS feature availability. It never reads OAuth documents or writes grants.
 Unknown legacy permissions do not hide the known account behind a permanent loading message.
-History and route-upload tools also distinguish unknown permissions from an active load, and explain how to close the
-tool and reconnect from the overview. Their permission checks use the same trimmed grant names as the displayed rows;
+History and route-upload tools also distinguish unknown permissions from an active load, and direct users to Garmin
+permission management or support when details remain unavailable. Their checks use the same trimmed grant names as the displayed rows;
 malformed arrays remain unknown. Pro prompts are focusable Material buttons with a single selection haptic.
 
 **Manage in Garmin** opens Garmin Connect's account/Connected Apps management; choose Quantified Self and manage the
-permissions Garmin exposes there. **Reconnect** is also available for a connected account and refreshes authorization
-through the existing Pro-gated OAuth flow, without first performing the destructive explicit-disconnect lifecycle.
+permissions Garmin exposes there. Healthy connections have no **Reconnect** or reauthorization upsell action, even
+when individual grants are missing or unreported. **Reconnect** is reserved for reconnect-required and manual-review
+disconnect recovery; disconnected users retain **Connect**. Permission callbacks update the saved grants automatically.
 Viewing grants and opening Garmin's management UI do not require Pro. A pending OAuth start disables Disconnect and
 other connection actions; disconnect-pending still blocks ordinary reconnect. Loading a new account hides the prior
 permission snapshot. Permission callbacks and successful OAuth continue to update the safe projection; there is no

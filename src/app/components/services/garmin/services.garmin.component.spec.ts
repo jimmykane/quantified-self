@@ -170,9 +170,10 @@ describe('ServicesGarminComponent', () => {
             fixture.detectChanges();
         });
 
-        it('shows all permissions and Reconnect for an already-connected user without creating work', () => {
+        it('shows permissions and management without Reconnect for a healthy connection', () => {
             expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(6);
-            expect(fixture.nativeElement.querySelector('.qs-mat-primary')?.textContent).toContain('Reconnect');
+            expect(fixture.nativeElement.querySelector('.qs-mat-primary')).toBeNull();
+            expect(fixture.nativeElement.textContent).not.toContain('Reconnect');
             expect(fixture.nativeElement.textContent).toContain('Manage in Garmin');
             expect(component.isConnectedToService()).toBe(true);
             expect(component.isReconnectRequired).toBe(false);
@@ -193,6 +194,8 @@ describe('ServicesGarminComponent', () => {
         });
 
         it('reuses OAuth without disconnecting and suppresses duplicate Reconnect clicks while pending', async () => {
+            component.serviceMeta = { connectionState: 'reconnect_required' } as typeof component.serviceMeta;
+            fixture.detectChanges();
             let resolve!: (value: { redirect_uri: string }) => void;
             mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockReturnValue(new Promise(value => { resolve = value; }));
             const button = fixture.nativeElement.querySelector('.qs-mat-primary') as HTMLButtonElement;
@@ -215,12 +218,16 @@ describe('ServicesGarminComponent', () => {
             const manage = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
                 .find(item => item.textContent?.includes('Manage in Garmin'))!;
             expect(manage.disabled).toBe(false);
+            expect(fixture.nativeElement.querySelector('.qs-mat-primary')).toBeNull();
+            component.serviceMeta = { connectionState: 'reconnect_required' } as typeof component.serviceMeta;
+            fixture.detectChanges();
             expect(fixture.nativeElement.querySelector('.qs-mat-primary')?.textContent).toContain('View Pro plans');
             await component.connectWithService(new Event('click'));
             expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
         });
 
         it('shows a retryable OAuth failure with one error haptic and leaves grants unchanged', async () => {
+            component.serviceMeta = { connectionState: 'reconnect_required' } as typeof component.serviceMeta;
             mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockRejectedValue(new Error('Unavailable'));
             const before = component.serviceTokens;
             await component.connectWithService(new Event('click')); fixture.detectChanges();
@@ -229,6 +236,26 @@ describe('ServicesGarminComponent', () => {
             expect(component.serviceTokens).toEqual(before);
             expect(haptics.selection).toHaveBeenCalledOnce(); expect(haptics.error).toHaveBeenCalledOnce();
             expect(haptics.success).not.toHaveBeenCalled();
+        });
+
+        it('does not turn missing or unknown permissions into a reconnect action', () => {
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID, settings: {} } as typeof component.user;
+            for (const permissions of [[], undefined]) {
+                component.serviceTokens = [{ providerUserId: 'garmin-account', ...(permissions ? { permissions } : {}) }];
+                fixture.detectChanges();
+                expect(component.shouldShowConnectAction).toBe(false);
+                expect(fixture.nativeElement.querySelector('.qs-mat-primary')).toBeNull();
+                expect(fixture.nativeElement.textContent).not.toContain('Reconnect');
+            }
+        });
+
+        it('keeps Connect available after disconnection', () => {
+            component.serviceTokens = [];
+            component.serviceMeta = undefined;
+            fixture.detectChanges();
+            expect(component.shouldShowConnectAction).toBe(true);
+            expect(component.connectButtonLabel).toBe('Connect');
+            expect(fixture.nativeElement.querySelector('.qs-mat-primary')?.textContent).toContain('Connect');
         });
 
         it('does not overlap a pending disconnect with permission management or ordinary reconnect', () => {
@@ -450,7 +477,7 @@ describe('ServicesGarminComponent', () => {
 
         expect(component.hasGarminCourseImportPermission).toBe(false);
         expect(fixture.nativeElement.querySelector('app-upload-route-to-service')).toBeFalsy();
-        expect(fixture.nativeElement.textContent).toContain('Reconnect Garmin and allow Course Import before sending routes.');
+        expect(fixture.nativeElement.textContent).toContain('Allow Course Import in Garmin Connect before sending routes.');
     });
 
     it('renders disconnect beside the connected account details', () => {
@@ -634,7 +661,8 @@ describe('ServicesGarminComponent', () => {
             component.activeProviderTool = tool;
             component.serviceTokens = [{ providerUserId: 'legacy-account' }];
             fixture.detectChanges();
-            expect(fixture.nativeElement.textContent).toContain('Close this tool and choose Reconnect');
+            expect(fixture.nativeElement.textContent).toContain('Close this tool and use Manage in Garmin');
+            expect(fixture.nativeElement.textContent).not.toContain('choose Reconnect');
             expect(fixture.nativeElement.querySelector('app-service-syncing-state')).toBeNull();
             expect(fixture.nativeElement.querySelector('app-history-import-form, app-upload-route-to-service')).toBeNull();
             component.isLoading = true;

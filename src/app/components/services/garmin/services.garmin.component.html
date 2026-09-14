@@ -9,13 +9,14 @@
     <li><strong>Web:</strong> Account Information, then Connected Apps</li>
     <li><strong>App:</strong> More, Settings, then Connected Apps</li>
   </ul>
-  <p class="permission-description">Select Quantified Self under Connected Apps to manage the permissions Garmin offers. Then use Reconnect here to refresh the saved authorization. You do not need to disconnect in Quantified Self first. Reconnecting requires Pro; viewing permissions and managing access in Garmin do not.</p>
+  <p class="permission-description">Select Quantified Self under Connected Apps to manage the permissions Garmin offers. Changes appear here after Garmin reports them. You do not need to disconnect in Quantified Self first.</p>
 </ng-template>
 
 <ng-template #unknownGarminPermissions>
   <app-status-info type="info" title="Permission details unavailable">
     Garmin has not reported permissions for this saved connection. This does not mean access was denied.
-    {{ showConnectionSummary ? 'Choose Reconnect above to refresh them.' : 'Close this tool and choose Reconnect on the Garmin connection overview to refresh them.' }}
+    {{ showConnectionSummary ? 'Check access using Manage in Garmin below.' : 'Close this tool and use Manage in Garmin on the connection overview to check access.' }}
+    If permission details remain unavailable, contact support.
   </app-status-info>
 </ng-template>
 
@@ -254,12 +255,12 @@
         <ng-container [ngTemplateOutlet]="unknownGarminPermissions"></ng-container>
         } @else if (!hasGarminCourseImportPermission) {
         <app-status-info type="info" title="Allow Course Import">
-          Reconnect Garmin and allow Course Import before sending routes.
+          Allow Course Import in Garmin Connect before sending routes.
         </app-status-info>
         } @else {
         <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-route-to-service>
         <app-status-info type="info" title="Garmin course access">
-          Garmin receives a course created from the selected GPX or FIT route. If Course Import was enabled after you connected, reconnect Garmin once to refresh that permission.
+          Garmin receives a course created from the selected GPX or FIT route. Permission changes appear after Garmin reports them.
         </app-status-info>
         }
       </section>
@@ -326,7 +327,7 @@
           <mat-icon>warning</mat-icon>
           <div class="qs-warning-content">
             <strong>Allow automatic Garmin activity sync</strong>
-            <p>Reconnect Garmin and allow Activity Export so new Garmin activities can be sent to Suunto automatically.</p>
+            <p>Allow Activity Export in Garmin Connect so new Garmin activities can be sent to Suunto automatically.</p>
           </div>
         </div>
         }

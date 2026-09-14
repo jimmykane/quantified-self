@@ -888,9 +888,9 @@ Services opens each provider on a compact connection overview. Choose an action 
 
 In **Connections → Garmin**, **Permissions** lists each account's last-reported grants, including **Workout Import** and **Course Import**. **Granted** and **Not granted** describe Garmin's saved response. **Not reported** means QS does not yet have permission details for that connection—not that you denied access. A granted permission does not mean every related feature is available in QS.
 
-If a Garmin history or route-upload tool says **Permission details unavailable**, close that tool and select **Reconnect** on the Garmin connection overview. Waiting on the tool will not refresh an unreported permission snapshot.
+If a Garmin history or route-upload tool says **Permission details unavailable**, close that tool and select **Manage in Garmin** on the connection overview to check access. Contact support if permission details remain unavailable.
 
-Select **Manage in Garmin**, find **Quantified Self** under Garmin Connect's **Connected Apps**, and manage the permissions Garmin offers there. Then select **Reconnect** in QS to refresh the authorization. You do not need to disconnect in QS first. Viewing these details and opening Garmin's settings are available without Pro; reauthorization still requires Pro. These rows are not local permission toggles or a live Garmin check, and opening the page does not change access or opt workouts into sync.
+Select **Manage in Garmin**, find **Quantified Self** under Garmin Connect's **Connected Apps**, and manage the permissions Garmin offers there. Changes appear after Garmin reports them. You do not need to disconnect in QS first. Viewing these details and opening Garmin's settings are available without Pro. **Reconnect** is reserved for connection recovery, not refreshing permissions on a healthy connection. These rows are not local permission toggles or a live Garmin check, and opening the page does not change access or opt workouts into sync.
 
 ### Disconnecting a provider
 

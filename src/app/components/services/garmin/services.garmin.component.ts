@@ -101,11 +101,12 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get shouldShowConnectAction(): boolean {
-    return !this.isDisconnectPending || this.isDisconnectManualReviewRequired;
+    return this.isDisconnectManualReviewRequired
+      || (!this.isDisconnectPending && (!this.isConnectedToService() || this.isReconnectRequired));
   }
 
   get connectButtonLabel(): string {
-    return this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
+    return this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
   }
 
   get connectionDescription(): string {

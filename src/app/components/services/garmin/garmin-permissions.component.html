@@ -8,7 +8,7 @@
       <section [attr.aria-label]="'Permissions for Garmin account ' + account.providerUserId">
         <p class="garmin-permissions__account">Garmin account: {{ account.providerUserId }}</p>
         @if (!account.permissionsKnown) {
-          <p>Garmin has not reported permissions for this saved connection. Reconnect to refresh; this does not mean access was denied.</p>
+          <p>Garmin has not reported permissions for this saved connection; this does not mean access was denied. Check access in Garmin Connect or contact support if details remain unavailable.</p>
         }
         <div role="list" aria-label="Permission grants">
           @for (permission of account.permissions; track permission.id; let last = $last) {
@@ -22,7 +22,7 @@
         </div>
       </section>
     } @empty {
-      <p>No permission details have been reported for this connection. Reconnect to refresh them.</p>
+      <p>No permission details have been reported for this connection.</p>
     }
   }
 </section>
