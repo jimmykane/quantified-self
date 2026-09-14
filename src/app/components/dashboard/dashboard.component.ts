@@ -887,12 +887,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.syncDashboardActionPromptState();
 
     try {
-      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.SuuntoApp);
+      await this.router.navigate(['/services'], { queryParams: { serviceName: ServiceNames.SuuntoApp, reconnect: '1' } });
       this.analyticsService.logEvent('dashboard_action_prompt_reconnect_service', {
         prompt_id: DASHBOARD_ACTION_PROMPT_RECONNECT_SUUNTO_SERVICE_ID,
         service_name: ServiceNames.SuuntoApp,
       });
-      this.windowService.windowRef.location.href = tokenAndURI.redirect_uri;
+      this.isReconnectingSuuntoServicePrompt = false;
     } catch (error: any) {
       this.reconnectSuuntoServicePromptError = 'Could not start Suunto reconnect.';
       this.logger.error('[DashboardComponent] Failed to start Suunto reconnect prompt flow', error);

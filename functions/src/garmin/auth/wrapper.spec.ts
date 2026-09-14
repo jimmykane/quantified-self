@@ -155,7 +155,7 @@ describe('Garmin Auth Wrapper', () => {
             const result = await (getGarminAPIAuthRequestTokenRedirectURI as any)(data, context);
 
             expect(serviceOAuthAccess.hasServiceOAuthConnectAccess).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI);
-            expect(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback');
+            expect(OAuth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', undefined);
             expect(result).toEqual({ redirect_uri: 'https://garmin.com/oauth' });
         });
 

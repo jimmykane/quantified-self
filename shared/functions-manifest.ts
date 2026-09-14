@@ -98,6 +98,10 @@ export const FUNCTIONS_MANIFEST = {
     processSportsLibReparseHeavyTask: { name: SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME, region: 'europe-west2' },
     processSportsLibRouteReparseTask: { name: 'processSportsLibRouteReparseTask', region: 'europe-west2' },
     processRouteDeliverySyncTask: { name: 'processRouteDeliverySyncTask', region: 'europe-west2' },
+    processConnectionHistoryTask: { name: 'processConnectionHistoryTask', region: 'europe-west2' },
+    onConnectionHistoryImportWritten: { name: 'onConnectionHistoryImportWritten', region: 'europe-west2' },
+    recoverConnectionHistoryImports: { name: 'recoverConnectionHistoryImports', region: 'europe-west2' },
+    retryConnectionHistoryImport: { name: 'retryConnectionHistoryImport', region: 'europe-west2' },
     processGarminHealthBackfillTask: { name: 'processGarminHealthBackfillTask', region: 'europe-west2' },
 
     // Upload/Reprocess Functions

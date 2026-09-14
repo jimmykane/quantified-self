@@ -1,3 +1,4 @@
+import { currentHistoryExecution } from '../connection-history/context';
 import fetch from 'node-fetch';
 import * as net from 'net';
 import { config } from '../config';
@@ -67,6 +68,7 @@ export async function downloadWahooFITFile(rawUrl: string): Promise<Buffer> {
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
     try {
       const result = await withWahooRequestTimeout(WAHOO_FIT_DOWNLOAD_TIMEOUT_MS, async (signal) => {
+        await currentHistoryExecution()?.beforeRequest();
         const response = await fetch(currentUrl.toString(), {
           method: 'GET',
           redirect: 'manual',

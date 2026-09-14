@@ -127,7 +127,8 @@ describe('Suunto Auth Wrapper', () => {
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 ServiceNames.SuuntoApp,
-                'https://app.com/callback'
+                'https://app.com/callback',
+                undefined
             );
             expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });

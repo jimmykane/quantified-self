@@ -165,9 +165,11 @@ describe('history', () => {
         })));
         hoisted.runTransactionMock.mockImplementation(async (runner: (transaction: {
             set: typeof hoisted.batchSetMock;
+            get: ReturnType<typeof vi.fn>;
             getAll: typeof hoisted.transactionGetAllMock;
         }) => unknown) => runner({
             set: hoisted.batchSetMock,
+            get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
             getAll: hoisted.transactionGetAllMock,
         }));
 
@@ -346,13 +348,13 @@ describe('history', () => {
             });
         });
 
-        it('should handle empty workouts without writes', async () => {
+        it('releases its reservation after empty history without admitting queue items', async () => {
             const firestore = admin.firestore();
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: [] }));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(0);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
             expect(result).toEqual({
                 successCount: 0,
                 failureCount: 0,
@@ -360,7 +362,7 @@ describe('history', () => {
                 failedBatches: 0
             });
             // ensure meta doc not touched
-            expect(firestore.collection).not.toHaveBeenCalledWith('users');
+            expect(hoisted.batchSetMock.mock.calls.some(call => call[1]?.fromHistory)).toBe(false);
         });
 
         it('should process multiple batches and count failures', async () => {
@@ -372,15 +374,16 @@ describe('history', () => {
 
             // First batch commit succeeds, second fails
             hoisted.runTransactionMock
-                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock }) => unknown) => (
-                    runner({ set: hoisted.batchSetMock })
+                .mockImplementationOnce(async runner => runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock }))
+                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock; get: ReturnType<typeof vi.fn>; getAll: typeof hoisted.transactionGetAllMock }) => unknown) => (
+                    runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock })
                 ))
                 .mockRejectedValueOnce(new Error('commit failed'));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             // Two batches should have been created
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(4);
 
             // First batch (450) succeeds, second (1) fails
             expect(result).toEqual({

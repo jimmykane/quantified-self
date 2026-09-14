@@ -314,6 +314,7 @@ describe('getQueueStats Cloud Function', () => {
                 routeSync: expectedQueueStats('processRouteSyncTask', 4),
                 sleepSync: expectedQueueStats('processSleepSyncTask', 3),
                 garminHealthBackfill: expectedQueueStats('processGarminHealthBackfillTask', 2),
+                connectionHistory: expectedQueueStats('processConnectionHistoryTask', 0),
                 sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 8),
                 sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 2),
                 sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),
@@ -692,6 +693,7 @@ describe('getQueueStats Cloud Function', () => {
             .mockResolvedValueOnce(8)
             .mockResolvedValueOnce(2)
             .mockResolvedValueOnce(2)
+            .mockResolvedValueOnce(0)
             .mockResolvedValueOnce(1)
             .mockResolvedValueOnce(6);
         const result = await (getQueueStats as any)(request);
@@ -704,6 +706,7 @@ describe('getQueueStats Cloud Function', () => {
                 routeSync: expectedQueueStats('processRouteSyncTask', 8),
                 sleepSync: expectedQueueStats('processSleepSyncTask', 2),
                 garminHealthBackfill: expectedQueueStats('processGarminHealthBackfillTask', 2),
+                connectionHistory: expectedQueueStats('processConnectionHistoryTask', 0),
                 sportsLibReparse: expectedQueueStats('processSportsLibReparseTask', 1),
                 sportsLibReparseHeavy: expectedQueueStats('processSportsLibReparseHeavyTask', 6),
                 sportsLibRouteReparse: expectedQueueStats('processSportsLibRouteReparseTask', 1),

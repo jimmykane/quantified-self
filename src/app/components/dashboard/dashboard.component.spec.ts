@@ -1102,8 +1102,8 @@ describe('DashboardComponent', () => {
 
         await component.reconnectSuuntoServicePrompt();
 
-        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(ServiceNames.SuuntoApp);
-        expect(windowService.windowRef.location.href).toBe('https://suunto.example/connect');
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName: ServiceNames.SuuntoApp, reconnect: '1' } });
     });
 
     it('should attach initial live query when resolver already returned user data', async () => {

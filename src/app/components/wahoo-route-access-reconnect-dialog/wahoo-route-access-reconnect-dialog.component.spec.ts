@@ -1,3 +1,4 @@
+import { Router } from '@angular/router';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialogRef, MatDialogState } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -14,6 +15,7 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
   let component: WahooRouteAccessReconnectDialogComponent;
   let fixture: ComponentFixture<WahooRouteAccessReconnectDialogComponent>;
 
+  const routerMock = { navigate: vi.fn().mockResolvedValue(true) };
   const windowRef = { location: { href: '' } };
   const userServiceMock = {
     getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
@@ -28,13 +30,14 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
     vi.clearAllMocks();
     windowRef.location.href = '';
     dialogRefMock.getState.mockReturnValue(MatDialogState.OPEN);
-    userServiceMock.getCurrentUserServiceTokenAndRedirectURI.mockResolvedValue({
+    routerMock.navigate.mockResolvedValue({
       redirect_uri: 'https://wahoo.example/authorize',
     });
 
     await TestBed.configureTestingModule({
       imports: [WahooRouteAccessReconnectDialogComponent],
       providers: [
+        { provide: Router, useValue: routerMock },
         { provide: MatDialogRef, useValue: dialogRefMock },
         { provide: AppHapticsService, useValue: hapticsMock },
         { provide: AppUserService, useValue: userServiceMock },
@@ -49,22 +52,23 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
     component = fixture.componentInstance;
   });
 
-  it('starts the Wahoo OAuth reconnect flow from the dialog', async () => {
+  it('opens Connections with Wahoo selected before OAuth', async () => {
     await component.reconnect();
 
-    expect(userServiceMock.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(ServiceNames.WahooAPI);
+    expect(routerMock.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName: ServiceNames.WahooAPI, reconnect: '1' } });
+    expect(userServiceMock.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('service_reconnect_start', {
       service_name: ServiceNames.WahooAPI,
       source: 'route_access_dialog',
     });
-    expect(windowRef.location.href).toBe('https://wahoo.example/authorize');
+    expect(dialogRefMock.close).toHaveBeenCalled();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     expect(hapticsMock.success).not.toHaveBeenCalled();
   });
 
   it('keeps the dialog usable when starting reconnect fails', async () => {
     const failure = new Error('Network unavailable');
-    userServiceMock.getCurrentUserServiceTokenAndRedirectURI.mockRejectedValueOnce(failure);
+    routerMock.navigate.mockRejectedValueOnce(failure);
 
     await component.reconnect();
 
@@ -90,11 +94,11 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
 
   it('keeps duplicate reconnect attempts silent while opening Wahoo', async () => {
     let finish!: (value: { redirect_uri: string }) => void;
-    userServiceMock.getCurrentUserServiceTokenAndRedirectURI.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    routerMock.navigate.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
     const reconnecting = component.reconnect();
     await component.reconnect();
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
-    expect(userServiceMock.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledTimes(1);
+    expect(routerMock.navigate).toHaveBeenCalledTimes(1);
     finish({ redirect_uri: 'https://wahoo.example/authorize' });
     await reconnecting;
   });
@@ -105,7 +109,7 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
   ])('discards a late reconnect %s when the dialog is %s', async (outcome, state) => {
     let finish!: (value: { redirect_uri: string }) => void;
     let fail!: (reason: unknown) => void;
-    userServiceMock.getCurrentUserServiceTokenAndRedirectURI.mockReturnValueOnce(new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+    routerMock.navigate.mockReturnValueOnce(new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
     const reconnecting = component.reconnect();
     if (state === 'destroyed') {
       fixture.destroy();

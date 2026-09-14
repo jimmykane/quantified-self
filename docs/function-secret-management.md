@@ -2,6 +2,8 @@
 
 Quantified Self deploys backend credentials through Google Cloud Secret Manager and Firebase `defineSecret()` bindings. A Function receives only the secrets declared for that endpoint in `functions/src/secrets.ts`; an endpoint absent from the policy must receive none.
 
+`processConnectionHistoryTask` binds the existing Garmin, Suunto API, COROS and Wahoo client credentials because it coordinates their shared history operations. `onConnectionHistoryImportWritten`, `recoverConnectionHistoryImports`, and `retryConnectionHistoryImport` have no provider-secret bindings. Downstream workers retain their existing least-privilege bindings. Deploy this compatible backend before the connection-history checkbox frontend; see [the release checklist](connection-history-import.md#release-and-operations).
+
 ## Managed inventory
 
 | Area | Secret Manager names |

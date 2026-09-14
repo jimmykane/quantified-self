@@ -79,11 +79,11 @@ export class ServicesWahooComponent extends ServicesAbstractComponentDirective {
   }
 
   get shouldShowConnectAction(): boolean {
-    return (!this.isConnectedToService() || this.isReconnectRequired) && !this.isDisconnectPending;
+    return (this.reconnectRequested || !this.isConnectedToService() || this.isReconnectRequired) && !this.isDisconnectPending;
   }
 
   get connectButtonLabel(): string {
-    return this.isReconnectRequired ? 'Reconnect' : 'Connect';
+    return this.reconnectRequested || this.isConnectedToService() || this.isReconnectRequired ? 'Reconnect' : 'Connect';
   }
 
   protected override onServiceDataChanged(): void {

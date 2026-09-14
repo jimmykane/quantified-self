@@ -1,3 +1,4 @@
+import { withHistoryQueueExecution } from './connection-history/execution';
 import * as functions from 'firebase-functions/v1';
 import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
@@ -752,6 +753,17 @@ export async function parseWorkoutQueueItemForServiceName(
 
 
 async function parseWorkoutQueueItemForServiceNameInternal(
+  serviceName: ServiceNames,
+  queueItem: ProviderWorkoutQueueItem,
+  bulkWriter?: admin.firestore.BulkWriter,
+  tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
+  usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
+  pendingWrites?: Map<string, number>,
+  corosClaimState?: COROSQueueProcessingClaim,
+): Promise<QueueResult> {
+  return withHistoryQueueExecution(queueItem, () => parseHistoryGuardedWorkoutQueueItem(serviceName, queueItem, bulkWriter, tokenCache, usageCache, pendingWrites, corosClaimState));
+}
+async function parseHistoryGuardedWorkoutQueueItem(
   serviceName: ServiceNames,
   queueItem: ProviderWorkoutQueueItem,
   bulkWriter?: admin.firestore.BulkWriter,

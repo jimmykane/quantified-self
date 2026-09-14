@@ -1,3 +1,4 @@
+import { CONNECTION_HISTORY_COLLECTION } from './connection-history/model';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { type Auth2ServiceTokenInterface, ServiceNames } from '@sports-alliance/sports-lib';
@@ -36,6 +37,7 @@ export interface OperationalCleanupQuery {
 }
 
 const CLOUD_TASK_SOURCE_QUEUE_COLLECTIONS = new Set([
+  CONNECTION_HISTORY_COLLECTION,
   ACTIVITY_SYNC_QUEUE_COLLECTION_NAME,
   ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME,
   ROUTE_SYNC_QUEUE_COLLECTION_NAME,
@@ -166,6 +168,7 @@ export function getExplicitFirebaseUidAssociation(
   }
 
   if (
+    collectionName === CONNECTION_HISTORY_COLLECTION ||
     collectionName === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
     collectionName === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
     collectionName === SLEEP_SYNC_QUEUE_COLLECTION_NAME ||
@@ -180,6 +183,7 @@ export function getExplicitFirebaseUidAssociation(
 
   const originalCollection = asNonEmptyString(data.originalCollection);
   if (
+    originalCollection === CONNECTION_HISTORY_COLLECTION ||
     originalCollection === ACTIVITY_SYNC_QUEUE_COLLECTION_NAME ||
     originalCollection === ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME ||
     originalCollection === SLEEP_SYNC_QUEUE_COLLECTION_NAME
@@ -257,6 +261,8 @@ export function buildOperationalCleanupQueries(config: ProviderOperationalCleanu
     && asNonEmptyString(data.providerUserId) === config.providerUserId;
 
   return [
+    { collectionName: CONNECTION_HISTORY_COLLECTION, fieldName: 'providerUserId', sourceCollectionName: CONNECTION_HISTORY_COLLECTION,
+      matches: data => data.serviceName === config.serviceName && data.providerUserId === config.providerUserId },
     {
       collectionName: config.workoutQueueCollection,
       fieldName: config.providerUserIdField,

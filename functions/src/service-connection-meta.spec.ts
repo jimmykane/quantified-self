@@ -3,6 +3,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import type * as admin from 'firebase-admin';
 
 const hoisted = vi.hoisted(() => ({
+  historyCreate: vi.fn(),
   metaSet: vi.fn().mockResolvedValue(undefined),
   metaGet: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
   refreshTokenRef: { path: 'wahooAPIAccessTokens/user-1/tokens/provider-1' },
@@ -90,7 +91,8 @@ vi.mock('firebase-admin', () => {
         collection: vi.fn(() => ({
           doc: vi.fn(() => ({
             get: hoisted.metaGet,
-            set: hoisted.metaSet,
+            create: hoisted.historyCreate,
+      set: hoisted.metaSet,
           })),
         })),
       })),
@@ -156,9 +158,11 @@ describe('service-connection-meta', () => {
       }
     });
     hoisted.runTransaction.mockImplementation(async (runner: (transaction: {
+      create: typeof hoisted.historyCreate;
       set: typeof hoisted.metaSet;
       get: (target: unknown) => unknown;
     }) => unknown) => runner({
+      create: hoisted.historyCreate,
       set: hoisted.metaSet,
       get: (target: unknown) => {
         if (target === hoisted.refreshTokenRef) return hoisted.refreshTokenGet();
@@ -294,6 +298,21 @@ describe('service-connection-meta', () => {
       }),
     );
     expect(hoisted.metaData).not.toHaveProperty('healthLifecycleProjectionPending');
+  });
+
+  it('creates accepted history in the connected-state transaction and omits jobs for unchecked clients', async () => {
+    const context = { requested: true, flowGeneration: 'single-use-flow', tokenPath: 'private/owner/tokens/account',
+      rootPath: 'private/owner', providerUserId: 'account', credentialGeneration: 'credential' };
+    await expect(markServiceConnected('user-1', ServiceNames.WahooAPI, 'account', undefined, undefined, context)).resolves.toBe(true);
+    expect(hoisted.historyCreate).toHaveBeenCalledTimes(1);
+    const run = hoisted.historyCreate.mock.calls[0][1];
+    expect(run).toMatchObject({ userID: 'user-1', tokenPath: context.tokenPath, credentialGeneration: 'credential', processed: false });
+    expect(hoisted.metaSet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      connectionState: 'connected', connectionHistoryImport: expect.objectContaining({ runId: run.id }),
+    }), { merge: true });
+    hoisted.historyCreate.mockClear();
+    await markServiceConnected('user-1', ServiceNames.WahooAPI, 'account', undefined, undefined, { ...context, requested: false });
+    expect(hoisted.historyCreate).not.toHaveBeenCalled();
   });
 
   it('does not create Health lifecycle state for providers outside this integration', async () => {
@@ -600,9 +619,11 @@ describe('service-connection-meta', () => {
   it('does not let terminal cleanup overwrite a fresh OAuth credential', async () => {
     const tokenCollection = { path: 'wahooAPIAccessTokens/user-1/tokens' };
     hoisted.runTransaction.mockImplementationOnce(async (runner: (transaction: {
+      create: typeof hoisted.historyCreate;
       set: typeof hoisted.metaSet;
       get: (target: unknown) => unknown;
     }) => unknown) => runner({
+      create: hoisted.historyCreate,
       set: hoisted.metaSet,
       get: (target: unknown) => target === tokenCollection
         ? Promise.resolve({ empty: false })
@@ -670,9 +691,11 @@ describe('service-connection-meta', () => {
   it('does not let fallback cleanup cross a newer OAuth root generation', async () => {
     const tokenRoot = { path: 'wahooAPIAccessTokens/user-1' };
     hoisted.runTransaction.mockImplementationOnce(async (runner: (transaction: {
+      create: typeof hoisted.historyCreate;
       set: typeof hoisted.metaSet;
       get: (target: unknown) => unknown;
     }) => unknown) => runner({
+      create: hoisted.historyCreate,
       set: hoisted.metaSet,
       get: (target: unknown) => target === tokenRoot
         ? Promise.resolve({
@@ -857,6 +880,7 @@ describe('service-connection-meta', () => {
       {
         oauthFlowGeneration: 'delete-sentinel',
         oauthFlowCreatedAt: 'delete-sentinel',
+      oauthImportRecentHistory: 'delete-sentinel',
         oauthFlowExpiresAt: 'delete-sentinel',
       },
       { merge: true },

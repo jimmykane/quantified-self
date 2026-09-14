@@ -222,6 +222,8 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 
 ## Architecture documentation
 
+- [Optional connection history import](docs/connection-history-import.md)
+
 - [Admin dashboard aggregate user history](docs/admin-dashboard-history.md)
 - [Unified health data foundation](docs/unified-health-data.md)
 - [Private Timeline notes](docs/timeline-notes.md)
