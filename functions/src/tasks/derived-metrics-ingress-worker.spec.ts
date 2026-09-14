@@ -100,8 +100,17 @@ describe('processDerivedMetricsIngressTask', () => {
         expect(hoisted.markDerivedMetricsDirtyAndMaybeQueue).toHaveBeenCalledWith(
             'user-1',
             [DERIVED_METRIC_KINDS.TrainingBuildComparison],
-            { incrementEventMutationVersion: false },
+            { incrementEventMutationVersion: false, preserveWorkoutInputs: true },
         );
+    });
+
+    it.each([
+        [DERIVED_METRIC_KINDS.TrainingReadiness, DERIVED_METRIC_KINDS.TrainingBuildComparison],
+        [DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingCapacity],
+    ])('preserves workout inputs only for strictly sleep/HRV metric sets: %s', async (...metricKinds) => {
+        await (processDerivedMetricsIngressTask as any)({ data: { uid: 'user-1', metricKinds, incrementEventMutationVersion: false } });
+        const options = hoisted.markDerivedMetricsDirtyAndMaybeQueue.mock.calls[0][2];
+        expect(options.preserveWorkoutInputs === true).toBe(!metricKinds.includes(DERIVED_METRIC_KINDS.TrainingCapacity));
     });
 
     it('rejects malformed targeted metric kinds instead of rebuilding every metric', async () => {

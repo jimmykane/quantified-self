@@ -41,6 +41,7 @@ const hoisted = vi.hoisted(() => ({
     hasAnyDerivedMetricsHealthRecord: vi.fn(),
     fetchRecoveryLookbackEventDocs: vi.fn(),
     fetchTrainingBuildBenchmarkSettings: vi.fn(),
+    fetchTrainingBuildWorkoutSeed: vi.fn(),
     fetchTrainingBuildSleepDocs: vi.fn(),
     fetchTrainingReadinessSleepDocs: vi.fn(),
     getDerivedRecoveryLookbackWindowSeconds: vi.fn(() => 0),
@@ -68,6 +69,7 @@ vi.mock('../derived-metrics/derived-metrics.service', async () => {
         hasAnyDerivedMetricsHealthRecord: hoisted.hasAnyDerivedMetricsHealthRecord,
         fetchRecoveryLookbackEventDocs: hoisted.fetchRecoveryLookbackEventDocs,
         fetchTrainingBuildBenchmarkSettings: hoisted.fetchTrainingBuildBenchmarkSettings,
+        fetchTrainingBuildWorkoutSeed: hoisted.fetchTrainingBuildWorkoutSeed,
         fetchTrainingBuildSleepDocs: hoisted.fetchTrainingBuildSleepDocs,
         fetchTrainingReadinessSleepDocs: hoisted.fetchTrainingReadinessSleepDocs,
         getDerivedRecoveryLookbackWindowSeconds: hoisted.getDerivedRecoveryLookbackWindowSeconds,
@@ -86,6 +88,7 @@ describe('processDerivedMetricsTask', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValue(null);
+        hoisted.fetchTrainingBuildWorkoutSeed.mockResolvedValue(null);
         hoisted.abandonDerivedMetricsProcessingAfterWriteBlock.mockResolvedValue({
             cleaned: true,
             requeued: false,
@@ -123,6 +126,55 @@ describe('processDerivedMetricsTask', () => {
         }));
     });
 
+    it.each([false, true])('avoids workout history reads on a valid Build seed (with Readiness: %s)', async withReadiness => {
+        const kinds = [DERIVED_METRIC_KINDS.TrainingBuildComparison,
+            ...(withReadiness ? [DERIVED_METRIC_KINDS.TrainingReadiness] : [])];
+        const startedAtMs = Date.now();
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({ dirtyMetricKinds: kinds,
+            startedAtMs, eventMutationVersion: 11, workoutInputsVersion: 3 });
+        const seed = { payload: {}, sourceEventCount: 200,
+            metadata: { formSourceDocCount: 100, activitySourceDocCount: 200 } };
+        hoisted.fetchTrainingBuildWorkoutSeed.mockResolvedValueOnce(seed);
+        if (withReadiness) hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({ status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 11,
+            dailyLoads: [], sourceEventCount: 0, sourceDocCount: 100 });
+        await (processDerivedMetricsTask as any)({ data: { uid: 'seed-owner', generation: 12 } });
+        expect(hoisted.fetchTrainingBuildWorkoutSeed).toHaveBeenCalledWith('seed-owner', expect.objectContaining({
+            sourceVersion: 3, eventMutationVersion: 11, settingsKey: expect.any(String) }));
+        expect(hoisted.fetchDerivedMetricsEventDocs).not.toHaveBeenCalled();
+        expect(hoisted.fetchDerivedMetricsActivityDocs).not.toHaveBeenCalled();
+        expect(hoisted.joinTrainingActivitySources).not.toHaveBeenCalled();
+        expect(hoisted.fetchTrainingBuildSleepDocs).toHaveBeenCalledWith('seed-owner', [], expect.anything(), expect.any(Number), seed);
+        expect(hoisted.fetchTrainingReadinessSleepDocs).toHaveBeenCalledTimes(withReadiness ? 1 : 0);
+        expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('seed-owner', kinds,
+            expect.objectContaining({ trainingBuildWorkoutSeed: seed, formDocs: [], trainingActivityDocs: [] }),
+            expect.objectContaining({ workoutInputsVersion: 3, claim: { generation: 12, startedAtMs } }));
+        expect(hoisted.fetchTrainingBuildWorkoutSeed.mock.invocationCallOrder[0])
+            .toBeLessThan(hoisted.markDerivedMetricSnapshotsBuilding.mock.invocationCallOrder[0]);
+    });
+
+    it('still reads events for Readiness when its Form seed is stale, but avoids the Build activity scan', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingReadiness],
+            startedAtMs: Date.now(), eventMutationVersion: 11, workoutInputsVersion: 3 });
+        hoisted.fetchTrainingBuildWorkoutSeed.mockResolvedValueOnce({ metadata: {} });
+        hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({ status: 'ready',
+            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 10 });
+        await (processDerivedMetricsTask as any)({ data: { uid: 'seed-owner', generation: 12 } });
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledOnce();
+        expect(hoisted.fetchDerivedMetricsActivityDocs).not.toHaveBeenCalled();
+    });
+
+    it('keeps the full shared history join for mixed workout-dependent builds', async () => {
+        hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingDurability],
+            startedAtMs: Date.now(), eventMutationVersion: 11, workoutInputsVersion: 3 });
+        await (processDerivedMetricsTask as any)({ data: { uid: 'seed-owner', generation: 12 } });
+        expect(hoisted.fetchTrainingBuildWorkoutSeed).not.toHaveBeenCalled();
+        expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledOnce();
+        expect(hoisted.fetchDerivedMetricsActivityDocs).toHaveBeenCalledOnce();
+    });
+
     it('queries recovery docs from lookback even when form docs are also requested', async () => {
         await (processDerivedMetricsTask as any)({
             data: {
@@ -143,6 +195,8 @@ describe('processDerivedMetricsTask', () => {
         }, {
             buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 11,
+            claim: { generation: 12, startedAtMs: expect.any(Number) },
+            workoutInputsVersion: undefined,
             formDailyLoads: [],
             formSourceEventCount: null,
             formSourceDocCount: null,
@@ -177,6 +231,8 @@ describe('processDerivedMetricsTask', () => {
             buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 12,
             formDailyLoads: [],
+            claim: { generation: 13, startedAtMs: expect.any(Number) },
+            workoutInputsVersion: undefined,
             formSourceEventCount: null,
             formSourceDocCount: null,
         });
@@ -274,6 +330,8 @@ describe('processDerivedMetricsTask', () => {
             ],
             formSourceEventCount: 5,
             formSourceDocCount: 7,
+            claim: { generation: 90, startedAtMs: expect.any(Number) },
+            workoutInputsVersion: undefined,
         });
     });
 
@@ -424,6 +482,7 @@ describe('processDerivedMetricsTask', () => {
             [{ activityId: 'joined-activity' }],
             settings,
             expect.any(Number),
+            null,
         );
         expect(hoisted.writeDerivedMetricSnapshotsReady).toHaveBeenCalledWith('user-training-build', [
             DERIVED_METRIC_KINDS.TrainingBuildComparison,
@@ -481,6 +540,7 @@ describe('processDerivedMetricsTask', () => {
             12,
             [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
             'task before snapshot building',
+            { generation: 12, startedAtMs: expect.any(Number) },
         );
     });
 
@@ -504,6 +564,7 @@ describe('processDerivedMetricsTask', () => {
             16,
             [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
             'task before snapshot ready write',
+            { generation: 16, startedAtMs: expect.any(Number) },
         );
     });
 
@@ -527,6 +588,7 @@ describe('processDerivedMetricsTask', () => {
             17,
             [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
             'task before processing completion',
+            { generation: 17, startedAtMs: expect.any(Number) },
         );
     });
 
@@ -556,6 +618,8 @@ describe('processDerivedMetricsTask', () => {
         }, {
             buildAtMs: expect.any(Number),
             builtFromEventMutationVersion: 13,
+            claim: { generation: 14, startedAtMs: expect.any(Number) },
+            workoutInputsVersion: undefined,
             formDailyLoads: [],
             formSourceEventCount: null,
             formSourceDocCount: null,
@@ -577,13 +641,25 @@ describe('processDerivedMetricsTask', () => {
             'user-4',
             [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
             transientError,
+            { generation: 15, startedAtMs: expect.any(Number) },
         );
         expect(hoisted.failDerivedMetricsProcessing).toHaveBeenCalledWith(
             'user-4',
             15,
             transientError,
             [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
+            { generation: 15, startedAtMs: expect.any(Number) },
         );
+    });
+
+    it.each(['building', 'ready'] as const)('does not complete a generation after a rejected %s commit', async stage => {
+        if (stage === 'building') hoisted.markDerivedMetricSnapshotsBuilding.mockResolvedValueOnce(false);
+        else hoisted.writeDerivedMetricSnapshotsReady.mockResolvedValueOnce(false);
+        await (processDerivedMetricsTask as any)({ data: { uid: 'blocked-commit', generation: 12 } });
+        expect(hoisted.abandonDerivedMetricsProcessingAfterWriteBlock).toHaveBeenCalledWith('blocked-commit', 12,
+            expect.any(Array), `snapshot ${stage} commit rejected`, { generation: 12, startedAtMs: expect.any(Number) });
+        expect(hoisted.completeDerivedMetricsProcessing).not.toHaveBeenCalled();
+        if (stage === 'building') expect(hoisted.fetchDerivedMetricsEventDocs).not.toHaveBeenCalled();
     });
 
     it('finalizes claimed work without failed snapshot writes when deletion becomes active after processing error', async () => {
@@ -608,6 +684,7 @@ describe('processDerivedMetricsTask', () => {
             15,
             [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.RecoveryNow],
             'task before failure writes',
+            { generation: 15, startedAtMs: expect.any(Number) },
         );
     });
 });

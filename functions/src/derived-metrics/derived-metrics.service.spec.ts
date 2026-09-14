@@ -390,6 +390,24 @@ describe('fetchTrainingBuildSleepDocs', () => {
             .mockResolvedValueOnce({ docs: [{ id: 'recent-sleep', data: () => ({}) }] });
     });
 
+    it.each(['period', 'event'] as const)('reused %s benchmark windows issue exactly the full-build sleep queries', async mode => {
+        const { fetchTrainingBuildSleepDocs, buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const activities = buildTrainingActivitySources([{ id: 'anchor', data: () => ({ startDate: Date.UTC(2026, 0, 1, 8),
+            stats: { [DataActivityTypes.type]: [ActivityTypes.Running] } }) }]);
+        const settings = { trainingSettings: { buildBenchmarks: { running: mode === 'period'
+            ? { mode, durationWeeks: 8, endDayMs: Date.UTC(2026, 2, 1) }
+            : { mode, durationWeeks: 8, eventId: 'anchor' } } } };
+        await fetchTrainingBuildSleepDocs('user-1', activities, settings, nowMs);
+        const queries = [...hoisted.where.mock.calls];
+        expect(queries).toHaveLength(4);
+        hoisted.where.mockClear();
+        hoisted.get.mockResolvedValue({ docs: [] });
+        const result = buildTrainingBuildComparisonMetricPayload(activities, settings, nowMs);
+        await fetchTrainingBuildSleepDocs('user-1', [], settings, nowMs, { ...result, metadata: {} } as any);
+        expect(hoisted.where.mock.calls).toEqual(queries);
+    });
+
     it('queries only the merged recent and configured benchmark sleep-date ranges', async () => {
         const { fetchTrainingBuildSleepDocs } = await import('./derived-metrics.service');
         const docs = await fetchTrainingBuildSleepDocs(
@@ -1164,6 +1182,33 @@ describe('buildTrainingReadinessMetricPayload', () => {
 });
 
 describe('buildTrainingBuildComparisonMetricPayload', () => {
+    it.each(['period', 'event'] as const)('recovery-only refresh equals a full %s rebuild after sleep edits and deletes', async mode => {
+        const { buildTrainingBuildComparisonMetricPayload, refreshTrainingBuildComparisonRecovery } = await import('./derived-metrics.service');
+        const nowMs = Date.UTC(2026, 5, 30, 12);
+        const activities = buildTrainingActivitySources([
+            { id: 'anchor', data: () => ({ startDate: Date.UTC(2026, 0, 1, 8), name: 'Winter race', tags: ['Race'],
+                stats: { [DataActivityTypes.type]: [ActivityTypes.Running], [DataDuration.type]: 3600 } }) },
+            { id: 'recent', data: () => ({ startDate: nowMs - 86_400_000,
+                stats: { [DataActivityTypes.type]: [ActivityTypes.Running], [DataDuration.type]: 1800 } }) },
+        ]);
+        const settings = { trainingSettings: { buildBenchmarks: { running: mode === 'period'
+            ? { mode, durationWeeks: 8, endDayMs: Date.UTC(2026, 2, 10) }
+            : { mode, durationWeeks: 8, eventId: 'anchor' } } } };
+        const sleep = (durationSeconds: number) => Array.from({ length: 7 }, (_, i) => ({ id: `night-${i}`, data: () => ({
+            source: { provider: 'GarminAPI' }, sleepDate: `2026-06-${23 + i}`, durationSeconds, isNap: false,
+            startTimeMs: Date.UTC(2026, 5, 23 + i), endTimeMs: Date.UTC(2026, 5, 23 + i, 8),
+            timezoneOffsetSeconds: 0, vitals: { overnightHrvMs: 50 + i },
+        }) }));
+        const original = buildTrainingBuildComparisonMetricPayload(activities, settings, nowMs, sleep(25_200) as any);
+        expect(original.payload.disciplines.find(d => d.discipline === 'running')?.status).toBe('ready');
+        for (const docs of [sleep(28_800), sleep(28_800).slice(1), []]) {
+            const refreshed = refreshTrainingBuildComparisonRecovery(original.payload, docs as any);
+            expect(refreshed).toEqual(buildTrainingBuildComparisonMetricPayload(activities, settings, nowMs + 1000, docs as any).payload);
+            expect(refreshed.recovery).not.toEqual(original.payload.recovery);
+            expect(refreshed.disciplines[0].current).toEqual(original.payload.disciplines[0].current);
+        }
+    });
+
     it('compares trustworthy overnight recovery context without treating naps or missing nights as zero', async () => {
         const { buildTrainingBuildComparisonMetricPayload } = await import('./derived-metrics.service');
         const nowMs = Date.UTC(2026, 5, 30, 12);
@@ -4087,6 +4132,7 @@ describe('startDerivedMetricsProcessing', () => {
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.Form],
             startedAtMs: expect.any(Number),
             eventMutationVersion: 101,
+            workoutInputsVersion: 0,
         });
         expect(hoisted.transactionSet).toHaveBeenCalledWith(
             hoisted.coordinatorRef,
@@ -4143,6 +4189,7 @@ describe('startDerivedMetricsProcessing', () => {
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.RecoveryNow],
             startedAtMs: expect.any(Number),
             eventMutationVersion: 77,
+            workoutInputsVersion: 0,
         });
         expect(hoisted.transactionSet).toHaveBeenCalledWith(
             hoisted.coordinatorRef,
@@ -4416,7 +4463,7 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
         vi.useRealTimers();
     });
 
-    it('coalesces when coordinator is queued recently and dirty set is unchanged', async () => {
+    it('invalidates workout reuse on an explicit repair even when its dirty set is unchanged', async () => {
         const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
         vi.useFakeTimers();
         vi.setSystemTime(Date.UTC(2026, 3, 11, 9, 0, 0));
@@ -4443,7 +4490,8 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
             generation: 12,
             metricKinds: [DERIVED_METRIC_KINDS.Form],
         });
-        expect(hoisted.transactionSet).not.toHaveBeenCalled();
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef,
+            expect.objectContaining({ workoutInputsVersion: 1 }), { merge: true });
         expect(hoisted.enqueueDerivedMetricsTask).not.toHaveBeenCalled();
     });
 
@@ -4728,7 +4776,7 @@ describe('writeDerivedMetricSnapshotsReady', () => {
         vi.clearAllMocks();
         hoisted.userRootGet.mockResolvedValue({ exists: true });
         hoisted.tombstoneGet.mockResolvedValue({ exists: false, data: () => undefined });
-        hoisted.batchCommit.mockResolvedValue(undefined);
+        mockTransactionDeletionGuardDefaults();
     });
 
     afterEach(() => {
@@ -4742,9 +4790,31 @@ describe('writeDerivedMetricSnapshotsReady', () => {
     }
 
     function findPersistedPayload(metricKind: string): Record<string, unknown> {
-        const call = hoisted.batchSet.mock.calls.find((setCall) => setCall?.[1]?.metricKind === metricKind);
+        const call = hoisted.transactionSet.mock.calls.find((setCall) => setCall?.[1]?.metricKind === metricKind);
         return (call?.[1] || {}) as Record<string, unknown>;
     }
+
+    it('warms internal reuse metadata and retains original source counts and expiry on recovery-only writes', async () => {
+        const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');
+        const { resolveTrainingBuildWorkoutSeed, trainingBuildSettingsKey } = await import('./training-build-workout-seed');
+        const nowMs = Date.UTC(2026, 8, 14, 10);
+        const kind = DERIVED_METRIC_KINDS.TrainingBuildComparison;
+        await writeDerivedMetricSnapshotsReady('user-1', [kind], {
+            formDocs: [buildEventDoc({})], trainingActivityDocs: [buildEventDoc({})], trainingActivities: [],
+        }, { buildAtMs: nowMs, builtFromEventMutationVersion: 7, workoutInputsVersion: 3 });
+        const full = findPersistedPayload(kind);
+        const seed = resolveTrainingBuildWorkoutSeed(full, { nowMs: nowMs + 1000, eventMutationVersion: 7,
+            sourceVersion: 3, settingsKey: trainingBuildSettingsKey({}) });
+        expect(seed).not.toBeNull();
+        hoisted.transactionSet.mockClear();
+        await writeDerivedMetricSnapshotsReady('user-1', [kind], { trainingBuildWorkoutSeed: seed },
+            { buildAtMs: nowMs + 1000, builtFromEventMutationVersion: 7, workoutInputsVersion: 3 });
+        const reused = findPersistedPayload(kind);
+        expect(reused.payload).toEqual(full.payload);
+        expect(reused.sourceDocCount).toBe(3);
+        expect(reused.sourceEventCount).toBe(full.sourceEventCount);
+        expect(reused.workoutInputsReuse).toEqual(full.workoutInputsReuse);
+    });
 
     it('reuses prejoined Training activities supplied by the worker', async () => {
         const { writeDerivedMetricSnapshotsReady } = await import('./derived-metrics.service');

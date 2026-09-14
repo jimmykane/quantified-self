@@ -129,8 +129,8 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         await (onDashboardDerivedMetricsHealthWrite as any)({
             params: {uid: 'user-1', sourceRecordId: 'nightly-hrv'},
             data: {
-                before: {exists: kind !== 'create', data: () => kind === 'create' ? undefined : ({metricIds: ['heart_rate_variability']})},
-                after: {exists: kind !== 'delete', data: () => kind === 'delete' ? undefined : ({metricIds: ['heart_rate_variability']})},
+                before: {exists: kind !== 'create', data: () => kind === 'create' ? undefined : ({metricIds: ['heart_rate_variability'], metrics: [{value: 40}]})},
+                after: {exists: kind !== 'delete', data: () => kind === 'delete' ? undefined : ({metricIds: ['heart_rate_variability'], metrics: [{value: 45}]})},
             },
         });
         expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1', undefined, undefined, {
@@ -262,6 +262,27 @@ describe('onDashboardDerivedMetricsEventWrite', () => {
         });
 
         expect(hoisted.enqueueDerivedMetricsIngressTask).toHaveBeenCalledWith('user-1');
+    });
+
+    it.each([
+        onDashboardDerivedMetricsEventWrite, onDashboardDerivedMetricsActivityWrite,
+        onDashboardDerivedMetricsSleepWrite, onDashboardDerivedMetricsHealthWrite,
+    ])('does no Firestore reads or enqueue for a metadata-only update', async handler => {
+        const before = { metricIds: ['heart_rate_variability'], source: { maxObservedRevisionOrder: 1 } };
+        const after = { ...before, updatedAtMs: 2, source: { maxObservedRevisionOrder: 2 } };
+        await (handler as any)({ params: { uid: 'user-1' }, data: {
+            before: { exists: true, data: () => before }, after: { exists: true, data: () => after },
+        } });
+        expect(hoisted.getAll).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
+    });
+
+    it('does not read deletion state for an unrelated Health create', async () => {
+        await (onDashboardDerivedMetricsHealthWrite as any)({ params: { uid: 'user-1' }, data: {
+            before: { exists: false, data: () => undefined }, after: { exists: true, data: () => ({ metricIds: ['steps'] }) },
+        } });
+        expect(hoisted.getAll).not.toHaveBeenCalled();
+        expect(hoisted.enqueueDerivedMetricsIngressTask).not.toHaveBeenCalled();
     });
 
     it('uses event timestamp for ingress bucketing when CloudEvent time is present', async () => {

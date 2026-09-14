@@ -2,7 +2,7 @@ import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 import * as logger from 'firebase-functions/logger';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
-import { normalizeDerivedMetricKindsStrict } from '../../../shared/derived-metrics';
+import { DERIVED_METRIC_KINDS, normalizeDerivedMetricKindsStrict } from '../../../shared/derived-metrics';
 import { getDefaultDerivedMetricKindsForDashboard, markDerivedMetricsDirtyAndMaybeQueue } from '../derived-metrics/derived-metrics.service';
 
 interface DerivedMetricsIngressTaskPayload {
@@ -39,8 +39,12 @@ export const processDerivedMetricsIngressTask = onTaskDispatched({
         return;
     }
     const incrementEventMutationVersion = payload.incrementEventMutationVersion !== false;
+    const preserveWorkoutInputs = hasTargetedMetricKinds && !incrementEventMutationVersion
+        && metricKinds.every(kind => kind === DERIVED_METRIC_KINDS.TrainingBuildComparison
+            || kind === DERIVED_METRIC_KINDS.TrainingReadiness);
     const queueResult = await markDerivedMetricsDirtyAndMaybeQueue(uid, metricKinds, {
         incrementEventMutationVersion,
+        ...(preserveWorkoutInputs ? { preserveWorkoutInputs: true } : {}),
     });
     logger.info('[derived-metrics-ingress] Processed ingress task.', {
         uid,

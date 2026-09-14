@@ -166,8 +166,10 @@ The page is eventually consistent. A complete event/activity historical scan hap
 browser. The browser can continue showing the latest complete payload while a newer generation is building. The only
 live contextual read added by Readiness is the bounded sleep-session listener shown above; it does not read event or
 activity history. A readiness-only worker refresh reuses a compatible Form snapshot seed and fetches only the bounded
-sleep envelope, so it does not perform a new event or activity scan. Event-driven all-metric builds still share their
-already-loaded Form history, and the existing sleep-triggered Best Build comparison retains its broader dependencies.
+sleep envelope when the Form seed is compatible. Sleep/HRV-triggered Best Build comparison can reuse the workout
+portion of its completed snapshot, so a combined Best Build + Readiness refresh can also avoid both historical scans.
+Missing or stale seeds fall back to the existing full build; event-driven all-metric builds still share their loaded
+Form history and canonical parent/activity join.
 
 ## Route and Frontend Entry Points
 
@@ -800,6 +802,8 @@ Every metric kind has its own snapshot document. The important fields are:
 ```
 
 The coordinator owns `generation`, `eventMutationVersion`, dirty kinds, processing state, timestamps, and the last error.
+An internal `workoutInputsVersion` also invalidates workout reuse for explicit repairs and non-sleep inputs, even when
+the event mutation version does not change. It is not a new public metric or formula version.
 A generation claim prevents an old Cloud Task from overwriting a newer request.
 
 ## Training Sport Registry and Contexts
@@ -992,13 +996,18 @@ Thumbnail examples and preview fallback data never enter Training calculations o
 
 ### Writes and ingress
 
-- Event creates, updates, and deletes enqueue debounced derived-metric ingress.
-- Activity creates, updates, and deletes enqueue the same ingress.
+- Event/activity creates and deletes enqueue debounced derived-metric ingress. Updates enqueue only when calculation
+  inputs change. `derived-metrics-source-fields.ts` shares the query projections with trigger comparisons, including
+  event classification/merge metadata and activity ownership/type; activity comparisons additionally include swim lengths.
+- Sleep and Health updates likewise ignore ingestion-only timestamps and revision watermarks. Changes to canonical
+  measurements, eligibility, source identity, dates, offsets, or other consumed fields still invalidate normally.
 - Sleep writes enqueue `training_build_comparison` and `training_readiness` and do not increment the event mutation
-  version. Readiness itself has no activity dependency and can reuse the Form seed; the pre-existing build comparison
-  still owns the wider activity/settings scan needed for build-range recovery context.
-- Health source-record creates, updates, and deletes enqueue only `body_weight_trend` and `training_capacity`. They do
-  not increment the event mutation version; irrelevant Health metrics produce no Training work.
+  version or workout-input revision. Readiness has no activity dependency and can reuse the Form seed; Build Comparison
+  can reuse its validated workout projection and always recomputes sleep/HRV recovery.
+- Health mutations target Weight → `body_weight_trend`, VO2 → `training_capacity`, and HRV →
+  `training_build_comparison` + `training_readiness`. HRV-only ingress preserves the workout-input revision. Other
+  Health invalidations conservatively invalidate reuse. Unrelated Health metrics return before deletion-guard reads
+  and produce no Training work. Relevant creates and deletes always retain the deletion guard.
 - The benchmark callable marks only `training_build_comparison` dirty.
 - Destination and shortcut changes write only `appSettings.trainingWorkspace` through the normal owner-authorized
   Firestore settings path. They do not dirty or rebuild derived metrics because they are presentation state.
@@ -1062,15 +1071,62 @@ builders; do not restore separate joined copies or per-activity spread clones.
 The derived worker:
 
 1. Claims the expected coordinator generation.
-2. Marks requested snapshots `building`.
-3. Resolves source requirements for only the dirty kinds.
+2. Resolves dirty-kind requirements and reads any completed workout/Form seeds before changing snapshot status.
+3. Marks requested snapshots `building`.
 4. Fetches events, normalized activities, bounded recovery events, settings, swim lengths, and sleep only as required.
 5. Builds payloads with a single `buildAtMs` anchor.
-6. Re-checks the user deletion guard before every write stage.
-7. Writes all requested snapshots `ready` with the same mutation version.
+6. Re-checks the user deletion guard before every write stage and inside the snapshot commit transaction.
+7. Writes all requested snapshots `ready` with the same mutation version, fenced by generation and claim start time.
 8. Completes the generation or requeues newly dirtied kinds.
 
 Failures mark affected snapshots failed, preserve an error, and are rethrown so the Cloud Tasks retry policy can apply.
+
+### Reusing Build Comparison workout inputs
+
+`training-build-workout-seed.ts` validates internal `workoutInputsReuse` metadata on the existing Build Comparison
+snapshot; it does not create another history collection. Reuse is eligible only for Build Comparison alone or combined
+with projection-sensitive kinds (not other activity-dependent builders). It requires a ready snapshot, the exact current
+derived schema and seed version, exact event/workout-input revisions, canonical benchmark-settings hash, current UTC
+day, and matching workout-payload digest. Missing, failed, malformed, legacy, edited, or otherwise incompatible inputs
+take the full-build path. Explicit ensure/repair calls and benchmark changes invalidate the internal revision; event
+and activity ingress also advances the event mutation version.
+
+The seed expires at the earlier of the next UTC midnight and the next persisted future activity's start time. A
+recovery-only refresh retains the original expiry, source counts, and workout metadata; it never extends the lease.
+Sleep/HRV recovery (headline and each configured sport's current/benchmark windows) is recomputed with the same helper
+used by full builds. Cached windows determine the same merged sleep-date queries, including historical event anchors.
+Readiness retains its separate end-time-bounded sleep query and nightly-HRV enrichment; different sleep predicates
+are not treated as interchangeable. If the Form seed is unavailable, Readiness still scans events, while a valid Build
+seed can independently avoid the activity scan. Existing formula payloads and frontend behavior are unchanged.
+
+Every worker snapshot commit checks the deletion tombstone/user root and current claim transactionally. Reclaimed or
+superseded attempts cannot publish, fail, or complete a newer attempt. A rejected building/ready commit does not clear
+the claimed work; the existing guarded abandon/requeue path handles it. A mutation arriving during a build retains its
+dirty kinds and advances the revision, so a follow-up generation cannot reuse that build's old workout inputs.
+
+No migration, index, source-data rewrite, or backfill is required. Snapshots warm lazily on their next full build.
+Release the event/activity/sleep/Health triggers, ingress worker, derived worker, ensure callable, and benchmark callable
+together so all dirty-mark writers use the same invalidation rules. Deployment requires separate approval. Bump the
+seed version (or global derived schema) when changing workout projection semantics; recovery-only formula changes
+still recompute recovery through the shared helper. Removing this optimization restores the full-build path and does
+not require deleting metadata or any source data.
+
+For verification, compare `usedTrainingBuildWorkoutSeed`, `usedProjectionFormSnapshotSeed`,
+`formEventDocsScanned`, `trainingActivityDocsScanned`, `reusedTrainingBuildEventDocs`, and
+`reusedTrainingBuildActivityDocs`. Reused counts describe inputs represented by the snapshot, not billed reads saved
+in every mixed task. `sourceFetchDurationMs` covers source loading after seed lookup, and
+`snapshotBuildAndWriteDurationMs` covers calculation/write and nearby guards; total `durationMs` includes all stages.
+These are aggregate operational counters, not exact Firestore billing attribution: control-document reads, nightly-HRV
+enrichment, empty-query minimums, and retries are not included in the source-document counters. Measure realized
+savings from deployment onward; do not equate the eligible workload share with a guaranteed reduction in the bill.
+
+Regression coverage includes pure full/reused recovery equivalence, seed expiry/corruption/version validation, worker
+query selection and fallbacks, plus loopback-only Firestore tests for ownership, concurrent claims, invalidation during
+processing, stale-worker fencing and deletion starting between the preliminary check and commit:
+
+```bash
+npx firebase emulators:exec --project demo-derived-metrics-reuse --only firestore 'npm --prefix functions test -- src/derived-metrics/derived-metrics-reuse.emulator.spec.ts'
+```
 
 ## Page Lifecycle and Destination Navigation
 
