@@ -407,8 +407,8 @@ readiness flags and delivery entitlement enforcement are unchanged. Broader roll
 
 The common delivery implementation lives in `functions/src/training-plans/delivery/`, with browser-safe v1 contracts in
 `shared/training-provider-delivery.ts`. It is independent of schedule history and leaves the exact `WorkoutStructureV1`
-JSON and Sports Lib conversion/formatting boundary unchanged. Real transports remain unavailable behind disabled
-provider switches. The Garmin adapter is implemented and tested offline under #647 (see below); deterministic fakes
+JSON and Sports Lib conversion/formatting boundary unchanged. Public provider switches remain disabled; a separate
+backend-enforced private Garmin evaluation pilot is described below. The Garmin adapter is implemented and tested offline under #647; deterministic fakes
 exist only in `delivery/test-support/`, are excluded from the Functions build, and have no browser/configuration switch.
 
 `previewTrainingProviderDelivery` and `mutateTrainingProviderDelivery` are focused, authenticated, App Check-enforced
@@ -535,14 +535,15 @@ Allowlisted diagnostics use the `[TrainingDelivery]` message with `event`, `prov
 Cloud Logging filters: `jsonPayload.message="[TrainingDelivery]"`; add `jsonPayload.event="failure"` and group by
 `jsonPayload.category`/`jsonPayload.provider` for failures or missing permissions; use `accepted` with `latencyMs` for
 delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptance`/`recovery_dispatch` for recovery.
-Production dashboards, alerts, certification and manual enablement remain #655.
+Production dashboards, alerts and broader rollout remain #655; Garmin evaluation evidence remains #698.
 
 ### Provider proof status
 
-`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four delivery switches remain
+`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four public delivery switches remain
 false. Garmin, COROS, Wahoo, and Suunto remain `fixture-only`: serializers prove documented mapping, and Garmin now
-also has an offline-tested HTTP adapter. No real provider request, token use, schedule write, ZIP upload, or production
-action was performed for this implementation. COROS, Wahoo and Suunto have no production transport binding yet. The
+also has an offline-tested HTTP adapter. Offline verification does not constitute a real provider request or device result.
+The UID-restricted evaluation exception below enables that evidence to be collected without public launch.
+COROS, Wahoo and Suunto have no production transport binding yet. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -556,6 +557,30 @@ combinations fail instead of being approximated. The common lifecycle is proved 
 real provider HTTP, callbacks and sandbox certification remain #645 and #647–#650. Rollout, AI, templates, completion
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
+
+#### Private Garmin evaluation pilot
+
+`shared/training-delivery-rollout.ts` contains a separate, exact-match Garmin pilot allowlist. It is not derived from
+the presentation-only Training UI gate. An empty pilot list disables the exception; it never means everyone. The
+production runtime selects the real Garmin adapter only when this per-user gate admits the identity. Callables use
+the authenticated UID, workers use server-owned job identity, and the worker rechecks transport readiness immediately
+before provider I/O. Request data cannot select a UID, destination, credential or test transport. Frontend readiness
+uses the same predicate and recomputes on sign-in, account switch and sign-out; showing controls does not grant consent.
+
+The pilot retains Auth/App Check, Pro/grace, explicit plan or standalone consent, compatibility approval, destination
+authority, deletion fencing, and existing recovery/Stop rules. Legacy Garmin connections without current connection and
+credential generations or recorded `WORKOUT_IMPORT` must reconnect; do not fabricate permission or migrate consent.
+Start evaluation with one explicitly sent future standalone workout, not an opted-in multi-workout plan.
+
+Deployment requires separate explicit approval. Before activation, inspect only the pilot account's existing settings,
+ledger and queued work so previously recorded opt-ins cannot unexpectedly resume. Deploy the two delivery callables
+(`previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`) and `processTrainingDeliveryTask`, then the
+production frontend. Existing queue dispatchers and schedule/connection/entitlement marker writers do not select
+transports and need no change for this gate; no Rules/index/secret changes are introduced. To disable the pilot, clear
+the list and redeploy those backend functions and frontend. That blocks transport, including withdrawals, but preserves
+consent and evidence; use Stop while access is valid first if eligible provider copies must be removed. Deployment alone
+neither creates consent nor sends a workout. This evaluation exception does not satisfy #698's sandbox/device proof or
+#655's public rollout gates, and does not change #651 completion matching or #654 Sports Lib extraction.
 
 ### Garmin workout/calendar adapter (#647)
 
@@ -599,7 +624,7 @@ edits and manual Retry, malformed/empty/asynchronous success responses, lost res
 changed-account reconnect, disconnect and account deletion. Run `npm run test:training-delivery` plus the existing Rules,
 secret registration and frontend suites. Sandbox/device certification remains a separate gate: confirm the documented
 create path in the evaluation tenant, actual response/404 semantics and schedule-list wrapper/pagination, quota/horizon,
-Workout Import approval, all CRUD/recovery scenarios and representative device rendering before enabling Garmin.
+Workout Import approval, all CRUD/recovery scenarios and representative device rendering before public Garmin enablement.
 The focused epic subissue #698 owns this remaining sandbox/device evidence, request-pacing validation and operator
 recovery procedure. Keep #647 open until its certification acceptance is evidenced; #645 owns access/contract questions
 and #655 owns production rollout. None of these tests constitutes a real Garmin sandbox or watch result.

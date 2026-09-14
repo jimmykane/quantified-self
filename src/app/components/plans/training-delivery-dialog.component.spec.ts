@@ -14,12 +14,13 @@ import { TrainingPlansService } from '../../services/training-plans.service';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { TrainingDeliveryDialogComponent } from './training-delivery-dialog.component';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
+import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
 
 describe('Training provider delivery controls', () => {
   const user = signal<{ uid: string } | null>({ uid: 'owner' });
   const user$ = new BehaviorSubject<{ uid: string } | null>({ uid: 'owner' });
   let close: ReturnType<typeof vi.fn>;
-  let service: { anyReady: boolean; isReady: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>;
+  let service: { anyReady: () => boolean; isReady: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>;
     watchScope: ReturnType<typeof vi.fn>; createMutationId: ReturnType<typeof vi.fn>; preview: ReturnType<typeof vi.fn>; mutate: ReturnType<typeof vi.fn> };
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   const status = { schemaVersion: 1, id: 'delivery', workoutId: 'w', planId: null, provider: 'garmin',
@@ -29,7 +30,7 @@ describe('Training provider delivery controls', () => {
   beforeEach(async () => {
     user.set({ uid: 'owner' }); user$.next(user()); close = vi.fn();
     haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
-    service = { anyReady: false, isReady: vi.fn(() => false), watchPresence: vi.fn(() => of(true)),
+    service = { anyReady: () => false, isReady: vi.fn(() => false), watchPresence: vi.fn(() => of(true)),
       watchScope: vi.fn(() => of({ settings: [], statuses: [status] })), createMutationId: vi.fn(() => 'mutation'),
       preview: vi.fn(async () => ({ schemaVersion: 1, available: true, connection: 'connected', hasPro: true,
         timeZone: 'Europe/Helsinki', effect: 'enable', settingsRevision: 0, eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: null })),
@@ -143,6 +144,22 @@ describe('Training provider delivery controls', () => {
     fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p'); fixture.componentRef.setInput('title', 'Plan');
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button')).toBeNull();
+  });
+  it('shows Send only for the pilot and hides it on account switch or sign-out without creating consent', () => {
+    service.watchPresence.mockReturnValue(of(false));
+    service.anyReady = () => isTrainingProviderDeliveryEnabled('garmin', user()?.uid);
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'workout'); fixture.componentRef.setInput('entityId', 'w');
+    fixture.componentRef.setInput('title', 'Workout'); fixture.componentRef.setInput('standalone', true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    user.set({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' }); user$.next(user()); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Send workout');
+    user.set({ uid: 'another-user' }); user$.next(user()); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    user.set(null); user$.next(null); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
   it('renders the Material dialog shell and permits recovery without Pro without granting consent', async () => {
     TestBed.overrideProvider(MatDialog, { useFactory: () => new MatDialog() });

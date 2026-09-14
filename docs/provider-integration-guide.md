@@ -59,11 +59,16 @@ deletion behavior, or enable a provider. See the [Training workspace source of t
 shared gate and account-change behavior.
 
 The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
-`functions/src/training-plans/providers/`. Every provider delivery flag is currently `false`:
+`functions/src/training-plans/providers/`. Every public provider delivery flag is currently `false`. The separate
+exact-UID Garmin evaluation exception in `shared/training-delivery-rollout.ts` is enforced by both the production runtime
+and reactive frontend controls; it does not depend on the presentation-only allowlist. It retains Pro, explicit consent,
+connection authority and `WORKOUT_IMPORT` checks. Legacy connections must reconnect rather than have permission inferred.
+See the [private pilot operational boundary](training-workspace.md#private-garmin-evaluation-pilot) for deployment,
+preflight and rollback. This is controlled evaluation, not sandbox certification or public rollout:
 
 | Provider | Proof state | Truthful model and current gate |
 | --- | --- | --- |
-| Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested, disabled HTTP adapter now cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Evaluation access, actual response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
+| Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested HTTP adapter cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Real delivery is restricted to the explicit private pilot. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Actual evaluation response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
 | COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
 | Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
 | Suunto | `fixture-only` | A scheduled workout maps to one dated SuuntoPlus Guide, not a native training-plan calendar. Time, distance, manual transition, repeats, and absolute HR/power/speed/pace/cadence targets map to Guide JSON; cadence converts from rpm to hertz. Guide entitlement, ZIP/icon transport, watch storage/pinning, supported-device behavior, CRUD, and FIT correlation need sandbox proof. |
@@ -110,7 +115,7 @@ update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and pro
 shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved only with an excluded
 test transport. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
 source of truth for its contracts, operations, evidence and maintenance. Garmin's #647 adapter additionally runs through
-synthetic HTTP fixtures and real Firestore transactions; all real provider transports remain unavailable behind the flags.
+synthetic HTTP fixtures and real Firestore transactions; real transport remains unavailable outside the private Garmin pilot.
 The [Garmin adapter boundary](training-workspace.md#garmin-workoutcalendar-adapter-647) documents the per-request authority
 guard, step journal, exact endpoints, request bounds, permission flow and remaining certification checklist. In particular,
 Garmin's documented first workout POST has no external idempotency/lookup key: unknown acceptance remains blocked for

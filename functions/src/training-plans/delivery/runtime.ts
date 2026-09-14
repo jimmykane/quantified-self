@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { isPlannedWorkoutProviderDeliveryEnabled } from '../../../../shared/planned-workout-providers';
+import { isTrainingProviderDeliveryEnabled } from '../../../../shared/training-delivery-rollout';
 import { hasProAccess } from '../../utils';
 import type { DeliveryOperation, DeliveryRuntime, TrainingDeliveryTransport } from './contracts';
 import { readTrainingDeliveryAuthority } from './connection';
@@ -21,12 +21,12 @@ function garminTransport(db: admin.firestore.Firestore, uid: string): TrainingDe
   };
 }
 
-/** There is no environment/browser-selectable fake. Real transports require the
- * shared, reviewed provider switch; all switches remain false pending certification. */
+/** No environment/browser-selectable fake. Public delivery remains disabled;
+ * only the reviewed UID pilot can exercise Garmin before certification. */
 export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRuntime {
   return {
     db, now: Date.now, hasPro: hasProAccess,
-    transport: (provider, uid) => provider === 'garmin' && isPlannedWorkoutProviderDeliveryEnabled(provider) ? garminTransport(db, uid) : null,
+    transport: (provider, uid) => provider === 'garmin' && isTrainingProviderDeliveryEnabled(provider, uid) ? garminTransport(db, uid) : null,
     connection: async (tx, uid, provider) => (await readTrainingDeliveryAuthority(db, tx, uid, provider)).connection,
   };
 }

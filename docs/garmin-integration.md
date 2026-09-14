@@ -87,7 +87,11 @@ Workout content and date-only Workout Schedule payloads are deliberately separat
 their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
 heart-rate/power/speed/pace/cadence ranges.
 
-All Garmin planned-workout delivery remains disabled. Relative targets require explicit degradation approval because
+Public Garmin planned-workout delivery remains disabled. A separate backend-enforced exact-UID evaluation pilot can
+use the existing app's explicit Send/plan consent flow; see the [pilot boundary](training-workspace.md#private-garmin-evaluation-pilot).
+The pilot does not bypass Pro, current connection generations or `WORKOUT_IMPORT`; older connections must reconnect.
+It is independent of the Training UI allowlist and does not constitute completed sandbox/device certification.
+Relative targets require explicit degradation approval because
 the provider percentage fields do not transmit Quantified Self's stored reference snapshot. Secondary targets are
 rejected outside cycling and remain device-dependent for cycling. The #647 adapter now has synthetic HTTP and real
 Firestore worker tests for separate CRUD, Long IDs, partial recovery, permission repair, reconnect and deletion races.
@@ -99,7 +103,7 @@ attention rather than being posted again. Provider responses and credentials nev
 Past/completed copies remain protected, and provider-held copies may remain after disconnect/account deletion.
 
 The detailed implementation and certification checklist live in the
-[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Evaluation credentials, actual
+[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Actual evaluation credential authority,
 request/response and schedule-list/404 behavior, device rendering, sandbox CRUD/reconnect evidence and production review
 remain outstanding in #645/#647/#698/#655; #698 tracks the focused sandbox/device evidence and operator recovery
 procedure. Completed-activity correlation remains #651. No new completion hook is implemented.

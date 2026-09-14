@@ -1,12 +1,14 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { Firestore, collection, collectionData, doc, docData, query, where, limit, orderBy } from 'app/firebase/firestore';
 import { combineLatest, map, Observable, of } from 'rxjs';
-import { PLANNED_WORKOUT_PROVIDER_IDS, isPlannedWorkoutProviderDeliveryEnabled } from '@shared/planned-workout-providers';
+import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
+import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
 import { deliverySettingsId, parseTrainingDeliverySettingsV1, parseTrainingDeliveryStatusV1,
   TRAINING_DELIVERY_PAGE_SIZE, TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliveryScope, type TrainingDeliverySettingsV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
+import { AppUserService } from './app.user.service';
 
 export interface TrainingDeliveryView { settings: TrainingDeliverySettingsV1[]; statuses: TrainingDeliveryStatusV1[]; }
 /** History is a read-only UI scope, never a delivery command or new consent scope. */
@@ -18,8 +20,9 @@ export class TrainingDeliveryService {
   private readonly firestore = inject(Firestore);
   private readonly functions = inject(AppFunctionsService);
   private readonly browser = inject(BrowserCompatibilityService);
-  readonly isReady = isPlannedWorkoutProviderDeliveryEnabled;
-  readonly anyReady = PLANNED_WORKOUT_PROVIDER_IDS.some(isPlannedWorkoutProviderDeliveryEnabled);
+  private readonly users = inject(AppUserService);
+  readonly isReady = (provider: PlannedWorkoutProviderId) => isTrainingProviderDeliveryEnabled(provider, this.users.user()?.uid);
+  readonly anyReady = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.some(provider => this.isReady(provider)));
 
   createMutationId(): string {
     return this.browser.createRandomUUID() ?? `delivery-${Date.now()}-${Math.random().toString(36).slice(2)}`;
