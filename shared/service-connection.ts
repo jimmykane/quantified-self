@@ -1,3 +1,4 @@
+import type { ConnectionHistoryStatusProjection } from './connection-history';
 export const SERVICE_CONNECTION_STATES = {
   Connected: 'connected',
   ReconnectRequired: 'reconnect_required',
@@ -16,6 +17,7 @@ export const SERVICE_OAUTH_COMPLETION_OUTCOMES = {
 export type ServiceOAuthCompletionResult =
   | {
     connected: true;
+    historyImport?: { runId: string };
     outcome: typeof SERVICE_OAUTH_COMPLETION_OUTCOMES.Connected;
   }
   | {
@@ -57,6 +59,7 @@ export interface ServiceDisconnectRetryDetails {
 }
 
 export interface ServiceConnectionMetaFields {
+  connectionHistoryImport?: ConnectionHistoryStatusProjection;
   connectionState?: ServiceConnectionState | null;
   /**
    * A display-only stable identifier supplied by the connected provider.

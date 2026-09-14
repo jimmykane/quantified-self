@@ -613,8 +613,8 @@ describe('RoutesPageComponent', () => {
         });
         await Promise.resolve();
 
-        expect(userServiceMock.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(ServiceNames.GarminAPI);
-        expect(windowServiceMock.windowRef.location.href).toBe('https://garmin.example/reconnect');
+        expect(userServiceMock.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
+        expect(routerMock.navigate).toHaveBeenCalledWith(['/services'], { queryParams: { serviceName: ServiceNames.GarminAPI, reconnect: '1' } });
     });
 
     it('dismisses the Garmin route permission prompt through dashboardActionPrompts', async () => {

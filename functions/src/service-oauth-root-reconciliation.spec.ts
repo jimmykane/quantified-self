@@ -155,6 +155,7 @@ describe('service OAuth root reconciliation', () => {
     expect(harness.transaction.update).toHaveBeenCalledWith(harness.rootRef, {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
+      oauthImportRecentHistory: hoisted.fieldDelete,
       oauthFlowGeneration: hoisted.fieldDelete,
       oauthFlowCreatedAt: hoisted.fieldDelete,
       oauthFlowExpiresAt: hoisted.fieldDelete,
@@ -184,6 +185,7 @@ describe('service OAuth root reconciliation', () => {
     expect(harness.transaction.update).toHaveBeenCalledWith(harness.rootRef, {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
+      oauthImportRecentHistory: hoisted.fieldDelete,
       oauthFlowGeneration: hoisted.fieldDelete,
       oauthFlowCreatedAt: hoisted.fieldDelete,
       oauthFlowExpiresAt: hoisted.fieldDelete,
@@ -239,6 +241,7 @@ describe('service OAuth root reconciliation', () => {
     expect(harness.transaction.update).toHaveBeenCalledWith(harness.rootRef, {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
+      oauthImportRecentHistory: hoisted.fieldDelete,
     });
     expect(harness.transaction.delete).not.toHaveBeenCalled();
   });
@@ -275,6 +278,7 @@ describe('service OAuth root reconciliation', () => {
     expect(harness.transaction.update).toHaveBeenCalledWith(harness.rootRef, {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
+      oauthImportRecentHistory: hoisted.fieldDelete,
     });
     expect(harness.transaction.delete).not.toHaveBeenCalled();
   });
@@ -306,6 +310,7 @@ describe('service OAuth root reconciliation', () => {
     expect(harness.transaction.update).toHaveBeenCalledWith(harness.rootRef, {
       state: hoisted.fieldDelete,
       codeVerifier: hoisted.fieldDelete,
+      oauthImportRecentHistory: hoisted.fieldDelete,
     });
     expect(harness.transaction.delete).not.toHaveBeenCalled();
   });

@@ -1,7 +1,12 @@
+import { replacesSupersededHistoryWork } from './connection-history/queue-replacement';
+import { randomUUID } from 'node:crypto';
+import { FieldValue } from 'firebase-admin/firestore';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { type HistoryExecution, HistoryWindowTooLargeError, assertHistoryReservation } from './connection-history/execution';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '../../shared/history-import.constants';
+import { activityHistoryNextAllowedAt } from '../../shared/history-import.constants';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
@@ -49,6 +54,8 @@ export interface HistoryImportResult {
 }
 
 export interface HistoryImportOptions {
+  execution?: HistoryExecution;
+  maxItems?: number;
   expectedProviderUserId?: string;
   cumulativeMetadata?: {
     startDate: Date;
@@ -92,9 +99,13 @@ async function commitHistoryBatchForActiveUser(params: {
   startDate: Date;
   endDate: Date;
   processedActivitiesCount: number;
+  execution?: HistoryExecution;
 }): Promise<void> {
   const db = admin.firestore();
   await db.runTransaction(async transaction => {
+    await params.execution?.inTransaction(transaction);
+    const reservationMeta = await transaction.get(db.collection('users').doc(params.userID).collection('meta').doc(params.serviceName));
+    assertHistoryReservation(reservationMeta.data(), params.execution?.runId);
     let deletionGuard;
     try {
       deletionGuard = await getUserDeletionGuardStateInTransaction(db, transaction, params.userID);
@@ -116,13 +127,17 @@ async function commitHistoryBatchForActiveUser(params: {
       workoutQueueItem,
       queueRef: db.collection(getServiceWorkoutQueueName(params.serviceName)).doc(`${workoutQueueItem.id}`),
     }));
-    const existingQueueSnapshots = params.serviceName === ServiceNames.COROSAPI && queueWrites.length > 0
+    const existingQueueSnapshots = queueWrites.length > 0
       ? await transaction.getAll(...queueWrites.map(({ queueRef }) => queueRef))
       : [];
     const nowMs = Date.now();
 
     for (let index = 0; index < queueWrites.length; index++) {
       const { workoutQueueItem, queueRef } = queueWrites[index];
+      // Preserve an existing canonical queue revision, including a webhook in flight.
+      if (params.execution && existingQueueSnapshots[index]?.exists && !replacesSupersededHistoryWork(
+        existingQueueSnapshots[index].data() || {}, { connectionHistoryRunId: params.execution.runId, firebaseUserID: params.userID },
+      )) continue;
       const activeProcessingLease = params.serviceName === ServiceNames.COROSAPI
         ? getActiveRevisionProcessingLease(
           existingQueueSnapshots[index]?.exists
@@ -140,6 +155,8 @@ async function commitHistoryBatchForActiveUser(params: {
         firebaseUserID: params.userID,
         expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
         fromHistory: true,
+        queueRevision: workoutQueueItem.queueRevision || randomUUID(),
+        ...(params.execution ? { connectionHistoryRunId: params.execution.runId } : {}),
         dispatchedToCloudTask: null,
         ...(activeProcessingLease || {}),
       });
@@ -147,7 +164,7 @@ async function commitHistoryBatchForActiveUser(params: {
     transaction.set(
       db.collection('users').doc(params.userID).collection('meta').doc(params.serviceName),
       <UserServiceMetaInterface>{
-        didLastHistoryImport: Date.now(),
+        didLastHistoryImport: params.execution?.cooldownStartedAtMs ?? Date.now(),
         lastHistoryImportStartDate: params.startDate.getTime(),
         lastHistoryImportEndDate: params.endDate.getTime(),
         processedActivitiesFromLastHistoryImportCount: params.processedActivitiesCount,
@@ -164,6 +181,42 @@ export async function addHistoryToQueue(
   endDate: Date,
   options: HistoryImportOptions = {},
 ): Promise<HistoryImportResult> {
+  if (options.execution) return addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options);
+  return withActivityHistoryImportReservation(userID, serviceName, importWindow => importWindow(startDate, endDate, options));
+}
+
+/** Reserve once for a complete manual import, including every provider window. */
+export async function withActivityHistoryImportReservation<T>(
+  userID: string,
+  serviceName: ServiceNames,
+  operation: (importWindow: (startDate: Date, endDate: Date, options?: HistoryImportOptions) => Promise<HistoryImportResult>) => Promise<T>,
+): Promise<T> {
+  const owner = randomUUID(); const db = admin.firestore();
+  const ref = db.collection('users').doc(userID).collection('meta').doc(serviceName);
+  await db.runTransaction(async transaction => {
+    const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+    if (deletion.shouldSkip) throw new HistoryImportSkippedForDeletedUserError(userID, 'reservation');
+    const snapshot = await transaction.get(ref); const meta = snapshot.data();
+    assertHistoryReservation(meta);
+    if (Number(meta?.historyImportLeaseExpiresAt) > Date.now()) throw new HttpsError('already-exists', 'Another history import is running.');
+    const next = activityHistoryNextAllowedAt(Number(meta?.didLastHistoryImport), Number(meta?.processedActivitiesFromLastHistoryImportCount));
+    if (next > Date.now()) throw new HttpsError('resource-exhausted', 'History import is in cooldown.');
+    transaction.set(ref, { historyImportLeaseOwner: owner, historyImportLeaseExpiresAt: Date.now() + 30 * 60_000,
+      connectionHistoryReservation: FieldValue.delete(), connectionHistoryReservationExpiresAt: FieldValue.delete() }, { merge: true });
+  });
+  try { return await operation((startDate, endDate, options = {}) => addHistoryToQueueOperation(userID, serviceName, startDate, endDate, options)); }
+  finally {
+    await db.runTransaction(async transaction => {
+      const deletion = await getUserDeletionGuardStateInTransaction(db, transaction, userID);
+      const snapshot = await transaction.get(ref);
+      if (deletion.shouldSkip || snapshot.data()?.historyImportLeaseOwner !== owner) return;
+      transaction.set(ref, { historyImportLeaseOwner: FieldValue.delete(), historyImportLeaseExpiresAt: FieldValue.delete() }, { merge: true });
+    });
+  }
+}
+async function addHistoryToQueueOperation(
+  userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date, options: HistoryImportOptions,
+): Promise<HistoryImportResult> {
   await assertHistoryImportUserActive(userID, 'before_token_lookup');
   const metadataStartDate = options.cumulativeMetadata?.startDate ?? startDate;
   const metadataEndDate = options.cumulativeMetadata?.endDate ?? endDate;
@@ -175,7 +228,9 @@ export async function addHistoryToQueue(
     throw new Error('Invalid history import cumulative metadata.');
   }
   const serviceConfig = getServiceConfig(serviceName);
-  const tokenDocuments = serviceName === ServiceNames.COROSAPI
+  const tokenDocuments = options.execution
+    ? [await admin.firestore().doc(options.execution.tokenPath).get()]
+    : serviceName === ServiceNames.COROSAPI
     ? [options.expectedProviderUserId
       ? await getActiveCOROSTokenSnapshot(userID, options.expectedProviderUserId)
       : await getActiveCOROSTokenSnapshot(userID)]
@@ -190,6 +245,7 @@ export async function addHistoryToQueue(
   let failedBatchesCount = 0;
 
   for (const tokenQueryDocumentSnapshot of tokenDocuments) {
+    await options.execution?.beforeRequest();
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
     await assertHistoryImportUserActive(userID, 'before_provider_request');
     if (serviceName === ServiceNames.COROSAPI) {
@@ -198,7 +254,14 @@ export async function addHistoryToQueue(
 
     let workoutQueueItems: any;
     try {
-      workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken as any, startDate, endDate);
+      await options.execution?.beforeRequest();
+      workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken as any, startDate, endDate, {
+        ...(options.maxItems ? { suuntoResultLimit: options.maxItems + 1, maxItems: options.maxItems } : {}),
+      });
+      if (options.maxItems && workoutQueueItems.length > options.maxItems) throw new HistoryWindowTooLargeError();
+      if (serviceName === ServiceNames.SuuntoApp) {
+        for (const item of workoutQueueItems) item.id = await generateIDFromParts([item.userName, item.workoutID, userID]);
+      }
     } catch (e: any) {
       logger.warn('[HistoryImport] Could not retrieve provider history.', {
         serviceName,
@@ -222,6 +285,7 @@ export async function addHistoryToQueue(
         await commitHistoryBatchForActiveUser({
           userID,
           serviceName,
+          execution: options.execution,
           providerUserId: tokenQueryDocumentSnapshot.id,
           workoutQueueItems: [],
           startDate: metadataStartDate,
@@ -250,6 +314,7 @@ export async function addHistoryToQueue(
         await commitHistoryBatchForActiveUser({
           userID,
           serviceName,
+          execution: options.execution,
           providerUserId: tokenQueryDocumentSnapshot.id,
           workoutQueueItems: batchToProcess,
           startDate: metadataStartDate,
@@ -259,11 +324,13 @@ export async function addHistoryToQueue(
             + processedWorkoutsCount,
         });
 
+        for (const item of batchToProcess) options.execution?.onQueued(`${getServiceWorkoutQueueName(serviceName)}/${item.id}`);
         processedBatchesCount++;
         totalProcessedWorkoutsCount += processedWorkoutsCount;
 
         logger.info(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
       } catch (e: any) {
+        if (options.execution) throw e;
         if (e instanceof HistoryImportSkippedForDeletedUserError
           || e instanceof UserDeletionGuardReadError
           || (serviceName === ServiceNames.COROSAPI && `${e?.code || ''}`.replace(/^functions\//, '') === 'unauthenticated')) {
@@ -292,7 +359,7 @@ export async function getWorkoutQueueItems(
   serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface,
   startDate: Date,
   endDate: Date,
-  options: { suuntoResultLimit?: number } = {},
+  options: { suuntoResultLimit?: number; maxItems?: number } = {},
 ): Promise<SuuntoAppWorkoutQueueItemInterface | COROSAPIWorkoutQueueItemInterface[]> {
   let result;
   switch (serviceName) {
@@ -314,12 +381,14 @@ export async function getWorkoutQueueItems(
           'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           'json': true,
         },
+        ...(options.maxItems ? { timeout: 30_000, maxResponseBytes: 16 * 1024 * 1024 } : {}),
         url: `https://cloudapi.suunto.com/v3/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=${requestedLimit}&filter-by-modification-time=false`,
       });
       result = JSON.parse(result);
       if (result.error) {
         throw new Error(result.error);
       }
+      if (options.maxItems && (!Array.isArray(result.payload) || result.payload.length > options.maxItems)) throw new HistoryWindowTooLargeError();
       return await Promise.all(result.payload
         // .filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate)
         .filter((item: any) => !!item.workoutKey)
@@ -344,6 +413,7 @@ export async function getWorkoutQueueItems(
       result = await requestPromise.get({
         url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/v2/coros/sport/list?token=${encodeURIComponent(accessToken)}&openId=${encodeURIComponent(openId)}&startDate=${formatCOROSCalendarDate(startDate)}&endDate=${formatCOROSCalendarDate(endDate)}`,
         timeout: COROS_API_REQUEST_TIMEOUT_MS,
+        ...(options.maxItems ? { maxResponseBytes: 16 * 1024 * 1024 } : {}),
       });
       const corosResult = parseCOROSJSON<COROSHistoryResponse>(result);
       const resultCode = `${corosResult.result ?? ''}`.trim();
@@ -353,6 +423,7 @@ export async function getWorkoutQueueItems(
       if (!Array.isArray(corosResult.data)) {
         throw new Error('COROS returned an invalid history response.');
       }
+      if (options.maxItems && corosResult.data.length > options.maxItems) throw new HistoryWindowTooLargeError();
       return await convertCOROSWorkoutsToQueueItems(corosResult.data, openId);
     }
   }
@@ -367,7 +438,7 @@ export async function getNextAllowedHistoryImportDate(userID: string, serviceNam
   if (data.processedActivitiesFromLastHistoryImportCount === 0) {
     return null;
   }
-  return new Date(data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000));
+  return new Date(activityHistoryNextAllowedAt(data.didLastHistoryImport, data.processedActivitiesFromLastHistoryImportCount));
 }
 
 export async function isAllowedToDoHistoryImport(userID: string, serviceName: ServiceNames): Promise<boolean> {

@@ -57,6 +57,7 @@ describe('ServicesGarminComponent', () => {
                 }
             }
         };
+        mockActivatedRoute.queryParamMap = of(mockActivatedRoute.snapshot.queryParamMap);
         mockRouter = {
             navigate: vi.fn().mockResolvedValue(true),
             events: of({}),

@@ -1,8 +1,14 @@
+import { currentHistoryExecution } from '../connection-history/context';
 import {
   GARMIN_HEALTH_SUMMARY_TYPES,
   GARMIN_HEALTH_SUMMARY_ENDPOINT_PATHS,
   type GarminHealthSummaryType,
 } from './health-summary-types';
+
+/** Automatic runs retain their original family inventory across subsequent deployments. */
+export function getGarminHistorySummaryTypes(): readonly GarminHealthSummaryType[] {
+  return currentHistoryExecution()?.garminHealthSummaryTypes ?? GARMIN_HEALTH_SUMMARY_TYPES;
+}
 
 export const GARMIN_HEALTH_BACKFILL_ENDPOINTS: Readonly<Record<GarminHealthSummaryType, string>>
   = GARMIN_HEALTH_SUMMARY_ENDPOINT_PATHS;
@@ -57,7 +63,7 @@ export function countGarminHealthBackfillWindows(startMs: number, endMs: number)
 }
 
 export function countGarminHealthBackfillRequests(startMs: number, endMs: number): number {
-  return countGarminHealthBackfillWindows(startMs, endMs) * GARMIN_HEALTH_SUMMARY_TYPES.length;
+  return countGarminHealthBackfillWindows(startMs, endMs) * getGarminHistorySummaryTypes().length;
 }
 
 export function getGarminHealthBackfillWindow(
@@ -68,15 +74,15 @@ export function getGarminHealthBackfillWindow(
   assertSecondAlignedTimestamp(rangeEndMs, 'rangeEndMs');
   if (!Number.isInteger(cursor.summaryIndex)
     || cursor.summaryIndex < 0
-    || cursor.summaryIndex > GARMIN_HEALTH_SUMMARY_TYPES.length) {
+    || cursor.summaryIndex > getGarminHistorySummaryTypes().length) {
     throw new Error('Garmin Health backfill summary cursor is invalid.');
   }
-  if (cursor.summaryIndex === GARMIN_HEALTH_SUMMARY_TYPES.length) return null;
+  if (cursor.summaryIndex === getGarminHistorySummaryTypes().length) return null;
   if (cursor.nextStartMs > rangeEndMs) {
     throw new Error('Garmin Health backfill time cursor is outside the active family.');
   }
   return {
-    summaryType: GARMIN_HEALTH_SUMMARY_TYPES[cursor.summaryIndex],
+    summaryType: getGarminHistorySummaryTypes()[cursor.summaryIndex],
     summaryIndex: cursor.summaryIndex,
     startMs: cursor.nextStartMs,
     endMs: Math.min(
@@ -141,5 +147,5 @@ export function clipGarminHealthBackfillCursorToMinimum(
 }
 
 export function isCompleteGarminHealthBackfillCursor(cursor: GarminHealthBackfillCursor): boolean {
-  return cursor.summaryIndex >= GARMIN_HEALTH_SUMMARY_TYPES.length;
+  return cursor.summaryIndex >= getGarminHistorySummaryTypes().length;
 }

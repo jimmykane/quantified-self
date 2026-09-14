@@ -1,3 +1,4 @@
+import { ConnectionHistoryOptionComponent, ConnectionHistoryStatusComponent } from '../components/services/connection-history/connection-history.component';
 import { NgModule } from '@angular/core';
 import { ServicesComponent } from '../components/services/services.component';
 import { ServicesRoutingModule } from '../services.routing.module';
@@ -20,6 +21,8 @@ import { ProviderDataFlowMatrixComponent } from '../components/shared/provider-d
 @NgModule({
     imports: [
         CommonModule,
+        ConnectionHistoryOptionComponent,
+        ConnectionHistoryStatusComponent,
         SharedModule,
         MaterialModule,
         ServicesRoutingModule,

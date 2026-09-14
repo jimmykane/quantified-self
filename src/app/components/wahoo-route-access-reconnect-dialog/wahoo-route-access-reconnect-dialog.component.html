@@ -1,7 +1,7 @@
 <h2 mat-dialog-title>Reconnect Wahoo to send routes</h2>
 <mat-dialog-content>
   <p>Your current Wahoo connection does not include permission to add routes.</p>
-  <p>Reconnect Wahoo to grant route access. When you return, send the route again.</p>
+  <p>Open Connections to review your history-import choice and reconnect Wahoo. When you return, send the route again.</p>
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button type="button" [disabled]="reconnecting()" (click)="haptics.selection()" mat-dialog-close>Not now</button>
@@ -9,9 +9,9 @@
     <span class="wahoo-route-access-reconnect-dialog__button-content">
       @if (reconnecting()) {
         <mat-spinner diameter="18"></mat-spinner>
-        <span>Opening Wahoo…</span>
+        <span>Opening Connections…</span>
       } @else {
-        <span>Reconnect Wahoo</span>
+        <span>Open Connections</span>
       }
     </span>
   </button>

@@ -19,6 +19,7 @@ import type { ServiceOAuthCompletionResult } from '../../../../shared/service-co
 
 
 interface GetAuthRedirectURIRequest {
+  importRecentHistory?: boolean;
   redirectUri: string;
 }
 
@@ -58,7 +59,7 @@ export const getCOROSAPIAuthRequestTokenRedirectURI = functions
 
     try {
       return {
-        redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
+        redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI, data.importRecentHistory),
       };
     } catch (error) {
       if (isServiceDisconnectInProgressError(error)) {

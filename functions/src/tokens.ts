@@ -1,3 +1,5 @@
+import { currentHistoryExecution } from './connection-history/context';
+import { HistoryLifecycleChangedError } from './connection-history/execution';
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as logger from 'firebase-functions/logger';
@@ -291,6 +293,11 @@ export async function getTokenData(
   forceRefreshAndSave = false,
   options: GetTokenDataOptions = {},
 ): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface | WahooAPIAuth2ServiceTokenInterface> {
+  const execution = currentHistoryExecution();
+  if (execution) {
+    await execution.beforeRequest();
+    if (doc.ref.path !== execution.tokenPath) throw new HistoryLifecycleChangedError();
+  }
   const serviceConfig = getServiceAdapter(serviceName, true);
   const serviceTokenData = <Auth2ServiceTokenInterface | undefined>doc.data();
   if (!serviceTokenData) {

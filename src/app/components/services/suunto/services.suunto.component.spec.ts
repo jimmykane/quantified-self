@@ -24,7 +24,8 @@ import { AppWindowService } from '../../../services/app.window.service';
 import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { of } from 'rxjs';
+import { of, BehaviorSubject } from 'rxjs';
+import { ActivatedRoute, convertToParamMap, ParamMap } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ROUTE_DELIVERY_SYNC_ROUTE_IDS } from '@shared/route-delivery-sync-routes';
@@ -38,8 +39,10 @@ describe('ServicesSuuntoComponent', () => {
     let mockSnackBar: any;
     let mockDialog: any;
     let mockAnalyticsService: any;
+    let routeParams: BehaviorSubject<ParamMap>;
 
     beforeEach(async () => {
+        routeParams = new BehaviorSubject(convertToParamMap({}));
         mockUserService = {
             user: vi.fn(() => ({ uid: 'user-1' })),
             isAdmin: vi.fn(),
@@ -108,6 +111,7 @@ describe('ServicesSuuntoComponent', () => {
                 RouterTestingModule
             ],
             providers: [
+                { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({}) }, queryParamMap: routeParams } },
                 { provide: Analytics, useValue: {} },
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
@@ -130,6 +134,21 @@ describe('ServicesSuuntoComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('reveals reconnect options for route changes on the existing Connections page', () => {
+        component.importRecentHistory = false;
+        routeParams.next(convertToParamMap({ serviceName: ServiceNames.WahooAPI, reconnect: '1' }));
+        expect(component.reconnectRequested).toBe(false);
+        routeParams.next(convertToParamMap({ serviceName: ServiceNames.SuuntoApp, reconnect: '1' }));
+        expect(component.reconnectRequested).toBe(true);
+        expect(component.importRecentHistory).toBe(false);
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
+        routeParams.next(convertToParamMap({ serviceName: ServiceNames.SuuntoApp }));
+        expect(component.reconnectRequested).toBe(false);
+        fixture.destroy();
+        routeParams.next(convertToParamMap({ serviceName: ServiceNames.SuuntoApp, reconnect: '1' }));
+        expect(component.reconnectRequested).toBe(false);
     });
 
     it('exchanges a returned OAuth code and state', async () => {
@@ -171,6 +190,13 @@ describe('ServicesSuuntoComponent', () => {
         expect(mockUserService.requestAndSetCurrentUserSuuntoAppAccessToken)
             .toHaveBeenCalledWith('state-token', 'auth-code');
         expect(component.forceConnected).toBe(true);
+    });
+
+    it.each(Object.values(ServiceNames).flatMap(service => [true, false].map(checked => [service, checked] as const)))('sends explicit history consent for %s checked=%s through the shared connection flow', async (service, checked) => {
+        component.serviceName = service; component.hasProAccess = true; component.importRecentHistory = checked;
+        mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockResolvedValue({ redirect_uri: 'https://provider.example/authorize' });
+        await component.connectWithService(new MouseEvent('click'));
+        expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).toHaveBeenCalledWith(service, checked);
     });
 
     it('starts only one OAuth flow while the authorization URL request is pending', async () => {

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Firebase callable tests use intentionally partial mocks. */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as requestHelper from '../request-helper';
-import { backfillGarminAPIActivities } from './backfill';
+import { backfillGarminAPIActivities, processGarminBackfill } from './backfill';
 import * as utils from '../utils';
 
 // Simple, robust mock setup
@@ -55,6 +55,7 @@ collectionMock.mockReturnValue(collectionObj); // collection() -> collection
 vi.mock('firebase-admin', () => ({
     firestore: () => ({
         collection: collectionMock,
+        doc: docMock,
         collectionGroup: vi.fn(), // added collectionGroup if needed
         runTransaction: runTransactionMock,
     })
@@ -230,6 +231,14 @@ describe('Garmin Backfill', () => {
         context.auth = undefined;
         const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
         await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('The function must be called while authenticated.');
+    });
+
+    it('preserves an automatic token refresh retry hint for the coordinator', async () => {
+        const error = Object.assign(new Error('refresh delayed'), { retryAt: Date.now() + 7200000 });
+        vi.mocked(tokens.getTokenData).mockRejectedValueOnce(error);
+        const execution = { runId: 'run', tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() };
+        await expect(processGarminBackfill('testUserID', new Date('2026-08-01'), new Date('2026-08-12'), execution)).rejects.toBe(error);
+        expect(requestHelper.get).not.toHaveBeenCalled();
     });
 
     it('should throw permission-denied if throttled', async () => {

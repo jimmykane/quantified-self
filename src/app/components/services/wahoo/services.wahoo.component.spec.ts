@@ -1,3 +1,4 @@
+import { of } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
@@ -37,7 +38,7 @@ describe('ServicesWahooComponent', () => {
         { provide: AppUserService, useValue: userService },
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { queryParamMap: convertToParamMap({ state: 'state-1', code: 'code-1' }) } },
+          useValue: { snapshot: { queryParamMap: convertToParamMap({ state: 'state-1', code: 'code-1' }) }, queryParamMap: of(convertToParamMap({})) },
         },
         { provide: AppWindowService, useValue: { windowRef: { location: { href: '' } } } },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },

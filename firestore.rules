@@ -508,6 +508,8 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
+    match /connectionHistoryImports/{document=**} { allow read, write: if false; }
+
     match /trainingDeliveryQueue/{document=**} { allow read, write: if false; }
 
     match /sleepSyncQueue/{queueItemID} {

@@ -75,3 +75,11 @@ Wahoo requires six composite indexes: one `tokens` collection-group index on `wa
 5. Deploy the Firestore indexes, Rules, queue TTL configuration, Functions, and Hosting artifacts through the normal release workflow.
 6. Exercise sandbox OAuth with activity and route write scopes, webhook, edited-workout deduplication, history pagination/rate limiting, automatic and manual Wahoo-to-Suunto/COROS delivery, destination-namespaced echo receipts, direct FIT activity delivery, direct FIT and GPX course/route create/update behavior, GPX conversion failures and output-size bounds, each source-to-Wahoo activity route, duplicate uploads, asynchronous activity-upload polling, disconnect, expired-Pro enforcement, and account deletion with test accounts.
 7. Monitor callable/webhook error rates, queue age/retries, skipped reasons, FIT download failures, Wahoo upload status failures, Wahoo 429 responses, and cleanup failures before enabling broadly.
+
+## Optional history on connection
+
+Connections offers **Import my last 30 days of history**, selected by default for eligible Pro connections and reconnections. Clearing it connects without starting history. The server accepts a durable run only after successful authorization; users can keep using the app or close the page. Progress and recoverable retries appear on Connections, independently of connection status. Existing cooldowns and permissions apply, and no automatic import continues into older dates.
+
+Wahoo imports eligible FIT-backed workouts only, one history page at a time. Route libraries and outbound delivery remain separate. Route-permission reconnect shortcuts open Connections before authorization so users can review the history checkbox.
+
+See [connection history import](connection-history-import.md) for the shared architecture, capability-registration requirements and backend-first release order. Manual History Import retains its existing range and response contract.

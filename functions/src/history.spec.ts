@@ -48,6 +48,7 @@ vi.mock('firebase-admin', () => {
     return {
         firestore: Object.assign(() => ({
             collection: hoisted.collectionMock,
+            doc: hoisted.docMock,
             batch: hoisted.batchMock,
             runTransaction: hoisted.runTransactionMock,
         }), {
@@ -165,9 +166,11 @@ describe('history', () => {
         })));
         hoisted.runTransactionMock.mockImplementation(async (runner: (transaction: {
             set: typeof hoisted.batchSetMock;
+            get: ReturnType<typeof vi.fn>;
             getAll: typeof hoisted.transactionGetAllMock;
         }) => unknown) => runner({
             set: hoisted.batchSetMock,
+            get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }),
             getAll: hoisted.transactionGetAllMock,
         }));
 
@@ -308,6 +311,33 @@ describe('history', () => {
         });
     });
 
+    it('keeps one manual reservation across windows even after the first starts its cooldown', async () => {
+        const meta: Record<string, unknown> = {};
+        hoisted.runTransactionMock.mockImplementation(async runner => runner({
+            get: vi.fn(async () => ({ exists: true, data: () => ({ ...meta }) })),
+            getAll: hoisted.transactionGetAllMock,
+            set: vi.fn((_ref, data) => {
+                if ('historyImportLeaseOwner' in data || 'didLastHistoryImport' in data) Object.assign(meta, data);
+                hoisted.batchSetMock(_ref, data);
+            }),
+        }));
+        vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'w1' }] }));
+        const start = new Date('2026-09-01');
+        await history.withActivityHistoryImportReservation('uid', ServiceNames.SuuntoApp, async importWindow => {
+            await importWindow(start, start);
+            expect(Number(meta.didLastHistoryImport)).toBeGreaterThan(0);
+            expect(meta.processedActivitiesFromLastHistoryImportCount).toBe(1);
+            await expect(history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, start, start))
+                .rejects.toMatchObject({ code: 'already-exists' });
+            await importWindow(start, new Date('2026-09-02'), {
+                cumulativeMetadata: { startDate: start, endDate: new Date('2026-09-02'), processedActivitiesCountOffset: 1 },
+            });
+        });
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+        expect(meta.processedActivitiesFromLastHistoryImportCount).toBe(2);
+        expect(hoisted.batchSetMock.mock.calls.filter(([, data]) => typeof data.historyImportLeaseOwner === 'string')).toHaveLength(1);
+    });
+
     describe('addHistoryToQueue', () => {
         it('should fetch workouts and commit in batches', async () => {
             const firestore = admin.firestore();
@@ -346,13 +376,13 @@ describe('history', () => {
             });
         });
 
-        it('should handle empty workouts without writes', async () => {
+        it('releases its reservation after empty history without admitting queue items', async () => {
             const firestore = admin.firestore();
             (requestHelper.get as any).mockResolvedValue(JSON.stringify({ payload: [] }));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(0);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
             expect(result).toEqual({
                 successCount: 0,
                 failureCount: 0,
@@ -360,7 +390,7 @@ describe('history', () => {
                 failedBatches: 0
             });
             // ensure meta doc not touched
-            expect(firestore.collection).not.toHaveBeenCalledWith('users');
+            expect(hoisted.batchSetMock.mock.calls.some(call => call[1]?.fromHistory)).toBe(false);
         });
 
         it('should process multiple batches and count failures', async () => {
@@ -372,15 +402,16 @@ describe('history', () => {
 
             // First batch commit succeeds, second fails
             hoisted.runTransactionMock
-                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock }) => unknown) => (
-                    runner({ set: hoisted.batchSetMock })
+                .mockImplementationOnce(async runner => runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock }))
+                .mockImplementationOnce(async (runner: (transaction: { set: typeof hoisted.batchSetMock; get: ReturnType<typeof vi.fn>; getAll: typeof hoisted.transactionGetAllMock }) => unknown) => (
+                    runner({ set: hoisted.batchSetMock, get: vi.fn().mockResolvedValue({ exists: false, data: () => undefined }), getAll: hoisted.transactionGetAllMock })
                 ))
                 .mockRejectedValueOnce(new Error('commit failed'));
 
             const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             // Two batches should have been created
-            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(2);
+            expect(hoisted.runTransactionMock).toHaveBeenCalledTimes(4);
 
             // First batch (450) succeeds, second (1) fails
             expect(result).toEqual({
@@ -464,6 +495,23 @@ describe('history', () => {
                     fromHistory: true,
                 }),
             );
+        });
+
+        it.each([
+            ['older-run', 'uid', false, true],
+            ['older-run', 'uid', true, false],
+            ['current-run', 'uid', false, false],
+            ['older-run', 'another-owner', false, false],
+            [undefined, 'uid', false, false],
+        ])('replaces only unfinished superseded history work (%s, %s, %s)', async (oldRun, owner, processed, replace) => {
+            hoisted.transactionGetAllMock.mockResolvedValue([{ exists: true, data: () => ({ connectionHistoryRunId: oldRun, firebaseUserID: owner, processed }) }]);
+            hoisted.getMock.mockResolvedValue({ id: 'token1' });
+            vi.mocked(requestHelper.get).mockResolvedValue(JSON.stringify({ payload: [{ workoutKey: 'workout' }] }));
+            const execution = { runId: 'current-run', tokenPath: 'token', providerUserId: 'account', cooldownStartedAtMs: Date.now(), requiredDocumentFieldValues: [], beforeRequest: vi.fn(), inTransaction: vi.fn(), onQueued: vi.fn() };
+            await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date('2026-09-01'), new Date('2026-09-02'), { execution });
+            const writes = hoisted.batchSetMock.mock.calls.filter(([, data]) => data.connectionHistoryRunId);
+            expect(writes).toHaveLength(replace ? 1 : 0);
+            if (replace) expect(writes[0][1]).toMatchObject({ connectionHistoryRunId: 'current-run', firebaseUserID: 'uid', queueRevision: expect.any(String) });
         });
 
         it('preserves an active event-write lease when history advances the COROS revision', async () => {

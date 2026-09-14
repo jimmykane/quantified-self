@@ -1555,7 +1555,12 @@ export class AppUserService implements OnDestroy {
     }
   }
 
-  async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{ redirect_uri: string }> {
+  async retryConnectionHistoryImport(runId: string): Promise<void> {
+    const result = await this.functionsService.call<{ runId: string }, { accepted: boolean }>('retryConnectionHistoryImport', { runId });
+    if (!result.data.accepted) throw new Error('History retry was not accepted.');
+  }
+
+  async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames, importRecentHistory = false): Promise<{ redirect_uri: string }> {
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${serviceName}&connect=1`);
     let functionName: FunctionName;
@@ -1577,7 +1582,7 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for auth redirect`);
     }
 
-    const result = await this.functionsService.call<{ redirectUri: string }, { redirect_uri: string }>(functionName, { redirectUri });
+    const result = await this.functionsService.call<{ redirectUri: string; importRecentHistory: boolean }, { redirect_uri: string }>(functionName, { redirectUri, importRecentHistory });
     return result.data;
   }
 

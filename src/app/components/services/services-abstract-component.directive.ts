@@ -63,12 +63,15 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
   public isConnecting = false;
+  public importRecentHistory = true;
+  public reconnectRequested = false;
   public isDisconnecting = false;
   public forceConnected = false;
   public isConnected = false;
 
 
   protected serviceDataSubscription!: Subscription;
+  private reconnectRouteSubscription?: Subscription;
 
   protected router = inject(Router);
   protected changeDetectorRef = inject(ChangeDetectorRef);
@@ -172,7 +175,9 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
         this.emitConnectionState();
-        this.snackBar.open(`Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
+        this.snackBar.open(completion.historyImport
+          ? 'Connected! Sit back while we bring in your recent history. You can keep using the app or close this page.'
+          : `Successfully connected to ${this.getPartnerDisplayName()}`, undefined, {
           duration: 10000,
         });
         this.hapticsService.success();
@@ -210,6 +215,10 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async ngOnInit() {
+    this.reconnectRouteSubscription = this.route.queryParamMap.subscribe(params => {
+      this.reconnectRequested = params.get('serviceName') === this.serviceName && params.get('reconnect') === '1';
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   protected onServiceDataChanged(): void {
@@ -243,7 +252,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     this.isConnecting = true;
     try {
       this.analyticsService.logEvent('service_connect_start', { service_name: this.serviceName });
-      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName);
+      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName, this.importRecentHistory);
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);
     } catch (e: any) {
@@ -423,6 +432,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   ngOnDestroy(): void {
+    this.reconnectRouteSubscription?.unsubscribe();
     if (this.serviceDataSubscription) {
       this.serviceDataSubscription.unsubscribe();
     }

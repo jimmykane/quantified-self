@@ -142,7 +142,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   get shouldShowConnectAction(): boolean {
-    return (!this.isServiceConnected || this.isReconnectRequired || this.isDisconnectManualReviewRequired || this.clicks > 10)
+    return (this.reconnectRequested || !this.isServiceConnected || this.isReconnectRequired || this.isDisconnectManualReviewRequired || this.clicks > 10)
       && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
   }
 
@@ -155,7 +155,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   get connectButtonLabel(): string {
-    return this.connectionView.connectButtonLabel;
+    return this.reconnectRequested ? 'Reconnect' : this.connectionView.connectButtonLabel;
   }
 
   get isSuuntoToGarminRouteAvailableForUser(): boolean {

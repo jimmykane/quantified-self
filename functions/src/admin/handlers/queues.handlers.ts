@@ -1,3 +1,4 @@
+import { CONNECTION_HISTORY_COLLECTION } from '../../connection-history/model';
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
@@ -162,6 +163,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             routeSyncQueue,
             sleepSyncQueue,
             garminHealthBackfillQueue,
+            connectionHistoryQueue,
             sportsLibReparseQueue,
             sportsLibReparseHeavyQueue,
             sportsLibRouteReparseQueue,
@@ -175,6 +177,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             routeSyncCloudTaskStats,
             sleepSyncCloudTaskStats,
             garminHealthBackfillCloudTaskStats,
+            connectionHistoryCloudTaskStats,
             sportsLibReparseCloudTaskStats,
             sportsLibReparseHeavyCloudTaskStats,
             sportsLibRouteReparseCloudTaskStats,
@@ -187,6 +190,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             getAdminCloudTaskQueueStats(routeSyncQueue),
             getAdminCloudTaskQueueStats(sleepSyncQueue),
             getAdminCloudTaskQueueStats(garminHealthBackfillQueue),
+            getAdminCloudTaskQueueStats(connectionHistoryQueue),
             getAdminCloudTaskQueueStats(sportsLibReparseQueue),
             getAdminCloudTaskQueueStats(sportsLibReparseHeavyQueue),
             getAdminCloudTaskQueueStats(sportsLibRouteReparseQueue),
@@ -200,6 +204,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
             + routeSyncCloudTaskStats.pending
             + sleepSyncCloudTaskStats.pending
             + garminHealthBackfillCloudTaskStats.pending
+            + connectionHistoryCloudTaskStats.pending
             + reparseCloudTaskDepth
             + sportsLibRouteReparseCloudTaskStats.pending
             + derivedMetricsIngressCloudTaskStats.pending
@@ -1078,6 +1083,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
         const reparseSupersededCount = reparseSupersededJobs?.data().count;
 
         return {
+            connectionHistory: await getConnectionHistoryMonitoring(db),
             pending: totalPending,
             succeeded: totalSucceeded,
             stuck: totalStuck,
@@ -1090,6 +1096,7 @@ export const getQueueStats = onAdminCall<GetQueueStatsRequest, QueueStatsRespons
                     routeSync: routeSyncCloudTaskStats,
                     sleepSync: sleepSyncCloudTaskStats,
                     garminHealthBackfill: garminHealthBackfillCloudTaskStats,
+                    connectionHistory: connectionHistoryCloudTaskStats,
                     sportsLibReparse: sportsLibReparseCloudTaskStats,
                     sportsLibReparseHeavy: sportsLibReparseHeavyCloudTaskStats,
                     sportsLibRouteReparse: sportsLibRouteReparseCloudTaskStats,
@@ -1423,3 +1430,15 @@ export const retrySportsLibReparseHeavyJob = onAdminCall<
         throw new HttpsError('internal', errorMessage);
     }
 });
+
+async function getConnectionHistoryMonitoring(db: admin.firestore.Firestore): Promise<{ pending: number; failed: number; maxLagMs: number } | null> {
+    try {
+        const queue = db.collection(CONNECTION_HISTORY_COLLECTION);
+        const [pending, failed, oldest] = await Promise.all([
+            queue.where('processed', '==', false).count().get(), queue.where('failed', '==', true).count().get(),
+            queue.where('processed', '==', false).orderBy('dateCreated').limit(1).get(),
+        ]);
+        return { pending: pending.data().count, failed: failed.data().count,
+            maxLagMs: oldest.empty ? 0 : Math.max(0, Date.now() - Number(oldest.docs[0].data().dateCreated)) };
+    } catch { logger.warn('[ConnectionHistory]', { event: 'monitoring_unavailable' }); return null; }
+}

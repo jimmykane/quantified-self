@@ -93,7 +93,8 @@ describe('COROS Auth Wrapper', () => {
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
-                'https://app.com/callback'
+                'https://app.com/callback',
+                undefined
             );
             expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });

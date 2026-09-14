@@ -1,3 +1,4 @@
+import { currentHistoryExecution } from './connection-history/context';
 export class ResponseBodyTooLargeError extends Error {
     readonly name = 'ResponseBodyTooLargeError';
 
@@ -112,6 +113,7 @@ export async function del(urlOrOptions: string | any, options: any = {}) {
 }
 
 async function request(urlOrOptions: string | any, options: any = {}) {
+    await currentHistoryExecution()?.beforeRequest();
     let url: string;
     let opts: any;
 
@@ -172,6 +174,8 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         if (!response.ok) {
             const err: any = new Error(`StatusCodeError: ${response.status} - ${response.statusText}`);
             err.statusCode = response.status;
+            const retryAfter = response.headers?.get('retry-after');
+            if (retryAfter) err.response = { headers: { 'retry-after': retryAfter } };
             try {
                 err.error = boundedResponseBody === null
                     ? await response.text()

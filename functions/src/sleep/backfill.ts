@@ -1,3 +1,6 @@
+import { FieldValue } from 'firebase-admin/firestore';
+import { HistoryUnavailableError, type HistoryExecution, assertHistoryReservation } from '../connection-history/execution';
+import type { HistoryResource } from '../../../shared/connection-history';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -75,7 +78,7 @@ interface CorosSleepBackfillToken {
     providerUserId: string;
 }
 
-type GarminSleepBackfillRequestResult = 'requested' | 'skipped' | 'aborted';
+type GarminSleepBackfillRequestResult = 'requested' | 'already-requested' | 'skipped' | 'aborted';
 
 interface GarminSleepBackfillRequestContext {
     providerUserId: string;
@@ -118,12 +121,13 @@ export function chunkSleepBackfillRange(startMs: number, endMs: number, windowDa
 async function getSuuntoSleepBackfillTokens(
     userID: string,
     maxAccounts?: number,
+    execution?: HistoryExecution,
 ): Promise<SuuntoSleepBackfillToken[]> {
     const tokenCollection = admin.firestore()
         .collection('suuntoAppAccessTokens')
         .doc(userID)
         .collection('tokens');
-    const tokenSnapshot = await (maxAccounts
+    const tokenSnapshot = execution ? { docs: [await admin.firestore().doc(execution.tokenPath).get()] } : await (maxAccounts
         ? tokenCollection.limit(maxAccounts + 1).get()
         : tokenCollection.get());
     if (maxAccounts && tokenSnapshot.docs.length > maxAccounts) {
@@ -165,8 +169,8 @@ async function getSuuntoSleepBackfillTokens(
     return tokens;
 }
 
-async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepBackfillToken> {
-    const tokenSnapshot = await admin.firestore()
+async function getGarminSleepBackfillToken(userID: string, execution?: HistoryExecution): Promise<GarminSleepBackfillToken> {
+    const tokenSnapshot = execution ? { empty: false, docs: [await admin.firestore().doc(execution.tokenPath).get()] } : await admin.firestore()
         .collection(GARMIN_API_TOKENS_COLLECTION_NAME)
         .doc(userID)
         .collection('tokens')
@@ -232,6 +236,7 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
         throw new HttpsError('failed-precondition', 'Connected Garmin token is incomplete for sleep backfill.');
     }
     if (lastTokenReadError) {
+        if (execution) throw lastTokenReadError;
         throw new HttpsError('internal', 'Could not read connected Garmin token for sleep backfill.');
     }
     if (bestMissingPermissions) {
@@ -240,9 +245,9 @@ async function getGarminSleepBackfillToken(userID: string): Promise<GarminSleepB
     throw new HttpsError('failed-precondition', 'Connected Garmin token is required for sleep backfill.');
 }
 
-async function getCorosSleepBackfillToken(userID: string): Promise<CorosSleepBackfillToken> {
+async function getCorosSleepBackfillToken(userID: string, execution?: HistoryExecution): Promise<CorosSleepBackfillToken> {
     try {
-        const tokenDoc = await getActiveCOROSTokenSnapshot(userID);
+        const tokenDoc = await getActiveCOROSTokenSnapshot(userID, execution?.providerUserId);
         const tokenData = await getTokenData(tokenDoc, ServiceNames.COROSAPI) as { openId?: unknown };
         const providerUserId = typeof tokenData.openId === 'string' ? tokenData.openId.trim() : '';
         if (providerUserId && providerUserId === tokenDoc.id) {
@@ -290,9 +295,10 @@ async function shouldAbortGarminSleepBackfillRequests(userID: string): Promise<b
     return true;
 }
 
-async function assertSleepBackfillCooldownAllows(userID: string, provider: SleepProvider, nowMs: number): Promise<void> {
+async function assertSleepBackfillCooldownAllows(userID: string, provider: SleepProvider, nowMs: number, execution?: HistoryExecution): Promise<void> {
     const stateSnapshot = await sleepSyncStateRef(userID, provider).get();
     const state = stateSnapshot.exists ? stateSnapshot.data() as SleepSyncState : null;
+    if (execution && stateSnapshot.data()?.connectionHistoryReservation === execution.runId) return;
     const nextAllowedAtMs = Number(state?.nextBackfillAllowedAtMs);
     if (Number.isFinite(nextAllowedAtMs) && nextAllowedAtMs > nowMs) {
         throw new HttpsError('resource-exhausted', `Sleep backfill is not allowed until ${new Date(nextAllowedAtMs).toISOString()}`);
@@ -305,6 +311,7 @@ async function claimSleepBackfillCooldown(
     startMs: number,
     endMs: number,
     nextAllowedAtMs: number,
+    execution?: HistoryExecution,
 ): Promise<boolean> {
     const db = admin.firestore();
     const stateRef = db.collection('users')
@@ -323,15 +330,19 @@ async function claimSleepBackfillCooldown(
             return false;
         }
 
+        await execution?.inTransaction(transaction);
         const stateSnapshot = await transaction.get(stateRef);
+        assertHistoryReservation(stateSnapshot.data(), execution?.runId);
+        if (execution && stateSnapshot.data()?.connectionHistoryReservation === execution.runId) return true;
         const state = stateSnapshot.exists ? stateSnapshot.data() as SleepSyncState : null;
         const existingNextAllowedAtMs = Number(state?.nextBackfillAllowedAtMs);
-        if (Number.isFinite(existingNextAllowedAtMs) && existingNextAllowedAtMs > endMs) {
+        if (Number.isFinite(existingNextAllowedAtMs) && existingNextAllowedAtMs > (execution ? Date.now() : endMs)) {
             throw new HttpsError('resource-exhausted', `Sleep backfill is not allowed until ${new Date(existingNextAllowedAtMs).toISOString()}`);
         }
 
         transaction.set(stateRef, {
             provider,
+            ...(execution ? { connectionHistoryReservation: execution.runId, connectionHistoryReservationExpiresAt: Date.now() + 35 * 86400000 } : { connectionHistoryReservation: FieldValue.delete(), connectionHistoryReservationExpiresAt: FieldValue.delete() }),
             status: SLEEP_SYNC_STATUSES.Ready,
             lastBackfillQueuedAtMs: endMs,
             lastBackfillStartMs: startMs,
@@ -505,6 +516,7 @@ async function requestGarminSleepBackfillWindow(
     token: GarminSleepBackfillToken,
     window: SleepBackfillWindow,
     context: GarminSleepBackfillRequestContext,
+    execution?: HistoryExecution,
 ): Promise<GarminSleepBackfillRequestResult> {
     const requestStartMs = context.providerMinStartMs
         ? Math.max(window.startMs, context.providerMinStartMs)
@@ -512,7 +524,7 @@ async function requestGarminSleepBackfillWindow(
     if (requestStartMs >= window.endMs) {
         return 'skipped';
     }
-    return requestGarminSleepBackfillRangeWithRecoveries(userID, token, requestStartMs, window.endMs, context);
+    return requestGarminSleepBackfillRangeWithRecoveries(userID, token, requestStartMs, window.endMs, context, execution);
 }
 
 async function requestGarminSleepBackfillRangeWithRecoveries(
@@ -521,15 +533,17 @@ async function requestGarminSleepBackfillRangeWithRecoveries(
     startMs: number,
     endMs: number,
     context: GarminSleepBackfillRequestContext,
+    execution?: HistoryExecution,
 ): Promise<GarminSleepBackfillRequestResult> {
     let requestStartMs = startMs;
     for (let attempt = 0; attempt < GARMIN_SLEEP_BACKFILL_MAX_ATTEMPTS; attempt += 1) {
         try {
+            await execution?.beforeRequest();
             return await requestGarminSleepBackfillRangeIfUserActive(userID, token, requestStartMs, endMs);
         } catch (error) {
             if (isGarminSleepBackfillAlreadyRequestedError(error)) {
                 logger.warn(`[SleepBackfill] Garmin sleep backfill window was already requested: ${new Date(requestStartMs).toISOString()} - ${new Date(endMs).toISOString()}`);
-                return 'skipped';
+                return execution ? 'already-requested' : 'skipped';
             }
 
             if (!isGarminSleepBackfillMinStartError(error)) {
@@ -588,6 +602,8 @@ async function requestGarminSleepBackfillRange(
     endMs: number,
 ): Promise<void> {
     await requestPromise.get({
+        timeout: 30_000,
+        maxResponseBytes: 1024 * 1024,
         headers: {
             Authorization: `Bearer ${token.accessToken}`,
         },
@@ -614,6 +630,10 @@ export const backfillSuuntoAppSleep = onCall({
     }
 
     const userID = request.auth.uid;
+    return queueSuuntoSleepHealthHistory(userID);
+});
+
+export async function queueSuuntoSleepHealthHistory(userID: string, options: SleepHistoryOptions = {}): Promise<SleepBackfillQueueResponse> {
     if (!(await hasProAccess(userID))) {
         logger.warn(`[SleepBackfill] Blocking Suunto sleep backfill for non-pro user ${userID}`);
         throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
@@ -627,24 +647,27 @@ export const backfillSuuntoAppSleep = onCall({
         throw new HttpsError('permission-denied', 'Sleep sync is not enabled for this user.');
     }
 
-    const nowMs = Date.now();
-    await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.SuuntoApp, nowMs);
+    const nowMs = options.endMs ?? Date.now();
+    await options.execution?.beforeRequest();
+    await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.SuuntoApp, Date.now(), options.execution);
 
-    const includeHealth = isSuuntoHealthSyncEnabled();
+    const includeHealth = isSuuntoHealthSyncEnabled() && (!options.resources || options.resources.includes('health'));
+    const includeSleep = !options.resources || options.resources.includes('sleep');
     const tokens = await getSuuntoSleepBackfillTokens(
         userID,
         includeHealth ? SUUNTO_HEALTH_BACKFILL_MAX_ACCOUNTS : undefined,
+        options.execution,
     );
     const sleepToken = tokens[0];
-    const startMs = getHealthBackfillStartMs(SLEEP_PROVIDERS.SuuntoApp, nowMs);
+    const startMs = options.startMs ?? getHealthBackfillStartMs(SLEEP_PROVIDERS.SuuntoApp, nowMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
 
     if (Math.ceil((nowMs - startMs) / (windowDays * 86_400_000)) > SUUNTO_BACKFILL_MAX_WINDOWS) {
         throw new HttpsError('resource-exhausted', 'Suunto history exceeds the per-request window limit.');
     }
     const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays).reverse();
-    const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
-    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.SuuntoApp, startMs, nowMs, nextAllowedAtMs);
+    const nextAllowedAtMs = (options.execution?.cooldownStartedAtMs ?? nowMs) + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.SuuntoApp, 'Suunto');
+    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.SuuntoApp, startMs, nowMs, nextAllowedAtMs, options.execution);
     if (!cooldownClaimed) {
         throw new HttpsError('failed-precondition', 'Sleep backfill is not available while account deletion is in progress.');
     }
@@ -670,7 +693,8 @@ export const backfillSuuntoAppSleep = onCall({
             let batchFailed = false;
             const results = await Promise.allSettled(windows.slice(offset, offset + SUUNTO_BACKFILL_WINDOW_BATCH_SIZE).map(async window => {
                 try {
-                    await addSleepSyncQueueItem({
+                    if (includeSleep) {
+                    await enqueueHistorySleepItem(options.execution, {
                         type: 'suunto_poll',
                         provider: SLEEP_PROVIDERS.SuuntoApp,
                         userID,
@@ -681,10 +705,11 @@ export const backfillSuuntoAppSleep = onCall({
                         dedupeKey: `sleep-backfill:${userID}:${window.startMs}:${window.endMs}`,
                     });
                     sleepQueued += 1;
+                    }
                     if (includeHealth) {
                         for (const healthToken of healthTokens) {
                             if (batchFailed) return;
-                            await addSleepSyncQueueItem({
+                            await enqueueHistorySleepItem(options.execution, {
                                 type: 'suunto_health_poll',
                                 provider: SLEEP_PROVIDERS.SuuntoApp,
                                 userID,
@@ -724,7 +749,7 @@ export const backfillSuuntoAppSleep = onCall({
         } else {
             logger.error(`[SleepBackfill] Failed after queueing ${queued} Suunto sleep windows for ${userID}`, error);
         }
-        await updateSleepSyncState(userID, SLEEP_PROVIDERS.SuuntoApp, {
+        await updateHistorySleepState(options.execution, userID, SLEEP_PROVIDERS.SuuntoApp, {
             status: SLEEP_SYNC_STATUSES.Failed,
             lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: queued,
@@ -734,7 +759,7 @@ export const backfillSuuntoAppSleep = onCall({
         throw new HttpsError('internal', 'Could not queue Suunto sleep backfill.');
     }
 
-    await updateSleepSyncState(userID, SLEEP_PROVIDERS.SuuntoApp, {
+    await updateHistorySleepState(options.execution, userID, SLEEP_PROVIDERS.SuuntoApp, {
         status: SLEEP_SYNC_STATUSES.Ready,
         lastBackfillQueuedAtMs: nowMs,
         lastBackfillStartMs: startMs,
@@ -754,7 +779,7 @@ export const backfillSuuntoAppSleep = onCall({
         endDate: new Date(nowMs).toISOString(),
         nextAllowedAtMs,
     };
-});
+}
 
 export const backfillCorosAPISleep = onCall({
     region: FUNCTIONS_MANIFEST.backfillCorosAPISleep.region,
@@ -771,6 +796,10 @@ export const backfillCorosAPISleep = onCall({
     }
 
     const userID = request.auth.uid;
+    return queueCorosSleepHealthHistory(userID);
+});
+
+export async function queueCorosSleepHealthHistory(userID: string, options: SleepHistoryOptions = {}): Promise<SleepBackfillQueueResponse> {
     if (!(await hasProAccess(userID))) {
         logger.warn(`[SleepBackfill] Blocking COROS Sleep and Health backfill for non-pro user ${userID}`);
         throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
@@ -788,15 +817,16 @@ export const backfillCorosAPISleep = onCall({
         throw new HttpsError('failed-precondition', 'COROS is unavailable for Sleep and Health sync. Reconnect COROS and try again.');
     }
 
-    const nowMs = Date.now();
-    await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.COROSAPI, nowMs);
+    const nowMs = options.endMs ?? Date.now();
+    await options.execution?.beforeRequest();
+    await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.COROSAPI, Date.now(), options.execution);
 
-    const token = await getCorosSleepBackfillToken(userID);
-    const startMs = getHealthBackfillStartMs(SLEEP_PROVIDERS.COROSAPI, nowMs);
+    const token = await getCorosSleepBackfillToken(userID, options.execution);
+    const startMs = options.startMs ?? getHealthBackfillStartMs(SLEEP_PROVIDERS.COROSAPI, nowMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.COROSAPI, 'COROS');
     const windows = chunkCOROSInclusiveTimestampRange(startMs, nowMs, windowDays);
-    const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.COROSAPI, 'COROS');
-    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.COROSAPI, startMs, nowMs, nextAllowedAtMs);
+    const nextAllowedAtMs = (options.execution?.cooldownStartedAtMs ?? nowMs) + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.COROSAPI, 'COROS');
+    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.COROSAPI, startMs, nowMs, nextAllowedAtMs, options.execution);
     if (!cooldownClaimed) {
         throw new HttpsError('failed-precondition', 'Sleep backfill is not available while account deletion is in progress.');
     }
@@ -804,7 +834,7 @@ export const backfillCorosAPISleep = onCall({
     let queued = 0;
     try {
         for (const window of windows) {
-            await addSleepSyncQueueItem({
+            await enqueueHistorySleepItem(options.execution, {
                 type: 'coros_poll',
                 provider: SLEEP_PROVIDERS.COROSAPI,
                 userID,
@@ -816,9 +846,11 @@ export const backfillCorosAPISleep = onCall({
             queued += 1;
         }
     } catch (error) {
+        // Durable imports retain their reservation and provider retry/auth details.
+        if (options.execution) throw error;
         const message = error instanceof Error ? error.message : `${error}`;
         logger.error(`[SleepBackfill] Failed after queueing ${queued} COROS Sleep and Health windows for ${userID}`, error);
-        await updateSleepSyncState(userID, SLEEP_PROVIDERS.COROSAPI, {
+        await updateHistorySleepState(options.execution, userID, SLEEP_PROVIDERS.COROSAPI, {
             status: SLEEP_SYNC_STATUSES.Failed,
             lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: queued,
@@ -828,7 +860,7 @@ export const backfillCorosAPISleep = onCall({
         throw new HttpsError('internal', 'Could not queue COROS Sleep and Health backfill.');
     }
 
-    await updateSleepSyncState(userID, SLEEP_PROVIDERS.COROSAPI, {
+    await updateHistorySleepState(options.execution, userID, SLEEP_PROVIDERS.COROSAPI, {
         status: SLEEP_SYNC_STATUSES.Ready,
         lastBackfillQueuedAtMs: nowMs,
         lastBackfillStartMs: startMs,
@@ -852,7 +884,7 @@ export const backfillCorosAPISleep = onCall({
         endDate: new Date(nowMs).toISOString(),
         nextAllowedAtMs,
     };
-});
+}
 
 export const backfillGarminAPIHealth = onCall({
     region: FUNCTIONS_MANIFEST.backfillGarminAPIHealth.region,
@@ -869,6 +901,10 @@ export const backfillGarminAPIHealth = onCall({
     }
 
     const userID = request.auth.uid;
+    return queueGarminSleepHealthHistory(userID);
+});
+
+export async function queueGarminSleepHealthHistory(userID: string, options: SleepHistoryOptions = {}): Promise<SleepBackfillQueueResponse> {
     if (!(await hasProAccess(userID))) {
         logger.warn(`[SleepBackfill] Blocking Garmin history backfill for non-pro user ${userID}`);
         throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
@@ -882,23 +918,24 @@ export const backfillGarminAPIHealth = onCall({
         throw new HttpsError('permission-denied', 'Sleep sync is not enabled for this user.');
     }
 
-    const nowMs = Date.now();
-    await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.GarminAPI, nowMs);
+    const nowMs = options.endMs ?? Date.now();
+    await options.execution?.beforeRequest();
+    await assertSleepBackfillCooldownAllows(userID, SLEEP_PROVIDERS.GarminAPI, Date.now(), options.execution);
 
-    const token = await getGarminSleepBackfillToken(userID);
-    const policyStartMs = ceilToGarminBackfillSecondMs(getHealthBackfillStartMs(SLEEP_PROVIDERS.GarminAPI, nowMs));
+    const token = await getGarminSleepBackfillToken(userID, options.execution);
+    const policyStartMs = ceilToGarminBackfillSecondMs(options.startMs ?? getHealthBackfillStartMs(SLEEP_PROVIDERS.GarminAPI, nowMs));
     const storedProviderMinStartMs = await getStoredGarminProviderMinBackfillStartMs(userID, token.providerUserId);
     const startMs = Math.max(policyStartMs, storedProviderMinStartMs || policyStartMs);
     const windowDays = getConfiguredSleepBackfillWindowDays(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
-    const windows = chunkSleepBackfillRange(startMs, nowMs, windowDays);
-    const includeHealth = isGarminHealthSyncEnabled();
+    const windows = !options.resources || options.resources.includes('sleep') ? chunkSleepBackfillRange(startMs, nowMs, windowDays) : [];
+    const includeHealth = isGarminHealthSyncEnabled() && (!options.resources || options.resources.includes('health'));
     const healthRangeStartMs = policyStartMs;
     const healthRangeEndMs = floorToGarminBackfillSecond(nowMs);
     const healthQueued = includeHealth
         ? countGarminHealthBackfillRequests(healthRangeStartMs, healthRangeEndMs)
         : 0;
-    const nextAllowedAtMs = nowMs + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
-    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.GarminAPI, startMs, nowMs, nextAllowedAtMs);
+    const nextAllowedAtMs = (options.execution?.cooldownStartedAtMs ?? nowMs) + getConfiguredSleepBackfillCooldownMs(SLEEP_PROVIDERS.GarminAPI, 'Garmin');
+    const cooldownClaimed = await claimSleepBackfillCooldown(userID, SLEEP_PROVIDERS.GarminAPI, startMs, nowMs, nextAllowedAtMs, options.execution);
     if (!cooldownClaimed) {
         throw new HttpsError('failed-precondition', 'Sleep backfill is not available while account deletion is in progress.');
     }
@@ -912,14 +949,17 @@ export const backfillGarminAPIHealth = onCall({
     };
     try {
         for (const window of windows) {
-            const requestResult = await requestGarminSleepBackfillWindow(userID, token, window, requestContext);
+            const requestResult = await requestGarminSleepBackfillWindow(userID, token, window, requestContext, options.execution);
             if (requestResult === 'aborted') {
                 abortedForDeletion = true;
                 break;
             }
-            if (requestResult === 'requested') {
+            if (requestResult === 'requested' || requestResult === 'already-requested') {
                 requested += 1;
             }
+        }
+        if (options.execution && options.resources?.includes('sleep') && !includeHealth && requested === 0 && !abortedForDeletion) {
+            throw new HistoryUnavailableError('Garmin does not provide Sleep history for this date range.');
         }
         if (!abortedForDeletion) {
             completedStartMs = Math.max(startMs, requestContext.providerMinStartMs || startMs);
@@ -944,7 +984,7 @@ export const backfillGarminAPIHealth = onCall({
             }
             // Publish the initial state before dispatch so a fast worker cannot
             // have its newer running/terminal state overwritten by this callable.
-            await updateSleepSyncState(
+            await updateHistorySleepState(options.execution,
                 userID,
                 SLEEP_PROVIDERS.GarminAPI,
                 finalStateUpdate,
@@ -952,7 +992,7 @@ export const backfillGarminAPIHealth = onCall({
             );
         }
         if (includeHealth && !abortedForDeletion) {
-            await addSleepSyncQueueItem({
+            await enqueueHistorySleepItem(options.execution, {
                 type: 'garmin_health_backfill',
                 provider: SLEEP_PROVIDERS.GarminAPI,
                 userID,
@@ -969,9 +1009,11 @@ export const backfillGarminAPIHealth = onCall({
             });
         }
     } catch (error) {
+        // Durable imports retain their reservation and provider retry/auth details.
+        if (options.execution) throw error;
         const message = error instanceof Error ? error.message : `${error}`;
         logger.error(`[SleepBackfill] Failed after requesting ${requested} Garmin sleep windows for ${userID}`, error);
-        await updateSleepSyncState(userID, SLEEP_PROVIDERS.GarminAPI, {
+        await updateHistorySleepState(options.execution, userID, SLEEP_PROVIDERS.GarminAPI, {
             status: SLEEP_SYNC_STATUSES.Failed,
             lastBackfillQueuedAtMs: null,
             lastBackfillQueueItems: requested,
@@ -1008,4 +1050,26 @@ export const backfillGarminAPIHealth = onCall({
         endDate: new Date(nowMs).toISOString(),
         nextAllowedAtMs,
     };
-});
+}
+
+export interface SleepHistoryOptions {
+    startMs?: number;
+    endMs?: number;
+    resources?: readonly HistoryResource[];
+    execution?: HistoryExecution;
+}
+async function enqueueHistorySleepItem(execution: HistoryExecution | undefined, input: Parameters<typeof addSleepSyncQueueItem>[0]): Promise<void> {
+    await execution?.beforeRequest();
+    const ref = await addSleepSyncQueueItem({ ...input, ...(execution ? {
+        dedupeKey: `connection-history:${execution.runId}:${input.type}:${input.rangeStartMs}:${input.rangeEndMs}`,
+        preserveExisting: true,
+        connectionHistoryRunId: execution.runId,
+        requiredDocumentFieldValues: execution.requiredDocumentFieldValues,
+    } : {}) });
+    execution?.onQueued(ref.path);
+}
+async function updateHistorySleepState(execution: HistoryExecution | undefined, ...args: Parameters<typeof updateSleepSyncState>): Promise<Awaited<ReturnType<typeof updateSleepSyncState>>> {
+    await execution?.beforeRequest();
+    if (execution) args[4] = { ...args[4], additionalRequiredDocumentFieldValues: [...(args[4]?.additionalRequiredDocumentFieldValues || []), ...execution.requiredDocumentFieldValues] };
+    return updateSleepSyncState(...args);
+}

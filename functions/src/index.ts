@@ -266,3 +266,5 @@ export { cleanupStripeCustomer } from './stripe/cleanup';
 
 exports[SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME] = processSportsLibReparseHeavyTaskFunction;
 exports[RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME] = retrySportsLibReparseHeavyJobFunction;
+
+export { processConnectionHistoryTask, onConnectionHistoryImportWritten, recoverConnectionHistoryImports, retryConnectionHistoryImport } from './connection-history/tasks';
