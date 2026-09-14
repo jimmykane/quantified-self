@@ -6,7 +6,7 @@ import { isServiceDisconnectPendingData } from '../../service-disconnect-pending
 import { deliveryIdentity } from './intent';
 import { DELIVERY_STATE, type DeliveryConnection } from './contracts';
 
-export const GARMIN_TRAINING_PERMISSION_ISSUE = 'Garmin Workout Import permission is required. Reconnect Garmin and allow training workouts.';
+export const GARMIN_TRAINING_PERMISSION_ISSUE = 'Garmin Training permission is required. Reconnect Garmin and allow training workouts.';
 export const DELIVERY_SERVICES = {
   garmin: { name: ServiceNames.GarminAPI, tokens: 'garminAPITokens', account: 'userID' },
   coros: { name: ServiceNames.COROSAPI, tokens: 'COROSAPIAccessTokens', account: 'openId' },

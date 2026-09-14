@@ -532,7 +532,8 @@ The frontend should reuse the Services and provider-presentation patterns rather
 ### Required product surfaces
 
 Garmin's connection overview displays supported permissions per browser-safe account snapshot, including optional
-Workout/Course Import grants. Explicit empty arrays mean not granted; absent or malformed arrays mean not reported,
+Training and Course Import grants. `WORKOUT_IMPORT` is displayed as **Training** in UI, help and delivery errors;
+retain the API identifier in authorization checks. Explicit empty arrays mean not granted; absent or malformed arrays mean not reported,
 not denial or endless loading. Deferred `MCT_EXPORT` (#621) is excluded from the catalog and display even if already
 granted; it is not required by QS. Other extra provider permission names remain visible as text, and separate accounts' grants
 are never combined for display or authority. The rows are a last-reported snapshot, not a live Garmin check or local

@@ -12,7 +12,8 @@ describe('GarminPermissionsComponent', () => {
     const rows = Array.from(fixture.nativeElement.querySelectorAll('[role="listitem"]') as NodeListOf<HTMLElement>);
     // CompactRow's display:contents host cannot reliably carry list semantics in browser accessibility trees.
     expect(rows.every(row => row.tagName === 'DIV' && row.querySelector('app-compact-row'))).toBe(true);
-    expect(rows.find(row => row.textContent?.includes('Workout Import'))?.textContent).toContain('Granted');
+    expect(rows.find(row => row.textContent?.includes('Training'))?.textContent).toContain('Granted');
+    expect(fixture.nativeElement.textContent).not.toMatch(/Workout Import|WORKOUT_IMPORT/);
     expect(rows.find(row => row.textContent?.includes('Course Import'))?.textContent).toContain('Not granted');
     expect(fixture.nativeElement.textContent).toContain('not a live permission check');
     expect(fixture.nativeElement.querySelector('input, mat-checkbox, mat-slide-toggle')).toBeNull();
@@ -60,7 +61,7 @@ describe('GarminPermissionsComponent', () => {
     fixture.componentRef.setInput('accounts', [{ providerUserId: 'account', permissions: ['<img src=x onerror=alert(1)>'] }]); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('img')).toBeNull();
     const rows = Array.from(fixture.nativeElement.querySelectorAll('[role="listitem"]') as NodeListOf<HTMLElement>);
-    expect(rows.find(row => row.textContent?.includes('Workout Import'))?.textContent).toContain('Not granted');
+    expect(rows.find(row => row.textContent?.includes('Training'))?.textContent).toContain('Not granted');
     expect(fixture.nativeElement.textContent).toContain('<img src=x onerror=alert(1)>');
   });
 });

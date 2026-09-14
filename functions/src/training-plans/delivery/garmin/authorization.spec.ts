@@ -4,7 +4,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import type { DeliveryOperation } from '../contracts';
 import type { DeliveryConnection } from '../contracts';
 const mocks = vi.hoisted(() => ({ read: vi.fn(), refresh: vi.fn(), deletion: vi.fn() }));
-vi.mock('../connection', () => ({ readTrainingDeliveryAuthority: mocks.read, GARMIN_TRAINING_PERMISSION_ISSUE: 'Workout Import required' }));
+vi.mock('../connection', () => ({ readTrainingDeliveryAuthority: mocks.read, GARMIN_TRAINING_PERMISSION_ISSUE: 'Training permission required' }));
 vi.mock('../../../tokens', () => ({ getTokenData: mocks.refresh }));
 vi.mock('../../../shared/user-deletion-guard', () => ({ getUserDeletionGuardStateInTransaction: mocks.deletion }));
 import { authorizeGarminTrainingRequest } from './authorization';
@@ -34,14 +34,14 @@ describe('Garmin delivery credential binding', () => {
       if (change === 'account') authority = { ...authority, account: 'different-account' };
       if (change === 'generation') authority = { ...authority, connection: { ...authority.connection, generation: 'replacement' } };
       if (change === 'deletion') mocks.deletion.mockResolvedValue({ shouldSkip: true });
-      if (change === 'permission') authority = { ...authority, connection: { ...authority.connection, issues: ['Workout Import required'] } };
+      if (change === 'permission') authority = { ...authority, connection: { ...authority.connection, issues: ['Training permission required'] } };
       if (change === 'token') authority = { ...authority, token: { ...authority.token, data: () => ({ accessToken: 'another-token' }) } };
       return { accessToken: 'fixture-token', userID: 'fixture-account', expiresAt: Date.now() + 60_000 };
     });
     await expect(authorizeGarminTrainingRequest(db, 'fixture-uid', operation)).rejects.toThrow();
   });
   it('blocks missing permission before token use and sanitizes refresh errors', async () => {
-    authority.connection.issues = ['Workout Import required'];
+    authority.connection.issues = ['Training permission required'];
     await expect(authorizeGarminTrainingRequest(db, 'fixture-uid', operation)).rejects.toMatchObject({ kind: 'permission' });
     expect(mocks.refresh).not.toHaveBeenCalled();
     delete authority.connection.issues;

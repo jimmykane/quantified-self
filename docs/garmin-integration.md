@@ -88,6 +88,8 @@ it is excluded from the catalog and display, even when an existing account repor
 The OAuth adapter still sends the generic `PARTNER_WRITE PARTNER_READ CONNECT_READ CONNECT_WRITE` scopes, not the
 permission catalog; this display/catalog change does not alter Garmin-hosted consent or remove saved grants.
 The view never reads OAuth documents or writes grants.
+User-facing labels, help and delivery errors call `WORKOUT_IMPORT` **Training**, matching Garmin's permission name;
+the API identifier and authorization checks remain unchanged.
 Unknown legacy permissions do not hide the known account behind a permanent loading message.
 History and route-upload tools also distinguish unknown permissions from an active load, and direct users to Garmin
 permission management or support when details remain unavailable. Their checks use the same trimmed grant names as the displayed rows;

@@ -155,7 +155,7 @@ describe('ServicesGarminComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('explains Workout Import without promising public availability or automatic delivery', () => {
+    it('explains Training permission without promising public availability or automatic delivery', () => {
         expect(component.permissionExplanations['WORKOUT_IMPORT']).toBe(
             'Send planned workouts when available for your account. Requires explicit opt-in.');
     });

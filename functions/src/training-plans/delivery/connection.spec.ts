@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
-import { readTrainingDeliveryAuthority, DELIVERY_SERVICES } from './connection';
+import { readTrainingDeliveryAuthority, DELIVERY_SERVICES, GARMIN_TRAINING_PERMISSION_ISSUE } from './connection';
 import { deliveryIdentity } from './intent';
 
 describe('Training authority extraction compatibility', () => {
+  it('uses the Garmin-facing Training permission name in the repair message', () => {
+    expect(GARMIN_TRAINING_PERMISSION_ISSUE).toBe('Garmin Training permission is required. Reconnect Garmin and allow training workouts.');
+  });
   it.each(['wahoo', 'coros', 'suunto'] as const)('keeps existing scalar account normalization for %s', async provider => {
     const service = DELIVERY_SERVICES[provider];
     const ref = { collection: () => ref, doc: () => ref, limit: () => ref };

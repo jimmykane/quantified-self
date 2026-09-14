@@ -79,10 +79,11 @@ describe('Training provider delivery controls', () => {
   it.each(['send', 'stop'] as const)('shows permission repair with zero mapping warnings when reviewing %s', async action => {
     service.isReady.mockReturnValue(true);
     service.preview.mockResolvedValue({ ...(await service.preview()), connection: 'connection_repair', warningCount: 0,
-      issues: ['Garmin Workout Import permission is required. Reconnect Garmin and allow training workouts.'] });
+      issues: ['Garmin Training permission is required. Reconnect Garmin and allow training workouts.'] });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     fixture.componentInstance.begin('garmin', action); await fixture.componentInstance.review(); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Garmin Workout Import permission is required. Reconnect Garmin');
+    expect(fixture.nativeElement.textContent).toContain('Garmin Training permission is required. Reconnect Garmin');
+    expect(fixture.nativeElement.textContent).not.toContain('Workout Import');
     expect(fixture.nativeElement.textContent).not.toContain('workouts need review');
     expect(fixture.componentInstance.canConfirm()).toBe(action === 'stop');
     expect(service.mutate).not.toHaveBeenCalled();

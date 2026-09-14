@@ -571,8 +571,10 @@ The pilot retains Auth/App Check, Pro/grace, explicit plan or standalone consent
 authority, deletion fencing, and existing recovery/Stop rules. Legacy Garmin connections without current connection and
 credential generations or recorded `WORKOUT_IMPORT` must reconnect; do not fabricate permission or migrate consent.
 Connectivity's Garmin overview exposes per-account last-reported permission rows and a **Manage in Garmin** action.
-It keeps **Reconnect** available even while the existing account appears connected, so refreshing Workout Import does
-not require an explicit disconnect that disables other sync routes. An unknown snapshot is not a denied grant, and
+The permission is labelled **Training** in UI, help and delivery errors; `WORKOUT_IMPORT` remains the API identifier.
+Healthy connections use **Manage in Garmin**, not **Reconnect**, for permission changes. Reconnect remains available
+for connection recovery; an explicit disconnect is not needed for permission changes and disables other sync routes.
+An unknown snapshot is not a denied grant, and
 the display never authorizes delivery or changes consent. This permission-management UI is available to all connected
 Garmin users; the separate Training UI and backend pilot UID restrictions are unchanged.
 Start evaluation with one explicitly sent future standalone workout, not an opted-in multi-workout plan.
@@ -629,7 +631,7 @@ edits and manual Retry, malformed/empty/asynchronous success responses, lost res
 changed-account reconnect, disconnect and account deletion. Run `npm run test:training-delivery` plus the existing Rules,
 secret registration and frontend suites. Sandbox/device certification remains a separate gate: confirm the documented
 create path in the evaluation tenant, actual response/404 semantics and schedule-list wrapper/pagination, quota/horizon,
-Workout Import approval, all CRUD/recovery scenarios and representative device rendering before public Garmin enablement.
+Training permission approval, all CRUD/recovery scenarios and representative device rendering before public Garmin enablement.
 The focused epic subissue #698 owns this remaining sandbox/device evidence, request-pacing validation and operator
 recovery procedure. Keep #647 open until its certification acceptance is evidenced; #645 owns access/contract questions
 and #655 owns production rollout. None of these tests constitutes a real Garmin sandbox or watch result.

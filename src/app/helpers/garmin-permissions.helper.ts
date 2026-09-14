@@ -4,7 +4,7 @@ import type { ServiceConnectionAccountProjection } from '@shared/service-connect
 export const GARMIN_PERMISSION_DETAILS = [
   { id: 'HISTORICAL_DATA_EXPORT', label: 'History Importer', description: 'Import your past Garmin activities.' },
   { id: 'ACTIVITY_EXPORT', label: 'Activity Sync', description: 'Automatically import new Garmin activities.' },
-  { id: 'WORKOUT_IMPORT', label: 'Workout Import', description: 'Send planned workouts when available for your account. Requires explicit opt-in.' },
+  { id: 'WORKOUT_IMPORT', label: 'Training', description: 'Send planned workouts when available for your account. Requires explicit opt-in.' },
   { id: 'HEALTH_EXPORT', label: 'Health Export', description: 'Import Garmin sleep and supported Health data.' },
   { id: 'COURSE_IMPORT', label: 'Course Import', description: 'Send saved routes or GPX/FIT files to Garmin Connect.' },
 ] as const;

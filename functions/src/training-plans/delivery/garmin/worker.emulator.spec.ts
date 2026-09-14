@@ -231,7 +231,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
   it('shows permission repair before consent and resumes a rejected request only after same-account reconnect', async () => {
     await credential().update({ permissions: ['ACTIVITY_EXPORT'] });
     const authority = await db.runTransaction(tx => runtime.connection(tx, uid, 'garmin'));
-    expect(authority).toMatchObject({ state: 'connection_repair', issues: [expect.stringContaining('Workout Import')] });
+    expect(authority).toMatchObject({ state: 'connection_repair', issues: [expect.stringContaining('Garmin Training permission')] });
     await expect(command()).rejects.toMatchObject({ code: 'failed-precondition' });
     await credential().update({ permissions: ['WORKOUT_IMPORT'] });
     const id = await send();

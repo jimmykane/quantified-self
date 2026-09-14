@@ -6,6 +6,7 @@ describe('Garmin permission display', () => {
       'HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'WORKOUT_IMPORT',
       'HEALTH_EXPORT', 'COURSE_IMPORT',
     ]);
+    expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'WORKOUT_IMPORT')?.label).toBe('Training');
     expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'WORKOUT_IMPORT')?.description).toContain('when available for your account');
     expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'WORKOUT_IMPORT')?.description).toContain('Requires explicit opt-in');
   });

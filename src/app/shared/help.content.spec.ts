@@ -37,7 +37,8 @@ describe('help.content', () => {
     expect(content).toContain('content, not old provider consent');
     expect(content).toContain('Pro expiry pauses creates and updates');
     expect(content).toContain('IANA time zone');
-    expect(content).toContain('Workout Import');
+    expect(content).toContain('**Training** permission');
+    expect(content).not.toMatch(/Workout Import|WORKOUT_IMPORT/);
     expect(content).toContain('Retry may still require support');
   });
   it('explains the compact mobile Health metric title picker and remembered selection', () => {
@@ -929,6 +930,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('MCP is marked **FREE**');
     expect(serviceConnectionsSection?.content).toContain('can always be disconnected');
     expect(serviceConnectionsSection?.content).toContain("each account's last-reported access for supported permissions");
+    expect(serviceConnectionsSection?.content).toContain('including **Training** and **Course Import**');
+    expect(serviceConnectionsSection?.content).not.toMatch(/Workout Import|WORKOUT_IMPORT/);
     expect(serviceConnectionsSection?.content).not.toMatch(/MCT_EXPORT|Menstrual|Women's Health/i);
     expect(serviceConnectionsSection?.content).toContain('**Not reported**');
     expect(serviceConnectionsSection?.content).toContain('**Permission details unavailable**');
