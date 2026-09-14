@@ -9,13 +9,22 @@ import { deliverySettingsId, parseTrainingDeliverySettingsV1, parseTrainingDeliv
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppUserService } from './app.user.service';
+import { TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '@shared/training-plans';
 
-export interface TrainingDeliveryView { settings: TrainingDeliverySettingsV1[]; statuses: TrainingDeliveryStatusV1[]; }
+export interface TrainingDeliveryView {
+  settings: TrainingDeliverySettingsV1[];
+  statuses: TrainingDeliveryStatusV1[];
+  /** Summary-only look-ahead for plan workout overrides; ordinary dialog pagination is unchanged. */
+  summaryComplete?: boolean;
+}
 /** History is a read-only UI scope, never a delivery command or new consent scope. */
 export type TrainingDeliveryViewScope = TrainingDeliveryScope | 'history';
 export const EMPTY_TRAINING_DELIVERY_VIEW: TrainingDeliveryView = { settings: [], statuses: [] };
 export const TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS = 30_000;
 export const TRAINING_DELIVERY_SAVE_TIMEOUT_MS = 70_000;
+// One look-ahead beyond the current 400-workout/four-provider bound. Historical
+// identities can exceed it; summaries must then explicitly withhold complete totals.
+export const TRAINING_DELIVERY_SUMMARY_LIMIT = TRAINING_PLAN_MAX_CURRENT_WORKOUTS * PLANNED_WORKOUT_PROVIDER_IDS.length + 1;
 
 @Injectable({ providedIn: 'root' })
 export class TrainingDeliveryService {
@@ -51,6 +60,22 @@ export class TrainingDeliveryService {
       orderBy('__name__'), limit(statusLimit))).pipe(
       map(values => values.map(parseTrainingDeliveryStatusV1)));
     return combineLatest([settings$, statuses$]).pipe(map(([settings, statuses]) => ({ settings, statuses })));
+  }
+  watchSummaryScope(uid: string, scope: 'plan' | 'workout', id: string, parentPlanId: string | null): Observable<TrainingDeliveryView> {
+    const view$ = this.watchScope(uid, scope, id, TRAINING_DELIVERY_SUMMARY_LIMIT);
+    if (!uid) return view$;
+    if (scope === 'plan') {
+      const overrides$ = collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS),
+        where('scope', '==', 'workout'), where('associationPlanId', '==', id), limit(TRAINING_DELIVERY_SUMMARY_LIMIT))).pipe(
+        map(values => values.map(parseTrainingDeliverySettingsV1)));
+      return combineLatest([view$, overrides$]).pipe(map(([view, overrides]) => ({ ...view,
+        settings: [...view.settings, ...overrides], summaryComplete: overrides.length < TRAINING_DELIVERY_SUMMARY_LIMIT })));
+    }
+    if (!parentPlanId) return view$;
+    const parent$ = combineLatest(PLANNED_WORKOUT_PROVIDER_IDS.map(provider => docData(doc(this.firestore,
+      'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId('plan', parentPlanId, provider))))).pipe(
+      map(values => values.filter(value => value !== undefined).map(parseTrainingDeliverySettingsV1)));
+    return combineLatest([view$, parent$]).pipe(map(([view, parent]) => ({ ...view, settings: [...view.settings, ...parent] })));
   }
   async preview(command: TrainingDeliveryCommandV1, canExecute: () => boolean = () => true): Promise<TrainingDeliveryPreviewV1> {
     return this.invoke<TrainingDeliveryPreviewV1>('previewTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS);

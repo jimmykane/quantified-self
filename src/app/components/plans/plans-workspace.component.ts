@@ -218,6 +218,11 @@ export class PlansWorkspaceComponent {
   readonly historyPanel = signal<HistoryPanelState | null>(null);
   readonly deletedWorkoutsExpanded = signal(false);
   readonly browsing = computed(() => !this.editor() && !this.showPlanForm());
+  readonly savedEditorWorkout = computed(() => {
+    const id = this.editor()?.original?.id;
+    return id ? this.schedule().workouts.find(workout => workout.id === id && workout.lifecycle !== 'deleted') ?? null : null;
+  });
+  readonly savedEditorPlan = computed(() => this.schedule().plans.find(plan => plan.id === this.savedEditorWorkout()?.planId) ?? null);
   private readonly acknowledgedPlan = signal<{
     uid: string;
     plan: TrainingPlanV1;

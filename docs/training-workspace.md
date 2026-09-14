@@ -507,6 +507,37 @@ Consent/lifecycle rules:
   the mismatch. A separate authored-content fingerprint avoids labelling unchanged Pro-paused copies as mismatches.
 
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
+The selected plan, its workout rows and the saved-workout editor also show compact, clickable **per-service sync
+summaries**, using destination branding (for example, **Garmin Connect · 2 of 3 workouts synced**). Opening a summary
+opens the existing sync details; rendering it never previews, grants consent, retries or contacts a provider. Editor
+summaries describe the current saved workout, not an unsaved draft. Plan totals cover every current non-deleted workout
+in that plan, across its entire date range—not only the selected day or the first 25 dialog rows. Skipped, waiting,
+outside-window, paused, unsupported and unapproved workouts remain explicit non-success states in that denominator.
+Confirmed past/completed copies may count as synced only while the safe projection confirms unchanged content; they
+are labelled as left unchanged. Empty plans are not fully synced. Plan inactive and sync-off preferences are distinct
+from confirmed delivery, and per-workout failures cannot be hidden by other successful workouts.
+
+`training-delivery-summary.helper.ts` matches the server's JSON-framed SHA-256 delivery identity using the owner-visible
+opaque destination fingerprint and inherited plan/current standalone settings. This is read-time presentation matching,
+never credential or connection authority. Earlier-account and removed-source copies stay available in details but never
+inflate current-workout confirmation counts. A newer authored/settings timestamp, workout override or changed association
+withholds an older confirmation until the worker catches up. Summary reads use an owner-scoped live status query, bounded
+to 1,601 projections (400 current workouts × four providers plus look-ahead), separately from the dialog's 25-row history
+pagination. Plan summaries also watch bounded workout overrides by their plan association, so a new individual Stop
+invalidates the old plan-level success total before reconciliation. Both look-aheads withhold complete totals at the cap:
+show **Status incomplete**, not an allegedly complete total. Read/crypto failures show
+**Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
+same-scope authored edits recompute the summary without reopening its Firestore listeners.
+
+These are workout-delivery aggregates for all services, including services without a native plan object. A provider that
+does not support workout delivery cannot become synced merely through aggregation. **Synced** confirms the complete
+provider-side workout/schedule delivery reported by QS, not receipt on a watch or other device. The existing readiness,
+UID presentation, Pro, consent, ledger, Rules and provider-adapter boundaries are unchanged; this presentation needs no
+Functions or index deployment. Verification includes `training-delivery-summary.helper.spec.ts` and
+`training-delivery-button.component.spec.ts` alongside the existing service/workspace/dialog tests.
+The latter also exports synthetic light/dark multi-service mixed-result summaries when `TRAINING_DELIVERY_QA_DIR` is set,
+using the same local stylesheet fixture workflow below. These fixtures do not enable any provider transport.
+
 Entry points and default dialog titles distinguish **Plan sync**, **Workout sync**, and **Workout sync history**.
 The plan view names the plan, explains automatic per-workout sending, and separates **Plan sync settings** / **Stop plan
 sync** from a visible **Workout sync status** section. Those entries are individual workout delivery projections, never

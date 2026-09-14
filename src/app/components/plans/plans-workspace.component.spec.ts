@@ -92,7 +92,8 @@ describe('PlansWorkspaceComponent', () => {
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: AppHapticsService, useValue: haptics },
-        { provide: TrainingDeliveryService, useValue: { anyReady: () => false, watchPresence: () => of(false) } },
+        { provide: TrainingDeliveryService, useValue: { anyReady: () => false, watchPresence: () => of(false),
+          watchSummaryScope: () => of({ settings: [], statuses: [] }) } },
         {
           provide: TrainingPlansService,
           useValue: {

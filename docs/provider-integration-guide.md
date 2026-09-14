@@ -68,6 +68,13 @@ provider training-plan parity. Inherited workout reviews show the server-resolve
 override's older zone. Transport timestamps appear in workout details separately from scheduled dates and reflect the
 latest attempt or confirmation; an older success never masks a newer failed attempt.
 
+Plan and workout surfaces show per-service destination summaries from the safe delivery projections. Plan totals are
+aggregates of all current authored workouts, not evidence of a native provider plan or device receipt. Only complete,
+unchanged confirmations for the matching destination count as synced; earlier-account/removed-source records remain
+history. Waiting, paused, unsupported, approval and failure states stay visible. Bounded/incomplete or failed reads must
+not claim complete success. Rendering these summaries performs owner-visible reads only, never provider calls or consent
+changes. See the Training workspace source of truth for identity matching, read bounds and tests.
+
 Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
 actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
 controls and generic provider-copy retention warnings. This does not authorize transport work, alter disconnect or
