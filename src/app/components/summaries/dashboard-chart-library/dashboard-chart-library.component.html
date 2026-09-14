@@ -1,7 +1,7 @@
 @if (showAddAction()) {
-  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" (click)="toggle()">
-    <mat-icon>add</mat-icon>
-    <span matBadge="New" matBadgeSize="medium" [matBadgeOverlap]="false" [matBadgeHidden]="!unseen().length" [matBadgeDescription]="newBadgeDescription()">{{ sectionPresentation().add }}</span>
+  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" matBadge="New" matBadgeSize="medium" [matBadgeHidden]="!unseen().length" [matBadgeDescription]="newBadgeDescription()" (click)="toggle()">
+    <span>{{ sectionPresentation().add }}</span>
+    <mat-icon iconPositionEnd>add</mat-icon>
   </button>
 }
 <ng-template #picker>
