@@ -35,7 +35,7 @@ interface BackfillRequest {
   endDate: string;
 }
 
-class GarminHistoryRangeUnavailableError extends Error {
+export class GarminHistoryRangeUnavailableError extends Error {
   constructor(minimumDate?: Date | null) {
     const minimumDateLabel = minimumDate
       ? minimumDate.toISOString().slice(0, 10)
@@ -435,6 +435,7 @@ async function requestGarminBackfill(userID: string, startDate: Date, endDate: D
     garminToken = await getTokenData(tokenDoc, ServiceNames.GarminAPI) as GarminAPIAuth2ServiceTokenInterface;
   } catch (error: unknown) {
     logger.error(`Failed to get/refresh Garmin token for ${userID}: ${getErrorMessage(error)}`);
+    if (execution) throw error;
     throw new Error('Token refresh failed');
   }
 

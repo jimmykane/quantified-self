@@ -150,6 +150,23 @@ describe('upsertWahooWorkoutQueueItem', () => {
     })).toBe(false);
   });
 
+  it('replaces unfinished work from an older connection without changing the provider revision', async () => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, connectionHistoryRunId: 'old-run', processed: false }) });
+    await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred'))
+      .resolves.toMatchObject({ queued: true });
+    expect(mocks.transactionSet).toHaveBeenCalledWith(mocks.ref, expect.objectContaining({ connectionHistoryRunId: 'new-run', queueRevision: expect.any(String), processed: false }));
+    const replacement = mocks.transactionSet.mock.calls[0][1];
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => replacement });
+    await expect(claimWahooWorkoutQueueRevision({ ...input, ref: mocks.ref, connectionHistoryRunId: 'old-run' } as WahooAPIWorkoutQueueItemInterface, 'stale-worker'))
+      .resolves.toBe('superseded');
+  });
+
+  it.each([true, false])('preserves completed or another owner’s prior history work (%s)', async completed => {
+    mocks.transactionGet.mockResolvedValue({ exists: true, data: () => ({ ...input, firebaseUserID: completed ? input.firebaseUserID : 'another-owner', connectionHistoryRunId: 'old-run', processed: completed }) });
+    await expect(upsertWahooWorkoutQueueItem({ ...input, connectionHistoryRunId: 'new-run' }, 'deferred')).resolves.toMatchObject({ queued: false });
+    expect(mocks.transactionSet).not.toHaveBeenCalled();
+  });
+
   it('resets a processed item when Wahoo sends a newer summary revision', async () => {
     mocks.transactionGet.mockResolvedValue({
       exists: true,

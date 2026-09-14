@@ -71,6 +71,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
 
   protected serviceDataSubscription!: Subscription;
+  private reconnectRouteSubscription?: Subscription;
 
   protected router = inject(Router);
   protected changeDetectorRef = inject(ChangeDetectorRef);
@@ -214,7 +215,10 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async ngOnInit() {
-    this.reconnectRequested = this.route.snapshot.queryParamMap.get('reconnect') === '1';
+    this.reconnectRouteSubscription = this.route.queryParamMap.subscribe(params => {
+      this.reconnectRequested = params.get('serviceName') === this.serviceName && params.get('reconnect') === '1';
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   protected onServiceDataChanged(): void {
@@ -428,6 +432,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   ngOnDestroy(): void {
+    this.reconnectRouteSubscription?.unsubscribe();
     if (this.serviceDataSubscription) {
       this.serviceDataSubscription.unsubscribe();
     }

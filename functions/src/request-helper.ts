@@ -174,6 +174,8 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         if (!response.ok) {
             const err: any = new Error(`StatusCodeError: ${response.status} - ${response.statusText}`);
             err.statusCode = response.status;
+            const retryAfter = response.headers?.get('retry-after');
+            if (retryAfter) err.response = { headers: { 'retry-after': retryAfter } };
             try {
                 err.error = boundedResponseBody === null
                     ? await response.text()
