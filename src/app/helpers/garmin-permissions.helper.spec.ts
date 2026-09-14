@@ -4,12 +4,25 @@ describe('Garmin permission display', () => {
   it('covers every supported Garmin permission without claiming feature readiness', () => {
     expect(GARMIN_PERMISSION_DETAILS.map(permission => permission.id)).toEqual([
       'HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT', 'WORKOUT_IMPORT',
-      'HEALTH_EXPORT', 'COURSE_IMPORT', 'MCT_EXPORT',
+      'HEALTH_EXPORT', 'COURSE_IMPORT',
     ]);
     expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'WORKOUT_IMPORT')?.description).toContain('when available for your account');
     expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'WORKOUT_IMPORT')?.description).toContain('Requires explicit opt-in');
-    expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'MCT_EXPORT')?.description).toBe('Not used by Quantified Self yet.');
   });
+
+  it.each([
+    { permissions: undefined }, { permissions: [] },
+    { permissions: ['MCT_EXPORT'] }, { permissions: [' MCT_EXPORT ', 'MCT_EXPORT'] },
+  ])(
+    'omits the deferred MCT permission regardless of the reported grant: $permissions', ({ permissions }) => {
+      const input = [{ providerUserId: 'account', ...(permissions ? { permissions } : {}) }];
+      const before = structuredClone(input);
+      const [account] = buildGarminPermissionAccounts(input);
+      expect(account.permissionsKnown).toBe(permissions !== undefined);
+      expect(account.permissions.map(row => row.id)).toEqual(GARMIN_PERMISSION_DETAILS.map(permission => permission.id));
+      expect(input).toEqual(before);
+    },
+  );
 
   it('shows granted and not-granted permissions separately for each account', () => {
     const accounts = buildGarminPermissionAccounts([
@@ -34,7 +47,7 @@ describe('Garmin permission display', () => {
   });
 
   it('preserves additional provider permissions, normalizes duplicates, and does not mutate the source', () => {
-    const input = [{ providerUserId: 'account', permissions: [' WORKOUT_IMPORT ', 'WORKOUT_IMPORT', 'FUTURE_SCOPE'] }];
+    const input = [{ providerUserId: 'account', permissions: [' WORKOUT_IMPORT ', 'WORKOUT_IMPORT', 'MCT_EXPORT', 'FUTURE_SCOPE'] }];
     const before = structuredClone(input);
     const [account] = buildGarminPermissionAccounts(input);
     expect(account.permissions.filter(row => row.status === 'Granted').map(row => row.id)).toEqual(['WORKOUT_IMPORT', 'FUTURE_SCOPE']);

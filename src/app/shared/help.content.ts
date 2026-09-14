@@ -886,7 +886,7 @@ Services opens each provider on a compact connection overview. Choose an action 
 
 ### Garmin permissions
 
-In **Connections → Garmin**, **Permissions** lists each account's last-reported grants, including **Workout Import** and **Course Import**. **Granted** and **Not granted** describe Garmin's saved response. **Not reported** means QS does not yet have permission details for that connection—not that you denied access. A granted permission does not mean every related feature is available in QS.
+In **Connections → Garmin**, **Permissions** shows each account's last-reported access for supported permissions, including **Workout Import** and **Course Import**. **Granted** and **Not granted** describe Garmin's saved response. **Not reported** means QS does not yet have permission details for that connection—not that you denied access. A granted permission does not mean every related feature is available in QS.
 
 If a Garmin history or route-upload tool says **Permission details unavailable**, close that tool and select **Manage in Garmin** on the connection overview to check access. Contact support if permission details remain unavailable.
 

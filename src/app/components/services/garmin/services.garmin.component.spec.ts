@@ -171,7 +171,7 @@ describe('ServicesGarminComponent', () => {
         });
 
         it('shows permissions and management without Reconnect for a healthy connection', () => {
-            expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(6);
+            expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(5);
             expect(fixture.nativeElement.querySelector('.qs-mat-primary')).toBeNull();
             expect(fixture.nativeElement.textContent).not.toContain('Reconnect');
             expect(fixture.nativeElement.textContent).toContain('Manage in Garmin');
@@ -214,7 +214,7 @@ describe('ServicesGarminComponent', () => {
 
         it('keeps management readable without Pro while gating reauthorization', async () => {
             component.hasProAccess = false; fixture.detectChanges();
-            expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(6);
+            expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(5);
             const manage = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
                 .find(item => item.textContent?.includes('Manage in Garmin'))!;
             expect(manage.disabled).toBe(false);

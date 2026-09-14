@@ -3,11 +3,12 @@ import { GarminPermissionsComponent } from './garmin-permissions.component';
 import { readFileSync } from 'node:fs';
 
 describe('GarminPermissionsComponent', () => {
-  it('renders all grants as accessible compact rows, without local consent toggles', () => {
+  it('renders supported grants as accessible compact rows, without MCT or local consent toggles', () => {
     const fixture = TestBed.createComponent(GarminPermissionsComponent);
-    fixture.componentRef.setInput('accounts', [{ providerUserId: 'account-a', permissions: ['WORKOUT_IMPORT', 'ACTIVITY_EXPORT'] }]);
+    fixture.componentRef.setInput('accounts', [{ providerUserId: 'account-a', permissions: ['WORKOUT_IMPORT', 'ACTIVITY_EXPORT', 'MCT_EXPORT'] }]);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelectorAll('app-compact-row')).toHaveLength(5);
+    expect(fixture.nativeElement.textContent).not.toMatch(/MCT_EXPORT|Menstrual|Women's Health/i);
     const rows = Array.from(fixture.nativeElement.querySelectorAll('[role="listitem"]') as NodeListOf<HTMLElement>);
     // CompactRow's display:contents host cannot reliably carry list semantics in browser accessibility trees.
     expect(rows.every(row => row.tagName === 'DIV' && row.querySelector('app-compact-row'))).toBe(true);
@@ -30,7 +31,7 @@ describe('GarminPermissionsComponent', () => {
     const fixture = TestBed.createComponent(GarminPermissionsComponent);
     fixture.componentRef.setInput('accounts', [{ providerUserId: 'account', permissions: ['WORKOUT_IMPORT'] }]);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.compact-row--compact.compact-row--columns')).toHaveLength(6);
+    expect(fixture.nativeElement.querySelectorAll('.compact-row--compact.compact-row--columns')).toHaveLength(5);
     const styles = readFileSync('src/app/components/services/garmin/garmin-permissions.component.scss', 'utf8');
     const statusStyles = styles.slice(styles.indexOf('.garmin-permissions__status {'));
     expect(statusStyles).toContain('inline-size: 6.5em');

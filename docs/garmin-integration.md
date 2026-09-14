@@ -82,8 +82,12 @@ Sleep and Health share the existing 30-day Garmin history cooldown, but their ra
 
 Connections → Garmin shows compact permission rows from the existing backend-owned connection-account projection.
 Each account keeps its own grants: `Granted`, `Not granted` for an explicitly absent grant, or `Not reported` when the
-saved permissions array is missing/malformed. The view includes all six documented permission families and any extra
-provider-reported scope names without implying QS feature availability. It never reads OAuth documents or writes grants.
+saved permissions array is missing/malformed. The view includes the five supported permission families and extra
+provider-reported scope names without implying QS feature availability. `MCT_EXPORT` remains deferred under #621:
+it is excluded from the catalog and display, even when an existing account reports that grant. It is not required by QS.
+The OAuth adapter still sends the generic `PARTNER_WRITE PARTNER_READ CONNECT_READ CONNECT_WRITE` scopes, not the
+permission catalog; this display/catalog change does not alter Garmin-hosted consent or remove saved grants.
+The view never reads OAuth documents or writes grants.
 Unknown legacy permissions do not hide the known account behind a permanent loading message.
 History and route-upload tools also distinguish unknown permissions from an active load, and direct users to Garmin
 permission management or support when details remain unavailable. Their checks use the same trimmed grant names as the displayed rows;

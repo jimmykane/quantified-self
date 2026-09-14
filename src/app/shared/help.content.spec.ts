@@ -928,7 +928,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('marked **PRO**');
     expect(serviceConnectionsSection?.content).toContain('MCP is marked **FREE**');
     expect(serviceConnectionsSection?.content).toContain('can always be disconnected');
-    expect(serviceConnectionsSection?.content).toContain("each account's last-reported grants");
+    expect(serviceConnectionsSection?.content).toContain("each account's last-reported access for supported permissions");
+    expect(serviceConnectionsSection?.content).not.toMatch(/MCT_EXPORT|Menstrual|Women's Health/i);
     expect(serviceConnectionsSection?.content).toContain('**Not reported**');
     expect(serviceConnectionsSection?.content).toContain('**Permission details unavailable**');
     expect(serviceConnectionsSection?.content).toContain('close that tool and select **Manage in Garmin**');
