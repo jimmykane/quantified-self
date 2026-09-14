@@ -1,3 +1,4 @@
+import { DASHBOARD_SLEEP_STAGE_SERIES as STAGE_SERIES } from '../../../helpers/dashboard-chart-series.helper';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { trainingStateChartGrid, TRAINING_STATE_AXIS_LABEL } from '../../../helpers/training-state-chart-layout.helper';
 import {
@@ -61,13 +62,6 @@ type AxisPointerEvent = {
 };
 type SleepStackValueKey = 'deepSeconds' | 'lightSeconds' | 'remSeconds' | 'unknownSeconds' | 'awakeSeconds' | 'napSeconds';
 
-const STAGE_SERIES = [
-  { key: 'deepSeconds', name: 'Deep', color: AppColors.DeepBlue },
-  { key: 'lightSeconds', name: 'Light', color: AppColors.LightBlue },
-  { key: 'remSeconds', name: 'REM', color: AppColors.Purple },
-  { key: 'unknownSeconds', name: 'Unknown', color: AppColors.MediumGray },
-  { key: 'awakeSeconds', name: 'Awake', color: AppColors.Orange },
-] as const;
 
 const HRV_SERIES = {
   name: 'HRV',

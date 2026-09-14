@@ -1,3 +1,4 @@
+import { DASHBOARD_CATEGORY_PALETTE } from '../../../helpers/dashboard-chart-series.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -22,7 +23,6 @@ import {
   type UserUnitSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
-import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
@@ -100,18 +100,7 @@ export class ChartsColumnsComponent implements AfterViewInit, OnChanges, OnDestr
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
   private readonly chartHost: EChartsHostController;
-  private readonly dateTypePalette = [
-    AppColors.Blue,
-    AppColors.Green,
-    AppColors.Orange,
-    AppColors.Purple,
-    AppColors.LightBlue,
-    AppColors.Yellow,
-    AppColors.Pink,
-    AppColors.Red,
-    AppColors.DeepBlue,
-    AppColors.LightGreen
-  ];
+  private readonly dateTypePalette = DASHBOARD_CATEGORY_PALETTE;
   private static readonly EMPTY_DATA_UPDATE_SETTINGS: ChartSetOptionSettings = {
     notMerge: true,
     lazyUpdate: false,

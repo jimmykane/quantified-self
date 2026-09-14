@@ -34,12 +34,12 @@ export class DashboardChartLibraryComponent {
   readonly lane = input.required<DashboardTileLaneKey>();
   readonly seed = input<DashboardPreviewInput>({ tiles: [] });
   private readonly previewData = inject(DashboardChartPreviewService);
-  private readonly kpiContexts = signal<{ uid: string; data: DashboardPreviewInput['derivedMetrics']; state: DashboardPreviewInput['kpiPreviewState'] } | null>(null);
+  private readonly previewContexts = signal<{ uid: string; lane: DashboardTileLaneKey; data: Partial<DashboardPreviewInput> } | null>(null);
   readonly previewSeed = computed((): DashboardPreviewInput => {
-    const context = this.kpiContexts();
+    const context = this.previewContexts();
     const seed = this.seed();
-    return this.expanded() && this.lane() === 'kpi' && context?.uid === this.user().uid
-      ? { ...seed, derivedMetrics: { ...seed.derivedMetrics, ...context.data }, kpiPreviewState: context.state }
+    return this.expanded() && context?.lane === this.lane() && context.uid === this.user().uid
+      ? { ...seed, ...context.data, derivedMetrics: { ...seed.derivedMetrics, ...context.data.derivedMetrics } }
       : seed;
   });
   readonly darkTheme = input(false);
@@ -109,15 +109,14 @@ export class DashboardChartLibraryComponent {
   constructor() {
     effect(onCleanup => {
       const user = this.user();
-      const open = this.expanded() && this.lane() === 'kpi';
+      const open = this.expanded();
+      const lane = this.lane();
       untracked(() => {
-        this.kpiContexts.set(null);
+        this.previewContexts.set(null);
         if (!open) return;
-        this.kpiContexts.set({ uid: user.uid, data: {}, state: 'loading' });
-        const tiles = this.catalog.filter(entry => entry.lane === 'kpi').map(entry => entry.tile);
-        const subscription = this.previewData.watchKpiContexts(user, tiles, this.seed()).subscribe({
-          next: data => this.kpiContexts.set({ uid: user.uid, data, state: 'ready' }),
-          error: () => this.kpiContexts.set({ uid: user.uid, data: {}, state: 'error' }),
+        const tiles = this.catalog.filter(entry => entry.lane === lane).map(entry => entry.tile);
+        const subscription = this.previewData.watchLibraryContexts(user, tiles, this.seed()).subscribe({
+          next: data => this.previewContexts.set({ uid: user.uid, lane, data }),
         });
         onCleanup(() => subscription.unsubscribe());
       });

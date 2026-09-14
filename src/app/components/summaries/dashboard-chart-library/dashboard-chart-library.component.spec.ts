@@ -21,6 +21,7 @@ import { AppSleepService } from '../../../services/app.sleep.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { DashboardDerivedMetricsService } from '../../../services/dashboard-derived-metrics.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
+import { buildDashboardExampleEvents } from '../../../helpers/dashboard-chart-preview.helper';
 import { getDashboardChartCatalog } from '../../../helpers/dashboard-chart-catalog.helper';
 
 describe('responsive chart picker interactions', () => {
@@ -30,6 +31,7 @@ describe('responsive chart picker interactions', () => {
   let mobile = false;
   let discard = false;
   const save = vi.fn();
+  const events = { getEventsBy: vi.fn() };
   const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const settle = async () => {
@@ -41,10 +43,11 @@ describe('responsive chart picker interactions', () => {
   beforeEach(async () => {
     vi.restoreAllMocks(); vi.clearAllMocks(); mobile = false; discard = false; save.mockResolvedValue(undefined);
     derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState()));
+    events.getEventsBy.mockReturnValue(of([]));
     await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent, DashboardTileEditorComponent], imports: [CommonModule, MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
       DashboardChartLibraryState, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
       { provide: BreakpointObserver, useValue: { isMatched: () => mobile, observe: () => of({ matches: false, breakpoints: {} }) } },
-      { provide: AppEventService, useValue: {} }, { provide: AppSleepService, useValue: {} }, { provide: AppRouteService, useValue: {} }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: DashboardHrvService, useValue: {} },
+      { provide: AppEventService, useValue: events }, { provide: AppSleepService, useValue: { watchForDashboard: () => of([]) } }, { provide: AppRouteService, useValue: { watchRecentRoutePreviews: () => of([]) } }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: DashboardHrvService, useValue: { watch: () => of(null) } },
     ] }).compileComponents();
     const dialog = TestBed.inject(MatDialog);
     const realOpen = dialog.open.bind(dialog);
@@ -92,6 +95,25 @@ describe('responsive chart picker interactions', () => {
     expect(derived.watch).toHaveBeenLastCalledWith(expect.objectContaining({ uid: 'next-owner' }), expect.anything());
     fixture.destroy();
     expect(next$.observed).toBe(false);
+  });
+  it('hydrates all activity rows through one read and retains previews while searching', async () => {
+    const source$ = new Subject<ReturnType<typeof buildDashboardExampleEvents>>();
+    events.getEventsBy.mockReturnValue(source$);
+    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
+    await component.toggle(); await settle();
+    expect(events.getEventsBy).toHaveBeenCalledOnce();
+    expect(component.rowPreviews().every(row => row.preview.loading)).toBe(true);
+    source$.next(buildDashboardExampleEvents(Date.now())); await settle();
+    const rows = component.rowPreviews();
+    expect(rows.every(row => row.preview.source === 'user' && !row.preview.loading)).toBe(true);
+    component.filter('Distance'); await settle();
+    expect(component.rowPreviews().every(row => rows.includes(row))).toBe(true);
+    expect(events.getEventsBy).toHaveBeenCalledOnce();
+    expect(derived.watch).not.toHaveBeenCalled();
+    await component.close(); await settle();
+    expect(source$.observed).toBe(false);
+    expect(component.previewSeed().previewEventsByRange).toBeUndefined();
+    expect(save).not.toHaveBeenCalled();
   });
   it('opens a wide dialog without expanding the dashboard', async () => {
     await component.toggle(); await settle();

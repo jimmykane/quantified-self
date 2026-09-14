@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { AppDeviceColors } from './app.device.colors';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
-import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
+import { ActivityTypes, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
+import { AppActivityTypeGroupColors, resolveActivityTypeVisualGroup } from './app.activity-type-group.colors';
 import { AppActivityTypeGroupGradients } from './app.activity-type-group.gradients';
 import { AppColors } from './app.colors';
 import { LoggerService } from '../logger.service';
@@ -168,12 +168,7 @@ export class AppEventColorService {
   }
 
   private getVisualActivityTypeGroup(activityType: ActivityTypes): ActivityTypeGroup {
-    switch (activityType) {
-      case ActivityTypes.Trekking:
-        return ActivityTypeGroups.OutdoorAdventuresGroup;
-      default:
-        return ActivityTypesHelper.getActivityGroupForActivityType(activityType);
-    }
+    return resolveActivityTypeVisualGroup(activityType);
   }
 
   getColorForZoneHex(zone: string): string {

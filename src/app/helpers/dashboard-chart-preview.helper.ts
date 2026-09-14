@@ -13,14 +13,30 @@ import type { SleepSession } from '@shared/sleep';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
 import type { DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
 
-export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & { tileEventAnchorsByOrder?: Record<number, number | null>; kpiPreviewState?: 'loading' | 'ready' | 'error' };
+export type DashboardPreviewLoadState = 'loading' | 'ready' | 'error';
+export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & {
+  tileEventAnchorsByOrder?: Record<number, number | null>;
+  previewStates?: Record<string, DashboardPreviewLoadState>;
+  previewEventsByRange?: Record<string, EventInterface[]>;
+};
+export function dashboardPreviewSourceKeys(tile: TileSettingsInterface): string[] {
+  const kinds = dashboardPreviewMetricKinds(tile);
+  if (kinds.length) return kinds.map(kind => `derived:${kind}`);
+  if (C.isDashboardHrvTrendChartType(tile['chartType'])) return ['hrv'];
+  if (C.isDashboardSleepBackedChartType(tile['chartType'])) return ['sleep'];
+  if (tile.type === TileTypes.Map && tile['mapSource'] === 'routes') return ['routes'];
+  return [`events:${normalizeDashboardTileEventFilters(tile['eventFilters']).range}`];
+}
+export function dashboardPreviewIsManaged(tile: TileSettingsInterface, seed: DashboardPreviewInput): boolean {
+  return dashboardPreviewSourceKeys(tile).every(key => !!seed.previewStates?.[key]);
+}
 /** Reuse only a current window; saved orders cannot be used for candidate previews. */
 export function buildDashboardPreviewSeed(tile: TileSettingsInterface, seed: DashboardPreviewInput, now = Date.now()): DashboardPreviewInput {
   const range = normalizeDashboardTileEventFilters(tile['eventFilters']).range;
   const saved = seed.tiles.find(candidate => !seed.tileEventAnchorsByOrder?.[candidate.order]
     && normalizeDashboardTileEventFilters(candidate['eventFilters']).range === range
     && seed.tileEventsByOrder?.[candidate.order]);
-  const input: DashboardPreviewInput = { ...seed, tiles: [tile], events: saved ? seed.tileEventsByOrder?.[saved.order] || [] : [], tileEventsByOrder: null };
+  const input: DashboardPreviewInput = { ...seed, tiles: [tile], events: seed.previewEventsByRange?.[range] ?? (saved ? seed.tileEventsByOrder?.[saved.order] || [] : []), tileEventsByOrder: null };
   const window = seed.sleepTrendWindow;
   if (!window || Math.abs(now - window.endMs) > 86400000 || Math.abs(window.endMs - window.startMs - 14*86400000) > 86400000) input.sleepSessions = [];
   const hrvWindow = dashboardHrvWindows('14d', now).visible;
@@ -35,18 +51,20 @@ export interface DashboardChartPreview {
   note: string;
   calendarEvents: EventInterface[];
   anchorMs: number;
+  startOfWeek?: number | null;
 }
 
-/** List previews use current, already-loaded data only. Missing sources stay explicit examples. */
+/** List and detail previews share the picker’s current data. Missing sources stay explicit examples. */
 export function buildDashboardThumbnailPreview(tile: TileSettingsInterface, seed: DashboardPreviewInput): DashboardChartPreview {
   const input = buildDashboardPreviewSeed(tile, seed);
   const existing = buildDashboardTileViewModels(input)[0];
-  const type = `${tile['chartType'] || ''}`;
   const preview: DashboardChartPreview = dashboardPreviewHasData(existing, input)
     ? { tile: existing, source: 'user', loading: false, note: '', calendarEvents: input.events || [], anchorMs: Date.now() }
     : buildDashboardExamplePreview(tile);
-  if (C.isDashboardKpiChartType(type) && input.kpiPreviewState === 'loading'
-    && dashboardPreviewMissingMetricKinds([tile], input).length) return { ...preview, loading: true };
+  preview.startOfWeek = seed.startOfWeek;
+  const states = dashboardPreviewSourceKeys(tile).map(key => input.previewStates?.[key]);
+  if (states.includes('loading')) return { ...preview, loading: true };
+  if (preview.source === 'example' && states.includes('error')) return { ...preview, note: 'Could not load your data. Showing an example.' };
   return preview;
 }
 

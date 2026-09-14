@@ -222,14 +222,21 @@ New catalog entries need an example and catalog coverage. Homepage signal fixtur
 `DashboardChartPreviewService` reads only. Row thumbnails use the shared ECharts host and a bounded, decorative shape
 from the existing preview view model, with no axes, values, tooltips, focus targets, or haptic handlers. The row's
 accessible description includes its format and data source. Preview models are cached across search/group filtering;
-closing the picker disposes its thumbnail charts. Opening the KPI picker subscribes once to its missing prepared
-metric dependencies, deduplicated by kind and scoped to the current owner. It reuses already loaded contexts, shares
-the resulting seed with list and detail previews, and releases those reads on close or owner change. Filtering does
-not resubscribe. KPI trends and semantic theme colors come from `dashboard-kpi-sparkline.helper.ts`, shared with the
-full KPI renderer; Training Balance uses the same percentage trend. A real headline without history stays real,
-with no invented sparkline. Other thumbnails use loaded context or labelled examples without additional reads.
-Selecting a chart lazily reads only the missing source (bounded activity window, 14 days of sleep, recent route previews, or the
-required prepared metric snapshots). Subscriptions are shared within a library and released when previews are destroyed.
+closing the picker disposes its thumbnail charts. Opening any section subscribes to its missing sources, scoped to the
+current owner: one combined prepared-metric subscription, one activity read per date range, 14 days of sleep, the shared
+HRV adapter, and up to 50 recent routes as needed. Current loaded contexts are reused. List and detail previews share
+these results and per-source loading/error states; selecting an empty or failed result does not repeat the read.
+Filtering does not resubscribe, one failed source does not block other rows, and closing or changing owners releases
+all reads. Activity windows stay separate, with activity-type filters applied after the shared read; changing custom
+settings to another range loads that range for its detail preview.
+
+KPI trends and semantic colors come from `dashboard-kpi-sparkline.helper.ts`. Other thumbnails reuse the full charts’
+activity-group colors, category palette, pie grouping, date/activity segmentation, sleep stage definitions, Power colors,
+and HRV range/status renderer. Form retains its two panels, weekly derived charts respect their configured range, and
+Sleep includes available stages, naps and vitals. The render is sampled to at most 48 points per series, without labels
+or interactive overlays. A real headline without history stays real, with no invented sparkline. Shared series definitions
+live in `dashboard-chart-series.helper.ts`; public homepage examples remain synthetic.
+
 A historically navigated event/sleep window cannot supply a current preview. Preview event reads exclude merged events.
 Preview paths never call metric ensure/rebuild APIs or persist settings. Synthetic examples remain labelled during loading
 and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
