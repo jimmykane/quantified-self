@@ -37,6 +37,7 @@
         <p class="delivery-caption">{{ phase() === 'preview' ? 'Nothing is sent until you confirm.' : 'You can close this dialog. Delivery status will update in the background.' }}</p>
       }
       @if (preview(); as preview) {
+        @if (!canChangeTimeZone()) { <p class="delivery-caption">Time zone: {{ preview.result.timeZone }}</p> }
         @if (draft.action === 'stop') {
           @if (!preview.result.available || preview.result.connection !== 'connected') {
             <p>Removal must wait for provider availability and valid access to the same account. Copies left after disconnect may need removing in the provider app.</p>
@@ -67,8 +68,8 @@
   } @else {
     @for (row of rows(); track row.provider; let last = $last) {
       <app-compact-row [title]="row.label" layout="stacked" density="compact" [showDivider]="!last">
-        @if (row.setting) { <p class="delivery-caption">{{ row.settingLabel }} · {{ row.setting.timeZone }}</p> }
-        @else if (planBound()) { <p class="delivery-caption">Uses this plan’s sync settings.</p> }
+        @if (planBound()) { <p class="delivery-caption">{{ row.settingLabel }}</p> }
+        @else if (row.setting) { <p class="delivery-caption">{{ row.settingLabel }} · {{ row.setting.timeZone }}</p> }
         @if (!row.ready) { <p>Delivery unavailable. Existing copies and problems remain visible.</p> }
         @if (data.scope !== 'history') {
           <div class="delivery-actions">

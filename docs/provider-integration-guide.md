@@ -57,6 +57,8 @@ The Training UI checks availability and compatibility automatically on entering 
 subsequent eligible edits reconcile automatically. Opening the dialog never mutates consent. The saved/browser time
 zone is shown inline and changes explicitly; mapping degradation still needs per-workout approval. Troubleshooting is
 secondary, with compact status/history rows and surface-free Show/Hide details matching existing Training controls.
+Inherited workout reviews show the server-resolved parent-plan zone, not a retained override's older zone. Compact
+history timestamps reflect the latest attempt or confirmation; an older success never masks a newer failed attempt.
 
 Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
 actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider

@@ -149,6 +149,14 @@ describe('Training provider delivery controls', () => {
     expect(rows[0].querySelector('button').getAttribute('aria-label')).toBe('Delivery details for Morning run');
     expect(rows[0].textContent).toContain('2026');
   });
+  it('shows a newer failed attempt instead of an older successful delivery time in a compact row', () => {
+    const accepted = Date.parse('2026-09-10T10:00:00Z');
+    const attempted = Date.parse('2026-09-14T12:00:00Z');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, status: 'retrying',
+      lastAcceptedAtMs: accepted, lastAttemptAtMs: attempted }] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.componentInstance.rows()[0].statuses[0]).toMatchObject({ timestamp: attempted, timestampLabel: 'Last attempt' });
+  });
   it('uses surface-free disclosures with controlled regions and one feedback owner', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     for (const id of ['delivery-attempt-delivery', 'delivery-guidance-details']) {
@@ -243,7 +251,7 @@ describe('Training provider delivery controls', () => {
       plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Uses this plan’s sync settings');
-    expect(fixture.nativeElement.textContent).not.toContain('Resume delivery');
+    expect(fixture.nativeElement.textContent).not.toContain('Resume sync');
     expect(fixture.nativeElement.textContent).not.toContain('Sync off');
     expect(haptics.selection).not.toHaveBeenCalled();
     (fixture.nativeElement.querySelector('button[aria-controls="delivery-attempt-delivery"]') as HTMLElement).click();
@@ -287,6 +295,68 @@ describe('Training provider delivery controls', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     expect(Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
       .some(button => button.textContent?.trim() === 'Stop sync')).toBe(true);
+  });
+  it('keeps Stop available after a transfer before a delivery status exists, ignoring the old plan suppression', () => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [{ provider: 'garmin', enabled: false, suppressed: true,
+      associationPlanId: 'old-plan', timeZone: 'Europe/Berlin' }], statuses: [] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [], workouts: [{ id: 'w', planId: 'new-plan', revision: 2 }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.componentInstance.rows()[0].canStop).toBe(true);
+    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).toContain('Stop sync');
+    expect(fixture.nativeElement.textContent).not.toContain('Resume sync');
+  });
+  it.each(['old-plan', 'new-plan'])('only offers status-derived Resume for the current plan, not a previous plan (%s)', planId => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, planId, status: 'stopped', hasRemoteCopy: false }] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [], workouts: [{ id: 'w', planId: 'new-plan', revision: 2 }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent.includes('Resume sync')).toBe(planId === 'new-plan');
+    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).toContain('Stop sync');
+  });
+  it.each(['stop', 'retry', 'resume', 'approve'] as const)('shows only the server-resolved inherited zone when reviewing %s', async action => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [{ provider: 'garmin', enabled: false, suppressed: false,
+      associationPlanId: 'p', timeZone: 'Europe/Berlin' }], statuses: [] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
+    service.preview.mockResolvedValue({ ...(await service.preview()), timeZone: 'America/New_York' });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Uses this plan’s sync settings');
+    expect(fixture.nativeElement.textContent).not.toContain('Europe/Berlin');
+    await fixture.componentInstance.begin('garmin', action); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Time zone: America/New_York');
+    expect(fixture.nativeElement.querySelector('input[name="timeZone"]')).toBeNull();
+    expect(service.preview.mock.calls.at(-1)![0]).not.toHaveProperty('timeZone');
+    expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it('retains Resume for current-plan suppression before a status exists', () => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [{ provider: 'garmin', enabled: false, suppressed: true,
+      associationPlanId: 'p', timeZone: 'Europe/Helsinki' }], statuses: [] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Stopped for this workout');
+    expect(fixture.nativeElement.textContent).toContain('Resume sync');
+    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).not.toContain('Stop sync');
+    expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it('does not offer Resume again after consent resumes while its old stopped status is still reconciling', () => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    const view$ = new BehaviorSubject({ settings: [{ provider: 'garmin', enabled: false, suppressed: true,
+      associationPlanId: 'p', timeZone: 'Europe/Helsinki' }], statuses: [{ ...status, planId: 'p', status: 'stopped', hasRemoteCopy: false }] });
+    service.watchScope.mockReturnValue(view$);
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Resume sync');
+    view$.next({ ...view$.value, settings: [{ ...view$.value.settings[0], suppressed: false }] }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Resume sync');
+    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).toContain('Stop sync');
+    expect(service.mutate).not.toHaveBeenCalled();
   });
   it('opens retained workout delivery from history without linking to a deleted editor', () => {
     const open = vi.fn();

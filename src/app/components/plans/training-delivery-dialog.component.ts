@@ -11,7 +11,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
 import { EMPTY_TRAINING_DELIVERY_VIEW, TrainingDeliveryService, type TrainingDeliveryViewScope } from '../../services/training-delivery.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
-import { TRAINING_DELIVERY_STATUS_LABELS, trainingDeliveryCommandError, trainingDeliveryCopyMessage } from '../../helpers/training-delivery-display.helper';
+import { TRAINING_DELIVERY_STATUS_LABELS, trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeliveryLatestEvent } from '../../helpers/training-delivery-display.helper';
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
 
 export interface TrainingDeliveryDialogData {
@@ -106,23 +106,25 @@ export class TrainingDeliveryDialogComponent {
   readonly rows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
     const setting = this.view().settings.find(item => item.provider === provider);
     const currentPlanId = this.schedule()?.workouts.find(item => item.id === this.data.id)?.planId;
-    const suppressed = this.planBound() && !!setting?.suppressed && setting.associationPlanId === currentPlanId;
+    const inheritedSetting = this.planBound() && setting?.associationPlanId === currentPlanId ? setting : undefined;
+    const suppressed = !!inheritedSetting?.suppressed;
     const statuses = this.statuses().filter(item => item.provider === provider).map(status => {
       const workout = this.schedule()?.workouts.find(item => item.id === status.workoutId);
       return { ...status, title: workout?.title ?? (this.scheduleView().error ? 'Workout unavailable'
         : this.scheduleView().loaded ? 'Deleted workout' : 'Loading workout…'), sourceExists: !!workout && workout.lifecycle !== 'deleted',
         label: TRAINING_DELIVERY_STATUS_LABELS[status.status], copyMessage: trainingDeliveryCopyMessage(status),
-        timestamp: status.lastAcceptedAtMs ?? status.lastAttemptAtMs ?? status.updatedAtMs,
-        timestampLabel: status.lastAcceptedAtMs !== null ? 'Last confirmed' : status.lastAttemptAtMs !== null ? 'Last attempt' : 'Updated',
+        ...trainingDeliveryLatestEvent(status),
         route: trainingPlansWorkoutRoute(status.workoutId) };
     });
     const ready = this.delivery.isReady(provider);
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
-      canResume: suppressed || statuses.some(status => status.status === 'stopped'),
+      // Current settings precede the asynchronously reconciled status after Resume.
+      canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'
+        && (!this.planBound() || status.planId === currentPlanId))),
       settingLabel: this.planBound() ? suppressed ? 'Stopped for this workout' : 'Uses this plan’s sync settings'
         : setting?.enabled ? 'Sync enabled' : 'Sync off',
       visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
-      canStop: !!setting?.enabled || (this.planBound() && !setting?.suppressed)
+      canStop: !!setting?.enabled || (this.planBound() && !suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
       approvalDigest: statuses.find(item => item.approvalDigest)?.approvalDigest ?? null,
       canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying'].includes(item.status)),

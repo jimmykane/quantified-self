@@ -1,7 +1,19 @@
-import { trainingDeliveryCommandError, trainingDeliveryCopyMessage } from './training-delivery-display.helper';
+import { trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeliveryLatestEvent } from './training-delivery-display.helper';
 import type { TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 
 describe('Training delivery explanations', () => {
+  it.each([
+    [10, 20, 20, 'Last attempt'],
+    [20, 10, 20, 'Last confirmed'],
+    [20, 20, 20, 'Last confirmed'],
+    [null, 20, 20, 'Last attempt'],
+    [20, null, 20, 'Last confirmed'],
+    [null, null, 30, 'Updated'],
+    [0, null, 0, 'Last confirmed'],
+    [null, 0, 0, 'Last attempt'],
+  ] as const)('labels the latest delivery event (confirmed %s, attempted %s)', (lastAcceptedAtMs, lastAttemptAtMs, timestamp, timestampLabel) => {
+    expect(trainingDeliveryLatestEvent({ lastAcceptedAtMs, lastAttemptAtMs, updatedAtMs: 30 })).toEqual({ timestamp, timestampLabel });
+  });
   it('distinguishes unfinished first delivery from an unconfirmed edit without claiming corruption', () => {
     const status = { status: 'retrying', differsFromQS: true, lastAcceptedAtMs: null } as TrainingDeliveryStatusV1;
     expect(trainingDeliveryCopyMessage(status)).toContain('not fully confirmed');

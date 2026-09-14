@@ -520,6 +520,8 @@ that shortcut; existing records or inherited plan consent open details instead. 
 There is no manual Preview step: availability/compatibility checks run on entering a change, then the single **Enable
 sync** / **Send workout** confirmation grants consent. Opening, reloading, cancelling, and live updates never opt in.
 The saved/browser IANA zone is shown inline; **Change** reveals its field and **Use time zone** rechecks without saving.
+Inherited workout details do not label a retained workout override's zone as the current plan zone: the parent plan's
+settings remain authoritative. Stop, Retry, Resume and approval reviews display the server-resolved zone read-only.
 Changing a zone invalidates the earlier preview. Degradation still requires explicit per-workout approval; enabling sync
 never approves warnings. An uncertain callable response retains the same mutation ID for retrying confirmation.
 Preview is explicitly read-only, has a 30-second end-to-end deadline (including readiness),
@@ -529,10 +531,14 @@ also prevent a delayed readiness retry from starting a stale callable. Saving se
 confirmed remote delivery. A retained artifact without a fully confirmed first delivery is explained as unconfirmed,
 not as a known different workout. Plan/history lists show compact title/status/time rows with a labelled details arrow,
 not an expanded explanation or attempt card per record. They show the current safe projection per delivery identity,
-not private attempt journals or one public record per authored edit. Workout attempt timestamps/counts and lifecycle
+not private attempt journals or one public record per authored edit. Their timestamp is the newer of the last attempt
+and confirmation (confirmation wins a tie), falling back to the status update only when neither exists; a later failed
+attempt cannot be hidden behind an older success. Workout attempt timestamps/counts and lifecycle
 guidance use surface-free Show/Hide Material buttons with `aria-expanded`/`aria-controls`, matching Training recovery
 details; no raised expansion panels. The next automatic check remains visible in workout details. Already inherited plan
-delivery does not offer a misleading Resume action.
+delivery does not offer a misleading Resume action. A prior plan's suppression cannot hide Stop after a transfer,
+including before the first new status arrives; a prior plan's stopped status cannot offer Resume for the current plan.
+After Resume, current-scope settings take precedence over an older stopped status until reconciliation catches up.
 Account changes clear drafts/results and close the dialog. The planning UI rollout described
 above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
 Completed activity totals are unchanged.

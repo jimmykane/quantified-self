@@ -11,6 +11,17 @@ export const TRAINING_DELIVERY_STATUS_LABELS: Record<TrainingDeliveryStatus, str
   needs_attention: 'Delivery uncertain — inspect before retrying', failed: 'Delivery failed',
 };
 
+/** Show the latest transport event, not an older success ahead of a newer failure. */
+export function trainingDeliveryLatestEvent(status: Pick<TrainingDeliveryStatusV1, 'lastAcceptedAtMs' | 'lastAttemptAtMs' | 'updatedAtMs'>): {
+  timestamp: number; timestampLabel: string;
+} {
+  if (status.lastAcceptedAtMs !== null && (status.lastAttemptAtMs === null || status.lastAcceptedAtMs >= status.lastAttemptAtMs)) {
+    return { timestamp: status.lastAcceptedAtMs, timestampLabel: 'Last confirmed' };
+  }
+  if (status.lastAttemptAtMs !== null) return { timestamp: status.lastAttemptAtMs, timestampLabel: 'Last attempt' };
+  return { timestamp: status.updatedAtMs, timestampLabel: 'Updated' };
+}
+
 /** A retained artifact is not proof that the full workout/calendar delivery finished. */
 export function trainingDeliveryCopyMessage(status: TrainingDeliveryStatusV1): string | null {
   if (!status.differsFromQS) return null;
