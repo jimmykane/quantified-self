@@ -109,6 +109,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(2);
   }, 30_000);
 
+  it('confirms an empty successful schedule create in one worker attempt, retaining one identity under duplicate dispatch', async () => {
+    const request = server.request;
+    server.request = async (...args) => {
+      const result = await request(...args);
+      return args[0].method === 'POST' && args[0].path === '/training-api/schedule/' ? { status: 204, body: null } : result;
+    };
+    const id = await send();
+    await Promise.all([processTrainingDelivery(runtime, uid, id), processTrainingDelivery(runtime, uid, id)]);
+    const current = await ledger();
+    expect(current.status).toBe('delivered'); expect(current.retries).toBe(0); expect(current.attempt).toBeNull();
+    expect(Object.keys(current.actual!.ids).sort()).toEqual(['owner', 'schedule', 'workout']);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(2);
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+  });
+
   it.each(['edit', 'stop', 'expiry', 'lease'] as const)('retains an accepted workout when %s wins before schedule creation', async change => {
     const id = await send();
     server.afterHandle = async request => {

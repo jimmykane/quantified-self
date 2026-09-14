@@ -509,7 +509,14 @@ their plan/workout. Each retained row opens delivery details independently of th
 only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
 cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
 but cannot bypass explicit-disconnect epochs. Preview precedes consent; an uncertain callable response retains the
-same mutation ID for Retry. Account changes clear drafts/results and close the dialog. The planning UI rollout described
+same mutation ID for Retry. Preview is explicitly read-only, has a 30-second end-to-end deadline (including readiness),
+and can be cancelled; saving has a 70-second deadline and retains its exact receipt identity on an uncertain response.
+Late results after cancellation, destruction or account change cannot replace the current review. Account/view guards
+also prevent a delayed readiness retry from starting a stale callable. Saving settings is labelled separately from
+confirmed remote delivery. A retained artifact without a fully confirmed first delivery is explained as unconfirmed,
+not as a known different workout. Attempt timestamps/counts and lifecycle guidance use Material disclosures; the next
+automatic check remains visible. Already inherited plan delivery does not offer a misleading Resume action.
+Account changes clear drafts/results and close the dialog. The planning UI rollout described
 above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
 Completed activity totals are unchanged.
 Connected-provider summaries and account-deletion confirmation explain that local cleanup does not guarantee removal
@@ -533,10 +540,15 @@ These rendered fixtures contain no application backend or selectable transport. 
 and account reset; emulator tests exercise backend lifecycle. Browser emulation does not establish physical vibration.
 
 Allowlisted diagnostics use the `[TrainingDelivery]` message with `event`, `provider`, `operation`, `category`, `retryCount`,
-`latencyMs`, `inspected`, and `dispatched` fields only. They exclude workout titles, recipes, IDs, tokens and provider errors.
+`latencyMs`, `inspected`, `dispatched`, and optional allowlisted `httpStatus`/`failurePhase` fields only. Failure phase is
+one of `request`, `response`, `decode`, or `contract`; HTTP status is an integer from 100 through 599. They exclude workout
+titles, recipes, IDs, tokens, raw response bodies, URLs and provider error messages.
 Cloud Logging filters: `jsonPayload.message="[TrainingDelivery]"`; add `jsonPayload.event="failure"` and group by
 `jsonPayload.category`/`jsonPayload.provider` for failures or missing permissions; use `accepted` with `latencyMs` for
 delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptance`/`recovery_dispatch` for recovery.
+For HTTP failures, group by `jsonPayload.httpStatus` and `jsonPayload.failurePhase` to distinguish rejected responses
+from network uncertainty and response decoding. Legacy failure records lack these fields and cannot prove a specific
+provider response status after the fact.
 Production dashboards, alerts and broader rollout remain #655; Garmin evaluation evidence remains #698.
 
 ### Provider proof status
@@ -615,6 +627,10 @@ Only documented synchronous success codes confirm completion. Unexpected success
 unconfirmed; an empty/null successful GET never means the artifact is absent. Only an explicit 404 enters the missing
 artifact path, with actual provider 404 semantics still subject to certification. Schedule PUT accepts an empty 204;
 a 200 response must supply the validated schedule record before QS records the new date.
+The documented schedule POST 204 path immediately inspects the exact retained workout/date to obtain a unique schedule
+ID, rather than waiting for ordinary retry backoff solely because the response was empty. Empty/ambiguous inspection
+remains unconfirmed and retains the started journal; it never authorizes a second POST. A first workout POST without an
+ID still cannot be recovered this way. Synthetic tests cover immediate recovery and empty/duplicate lookup results.
 
 Every accepted artifact is journaled before another write. An interrupted schedule create can recover through one exact
 workout/date match in the date-range lookup; empty or ambiguous results are not proof of nonacceptance. Retained-ID
@@ -2340,6 +2356,11 @@ that does not retain the Admin SDK's legacy static exports.
 The localhost frontend normally calls emulated Functions; `local-prod-functions` explicitly targets production Functions.
 Backend code can still reach real services depending on environment variables and credentials, so verify the active
 project and never assume `localhost` means isolated data.
+In particular, Functions-only emulation does not emulate Firestore triggers, Cloud Tasks or Garmin. A local Training
+mutation against live Firestore can enqueue the deployed delivery worker; rebuilding local Functions will not update
+that worker. Use `npm run test:training-delivery` for bulk/failure stress tests: its demo Firestore project and injected
+synthetic transports cannot call Garmin. Real-account UI checks are bounded pilot operations requiring explicit scope;
+do not use a Functions-only environment for destructive or bulk tests.
 
 The Functions emulator sets `FUNCTIONS_EMULATOR=true`, which bypasses the manual callable App Check guard only inside
 that local worker. Production and beta callables continue to require App Check. This keeps a hosted debug-token exchange

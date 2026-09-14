@@ -42,7 +42,7 @@ describe('Garmin Training HTTP boundary (no network)', () => {
     const client = createGarminTrainingClient(async () => 'fixture', fetcher);
     let failure: unknown;
     try { await client({ method: 'POST', path: '/workoutportal/workout/v2' }, vi.fn()); } catch (error) { failure = error; }
-    expect(failure).toMatchObject({ kind, rejected });
+    expect(failure).toMatchObject({ kind, rejected, diagnostics: { httpStatus: status, failurePhase: 'response' } });
     expect(JSON.stringify(failure)).not.toContain('private-token');
     if (status === 429) expect(failure).toMatchObject({ retryAfterMs: 120_000 });
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -86,5 +86,22 @@ describe('Garmin Training HTTP boundary (no network)', () => {
   it.each(['GET', 'DELETE'] as const)('preserves explicit %s 404 absence', async method => {
     const client = createGarminTrainingClient(async () => 'fixture', vi.fn(async () => new Response(null, { status: 404 })));
     await expect(client({ method, path: '/training-api/workout/v2/1' }, vi.fn())).resolves.toEqual({ status: 404, body: null });
+  });
+  it('passes documented POST 204 to the adapter for identity inspection, without claiming an artifact', async () => {
+    const client = createGarminTrainingClient(async () => 'fixture', vi.fn(async () => new Response(null, { status: 204 })));
+    await expect(client({ method: 'POST', path: '/training-api/schedule/', body: '{}' }, vi.fn()))
+      .resolves.toEqual({ status: 204, body: null });
+  });
+  it('distinguishes a lost request from response decoding without exposing private error text', async () => {
+    for (const received of [false, true]) {
+      const client = createGarminTrainingClient(async () => 'fixture', vi.fn(async () => {
+        if (!received) throw new Error('private-network-detail');
+        return new Response('private-malformed-body');
+      }));
+      let failure: unknown;
+      try { await client({ method: 'POST', path: '/training-api/schedule/' }, vi.fn()); } catch (error) { failure = error; }
+      expect(failure).toMatchObject({ diagnostics: received ? { httpStatus: 200, failurePhase: 'decode' } : { failurePhase: 'request' } });
+      expect(JSON.stringify(failure)).not.toContain('private');
+    }
   });
 });

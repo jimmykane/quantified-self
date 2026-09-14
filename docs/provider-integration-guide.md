@@ -120,6 +120,11 @@ The [Garmin adapter boundary](training-workspace.md#garmin-workoutcalendar-adapt
 guard, step journal, exact endpoints, request bounds, permission flow and remaining certification checklist. In particular,
 Garmin's documented first workout POST has no external idempotency/lookup key: unknown acceptance remains blocked for
 attention, never retried blindly. Do not turn an empty schedule lookup into proof that a POST failed. HTTP response
+handling includes documented empty schedule-create success: a POST 204 is followed by an exact workout/date lookup,
+and only one matching schedule ID confirms that artifact. No match or multiple matches keep the journal uncertain.
+Allowlisted HTTP status and failure-phase diagnostics distinguish transport failures without logging raw provider data.
+Functions-only emulation can still write live Firestore and trigger deployed delivery workers; isolate bulk/failure
+tests with the demo Firestore suite and synthetic transport, not just a localhost callable URL. HTTP response
 tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from
 completed mutation. Interrupted edits invalidate the old fully accepted payload digest, and provider-imposed retry
 deadlines survive authored changes and manual Retry; these are tested locally, not certified provider semantics. Focused Garmin

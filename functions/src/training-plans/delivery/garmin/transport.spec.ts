@@ -83,6 +83,33 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(writes().map(call => call.method)).toEqual(['POST', 'POST']);
     expect(operation.artifact?.ids.schedule).toBeDefined();
   });
+  it('finishes a documented empty schedule-create success through immediate exact-ID inspection', async () => {
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      const result = await server.request(request, beforeSend);
+      return request.method === 'POST' && request.path === '/training-api/schedule/' ? { status: 204, body: null } : result;
+    }, () => now);
+    const result = await execute();
+    expect(result?.ids.schedule).toBeDefined();
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    expect(writes()).toHaveLength(2);
+    expect(server.calls.at(-1)?.path).toBe('/training-api/schedule?startDate=2026-09-15&endDate=2026-09-15');
+    expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted' });
+  });
+  it.each(['empty', 'duplicate'] as const)('retains an empty-success POST journal when immediate inspection is %s, never repeating create', async mode => {
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      const result = await server.request(request, beforeSend);
+      if (request.method === 'POST' && request.path === '/training-api/schedule/') {
+        if (mode === 'empty') server.schedules.clear();
+        else server.schedules.set('123', { ...[...server.schedules.values()][0], scheduleId: '123' });
+        return { status: 204, body: null };
+      }
+      return result;
+    }, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    expect(writes()).toHaveLength(2);
+  });
   it.each(['empty', 'duplicate'] as const)('does not infer schedule POST nonacceptance from an %s lookup', async mode => {
     server.afterHandle = async request => { if (request.path === '/training-api/schedule/') throw new GarminTrainingHttpError('uncertain', false); };
     await expect(execute()).rejects.toThrow();

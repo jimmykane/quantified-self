@@ -1,9 +1,19 @@
 :host { display: block; min-width: 0; }
 p, li { overflow-wrap: anywhere; }
-.delivery-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.delivery-actions, .delivery-review-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .delivery-review { display: flex; flex-direction: column; align-items: stretch; gap: 0.75rem; }
+.delivery-review h3, .delivery-review p { margin-block: 0; }
+.delivery-subtitle, .delivery-caption { color: var(--mat-sys-on-surface-variant); }
+.delivery-progress { display: flex; align-items: center; gap: 0.75rem; }
+.delivery-progress mat-spinner { flex: 0 0 20px; }
+.delivery-workout-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.delivery-workout-heading a, .delivery-workout-heading span { min-width: 0; overflow-wrap: anywhere; }
+.delivery-workout-heading button { flex-shrink: 0; }
+.delivery-status-label { font-weight: 500; }
+.delivery-attempts { margin-block-start: 0.5rem; }
+.delivery-guidance { margin-block-start: 1rem; }
 .delivery-status { margin-block: 0.75rem; }
 .delivery-status p { margin-block: 0.25rem; }
 @media (max-width: 600px) {
-  .delivery-actions { flex-direction: column; align-items: stretch; }
+  .delivery-workout-heading { flex-wrap: wrap; }
 }

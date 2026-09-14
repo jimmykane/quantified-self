@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeDeliveryTimeZone, parseTrainingDeliveryCommandV1, trainingDeliveryLocalDate,
   parseTrainingDeliveryStatusV1 } from '../../../../shared/training-provider-delivery';
+import { TrainingDeliveryTransportError } from './contracts';
 
 const command = { schemaVersion: 1, mutationId: 'test-1', scope: 'workout', scopeId: 'workout-1',
   provider: 'garmin', action: 'send', expectedScheduleRevision: 1, expectedScopeRevision: 1,
   expectedSettingsRevision: 0, timeZone: 'Europe/Helsinki' };
 
 describe('Training delivery contracts', () => {
+  it('keeps transport diagnostics allowlisted even with invalid or unexpected runtime fields', () => {
+    const details = { httpStatus: 200, failurePhase: 'decode', body: 'private-payload', url: 'private-url' };
+    const error = new TrainingDeliveryTransportError('uncertain', 0, details as TrainingDeliveryTransportError['diagnostics']);
+    expect(error.diagnostics).toEqual({ httpStatus: 200, failurePhase: 'decode' });
+    expect(JSON.stringify(error)).not.toContain('private');
+    expect(new TrainingDeliveryTransportError('uncertain', 0,
+      { httpStatus: 999, failurePhase: 'private' } as unknown as TrainingDeliveryTransportError['diagnostics']).diagnostics).toEqual({});
+  });
   it('round trips exact JSON without touching the workout recipe', () => {
     expect(parseTrainingDeliveryCommandV1(JSON.parse(JSON.stringify(command)))).toEqual(command);
   });

@@ -26,7 +26,7 @@ function matches(expected: unknown, actual: unknown): boolean {
   return expected === actual;
 }
 
-/** Offline-tested Training API V2 adapter. The production factory remains gated off.
+/** Training API V2 adapter. Production availability is restricted by the pilot gate.
  * No external create key or workout-list endpoint is invented: a lost first-create ID
  * is deliberately unrecoverable automatically. QS identity lives in the private ledger. */
 export class GarminTrainingTransport implements TrainingDeliveryTransport {
@@ -174,15 +174,34 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         body: garminBody({ date: workout.localDate }, { workoutId: artifact.ids.workout,
           ...(artifact.ids.schedule ? { scheduleId: artifact.ids.schedule } : {}) }),
       }, checkpoint, guard);
-      // Update permits an empty 204; its known schedule ID remains authoritative.
-      const saved = result.status === 204 && artifact.ids.schedule
-        ? { id: artifact.ids.schedule, workoutId: artifact.ids.workout, date: workout.localDate } : schedule(result.body);
-      if (saved.workoutId !== artifact.ids.workout || saved.date !== workout.localDate
-        || (artifact.ids.schedule && saved.id !== artifact.ids.schedule)) throw new TrainingDeliveryTransportError('uncertain');
-      await this.save(operation, checkpoint, { ...artifact, ids: { ...artifact.ids, schedule: saved.id }, localDate: saved.date }, step, 'accepted');
+      if (result.status === 204 && !artifact.ids.schedule) {
+        // Garmin documents empty successful schedule creates. Inspect immediately,
+        // never repeat this POST or mark delivery complete without an exact identity.
+        if (!await this.recoverCreatedSchedule(operation, checkpoint, guard)) throw new TrainingDeliveryTransportError('uncertain');
+      } else {
+        // Update permits an empty 204; its known schedule ID remains authoritative.
+        const saved = result.status === 204 && artifact.ids.schedule
+          ? { id: artifact.ids.schedule, workoutId: artifact.ids.workout, date: workout.localDate } : schedule(result.body);
+        if (saved.workoutId !== artifact.ids.workout || saved.date !== workout.localDate
+          || (artifact.ids.schedule && saved.id !== artifact.ids.schedule)) throw new TrainingDeliveryTransportError('uncertain');
+        await this.save(operation, checkpoint, { ...artifact, ids: { ...artifact.ids, schedule: saved.id }, localDate: saved.date }, step, 'accepted');
+      }
     }
     await this.save(operation, checkpoint, operation.artifact, 'finished', 'accepted');
     return operation.artifact;
+  }
+
+  private async recoverCreatedSchedule(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint,
+    guard: DeliveryRequestGuard): Promise<boolean> {
+    if (!operation.workout || !operation.artifact) return false;
+    const date = normalizeTrainingLocalDate(operation.workout.localDate);
+    const rows = await this.read({ method: 'GET', path: `/training-api/schedule?startDate=${date}&endDate=${date}` }, guard);
+    if (!Array.isArray(rows) || rows.length > 1000) return false;
+    const candidates = rows.map(schedule).filter(row => row.workoutId === operation.artifact!.ids.workout && row.date === date);
+    // An empty eventually-consistent read is not proof a POST failed.
+    if (candidates.length !== 1) return false;
+    await this.save(operation, checkpoint, { ...operation.artifact, ids: { ...operation.artifact.ids, schedule: candidates[0].id }, localDate: date }, 'schedule-create', 'accepted');
+    return true;
   }
 
   private async remove(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<null> {
@@ -212,14 +231,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     if (progress.step === 'workout-create') return { kind: 'uncertain' };
     if (!operation.artifact) return { kind: 'uncertain' };
     if (progress.step === 'schedule-create') {
-      if (!operation.workout) return { kind: 'uncertain' };
-      const date = normalizeTrainingLocalDate(operation.workout.localDate);
-      const rows = await this.read({ method: 'GET', path: `/training-api/schedule?startDate=${date}&endDate=${date}` }, guard);
-      if (!Array.isArray(rows) || rows.length > 1000) return { kind: 'uncertain' };
-      const candidates = rows.map(schedule).filter(row => row.workoutId === operation.artifact!.ids.workout && row.date === date);
-      // An empty eventually-consistent read is not proof a POST failed.
-      if (candidates.length !== 1) return { kind: 'uncertain' };
-      await this.save(operation, checkpoint, { ...operation.artifact, ids: { ...operation.artifact.ids, schedule: candidates[0].id }, localDate: date }, 'schedule-create', 'accepted');
+      if (!await this.recoverCreatedSchedule(operation, checkpoint, guard)) return { kind: 'uncertain' };
       return { kind: 'resume' };
     }
     if (progress.step === 'schedule-delete' || progress.step === 'schedule-update') {

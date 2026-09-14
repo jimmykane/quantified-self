@@ -17,7 +17,7 @@ export type GarminTrainingClient = (request: GarminTrainingRequest,
 /** No raw HTTP response, URL, credential or provider error survives this boundary. */
 export class GarminTrainingHttpError extends TrainingDeliveryTransportError {
   constructor(kind: TrainingDeliveryTransportError['kind'], public readonly rejected: boolean,
-    retryAfterMs = 0) { super(kind, retryAfterMs); }
+    retryAfterMs = 0, diagnostics: TrainingDeliveryTransportError['diagnostics'] = {}) { super(kind, retryAfterMs, diagnostics); }
 }
 
 export function garminId(value: unknown): string {
@@ -82,12 +82,16 @@ export function createGarminTrainingClient(authorize: () => Promise<string>,
     const token = await authorize();
     await beforeSend();
     const mutating = request.method !== 'GET';
+    let httpStatus: number | undefined;
+    let failurePhase: 'request' | 'response' | 'decode' = 'request';
     try {
       const response = await fetcher(`${BASE}${request.path}`, {
         method: request.method, redirect: 'error', signal: AbortSignal.timeout(GARMIN_TRAINING_TIMEOUT_MS),
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' },
         ...(request.body === undefined ? {} : { body: request.body }),
       });
+      httpStatus = response.status;
+      failurePhase = 'response';
       if (response.status === 404 && ['GET', 'DELETE'].includes(request.method)) {
         await response.body?.cancel();
         return { status: 404, body: null };
@@ -109,17 +113,21 @@ export function createGarminTrainingClient(authorize: () => Promise<string>,
       }
       // Only documented synchronous success confirms completion. In particular, 202
       // is not proof a DELETE finished, and an empty GET is not evidence of absence.
-      if (response.status !== 200 && !(response.status === 204 && ['PUT', 'DELETE'].includes(request.method))) {
+      // The schedule contract also permits POST 204. The adapter must inspect by
+      // retained workout/date to recover its ID; HTTP success alone is not delivery.
+      if (response.status !== 200 && !(response.status === 204 && mutating)) {
         await response.body?.cancel();
         throw new GarminTrainingHttpError(mutating ? 'uncertain' : 'retryable', false);
       }
+      failurePhase = 'decode';
       const raw = await readBounded(response);
       const body = raw.trim() ? parseGarminTrainingJSON(raw) : null;
       if (request.method === 'GET' && body === null) throw new GarminTrainingHttpError('retryable', false);
       return { status: response.status, body };
     } catch (error) {
-      if (error instanceof GarminTrainingHttpError) throw error;
-      throw new GarminTrainingHttpError(mutating ? 'uncertain' : 'retryable', false);
+      if (error instanceof GarminTrainingHttpError) throw new GarminTrainingHttpError(error.kind, error.rejected,
+        error.retryAfterMs, { httpStatus, failurePhase });
+      throw new GarminTrainingHttpError(mutating ? 'uncertain' : 'retryable', false, 0, { httpStatus, failurePhase });
     }
   };
 }

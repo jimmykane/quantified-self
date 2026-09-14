@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
@@ -11,7 +11,7 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
 import { EMPTY_TRAINING_DELIVERY_VIEW, TrainingDeliveryService, type TrainingDeliveryViewScope } from '../../services/training-delivery.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
-import { TRAINING_DELIVERY_STATUS_LABELS } from '../../helpers/training-delivery-display.helper';
+import { TRAINING_DELIVERY_STATUS_LABELS, trainingDeliveryCommandError, trainingDeliveryCopyMessage } from '../../helpers/training-delivery-display.helper';
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
 
 export interface TrainingDeliveryDialogData { scope: TrainingDeliveryViewScope; id: string; title: string; }
@@ -27,11 +27,15 @@ export class TrainingDeliveryDialogComponent {
   readonly delivery = inject(TrainingDeliveryService);
   private readonly plans = inject(TrainingPlansService);
   private readonly users = inject(AppUserService);
-  private readonly haptics = inject(AppHapticsService);
+  readonly haptics = inject(AppHapticsService);
+  private readonly destroyRef = inject(DestroyRef);
+  private requestVersion = 0;
   readonly uid = toSignal(this.users.user$.pipe(map(user => user?.uid ?? '')), { initialValue: '' });
   private readonly initialUid = this.users.user()?.uid;
   readonly error = signal<string | null>(null);
-  readonly busy = signal(false);
+  readonly phase = signal<'preview' | 'saving' | null>(null);
+  readonly busy = computed(() => this.phase() !== null);
+  readonly notice = signal<string | null>(null);
   readonly draft = signal<DeliveryDraft | null>(null);
   readonly preview = signal<{ result: TrainingDeliveryPreviewV1; command: TrainingDeliveryCommandV1 } | null>(null);
   private readonly statusLimit = signal(TRAINING_DELIVERY_PAGE_SIZE);
@@ -44,25 +48,36 @@ export class TrainingDeliveryDialogComponent {
     catchError(() => of({ ...EMPTY_TRAINING_DELIVERY_VIEW, loaded: true, error: true })),
   ) : of({ ...EMPTY_TRAINING_DELIVERY_VIEW, loaded: true, error: false }))),
   { initialValue: { ...EMPTY_TRAINING_DELIVERY_VIEW, loaded: false, error: false } });
-  readonly schedule = toSignal(this.users.user$.pipe(switchMap(user => user?.uid ? this.plans.watchSchedule(user.uid).pipe(
-    startWith(null), catchError(() => of(null))) : of(null))), { initialValue: null });
+  readonly scheduleView = toSignal(this.users.user$.pipe(switchMap(user => user?.uid ? this.plans.watchSchedule(user.uid).pipe(
+    map(value => ({ value, loaded: true, error: false })),
+    startWith({ value: null, loaded: false, error: false }),
+    catchError(() => of({ value: null, loaded: true, error: true })))
+    : of({ value: null, loaded: true, error: false }))), { initialValue: { value: null, loaded: false, error: false } });
+  readonly schedule = computed(() => this.scheduleView().value);
   readonly scopeRecord = computed(() => this.data.scope === 'history' ? undefined : this.data.scope === 'plan'
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)
     : this.schedule()?.workouts.find(workout => workout.id === this.data.id));
   readonly planBound = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.data.id)?.planId != null && this.data.scope === 'workout');
   readonly canSend = computed(() => !!this.scopeRecord() && this.scopeRecord()!.lifecycle !== 'deleted');
-  readonly canReview = computed(() => !!this.schedule() && this.data.scope !== 'history'
+  readonly canReview = computed(() => this.view().loaded && !this.view().error && !!this.schedule() && this.data.scope !== 'history'
     && (!!this.scopeRecord() || this.statuses().length > 0));
   readonly statuses = computed(() => this.view().statuses);
+  readonly providerLabel = (provider: PlannedWorkoutProviderId) => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label;
   readonly rows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
     const setting = this.view().settings.find(item => item.provider === provider);
+    const currentPlanId = this.schedule()?.workouts.find(item => item.id === this.data.id)?.planId;
+    const suppressed = this.planBound() && !!setting?.suppressed && setting.associationPlanId === currentPlanId;
     const statuses = this.statuses().filter(item => item.provider === provider).map(status => {
       const workout = this.schedule()?.workouts.find(item => item.id === status.workoutId);
-      return { ...status, title: workout?.title ?? 'Deleted workout', sourceExists: !!workout && workout.lifecycle !== 'deleted',
-        label: TRAINING_DELIVERY_STATUS_LABELS[status.status], route: trainingPlansWorkoutRoute(status.workoutId) };
+      return { ...status, title: workout?.title ?? (this.scheduleView().error ? 'Workout unavailable'
+        : this.scheduleView().loaded ? 'Deleted workout' : 'Loading workout…'), sourceExists: !!workout && workout.lifecycle !== 'deleted',
+        label: TRAINING_DELIVERY_STATUS_LABELS[status.status], copyMessage: trainingDeliveryCopyMessage(status), route: trainingPlansWorkoutRoute(status.workoutId) };
     });
     const ready = this.delivery.isReady(provider);
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
+      canResume: suppressed || statuses.some(status => status.status === 'stopped'),
+      settingLabel: this.planBound() ? suppressed ? 'Stopped for this workout' : 'Uses this plan’s sync settings'
+        : setting?.enabled ? 'Sync enabled' : 'Sync off',
       visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
       canStop: !!setting?.enabled || (this.planBound() && !setting?.suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
@@ -80,32 +95,38 @@ export class TrainingDeliveryDialogComponent {
   });
 
   constructor() {
+    this.destroyRef.onDestroy(() => { this.requestVersion++; });
     effect(() => {
       if (!this.uid() || this.uid() !== this.initialUid) {
+        this.requestVersion++; this.phase.set(null); this.notice.set(null);
         this.preview.set(null); this.draft.set(null); this.dialogRef.close();
       }
     });
   }
   begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string): void {
-    if (this.busy() || !this.uid() || this.data.scope === 'history'
+    if (this.busy() || !this.uid() || !this.canReview() || this.data.scope === 'history'
       || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
-    this.error.set(null); this.preview.set(null);
+    this.error.set(null); this.preview.set(null); this.notice.set(null);
     this.draft.set({ provider, action, timeZone: setting?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       ...(approvalDigest ? { approvalDigest } : {}) });
   }
   updateTimeZone(value: string): void {
+    if (this.busy()) return;
     this.draft.update(draft => draft ? { ...draft, timeZone: value } : null);
     this.preview.set(null);
   }
   cancelReview(): void {
-    if (this.busy()) return;
+    if (this.phase() === 'saving') return;
+    this.requestVersion++; this.phase.set(null);
     this.draft.set(null); this.preview.set(null); this.error.set(null);
   }
   async review(): Promise<void> {
     const draft = this.draft(); const scope = this.scopeRecord(); const schedule = this.schedule(); const uid = this.uid();
     if (!draft || !schedule || !uid || this.busy() || !this.canReview() || this.data.scope === 'history') return;
-    this.busy.set(true); this.error.set(null);
+    const version = ++this.requestVersion;
+    const current = () => !this.destroyRef.destroyed && this.uid() === uid && this.requestVersion === version;
+    this.phase.set('preview'); this.error.set(null);
     try {
       const command: TrainingDeliveryCommandV1 = { schemaVersion: 1, mutationId: this.delivery.createMutationId(),
         scope: this.data.scope, scopeId: this.data.id, provider: draft.provider, action: draft.action,
@@ -114,24 +135,29 @@ export class TrainingDeliveryDialogComponent {
         ...(['configure', 'send'].includes(draft.action) || (draft.action === 'resume' && !this.planBound())
           ? { timeZone: normalizeDeliveryTimeZone(draft.timeZone) } : {}),
         ...(draft.action === 'approve' ? { approvalDigest: draft.approvalDigest } : {}) };
-      const result = await this.delivery.preview(command);
-      if (this.uid() !== uid) return;
+      const result = await this.delivery.preview(command, current);
+      if (!current()) return;
       this.preview.set({ result, command: command.action === 'approve' && result.approvalDigest
         ? { ...command, approvalDigest: result.approvalDigest } : command });
-    } catch { if (this.uid() === uid) { this.error.set('Unable to preview. Check the time zone and refresh if the schedule changed.'); this.haptics.error(); } }
-    finally { this.busy.set(false); }
+    } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, false)); this.haptics.error(); } }
+    finally { if (current()) this.phase.set(null); }
   }
   async confirm(): Promise<void> {
     const preview = this.preview(); const uid = this.uid();
     if (!preview || !uid || !this.canConfirm() || this.busy()) return;
-    this.busy.set(true); this.error.set(null);
+    const version = ++this.requestVersion;
+    const current = () => !this.destroyRef.destroyed && this.uid() === uid && this.requestVersion === version;
+    this.phase.set('saving'); this.error.set(null);
     try {
       // Retain this exact mutation ID on failure, so an uncertain response is safe to retry.
-      await this.delivery.mutate(preview.command);
-      if (this.uid() !== uid) return;
+      await this.delivery.mutate(preview.command, current);
+      if (!current()) return;
+      this.notice.set(preview.command.action === 'stop' ? 'Stop sync saved. Eligible copies will be removed in the background.'
+        : preview.command.action === 'retry' ? 'Recovery requested. Provider retry limits still apply.'
+          : 'Sync settings saved. Workout delivery continues in the background.');
       this.preview.set(null); this.draft.set(null); this.haptics.success();
-    } catch { if (this.uid() === uid) { this.error.set('The change was not confirmed. Retry safely, or cancel and review the latest schedule.'); this.haptics.error(); } }
-    finally { this.busy.set(false); }
+    } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, true)); this.haptics.error(); } }
+    finally { if (current()) this.phase.set(null); }
   }
   loadMore(): void {
     if (!this.uid() || this.busy() || !this.canLoadMore()) return;

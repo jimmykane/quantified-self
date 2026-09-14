@@ -1,6 +1,6 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { Firestore, collection, collectionData, doc, docData, query, where, limit, orderBy } from 'app/firebase/firestore';
-import { combineLatest, map, Observable, of } from 'rxjs';
+import { combineLatest, finalize, firstValueFrom, from, map, Observable, of, timeout } from 'rxjs';
 import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
 import { deliverySettingsId, parseTrainingDeliverySettingsV1, parseTrainingDeliveryStatusV1,
@@ -14,6 +14,8 @@ export interface TrainingDeliveryView { settings: TrainingDeliverySettingsV1[]; 
 /** History is a read-only UI scope, never a delivery command or new consent scope. */
 export type TrainingDeliveryViewScope = TrainingDeliveryScope | 'history';
 export const EMPTY_TRAINING_DELIVERY_VIEW: TrainingDeliveryView = { settings: [], statuses: [] };
+export const TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS = 30_000;
+export const TRAINING_DELIVERY_SAVE_TIMEOUT_MS = 70_000;
 
 @Injectable({ providedIn: 'root' })
 export class TrainingDeliveryService {
@@ -50,10 +52,21 @@ export class TrainingDeliveryService {
       map(values => values.map(parseTrainingDeliveryStatusV1)));
     return combineLatest([settings$, statuses$]).pipe(map(([settings, statuses]) => ({ settings, statuses })));
   }
-  async preview(command: TrainingDeliveryCommandV1): Promise<TrainingDeliveryPreviewV1> {
-    return (await this.functions.call<TrainingDeliveryCommandV1, TrainingDeliveryPreviewV1>('previewTrainingProviderDelivery', command)).data;
+  async preview(command: TrainingDeliveryCommandV1, canExecute: () => boolean = () => true): Promise<TrainingDeliveryPreviewV1> {
+    return this.invoke<TrainingDeliveryPreviewV1>('previewTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS);
   }
-  async mutate(command: TrainingDeliveryCommandV1): Promise<TrainingDeliverySettingsV1> {
-    return (await this.functions.call<TrainingDeliveryCommandV1, TrainingDeliverySettingsV1>('mutateTrainingProviderDelivery', command)).data;
+  async mutate(command: TrainingDeliveryCommandV1, canExecute: () => boolean = () => true): Promise<TrainingDeliverySettingsV1> {
+    return this.invoke<TrainingDeliverySettingsV1>('mutateTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_SAVE_TIMEOUT_MS);
+  }
+  private async invoke<T>(name: 'previewTrainingProviderDelivery' | 'mutateTrainingProviderDelivery',
+    command: TrainingDeliveryCommandV1, canExecute: () => boolean, timeoutMs: number): Promise<T> {
+    const uid = this.users.user()?.uid;
+    let active = true;
+    // Bound App Check/token readiness as well as HTTP. A timeout cannot undo an
+    // in-flight write: the dialog retains its mutation ID for a safe receipt replay.
+    const result = await firstValueFrom(from(this.functions.call<TrainingDeliveryCommandV1, T>(name, command, {
+      canExecute: () => active && !!uid && this.users.user()?.uid === uid && canExecute(),
+    })).pipe(timeout(timeoutMs), finalize(() => { active = false; })));
+    return result.data;
   }
 }

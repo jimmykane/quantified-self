@@ -70,8 +70,19 @@ export interface TrainingDeliveryTransport {
   recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
 }
 export class TrainingDeliveryTransportError extends Error {
+  readonly diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' };
   constructor(public readonly kind: 'retryable' | 'auth' | 'permission' | 'terminal' | 'uncertain',
-    public readonly retryAfterMs = 0) { super(kind); }
+    public readonly retryAfterMs = 0,
+    diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' } = {}) {
+    super(kind);
+    // Allowlisted diagnostics only: never forward HTTP bodies, URLs, IDs or error messages.
+    this.diagnostics = {
+      ...(Number.isInteger(diagnostics.httpStatus) && diagnostics.httpStatus! >= 100 && diagnostics.httpStatus! <= 599
+        ? { httpStatus: diagnostics.httpStatus } : {}),
+      ...(['request', 'response', 'decode', 'contract'].includes(diagnostics.failurePhase ?? '')
+        ? { failurePhase: diagnostics.failurePhase } : {}),
+    };
+  }
 }
 export interface DeliveryRuntime {
   db: Firestore;

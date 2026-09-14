@@ -267,7 +267,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id, dueAtMs: ledger.retryAtMs, dispatchToken: randomUUID() });
       else tx.delete(jobRef);
     });
-    logger.warn('[TrainingDelivery]', { event: 'failure', provider: claim.provider, category: failure.kind,
+    logger.warn('[TrainingDelivery]', { event: 'failure', provider: claim.provider, category: failure.kind, ...failure.diagnostics,
       retryCount, latencyMs: runtime.now() - startedAt });
   }
 }
