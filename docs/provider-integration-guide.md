@@ -63,7 +63,7 @@ The versioned research snapshot lives in `shared/planned-workout-providers.ts`; 
 
 | Provider | Proof state | Truthful model and current gate |
 | --- | --- | --- |
-| Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested, disabled HTTP adapter now cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Evaluation access, actual response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
+| Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested, disabled HTTP adapter now cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Account-bound authorization evidence, actual response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
 | COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
 | Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
 | Suunto | `fixture-only` | A scheduled workout maps to one dated SuuntoPlus Guide, not a native training-plan calendar. Time, distance, manual transition, repeats, and absolute HR/power/speed/pace/cadence targets map to Guide JSON; cadence converts from rpm to hertz. Guide entitlement, ZIP/icon transport, watch storage/pinning, supported-device behavior, CRUD, and FIT correlation need sandbox proof. |
@@ -120,6 +120,12 @@ completed mutation. Interrupted edits invalidate the old fully accepted payload 
 deadlines survive authored changes and manual Retry; these are tested locally, not certified provider semantics. Focused Garmin
 sandbox/device evidence, quota/pacing validation and operator recovery are tracked in epic subissue #698; #647 stays open
 until its original certification acceptance is satisfied.
+The [operator certification runner](training-workspace.md#garmin-certification-runner-698) now supports one bounded
+synthetic workout/schedule cycle with explicit account preflight, per-action approval, a private durable journal,
+redacted read-back evidence and separately approved cleanup. It adds no deployed Function or browser control, performs
+no QS/connection/consent writes, and leaves global delivery disabled. Owner-confirmed evaluation access is recorded, but
+no live call/device proof is implied. Its per-run pacing is not account/partner quota certification. Keep #698/#647 open
+until the complete live matrix is satisfied; follow the linked recovery and evidence-retention procedure on uncertainty.
 Provider certification, production observability and kill switches remain tracked under epic #583. Do not hide an unmet gate in a code comment or silently
 narrow the epic acceptance criteria.
 

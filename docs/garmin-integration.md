@@ -99,11 +99,19 @@ attention rather than being posted again. Provider responses and credentials nev
 Past/completed copies remain protected, and provider-held copies may remain after disconnect/account deletion.
 
 The detailed implementation and certification checklist live in the
-[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Evaluation credentials, actual
+[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Account-bound authorization, actual
 request/response and schedule-list/404 behavior, device rendering, sandbox CRUD/reconnect evidence and production review
 remain outstanding in #645/#647/#698/#655; #698 tracks the focused sandbox/device evidence and operator recovery
 procedure. Completed-activity correlation remains #651. No new completion hook is implemented.
 Neither the adapter nor the offline proof authorizes a provider call, deployment, or production enablement.
+
+The [#698 operator runner](training-workspace.md#garmin-certification-runner-698) prepares a single synthetic
+Running/Cycling workout locally, checks server-owned account/permission authority, and requires a fresh approval digest
+for each real request workflow, including inspection and exact-artifact removal. Its private journal survives interrupted
+operations without blindly repeating uncertain first creates. It does not refresh credentials or write QS/Firebase data,
+register Functions, change app readiness, or certify device/partner quota behavior. Evaluation access has been confirmed
+by the owner; actual account-bound provider and device evidence remains outstanding. Use the Training runbook for bounds,
+read-back evidence and operator recovery, and keep all global provider switches disabled.
 
 ## Production configuration
 

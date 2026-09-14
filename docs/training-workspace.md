@@ -604,6 +604,127 @@ The focused epic subissue #698 owns this remaining sandbox/device evidence, requ
 recovery procedure. Keep #647 open until its certification acceptance is evidenced; #645 owns access/contract questions
 and #655 owns production rollout. None of these tests constitutes a real Garmin sandbox or watch result.
 
+### Garmin certification runner (#698)
+
+`functions/src/scripts/garmin-training-certification.ts` is an **operator-only evaluation tool**, not a deployed Function,
+browser control or production delivery flag. It directly exercises the same Garmin HTTP client, serializer and transport
+as #647. It does not write QS plans, workouts, consent, connection metadata, jobs or delivery-ledger documents. All four
+application delivery switches stay false. The owner has confirmed evaluation access, `WORKOUT_IMPORT`, and a designated
+account/device are available; this is not a live permission probe or certification evidence. Select and explicitly approve
+the exact Firebase project, test QS UID, Garmin account, test date, and device model/firmware before live work. The app's
+historical UI allowlist is not an authorization to use that account as an evaluation target.
+
+Each run admits one synthetic Running or Cycling workout and one associated schedule. The fixed recipe includes
+time/distance/manual steps, two fixed repeats and an absolute HR or power range. `update` changes the distance and range;
+`reschedule` moves the date forward one civil day, including across DST/year boundaries. It does not export personal
+workouts or accept arbitrary payloads, credentials, remote IDs, endpoints or fake-provider switches. Degraded fixtures,
+additional target/device combinations and production worker lifecycle tests remain in #698's full certification matrix;
+this small smoke cycle does not certify those scenarios or supersede existing common-worker emulator coverage.
+
+Build once from the reviewed commit:
+
+```bash
+npm --prefix functions run build
+npm --prefix functions run certify-garmin-training -- --help
+```
+
+Use a new empty private directory **outside every Git checkout** on a trusted, encrypted local disk. The tool requires
+owner-only directory/file permissions (normally 0700/0600), rejects symlinks for the directory/journal/lock, and never
+overwrites an existing run. Run the following with the explicitly agreed evaluation values, not a general customer UID:
+
+```bash
+GARMIN_CERT_RUN="$(mktemp -d "${TMPDIR:-/tmp}/qs-garmin-cert.XXXXXX")"
+npm --prefix functions run certify-garmin-training -- prepare \
+  --directory="$GARMIN_CERT_RUN" --project="<approved-firebase-project>" \
+  --uid="<approved-test-qs-uid>" --date="<approved-future-YYYY-MM-DD>" \
+  --time-zone="Europe/Helsinki" --sport=running
+```
+
+`prepare`, `report` and action previews are offline: they do not initialize Firebase or require ADC. For preflight/live
+actions, provide appropriately scoped operator ADC externally; do not put credentials in arguments or the journal. The
+named Firebase app is bound to the saved project, not the active Firebase CLI alias. The live runtime refuses emulator
+authority and disabled TLS verification. There is no CLI/environment/browser path to the synthetic test transport.
+
+Preflight reads Firebase Auth and current Firestore connection/deletion authority only; it does **not** call Garmin:
+
+```bash
+npm --prefix functions run certify-garmin-training -- preflight --directory="$GARMIN_CERT_RUN"
+```
+
+Verify the designated account in Connected Services/Garmin Connect and the saved local configuration; preflight emits
+only a destination fingerprint and allowlisted checks. Repeat `preflight` with `--approve=<returned-digest>` to pin that
+server-resolved account, connection generation and consent epoch locally. Stored `WORKOUT_IMPORT` must be present, Auth
+enabled, deletion clear, and the stored token unexpired with at least 30 seconds remaining. No refresh/deauthorization is
+performed: token expiry requires the existing normal refresh/reconnect path outside the runner. A same-account generation
+change requires a fresh approved preflight; an account or explicit-disconnect epoch change cannot rebind this run. Pro or
+valid grace is required for creates/updates, while inspection/removal may proceed without Pro if valid access remains.
+
+For each action independently, inspect the preview, obtain explicit evaluation approval, and repeat the same action with
+its current `--approve=<digest>`. The digest binds the full journal revision, destination, action, artifact IDs, date/zone,
+mapping assessment and generated payload. **Do not automate approval or reuse another action's digest.** `inspect` also
+makes real provider GETs and needs approval. The intended order is:
+
+1. `create`, then `inspect`: confirm workout and calendar entry in Garmin Connect, sync the designated device and record
+   the actual rendering. Do not perform/complete the synthetic workout before cleanup.
+2. `update`, then `inspect`: confirm the same remote identities and updated steps/ranges.
+3. `reschedule`, then `inspect`: confirm the same identities on the new date. The original and following day must be
+   within today's saved-zone QS 365-day policy. This is not a claim about Garmin's actual horizon.
+4. `remove`: obtain **separate cleanup approval** for the exact artifacts retained by this run. The transport removes
+   schedule then workout, only while future/uncompleted; it checks QS ownership and the synthetic run marker before
+   modifying any retained workout, including schedule-first cleanup. Then `inspect` verifies the retained IDs return
+   explicit 404s. Device-side disappearance and provider 404 consistency still need observation, not assumption.
+
+Example preview and offline evidence commands (neither calls Garmin):
+
+```bash
+npm --prefix functions run certify-garmin-training -- create --directory="$GARMIN_CERT_RUN"
+npm --prefix functions run certify-garmin-training -- report --directory="$GARMIN_CERT_RUN"
+```
+
+Reports allowlist phase, pending step, artifact-presence booleans, read-back checks, admitted request count, HTTP
+method/resource class/status and latency. They omit UID, project, account/remote IDs, title, credentials and raw provider
+bodies. Status `null` is not proof that a request was sent or rejected. A failed inspection exits unsuccessfully and
+retains its failed check; get the offline report afterward. Attach reviewed redacted output plus actual Connect/device
+observations to #698. Never attach the private directory, raw journal, ADC, tokens, or identifiable device screenshots.
+
+#### Bounds and interrupted-run recovery
+
+Only one operator/run may use the evaluation account at a time, with an agreed exclusive evaluation window. The local
+exclusive `run.lock` prevents concurrent use of **one directory**, not competing machines or other runs. Each invocation
+admits at most 12 requests and guards a two-minute execution window before requests; each run admits at most 64 requests,
+reserving the last 16 for inspection/removal. Requests are paced at least two seconds after completion, and provider
+Retry-After deadlines survive restart and also constrain removal. The existing HTTP ten-second timeout, exact host/path
+allowlist, redirect rejection and 2 MiB response cap remain in force. These are conservative local bounds, **not** proven
+account/partner-wide quota coordination; #698 must establish actual quotas and pacing before production enablement.
+
+The fsynced append-only `journal.jsonl` retains operation-start/acceptance checkpoints and exact Long artifact IDs. It
+fails closed on torn/corrupt/oversized journals, out-of-order revisions or a concurrent lock; it never rolls back to an
+older checkpoint. Safe HTTP evidence is flushed with the next artifact checkpoint, not in a new write between acceptance
+and saving an ID. Files contain private operator scope and remote identities, but never credentials or provider bodies.
+Keep this single journal through verification and approved cleanup; do not copy it to another host, share it or start a
+new run to bypass an ambiguous outcome. Archive securely afterward according to the agreed operator retention policy.
+
+- For a normal error, inspect `report`, repair the reported prerequisite, preview the **same action**, then separately
+  approve it. Duplicate completed commands do not POST again. Known-ID PUT/DELETE and exact schedule-create recovery use
+  the production adapter's inspection logic; an unknown first workout POST cannot be retried automatically.
+- For partial delivery with known IDs and a safe/recoverable pending step, separately approved `remove` can retire the
+  retained artifacts without creating the missing schedule. If acceptance is ambiguous, removal blocks too: no ID is
+  guessed and no title-based search, replacement create, or arbitrary-ID cleanup endpoint is supplied.
+- If the process crashed, first establish that the PID recorded in `run.lock` is dead and that no operator/provider
+  request can still be in flight. Only then may the operator remove that exact **local lock file** and reopen the same
+  journal. Never clear a live lock, edit/truncate the journal or reset the run. A damaged journal or unidentifiable first
+  acceptance requires provider/operator reconciliation under #698, with new explicit approval for identified cleanup.
+- On disconnect, account change, account deletion, lost access, past/completed artifacts or exhausted bounds, stop and
+  preserve evidence. Provider-held copies may remain; this tool cannot bypass authority or remove them after revocation.
+
+Verification: `npm run test:training-delivery` includes this runner and real Firestore authority transactions in CI.
+Synthetic HTTP tests cover CRUD/read-back, duplicate commands, stable Long IDs, lost responses/checkpoints, same-account
+rebind, account/epoch changes, Pro/cleanup, Retry-After, partial cleanup, date bounds, request pacing and journal safety.
+`npm --prefix functions run secrets:check` still verifies the unchanged function bindings. No Functions, Rules, indexes,
+UI, help flow or deployment changes are required to use the local runner. The app's Training help was reviewed and remains
+truthful: normal provider Send controls are still unavailable. #698 and #647 stay open until the full live certification
+criteria are evidenced; #645 owns access/contract questions, #651 completion correlation and #655 production rollout.
+
 ### Product analytics
 
 The app-wide, consent-gated Firebase `screen_view` already records `/training` route visits, so Training must not emit a
