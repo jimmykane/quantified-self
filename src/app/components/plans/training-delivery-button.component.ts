@@ -23,7 +23,7 @@ export class TrainingDeliveryButtonComponent {
     switchMap(([user, scope]) => user?.uid ? this.delivery.watchPresence(user.uid, scope.scope, scope.id).pipe(
       startWith(false), catchError(() => of(true))) : of(false))), { initialValue: false });
   readonly visible = computed(() => !!this.users.user()?.uid
-    && ((this.scope() !== 'history' && this.delivery.anyReady) || this.hasRecords()));
+    && ((this.scope() !== 'history' && this.delivery.anyReady()) || this.hasRecords()));
   open(): void {
     if (!this.users.user()?.uid || this.disabled()) return;
     this.dialog.open(TrainingDeliveryDialogComponent, { data: this.context(), width: '640px', maxWidth: '95vw' });

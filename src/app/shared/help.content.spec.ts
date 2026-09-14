@@ -28,9 +28,11 @@ describe('help.content', () => {
   it('retains complete planning guidance for the allowlisted account', () => {
     expect(getHelpSectionsForUser(TRAINING_PLANNING_UI_ALLOWED_UIDS[0])).toBe(HELP_SECTIONS);
   });
-  it('distinguishes Training consent, expiry, disconnect and the disabled provider launch boundary', () => {
+  it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('not enabled yet');
+    expect(content).toContain('private evaluation pilot, not a public launch');
+    expect(content).toContain('Older connections may need this even when activity imports work');
     expect(content).toContain('Stop sync before disconnecting');
     expect(content).toContain('content, not old provider consent');
     expect(content).toContain('Pro expiry pauses creates and updates');
@@ -497,7 +499,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Sending planned workouts to Garmin, COROS, Wahoo, or Suunto is not enabled yet');
+    expect(planningSection?.content).toContain('Garmin workout delivery is available only to the private evaluation pilot');
+    expect(planningSection?.content).toContain('COROS, Wahoo and Suunto delivery are not enabled yet');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
     expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');
