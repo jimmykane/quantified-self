@@ -1,13 +1,21 @@
+import type { AppEnvironment } from './environment.interface';
 declare function require(moduleName: string): any;
 const appVersion = require('../../package.json').version;
-export const environment = {
+export const environment: AppEnvironment = {
   appVersion: appVersion,
   supportEmail: 'support@quantified-self.io',
   appUrl: 'https://quantified-self.io',
   production: true,
   beta: false,
   localhost: false,
+  backendMode: 'hosted',
+  billingMode: 'stripe',
+  analyticsEnabled: true,
   forceAnalyticsCollection: true,
+  remoteConfigEnabled: true,
+  appCheckEnabled: true,
+  performanceEnabled: true,
+  observabilityEnabled: true,
   useAuthEmulator: false,
   useFunctionsEmulator: false,
   firebase: {

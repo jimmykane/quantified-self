@@ -1,6 +1,8 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LoggerService } from './logger.service';
 import * as Sentry from '@sentry/browser';
+import { environment } from '../../environments/environment';
+import type { AppEnvironment } from '../../environments/environment.interface';
 
 // Mock Sentry
 vi.mock('@sentry/browser', () => ({
@@ -11,10 +13,15 @@ describe('LoggerService', () => {
     let service: LoggerService;
 
     beforeEach(() => {
+        (environment as AppEnvironment).observabilityEnabled = true;
         vi.clearAllMocks();
         service = new LoggerService();
         // Mock console methods
         vi.spyOn(console, 'error').mockImplementation(() => { });
+    });
+
+    afterEach(() => {
+        (environment as AppEnvironment).observabilityEnabled = false;
     });
 
     it('should log regular errors to console and Sentry', () => {
@@ -54,5 +61,13 @@ describe('LoggerService', () => {
         expect(console.error).toHaveBeenCalled();
         expect(Sentry.captureException).toHaveBeenCalled();
     });
-});
 
+    it('should keep errors local when observability is disabled', () => {
+        (environment as AppEnvironment).observabilityEnabled = false;
+
+        service.error('Local error', new Error('Never send this'));
+
+        expect(console.error).toHaveBeenCalled();
+        expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+});

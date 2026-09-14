@@ -10,7 +10,7 @@ import {
   FirestoreRouteJSON,
   OriginalRouteFileMetaData,
 } from '../../../shared/app-route.interface';
-import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
+import { ALLOWED_CORS_ORIGINS, hasBasicAccess, hasProAccess, shouldEnforceAppCheck } from '../utils';
 import { FUNCTIONS_MANIFEST } from '../../../shared/functions-manifest';
 import { buildFirestoreRoutePayload, OriginalRouteFile } from '../shared/route-writer';
 import { ROUTE_PROCESSING_HTTPS_RUNTIME_OPTIONS, MAX_ROUTE_UPLOAD_BYTES } from '../shared/route-processing-config';
@@ -109,7 +109,7 @@ async function verifyFirebaseUserIDFromAuthorizationHeader(
 }
 
 async function verifyAppCheckHeader(appCheckHeader?: string): Promise<void> {
-  if (!ENFORCE_APP_CHECK) {
+  if (!shouldEnforceAppCheck()) {
     return;
   }
 

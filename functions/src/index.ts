@@ -3,6 +3,7 @@
 // Firebase Setup
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { resolveFirebaseAdminRuntime } from './firebase-admin-runtime';
 import {
   RETRY_SPORTS_LIB_REPARSE_HEAVY_JOB_FUNCTION_NAME,
   SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME,
@@ -10,14 +11,12 @@ import {
 import { retrySportsLibReparseHeavyJob as retrySportsLibReparseHeavyJobFunction } from './admin';
 import { processSportsLibReparseHeavyTask as processSportsLibReparseHeavyTaskFunction } from './tasks/sports-lib-reparse-worker';
 
-// Firebase still advertises the legacy `.appspot.com` default in
-// FIREBASE_CONFIG. Storage writes intentionally use the migrated EU bucket.
-const PRIMARY_STORAGE_BUCKET = 'quantified-self-io';
-
 if (admin.apps.length === 0) {
+  const runtime = resolveFirebaseAdminRuntime();
   admin.initializeApp({
-    databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
-    storageBucket: PRIMARY_STORAGE_BUCKET,
+    ...(runtime.isEmulator ? { projectId: runtime.projectId } : {}),
+    databaseURL: runtime.databaseURL,
+    storageBucket: runtime.storageBucket,
   });
 }
 

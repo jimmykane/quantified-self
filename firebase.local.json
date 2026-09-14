@@ -1,0 +1,61 @@
+{
+  "functions": {
+    "source": "functions",
+    "disallowLegacyRuntimeConfig": true,
+    "ignore": [
+      "node_modules",
+      ".git",
+      ".env*",
+      ".secret*",
+      ".runtimeconfig.json",
+      "**/*service-account*.json",
+      "**/*service_account*.json",
+      "**/*serviceAccount*.json",
+      "**/*firebase-adminsdk*.json",
+      "**/*.log",
+      "coverage",
+      "tmp",
+      "emulator-export",
+      "firestore_export"
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.quantified-self-io.rules"
+  },
+  "emulators": {
+    "singleProjectMode": true,
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9099
+    },
+    "functions": {
+      "host": "127.0.0.1",
+      "port": 5001
+    },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8081
+    },
+    "storage": {
+      "host": "127.0.0.1",
+      "port": 9199
+    },
+    "tasks": {
+      "host": "127.0.0.1",
+      "port": 9499
+    },
+    "ui": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 4000
+    },
+    "hub": {
+      "host": "127.0.0.1",
+      "port": 4400
+    }
+  }
+}

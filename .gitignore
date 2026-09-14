@@ -75,6 +75,7 @@ src/environments/mapbox-token.local.ts
 
 # Local Quantified Self plugin configuration and generated bundle files
 /.local/quantified-self-plugin.json
+/.local/firebase-emulator-data
 /plugins/quantified-self/.app.json
 /plugins/quantified-self/.codex-plugin/plugin.json
 /plugins/quantified-self/assets/quantified-self.png

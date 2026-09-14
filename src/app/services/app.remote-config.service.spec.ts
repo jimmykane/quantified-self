@@ -109,6 +109,27 @@ describe('AppRemoteConfigService', () => {
         expect(service.maintenanceMessage).toBeDefined();
     });
 
+    it('should stay disabled without a Remote Config provider', () => {
+        TestBed.resetTestingModule();
+        vi.clearAllMocks();
+        TestBed.configureTestingModule({
+            providers: [
+                AppRemoteConfigService,
+                { provide: AppWindowService, useValue: mockWindowService },
+                { provide: AppUserService, useValue: mockUserService },
+                { provide: APP_STORAGE, useValue: mockStorage },
+                { provide: PLATFORM_ID, useValue: 'browser' }
+            ]
+        });
+
+        service = TestBed.inject(AppRemoteConfigService);
+
+        expect(service.configLoaded()).toBe(true);
+        expect(service.maintenanceMode()).toBe(false);
+        expect(mockUserService.isAdmin).not.toHaveBeenCalled();
+        expect(fetchAndActivate).not.toHaveBeenCalled();
+    });
+
     describe('maintenanceMode signal', () => {
         it('should return false when maintenance is disabled', async () => {
             // getString returns '' for both enabled and message
