@@ -31,17 +31,20 @@
         </div>
       } @else {
         <div class="mcp-connections__list">
-          @for (connection of connections(); track connection.connectionId) {
+          @for (connection of connectionDetails(); track connection.connectionId) {
             <article class="mcp-connections__item">
               <div class="mcp-connections__details">
                 <h3>{{ connection.clientName }}</h3>
                 <p>{{ connection.redirectHost }}</p>
                 <p class="mcp-connections__permissions-label">Read-only access</p>
-                <div class="mcp-connections__permissions" role="group" aria-label="Granted read-only permissions">
-                  @for (scope of connection.scopes; track scope) {
-                    <mat-checkbox checked disabled>{{ scopeLabels[scope] }}</mat-checkbox>
+                <div class="mcp-connections__permissions" role="group" aria-label="Read-only permission status">
+                  @for (permission of connection.permissions; track permission.scope) {
+                    <mat-checkbox [checked]="permission.granted" disabled>
+                      {{ permission.label }} — {{ permission.granted ? 'Granted' : 'Not granted' }}
+                    </mat-checkbox>
                   }
                 </div>
+                <p>To grant permissions marked “Not granted”, reconnect this app and approve those permissions during authorization.</p>
                 <p class="mcp-connections__dates">
                   Connected {{ connection.createdAtMs | date:'mediumDate' }}
                   @if (connection.lastUsedAtMs) {

@@ -65,7 +65,7 @@ describe('McpConnectionsComponent', () => {
     }).compileComponents();
   });
 
-  it('lists the client and its granted scopes', async () => {
+  it('lists all permissions and distinguishes granted from not granted without allowing changes', async () => {
     const fixture = TestBed.createComponent(McpConnectionsComponent);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -91,9 +91,37 @@ describe('McpConnectionsComponent', () => {
         '.mcp-connections__permissions input[type="checkbox"]',
       ),
     );
-    expect(permissionInputs).toHaveLength(connection.scopes.length);
-    expect(permissionInputs.every(input => input.checked)).toBe(true);
+    expect(permissionInputs).toHaveLength(Object.keys(fixture.componentInstance.scopeLabels).length);
+    expect(permissionInputs.filter(input => input.checked)).toHaveLength(connection.scopes.length);
     expect(permissionInputs.every(input => input.disabled)).toBe(true);
+    const rows = Array.from(fixture.nativeElement.querySelectorAll<HTMLElement>(
+      '.mcp-connections__permissions mat-checkbox',
+    ));
+    for (const label of ['Timeline notes', 'Activity descriptions']) {
+      const row = rows.find(row => row.textContent?.includes(label))!;
+      expect(row.textContent).toContain('Not granted');
+      expect(row.querySelector('input')?.checked).toBe(false);
+    }
+    expect(rows.find(row => row.textContent?.includes('Health metrics'))?.textContent).toContain('Granted');
+    expect(content).toContain('To grant permissions marked “Not granted”, reconnect this app and approve those permissions during authorization.');
+    expect(functions.call).toHaveBeenCalledTimes(1);
+  });
+
+  it('recomputes each connection independently when grants change', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.componentInstance.connections.set([
+      { ...connection, scopes: ['metrics:read'] },
+      { ...connection, connectionId: 'connection-2', scopes: ['sleep:read'] },
+    ]);
+    fixture.detectChanges();
+    const rows = fixture.componentInstance.connectionDetails();
+    expect(rows[0].permissions.filter(permission => permission.granted).map(permission => permission.scope))
+      .toEqual(['metrics:read']);
+    expect(rows[1].permissions.filter(permission => permission.granted).map(permission => permission.scope))
+      .toEqual(['sleep:read']);
+    expect(functions.call).toHaveBeenCalledTimes(1);
   });
 
   it('uses a standard glass-card stack matching the connection workspace', async () => {

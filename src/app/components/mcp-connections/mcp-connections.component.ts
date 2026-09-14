@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Clipboard, ClipboardModule } from '@angular/cdk/clipboard';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -73,6 +73,15 @@ export class McpConnectionsComponent implements OnInit {
     'route-location:read': 'Saved-route locations and geometry',
   };
   readonly mcpEndpoint = `${this.windowService.currentDomain}/mcp`;
+  readonly connectionDetails = computed(() => this.connections().map(connection => {
+    const granted = new Set<string>(connection.scopes);
+    return {
+      ...connection,
+      permissions: Object.entries(this.scopeLabels).map(([scope, label]) => ({
+        scope, label, granted: granted.has(scope),
+      })),
+    };
+  }));
 
   ngOnInit(): void {
     void this.loadConnections();

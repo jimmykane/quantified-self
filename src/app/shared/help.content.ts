@@ -1136,6 +1136,7 @@ In Settings you can:
 - and customize charts, maps, and units.
 
 Review and revoke authorized MCP clients under [**Connections -> MCP**](/services?serviceName=mcp).
+Each connection shows all permissions as **Granted** or **Not granted**. These indicators are read-only; reconnect the app and review its authorization choices to change access.
 
 ## MCP client access
 
