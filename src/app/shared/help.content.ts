@@ -1137,6 +1137,7 @@ In Settings you can:
 
 Review and revoke authorized MCP clients under [**Connections -> MCP**](/services?serviceName=mcp).
 Each connection shows all permissions as **Granted** or **Not granted**. These indicators are read-only; reconnect the app and review its authorization choices to change access.
+Use the info button beside a permission in **Authorization and data access** to read what it includes and any required permissions.
 
 ## MCP client access
 

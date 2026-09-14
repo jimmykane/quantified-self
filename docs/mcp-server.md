@@ -105,6 +105,9 @@ the client successfully exchanges its authorization code for credentials, and le
 Each connection lists every supported permission as a disabled checkbox with an explicit Granted or Not granted label.
 Only scopes returned for that connection are checked; missing permissions, including scopes added since authorization,
 remain unchecked. This display does not expand grants. Users reconnect and review authorization to change permissions.
+The authorization overview shows compact permission names with individually labelled info buttons. Each opens a
+standard Material dialog using the same permission description as consent, with its parent requirement and reconnect
+guidance. Details remain accessible by touch and keyboard without repeating all descriptions in the page.
 
 ## Public discovery and indexing
 

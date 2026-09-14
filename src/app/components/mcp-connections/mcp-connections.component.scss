@@ -179,6 +179,10 @@
     line-height: 1.35;
   }
 
+  li > span { flex: 1; }
+
+  button { flex: 0 0 auto; }
+
   mat-icon {
     flex: 0 0 auto;
     width: 20px;

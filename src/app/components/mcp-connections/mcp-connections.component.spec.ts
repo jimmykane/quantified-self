@@ -9,6 +9,9 @@ import { AppFunctionsService } from '../../services/app.functions.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { LoggerService } from '../../services/logger.service';
 import { McpConnectionsComponent } from './mcp-connections.component';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { MatDialog } from '@angular/material/dialog';
+import { MCP_SCOPE_CONTENT } from '../../helpers/mcp-permissions.helper';
 
 describe('McpConnectionsComponent', () => {
   const connection = {
@@ -43,6 +46,7 @@ describe('McpConnectionsComponent', () => {
     call: vi.fn(),
   };
   const snackBar = { open: vi.fn() };
+  const haptics = { selection: vi.fn() };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -61,6 +65,7 @@ describe('McpConnectionsComponent', () => {
         { provide: Clipboard, useValue: clipboard },
         { provide: LoggerService, useValue: { error: vi.fn() } },
         { provide: MatSnackBar, useValue: snackBar },
+        { provide: AppHapticsService, useValue: haptics },
       ],
     }).compileComponents();
   });
@@ -76,7 +81,6 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('Activity and Training metrics');
     expect(content).toContain('Body measurements');
     expect(content).toContain('Health metrics');
-    expect(content).toContain('existing connections must reconnect');
     expect(content).toContain('Sleep summaries');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('Activity locations');
@@ -124,6 +128,34 @@ describe('McpConnectionsComponent', () => {
     expect(functions.call).toHaveBeenCalledTimes(1);
   });
 
+  it('shows concise permission rows and opens the matching details with selection feedback', async () => {
+    const fixture = TestBed.createComponent(McpConnectionsComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const card = fixture.nativeElement.querySelector('[aria-labelledby="mcp-authorization-title"]');
+    const buttons = Array.from(card.querySelectorAll<HTMLButtonElement>('button'));
+    expect(buttons).toHaveLength(Object.keys(MCP_SCOPE_CONTENT).length);
+    expect(card.textContent).not.toContain('Text may include sensitive health');
+    expect(card.textContent).toContain('Reconnect an app to grant additional permissions');
+    expect(haptics.selection).not.toHaveBeenCalled();
+    for (const permission of fixture.componentInstance.permissionInfo) {
+      buttons.find(button => button.getAttribute('aria-label') === `About ${permission.title}`)!.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      const dialog = document.querySelector('mat-dialog-container')!;
+      expect(dialog.textContent).toContain(permission.description);
+      if (permission.parentTitle) expect(dialog.textContent).toContain(`Requires ${permission.parentTitle} permission`);
+      expect(dialog.textContent).toContain('Reconnect the app and approve this permission');
+      (dialog.querySelector('button') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+    expect(haptics.selection).toHaveBeenCalledTimes(buttons.length * 2);
+    expect(TestBed.inject(MatDialog).openDialogs).toHaveLength(0);
+    expect(functions.call).toHaveBeenCalledTimes(1);
+  });
+
   it('uses a standard glass-card stack matching the connection workspace', async () => {
     const fixture = TestBed.createComponent(McpConnectionsComponent);
     fixture.detectChanges();
@@ -164,23 +196,15 @@ describe('McpConnectionsComponent', () => {
     expect(content).toContain('ChatGPT setup');
     expect(content).toContain('https://quantified-self.io/mcp');
     expect(content).toContain('Copy endpoint');
-    expect(content).toContain('Exact starts, ends, jump positions, and breadcrumb traces');
-    expect(content).toContain('location permissions are independent');
-    expect(content).toContain('Activity descriptions is selected by default when requested');
-    expect(content).toContain('Uncheck it before approving to withhold access');
-    expect(content).toContain('Timeline notes is selected by default when requested. Uncheck it before approving to withhold access;');
     expect(content).toContain('ChatGPT app icon');
     expect(content).toContain('recommended size');
     expect(content).toContain('under its 10 KB limit');
     expect(content).toContain('Download recommended icon · 256 px · 9.4 KB');
-    expect(content).toContain('review or disconnect a client at any time');
-    expect(content).toContain('Existing clients must reconnect');
     expect(content).toContain('Authorizing on Android');
     expect(content).toContain('Desktop setup is the most reliable option');
     expect(content).toContain('Open supported links');
     expect(content).toContain('no active connection is created');
     expect(content).toContain('Authorization and data access');
-    expect(content).toContain('any combination of these access categories');
     expect(content).toContain('metrics, body measurements');
 
     const iconDownloads = fixture.nativeElement.querySelectorAll<HTMLAnchorElement>(
