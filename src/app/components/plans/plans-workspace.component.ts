@@ -18,7 +18,6 @@ import { Location } from '@angular/common';
 import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
-import type { MatMenuTrigger } from '@angular/material/menu';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -538,12 +537,6 @@ export class PlansWorkspaceComponent {
       operation: { kind: 'set-plan-color', planId: plan.id, color },
     }, `color-${plan.id}`);
     if (response) this.snackBar.open('Plan color updated.', 'Dismiss', { duration: 3000 });
-  }
-
-  closePlanColorMenuOnSiblingHover(trigger: MatMenuTrigger): void {
-    if (trigger.menuOpen) {
-      trigger.closeMenu();
-    }
   }
 
   async renamePlan(plan: TrainingPlanV1): Promise<void> {

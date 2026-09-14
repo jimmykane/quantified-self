@@ -7,7 +7,6 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
-import { MatMenuTrigger } from '@angular/material/menu';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
 import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
@@ -23,6 +22,8 @@ import {
 import { PlansWorkspaceComponent } from './plans-workspace.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('PlansWorkspaceComponent', () => {
   const user = { uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0], settings: { unitSettings: {} } };
@@ -562,28 +563,13 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.success).toHaveBeenCalledOnce();
   });
 
-  it('releases the open color submenu when a sibling plan action is hovered', async () => {
-    const fixture = await renderPlans();
-    const actionMenuTrigger = fixture.debugElement.query(By.directive(MatMenuTrigger)).injector.get(MatMenuTrigger);
-    actionMenuTrigger.openMenu();
-    fixture.detectChanges();
-    await fixture.whenStable();
+  it('keeps the color submenu backdrop off so sibling plan actions remain pointer-interactive', () => {
+    const template = readFileSync(
+      resolve(process.cwd(), 'src/app/components/plans/plans-workspace.component.html'),
+      'utf8',
+    );
 
-    const menuItems = Array.from(document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item'));
-    const itemWithLabel = (label: string) => menuItems.find(item =>
-      item.querySelector('.mat-mdc-menu-item-text')?.textContent?.trim() === label,
-    )!;
-    const colorTrigger = itemWithLabel('Plan color');
-    colorTrigger.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    expect(colorTrigger.getAttribute('aria-expanded')).toBe('true');
-
-    const closeOnHover = vi.spyOn(fixture.componentInstance, 'closePlanColorMenuOnSiblingHover');
-    itemWithLabel('Shift dates').dispatchEvent(new MouseEvent('mouseenter'));
-    fixture.detectChanges();
-    expect(closeOnHover).toHaveBeenCalledOnce();
-    expect(colorTrigger.getAttribute('aria-expanded')).toBe('false');
+    expect(template).toMatch(/<mat-menu #planColorMenu="matMenu"[^>]*\[hasBackdrop\]="false"/);
   });
 
   it('keeps the saved plan color when changing it fails', async () => {
