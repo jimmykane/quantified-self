@@ -1,0 +1,65 @@
+// One app-wide skin, including CDK overlays outside app-root and nested scrollers.
+// Zero-specificity defaults preserve deliberately hidden navigation rails. This
+// styles scrollbars only: components still own overflow, sizing and scroll axes.
+@mixin global($dark-on-surface) {
+  :where(*),
+  .qs-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--qs-scrollbar-ink, var(--mat-sys-on-surface)) var(--qs-scrollbar-opacity, 36%), transparent) transparent;
+
+    &::-webkit-scrollbar {
+      height: 10px;
+      width: 10px;
+    }
+
+    &::-webkit-scrollbar-track,
+    &::-webkit-scrollbar-track-piece,
+    &::-webkit-scrollbar-corner {
+      background: transparent;
+      border-radius: 999px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background-color: color-mix(in srgb, var(--qs-scrollbar-ink, var(--mat-sys-on-surface)) var(--qs-scrollbar-thumb-opacity, 30%), transparent);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+
+    &::-webkit-scrollbar-thumb:hover {
+      background-color: color-mix(in srgb, var(--qs-scrollbar-ink, var(--mat-sys-on-surface)) var(--qs-scrollbar-hover-opacity, 46%), transparent);
+    }
+
+    &::-webkit-scrollbar-thumb:active {
+      background-color: color-mix(in srgb, var(--qs-scrollbar-ink, var(--mat-sys-on-surface)) var(--qs-scrollbar-active-opacity, 56%), transparent);
+    }
+  }
+
+  :where(.dark-theme, html:has(> body.dark-theme)) {
+    --qs-scrollbar-opacity: 44%;
+    --qs-scrollbar-thumb-opacity: 40%;
+    --qs-scrollbar-hover-opacity: 56%;
+    --qs-scrollbar-active-opacity: 66%;
+  }
+
+  // AppThemeService themes body and the overlay container. Viewport scrollbar
+  // colors come from html, not body; use the same Material dark-theme color there.
+  :where(html:has(> body.dark-theme)) {
+    --qs-scrollbar-ink: #{$dark-on-surface};
+  }
+
+  // Let high-contrast users retain system colors. Native scrolling/keyboard
+  // behavior is never replaced with a custom scrollbar component.
+  @media (forced-colors: active) {
+    :where(*),
+    .qs-scrollbar {
+      scrollbar-color: auto;
+
+      &::-webkit-scrollbar-thumb,
+      &::-webkit-scrollbar-thumb:hover,
+      &::-webkit-scrollbar-thumb:active {
+        background-color: CanvasText;
+      }
+    }
+  }
+}

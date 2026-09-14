@@ -5,6 +5,11 @@ Read `/Users/dimitrios/Projects/quantified-self/AGENTS.md` first.
 Frontend-only rules:
 - `../.agent/rules/rules.md`
 - `../.agent/rules/material-design-strict.md`
+- All scrollable surfaces must use the shared thin QS scrollbar skin from `styles/_scrollbars.scss`, included globally
+  by `styles.scss`. This covers dialogs, bottom sheets, menus/selects, nested lists, tables, textareas and page panels,
+  including CDK overlays outside app-root. Do not add stock or component-specific scrollbar skins. Keep the actual
+  scroll owner bounded, preserve intentional scrollbar-free navigation rails, and verify overflow in light/dark and
+  at phone widths. Never hide a needed scrollbar or clip content to disguise an overflow bug. See `docs/frontend-ui.md`.
 - When adding a new indexable public page, add it to `sitemap.xml` in the same change. Also verify its `robots.txt`
   policy, SSR/prerender registration, route SEO metadata, public-route handling, internal links, and tests. Deliberately
   exclude non-indexable pages from the sitemap and set their `noindex` policy where applicable.

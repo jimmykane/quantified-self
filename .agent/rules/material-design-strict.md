@@ -33,6 +33,11 @@ This always-on rule applies to frontend UI changes.
 ## Dialogs and Overlays
 - Do not add custom `panelClass` unless there is a documented exception.
 - Prefer the global dialog container conventions.
+- Scrollbars are app styling, not a Material default: use the global thin QS skin in `src/styles/_scrollbars.scss`
+  for every dialog, sheet and nested scroll owner. The global rule covers new surfaces automatically; the existing
+  `qs-scrollbar` class remains supported. Do not duplicate scrollbar CSS or add `panelClass`/`::ng-deep` for this.
+  Preserve scroll axes, keyboard/touch access and fixed actions; fix accidental overflow instead of hiding it. Check
+  long content at 320px and desktop widths in both themes, including intentionally scrollbar-free navigation rails.
 - For `mat-menu`, use Angular Material's public menu class API deliberately: classes on `<mat-menu>` are applied to the menu panel, while `overlayPanelClass` targets the CDK overlay pane. App-styled menus should include the shared `qs-menu-panel` class on `<mat-menu>` so they inherit the same surface, radius, scrolling, and sizing as the rest of the app.
 
 ## Async Button Content Alignment

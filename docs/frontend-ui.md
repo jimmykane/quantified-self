@@ -64,6 +64,29 @@ Give each primary route title a stable `titleId` and reference it from the route
 `aria-labelledby`. Keep a title status concise and expose failures with the supplied warning status or an equivalent
 projected `role="alert"` state.
 
+## Shared scrollbars
+
+`src/styles/_scrollbars.scss`, included once by `src/styles.scss`, owns the app's thin, rounded QS scrollbar skin.
+It applies globally with zero-specificity defaults, including document scrolling, Material dialog content/surfaces,
+bottom sheets, menus, selects, autocomplete, nested lists/history, tables, textareas and custom scrollable panels.
+CDK overlays live outside app-root and are covered without a per-dialog class. The existing `qs-scrollbar` class
+remains supported, but forgetting it must not restore a stock scrollbar. Do not add per-component skins.
+
+Standard scrollbar properties and the existing WebKit fallback share Material on-surface colors, transparent tracks,
+and the existing light/dark opacities. The document scrollbar also follows the body's theme (the
+[viewport uses the root element's scrollbar color](https://www.w3.org/TR/css-scrollbars-1/#scrollbar-color), not body's);
+forced-colors mode keeps system colors. The browser still owns scrolling and platform-specific thumb behavior.
+
+The skin does not set overflow, heights, axes, gutters, overscroll behavior or touch handlers. Each component owns its
+scroll layout: constrain the intended content region, keep dialog/sheet headers and actions reachable, and avoid
+accidental nested scrollbars. Existing intentionally hidden sidebar/tab-rail scrollbars remain hidden via their more
+specific rules. Do not hide a needed scrollbar or clip content to mask a layout bug.
+
+For changes, run `src/styles/scrollbars.spec.ts` and the affected component suites, then a production build. Browser
+QA must include genuinely overflowing content in dialogs, sheets and nested panels, horizontal tables, long textareas,
+and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
+existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
+
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
