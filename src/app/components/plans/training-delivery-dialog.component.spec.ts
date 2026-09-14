@@ -193,7 +193,9 @@ describe('Training provider delivery controls', () => {
     expect(service.mutate).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).not.toContain('Preview change');
     expect(fixture.nativeElement.querySelector('#delivery-time-zone').hidden).toBe(true);
-    const consent = fixture.nativeElement.querySelector('.delivery-review-actions button') as HTMLButtonElement;
+    const consent = fixture.nativeElement.querySelector('mat-dialog-actions button[mat-flat-button]') as HTMLButtonElement;
+    expect(Array.from(fixture.nativeElement.querySelectorAll('mat-dialog-actions button') as NodeListOf<HTMLButtonElement>)
+      .map(button => button.textContent?.trim())).toEqual(['Cancel', scope === 'plan' ? 'Enable plan sync' : 'Send workout']);
     expect(consent.textContent?.trim()).toBe(scope === 'plan' ? 'Enable plan sync' : 'Send workout');
     expect(consent.disabled).toBe(false); consent.click();
     await fixture.whenStable(); fixture.detectChanges();
@@ -223,8 +225,129 @@ describe('Training provider delivery controls', () => {
     expect(component.canConfirm()).toBe(false); expect(component.editingTimeZone()).toBe(true);
     service.preview.mockResolvedValueOnce(response); await component.review();
     expect(component.preview()?.command.timeZone).toBe('America/New_York');
-    expect(component.editingTimeZone()).toBe(false); expect(service.mutate).not.toHaveBeenCalled();
+    expect(component.editingTimeZone()).toBe(true); expect(service.mutate).not.toHaveBeenCalled();
     await component.confirm(); expect(service.mutate.mock.calls[0][0].timeZone).toBe('America/New_York');
+  });
+  it.each(['plan', 'workout'] as const)('opens existing %s settings without a request and only saves an actual checked change', async scope => {
+    service.watchScope.mockReturnValue(of({ settings: [{ provider: 'garmin', enabled: true, revision: 1, timeZone: 'Europe/Helsinki' }], statuses: [] }));
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope, id: 'w', title: 'Morning run' } });
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [{ id: 'w', revision: 2, lifecycle: 'active' }], workouts: [{ id: 'w', revision: 2, planId: null }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    await component.begin('garmin', scope === 'plan' ? 'configure' : 'send'); fixture.detectChanges();
+    expect(component.dialogTitle()).toBe(scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings');
+    expect(fixture.nativeElement.textContent).toContain('Sync with Garmin is already enabled');
+    expect(fixture.nativeElement.querySelector('#delivery-time-zone').hidden).toBe(false);
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions button[mat-flat-button]').disabled).toBe(true);
+    await component.review(); await component.confirm();
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    vi.useFakeTimers();
+    try {
+      component.updateTimeZone(' Europe/Helsinki '); await vi.advanceTimersByTimeAsync(450);
+      expect(service.preview).not.toHaveBeenCalled(); expect(component.hasSettingsChanges()).toBe(false);
+      component.updateTimeZone('Europe/Berlin'); component.updateTimeZone('America/New_York');
+      await vi.advanceTimersByTimeAsync(450); fixture.detectChanges();
+      expect(service.preview).toHaveBeenCalledOnce(); expect(component.canConfirm()).toBe(true);
+      expect(service.preview.mock.calls[0][0].timeZone).toBe('America/New_York');
+      expect(service.mutate).not.toHaveBeenCalled();
+      component.updateTimeZone('Europe/Helsinki'); await vi.advanceTimersByTimeAsync(450);
+      expect(component.canConfirm()).toBe(false); expect(service.preview).toHaveBeenCalledOnce();
+      component.updateTimeZone('bad/zone'); await vi.advanceTimersByTimeAsync(450); fixture.detectChanges();
+      expect(component.canConfirm()).toBe(false); expect(service.preview).toHaveBeenCalledOnce();
+      expect(fixture.nativeElement.textContent).toContain('Enter a valid time zone');
+      component.updateTimeZone('Europe/Berlin'); await vi.advanceTimersByTimeAsync(450);
+      await component.confirm();
+      expect(service.mutate).toHaveBeenCalledOnce();
+      expect(service.mutate.mock.calls[0][0]).toMatchObject({ timeZone: 'Europe/Berlin', expectedSettingsRevision: 1 });
+    } finally { fixture.destroy(); vi.useRealTimers(); }
+  });
+  it('discards a late time-zone check when the user reverts an edit', async () => {
+    service.watchScope.mockReturnValue(of({ settings: [{ provider: 'garmin', enabled: true, timeZone: 'Europe/Helsinki' }], statuses: [] }));
+    const response = await service.preview(); service.preview.mockClear();
+    let resolve!: (value: unknown) => void;
+    service.preview.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance; await component.begin('garmin', 'send');
+    component.updateTimeZone('Europe/Berlin'); const pending = component.review(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[name="timeZone"]').disabled).toBe(false);
+    component.updateTimeZone('Europe/Helsinki'); resolve(response); await pending;
+    expect(component.preview()).toBeNull(); expect(component.busy()).toBe(false);
+    await component.confirm(); expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it('keeps settings unchanged even with historical account warnings and offers a separate explicit consent review', async () => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [{ provider: 'garmin', enabled: true, revision: 1, timeZone: 'Europe/Helsinki' }],
+      statuses: [{ ...status, status: 'fresh_consent_required' }, { ...status, id: 'current', status: 'delivered' }] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).toContain('Workout sync settings');
+    const component = fixture.componentInstance; await component.begin('garmin', 'send');
+    expect(component.editingSettings()).toBe(true); expect(component.canConfirm()).toBe(false);
+    await component.confirm(); expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    component.cancelReview(); fixture.detectChanges();
+    const review = Array.from(fixture.nativeElement.querySelectorAll('.delivery-actions button') as NodeListOf<HTMLButtonElement>)
+      .find(button => button.textContent?.trim() === 'Review sync setup');
+    expect(review).toBeDefined(); review!.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(component.editingSettings()).toBe(false); expect(component.confirmLabel()).toBe('Send workout');
+    expect(service.preview).toHaveBeenCalledOnce(); expect(component.canConfirm()).toBe(true);
+    expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it('blocks stale settings edits but can replay an uncertain save receipt after a live settings echo', async () => {
+    const setting = { provider: 'garmin', enabled: true, revision: 1, timeZone: 'Europe/Helsinki' };
+    const view$ = new BehaviorSubject({ settings: [setting], statuses: [] }); service.watchScope.mockReturnValue(view$);
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance; await component.begin('garmin', 'send');
+    component.updateTimeZone('Europe/Berlin'); await component.review();
+    view$.next({ settings: [{ ...setting, enabled: false, revision: 2 }], statuses: [] }); fixture.detectChanges();
+    expect(component.canConfirm()).toBe(false); await component.confirm();
+    expect(service.mutate).not.toHaveBeenCalled();
+    view$.next({ settings: [setting], statuses: [] }); fixture.detectChanges();
+    service.mutate.mockImplementationOnce(async () => {
+      view$.next({ settings: [{ ...setting, timeZone: 'Europe/Berlin', revision: 2 }], statuses: [] });
+      throw new Error('uncertain');
+    });
+    await component.confirm(); fixture.detectChanges();
+    const checked = component.preview(); const previewCount = service.preview.mock.calls.length;
+    await component.review(); expect(component.preview()).toBe(checked);
+    expect(service.preview).toHaveBeenCalledTimes(previewCount);
+    expect(component.canConfirm()).toBe(true); await component.confirm();
+    expect(service.mutate).toHaveBeenCalledTimes(2);
+    expect(service.mutate.mock.calls[1][0]).toEqual(service.mutate.mock.calls[0][0]);
+  });
+  it.each(['cancel', 'destroy', 'account change'] as const)('cancels a scheduled time-zone check on %s', async action => {
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance; await component.begin('garmin', 'send'); service.preview.mockClear();
+    vi.useFakeTimers();
+    try {
+      component.updateTimeZone('Europe/Berlin');
+      if (action === 'cancel') component.cancelReview();
+      if (action === 'destroy') fixture.destroy();
+      if (action === 'account change') { user.set(null); user$.next(null); fixture.detectChanges(); }
+      await vi.advanceTimersByTimeAsync(450);
+      expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
+  it('uses one footer and never offers Cancel after saving has started', async () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const labels = () => Array.from(fixture.nativeElement.querySelectorAll('mat-dialog-actions button') as NodeListOf<HTMLButtonElement>)
+      .map(button => button.textContent?.trim());
+    expect(labels()).toEqual(['Close']);
+    await fixture.componentInstance.begin('garmin', 'send'); fixture.detectChanges();
+    expect(labels()).toEqual(['Cancel', 'Send workout']);
+    let resolve!: () => void;
+    service.mutate.mockImplementationOnce(() => new Promise<void>(done => { resolve = done; }));
+    const pending = fixture.componentInstance.confirm(); fixture.detectChanges();
+    expect(labels()).toEqual(['Close', 'Saving…']);
+    expect(fixture.nativeElement.querySelector('mat-dialog-actions button[mat-flat-button]').disabled).toBe(true);
+    resolve(); await pending; fixture.detectChanges(); expect(labels()).toEqual(['Close']);
+  });
+  it('closes direct initial consent on Cancel without saving', async () => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'workout', id: 'w', title: 'Morning run', initialProvider: 'garmin' } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges(); await fixture.whenStable();
+    fixture.componentInstance.cancelReview(); expect(close).toHaveBeenCalledOnce();
+    expect(service.mutate).not.toHaveBeenCalled();
   });
   it('does not turn mapping warnings into automatic degradation approval', async () => {
     const response = await service.preview(); service.preview.mockClear();
@@ -617,6 +740,15 @@ describe('Training provider delivery controls', () => {
     });
     await TestBed.inject(ApplicationRef).whenStable(); render('plan-sync'); render('plan-sync-dark');
     expect(document.querySelectorAll('.delivery-workout-button')).toHaveLength(2);
+    await ref.componentInstance.begin('garmin', 'configure');
+    TestBed.inject(ApplicationRef).tick(); await TestBed.inject(ApplicationRef).whenStable();
+    render('plan-settings'); render('plan-settings-dark');
+    expect(document.querySelector<HTMLInputElement>('input[name="timeZone"]')?.value).toBe('Europe/Helsinki');
+    ref.componentInstance.updateTimeZone('Europe/Berlin'); await ref.componentInstance.review();
+    TestBed.inject(ApplicationRef).tick(); await TestBed.inject(ApplicationRef).whenStable(); render('plan-settings-changed');
+    expect(document.querySelector<HTMLInputElement>('input[name="timeZone"]')?.value).toBe('Europe/Berlin');
+    ref.componentInstance.phase.set('saving'); render('plan-settings-saving'); ref.componentInstance.phase.set(null);
+    ref.componentInstance.cancelReview();
     await ref.componentInstance.begin('garmin', 'stop'); render('plan-stop'); ref.componentInstance.cancelReview();
     ref.componentInstance.inspectWorkout(planStatuses[0] as Parameters<TrainingDeliveryDialogComponent['inspectWorkout']>[0]);
     await TestBed.inject(ApplicationRef).whenStable(); ref = TestBed.inject(MatDialog).openDialogs.at(-1)!;

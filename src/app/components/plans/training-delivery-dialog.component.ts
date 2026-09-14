@@ -20,7 +20,10 @@ export interface TrainingDeliveryDialogData {
   /** Open a read-only consent check directly when there is only one available destination. */
   initialProvider?: PlannedWorkoutProviderId;
 }
-interface DeliveryDraft { provider: PlannedWorkoutProviderId; action: TrainingDeliveryAction; timeZone: string; approvalDigest?: string; }
+interface DeliveryDraft {
+  provider: PlannedWorkoutProviderId; action: TrainingDeliveryAction; timeZone: string; approvalDigest?: string;
+  editingSettings: boolean; initialTimeZone: string; initialSettingsRevision: number;
+}
 
 @Component({ selector: 'app-training-delivery-dialog', standalone: true,
   imports: [SharedModule, CompactRowComponent], templateUrl: './training-delivery-dialog.component.html',
@@ -36,6 +39,9 @@ export class TrainingDeliveryDialogComponent {
   private readonly destroyRef = inject(DestroyRef);
   private requestVersion = 0;
   private initialReviewHandled = false;
+  private closeOnCancel = false;
+  private timeZoneReviewTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly confirmationAttempted = signal(false);
   readonly uid = toSignal(this.users.user$.pipe(map(user => user?.uid ?? '')), { initialValue: '' });
   private readonly initialUid = this.users.user()?.uid;
   private readonly sameAccount = computed(() => !!this.initialUid && this.uid() === this.initialUid && this.users.user()?.uid === this.initialUid);
@@ -83,10 +89,26 @@ export class TrainingDeliveryDialogComponent {
     const draft = this.draft();
     return draft ? PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[draft.provider].label : '';
   });
+  readonly editingSettings = computed(() => !!this.draft()?.editingSettings);
+  readonly normalizedTimeZone = computed(() => {
+    try { return normalizeDeliveryTimeZone(this.draft()?.timeZone.trim()); } catch { return null; }
+  });
+  readonly hasSettingsChanges = computed(() => {
+    const draft = this.draft();
+    if (!draft?.editingSettings || !this.normalizedTimeZone()) return false;
+    return this.normalizedTimeZone() !== normalizeDeliveryTimeZone(draft.initialTimeZone);
+  });
+  readonly settingsChangedElsewhere = computed(() => {
+    const draft = this.draft();
+    if (!draft?.editingSettings) return false;
+    const setting = this.view().settings.find(item => item.provider === draft.provider);
+    return !setting?.enabled || (setting.revision ?? 0) !== draft.initialSettingsRevision;
+  });
   readonly dialogTitle = computed(() => {
     if (this.data.scope === 'history') return 'Workout sync history';
+    if (this.editingSettings()) return this.data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings';
     switch (this.draft()?.action) {
-      case 'configure': return `Plan sync with ${this.draftLabel()}`;
+      case 'configure': return `Enable plan sync with ${this.draftLabel()}`;
       case 'send': return `Send workout to ${this.draftLabel()}`;
       case 'resume': return 'Resume workout sync';
       case 'stop': return `${this.stopLabel()}?`;
@@ -101,14 +123,14 @@ export class TrainingDeliveryDialogComponent {
   });
   readonly confirmLabel = computed(() => {
     const draft = this.draft();
-    const enabled = this.view().settings.some(item => item.provider === draft?.provider && item.enabled);
+    if (this.editingSettings()) return 'Save changes';
     switch (draft?.action) {
       case 'stop': return this.stopLabel();
       case 'retry': return 'Request recovery';
       case 'approve': return 'Approve differences';
       case 'resume': return 'Resume workout sync';
-      case 'configure': return enabled ? 'Save plan sync settings' : 'Enable plan sync';
-      default: return enabled ? 'Save changes' : 'Send workout';
+      case 'configure': return 'Enable plan sync';
+      default: return 'Send workout';
     }
   });
   readonly rows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
@@ -131,6 +153,7 @@ export class TrainingDeliveryDialogComponent {
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
+      needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
       // Current settings precede the asynchronously reconciled status after Resume.
       canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'
         && (!this.planBound() || status.planId === currentPlanId))),
@@ -148,16 +171,17 @@ export class TrainingDeliveryDialogComponent {
   readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
   readonly canConfirm = computed(() => {
     const preview = this.preview();
+    if (this.editingSettings() && (!this.hasSettingsChanges() || (this.settingsChangedElsewhere() && !this.confirmationAttempted()))) return false;
     return !!preview && (preview.command.action === 'stop'
       || (preview.result.available && (preview.result.hasPro || preview.command.action === 'retry') && preview.result.connection === 'connected'
         && (preview.command.action !== 'approve' || !!preview.result.approvalDigest)));
   });
 
   constructor() {
-    this.destroyRef.onDestroy(() => { this.requestVersion++; });
+    this.destroyRef.onDestroy(() => { this.requestVersion++; this.clearTimeZoneReview(); });
     effect(() => {
       if (!this.uid() || this.uid() !== this.initialUid) {
-        this.requestVersion++; this.phase.set(null); this.notice.set(null);
+        this.requestVersion++; this.clearTimeZoneReview(); this.phase.set(null); this.notice.set(null);
         this.preview.set(null); this.draft.set(null); this.dialogRef.close();
       }
     });
@@ -170,24 +194,35 @@ export class TrainingDeliveryDialogComponent {
       if (this.delivery.isReady(provider) && this.canSend() && !this.planBound()
         && !this.view().settings.some(item => item.provider === provider)
         && !this.statuses().some(item => item.provider === provider)) {
+        this.closeOnCancel = true;
         void this.begin(provider, this.data.scope === 'plan' ? 'configure' : 'send');
       }
     });
   }
-  async begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string): Promise<void> {
+  async begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string, renewConsent = false): Promise<void> {
     if (this.busy() || !this.sameAccount() || !this.canReview() || this.data.scope === 'history'
       || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
+    // Historical copies can still need consent for an old account. They must not
+    // silently turn opening current settings into enabling delivery again.
+    const editingSettings = !!setting?.enabled && (action === 'configure' || action === 'send') && !renewConsent;
+    const timeZone = setting?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    this.clearTimeZoneReview(); this.confirmationAttempted.set(false);
     this.error.set(null); this.preview.set(null); this.notice.set(null);
-    this.editingTimeZone.set(false);
-    this.draft.set({ provider, action, timeZone: setting?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    this.editingTimeZone.set(editingSettings);
+    this.draft.set({ provider, action, timeZone, editingSettings, initialTimeZone: timeZone,
+      initialSettingsRevision: setting?.revision ?? 0,
       ...(approvalDigest ? { approvalDigest } : {}) });
-    await this.review();
+    if (!editingSettings) await this.review();
   }
   updateTimeZone(value: string): void {
-    if (this.busy()) return;
+    if (this.phase() === 'saving') return;
+    this.clearTimeZoneReview(); this.requestVersion++; this.phase.set(null); this.confirmationAttempted.set(false);
     this.draft.update(draft => draft ? { ...draft, timeZone: value } : null);
     this.preview.set(null); this.error.set(null);
+    if (this.normalizedTimeZone() && (!this.editingSettings() || this.hasSettingsChanges())) {
+      this.timeZoneReviewTimer = setTimeout(() => { this.timeZoneReviewTimer = undefined; void this.review(); }, 400);
+    }
   }
   toggleTimeZone(): void {
     if (this.busy()) return;
@@ -198,12 +233,17 @@ export class TrainingDeliveryDialogComponent {
   }
   cancelReview(): void {
     if (this.phase() === 'saving') return;
-    this.requestVersion++; this.phase.set(null);
+    this.requestVersion++; this.clearTimeZoneReview(); this.phase.set(null);
     this.draft.set(null); this.preview.set(null); this.error.set(null);
+    if (this.closeOnCancel) this.dialogRef.close();
   }
   async review(): Promise<void> {
+    this.clearTimeZoneReview();
     const draft = this.draft(); const scope = this.scopeRecord(); const schedule = this.schedule(); const uid = this.uid();
     if (!draft || !schedule || !this.sameAccount() || this.busy() || !this.canReview() || this.data.scope === 'history') return;
+    // Enter in the time-zone form must not replace an uncertain save's receipt.
+    if (this.confirmationAttempted() && this.preview()) return;
+    if (draft.editingSettings && (!this.hasSettingsChanges() || this.settingsChangedElsewhere())) return;
     const version = ++this.requestVersion;
     const current = () => !this.destroyRef.destroyed && this.sameAccount() && this.uid() === uid && this.requestVersion === version;
     this.phase.set('preview'); this.error.set(null); this.preview.set(null);
@@ -213,11 +253,10 @@ export class TrainingDeliveryDialogComponent {
         expectedScheduleRevision: schedule.state.revision, expectedScopeRevision: scope?.revision ?? 0,
         expectedSettingsRevision: this.view().settings.find(item => item.provider === draft.provider)?.revision ?? 0,
         ...(['configure', 'send'].includes(draft.action) || (draft.action === 'resume' && !this.planBound())
-          ? { timeZone: normalizeDeliveryTimeZone(draft.timeZone) } : {}),
+          ? { timeZone: normalizeDeliveryTimeZone(draft.timeZone.trim()) } : {}),
         ...(draft.action === 'approve' ? { approvalDigest: draft.approvalDigest } : {}) };
       const result = await this.delivery.preview(command, current);
       if (!current()) return;
-      this.editingTimeZone.set(false);
       this.preview.set({ result, command: command.action === 'approve' && result.approvalDigest
         ? { ...command, approvalDigest: result.approvalDigest } : command });
     } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, false)); this.haptics.error(); } }
@@ -229,6 +268,7 @@ export class TrainingDeliveryDialogComponent {
     const version = ++this.requestVersion;
     const current = () => !this.destroyRef.destroyed && this.sameAccount() && this.uid() === uid && this.requestVersion === version;
     this.phase.set('saving'); this.error.set(null);
+    this.confirmationAttempted.set(true);
     try {
       // Retain this exact mutation ID on failure, so an uncertain response is safe to retry.
       await this.delivery.mutate(preview.command, current);
@@ -236,9 +276,13 @@ export class TrainingDeliveryDialogComponent {
       this.notice.set(preview.command.action === 'stop' ? `${this.stopLabel()} saved. Eligible copies will be removed in the background.`
         : preview.command.action === 'retry' ? 'Recovery requested. Provider retry limits still apply.'
           : 'Sync settings saved. Workout delivery continues in the background.');
-      this.preview.set(null); this.draft.set(null); this.haptics.success();
+      this.preview.set(null); this.draft.set(null); this.closeOnCancel = false; this.haptics.success();
     } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, true)); this.haptics.error(); } }
     finally { if (current()) this.phase.set(null); }
+  }
+  private clearTimeZoneReview(): void {
+    if (this.timeZoneReviewTimer !== undefined) clearTimeout(this.timeZoneReviewTimer);
+    this.timeZoneReviewTimer = undefined;
   }
   loadMore(): void {
     if (!this.sameAccount() || this.busy() || !this.canLoadMore()) return;

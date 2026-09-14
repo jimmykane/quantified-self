@@ -57,6 +57,10 @@ The Training UI checks availability and compatibility automatically on entering 
 subsequent eligible edits reconcile automatically. Opening the dialog never mutates consent. The saved/browser time
 zone is shown inline and changes explicitly; mapping degradation still needs per-workout approval. Troubleshooting is
 secondary, with compact status/history rows and surface-free Show/Hide details matching existing Training controls.
+Existing sync settings open without a new preview or active Save action. Only an actual validated time-zone change
+enables **Save changes**, after a debounced read-only check; reverting disables it again. One footer distinguishes
+Cancel/confirmation from overview Close and in-flight saving. Initial Enable/Send and fresh-account consent remain
+explicit, and uncertain saves retain their original receipt. See Training's detailed UI contract for cancellation rules.
 **Plan sync** separates automatic plan-level settings from **Workout sync status** rows. Each row represents an individual
 workout, shows its scheduled date, and opens **Workout sync** details; editing is a separate action. **Stop plan sync** and
 **Stop workout sync** name their different scopes explicitly. Plan sync means automatic per-workout delivery, not native

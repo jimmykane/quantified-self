@@ -48,6 +48,9 @@ describe('help.content', () => {
     expect(content).toContain('**Stop plan sync**');
     expect(content).toContain('**Stop workout sync**');
     expect(content).toContain('there is no separate Preview step');
+    expect(content).toContain('Existing settings open with **Save changes** disabled');
+    expect(content).toContain('The overview has only **Close**');
+    expect(content).not.toContain('**Use time zone**');
     expect(content).toContain('**Show attempt details**');
     expect(content).toContain('compact, scrollable **Revision history**');
     expect(content).toContain('**Training** permission');

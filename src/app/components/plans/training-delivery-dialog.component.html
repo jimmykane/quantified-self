@@ -25,11 +25,13 @@
         <p>{{ data.scope === 'plan' ? 'Stop syncing this plan’s workouts to ' + draftLabel() + ' and remove eligible future copies.' : 'Stop syncing only this workout to ' + draftLabel() + ' and remove its eligible future copy. Other workouts are not affected.' }} Past or completed workouts stay unchanged.</p>
       } @else if (draft.action === 'retry') {
         <p>Inspect unfinished operations and retry the current delivery intent. Retry does not resume stopped sync or grant new consent.</p>
+      } @else if (editingSettings()) {
+        <p>Sync with {{ draftLabel() }} is already enabled. Change the time zone used for scheduled workout dates.</p>
       } @else if (draft.action !== 'approve') {
         <p>{{ data.scope === 'plan' ? 'Automatically send upcoming workouts while this plan is active. New workouts and edits sync automatically.' : 'Send this workout and automatically sync future edits to the same provider copy.' }}</p>
       }
       @if (canChangeTimeZone()) {
-        <div class="delivery-zone">
+        <div class="delivery-zone" [hidden]="editingTimeZone()">
           <span class="delivery-caption">Time zone: {{ preview()?.result?.timeZone ?? draft.timeZone }}</span>
           <button mat-button appHapticTap type="button" (click)="toggleTimeZone()" [disabled]="busy() || editingTimeZone()"
             [attr.aria-expanded]="editingTimeZone()" aria-controls="delivery-time-zone">Change</button>
@@ -37,11 +39,13 @@
         <form id="delivery-time-zone" [hidden]="!editingTimeZone()" (ngSubmit)="review()" class="delivery-zone-form">
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>Delivery time zone</mat-label>
-            <input matInput name="timeZone" [ngModel]="draft.timeZone" (ngModelChange)="updateTimeZone($event)" [disabled]="busy()" placeholder="Europe/Helsinki">
-            <mat-hint>Saved with your consent. Travel will not change it.</mat-hint>
+            <input matInput name="timeZone" [ngModel]="draft.timeZone" (ngModelChange)="updateTimeZone($event)" [disabled]="phase() === 'saving'" placeholder="Europe/Helsinki" [attr.aria-invalid]="!normalizedTimeZone()">
+            <mat-hint>@if (normalizedTimeZone()) { Workout dates use this time zone, even when you travel. } @else { <span role="alert">Enter a valid time zone, such as Europe/Helsinki.</span> }</mat-hint>
           </mat-form-field>
-          <button mat-button appHapticTap type="submit" [disabled]="busy() || !canReview()">Use time zone</button>
         </form>
+      }
+      @if (editingSettings() && settingsChangedElsewhere() && !busy()) {
+        <p role="status">{{ error() && preview() ? 'Your save may already have been applied. Select Save changes again to check the result.' : 'Sync settings changed in another window. Cancel and reopen this view to see the latest settings.' }}</p>
       }
       @if (busy()) {
         <div class="delivery-progress" role="status">
@@ -71,13 +75,6 @@
           <ul>@for (issue of preview.result.issues; track $index) { <li>{{ issue }}</li> }</ul>
         }
       }
-      <div class="delivery-review-actions">
-        <button mat-flat-button appHapticTap type="button" (click)="confirm()" [disabled]="busy() || !canConfirm()">{{ confirmLabel() }}</button>
-        @if (error() && !preview() && !editingTimeZone()) {
-          <button mat-button appHapticTap type="button" (click)="review()" [disabled]="busy() || !canReview()">Try again</button>
-        }
-        <button mat-button appHapticTap type="button" (click)="cancelReview()" [disabled]="phase() === 'saving'">Cancel</button>
-      </div>
     </section>
   } @else {
     @for (row of rows(); track row.provider; let last = $last) {
@@ -99,6 +96,9 @@
                   <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : planBound() ? 'resume' : 'send')">
                     {{ planBound() ? 'Resume workout sync' : row.setting?.enabled ? data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings' : data.scope === 'plan' ? 'Sync plan with ' + row.label : 'Send to ' + row.label }}
                   </button>
+                }
+                @if (canSend() && !planBound() && row.setting?.enabled && row.needsFreshConsent) {
+                  <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : 'send', undefined, true)">Review sync setup</button>
                 }
                 @if (row.canRetry) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'retry')">{{ data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync' }}</button> }
                 @if (row.approvalDigest && data.scope === 'workout' && canSend()) {
@@ -174,4 +174,19 @@
     </div>
   </div>
 </mat-dialog-content>
-<mat-dialog-actions align="end"><button mat-button appHapticTap mat-dialog-close type="button">Close</button></mat-dialog-actions>
+<mat-dialog-actions align="end" class="delivery-review-actions">
+  @if (draft()) {
+    @if (phase() === 'saving') {
+      <button mat-button appHapticTap mat-dialog-close type="button">Close</button>
+    } @else {
+      <button mat-button appHapticTap type="button" (click)="cancelReview()">Cancel</button>
+    }
+    @if (error() && !preview()) {
+      <button mat-flat-button appHapticTap type="button" (click)="review()" [disabled]="busy() || !canReview() || (canChangeTimeZone() && !normalizedTimeZone()) || settingsChangedElsewhere()">Try again</button>
+    } @else {
+      <button mat-flat-button appHapticTap type="button" (click)="confirm()" [disabled]="busy() || !canConfirm()">{{ phase() === 'saving' ? 'Saving…' : confirmLabel() }}</button>
+    }
+  } @else {
+    <button mat-button appHapticTap mat-dialog-close type="button">Close</button>
+  }
+</mat-dialog-actions>

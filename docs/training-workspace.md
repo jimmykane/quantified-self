@@ -524,7 +524,19 @@ directly from **Sync plan with Garmin** / **Send to Garmin**. The dialog waits f
 that shortcut; existing records or inherited plan consent open details instead. Multiple providers keep a chooser.
 There is no manual Preview step: availability/compatibility checks run on entering a change, then the single **Enable
 plan sync** / **Send workout** confirmation grants consent. Opening, reloading, cancelling, and live updates never opt in.
-The saved/browser IANA zone is shown inline; **Change** reveals its field and **Use time zone** rechecks without saving.
+The saved/browser IANA zone is shown inline for initial consent; **Change** reveals its field. Existing **Plan sync
+settings** / **Workout sync settings** open the field directly without a preview request or new consent. **Save changes**
+is disabled until a valid normalized time zone differs from the captured saved value and its read-only check succeeds.
+Time-zone edits debounce those checks by 400ms; there is no separate **Use time zone** step. Reverting an edit disables
+Save again, and typing cancels stale checks without locking the field. Cancellation, account change and teardown cancel
+pending checks. A changed settings revision requires reopening the view, except that an uncertain save can replay its
+exact existing receipt. Fresh-account consent remains an explicit Send/Enable action, not a no-op settings save.
+Account-consent warnings expose a separate **Review sync setup** action. Retained old-account warnings never change
+the meaning of opening current settings or enable an unchanged Save.
+Review actions live in one Material footer: **Cancel** plus the specific confirmation, or **Try again** after a failed
+check. Cancel discards the draft and returns to sync details; directly opened initial consent closes instead. Overview
+has only **Close**. Once saving starts, Cancel becomes **Close** alongside disabled **Saving…**, because closing cannot
+cancel a dispatched request. The initial consent label never changes to Save merely because a live settings echo arrives.
 Inherited workout details do not label a retained workout override's zone as the current plan zone: the parent plan's
 settings remain authoritative. Stop, Retry, Resume and approval reviews display the server-resolved zone read-only.
 Changing a zone invalidates the earlier preview. Degradation still requires explicit per-workout approval; enabling sync
@@ -574,7 +586,7 @@ their contract/sandbox gates; completion matching remains #651 and Sports Lib ex
 For isolated visual QA, create a temporary directory and set `TRAINING_DELIVERY_QA_DIR` to it when running
 `npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts src/app/components/plans/plans-workspace.component.spec.ts`.
 The tests export synthetic Material dialog DOM for status, automatic checking, consent, time-zone editing, pending,
-Retry, plan overview, plan-bound workout details, plan/workout Stop review, 25-row workout sync history and deleted-source
+Retry, unchanged/changed/saving settings, plan overview, plan-bound workout details, plan/workout Stop review, 25-row workout sync history and deleted-source
 recovery, plus a 50-row authored revision history. Plan fixtures cross the year boundary and include a long workout title. They include the
 app's Material Symbols default, generated component styles, and real component SCSS compiled with the Angular build's
 Sass dependency. Build the local app, then copy its emitted `dist/browser/styles-*.css` as `styles.css` and link/copy

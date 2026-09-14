@@ -31,6 +31,8 @@ app-compact-row p.delivery-caption { margin: 0; }
 .delivery-attempts div { display: flex; flex-wrap: wrap; column-gap: 0.5rem; padding-block: 0.125rem; }
 .delivery-attempts dt { font-weight: 500; }
 .delivery-attempts dd { margin: 0; }
-.delivery-guidance { margin-block-start: 0.75rem; }
+// Material's 48px touch target extends 4px below the 40px disclosure button.
+// Reserve that space so the otherwise-fitting content does not acquire a scrollbar.
+.delivery-guidance { margin-block-start: 0.75rem; padding-block-end: 0.25rem; }
 .delivery-guidance p { margin-block: 0.5rem; }
 [hidden] { display: none !important; }
