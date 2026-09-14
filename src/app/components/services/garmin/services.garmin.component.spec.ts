@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ServicesGarminComponent } from './services.garmin.component';
 import { GarminPermissionsComponent } from './garmin-permissions.component';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { HapticTapDirective } from '../../../directives/haptic-tap.directive';
 import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { ServiceSyncingStateComponent } from '../../shared/service-syncing-state/service-syncing-state.component';
 import { MatCardModule } from '@angular/material/card';
@@ -34,7 +35,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { ServiceConnectionStatusComponent } from '../service-connection-status/service-connection-status.component';
 import { buildSuuntoServiceConnectionViewModel } from '../../../helpers/suunto-service-connection.helper';
@@ -103,7 +104,7 @@ describe('ServicesGarminComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [ServicesGarminComponent, ServiceSyncingStateComponent, ServiceConnectionStatusComponent],
+            declarations: [ServicesGarminComponent, ServiceSyncingStateComponent, ServiceConnectionStatusComponent, HapticTapDirective],
             imports: [
                 GarminPermissionsComponent,
                 MatIconTestingModule,
@@ -239,6 +240,110 @@ describe('ServicesGarminComponent', () => {
             expect(manage.disabled).toBe(true); component.openGarminConnectApp();
             expect(haptics.selection).not.toHaveBeenCalled();
             expect(TestBed.inject(AppDeepLinkService).openGarminConnectApp).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Connection view lifecycle', () => {
+        beforeEach(() => {
+            fixture.componentRef.setInput('user', { uid: 'original-owner', settings: {} });
+            fixture.componentRef.setInput('hasProAccess', true);
+            fixture.detectChanges();
+        });
+
+        it('does not restart secondary listeners after teardown during initialization', async () => {
+            mockUserService.watchSuuntoServiceConnectionView.mockClear();
+            const pending = component.ngOnChanges();
+            fixture.destroy();
+            await pending;
+            expect(mockUserService.watchSuuntoServiceConnectionView).not.toHaveBeenCalled();
+        });
+
+        it('clears account details and pending UI state immediately on sign-out', () => {
+            component.serviceTokens = [{ providerUserId: 'private-account', permissions: ['WORKOUT_IMPORT'] }];
+            component.serviceMeta = { connectionState: 'connected' } as typeof component.serviceMeta;
+            component.forceConnected = true;
+            component.isConnecting = true;
+            fixture.detectChanges();
+            fixture.componentRef.setInput('user', undefined);
+            fixture.detectChanges();
+            expect(component.serviceTokens).toBeUndefined();
+            expect(component.serviceMeta).toBeUndefined();
+            expect(component.forceConnected).toBe(false);
+            expect(component.isConnecting).toBe(false);
+            expect(fixture.nativeElement.textContent).not.toContain('private-account');
+        });
+
+        it.each(['account switch', 'destroy'])('discards a pending OAuth redirect after %s', async change => {
+            let resolve!: (value: { redirect_uri: string }) => void;
+            mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockReturnValue(new Promise(value => { resolve = value; }));
+            const pending = component.connectWithService(new Event('click'));
+            if (change === 'destroy') fixture.destroy();
+            else {
+                fixture.componentRef.setInput('user', { uid: 'next-owner', settings: {} });
+                fixture.detectChanges();
+            }
+            resolve({ redirect_uri: 'https://example.test/stale-authorization' });
+            await pending;
+            expect(TestBed.inject(AppWindowService).windowRef.location.href).toBe('');
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it('does not let a stale OAuth failure clear a newer account request', async () => {
+            let reject!: (reason: Error) => void;
+            mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockReturnValue(new Promise((_resolve, fail) => { reject = fail; }));
+            const pending = component.connectWithService(new Event('click'));
+            fixture.componentRef.setInput('user', { uid: 'next-owner', settings: {} }); fixture.detectChanges();
+            component.isConnecting = true;
+            reject(new Error('old account failure')); await pending;
+            expect(component.isConnecting).toBe(true);
+            expect(haptics.error).not.toHaveBeenCalled();
+        });
+
+        it('drops OAuth callback feedback and navigation after the view is destroyed', async () => {
+            let resolve!: (value: { connected: true; outcome: 'connected' }) => void;
+            mockUserService.requestAndSetCurrentUserGarminAPIAccessToken.mockReturnValue(new Promise(value => { resolve = value; }));
+            queryParams = { serviceName: component.serviceName, state: 'test-state', code: 'test-code' };
+            await component.ngOnChanges();
+            fixture.destroy();
+            resolve({ connected: true, outcome: 'connected' });
+            await Promise.resolve(); await Promise.resolve();
+            expect(component.forceConnected).toBe(false);
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+            expect(haptics.success).not.toHaveBeenCalled();
+        });
+
+        it('locks disconnect confirmation and cancels it when the account changes', async () => {
+            component.user.settings.serviceSyncSettings = { activitySyncRoutes: {
+                [ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp]: { enabled: true },
+            } } as typeof component.user.settings.serviceSyncSettings;
+            const closed = new Subject<boolean>();
+            const close = vi.fn((result: boolean) => { closed.next(result); closed.complete(); });
+            mockDialog.open.mockReturnValue({ afterClosed: () => closed, close });
+            const pending = component.deauthorizeService(new Event('click'));
+            await component.deauthorizeService(new Event('click'));
+            await component.connectWithService(new Event('click'));
+            expect(component.isDisconnecting).toBe(true);
+            expect(mockDialog.open).toHaveBeenCalledOnce();
+            expect(mockUserService.getCurrentUserServiceTokenAndRedirectURI).not.toHaveBeenCalled();
+            fixture.componentRef.setInput('user', { uid: 'next-owner', settings: {} }); fixture.detectChanges();
+            await pending;
+            expect(close).toHaveBeenCalledExactlyOnceWith(false);
+            expect(mockUserService.deauthorizeService).not.toHaveBeenCalled();
+            expect(component.isDisconnecting).toBe(false);
+            expect(haptics.selection).toHaveBeenCalledOnce();
+        });
+
+        it('ignores late disconnect feedback after switching accounts', async () => {
+            let resolve!: () => void;
+            mockUserService.deauthorizeService.mockReturnValue(new Promise<void>(value => { resolve = value; }));
+            const pending = component.deauthorizeService(new Event('click'));
+            await Promise.resolve();
+            fixture.componentRef.setInput('user', { uid: 'next-owner', settings: {} }); fixture.detectChanges();
+            component.forceConnected = true;
+            resolve(); await pending;
+            expect(component.forceConnected).toBe(true);
+            expect(haptics.success).not.toHaveBeenCalled();
         });
     });
 
@@ -501,7 +606,7 @@ describe('ServicesGarminComponent', () => {
             expect(connectButton?.disabled).toBe(false);
         });
 
-        it('keeps history import loading while Garmin token permissions are not loaded', () => {
+        it('does not confuse an unreported permission snapshot with active loading', () => {
             component.isLoading = false;
             component.serviceTokens = [{
                 accessToken: 'garmin-token',
@@ -511,7 +616,48 @@ describe('ServicesGarminComponent', () => {
             expect(component.isConnectedToService()).toBe(true);
             expect(component.hasPermissionsLoaded).toBe(false);
             expect(component.missingPermissions).toEqual([]);
-            expect(component.isHistoryImportLoading).toBe(true);
+            expect(component.isHistoryImportLoading).toBe(false);
+        });
+
+        it('normalizes grants consistently with the overview and rejects malformed snapshots', () => {
+            component.serviceTokens = [{ providerUserId: 'garmin-user', permissions: [' COURSE_IMPORT '] }];
+            expect(component.hasGarminCourseImportPermission).toBe(true);
+            component.serviceTokens = [{ providerUserId: 'garmin-user', permissions: ['COURSE_IMPORT', ''] }];
+            expect(component.hasPermissionsLoaded).toBe(false);
+            expect(component.hasGarminCourseImportPermission).toBe(false);
+        });
+
+        it.each(['history', 'uploads'])('shows actionable unknown permission guidance in the %s tool', tool => {
+            component.hasProAccess = true;
+            component.showConnectionSummary = false;
+            component.showOnlyActiveProviderTool = true;
+            component.activeProviderTool = tool;
+            component.serviceTokens = [{ providerUserId: 'legacy-account' }];
+            fixture.detectChanges();
+            expect(fixture.nativeElement.textContent).toContain('Close this tool and choose Reconnect');
+            expect(fixture.nativeElement.querySelector('app-service-syncing-state')).toBeNull();
+            expect(fixture.nativeElement.querySelector('app-history-import-form, app-upload-route-to-service')).toBeNull();
+            component.isLoading = true;
+            fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('app-service-syncing-state')).toBeTruthy();
+        });
+
+        it.each(['history', 'uploads', 'auto-sync'])('uses a focusable Pro action without a clickable panel in %s', tool => {
+            component.user = { uid: ACTIVITY_SYNC_ALLOWLISTED_UID } as typeof component.user;
+            component.hasProAccess = false;
+            component.showConnectionSummary = false;
+            component.showOnlyActiveProviderTool = true;
+            component.activeProviderTool = tool;
+            fixture.detectChanges();
+            const panel = fixture.nativeElement.querySelector('.provider-tool-panel') as HTMLElement;
+            panel.click();
+            expect(mockRouter.navigate).not.toHaveBeenCalled();
+            const action = panel.querySelector('button.pro-required-inline') as HTMLButtonElement;
+            expect(action.type).toBe('button');
+            expect(action.disabled).toBe(false);
+            action.click();
+            expect(mockRouter.navigate).toHaveBeenCalledExactlyOnceWith(['/subscriptions']);
+            expect(haptics.selection).toHaveBeenCalledOnce();
         });
 
         it('ignores permission arrays on Garmin tokens without a provider identity', () => {
@@ -1187,7 +1333,7 @@ describe('ServicesGarminComponent', () => {
             await component.deauthorizeService(new MouseEvent('click'));
 
             expect(mockDialog.open).not.toHaveBeenCalled();
-            expect(mockUserService.deauthorizeService).toHaveBeenCalledWith(component.serviceName);
+            expect(mockUserService.deauthorizeService).toHaveBeenCalledWith(component.serviceName, expect.any(Function));
         });
     });
 });

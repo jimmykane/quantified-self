@@ -85,6 +85,9 @@ Each account keeps its own grants: `Granted`, `Not granted` for an explicitly ab
 saved permissions array is missing/malformed. The view includes all six documented permission families and any extra
 provider-reported scope names without implying QS feature availability. It never reads OAuth documents or writes grants.
 Unknown legacy permissions do not hide the known account behind a permanent loading message.
+History and route-upload tools also distinguish unknown permissions from an active load, and explain how to close the
+tool and reconnect from the overview. Their permission checks use the same trimmed grant names as the displayed rows;
+malformed arrays remain unknown. Pro prompts are focusable Material buttons with a single selection haptic.
 
 **Manage in Garmin** opens Garmin Connect's account/Connected Apps management; choose Quantified Self and manage the
 permissions Garmin exposes there. **Reconnect** is also available for a connected account and refreshes authorization
@@ -95,6 +98,13 @@ permission snapshot. Permission callbacks and successful OAuth continue to updat
 new callable, live polling, browser token access, or frontend grant mutation. Backend delivery readiness/consent checks
 remain authoritative. Garmin's [account preferences guidance](https://support.garmin.com/en-SG/?faq=JwIU2Sofyy6ThtzhH8ENX6)
 describes connected-app management.
+
+Shared connection UI results are pinned to the originating user and view lifetime. Switching accounts/signing out
+clears prior connection details immediately, and pending OAuth redirects/callbacks or disconnect results cannot update
+a replacement view. Disconnect confirmation is locked against duplicate actions, dismissed on account change/teardown,
+and rechecked before dispatch. Server-side connection authority and operations already in flight remain unchanged.
+OAuth-start and disconnect dispatch/retries also check the original Firebase auth user after App Check waits, stopping
+unsent work when the account or view changes instead of letting a delayed retry use a replacement account.
 
 ## Training-planning proof boundary
 

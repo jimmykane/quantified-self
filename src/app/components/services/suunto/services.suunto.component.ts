@@ -91,6 +91,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       this.activeActivitySyncDestination = this.initialActivitySyncDestination;
     }
     await super.ngOnChanges();
+    if (this.connectionViewDestroyed) return;
     this.syncDerivedState();
     this.watchGarminRouteSendState();
     this.watchWahooRouteDeliveryState();

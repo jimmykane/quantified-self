@@ -132,6 +132,15 @@ describe('ServicesSuuntoComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('does not restart secondary listeners after teardown during initialization', async () => {
+        component.user = { uid: 'user-1', settings: {} } as typeof component.user;
+        const pending = component.ngOnChanges();
+        fixture.destroy();
+        await pending;
+        expect(mockUserService.watchGarminRouteSendContext).not.toHaveBeenCalled();
+        expect(mockUserService.watchActivityServiceConnectionState).not.toHaveBeenCalled();
+    });
+
     it('exchanges a returned OAuth code and state', async () => {
         vi.spyOn(component['route'].snapshot.queryParamMap, 'get').mockImplementation((key: string) => ({
             state: 'state-token',

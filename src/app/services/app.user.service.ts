@@ -1504,7 +1504,8 @@ export class AppUserService implements OnDestroy {
     return `${year}-${month}-${day}`;
   }
 
-  async deauthorizeService(serviceName: ServiceNames): Promise<any> {
+  async deauthorizeService(serviceName: ServiceNames, isCurrentView?: () => boolean): Promise<any> {
+    const canExecute = this.captureServiceConnectionAccount(isCurrentView);
     let functionName: FunctionName;
 
     switch (serviceName) {
@@ -1524,17 +1525,18 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for deauthorization`);
     }
 
-    const result = await this.callServiceDisconnectWithRefreshRetry(functionName);
+    const result = await this.callServiceDisconnectWithRefreshRetry(functionName, canExecute);
     return result.data;
   }
 
-  private async callServiceDisconnectWithRefreshRetry(functionName: FunctionName): Promise<{ data: any }> {
+  private async callServiceDisconnectWithRefreshRetry(functionName: FunctionName, canExecute: () => boolean): Promise<{ data: any }> {
     let retryAttempt = 0;
     let retryDeadlineAt: number | null = null;
 
     while (true) {
+      if (!canExecute()) throw new Error('Operation cancelled because its account or view changed.');
       try {
-        return await this.functionsService.call(functionName);
+        return await this.functionsService.call(functionName, undefined, { canExecute });
       } catch (error) {
         const details = getTokenRefreshDisconnectRetryDetails(error);
         if (!details) throw error;
@@ -1557,7 +1559,15 @@ export class AppUserService implements OnDestroy {
     }
   }
 
-  async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{ redirect_uri: string }> {
+  private captureServiceConnectionAccount(isCurrentView?: () => boolean): () => boolean {
+    const firebaseUser = this.auth.currentUser;
+    const uid = firebaseUser?.uid;
+    return () => !!uid && this.auth.currentUser === firebaseUser && this.auth.currentUser.uid === uid
+      && (!isCurrentView || isCurrentView());
+  }
+
+  async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames, isCurrentView?: () => boolean): Promise<{ redirect_uri: string }> {
+    const canExecute = this.captureServiceConnectionAccount(isCurrentView);
     const currentDomain = this.windowService.currentDomain;
     const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${serviceName}&connect=1`);
     let functionName: FunctionName;
@@ -1579,7 +1589,7 @@ export class AppUserService implements OnDestroy {
         throw new Error(`Service ${serviceName} not supported for auth redirect`);
     }
 
-    const result = await this.functionsService.call<{ redirectUri: string }, { redirect_uri: string }>(functionName, { redirectUri });
+    const result = await this.functionsService.call<{ redirectUri: string }, { redirect_uri: string }>(functionName, { redirectUri }, { canExecute });
     return result.data;
   }
 

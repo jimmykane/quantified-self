@@ -24,6 +24,7 @@ import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfi
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
   getGarminProviderUserIdFromTokenLike,
+  getGarminPermissionsFromTokenLike,
   hasConnectedGarminToken,
   selectPreferredGarminTokenLike,
 } from '@shared/garmin-service-token';
@@ -184,7 +185,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get isHistoryImportLoading(): boolean {
-    return this.isLoading || !this.hasPermissionsLoaded;
+    return this.isLoading;
   }
 
   get hasGarminCourseImportPermission(): boolean {
@@ -203,7 +204,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
    * Attempts to open Garmin Connect mobile app, falls back to web
    */
   openGarminConnectApp(): void {
-    if (this.isConnecting || this.isDisconnecting || this.isDisconnectPending) return;
+    if (!this.user || this.isLoading || this.isConnecting || this.isDisconnecting || this.isDisconnectPending) return;
     this.hapticsService.selection();
     this.deepLinkService.openGarminConnectApp();
   }
@@ -213,6 +214,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       this.activeActivitySyncDestination = this.initialActivitySyncDestination;
     }
     await super.ngOnChanges();
+    if (this.connectionViewDestroyed) return;
     this.watchSuuntoConnectionState();
   }
 
@@ -266,6 +268,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return this.garminTokens
       .filter((token): token is Record<string, unknown> & { permissions: unknown[] } => (
         Array.isArray(token.permissions)
+        && token.permissions.every(permission => typeof permission === 'string' && permission.trim().length > 0)
         && !!getGarminProviderUserIdFromTokenLike(token)
       ));
   }
@@ -298,7 +301,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   private missingPermissionsForToken(token: { permissions: unknown[] }, requiredPermissions: readonly string[]): string[] {
-    const permissionSet = new Set(token.permissions.map(permission => `${permission}`));
+    const permissionSet = new Set(getGarminPermissionsFromTokenLike(token));
     return requiredPermissions.filter(permission => !permissionSet.has(permission));
   }
 

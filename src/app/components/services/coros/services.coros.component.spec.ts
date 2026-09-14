@@ -116,6 +116,14 @@ describe('ServicesCorosComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('does not restart secondary listeners after teardown during initialization', async () => {
+        component.user = { uid: 'user-1', settings: {} } as AppUserInterface;
+        const pending = component.ngOnChanges();
+        fixture.destroy();
+        await pending;
+        expect(mockUserService.watchSuuntoServiceConnectionView).not.toHaveBeenCalled();
+    });
+
     it('renders connection status outside the provider tool tabs', () => {
         fixture.detectChanges();
 

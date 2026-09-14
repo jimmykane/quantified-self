@@ -930,6 +930,8 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('can always be disconnected');
     expect(serviceConnectionsSection?.content).toContain("each account's last-reported grants");
     expect(serviceConnectionsSection?.content).toContain('**Not reported**');
+    expect(serviceConnectionsSection?.content).toContain('**Permission details unavailable**');
+    expect(serviceConnectionsSection?.content).toContain('close that tool and select **Reconnect**');
     expect(serviceConnectionsSection?.content).toContain('**Manage in Garmin**');
     expect(serviceConnectionsSection?.content).toContain('You do not need to disconnect in QS first');
     expect(serviceConnectionsSection?.content).toContain('reauthorization still requires Pro');

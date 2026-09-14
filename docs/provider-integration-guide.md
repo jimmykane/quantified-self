@@ -539,6 +539,21 @@ consent toggles. **Manage in Garmin** opens the existing connected-app managemen
 Pro-gated OAuth flow even when the account still appears connected. Do not require an explicit disconnect to refresh
 consent: it disables other sync routes. Pending disconnect/reconnect actions cannot overlap, and merely rendering the
 view does not contact Garmin, refresh credentials, change grants, or opt workouts into delivery.
+History and route-upload tools distinguish a pending projection from an unreported/malformed permission snapshot;
+the latter shows a reconnect recovery instruction instead of a permanent spinner. Permission checks normalize the
+same grant names as the overview. Locked Garmin tools use explicit keyboard-accessible Pro buttons, not clickable
+panels, with one selection haptic per action.
+
+The shared connection view binds OAuth URL/callback completion and disconnect confirmation/result feedback to the
+originating UID and view revision. Account changes clear old projections and pending UI state; teardown and account
+changes dismiss the owned confirmation and discard late redirects, navigation, status, and haptics. Provider-specific
+initialization also checks teardown before creating secondary connection listeners. Disconnect locks
+before confirmation so duplicate actions and reconnect cannot overlap. This suppresses stale client effects without
+cancelling or reauthorizing server work already started for the original account.
+OAuth-start and disconnect requests also capture the Firebase auth user instance and UID. Their optional local
+dispatch check runs after App Check readiness/refresh and before every disconnect retry, so a delayed client attempt
+cannot move to a replacement signed-in account or a closed view. The check is never sent to Functions and does not
+replace Auth/App Check or server connection fencing; an already dispatched request is not cancelled.
 
 - Add the provider to `ServicesComponent`, its navigation order, connection-state map, query-param selection, and focused tool-dialog switch.
 - Create or adapt a provider service component using `ServicesAbstractComponentDirective`. Keep connection summary and advanced tools compatible with the dialog contract (`showConnectionSummary`, `showAdvancedTools`, `activeProviderTool`, and `showOnlyActiveProviderTool`).
