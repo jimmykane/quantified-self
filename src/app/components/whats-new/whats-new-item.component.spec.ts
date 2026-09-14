@@ -52,19 +52,23 @@ describe('WhatsNewItemComponent', () => {
         expect(spy).toHaveBeenCalled();
     });
 
-    it('should apply flush content alignment only when notification layout is requested', () => {
-        const panel = fixture.debugElement.query(By.css('.changelog-panel')).nativeElement as HTMLElement;
-        expect(panel.classList.contains('changelog-panel-notification')).toBe(false);
+    it('should render an open article only for the notification layout', () => {
+        expect(fixture.debugElement.query(By.css('.changelog-panel'))).toBeTruthy();
+        expect(fixture.debugElement.query(By.css('article'))).toBeNull();
 
         fixture.componentRef.setInput('notificationLayout', true);
         fixture.detectChanges();
 
-        const header = fixture.debugElement.query(By.directive(MatExpansionPanelHeader));
-        const headerComponent = header.componentInstance as MatExpansionPanelHeader;
+        const article = fixture.debugElement.query(By.css('article.changelog-notification'));
+        expect(article.query(By.css('h3')).nativeElement.textContent).toContain(mockPost.title);
+        expect(article.query(By.css('.header-date'))).toBeTruthy();
+        expect(article.query(By.css('.description'))).toBeTruthy();
+        expect(fixture.debugElement.query(By.directive(MatExpansionPanelHeader))).toBeNull();
 
-        expect(panel.classList.contains('changelog-panel-notification')).toBe(true);
-        expect(headerComponent.collapsedHeight).toBe('');
-        expect(headerComponent.expandedHeight).toBe('');
+        fixture.componentRef.setInput('notificationLayout', false);
+        fixture.detectChanges();
+        expect(fixture.debugElement.query(By.css('article'))).toBeNull();
+        expect(fixture.debugElement.query(By.directive(MatExpansionPanelHeader))).toBeTruthy();
     });
 
     it('should let full-mode headers grow so wrapped titles do not cover release metadata', () => {
