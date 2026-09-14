@@ -63,7 +63,7 @@ The versioned research snapshot lives in `shared/planned-workout-providers.ts`; 
 
 | Provider | Proof state | Truthful model and current gate |
 | --- | --- | --- |
-| Garmin | `fixture-only` | The local ignored Training API V2 partner contract proves separate Workout and Workout Schedule CRUD, `WORKOUT_IMPORT`, 100-step single-sport limits, and primary/secondary target fields. Redacted Running/Cycling fixtures cover time/distance/manual steps and repeats. Evaluation credentials, device coverage, completion correlation, and sandbox CRUD remain unproven. |
+| Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested, disabled HTTP adapter now cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Evaluation access, actual response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
 | COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
 | Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
 | Suunto | `fixture-only` | A scheduled workout maps to one dated SuuntoPlus Guide, not a native training-plan calendar. Time, distance, manual transition, repeats, and absolute HR/power/speed/pace/cadence targets map to Guide JSON; cadence converts from rpm to hertz. Guide entitlement, ZIP/icon transport, watch storage/pinning, supported-device behavior, CRUD, and FIT correlation need sandbox proof. |
@@ -109,7 +109,17 @@ Fixture compatibility is not delivery readiness. Before any adapter flag changes
 update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and provider-specific horizon behavior. The
 shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved only with an excluded
 test transport. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
-source of truth for its contracts, operations, evidence and maintenance. Every real provider transport remains unavailable.
+source of truth for its contracts, operations, evidence and maintenance. Garmin's #647 adapter additionally runs through
+synthetic HTTP fixtures and real Firestore transactions; all real provider transports remain unavailable behind the flags.
+The [Garmin adapter boundary](training-workspace.md#garmin-workoutcalendar-adapter-647) documents the per-request authority
+guard, step journal, exact endpoints, request bounds, permission flow and remaining certification checklist. In particular,
+Garmin's documented first workout POST has no external idempotency/lookup key: unknown acceptance remains blocked for
+attention, never retried blindly. Do not turn an empty schedule lookup into proof that a POST failed. HTTP response
+tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from
+completed mutation. Interrupted edits invalidate the old fully accepted payload digest, and provider-imposed retry
+deadlines survive authored changes and manual Retry; these are tested locally, not certified provider semantics. Focused Garmin
+sandbox/device evidence, quota/pacing validation and operator recovery are tracked in epic subissue #698; #647 stays open
+until its original certification acceptance is satisfied.
 Provider certification, production observability and kill switches remain tracked under epic #583. Do not hide an unmet gate in a code comment or silently
 narrow the epic acceptance criteria.
 

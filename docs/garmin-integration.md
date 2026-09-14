@@ -89,9 +89,21 @@ heart-rate/power/speed/pace/cadence ranges.
 
 All Garmin planned-workout delivery remains disabled. Relative targets require explicit degradation approval because
 the provider percentage fields do not transmit Quantified Self's stored reference snapshot. Secondary targets are
-rejected outside cycling and remain device-dependent for cycling. Evaluation credentials, representative device access,
-create/update/reschedule/delete/duplicate evidence, reconnect behavior, production review, and completed-activity
-correlation remain in issues #645 and #647. This proof does not authorize a provider call or deployment.
+rejected outside cycling and remain device-dependent for cycling. The #647 adapter now has synthetic HTTP and real
+Firestore worker tests for separate CRUD, Long IDs, partial recovery, permission repair, reconnect and deletion races.
+It reuses existing Garmin OAuth refresh/connection authority and binds existing OAuth secrets only to the Training task
+worker. Missing `WORKOUT_IMPORT` requires reconnect; it never grants permission from a browser-supplied account.
+The private ledger retains workout, schedule and workout-owner IDs independently of authored documents. The documented
+first-create endpoint has no idempotency key or external-ID lookup, so an unknown first-create outcome stays blocked for
+attention rather than being posted again. Provider responses and credentials never enter browser status or diagnostics.
+Past/completed copies remain protected, and provider-held copies may remain after disconnect/account deletion.
+
+The detailed implementation and certification checklist live in the
+[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Evaluation credentials, actual
+request/response and schedule-list/404 behavior, device rendering, sandbox CRUD/reconnect evidence and production review
+remain outstanding in #645/#647/#698/#655; #698 tracks the focused sandbox/device evidence and operator recovery
+procedure. Completed-activity correlation remains #651. No new completion hook is implemented.
+Neither the adapter nor the offline proof authorizes a provider call, deployment, or production enablement.
 
 ## Production configuration
 

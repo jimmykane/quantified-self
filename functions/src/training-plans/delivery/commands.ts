@@ -89,7 +89,7 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
       eligibleCount: workouts.filter(item => item.lifecycle === 'planned' && item.localDate >= today
         && (!transport || (Date.parse(item.localDate) - Date.parse(today)) / 86_400_000 <= transport.horizonDays)).length,
       warningCount: assessments.filter(item => item.level !== 'exact').length,
-      issues: [...new Set(assessments.flatMap(item => item.issues))].slice(0, 20),
+      issues: [...new Set([...(connection.issues ?? []), ...assessments.flatMap(item => item.issues)])].slice(0, 20),
       approvalDigest: workout && assessments[0]?.level === 'degraded' ? assessments[0].digest : null };
     if (previewOnly) return preview;
     const removal = command.action === 'stop';
