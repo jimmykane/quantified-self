@@ -147,28 +147,35 @@
                 <span class="cdk-visually-hidden">{{ selectedPlanActionBusy() ? 'Updating plan' : 'Plan actions' }}</span>
               </button>
               <mat-menu #planActionsMenu="matMenu" class="qs-menu-panel">
-                <button appHapticTap mat-menu-item type="button" (click)="setPlanLifecycle(plan, plan.lifecycle === 'active' ? 'paused' : 'active')">
+                <button appHapticTap mat-menu-item type="button" (mouseenter)="closePlanColorMenuOnSiblingHover(planColorMenuTrigger)"
+                  (click)="setPlanLifecycle(plan, plan.lifecycle === 'active' ? 'paused' : 'active')">
                   <mat-icon aria-hidden="true">{{ plan.lifecycle === 'active' ? 'pause_circle' : 'play_circle' }}</mat-icon>
                   <span>{{ plan.lifecycle === 'active' ? 'Pause plan' : 'Activate plan' }}</span>
                 </button>
-                <button appHapticTap mat-menu-item type="button" (click)="beginRename(plan)">
+                <button appHapticTap mat-menu-item type="button" (mouseenter)="closePlanColorMenuOnSiblingHover(planColorMenuTrigger)"
+                  (click)="beginRename(plan)">
                   <mat-icon aria-hidden="true">edit</mat-icon><span>Rename</span>
                 </button>
-                <button appHapticTap mat-menu-item type="button" [matMenuTriggerFor]="planColorMenu">
+                <button #planColorMenuTrigger="matMenuTrigger" appHapticTap mat-menu-item type="button"
+                  [matMenuTriggerFor]="planColorMenu">
                   <mat-icon [style.color]="selectedPlanAppearance().color" aria-hidden="true">palette</mat-icon><span>Plan color</span>
                 </button>
-                <button appHapticTap mat-menu-item type="button" (click)="beginShift(plan)">
+                <button appHapticTap mat-menu-item type="button" (mouseenter)="closePlanColorMenuOnSiblingHover(planColorMenuTrigger)"
+                  (click)="beginShift(plan)">
                   <mat-icon aria-hidden="true">date_range</mat-icon><span>Shift dates</span>
                 </button>
-                <button appHapticTap mat-menu-item type="button" (click)="openHistory({ kind: 'plan', id: plan.id })">
+                <button appHapticTap mat-menu-item type="button" (mouseenter)="closePlanColorMenuOnSiblingHover(planColorMenuTrigger)"
+                  (click)="openHistory({ kind: 'plan', id: plan.id })">
                   <mat-icon aria-hidden="true">history</mat-icon><span>History</span>
                 </button>
                 @if (plan.lifecycle !== 'archived') {
-                  <button appHapticTap mat-menu-item type="button" (click)="setPlanLifecycle(plan, 'archived')">
+                  <button appHapticTap mat-menu-item type="button" (mouseenter)="closePlanColorMenuOnSiblingHover(planColorMenuTrigger)"
+                    (click)="setPlanLifecycle(plan, 'archived')">
                     <mat-icon aria-hidden="true">archive</mat-icon><span>Archive</span>
                   </button>
                 }
-                <button appHapticTap mat-menu-item type="button" (click)="beginPlanDeletion(plan)">
+                <button appHapticTap mat-menu-item type="button" (mouseenter)="closePlanColorMenuOnSiblingHover(planColorMenuTrigger)"
+                  (click)="beginPlanDeletion(plan)">
                   <mat-icon aria-hidden="true">delete</mat-icon><span>Delete plan</span>
                 </button>
               </mat-menu>

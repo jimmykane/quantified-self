@@ -294,6 +294,9 @@ compact mode, matching Health. Each labelled row retains its sport, date, unit-a
 dividers separate consecutive workouts without card borders or a multi-column card grid. Skipped workouts keep an
 explicit state marker; normal planned workouts need no repeated badge.
 
+The Plan color submenu yields immediately when pointer hover moves to another plan action, clearing the submenu and its
+trigger highlight. Click/touch selection and Material's native keyboard submenu navigation remain unchanged.
+
 Creation includes a named Material **Plan color** selector; existing plans use **Plan actions -> Plan color**. The selected
 color appears beside the plan name and accents its schedule. `training-plan-appearance.helper.ts` maps the allowlisted
 names to the existing `AppColors` palette, blended toward theme foreground for legibility; Default follows theme primary.
