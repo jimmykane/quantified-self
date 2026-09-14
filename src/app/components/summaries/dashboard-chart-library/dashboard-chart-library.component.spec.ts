@@ -190,6 +190,23 @@ describe('responsive chart picker interactions', () => {
     expect(component.previewSeed().previewEventsByRange).toBeUndefined();
     expect(save).not.toHaveBeenCalled();
   });
+  it('keeps reused dashboard data live without fetching again or changing the selection', async () => {
+    const existing = getDashboardChartCatalog().find(entry => entry.definition.id === 'custom-distance-columns')!.tile;
+    user.settings.dashboardSettings.tiles = [existing];
+    fixture.componentRef.setInput('lane', 'section:activityOverview');
+    fixture.componentRef.setInput('seed', { tiles: [existing], tileEventsByOrder: { [existing.order]: buildDashboardExampleEvents(Date.now()) } });
+    await settle(); await component.toggle(); await settle();
+    const selected = component.state.selected()?.definition.id;
+    expect(component.suggested()).toHaveLength(2);
+    expect(events.getEventsBy).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('seed', { tiles: [existing], tileEventsByOrder: { [existing.order]: [] } });
+    await settle();
+    expect(component.suggested()).toHaveLength(0);
+    expect(component.rowPreviews().every(row => row.preview.availability?.state === 'no-data')).toBe(true);
+    expect(component.state.selected()?.definition.id).toBe(selected);
+    expect(events.getEventsBy).not.toHaveBeenCalled();
+  });
   it('opens a wide dialog without expanding the dashboard', async () => {
     await component.toggle(); await settle();
     expect(document.body.querySelector('mat-dialog-container')).not.toBeNull();

@@ -24,14 +24,22 @@ export class DashboardChartPreviewService {
   watchDerivedContexts(user: AppUserInterface, tiles: readonly TileSettingsInterface[], seed: DashboardPreviewInput): Observable<Partial<DashboardPreviewInput>> {
     const metricKinds = dashboardPreviewMissingMetricKinds(tiles, seed);
     if (!metricKinds.length) return of({});
-    return this.derived.watch(user, { metricKinds }).pipe(map(state => ({
-      derivedMetrics: Object.fromEntries(metricKinds.map(kind => [DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind], state[DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind]]])),
-      previewMetricStatuses: Object.fromEntries(metricKinds.map(kind => {
+    return this.derived.watch(user, { metricKinds, reportReadErrors: true }).pipe(scan((previous, state) => {
+      const statuses = Object.fromEntries(metricKinds.map(kind => {
         const context = DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind];
         const status = (context === 'formPoints' ? 'formStatus' : `${context}Status`) as keyof DashboardDerivedMetricsState;
         return [kind, state[status]];
-      })),
-    })));
+      }));
+      const updates = metricKinds.flatMap(kind => {
+        const context = DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind];
+        const value = state[context];
+        // Pending/failed snapshots can omit their payload. Keep the previous
+        // values until a completed result (including an empty one) replaces them.
+        return statuses[kind] === 'ready' || value != null && (!Array.isArray(value) || value.length)
+          ? [[context, value]] : [];
+      });
+      return { derivedMetrics: { ...previous.derivedMetrics, ...Object.fromEntries(updates) }, previewMetricStatuses: statuses };
+    }, {} as Partial<DashboardPreviewInput>));
   }
 
   /** Read each source once for the open section, independently of filtering or selection. */
@@ -52,24 +60,25 @@ export class DashboardChartPreviewService {
     for (const [key, tile] of sourceTiles) {
       const input = buildDashboardPreviewSeed(tile, seed, now);
       const source$ = defer((): Observable<Partial<DashboardPreviewInput>> => {
+        // Reused sources stay on the live dashboard seed. Copying them into this
+        // patch would shadow later dashboard emissions for the whole browse session.
         if (key === 'hrv') return input.hrvTrend && !input.hrvTrend.loading && !input.hrvTrend.error
-          ? of({ hrvTrend: input.hrvTrend })
+          ? of({})
           : this.hrv.watch(user.uid, '14d', now, user.settings.unitSettings).pipe(map(hrvTrend => ({ hrvTrend })));
         if (key === 'sleep') return input.sleepSessions?.length
-          ? of({ sleepSessions: input.sleepSessions, sleepTrendWindow: input.sleepTrendWindow })
+          ? of({})
           : this.sleep.watchForDashboard(user.uid, now - 14 * 86400000, now).pipe(map(sleepSessions => ({
             sleepSessions, sleepTrendWindow: { startMs: now - 14 * 86400000, endMs: now },
           })));
         if (key === 'routes') return input.routePreviews?.length
-          ? of({ routePreviews: input.routePreviews })
+          ? of({})
           : this.routes.watchRecentRoutePreviews(user, 50).pipe(map(routePreviews => ({ routePreviews })));
         const filters = normalizeDashboardTileEventFilters(tile['eventFilters']);
         const saved = seed.tiles.some(candidate => !seed.tileEventAnchorsByOrder?.[candidate.order]
           && normalizeDashboardTileEventFilters(candidate['eventFilters']).range === filters.range
           && seed.tileEventsByOrder?.[candidate.order] != null);
-        const events$ = saved || seed.previewEventsByRange?.[filters.range] != null ? of(input.events || [])
-          : this.watchEvents(user, filters, now);
-        return events$.pipe(map(events => ({ previewEventsByRange: { [filters.range]: events } })));
+        if (saved || seed.previewEventsByRange?.[filters.range] != null) return of({});
+        return this.watchEvents(user, filters, now).pipe(map(events => ({ previewEventsByRange: { [filters.range]: events } })));
       });
       streams$.push(withState([key], source$));
     }

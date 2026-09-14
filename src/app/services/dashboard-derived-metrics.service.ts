@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
-import { combineLatest, from, Observable, of } from 'rxjs';
+import { combineLatest, defer, from, Observable, of } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
 import type { DashboardFormPoint } from '../helpers/dashboard-form.helper';
 import { buildDashboardFormPointsFromDailyLoads } from '../helpers/dashboard-form.helper';
@@ -395,7 +395,7 @@ export class DashboardDerivedMetricsService {
     };
   watch(
     user: UserUIDCarrier,
-    options?: DashboardDerivedMetricsScopeOptions,
+    options?: DashboardDerivedMetricsScopeOptions & { reportReadErrors?: boolean },
   ): Observable<DashboardDerivedMetricsState> {
     const uid = `${user?.uid || ''}`.trim();
     if (!uid) {
@@ -403,7 +403,7 @@ export class DashboardDerivedMetricsService {
     }
     const metricDescriptors = this.resolveMetricDescriptors(options?.metricKinds);
     const snapshotStreams = metricDescriptors
-      .map(descriptor => this.watchMetricSnapshot(uid, descriptor.kind));
+      .map(descriptor => this.watchMetricSnapshot(uid, descriptor.kind, options?.reportReadErrors));
     return combineLatest(snapshotStreams).pipe(
       map((snapshots) => {
         const nextState = createDashboardDerivedMetricsMissingState();
@@ -513,7 +513,7 @@ export class DashboardDerivedMetricsService {
     return `${uid}:${[...metricKinds].sort().join(',')}`;
   }
 
-  private watchMetricSnapshot(uid: string, metricKind: DerivedMetricKind): Observable<SnapshotRecord> {
+  private watchMetricSnapshot(uid: string, metricKind: DerivedMetricKind, reportReadErrors = false): Observable<SnapshotRecord> {
     const metricDocRef = doc(
       this.firestore,
       'users',
@@ -521,9 +521,15 @@ export class DashboardDerivedMetricsService {
       DERIVED_METRICS_COLLECTION_ID,
       getDerivedMetricDocId(metricKind),
     );
-    return (docData(metricDocRef) as Observable<Record<string, unknown> | undefined>).pipe(
-      catchError(() => of(undefined)),
-    );
+    return defer(() => {
+      let lastSnapshot: SnapshotRecord;
+      return (docData(metricDocRef) as Observable<SnapshotRecord>).pipe(
+        tap(snapshot => { lastSnapshot = snapshot; }),
+        // Read-only discovery needs to distinguish a failed read from a missing
+        // document without requesting a rebuild or hiding the last loaded values.
+        catchError(() => of(reportReadErrors ? { ...lastSnapshot, status: 'failed' } : undefined)),
+      );
+    });
   }
 
   private resolveSnapshotStatus(

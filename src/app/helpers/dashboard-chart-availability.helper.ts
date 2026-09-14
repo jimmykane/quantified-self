@@ -48,15 +48,21 @@ export function dashboardChartHasRecordedData(tile: DashboardTileViewModel, inpu
     case C.DASHBOARD_FITNESS_CTL_KPI_CHART_TYPE: return finite(chart.fitnessCtl?.value);
     case C.DASHBOARD_FATIGUE_ATL_KPI_CHART_TYPE: return finite(chart.fatigueAtl?.value);
     case C.DASHBOARD_FITNESS_TREND_KPI_CHART_TYPE: return finite(resolveDashboardKpiTrendDelta(chart.fitnessCtl?.trend8Weeks || [], 4));
-    case C.DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE: return finite(resolveDashboardKpiTrendDelta(chart.fatigueAtl?.trend8Weeks || [], 4));
+    case C.DASHBOARD_FATIGUE_TREND_KPI_CHART_TYPE: return finite(resolveDashboardKpiTrendDelta(chart.fatigueAtl?.trend8Weeks || [], 1));
     case C.DASHBOARD_FORM_PLUS_7D_KPI_CHART_TYPE: return finite(chart.formPlus7d?.value);
-    case C.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE: return finite(chart.formNow?.value) && chart.freshnessForecast?.points?.some(point => point.isForecast && finite(point.formSameDay)) === true;
+    // Match the KPI renderer: neutral Form already means zero debt; negative
+    // Form uses the forecast, compact +7d estimate, or its existing 7+ days label.
+    case C.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE: return finite(chart.formNow?.value);
     case C.DASHBOARD_EASY_PERCENT_KPI_CHART_TYPE: return finite(chart.easyPercent?.value);
     case C.DASHBOARD_HARD_PERCENT_KPI_CHART_TYPE: return finite(chart.hardPercent?.value);
-    case C.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE: return intensity() && finite(chart.intensityDistribution?.latestEasyPercent) && finite(chart.intensityDistribution?.latestHardPercent);
+    case C.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE: return [
+      chart.intensityDistribution?.latestEasyPercent ?? chart.easyPercent?.value,
+      chart.intensityDistribution?.latestModeratePercent,
+      chart.intensityDistribution?.latestHardPercent ?? chart.hardPercent?.value,
+    ].some(finite);
     case C.DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE: return intensity();
     case C.DASHBOARD_EFFICIENCY_TREND_CHART_TYPE: return filterDashboardDerivedWeeklyRange(chart.efficiencyTrend?.points || [], range).some(point => finite(point.value) && point.sampleCount > 0);
-    case C.DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE: return finite(chart.efficiencyDelta4w?.deltaPct);
+    case C.DASHBOARD_EFFICIENCY_DELTA_4W_KPI_CHART_TYPE: return finite(chart.efficiencyDelta4w?.deltaAbs);
     case C.DASHBOARD_AEROBIC_CAPACITY_KPI_CHART_TYPE: return finite(chart.aerobicCapacity?.value) && chart.aerobicCapacity.observationCount > 0;
     case C.DASHBOARD_AEROBIC_DURABILITY_KPI_CHART_TYPE: return finite(chart.aerobicDurability?.value) && chart.aerobicDurability.sampleCount > 0;
     case C.DASHBOARD_FRESHNESS_FORECAST_CHART_TYPE: return chart.freshnessForecast?.points?.some(point => point.isForecast && finite(point.formSameDay)) === true;
@@ -70,7 +76,7 @@ export function dashboardChartHasRecordedData(tile: DashboardTileViewModel, inpu
 function needsHistory(chart: DashboardChartTileViewModel): boolean {
   if (C.isDashboardEfficiencyDelta4wKpiChartType(chart.chartType)) return finite(chart.efficiencyDelta4w?.latestValue) && chart.efficiencyDelta4w.baselineWeekCount === 0;
   if (C.isDashboardFitnessTrendKpiChartType(chart.chartType)) return finite(chart.fitnessCtl?.value) && !finite(resolveDashboardKpiTrendDelta(chart.fitnessCtl.trend8Weeks, 4));
-  if (C.isDashboardFatigueTrendKpiChartType(chart.chartType)) return finite(chart.fatigueAtl?.value) && !finite(resolveDashboardKpiTrendDelta(chart.fatigueAtl.trend8Weeks, 4));
+  if (C.isDashboardFatigueTrendKpiChartType(chart.chartType)) return finite(chart.fatigueAtl?.value) && !finite(resolveDashboardKpiTrendDelta(chart.fatigueAtl.trend8Weeks, 1));
   return false;
 }
 

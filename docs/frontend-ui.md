@@ -262,7 +262,10 @@ from the existing preview view model, with no axes, values, tooltips, focus targ
 accessible description includes its format and data source. Preview models are cached across search/group filtering;
 closing the picker disposes its thumbnail charts. Opening any section subscribes to its missing sources, scoped to the
 current owner: one combined prepared-metric subscription, one activity read per date range, 14 days of sleep, the shared
-HRV adapter, and up to 50 recent routes as needed. Current loaded contexts are reused. List and detail previews share
+HRV adapter, and up to 50 recent routes as needed. Reused dashboard contexts remain live rather than being copied into
+the library's fetched state, so later imports or removals update previews without another read. Pending or failed metric
+snapshots retain last available values; a completed empty result clears them. Per-metric read failures are reported
+explicitly rather than appearing as an indefinitely missing snapshot. List and detail previews share
 these results and per-source loading/error states; selecting an empty or failed result does not repeat the read.
 Filtering does not resubscribe, one failed source does not block other rows, and closing or changing owners releases
 all reads. Activity windows stay separate, with activity-type filters applied after the shared read; changing custom

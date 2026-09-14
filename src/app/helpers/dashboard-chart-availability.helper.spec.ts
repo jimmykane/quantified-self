@@ -63,4 +63,22 @@ describe('chart availability', () => {
     expect(resolveDashboardChartAvailability(vm, input, [], ['failed'])).toMatchObject({ state: 'error', hasData: true });
     expect(preview('kpi-acwr', { previewMetricStatuses: { acwr: 'missing' } }).availability?.state).toBe('updating');
   });
+
+  it('recognizes the same compact KPI values and fallbacks that the dashboard can display', () => {
+    const formNow = { value: 0, latestDayMs: Date.now(), trend8Weeks: [] };
+    expect(preview('kpi-recovery-debt', { derivedMetrics: { formNow } })).toMatchObject({ source: 'user', availability: { state: 'ready' } });
+    expect(preview('kpi-recovery-debt', { derivedMetrics: { formNow: { ...formNow, value: -10 },
+      formPlus7d: { ...formNow, value: 20, projectedDayMs: Date.now() + 7 * 86400000 },
+    } }).availability?.state).toBe('ready');
+    expect(preview('kpi-training-balance', { derivedMetrics: {
+      easyPercent: { latestWeekStartMs: Date.now(), value: 80, trend8Weeks: [] },
+      hardPercent: { latestWeekStartMs: Date.now(), value: 10, trend8Weeks: [] },
+    } })).toMatchObject({ source: 'user', availability: { state: 'ready' } });
+    expect(preview('kpi-training-balance', { derivedMetrics: {
+      intensityDistribution: { weeks: [], latestEasyPercent: null, latestModeratePercent: null, latestHardPercent: null } as never,
+    } }).availability?.state).toBe('no-data');
+    expect(preview('kpi-efficiency-delta-4w', { derivedMetrics: {
+      efficiencyDelta4w: { deltaAbs: 0.2, deltaPct: null } as never,
+    } })).toMatchObject({ source: 'user', availability: { state: 'ready' } });
+  });
 });

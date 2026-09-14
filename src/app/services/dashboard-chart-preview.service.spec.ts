@@ -48,6 +48,29 @@ describe('read-only chart preview data', () => {
   expect(result!.loading).toBe(true);
   expect(derived.watch).not.toHaveBeenCalled();
  });
+ it('retains last available KPI values during updates and failures, but accepts a completed empty result', () => {
+  const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'kpi-acwr')!.tile;
+  const source$ = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+  derived.watch.mockReturnValue(source$);
+  const values: DashboardChartPreview[] = [];
+  const acwr = { ratio: 1.2, acuteLoad7: 120, chronicLoad28: 100, latestDayMs: Date.now(), trend8Weeks: [] };
+  const subscription = TestBed.inject(DashboardChartPreviewService).watch(user, tile, {
+   tiles: [], derivedMetrics: { acwr }, previewMetricStatuses: { acwr: 'stale' },
+  }).subscribe(value => values.push(value));
+  const state = createDashboardDerivedMetricsMissingState();
+  state.acwrStatus = 'building';
+  source$.next(state);
+  expect(values.at(-1)).toMatchObject({ source: 'user', availability: { state: 'updating' }, tile: { acwr } });
+  state.acwr = { ...acwr, ratio: 1.3 }; state.acwrStatus = 'ready';
+  source$.next(state);
+  state.acwr = null; state.acwrStatus = 'failed';
+  source$.next(state);
+  expect(values.at(-1)).toMatchObject({ source: 'user', availability: { state: 'error' }, tile: { acwr: { ratio: 1.3 } } });
+  state.acwrStatus = 'ready';
+  source$.next(state);
+  expect(values.at(-1)).toMatchObject({ source: 'example', availability: { state: 'no-data' } });
+  subscription.unsubscribe();
+ });
  it('loads all non-KPI sources once, preserves incremental results and releases every read', () => {
   const subjects = [events.getEventsBy, sleep.watchForDashboard, routes.watchRecentRoutePreviews, hrv.watch, derived.watch]
     .map(mock => { const source$ = new Subject(); mock.mockReturnValue(source$); return source$; });

@@ -867,11 +867,13 @@ Training state and Readiness are fixed inside the optional Today summary:
   never exposes source-account keys. This remains neutral context, not a health assessment, training prescription, or
   input to Readiness, Form, or the TSS-only Training state.
 
-Dashboard **Reset to recommended** recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
-useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
-its default 14-day window, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild
-merely because the inline chart library was opened. Selecting a chart reads existing prepared snapshots only;
-thumbnail examples and preview fallback data never enter Training calculations or trigger a rebuild.
+Dashboard **Reset to starter dashboard** restores Today, Weekly Training Time (90 days), and Calendar after confirmation.
+Suggestions inside the chart library use existing displayable evidence: activity charts use their bounded event window,
+Sleep and HRV use 14 days, and Power Curve uses each discipline's prepared 1-year snapshot. New Intensity and Efficiency
+tiles show 12 weeks; existing saved ranges remain unchanged. The library opts into per-metric read-error reporting from
+`DashboardDerivedMetricsService.watch`, retaining last available values with an error notice and keeping other metrics
+usable. It never calls ensure/rebuild; the normal Dashboard and Training freshness lifecycle remains independent.
+Thumbnail examples and preview fallback data never enter Training calculations or trigger a rebuild.
 
 ### Writes and ingress
 
