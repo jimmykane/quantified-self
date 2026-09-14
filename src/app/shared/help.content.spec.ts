@@ -928,6 +928,11 @@ describe('help.content', () => {
     expect(serviceConnectionsSection?.content).toContain('marked **PRO**');
     expect(serviceConnectionsSection?.content).toContain('MCP is marked **FREE**');
     expect(serviceConnectionsSection?.content).toContain('can always be disconnected');
+    expect(serviceConnectionsSection?.content).toContain("each account's last-reported grants");
+    expect(serviceConnectionsSection?.content).toContain('**Not reported**');
+    expect(serviceConnectionsSection?.content).toContain('**Manage in Garmin**');
+    expect(serviceConnectionsSection?.content).toContain('You do not need to disconnect in QS first');
+    expect(serviceConnectionsSection?.content).toContain('reauthorization still requires Pro');
     expect(serviceConnectionsSection?.content).toContain('When a disconnect begins, automatic activity and saved-route delivery');
     expect(serviceConnectionsSection?.content).toContain('you do not need to keep the page open');
     expect(serviceConnectionsSection?.content).toContain('Health history, and Sleep sessions stay in your account');

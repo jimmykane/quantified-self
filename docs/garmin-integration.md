@@ -78,6 +78,24 @@ Health minimum-start clipping independently adds up to 30 seconds of headroom af
 
 Sleep and Health share the existing 30-day Garmin history cooldown, but their ranges are independent: a provider-discovered Sleep minimum does not shorten another Health family's range. The callable reports `sleepQueued` and `healthQueued` separately while retaining `queued` as the number of Sleep date-range requests. Garmin Summary Resender remains an operational recovery option for a deliberately bounded family/range after live delivery is healthy; it is not the normal user history flow, and no local credential migration script is required.
 
+## Permission visibility and management
+
+Connections → Garmin shows compact permission rows from the existing backend-owned connection-account projection.
+Each account keeps its own grants: `Granted`, `Not granted` for an explicitly absent grant, or `Not reported` when the
+saved permissions array is missing/malformed. The view includes all six documented permission families and any extra
+provider-reported scope names without implying QS feature availability. It never reads OAuth documents or writes grants.
+Unknown legacy permissions do not hide the known account behind a permanent loading message.
+
+**Manage in Garmin** opens Garmin Connect's account/Connected Apps management; choose Quantified Self and manage the
+permissions Garmin exposes there. **Reconnect** is also available for a connected account and refreshes authorization
+through the existing Pro-gated OAuth flow, without first performing the destructive explicit-disconnect lifecycle.
+Viewing grants and opening Garmin's management UI do not require Pro. A pending OAuth start disables Disconnect and
+other connection actions; disconnect-pending still blocks ordinary reconnect. Loading a new account hides the prior
+permission snapshot. Permission callbacks and successful OAuth continue to update the safe projection; there is no
+new callable, live polling, browser token access, or frontend grant mutation. Backend delivery readiness/consent checks
+remain authoritative. Garmin's [account preferences guidance](https://support.garmin.com/en-SG/?faq=JwIU2Sofyy6ThtzhH8ENX6)
+describes connected-app management.
+
 ## Training-planning proof boundary
 
 The ignored local Garmin Training API V2 version 1.0 partner contract is available for development, but it is never

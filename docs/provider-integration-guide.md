@@ -531,6 +531,15 @@ The frontend should reuse the Services and provider-presentation patterns rather
 
 ### Required product surfaces
 
+Garmin's connection overview displays all known permissions per browser-safe account snapshot, including optional
+Workout/Course Import grants. Explicit empty arrays mean not granted; absent or malformed arrays mean not reported,
+not denial or endless loading. Extra provider permission names remain visible as text, and separate accounts' grants
+are never combined for display or authority. The rows are a last-reported snapshot, not a live Garmin check or local
+consent toggles. **Manage in Garmin** opens the existing connected-app management path; **Reconnect** uses the existing
+Pro-gated OAuth flow even when the account still appears connected. Do not require an explicit disconnect to refresh
+consent: it disables other sync routes. Pending disconnect/reconnect actions cannot overlap, and merely rendering the
+view does not contact Garmin, refresh credentials, change grants, or opt workouts into delivery.
+
 - Add the provider to `ServicesComponent`, its navigation order, connection-state map, query-param selection, and focused tool-dialog switch.
 - Create or adapt a provider service component using `ServicesAbstractComponentDirective`. Keep connection summary and advanced tools compatible with the dialog contract (`showConnectionSummary`, `showAdvancedTools`, `activeProviderTool`, and `showOnlyActiveProviderTool`).
 - Show connection, reconnect, disconnect-pending, locked/Pro, loading, and history states accessibly. Upsell actions must be actual buttons, not a click handler on a non-interactive panel.

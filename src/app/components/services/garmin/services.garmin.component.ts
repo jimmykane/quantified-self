@@ -15,6 +15,7 @@ import { GARMIN_REQUIRED_PERMISSIONS } from '../../../../../functions/src/garmin
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 import { Subscription } from 'rxjs';
+import { GARMIN_PERMISSION_DETAILS } from '../../../helpers/garmin-permissions.helper';
 import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
@@ -43,23 +44,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   public serviceName: ServiceNames = ServiceNames.GarminAPI;
 
-  public readonly permissionLabels: { [key: string]: string } = {
-    'HISTORICAL_DATA_EXPORT': 'History Importer',
-    'ACTIVITY_EXPORT': 'Activity Sync',
-    'WORKOUT_IMPORT': 'Workout Import',
-    'HEALTH_EXPORT': 'Health Export',
-    'COURSE_IMPORT': 'Course Import',
-    'MCT_EXPORT': 'Menstrual Cycle Tracking Export'
-  };
-
-  public readonly permissionExplanations: { [key: string]: string } = {
-    'HISTORICAL_DATA_EXPORT': 'Without this, you cannot import your past activities from Garmin Connect.',
-    'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
-    'WORKOUT_IMPORT': 'Required for planned-workout delivery when available for your account. Connecting alone does not send workouts.',
-    'HEALTH_EXPORT': 'Required for Garmin Sleep and supported Health summary imports.',
-    'COURSE_IMPORT': 'Required to send saved routes and manually selected GPX or FIT routes to Garmin Connect.',
-    'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
-  };
+  public readonly permissionLabels = Object.fromEntries(GARMIN_PERMISSION_DETAILS.map(permission => [permission.id, permission.label]));
+  public readonly permissionExplanations = Object.fromEntries(GARMIN_PERMISSION_DETAILS.map(permission => [permission.id, permission.description]));
 
   public readonly garminToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
@@ -114,12 +100,11 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get shouldShowConnectAction(): boolean {
-    return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
-      && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
+    return !this.isDisconnectPending || this.isDisconnectManualReviewRequired;
   }
 
   get connectButtonLabel(): string {
-    return this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
+    return this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired ? 'Reconnect' : 'Connect';
   }
 
   get connectionDescription(): string {
@@ -218,6 +203,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
    * Attempts to open Garmin Connect mobile app, falls back to web
    */
   openGarminConnectApp(): void {
+    if (this.isConnecting || this.isDisconnecting || this.isDisconnectPending) return;
+    this.hapticsService.selection();
     this.deepLinkService.openGarminConnectApp();
   }
 

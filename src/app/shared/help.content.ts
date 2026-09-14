@@ -884,6 +884,14 @@ The **Connections** page is available to every signed-in account. Starter and Ba
 
 Services opens each provider on a compact connection overview. Choose an action on an activity, sleep history, route, upload, or automatic sync card. For non-Pro accounts, the action opens the Pro subscription page. For Pro accounts, it opens the provider tool in a dialog; close the dialog to return to the unchanged overview. A connected provider can always be disconnected after Pro access ends. Once any grace period expires, an automated subscription check disconnects remaining expired Pro provider connections.
 
+### Garmin permissions
+
+In **Connections → Garmin**, **Permissions** lists each account's last-reported grants, including **Workout Import** and **Course Import**. **Granted** and **Not granted** describe Garmin's saved response. **Not reported** means QS does not yet have permission details for that connection—not that you denied access. A granted permission does not mean every related feature is available in QS.
+
+Select **Manage in Garmin**, find **Quantified Self** under Garmin Connect's **Connected Apps**, and manage the permissions Garmin offers there. Then select **Reconnect** in QS to refresh the authorization. You do not need to disconnect in QS first. Viewing these details and opening Garmin's settings are available without Pro; reauthorization still requires Pro. These rows are not local permission toggles or a live Garmin check, and opening the page does not change access or opt workouts into sync.
+
+### Disconnecting a provider
+
 When a disconnect begins, automatic activity and saved-route delivery involving that provider turn off. If the connection shows **Disconnect pending**, sync is paused while the server retries; you do not need to keep the page open. Operational cleanup can finish in the background after disconnect completes. Your previously imported activities, saved routes, Health history, and Sleep sessions stay in your account. After reconnecting, turn any automatic delivery directions you want back on yourself.
 
 At the top of Connections, **Your data flow** explains that connected providers import new activities into Quantified Self. Non-Pro accounts see a Pro upgrade explanation instead of an unusable connection prompt. Once two or more services are connected with Pro access, it shows a provider-to-provider matrix of compatible automatic activity and saved-route delivery paths through Quantified Self. On phones, the same routes are grouped by source and destination instead of using a wide table. Enabled routes show **On**, available routes remain opt-in, and a configured route that cannot run because a provider is disconnected or needs reconnection is marked **Needs connection**. With no services connected, it prompts a Pro account to connect its first provider.

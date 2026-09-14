@@ -1,0 +1,16 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.garmin-permissions p {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.garmin-permissions__account {
+  overflow-wrap: anywhere;
+}
+
+.garmin-permissions__status {
+  white-space: nowrap;
+}

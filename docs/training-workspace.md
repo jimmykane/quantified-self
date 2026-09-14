@@ -570,6 +570,11 @@ uses the same predicate and recomputes on sign-in, account switch and sign-out; 
 The pilot retains Auth/App Check, Pro/grace, explicit plan or standalone consent, compatibility approval, destination
 authority, deletion fencing, and existing recovery/Stop rules. Legacy Garmin connections without current connection and
 credential generations or recorded `WORKOUT_IMPORT` must reconnect; do not fabricate permission or migrate consent.
+Connectivity's Garmin overview exposes per-account last-reported permission rows and a **Manage in Garmin** action.
+It keeps **Reconnect** available even while the existing account appears connected, so refreshing Workout Import does
+not require an explicit disconnect that disables other sync routes. An unknown snapshot is not a denied grant, and
+the display never authorizes delivery or changes consent. This permission-management UI is available to all connected
+Garmin users; the separate Training UI and backend pilot UID restrictions are unchanged.
 Start evaluation with one explicitly sent future standalone workout, not an opted-in multi-workout plan.
 
 Deployment requires separate explicit approval. Before activation, inspect only the pilot account's existing settings,

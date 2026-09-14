@@ -1,14 +1,15 @@
 <ng-template #garminPermissionUpdateGuidance>
-  <p><strong>To update permissions:</strong></p>
-  <a class="tool-link" (click)="openGarminConnectApp(); $event.preventDefault()" href="javascript:void(0)">
-    Open Garmin Connect
-  </a>
+  <p><strong>Change permissions in Garmin Connect</strong></p>
+  <button mat-button type="button" (click)="openGarminConnectApp()"
+    [disabled]="!user || isLoading || isConnecting || isDisconnecting || isDisconnectPending">
+    <mat-icon>open_in_new</mat-icon> Manage in Garmin
+  </button>
   <p><strong>Navigate to:</strong></p>
   <ul class="permissions-list">
     <li><strong>Web:</strong> Account Information, then Connected Apps</li>
     <li><strong>App:</strong> More, Settings, then Connected Apps</li>
   </ul>
-  <p class="permission-description">After updating permissions, reconnect to refresh.</p>
+  <p class="permission-description">Select Quantified Self under Connected Apps to manage the permissions Garmin offers. Then use Reconnect here to refresh the saved authorization. You do not need to disconnect in Quantified Self first. Reconnecting requires Pro; viewing permissions and managing access in Garmin do not.</p>
 </ng-template>
 
 <div
@@ -48,7 +49,7 @@
     @if (isConnectedToService()) {
     <div class="connection-account-row">
       <div class="connection-account-info">
-    @if (!garminUserID || !hasPermissionsLoaded) {
+    @if (isLoading || !garminUserID) {
     <app-service-syncing-state></app-service-syncing-state>
     } @else {
     <div class="connected-account-list" role="list">
@@ -85,7 +86,7 @@
       </div>
 
       <button mat-stroked-button class="connection-disconnect-button qs-mat-warn"
-        [disabled]="isLoading || isDisconnecting" (click)="deauthorizeService($event)">
+        [disabled]="isLoading || isDisconnecting || isConnecting" (click)="deauthorizeService($event)">
         @if (isDisconnecting) {
         <span class="connection-action-content">
           <mat-spinner diameter="20" class="qs-spinner-warn"></mat-spinner>
@@ -99,21 +100,9 @@
       </button>
     </div>
 
-    <div *ngIf="missingPermissions.length > 0" class="qs-warning-box">
-      <mat-icon>warning</mat-icon>
-      <div class="qs-warning-content">
-        <strong>Missing Permissions</strong>
-        <p>Some features are disabled. Missing permissions:</p>
-        <ul class="permissions-list">
-          <li *ngFor="let permission of missingPermissions">
-            <div class="permission-name">{{ getPermissionLabel(permission) }}</div>
-            <div class="permission-description">{{ getPermissionExplanation(permission) }}</div>
-          </li>
-        </ul>
-        <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
-      </div>
-    </div>
     }
+    <app-garmin-permissions [accounts]="user ? serviceTokens : undefined" [loading]="isLoading"></app-garmin-permissions>
+    <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
     </div>
 
     <div connection-actions class="tool-actions">
@@ -125,7 +114,7 @@
       }
       @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
-        [disabled]="!user || isLoading || isConnecting" (click)="connectWithService($event)">
+        [disabled]="!user || isLoading || isConnecting || isDisconnecting" (click)="connectWithService($event)">
         @if (isConnecting) {
         <span class="connection-action-content">
           <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
@@ -133,7 +122,7 @@
         </span>
         } @else {
         <span class="connection-action-content">
-          <mat-icon>{{ canConnectServiceWithCurrentAccess ? (isReconnectRequired || isDisconnectManualReviewRequired ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
+          <mat-icon>{{ canConnectServiceWithCurrentAccess ? (connectButtonLabel === 'Reconnect' ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
           {{ canConnectServiceWithCurrentAccess ? connectButtonLabel : 'View Pro plans' }}
         </span>
         }
