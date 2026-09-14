@@ -21,6 +21,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
 import { SharedModule } from '../../modules/shared.module';
@@ -212,6 +213,7 @@ export class PlansWorkspaceComponent {
   readonly deletingPlanId = signal<string | null>(null);
   readonly deleteDisposition = signal<DeleteTrainingPlanRequestV1['workoutDisposition']>('convert-to-standalone');
   readonly editor = signal<WorkoutEditorSession | null>(null);
+  readonly workoutDatePickerValue = computed(() => workoutDatePickerInput(this.editor()?.value.localDate ?? ''));
   readonly busyAction = signal<string | null>(null);
   readonly historyPanel = signal<HistoryPanelState | null>(null);
   readonly browsing = computed(() => !this.editor() && !this.showPlanForm());
@@ -749,6 +751,10 @@ export class PlansWorkspaceComponent {
     this.editor.update(session => session ? { ...session, value: { ...session.value, [field]: value } } : null);
   }
 
+  updateWorkoutDate(value: Dayjs | null): void {
+    this.updateEditorField('localDate', workoutLocalDate(value));
+  }
+
   updateEditorDestination(planId: string | null): void {
     if (this.busyAction() || this.editor()?.destinationPlanId === planId) return;
     this.haptics.selection();
@@ -1230,6 +1236,24 @@ function todayLocalDate(now = new Date()): string {
   const month = `${now.getMonth() + 1}`.padStart(2, '0');
   const day = `${now.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function workoutDatePickerInput(localDate: string): Dayjs | null {
+  try {
+    return dayjs(normalizeTrainingLocalDate(localDate));
+  } catch {
+    return null;
+  }
+}
+
+function workoutLocalDate(value: Dayjs | null): string {
+  if (!dayjs.isDayjs(value) || !value.isValid()) return '';
+  const candidate = `${value.year()}-${`${value.month() + 1}`.padStart(2, '0')}-${`${value.date()}`.padStart(2, '0')}`;
+  try {
+    return normalizeTrainingLocalDate(candidate);
+  } catch {
+    return '';
+  }
 }
 
 function defaultPlanDraft(now = new Date()): PlanDraft {

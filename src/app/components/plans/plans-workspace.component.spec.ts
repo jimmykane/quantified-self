@@ -5,11 +5,13 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
 import { MatFormField } from '@angular/material/form-field';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter, type Data, type ParamMap } from '@angular/router';
 import { ActivityTypes, DistanceUnits } from '@sports-alliance/sports-lib';
 import { normalizeUserUnitSettings } from '@shared/unit-aware-display';
+import dayjs from 'dayjs';
 import { BehaviorSubject, Subject, concat, defer, of, type Observable } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -717,6 +719,38 @@ describe('PlansWorkspaceComponent', () => {
       destinationPlanId: null,
       original: { id: 'standalone-workout' },
     });
+  });
+
+  it('uses the localized Material date picker while preserving the canonical workout date', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+    const dateInput = fixture.debugElement.query(By.directive(MatDatepickerInput))
+      .injector.get(MatDatepickerInput);
+
+    expect(fixture.nativeElement.querySelector('.workout-editor input[type="date"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.workout-editor mat-datepicker-toggle')).toBeTruthy();
+    expect((dateInput.value as { format(pattern: string): string }).format('YYYY-MM-DD')).toBe('2026-09-09');
+
+    fixture.componentInstance.updateWorkoutDate(dayjs('2027-01-03'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.editor()?.value.localDate).toBe('2027-01-03');
+    expect((dateInput.value as { format(pattern: string): string }).format('YYYY-MM-DD')).toBe('2027-01-03');
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('does not silently retain the previous workout date after an invalid date-picker value', async () => {
+    setRouteState({ mode: 'edit', workoutId: 'plan-workout' });
+    const fixture = await renderPlans();
+
+    fixture.componentInstance.updateWorkoutDate(null);
+    await fixture.componentInstance.saveWorkout();
+
+    expect(fixture.componentInstance.editor()?.value.localDate).toBe('');
+    expect(mutate).not.toHaveBeenCalled();
+    expect(haptics.error).toHaveBeenCalledOnce();
   });
 
   it('returns to the linked workout date when cancelling the calendar-originated editor', async () => {

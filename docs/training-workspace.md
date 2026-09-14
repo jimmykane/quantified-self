@@ -340,7 +340,9 @@ completed-activity matching, or new metric is introduced by this presentation ch
 Creating a plan or editing a workout is a focused view: scope navigation, lists, and other editors are hidden until Save
 or Cancel. The title field receives focus on entry; focus returns to the contextual add action (or scope navigation) on
 exit. A successful workout save selects its destination scope, including standalone/plan transfers. Pending saves disable
-native inputs and Material selectors, retain the draft on failure, and use a stable icon/spinner content row. Save/Cancel
+native inputs and Material selectors, retain the draft on failure, and use a stable icon/spinner content row. The workout
+date uses the app's localized Material date picker while persisting the unchanged `YYYY-MM-DD` calendar label; clearing or
+typing an invalid value blocks saving instead of retaining the previous date. Save/Cancel
 stay in a sticky, safe-area-aware footer for long mobile editors. Plan/workout forms are unboxed sections, and editable
 steps and repeat blocks reuse the same compact-row primitive with labelled headings and projected remove controls.
 The revision-history section also uses that primitive, while destructive plan confirmation retains its Material card.
