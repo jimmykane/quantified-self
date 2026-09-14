@@ -18,7 +18,7 @@ import { DELIVERY_SERVICES, productionDeliveryRuntime } from './runtime';
 import { deliveryIdentity } from './intent';
 import { projectDelivery } from './store';
 
-describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Firestore transactions', () => {
+describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Firestore transactions', { timeout: 30_000 }, () => {
   // Never accept a production project or a non-loopback emulator endpoint.
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   if (host && !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error('Loopback emulator required.');
@@ -404,7 +404,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     const root = db.collection(service.tokens).doc(uid);
     await user.collection('meta').doc(service.name).set({ connectionState: 'connected', connectionStateGeneration: 'g1' });
     await root.set({ activeOAuthCredentialGeneration: 'credential' });
-    await root.collection('tokens').doc('first').set({ userID: 'provider-a', tokenCredentialGeneration: 'credential', accessToken: 'fixture-only' });
+    await root.collection('tokens').doc('first').set({ userID: 'provider-a', tokenCredentialGeneration: 'credential', accessToken: 'fixture-only', serviceName: service.name, permissions: ['WORKOUT_IMPORT'] });
     const actual = productionDeliveryRuntime(db);
     const resolve = () => db.runTransaction(tx => actual.connection(tx, uid, 'garmin'));
     expect((await resolve()).state).toBe('connected');

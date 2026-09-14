@@ -2,6 +2,11 @@
 
 Quantified Self deploys backend credentials through Google Cloud Secret Manager and Firebase `defineSecret()` bindings. A Function receives only the secrets declared for that endpoint in `functions/src/secrets.ts`; an endpoint absent from the policy must receive none.
 
+The disabled Garmin Training adapter (#647) reuses the Garmin client ID/secret through the shared token-refresh helper.
+`processTrainingDeliveryTask` therefore binds that existing pair; the Training preview/mutation callables, queue trigger,
+and recovery dispatcher do not. No new secret or deployment is introduced, and binding credentials does not enable the
+provider: all Training delivery switches remain false until separately reviewed certification and enablement.
+
 ## Managed inventory
 
 | Area | Secret Manager names |

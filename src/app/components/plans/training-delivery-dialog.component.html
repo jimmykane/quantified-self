@@ -31,8 +31,10 @@
           @if (preview.result.connection !== 'connected') { <p>Repair the connection in <a routerLink="/services" (click)="dialogRef.close()" appHapticTap>Connectivity</a>.</p> }
           @if (preview.result.warningCount) {
             <p>{{ preview.result.warningCount }} workouts need review. Unsupported workouts cannot be sent; degraded workouts require individual approval.</p>
-            <ul>@for (issue of preview.result.issues; track $index) { <li>{{ issue }}</li> }</ul>
           }
+        }
+        @if (preview.result.issues.length) {
+          <ul>@for (issue of preview.result.issues; track $index) { <li>{{ issue }}</li> }</ul>
         }
         <button mat-flat-button appHapticTap type="button" (click)="confirm()" [disabled]="busy() || !canConfirm()">
           {{ draft.action === 'stop' ? 'Confirm stop sync' : draft.action === 'approve' ? 'Approve these differences' : 'Confirm' }}

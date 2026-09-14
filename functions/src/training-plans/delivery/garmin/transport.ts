@@ -1,0 +1,246 @@
+import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
+import { normalizeTrainingLocalDate, type ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
+import { serializeGarminWorkoutV1 } from '../../providers/garmin-workout.serializer';
+import { assessTrainingDeliveryMapping } from '../mapping';
+import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
+  type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport } from '../contracts';
+import { GarminTrainingHttpError, garminBody, garminId, type GarminTrainingClient, type GarminTrainingRequest } from './http';
+
+const STEPS = ['workout-create', 'workout-update', 'schedule-create', 'schedule-update', 'schedule-delete', 'workout-delete', 'finished'] as const;
+type Step = typeof STEPS[number];
+type ObjectValue = Record<string, unknown>;
+function object(value: unknown): ObjectValue {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TrainingDeliveryTransportError('uncertain');
+  return value as ObjectValue;
+}
+function schedule(value: unknown): { id: string; workoutId: string; date: string } {
+  const data = object(value);
+  try { return { id: garminId(data.scheduleId), workoutId: garminId(data.workoutId), date: normalizeTrainingLocalDate(data.date) }; }
+  catch { throw new TrainingDeliveryTransportError('uncertain'); }
+}
+function matches(expected: unknown, actual: unknown): boolean {
+  if (expected === null) return actual === null || actual === undefined;
+  if (Array.isArray(expected)) return Array.isArray(actual) && expected.length === actual.length && expected.every((value, i) => matches(value, actual[i]));
+  if (expected && typeof expected === 'object') return !!actual && typeof actual === 'object'
+    && Object.entries(expected).every(([key, value]) => matches(value, (actual as ObjectValue)[key]));
+  return expected === actual;
+}
+
+/** Offline-tested Training API V2 adapter. The production factory remains gated off.
+ * No external create key or workout-list endpoint is invented: a lost first-create ID
+ * is deliberately unrecoverable automatically. QS identity lives in the private ledger. */
+export class GarminTrainingTransport implements TrainingDeliveryTransport {
+  readonly mappingVersion = 'fixtures-v1';
+  /** QS delivery policy, not an asserted Garmin API maximum. Confirm under #645. */
+  readonly horizonDays = 365;
+  constructor(private readonly client: GarminTrainingClient, private readonly now: () => number = Date.now) {}
+  assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string) {
+    return assessTrainingDeliveryMapping('garmin', workout, destinationKey, timeZone);
+  }
+  canRemove(artifact: DeliveryArtifact, today: string): boolean { return !artifact.completed && artifact.localDate >= today; }
+
+  private validate(operation: DeliveryOperation): void {
+    const progress = operation.progress;
+    if (progress && (progress.version !== 1 || !STEPS.includes(progress.step as Step)
+      || !['ready', 'started', 'rejected', 'accepted'].includes(progress.state))) throw new TrainingDeliveryTransportError('uncertain');
+    if (operation.artifact) {
+      const keys = Object.keys(operation.artifact.ids);
+      if (!keys.includes('workout') || keys.some(key => !['workout', 'schedule', 'owner'].includes(key))) throw new TrainingDeliveryTransportError('uncertain');
+      keys.forEach(key => garminId(operation.artifact!.ids[key]));
+    }
+  }
+  private async save(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, artifact: DeliveryArtifact | null,
+    step: Step, state: DeliveryTransportProgress['state']): Promise<void> {
+    const progress: DeliveryTransportProgress = { version: 1, step, state };
+    await checkpoint(artifact, progress);
+    // Mutate in-memory state only after the journal is durable. This also makes the
+    // adapter usable with a checkpoint implementation that does not mutate its argument.
+    operation.artifact = artifact;
+    operation.progress = progress;
+  }
+  private async read(request: GarminTrainingRequest, guard: DeliveryRequestGuard): Promise<unknown | null> {
+    await guard(false);
+    const result = await this.client(request, () => guard(false));
+    return result.status === 404 ? null : result.body;
+  }
+  private async write(operation: DeliveryOperation, step: Step, request: GarminTrainingRequest,
+    checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<unknown | null> {
+    await this.save(operation, checkpoint, operation.artifact, step, 'ready');
+    await guard(true);
+    try {
+      const result = await this.client(request, async () => {
+        await guard(true);
+        await this.save(operation, checkpoint, operation.artifact, step, 'started');
+        // Token refresh and the journal transaction may take time. Recheck immediately
+        // before fetch, including Stop, Pro loss, deletion, date rollover and lease expiry.
+        try { await guard(true); }
+        catch (error) {
+          // No request has started: if this journal succeeds, a later recovery may
+          // safely retire or retry the operation instead of guessing about a POST.
+          await this.save(operation, checkpoint, operation.artifact, step, 'rejected');
+          throw error;
+        }
+      });
+      return result.body;
+    } catch (error) {
+      if (error instanceof GarminTrainingHttpError && error.rejected) {
+        await this.save(operation, checkpoint, operation.artifact, step, 'rejected');
+      }
+      throw error;
+    }
+  }
+  private assertFuture(operation: DeliveryOperation): void {
+    const today = trainingDeliveryLocalDate(this.now(), operation.timeZone);
+    if ((operation.artifact && !this.canRemove(operation.artifact, today))
+      || (operation.kind === 'upsert' && (!operation.workout || operation.workout.localDate < today))) {
+      throw new TrainingDeliveryTransportError('uncertain');
+    }
+  }
+  private async ownedWorkout(operation: DeliveryOperation, guard: DeliveryRequestGuard): Promise<ObjectValue | null> {
+    const artifact = operation.artifact!;
+    const raw = await this.read({ method: 'GET', path: `/training-api/workout/v2/${garminId(artifact.ids.workout)}` }, guard);
+    if (raw === null) return null;
+    const value = object(raw);
+    if (garminId(value.workoutId) !== artifact.ids.workout || (artifact.ids.owner && garminId(value.ownerId) !== artifact.ids.owner)
+      || value.workoutProvider !== 'Quantified Self' || value.workoutSourceId !== 'Quantified Self') throw new TrainingDeliveryTransportError('uncertain');
+    garminId(value.ownerId);
+    return value;
+  }
+  private async ownedSchedule(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint,
+    guard: DeliveryRequestGuard): Promise<ReturnType<typeof schedule> | null> {
+    const artifact = operation.artifact!;
+    const raw = await this.read({ method: 'GET', path: `/training-api/schedule/${garminId(artifact.ids.schedule)}` }, guard);
+    if (raw === null) return null;
+    const value = schedule(raw);
+    if (value.id !== artifact.ids.schedule || value.workoutId !== artifact.ids.workout) throw new TrainingDeliveryTransportError('uncertain');
+    if (value.date < trainingDeliveryLocalDate(this.now(), operation.timeZone)) {
+      // Retain the provider-observed past date so reconciliation cannot remove or
+      // rewrite a copy that was moved into the past outside QS.
+      await checkpoint({ ...artifact, localDate: value.date });
+      throw new TrainingDeliveryTransportError('uncertain');
+    }
+    return value;
+  }
+
+  async execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null> {
+    this.validate(operation);
+    this.assertFuture(operation);
+    if (operation.progress === undefined || operation.progress?.state === 'started') throw new TrainingDeliveryTransportError('uncertain');
+    if (operation.kind === 'remove') return this.remove(operation, checkpoint, guard);
+    const workout = operation.workout!;
+    // The shared worker binds approval to the exact assessment digest. Rechecking here
+    // prevents an adapter/serializer version mismatch from silently changing the payload.
+    const assessment = this.assess(workout, operation.destinationKey, operation.timeZone);
+    if (assessment.digest !== operation.digest || assessment.level === 'unsupported') throw new TrainingDeliveryTransportError('terminal');
+    const payload = serializeGarminWorkoutV1(workout.structure, { name: workout.title, allowDegraded: true }).artifact;
+    let currentSchedule: ReturnType<typeof schedule> | null = null;
+    if (operation.artifact?.ids.schedule) currentSchedule = await this.ownedSchedule(operation, checkpoint, guard);
+    if (operation.artifact) {
+      const existing = await this.ownedWorkout(operation, guard);
+      // A removed/replaced remote workout requires explicit reconciliation, not a
+      // replacement POST that could duplicate an eventually-consistent provider copy.
+      if (!existing) throw new TrainingDeliveryTransportError('uncertain');
+      const owner = garminId(existing.ownerId);
+      const artifact: DeliveryArtifact = { ...operation.artifact, ids: { ...operation.artifact.ids, owner } };
+      await checkpoint(artifact); operation.artifact = artifact;
+      if (!matches(payload, existing)) {
+        await this.write(operation, 'workout-update', { method: 'PUT', path: `/training-api/workout/v2/${artifact.ids.workout}`,
+          body: garminBody(payload as unknown as ObjectValue, { workoutId: artifact.ids.workout, ownerId: owner }) }, checkpoint, guard);
+      }
+      await this.save(operation, checkpoint, artifact, 'workout-update', 'accepted');
+    } else {
+      const raw = await this.write(operation, 'workout-create', { method: 'POST', path: '/workoutportal/workout/v2',
+        body: garminBody(payload as unknown as ObjectValue) }, checkpoint, guard);
+      const created = object(raw);
+      const ids: Record<string, string> = { workout: garminId(created.workoutId) };
+      // Save an accepted workout ID even when the response omitted the owner needed
+      // by future PUTs; GET can recover the owner without ever repeating this POST.
+      await this.save(operation, checkpoint, { ids, localDate: workout.localDate, completed: false }, 'workout-create', 'accepted');
+      if (created.ownerId !== undefined) {
+        const artifact = { ...operation.artifact!, ids: { ...ids, owner: garminId(created.ownerId) } };
+        await checkpoint(artifact); operation.artifact = artifact;
+      }
+    }
+    this.assertFuture(operation);
+    const artifact = operation.artifact!;
+    if (artifact.ids.schedule && !currentSchedule) throw new TrainingDeliveryTransportError('uncertain');
+    if (currentSchedule?.date !== workout.localDate) {
+      const step = artifact.ids.schedule ? 'schedule-update' : 'schedule-create';
+      const body = await this.write(operation, step, {
+        method: artifact.ids.schedule ? 'PUT' : 'POST',
+        path: artifact.ids.schedule ? `/training-api/schedule/${artifact.ids.schedule}` : '/training-api/schedule/',
+        body: garminBody({ date: workout.localDate }, { workoutId: artifact.ids.workout,
+          ...(artifact.ids.schedule ? { scheduleId: artifact.ids.schedule } : {}) }),
+      }, checkpoint, guard);
+      // Update permits an empty 204; its known schedule ID remains authoritative.
+      const saved = body === null && artifact.ids.schedule
+        ? { id: artifact.ids.schedule, workoutId: artifact.ids.workout, date: workout.localDate } : schedule(body);
+      if (saved.workoutId !== artifact.ids.workout || saved.date !== workout.localDate
+        || (artifact.ids.schedule && saved.id !== artifact.ids.schedule)) throw new TrainingDeliveryTransportError('uncertain');
+      await this.save(operation, checkpoint, { ...artifact, ids: { ...artifact.ids, schedule: saved.id }, localDate: saved.date }, step, 'accepted');
+    }
+    await this.save(operation, checkpoint, operation.artifact, 'finished', 'accepted');
+    return operation.artifact;
+  }
+
+  private async remove(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<null> {
+    if (!operation.artifact) { await this.save(operation, checkpoint, null, 'finished', 'accepted'); return null; }
+    if (operation.artifact.ids.schedule) {
+      const existing = await this.ownedSchedule(operation, checkpoint, guard);
+      if (existing) await this.write(operation, 'schedule-delete', { method: 'DELETE', path: `/training-api/schedule/${existing.id}` }, checkpoint, guard);
+      const ids = { ...operation.artifact.ids };
+      delete ids.schedule;
+      await this.save(operation, checkpoint, { ...operation.artifact, ids }, 'schedule-delete', 'accepted');
+    }
+    const existing = await this.ownedWorkout(operation, guard);
+    if (existing) await this.write(operation, 'workout-delete', { method: 'DELETE', path: `/training-api/workout/v2/${operation.artifact!.ids.workout}` }, checkpoint, guard);
+    await this.save(operation, checkpoint, null, 'finished', 'accepted');
+    return null;
+  }
+
+  async recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery> {
+    this.validate(operation);
+    const progress = operation.progress;
+    if (progress === undefined) return { kind: 'uncertain' };
+    if (progress === null) return { kind: 'not-accepted' };
+    if (progress.step === 'finished' && progress.state === 'accepted') return { kind: 'accepted', artifact: operation.artifact };
+    if (progress.state !== 'started') return { kind: operation.artifact ? 'resume' : 'not-accepted' };
+    // The contract has no lookup by stable external workout key. Never search by title
+    // or guess IDs, and never repeat a POST whose acceptance is unknown.
+    if (progress.step === 'workout-create') return { kind: 'uncertain' };
+    if (!operation.artifact) return { kind: 'uncertain' };
+    if (progress.step === 'schedule-create') {
+      if (!operation.workout) return { kind: 'uncertain' };
+      const date = normalizeTrainingLocalDate(operation.workout.localDate);
+      const rows = await this.read({ method: 'GET', path: `/training-api/schedule?startDate=${date}&endDate=${date}` }, guard);
+      if (!Array.isArray(rows) || rows.length > 1000) return { kind: 'uncertain' };
+      const candidates = rows.map(schedule).filter(row => row.workoutId === operation.artifact!.ids.workout && row.date === date);
+      // An empty eventually-consistent read is not proof a POST failed.
+      if (candidates.length !== 1) return { kind: 'uncertain' };
+      await this.save(operation, checkpoint, { ...operation.artifact, ids: { ...operation.artifact.ids, schedule: candidates[0].id }, localDate: date }, 'schedule-create', 'accepted');
+      return { kind: 'resume' };
+    }
+    if (progress.step === 'schedule-delete' || progress.step === 'schedule-update') {
+      if (!operation.artifact.ids.schedule) return { kind: 'uncertain' };
+      const found = await this.ownedSchedule(operation, checkpoint, guard);
+      if (!found && progress.step === 'schedule-update') return { kind: 'uncertain' };
+      if (!found) {
+        const ids = { ...operation.artifact.ids };
+        delete ids.schedule;
+        await this.save(operation, checkpoint, { ...operation.artifact, ids }, 'schedule-delete', 'accepted');
+      } else {
+        // PUT/DELETE operate on an inspected, retained ID, never on a new create key.
+        await this.save(operation, checkpoint, { ...operation.artifact, localDate: found.date }, progress.step as Step, 'ready');
+      }
+      return { kind: 'resume' };
+    }
+    const found = await this.ownedWorkout(operation, guard);
+    if (!found && progress.step !== 'workout-delete') return { kind: 'uncertain' };
+    if (!found) {
+      await this.save(operation, checkpoint, null, 'finished', 'accepted');
+      return { kind: 'accepted', artifact: null };
+    }
+    await this.save(operation, checkpoint, operation.artifact, progress.step as Step, 'ready');
+    return { kind: 'resume' };
+  }
+}
