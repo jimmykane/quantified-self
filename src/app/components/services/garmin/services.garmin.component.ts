@@ -55,7 +55,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   public readonly permissionExplanations: { [key: string]: string } = {
     'HISTORICAL_DATA_EXPORT': 'Without this, you cannot import your past activities from Garmin Connect.',
     'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
-    'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
+    'WORKOUT_IMPORT': 'Required for planned-workout delivery when available for your account. Connecting alone does not send workouts.',
     'HEALTH_EXPORT': 'Required for Garmin Sleep and supported Health summary imports.',
     'COURSE_IMPORT': 'Required to send saved routes and manually selected GPX or FIT routes to Garmin Connect.',
     'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'

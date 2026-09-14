@@ -146,6 +146,11 @@ describe('ServicesGarminComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('explains Workout Import without promising public availability or automatic delivery', () => {
+        expect(component.permissionExplanations['WORKOUT_IMPORT']).toBe(
+            'Required for planned-workout delivery when available for your account. Connecting alone does not send workouts.');
+    });
+
     it('renders connection status outside the provider tool tabs', () => {
         fixture.detectChanges();
 
