@@ -107,6 +107,11 @@ rounded container, shadow, or nested content padding. `showDivider` controls the
 Training Plans uses the same compact stacked rows for workouts, editable step/repeat blocks, and its history section;
 workflow state and unit-aware workout summaries remain owned by Plans.
 
+Compact **column** lists (currently Garmin permission grants) center icon, heading, description, and trailing status,
+with 24px icons and tighter row padding. At narrow widths, the status stays beside the heading and the description
+wraps underneath; grant labels reserve an equal width so changing status cannot shift the description column.
+This density-specific layout does not change comfortable public rows or stacked Health/Training content.
+
 For stacked chart rows, `[fillHeight]="true"` opts into stretching the row body within its allocated height; it is
 ignored for column layouts and defaults to false. The Health metric explorer uses this on desktop to fill the space
 beside the metric list, with a minimum plot height for multi-row grids. Mobile, Highlights, and public previews

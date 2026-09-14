@@ -7,6 +7,8 @@ describe('Garmin permission display', () => {
       'HEALTH_EXPORT', 'COURSE_IMPORT', 'MCT_EXPORT',
     ]);
     expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'WORKOUT_IMPORT')?.description).toContain('when available for your account');
+    expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'WORKOUT_IMPORT')?.description).toContain('Requires explicit opt-in');
+    expect(GARMIN_PERMISSION_DETAILS.find(permission => permission.id === 'MCT_EXPORT')?.description).toBe('Not used by Quantified Self yet.');
   });
 
   it('shows granted and not-granted permissions separately for each account', () => {

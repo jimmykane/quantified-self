@@ -187,3 +187,49 @@
     grid-template-columns: 32px minmax(0, 1fr) auto;
   }
 }
+
+// Dense information lists align every column to the row center. Keep this
+// separate from stacked workspace content and comfortable public feature rows.
+.compact-row--compact.compact-row--columns {
+  grid-template-columns: 24px minmax(140px, 180px) minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 0.375rem 0;
+
+  .compact-row__icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    mat-icon { width: 16px; height: 16px; font-size: 16px; }
+  }
+
+  .compact-row__title {
+    min-height: 24px;
+    align-self: center;
+    overflow-wrap: anywhere;
+  }
+
+  &.compact-row--without-icon {
+    grid-template-columns: minmax(140px, 180px) minmax(0, 1fr) auto;
+  }
+
+  @media (max-width: 900px) {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+
+    .compact-row__icon { grid-column: 1; grid-row: 1; }
+    .compact-row__title { grid-column: 2; grid-row: 1; }
+    .compact-row__action {
+      grid-column: 3;
+      grid-row: 1;
+      justify-self: end;
+      width: auto;
+    }
+    .compact-row__body { grid-column: 2 / -1; grid-row: 2; }
+
+    &.compact-row--without-icon {
+      grid-template-columns: minmax(0, 1fr) auto;
+      .compact-row__title { grid-column: 1; }
+      .compact-row__action { grid-column: 2; }
+      .compact-row__body { grid-column: 1 / -1; }
+    }
+  }
+}

@@ -2,12 +2,12 @@ import { getGarminPermissionsFromTokenLike, getGarminProviderUserIdFromTokenLike
 import type { ServiceConnectionAccountProjection } from '@shared/service-connection';
 
 export const GARMIN_PERMISSION_DETAILS = [
-  { id: 'HISTORICAL_DATA_EXPORT', label: 'History Importer', description: 'Without this, you cannot import your past activities from Garmin Connect.' },
-  { id: 'ACTIVITY_EXPORT', label: 'Activity Sync', description: 'Without this, your new activities will not automatically sync to Quantified Self.' },
-  { id: 'WORKOUT_IMPORT', label: 'Workout Import', description: 'Required for planned-workout delivery when available for your account. Workouts also require explicit delivery opt-in.' },
-  { id: 'HEALTH_EXPORT', label: 'Health Export', description: 'Required for Garmin Sleep and supported Health summary imports.' },
-  { id: 'COURSE_IMPORT', label: 'Course Import', description: 'Required to send saved routes and manually selected GPX or FIT routes to Garmin Connect.' },
-  { id: 'MCT_EXPORT', label: 'Menstrual Cycle Tracking Export', description: 'This permission is not used by Quantified Self yet.' },
+  { id: 'HISTORICAL_DATA_EXPORT', label: 'History Importer', description: 'Import your past Garmin activities.' },
+  { id: 'ACTIVITY_EXPORT', label: 'Activity Sync', description: 'Automatically import new Garmin activities.' },
+  { id: 'WORKOUT_IMPORT', label: 'Workout Import', description: 'Send planned workouts when available for your account. Requires explicit opt-in.' },
+  { id: 'HEALTH_EXPORT', label: 'Health Export', description: 'Import Garmin sleep and supported Health data.' },
+  { id: 'COURSE_IMPORT', label: 'Course Import', description: 'Send saved routes or GPX/FIT files to Garmin Connect.' },
+  { id: 'MCT_EXPORT', label: 'Menstrual Cycle Tracking Export', description: 'Not used by Quantified Self yet.' },
 ] as const;
 
 /** Display only: never combine grants across accounts or use these rows as authority. */

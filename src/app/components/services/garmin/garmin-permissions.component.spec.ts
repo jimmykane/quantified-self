@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { GarminPermissionsComponent } from './garmin-permissions.component';
+import { readFileSync } from 'node:fs';
 
 describe('GarminPermissionsComponent', () => {
   it('renders all grants as accessible compact rows, without local consent toggles', () => {
@@ -23,6 +24,18 @@ describe('GarminPermissionsComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Not reported');
     expect(fixture.nativeElement.textContent).not.toContain('Not granted');
     expect(fixture.nativeElement.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('uses compact columns with equal-width readable grant labels', () => {
+    const fixture = TestBed.createComponent(GarminPermissionsComponent);
+    fixture.componentRef.setInput('accounts', [{ providerUserId: 'account', permissions: ['WORKOUT_IMPORT'] }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.compact-row--compact.compact-row--columns')).toHaveLength(6);
+    const styles = readFileSync('src/app/components/services/garmin/garmin-permissions.component.scss', 'utf8');
+    const statusStyles = styles.slice(styles.indexOf('.garmin-permissions__status {'));
+    expect(statusStyles).toContain('inline-size: 6.5em');
+    expect(statusStyles).toContain('font: var(--mat-sys-body-small)');
+    expect(statusStyles).toContain('text-align: end');
   });
 
   it('hides the previous snapshot while loading a different user and clears it on sign-out', () => {
