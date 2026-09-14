@@ -172,6 +172,7 @@ const hoisted = vi.hoisted(() => {
     const coordinatorRef = {
         id: 'coordinator-ref',
         set: vi.fn(),
+        get: vi.fn(),
     };
     const batchSet = vi.fn();
     const batchCommit = vi.fn();
@@ -279,6 +280,44 @@ function mockTransactionDeletionGuardDefaults(): void {
         return { exists: false, data: () => undefined };
     });
 }
+
+describe('fetchDerivedFormSnapshotSeed', () => {
+    const dayMs = Date.UTC(2026, 8, 14);
+    const valid = () => ({ entryType: 'snapshot', metricKind: DERIVED_METRIC_KINDS.Form,
+        status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 7,
+        sourceEventCount: 1, sourceDocCount: 2, payload: { dayBoundary: 'UTC', excludesMergedEvents: true,
+            rangeStartDayMs: dayMs, rangeEndDayMs: dayMs, dailyLoads: [{ dayMs, load: 50 }] } });
+    beforeEach(() => vi.clearAllMocks());
+    async function read(data: unknown) {
+        const { fetchDerivedFormSnapshotSeed } = await import('./derived-metrics.service');
+        hoisted.coordinatorRef.get.mockResolvedValue({ data: () => data });
+        return fetchDerivedFormSnapshotSeed('user-1');
+    }
+    it('accepts canonical loads and genuine zero-load histories', async () => {
+        expect(await read(valid())).toMatchObject({ dailyLoads: [{ dayMs, load: 50 }], sourceEventCount: 1 });
+        const zero = valid(); zero.payload.dailyLoads[0].load = 0;
+        expect(await read(zero)).toMatchObject({ dailyLoads: [{ dayMs, load: 0 }], sourceEventCount: 1 });
+        const empty = valid(); empty.sourceEventCount = 0;
+        Object.assign(empty.payload, { dailyLoads: [], rangeStartDayMs: null, rangeEndDayMs: null });
+        expect(await read(empty)).toMatchObject({ dailyLoads: [], sourceEventCount: 0, sourceDocCount: 2 });
+    });
+    it.each([
+        { payload: null }, { payload: { ...valid().payload, dailyLoads: undefined } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: Number.NaN }] } },
+        { payload: { ...valid().payload, dailyLoads: [{ dayMs, load: -1 }] } },
+        { payload: { ...valid().payload, rangeStartDayMs: dayMs + 1, rangeEndDayMs: dayMs + 1,
+            dailyLoads: [{ dayMs: dayMs + 1, load: 50 }] } },
+        { sourceEventCount: 2, payload: { ...valid().payload, dailyLoads: [{ dayMs, load: 20 }, { dayMs, load: 30 }] } },
+        { sourceEventCount: 2, payload: { ...valid().payload, rangeStartDayMs: dayMs + 86_400_000,
+            dailyLoads: [{ dayMs: dayMs + 86_400_000, load: 20 }, { dayMs, load: 30 }] } },
+        { payload: { ...valid().payload, rangeEndDayMs: dayMs - 86_400_000 } },
+        { payload: { ...valid().payload, dailyLoads: [], rangeStartDayMs: null, rangeEndDayMs: null } },
+        { sourceDocCount: 0 }, { sourceEventCount: undefined },
+        { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION + 1 },
+    ])('rejects incomplete/incompatible Form inputs rather than silently normalizing them: %j', async patch => {
+        expect(await read({ ...valid(), ...patch })).toBeNull();
+    });
+});
 
 describe('fetchRecoveryLookbackEventDocs', () => {
     beforeEach(() => {
@@ -4113,6 +4152,25 @@ describe('startDerivedMetricsProcessing', () => {
         vi.useRealTimers();
     });
 
+    it('reclaims failed work with a distinct claim even when the retry starts in the same millisecond', async () => {
+        const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
+        vi.useFakeTimers();
+        const nowMs = Date.UTC(2026, 8, 14, 10);
+        vi.setSystemTime(nowMs);
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'failed', generation: 42, eventMutationVersion: 7, workoutInputsVersion: 3,
+            startedAtMs: nowMs, dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness], processingMetricKinds: [],
+        }) });
+        expect(await startDerivedMetricsProcessing('user-1', 42)).toEqual({
+            startedAtMs: nowMs + 1, eventMutationVersion: 7, workoutInputsVersion: 3,
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+        });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            status: 'processing', startedAtMs: nowMs + 1, dirtyMetricKinds: [],
+            processingMetricKinds: [DERIVED_METRIC_KINDS.TrainingReadiness],
+        }), { merge: true });
+    });
+
     it('claims queued generation and persists processing metric kinds for retries', async () => {
         const { startDerivedMetricsProcessing } = await import('./derived-metrics.service');
         hoisted.transactionGet.mockResolvedValueOnce({
@@ -4585,6 +4643,23 @@ describe('markDerivedMetricsDirtyAndMaybeQueue', () => {
                 generation: 21,
             }),
         );
+    });
+
+    it('retains in-flight kinds when a sleep-only ingress replaces a stuck workout build', async () => {
+        const { markDerivedMetricsDirtyAndMaybeQueue } = await import('./derived-metrics.service');
+        const nowMs = Date.now();
+        hoisted.transactionGet.mockResolvedValueOnce({ exists: true, data: () => ({
+            status: 'processing', generation: 30, dirtyMetricKinds: [],
+            startedAtMs: nowMs - 20 * 60_000,
+            processingMetricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingDurability],
+        }) });
+        await markDerivedMetricsDirtyAndMaybeQueue('test-user-uid', [DERIVED_METRIC_KINDS.TrainingReadiness],
+            { preserveWorkoutInputs: true });
+        expect(hoisted.transactionSet).toHaveBeenCalledWith(hoisted.coordinatorRef, expect.objectContaining({
+            status: 'queued', generation: 31, processingMetricKinds: [],
+            dirtyMetricKinds: expect.arrayContaining([DERIVED_METRIC_KINDS.Form,
+                DERIVED_METRIC_KINDS.TrainingDurability, DERIVED_METRIC_KINDS.TrainingReadiness]),
+        }), { merge: true });
     });
 
     it('forces requeue when coordinator is processing for too long', async () => {

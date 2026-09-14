@@ -92,8 +92,10 @@ export const processDerivedMetricsTask = onTaskDispatched({
         const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings
             ? await fetchTrainingBuildBenchmarkSettings(uid) : {};
         const remainingMetricKinds = dirtyMetricKinds.filter(kind => kind !== DERIVED_METRIC_KINDS.TrainingBuildComparison);
+        const remainingSourceRequirements = resolveDerivedMetricSourceRequirements(remainingMetricKinds);
         const canReuseWorkoutInputs = dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingBuildComparison)
-            && (!remainingMetricKinds.length || areOnlyProjectionSensitiveMetricKinds(remainingMetricKinds));
+            && (!remainingMetricKinds.length || areOnlyProjectionSensitiveMetricKinds(remainingMetricKinds))
+            && !remainingSourceRequirements.needsTrainingActivityDocs;
         // Read completed seeds before marking this generation's snapshots building.
         const trainingBuildWorkoutSeed = canReuseWorkoutInputs ? await fetchTrainingBuildWorkoutSeed(uid, {
             nowMs: buildAtMs, sourceVersion: startResult.workoutInputsVersion,
@@ -102,7 +104,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
         }) : null;
         if (trainingBuildWorkoutSeed) {
             sourceRequirements = {
-                ...resolveDerivedMetricSourceRequirements(remainingMetricKinds),
+                ...remainingSourceRequirements,
                 needsTrainingBuildBenchmarkSettings: true,
                 needsTrainingBuildSleepDocs: true,
             };
@@ -118,10 +120,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             && !sourceRequirements.needsTrainingActivityDocs;
         if (canUseProjectionSeed) {
             const candidateProjectionSeed = await fetchDerivedFormSnapshotSeed(uid);
-            const hasCompatibleSchema = Number.isFinite(candidateProjectionSeed?.schemaVersion)
-                && (candidateProjectionSeed?.schemaVersion as number) >= DERIVED_METRIC_SCHEMA_VERSION;
-            const hasCompatibleBuildMutationVersion = Number.isFinite(candidateProjectionSeed?.builtFromEventMutationVersion)
-                && (candidateProjectionSeed?.builtFromEventMutationVersion as number) >= startResult.eventMutationVersion;
+            const hasCompatibleSchema = candidateProjectionSeed?.schemaVersion === DERIVED_METRIC_SCHEMA_VERSION;
+            const hasCompatibleBuildMutationVersion = candidateProjectionSeed?.builtFromEventMutationVersion
+                === startResult.eventMutationVersion;
             if (
                 candidateProjectionSeed
                 && candidateProjectionSeed.status === 'ready'

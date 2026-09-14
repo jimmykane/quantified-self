@@ -153,21 +153,25 @@ describe('processDerivedMetricsTask', () => {
             .toBeLessThan(hoisted.markDerivedMetricSnapshotsBuilding.mock.invocationCallOrder[0]);
     });
 
-    it('still reads events for Readiness when its Form seed is stale, but avoids the Build activity scan', async () => {
+    it.each([
+        { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 10 },
+        { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 12 },
+        { schemaVersion: DERIVED_METRIC_SCHEMA_VERSION + 1, builtFromEventMutationVersion: 11 },
+    ])('reads events when its Form seed is incompatible, but avoids the Build activity scan: %j', async metadata => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
             dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingReadiness],
             startedAtMs: Date.now(), eventMutationVersion: 11, workoutInputsVersion: 3 });
         hoisted.fetchTrainingBuildWorkoutSeed.mockResolvedValueOnce({ metadata: {} });
-        hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({ status: 'ready',
-            schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, builtFromEventMutationVersion: 10 });
+        hoisted.fetchDerivedFormSnapshotSeed.mockResolvedValueOnce({ status: 'ready', ...metadata });
         await (processDerivedMetricsTask as any)({ data: { uid: 'seed-owner', generation: 12 } });
         expect(hoisted.fetchDerivedMetricsEventDocs).toHaveBeenCalledOnce();
         expect(hoisted.fetchDerivedMetricsActivityDocs).not.toHaveBeenCalled();
     });
 
-    it('keeps the full shared history join for mixed workout-dependent builds', async () => {
+    it.each([DERIVED_METRIC_KINDS.TrainingDurability, DERIVED_METRIC_KINDS.PowerCurve])(
+        'does not attempt workout reuse when %s still requires an activity scan', async kind => {
         hoisted.startDerivedMetricsProcessing.mockResolvedValueOnce({
-            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison, DERIVED_METRIC_KINDS.TrainingDurability],
+            dirtyMetricKinds: [DERIVED_METRIC_KINDS.TrainingBuildComparison, kind],
             startedAtMs: Date.now(), eventMutationVersion: 11, workoutInputsVersion: 3 });
         await (processDerivedMetricsTask as any)({ data: { uid: 'seed-owner', generation: 12 } });
         expect(hoisted.fetchTrainingBuildWorkoutSeed).not.toHaveBeenCalled();

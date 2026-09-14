@@ -5726,13 +5726,33 @@ export async function fetchDerivedFormSnapshotSeed(uid: string): Promise<Derived
     const payload = (data.payload && typeof data.payload === 'object')
         ? data.payload as Record<string, unknown>
         : {};
+    const isCount = (value: unknown): value is number => typeof value === 'number'
+        && Number.isSafeInteger(value) && value >= 0;
+    const loads = payload.dailyLoads;
+    // Normalization is appropriate for display, not for cache admission: dropping
+    // missing/malformed entries here would silently replace real load with zero.
+    if (data.entryType !== DERIVED_METRICS_ENTRY_TYPES.Snapshot || data.metricKind !== DERIVED_METRIC_KINDS.Form
+        || data.status !== 'ready' || data.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+        || !isCount(data.builtFromEventMutationVersion) || !isCount(data.sourceEventCount) || !isCount(data.sourceDocCount)
+        || data.sourceDocCount < data.sourceEventCount || payload.dayBoundary !== 'UTC'
+        || payload.excludesMergedEvents !== true || !Array.isArray(loads)
+        || loads.length > data.sourceEventCount || (loads.length === 0) !== (data.sourceEventCount === 0)) return null;
+    let previousDay = -Infinity;
+    for (const entry of loads) {
+        if (!entry || typeof entry !== 'object' || !Number.isSafeInteger(entry.dayMs)
+            || entry.dayMs % DAY_MS !== 0 || entry.dayMs <= previousDay
+            || typeof entry.load !== 'number' || !Number.isFinite(entry.load) || entry.load < 0) return null;
+        previousDay = entry.dayMs;
+    }
+    if (payload.rangeStartDayMs !== (loads[0]?.dayMs ?? null)
+        || payload.rangeEndDayMs !== (loads[loads.length - 1]?.dayMs ?? null)) return null;
     return {
-        status: toSafeString(data.status) || null,
-        schemaVersion: toFiniteNumber(data.schemaVersion),
-        builtFromEventMutationVersion: toFiniteNumber(data.builtFromEventMutationVersion),
-        sourceEventCount: Math.max(0, Math.floor(toFiniteNumber(data.sourceEventCount) || 0)),
-        sourceDocCount: Math.max(0, Math.floor(toFiniteNumber(data.sourceDocCount) || 0)),
-        dailyLoads: normalizeDerivedFormDailyLoads(payload.dailyLoads),
+        status: data.status,
+        schemaVersion: data.schemaVersion,
+        builtFromEventMutationVersion: data.builtFromEventMutationVersion,
+        sourceEventCount: data.sourceEventCount,
+        sourceDocCount: data.sourceDocCount,
+        dailyLoads: loads.map(entry => ({ dayMs: entry.dayMs, load: entry.load })),
     };
 }
 
@@ -5810,12 +5830,19 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             return;
         }
 
-        const coordinator = parseCoordinator(coordinatorSnapshot.data());
-        const nextDirtyMetricKinds = mergeDerivedMetricKinds(coordinator.dirtyMetricKinds, metricKinds);
+        const rawCoordinatorData = coordinatorSnapshot.data();
+        const coordinator = parseCoordinator(rawCoordinatorData);
         const isAlreadyQueuedOrProcessing = coordinator.status === 'queued' || coordinator.status === 'processing';
-        const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
         const coordinatorLikelyStuck = isAlreadyQueuedOrProcessing
             && isDerivedMetricsCoordinatorStuck(coordinator, nowMs);
+        // Replacing a stuck generation also fences its old worker. Carry its
+        // claimed work forward before clearing processingMetricKinds below.
+        const retainedMetricKinds = coordinatorLikelyStuck && coordinator.status === 'processing'
+            ? mergeDerivedMetricKinds(coordinator.dirtyMetricKinds,
+                resolveInFlightMetricKinds(rawCoordinatorData, coordinator.dirtyMetricKinds))
+            : coordinator.dirtyMetricKinds;
+        const nextDirtyMetricKinds = mergeDerivedMetricKinds(retainedMetricKinds, metricKinds);
+        const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
         const shouldIncrementEventMutationVersion = options?.incrementEventMutationVersion === true;
         const nextEventMutationVersion = shouldIncrementEventMutationVersion
             ? coordinator.eventMutationVersion + 1
@@ -5984,8 +6011,9 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
-        // A generation can only be freshly claimed from queued state.
-        if (coordinator.status !== 'queued') {
+        // A thrown worker failure retains dirty kinds in failed state. Cloud Tasks
+        // retries the same generation; acknowledging it here would lose that retry.
+        if (coordinator.status !== 'queued' && coordinator.status !== 'failed') {
             startedResult = null;
             return;
         }
@@ -6004,19 +6032,21 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
+        // Retry claims must differ even if the clock has not advanced since failure.
+        const claimedAtMs = Math.max(nowMs, (coordinator.startedAtMs ?? -1) + 1);
         transaction.set(coordinatorRef, {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'processing',
             dirtyMetricKinds: [],
             processingMetricKinds: dirtyMetricKinds,
-            startedAtMs: nowMs,
+            startedAtMs: claimedAtMs,
             updatedAtMs: nowMs,
             lastError: null,
         }, { merge: true });
 
         startedResult = {
             dirtyMetricKinds,
-            startedAtMs: nowMs,
+            startedAtMs: claimedAtMs,
             eventMutationVersion: coordinator.eventMutationVersion,
             workoutInputsVersion: readWorkoutInputsVersion(rawCoordinatorData),
         };
@@ -6281,12 +6311,13 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
                     '[derived-metrics] Cleaned up derived metrics after write-block follow-up enqueue failure.',
                 );
             }
-            await coordinatorRef.set({
-                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                status: 'failed',
-                lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_write_block_follow_up_failed',
-                updatedAtMs: Date.now(),
-            }, { merge: true });
+            await markDerivedMetricsEnqueueFailed(
+                uid,
+                requeueResult.nextGeneration,
+                error,
+                'write-block follow-up enqueue failure',
+                'enqueue_write_block_follow_up_failed',
+            );
         }
     }
 

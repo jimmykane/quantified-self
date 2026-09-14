@@ -1080,12 +1080,19 @@ The derived worker:
 8. Completes the generation or requeues newly dirtied kinds.
 
 Failures mark affected snapshots failed, preserve an error, and are rethrown so the Cloud Tasks retry policy can apply.
+The next attempt can claim that same generation from `failed` and consume its retained dirty kinds. Its claim timestamp
+is strictly newer than the previous claim, including same-millisecond retries. Healthy processing duplicates and
+completed generations remain no-ops. When ingress replaces a stuck processing generation, it carries the union of
+in-flight, pending, and newly requested metric kinds into the replacement; fencing the old worker must not discard its
+work. Enqueue-failure updates, including write-block recovery, are transactional and only mark the matching generation
+failed while it is still queued, never after its replacement has already started.
 
 ### Reusing Build Comparison workout inputs
 
 `training-build-workout-seed.ts` validates internal `workoutInputsReuse` metadata on the existing Build Comparison
 snapshot; it does not create another history collection. Reuse is eligible only for Build Comparison alone or combined
-with projection-sensitive kinds (not other activity-dependent builders). It requires a ready snapshot, the exact current
+with projection-sensitive kinds that need no activity scan (Power Curve is projection-sensitive but still requires
+activities, so it is explicitly excluded from this reuse path). It requires a ready snapshot, the exact current
 derived schema and seed version, exact event/workout-input revisions, canonical benchmark-settings hash, current UTC
 day, and matching workout-payload digest. Missing, failed, malformed, legacy, edited, or otherwise incompatible inputs
 take the full-build path. Explicit ensure/repair calls and benchmark changes invalidate the internal revision; event
@@ -1098,6 +1105,9 @@ used by full builds. Cached windows determine the same merged sleep-date queries
 Readiness retains its separate end-time-bounded sleep query and nightly-HRV enrichment; different sleep predicates
 are not treated as interchangeable. If the Form seed is unavailable, Readiness still scans events, while a valid Build
 seed can independently avoid the activity scan. Existing formula payloads and frontend behavior are unchanged.
+Form seed admission also requires the exact current schema and claimed event revision, canonical UTC day/load entries,
+strictly ordered unique days, finite nonnegative loads, consistent range endpoints and source counts. Missing or
+malformed history is a cache miss, not an empty/zero-load replacement. A genuinely empty Form history remains reusable.
 
 Every worker snapshot commit checks the deletion tombstone/user root and current claim transactionally. Reclaimed or
 superseded attempts cannot publish, fail, or complete a newer attempt. A rejected building/ready commit does not clear
@@ -1122,7 +1132,8 @@ savings from deployment onward; do not equate the eligible workload share with a
 
 Regression coverage includes pure full/reused recovery equivalence, seed expiry/corruption/version validation, worker
 query selection and fallbacks, plus loopback-only Firestore tests for ownership, concurrent claims, invalidation during
-processing, stale-worker fencing and deletion starting between the preliminary check and commit:
+processing, a real worker retry after a transient cache-read failure, preserved in-flight work on replacement,
+late enqueue-failure fencing, and deletion starting between the preliminary check and commit:
 
 ```bash
 npx firebase emulators:exec --project demo-derived-metrics-reuse --only firestore 'npm --prefix functions test -- src/derived-metrics/derived-metrics-reuse.emulator.spec.ts'

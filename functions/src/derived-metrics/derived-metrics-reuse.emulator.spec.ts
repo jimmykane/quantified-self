@@ -7,13 +7,16 @@ const mocks = vi.hoisted(() => ({ firestore: vi.fn(), enqueue: vi.fn(async () =>
 vi.mock('firebase-admin', () => ({ firestore: mocks.firestore }));
 vi.mock('../shared/cloud-tasks', () => ({ enqueueDerivedMetricsTask: mocks.enqueue }));
 vi.mock('./derived-metrics-uid-gate', () => ({ isDerivedMetricsUidAllowed: () => true, getDerivedMetricsUidAllowlist: () => new Set() }));
+vi.mock('firebase-functions/v2/tasks', () => ({ onTaskDispatched: (_options: unknown, handler: unknown) => handler }));
 
 import {
+    abandonDerivedMetricsProcessingAfterWriteBlock,
     completeDerivedMetricsProcessing, failDerivedMetricsProcessing, fetchTrainingBuildWorkoutSeed,
     markDerivedMetricsDirtyAndMaybeQueue, markDerivedMetricSnapshotsBuilding, markDerivedMetricSnapshotsFailed,
     startDerivedMetricsProcessing, writeDerivedMetricSnapshotsReady,
 } from './derived-metrics.service';
 import { trainingBuildSettingsKey } from './training-build-workout-seed';
+import { processDerivedMetricsTask } from '../tasks/derived-metrics-worker';
 
 // A separate demo namespace, synthetic fixtures only, and no Cloud Tasks or provider calls.
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / real Firestore', { timeout: 30_000 }, () => {
@@ -68,6 +71,65 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('derived workout reuse / r
         expect(start.workoutInputsVersion).toBe(context.sourceVersion);
         expect(start.eventMutationVersion).toBe(context.eventMutationVersion);
         expect(await fetchTrainingBuildWorkoutSeed(uid, context)).not.toBeNull();
+    });
+
+    it('recovers a transient seed-read failure through a real worker retry of the same generation', async () => {
+        const queued = await markDerivedMetricsDirtyAndMaybeQueue(uid, kinds);
+        const run = processDerivedMetricsTask as unknown as (request: { data: { uid: string; generation: number } }) => Promise<void>;
+        const request = { data: { uid, generation: queued.generation! } };
+        const originalDoc = db.doc.bind(db);
+        let failSeedRead = true;
+        vi.spyOn(db, 'doc').mockImplementation(path => {
+            const ref = originalDoc(path);
+            if (failSeedRead && path === `users/${uid}/derivedMetrics/${kinds[0]}`) {
+                failSeedRead = false;
+                vi.spyOn(ref, 'get').mockRejectedValueOnce(new Error('transient_seed_read'));
+            }
+            return ref;
+        });
+        await expect(run(request)).rejects.toThrow('transient_seed_read');
+        const failed = (await coordinator().get()).data()!;
+        expect(failed.status).toBe('failed');
+        expect(failed.dirtyMetricKinds).toEqual(kinds);
+        await run(request);
+        expect((await coordinator().get()).data()).toMatchObject({ status: 'idle',
+            generation: queued.generation, dirtyMetricKinds: [], processingMetricKinds: [] });
+        expect((await metric().get()).data()?.status).toBe('ready');
+        await run(request); // A duplicate after completion remains a no-op.
+        expect((await coordinator().get()).data()?.status).toBe('idle');
+    });
+
+    it('carries claimed workout kinds into a replacement generation triggered only by Readiness', async () => {
+        const originalKinds = [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.TrainingDurability];
+        const queued = await markDerivedMetricsDirtyAndMaybeQueue(uid, originalKinds);
+        const original = (await startDerivedMetricsProcessing(uid, queued.generation!))!;
+        await coordinator().update({ startedAtMs: Date.now() - 20 * 60_000 });
+        const replacement = await markDerivedMetricsDirtyAndMaybeQueue(uid, [DERIVED_METRIC_KINDS.TrainingReadiness],
+            { preserveWorkoutInputs: true });
+        expect(replacement.generation).toBe(queued.generation! + 1);
+        expect(await markDerivedMetricSnapshotsBuilding(uid, originalKinds,
+            { generation: queued.generation!, startedAtMs: original.startedAtMs })).toBe(false);
+        const next = (await startDerivedMetricsProcessing(uid, replacement.generation!))!;
+        expect(new Set(next.dirtyMetricKinds)).toEqual(new Set([...originalKinds, DERIVED_METRIC_KINDS.TrainingReadiness]));
+        const claim = { generation: replacement.generation!, startedAtMs: next.startedAtMs };
+        expect(await writeDerivedMetricSnapshotsReady(uid, next.dirtyMetricKinds, {}, { claim })).toBe(true);
+        await completeDerivedMetricsProcessing(uid, claim.generation, claim);
+        for (const kind of next.dirtyMetricKinds) {
+            expect((await user().collection('derivedMetrics').doc(kind).get()).data()?.status).toBe('ready');
+        }
+    });
+
+    it('does not downgrade an already claimed replacement after a late enqueue failure during write-block recovery', async () => {
+        const { claim } = await warm();
+        mocks.enqueue.mockImplementationOnce(async (...args: unknown[]) => {
+            expect(await startDerivedMetricsProcessing(uid, Number(args[1]))).not.toBeNull();
+            throw new Error('enqueue_response_lost_after_dispatch');
+        });
+        const result = await abandonDerivedMetricsProcessingAfterWriteBlock(uid, claim.generation, kinds,
+            'fixture write block cleared', claim);
+        expect(result.requeued).toBe(true);
+        expect((await coordinator().get()).data()).toMatchObject({ status: 'processing',
+            generation: result.nextGeneration, processingMetricKinds: kinds, lastError: null });
     });
 
     it.each(['workout mutation', 'explicit repair'] as const)('invalidates on %s during processing and retains follow-up work', async reason => {
