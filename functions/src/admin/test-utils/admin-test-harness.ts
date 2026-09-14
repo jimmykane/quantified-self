@@ -31,7 +31,8 @@ const {
     const mockCreateCustomToken = vi.fn();
     const mockGetUser = vi.fn();
     const mockAuth = { listUsers: mockListUsers, createCustomToken: mockCreateCustomToken, getUser: mockGetUser };
-    const mockOnCall = vi.fn((_options: unknown, handler: unknown) => handler);
+    type MockCallableHandler = ((...args: unknown[]) => unknown) & { __options?: unknown };
+    const mockOnCall = vi.fn((options: unknown, handler: unknown) => Object.assign(handler as MockCallableHandler, { __options: options }));
 
     const mockCollection = vi.fn() as any;
     const mockDoc = vi.fn();

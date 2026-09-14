@@ -23,7 +23,7 @@ import { buildMonthlyBucketWindows, clampSubscriptionHistoryMonths, toEpochMilli
  */
 export const getSubscriptionHistoryTrend = onAdminCall<GetSubscriptionHistoryTrendRequest, SubscriptionHistoryTrendResponse>({
     region: FUNCTIONS_MANIFEST.getSubscriptionHistoryTrend.region,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async (request) => {
     try {
         const db = admin.firestore();
