@@ -4,7 +4,12 @@ p, li, span, a { overflow-wrap: anywhere; }
 .delivery-review { display: flex; flex-direction: column; align-items: stretch; gap: 0.75rem; }
 .delivery-review p { margin-block: 0; }
 .delivery-subtitle, .delivery-caption { color: var(--mat-sys-on-surface-variant); }
-.delivery-subtitle { margin: 0 0 0.75rem; }
+.delivery-context { margin-block: 0.5rem 0.75rem; }
+.delivery-subtitle { margin: 0; font: var(--mat-sys-title-medium); color: var(--mat-sys-on-surface); }
+.delivery-context .delivery-caption { margin-block: 0.25rem 0; }
+.delivery-setting-label { margin: 0 0 0.25rem; font-weight: 500; }
+.delivery-provider-settings { display: grid; gap: 0.25rem; }
+.delivery-workouts h4 { margin: 0 0 0.25rem; font: var(--mat-sys-title-small); }
 app-compact-row p.delivery-caption { margin: 0; }
 .delivery-caption { font: var(--mat-sys-body-small); }
 .delivery-progress { display: flex; align-items: center; gap: 0.75rem; }
@@ -17,10 +22,11 @@ app-compact-row p.delivery-caption { margin: 0; }
 .delivery-status { padding-block: 0.5rem; }
 .delivery-status + .delivery-status { border-top: 1px solid var(--mat-sys-outline-variant); }
 .delivery-status p { margin-block: 0.125rem; }
-.delivery-status--summary { display: flex; align-items: center; gap: 0.5rem; }
-.delivery-status-summary { flex: 1; min-width: 0; font: var(--mat-sys-body-medium); }
-.delivery-status-summary a { color: var(--mat-sys-primary); }
-.delivery-status--summary button { flex-shrink: 0; }
+.delivery-status--summary { padding-block: 0; }
+.delivery-workout-button { width: 100%; height: auto; min-height: 56px; justify-content: space-between; padding: 8px; text-align: start; }
+.delivery-status-summary { display: flex; flex-direction: column; min-width: 0; font: var(--mat-sys-body-medium); }
+.delivery-workout-meta { display: flex; flex-direction: column; }
+.delivery-workout-title { color: var(--mat-sys-on-surface); }
 .delivery-attempts { margin: 0.25rem 0; }
 .delivery-attempts div { display: flex; flex-wrap: wrap; column-gap: 0.5rem; padding-block: 0.125rem; }
 .delivery-attempts dt { font-weight: 500; }

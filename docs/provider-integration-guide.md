@@ -53,12 +53,16 @@ directional: a plan needs per-provider opt-in, while a standalone workout needs 
 connection alone never opts workouts into delivery.
 
 The Training UI checks availability and compatibility automatically on entering sync consent. With one ready provider,
-**Sync with Garmin** → **Enable sync** (plan) or **Send to Garmin** → **Send workout** (standalone) is the normal path;
+**Sync plan with Garmin** → **Enable plan sync** (plan) or **Send to Garmin** → **Send workout** (standalone) is the normal path;
 subsequent eligible edits reconcile automatically. Opening the dialog never mutates consent. The saved/browser time
 zone is shown inline and changes explicitly; mapping degradation still needs per-workout approval. Troubleshooting is
 secondary, with compact status/history rows and surface-free Show/Hide details matching existing Training controls.
-Inherited workout reviews show the server-resolved parent-plan zone, not a retained override's older zone. Compact
-history timestamps reflect the latest attempt or confirmation; an older success never masks a newer failed attempt.
+**Plan sync** separates automatic plan-level settings from **Workout sync status** rows. Each row represents an individual
+workout, shows its scheduled date, and opens **Workout sync** details; editing is a separate action. **Stop plan sync** and
+**Stop workout sync** name their different scopes explicitly. Plan sync means automatic per-workout delivery, not native
+provider training-plan parity. Inherited workout reviews show the server-resolved parent-plan zone, not a retained
+override's older zone. Transport timestamps appear in workout details separately from scheduled dates and reflect the
+latest attempt or confirmation; an older success never masks a newer failed attempt.
 
 Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
 actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider

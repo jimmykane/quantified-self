@@ -507,18 +507,23 @@ Consent/lifecycle rules:
   the mismatch. A separate authored-content fingerprint avoids labelling unchanged Pro-paused copies as mismatches.
 
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
+Entry points and default dialog titles distinguish **Plan sync**, **Workout sync**, and **Workout sync history**.
+The plan view names the plan, explains automatic per-workout sending, and separates **Plan sync settings** / **Stop plan
+sync** from a visible **Workout sync status** section. Those entries are individual workout delivery projections, never
+plan records or authored edit history. An inactive plan is explicitly labelled; enabled preferences alone do not claim
+that an inactive plan is sending. A missing status is not a confirmed delivery; the empty state explains the first check.
 Unavailable Send/configuration actions stay hidden, but existing settings, problems, reconnect links and Stop remain
 readable. Status details expand in groups of 25 using a live loaded-prefix query, so subsequent pages cannot retain stale
 statuses or miss records moving across page boundaries. Plan workouts retain Stop even when their first delivery fails.
-The workspace's **Delivery history** entry appears only when delivery records exist and remains reachable after deleting
+The workspace's **Workout sync history** entry appears only when delivery records exist and remains reachable after deleting
 their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
 only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
 cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
 but cannot bypass explicit-disconnect epochs. New opt-in with one ready provider opens the automatic read-only check
-directly from **Sync with Garmin** / **Send to Garmin**. The dialog waits for owner settings and schedule before taking
+directly from **Sync plan with Garmin** / **Send to Garmin**. The dialog waits for owner settings and schedule before taking
 that shortcut; existing records or inherited plan consent open details instead. Multiple providers keep a chooser.
 There is no manual Preview step: availability/compatibility checks run on entering a change, then the single **Enable
-sync** / **Send workout** confirmation grants consent. Opening, reloading, cancelling, and live updates never opt in.
+plan sync** / **Send workout** confirmation grants consent. Opening, reloading, cancelling, and live updates never opt in.
 The saved/browser IANA zone is shown inline; **Change** reveals its field and **Use time zone** rechecks without saving.
 Inherited workout details do not label a retained workout override's zone as the current plan zone: the parent plan's
 settings remain authoritative. Stop, Retry, Resume and approval reviews display the server-resolved zone read-only.
@@ -529,9 +534,18 @@ and can be cancelled; saving has a 70-second deadline and retains its exact rece
 Late results after cancellation, destruction or account change cannot replace the current review. Account/view guards
 also prevent a delayed readiness retry from starting a stale callable. Saving settings is labelled separately from
 confirmed remote delivery. A retained artifact without a fully confirmed first delivery is explained as unconfirmed,
-not as a known different workout. Plan/history lists show compact title/status/time rows with a labelled details arrow,
-not an expanded explanation or attempt card per record. They show the current safe projection per delivery identity,
-not private attempt journals or one public record per authored edit. Their timestamp is the newer of the last attempt
+not as a known different workout. Plan/history lists use one full-width Material button per compact workout row, showing
+the title, authored scheduled date and current status. The title and arrow have the same action: open workout sync
+details, not the workout editor. Loaded rows sort by scheduled date with ID tie-breaking; retained records without a
+source date sort last and do not invent one. The live loaded-prefix query remains bounded and **Show more workout
+statuses** expands it; sorting does not claim all history has been loaded. History rows identify the current plan or
+Standalone, and transferred/deleted sources remain labelled rather than silently appearing to belong to the old plan.
+Workout details name their parent plan or Standalone, clearly label **Stop workout sync** / **Resume workout sync**,
+and explain that other workouts are unaffected. **Back to plan sync** / **Back to sync history** returns to the originating
+overview without commands or new consent; **Edit workout** is a separate labelled route action and remains absent for
+deleted sources. Navigation retains account/busy guards and haptics. The lists show the current safe projection per
+delivery identity, not private attempt journals or one public record per authored edit. Only workout details show a
+labelled transport timestamp, separate from the scheduled date: it is the newer of the last attempt
 and confirmation (confirmation wins a tie), falling back to the status update only when neither exists; a later failed
 attempt cannot be hidden behind an older success. Workout attempt timestamps/counts and lifecycle
 guidance use surface-free Show/Hide Material buttons with `aria-expanded`/`aria-controls`, matching Training recovery
@@ -556,7 +570,8 @@ their contract/sandbox gates; completion matching remains #651 and Sports Lib ex
 For isolated visual QA, create a temporary directory and set `TRAINING_DELIVERY_QA_DIR` to it when running
 `npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts src/app/components/plans/plans-workspace.component.spec.ts`.
 The tests export synthetic Material dialog DOM for status, automatic checking, consent, time-zone editing, pending,
-Retry, 25-row delivery history and deleted-source recovery, plus a 50-row authored revision history. They include the
+Retry, plan overview, plan-bound workout details, plan/workout Stop review, 25-row workout sync history and deleted-source
+recovery, plus a 50-row authored revision history. Plan fixtures cross the year boundary and include a long workout title. They include the
 app's Material Symbols default, generated component styles, and real component SCSS compiled with the Angular build's
 Sass dependency. Build the local app, then copy its emitted `dist/browser/styles-*.css` as `styles.css` and link/copy
 `dist/browser/media` beside the HTML. Open those fixtures in a browser at 320, 390 and desktop widths in light/dark themes; verify readable status,

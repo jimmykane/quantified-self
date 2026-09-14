@@ -30,12 +30,12 @@ export class TrainingDeliveryButtonComponent {
     return providers.length === 1 ? providers[0] : null;
   });
   readonly buttonLabel = computed(() => {
-    if (this.scope() === 'history') return 'Delivery history';
-    if (this.hasRecords()) return 'Sync details';
+    if (this.scope() === 'history') return 'Workout sync history';
+    if (this.hasRecords()) return this.scope() === 'plan' ? 'Plan sync' : 'Workout sync';
     const provider = this.singleProvider();
     const label = provider ? PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label : null;
-    return this.scope() === 'plan' ? label ? `Sync with ${label}` : 'Sync workouts'
-      : this.standalone() ? label ? `Send to ${label}` : 'Send workout' : 'Sync details';
+    return this.scope() === 'plan' ? label ? `Sync plan with ${label}` : 'Sync plan'
+      : this.standalone() ? label ? `Send to ${label}` : 'Send workout' : 'Workout sync';
   });
   open(): void {
     if (!this.visible() || this.disabled()) return;

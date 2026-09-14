@@ -37,8 +37,12 @@ describe('help.content', () => {
     expect(content).toContain('content, not old provider consent');
     expect(content).toContain('Pro expiry pauses creates and updates');
     expect(content).toContain('IANA time zone');
-    expect(content).toContain('**Sync with Garmin**');
-    expect(content).toContain('**Enable sync**');
+    expect(content).toContain('**Sync plan with Garmin**');
+    expect(content).toContain('**Enable plan sync**');
+    expect(content).toContain('**Workout sync status**');
+    expect(content).toContain('individual workouts, not plans or edits');
+    expect(content).toContain('**Stop plan sync**');
+    expect(content).toContain('**Stop workout sync**');
     expect(content).toContain('there is no separate Preview step');
     expect(content).toContain('**Show attempt details**');
     expect(content).toContain('compact, scrollable **Revision history**');

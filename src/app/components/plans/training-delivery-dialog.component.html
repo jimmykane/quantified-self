@@ -1,6 +1,20 @@
 <h2 mat-dialog-title>{{ dialogTitle() }}</h2>
 <mat-dialog-content>
-  <p class="delivery-subtitle">{{ data.title }}</p>
+  @if (data.returnTo && !draft()) {
+    <button mat-button appHapticTap type="button" (click)="backToOverview()" [disabled]="busy()">
+      <mat-icon aria-hidden="true">arrow_back</mat-icon>{{ data.returnTo.scope === 'plan' ? 'Back to plan sync' : 'Back to sync history' }}
+    </button>
+  }
+  <div class="delivery-context">
+    <p class="delivery-subtitle">{{ scopeTitle() }}</p>
+    @if (workout(); as workout) {
+      <p class="delivery-caption">
+        <time [attr.datetime]="workout.localDate">{{ workout.localDate | date:'EEE, MMM d, y' }}</time>
+        · {{ workout.planId ? 'Plan: ' + (parentPlan()?.name ?? 'Unavailable plan') : 'Standalone workout' }}
+      </p>
+    }
+  </div>
+  @if (data.scope === 'history') { <p class="delivery-caption">Individual workouts across your plans and standalone workouts. Select a workout for sync details.</p> }
   @if (notice()) { <p role="status">{{ notice() }}</p> }
   @if (view().error || error()) { <p role="alert">{{ error() || 'Unable to load delivery settings.' }}</p> }
   @if (scheduleView().error) { <p role="alert">Unable to load the training schedule. Close and reopen this dialog to try again.</p> }
@@ -8,7 +22,7 @@
   @if (draft(); as draft) {
     <section aria-label="Review delivery change" class="delivery-review" [attr.aria-busy]="busy()">
       @if (draft.action === 'stop') {
-        <p>Stop future sync and remove eligible future provider copies. Past or completed workouts stay unchanged.</p>
+        <p>{{ data.scope === 'plan' ? 'Stop syncing this plan’s workouts to ' + draftLabel() + ' and remove eligible future copies.' : 'Stop syncing only this workout to ' + draftLabel() + ' and remove its eligible future copy. Other workouts are not affected.' }} Past or completed workouts stay unchanged.</p>
       } @else if (draft.action === 'retry') {
         <p>Inspect unfinished operations and retry the current delivery intent. Retry does not resume stopped sync or grant new consent.</p>
       } @else if (draft.action !== 'approve') {
@@ -68,61 +82,85 @@
   } @else {
     @for (row of rows(); track row.provider; let last = $last) {
       <app-compact-row [title]="row.label" layout="stacked" density="compact" [showDivider]="!last">
-        @if (planBound()) { <p class="delivery-caption">{{ row.settingLabel }}</p> }
-        @else if (row.setting) { <p class="delivery-caption">{{ row.settingLabel }} · {{ row.setting.timeZone }}</p> }
-        @if (!row.ready) { <p>Delivery unavailable. Existing copies and problems remain visible.</p> }
-        @if (data.scope !== 'history') {
-          <div class="delivery-actions">
-            @if (row.ready) {
-              @if (canSend() && (!planBound() || row.canResume)) {
-                <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : planBound() ? 'resume' : 'send')">
-                  {{ planBound() ? 'Resume sync' : row.setting?.enabled ? 'Sync settings' : data.scope === 'plan' ? 'Sync with ' + row.label : 'Send to ' + row.label }}
-                </button>
-              }
-              @if (row.canRetry) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'retry')">Retry</button> }
-              @if (row.approvalDigest && data.scope === 'workout' && canSend()) {
-                <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'approve', row.approvalDigest)">Review differences</button>
-              }
-            }
-            @if (row.reconnect) { <a mat-button routerLink="/services" appHapticTap (click)="dialogRef.close()">Check connection</a> }
-            @if (row.canStop) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'stop')">Stop sync</button> }
-          </div>
-        }
-        <ul class="delivery-list" [attr.aria-label]="row.label + ' workout deliveries'">
-          @for (status of row.statuses; track status.id) {
-            <li class="delivery-status" [class.delivery-status--summary]="data.scope !== 'workout'">
-              @if (data.scope !== 'workout') {
-                <div class="delivery-status-summary">
-                  @if (status.sourceExists) { <a [routerLink]="status.route" (click)="dialogRef.close()" appHapticTap>{{ status.title }}</a> }
-                  @else { <span>{{ status.title }}</span> }
-                  <p class="delivery-caption">{{ status.label }} · <time [attr.aria-label]="status.timestampLabel + ': ' + (status.timestamp | date:'medium')">{{ status.timestamp | date:'MMM d, y, HH:mm' }}</time></p>
-                </div>
-                <button mat-icon-button type="button" appHapticTap (click)="inspectWorkout(status)" [attr.aria-label]="'Delivery details for ' + status.title" matTooltip="Delivery details" [disabled]="busy()"><mat-icon aria-hidden="true">chevron_right</mat-icon></button>
-              } @else {
-                <p class="delivery-status-label">{{ status.label }}</p>
-                @if (status.copyMessage) { <p>{{ status.copyMessage }}</p> }
-                @if (status.nextRetryAtMs !== null) { <p class="delivery-caption">Next automatic check: {{ status.nextRetryAtMs | date:'medium' }}</p> }
-                @if (status.status === 'needs_attention') { <p>Retry inspects the earlier operation first. It will not blindly create another copy.</p> }
-                @for (issue of status.issues; track $index) { <p>{{ issue }}</p> }
-                @if (status.lastAttemptAtMs !== null || status.lastAcceptedAtMs !== null || status.retryCount) {
-                  <button mat-button type="button" appHapticTap (click)="toggleAttempts(status.id)"
-                    [attr.aria-expanded]="attemptsExpanded() === status.id" [attr.aria-controls]="'delivery-attempt-' + status.id">
-                    <mat-icon aria-hidden="true">{{ attemptsExpanded() === status.id ? 'expand_less' : 'expand_more' }}</mat-icon>{{ attemptsExpanded() === status.id ? 'Hide' : 'Show' }} attempt details
+        <div class="delivery-provider-settings">
+          @if (data.scope !== 'history') {
+            <p class="delivery-setting-label">{{ row.settingLabel }}</p>
+            @if (data.scope === 'plan') {
+              <p class="delivery-caption">Upcoming workouts are sent individually. New workouts and edits sync while this plan is active.</p>
+              @if (scopeRecord() && scopeRecord()?.lifecycle !== 'active') { <p class="delivery-caption">{{ row.setting?.enabled ? 'This plan is inactive. Future copies are withdrawn; syncing resumes only after activation.' : 'This plan is inactive. Activate it and enable plan sync to send workouts.' }}</p> }
+            } @else if (planBound()) { <p class="delivery-caption">These controls affect only this workout, not the rest of the plan.</p> }
+            @if (!planBound() && row.setting) { <p class="delivery-caption">Time zone: {{ row.setting.timeZone }}</p> }
+          }
+          @if (!row.ready) { <p>Delivery unavailable. Existing copies and problems remain visible.</p> }
+          @if (data.scope !== 'history') {
+            <div class="delivery-actions">
+              @if (row.ready) {
+                @if (canSend() && (!planBound() || row.canResume)) {
+                  <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : planBound() ? 'resume' : 'send')">
+                    {{ planBound() ? 'Resume workout sync' : row.setting?.enabled ? data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings' : data.scope === 'plan' ? 'Sync plan with ' + row.label : 'Send to ' + row.label }}
                   </button>
-                  <dl class="delivery-attempts delivery-caption" [id]="'delivery-attempt-' + status.id" [hidden]="attemptsExpanded() !== status.id">
-                    @if (status.lastAttemptAtMs !== null) { <div><dt>Last attempt</dt><dd>{{ status.lastAttemptAtMs | date:'medium' }}</dd></div> }
-                    @if (status.lastAcceptedAtMs !== null) { <div><dt>Last confirmed</dt><dd>{{ status.lastAcceptedAtMs | date:'medium' }}</dd></div> }
-                    @if (status.retryCount) { <div><dt>Failed attempts</dt><dd>{{ status.retryCount }}</dd></div> }
-                  </dl>
+                }
+                @if (row.canRetry) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'retry')">{{ data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync' }}</button> }
+                @if (row.approvalDigest && data.scope === 'workout' && canSend()) {
+                  <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'approve', row.approvalDigest)">Review differences</button>
                 }
               }
-            </li>
+              @if (row.reconnect) { <a mat-button routerLink="/services" appHapticTap (click)="dialogRef.close()">Check connection</a> }
+              @if (row.canStop) { <button mat-button appHapticTap type="button" [disabled]="busy() || !canReview()" (click)="begin(row.provider, 'stop')">{{ stopLabel() }}</button> }
+            </div>
           }
-        </ul>
+        </div>
+        <section class="delivery-workouts" [attr.aria-label]="row.label + ' workout sync status'">
+          @if (data.scope !== 'workout') {
+            <h4>Workout sync status</h4>
+            @if (!row.statuses.length) { <p class="delivery-caption">No workout sync status yet. Workouts appear here after their first sync check.</p> }
+          }
+          <ul class="delivery-list" [attr.aria-label]="row.label + ' workout deliveries'">
+            @for (status of row.statuses; track status.id) {
+              <li class="delivery-status" [class.delivery-status--summary]="data.scope !== 'workout'">
+                @if (data.scope !== 'workout') {
+                  <button mat-button type="button" class="delivery-workout-button" appHapticTap (click)="inspectWorkout(status)" [attr.aria-label]="'Sync details for workout: ' + status.title"
+                    [attr.aria-describedby]="'workout-summary-' + status.id" [disabled]="busy()">
+                    <span class="delivery-status-summary">
+                      <span class="delivery-workout-title">{{ status.title }}</span>
+                      <span class="delivery-workout-meta" [id]="'workout-summary-' + status.id">
+                        <span class="delivery-caption">
+                          @if (status.localDate) { <time [attr.datetime]="status.localDate">{{ status.localDate | date:'EEE, MMM d, y' }}</time> · }
+                          {{ status.label }}
+                        </span>
+                        @if ((data.scope === 'history' || status.moved) && status.scopeLabel) { <span class="delivery-caption">{{ status.scopeLabel }}</span> }
+                      </span>
+                    </span>
+                    <mat-icon iconPositionEnd aria-hidden="true">chevron_right</mat-icon>
+                  </button>
+                } @else {
+                  <p class="delivery-status-label">{{ status.label }}</p>
+                  <p class="delivery-caption">{{ status.timestampLabel }}: <time>{{ status.timestamp | date:'medium' }}</time></p>
+                  @if (status.copyMessage) { <p>{{ status.copyMessage }}</p> }
+                  @if (status.nextRetryAtMs !== null) { <p class="delivery-caption">Next automatic check: {{ status.nextRetryAtMs | date:'medium' }}</p> }
+                  @if (status.status === 'needs_attention') { <p>Retry inspects the earlier operation first. It will not blindly create another copy.</p> }
+                  @for (issue of status.issues; track $index) { <p>{{ issue }}</p> }
+                  @if (status.lastAttemptAtMs !== null || status.lastAcceptedAtMs !== null || status.retryCount) {
+                    <button mat-button type="button" appHapticTap (click)="toggleAttempts(status.id)"
+                      [attr.aria-expanded]="attemptsExpanded() === status.id" [attr.aria-controls]="'delivery-attempt-' + status.id">
+                      <mat-icon aria-hidden="true">{{ attemptsExpanded() === status.id ? 'expand_less' : 'expand_more' }}</mat-icon>{{ attemptsExpanded() === status.id ? 'Hide' : 'Show' }} attempt details
+                    </button>
+                    <dl class="delivery-attempts delivery-caption" [id]="'delivery-attempt-' + status.id" [hidden]="attemptsExpanded() !== status.id">
+                      @if (status.lastAttemptAtMs !== null) { <div><dt>Last attempt</dt><dd>{{ status.lastAttemptAtMs | date:'medium' }}</dd></div> }
+                      @if (status.lastAcceptedAtMs !== null) { <div><dt>Last confirmed</dt><dd>{{ status.lastAcceptedAtMs | date:'medium' }}</dd></div> }
+                      @if (status.retryCount) { <div><dt>Failed attempts</dt><dd>{{ status.retryCount }}</dd></div> }
+                    </dl>
+                  }
+                }
+              </li>
+            }
+          </ul>
+        </section>
       </app-compact-row>
     } @empty { @if (view().loaded) { <p>No providers are available for workout delivery yet.</p> } }
-    @if (canLoadMore()) { <button mat-button appHapticTap type="button" (click)="loadMore()" [disabled]="busy()">Load more deliveries</button> }
+    @if (canLoadMore()) { <button mat-button appHapticTap type="button" (click)="loadMore()" [disabled]="busy()">Show more workout statuses</button> }
   }
+  @if (workoutRoute() && !draft()) { <a mat-button [routerLink]="workoutRoute()" appHapticTap (click)="dialogRef.close()"><mat-icon aria-hidden="true">edit</mat-icon>Edit workout</a> }
   <div class="delivery-guidance">
     <button mat-button appHapticTap type="button" (click)="guidanceExpanded.set(!guidanceExpanded())"
       [attr.aria-expanded]="guidanceExpanded()" aria-controls="delivery-guidance-details">
@@ -130,7 +168,7 @@
     </button>
     <div id="delivery-guidance-details" [hidden]="!guidanceExpanded()" class="delivery-caption">
       <p>Sync is Pro and always opt-in. Manual planning stays free.</p>
-      <p>Only the active plan syncs. Pausing a plan withdraws eligible future copies; Pro expiry pauses changes and keeps copies.</p>
+      <p>Plan workouts sync only while their plan is active. Pausing a plan withdraws eligible future copies; Pro expiry pauses changes and keeps copies.</p>
       <p>To remove copies, use Stop sync before disconnecting. Disconnect or account deletion may leave copies with the provider.</p>
     </div>
   </div>

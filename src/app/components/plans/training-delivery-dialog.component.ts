@@ -16,6 +16,7 @@ import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigati
 
 export interface TrainingDeliveryDialogData {
   scope: TrainingDeliveryViewScope; id: string; title: string;
+  returnTo?: { scope: 'plan' | 'history'; id: string; title: string };
   /** Open a read-only consent check directly when there is only one available destination. */
   initialProvider?: PlannedWorkoutProviderId;
 }
@@ -66,6 +67,13 @@ export class TrainingDeliveryDialogComponent {
   readonly scopeRecord = computed(() => this.data.scope === 'history' ? undefined : this.data.scope === 'plan'
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)
     : this.schedule()?.workouts.find(workout => workout.id === this.data.id));
+  readonly workout = computed(() => this.data.scope === 'workout' ? this.schedule()?.workouts.find(item => item.id === this.data.id) : undefined);
+  readonly parentPlan = computed(() => this.schedule()?.plans.find(plan => plan.id === this.workout()?.planId));
+  readonly scopeTitle = computed(() => this.data.scope === 'plan'
+    ? this.schedule()?.plans.find(plan => plan.id === this.data.id)?.name ?? this.data.title
+    : this.workout()?.title ?? this.data.title);
+  readonly workoutRoute = computed(() => this.workout() && this.workout()?.lifecycle !== 'deleted' ? trainingPlansWorkoutRoute(this.data.id) : null);
+  readonly stopLabel = computed(() => this.data.scope === 'plan' ? 'Stop plan sync' : 'Stop workout sync');
   readonly planBound = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.data.id)?.planId != null && this.data.scope === 'workout');
   readonly canSend = computed(() => !!this.scopeRecord() && this.scopeRecord()!.lifecycle !== 'deleted');
   readonly canReview = computed(() => this.view().loaded && !this.view().error && !!this.schedule() && this.data.scope !== 'history'
@@ -76,15 +84,15 @@ export class TrainingDeliveryDialogComponent {
     return draft ? PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[draft.provider].label : '';
   });
   readonly dialogTitle = computed(() => {
-    if (this.data.scope === 'history') return 'Delivery history';
+    if (this.data.scope === 'history') return 'Workout sync history';
     switch (this.draft()?.action) {
-      case 'configure': return `Sync with ${this.draftLabel()}`;
-      case 'send': return `Send to ${this.draftLabel()}`;
-      case 'resume': return `Resume ${this.draftLabel()} sync`;
-      case 'stop': return `Stop ${this.draftLabel()} sync?`;
+      case 'configure': return `Plan sync with ${this.draftLabel()}`;
+      case 'send': return `Send workout to ${this.draftLabel()}`;
+      case 'resume': return 'Resume workout sync';
+      case 'stop': return `${this.stopLabel()}?`;
       case 'approve': return `Review ${this.draftLabel()} differences`;
-      case 'retry': return `Recover ${this.draftLabel()} delivery`;
-      default: return 'Workout sync';
+      case 'retry': return this.data.scope === 'plan' ? 'Retry plan sync' : 'Retry workout sync';
+      default: return this.data.scope === 'plan' ? 'Plan sync' : 'Workout sync';
     }
   });
   readonly canChangeTimeZone = computed(() => {
@@ -95,11 +103,11 @@ export class TrainingDeliveryDialogComponent {
     const draft = this.draft();
     const enabled = this.view().settings.some(item => item.provider === draft?.provider && item.enabled);
     switch (draft?.action) {
-      case 'stop': return 'Stop sync';
+      case 'stop': return this.stopLabel();
       case 'retry': return 'Request recovery';
       case 'approve': return 'Approve differences';
-      case 'resume': return 'Resume sync';
-      case 'configure': return enabled ? 'Save changes' : 'Enable sync';
+      case 'resume': return 'Resume workout sync';
+      case 'configure': return enabled ? 'Save plan sync settings' : 'Enable plan sync';
       default: return enabled ? 'Save changes' : 'Send workout';
     }
   });
@@ -110,19 +118,25 @@ export class TrainingDeliveryDialogComponent {
     const suppressed = !!inheritedSetting?.suppressed;
     const statuses = this.statuses().filter(item => item.provider === provider).map(status => {
       const workout = this.schedule()?.workouts.find(item => item.id === status.workoutId);
+      const plan = this.schedule()?.plans.find(item => item.id === workout?.planId);
       return { ...status, title: workout?.title ?? (this.scheduleView().error ? 'Workout unavailable'
-        : this.scheduleView().loaded ? 'Deleted workout' : 'Loading workout…'), sourceExists: !!workout && workout.lifecycle !== 'deleted',
+        : this.scheduleView().loaded ? 'Deleted workout' : 'Loading workout…'),
+        localDate: workout?.localDate ?? null,
+        scopeLabel: workout?.lifecycle === 'deleted' ? 'Deleted workout'
+          : workout ? workout.planId ? `Plan: ${plan?.name ?? 'Unavailable plan'}` : 'Standalone workout' : null,
+        moved: !!workout && (workout.lifecycle === 'deleted' || (this.data.scope === 'plan' && workout.planId !== this.data.id)),
         label: TRAINING_DELIVERY_STATUS_LABELS[status.status], copyMessage: trainingDeliveryCopyMessage(status),
         ...trainingDeliveryLatestEvent(status),
-        route: trainingPlansWorkoutRoute(status.workoutId) };
-    });
+      };
+    }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
       // Current settings precede the asynchronously reconciled status after Resume.
       canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'
         && (!this.planBound() || status.planId === currentPlanId))),
-      settingLabel: this.planBound() ? suppressed ? 'Stopped for this workout' : 'Uses this plan’s sync settings'
-        : setting?.enabled ? 'Sync enabled' : 'Sync off',
+      settingLabel: this.planBound() ? suppressed ? 'Stopped for this workout' : 'Follows plan sync settings'
+        : this.data.scope === 'plan' ? setting?.enabled ? 'Plan sync enabled' : 'Plan sync off'
+          : setting?.enabled ? 'Workout sync enabled' : 'Workout sync off',
       visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
       canStop: !!setting?.enabled || (this.planBound() && !suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
@@ -219,7 +233,7 @@ export class TrainingDeliveryDialogComponent {
       // Retain this exact mutation ID on failure, so an uncertain response is safe to retry.
       await this.delivery.mutate(preview.command, current);
       if (!current()) return;
-      this.notice.set(preview.command.action === 'stop' ? 'Stop sync saved. Eligible copies will be removed in the background.'
+      this.notice.set(preview.command.action === 'stop' ? `${this.stopLabel()} saved. Eligible copies will be removed in the background.`
         : preview.command.action === 'retry' ? 'Recovery requested. Provider retry limits still apply.'
           : 'Sync settings saved. Workout delivery continues in the background.');
       this.preview.set(null); this.draft.set(null); this.haptics.success();
@@ -233,8 +247,16 @@ export class TrainingDeliveryDialogComponent {
   inspectWorkout(status: TrainingDeliveryStatusV1): void {
     if (!this.sameAccount() || this.busy()) return;
     const title = this.schedule()?.workouts.find(workout => workout.id === status.workoutId)?.title ?? 'Deleted workout';
+    this.openContext({ scope: 'workout', id: status.workoutId, title,
+      ...(this.data.scope !== 'workout' ? { returnTo: { scope: this.data.scope, id: this.data.id, title: this.scopeTitle() } } : {}) });
+  }
+  backToOverview(): void {
+    if (this.data.returnTo) this.openContext(this.data.returnTo);
+  }
+  private openContext(data: TrainingDeliveryDialogData): void {
+    if (!this.sameAccount() || this.busy()) return;
     this.dialogRef.close();
-    this.dialog.open(TrainingDeliveryDialogComponent, { data: { scope: 'workout', id: status.workoutId, title },
+    this.dialog.open(TrainingDeliveryDialogComponent, { data,
       width: '640px', maxWidth: '95vw' });
   }
 }

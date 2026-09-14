@@ -8,7 +8,7 @@
     [status]="pageStatus()">
     @if (browsing()) {
     <div pageHeaderActions class="plans-header-actions">
-      <app-training-delivery-button scope="history" entityId="current" title="All provider deliveries"
+      <app-training-delivery-button scope="history" entityId="current" title="Plans and standalone workouts"
         [disabled]="busyAction() !== null"></app-training-delivery-button>
       <a mat-button routerLink="/calendar" appHapticTap>
         <mat-icon aria-hidden="true">calendar_month</mat-icon>
