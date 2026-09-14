@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { catchError, combineLatest, of, startWith, switchMap } from 'rxjs';
+import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1 } from '@shared/planned-workout-providers';
 import { SharedModule } from '../../modules/shared.module';
 import { AppUserService } from '../../services/app.user.service';
 import { TrainingDeliveryService, type TrainingDeliveryViewScope } from '../../services/training-delivery.service';
@@ -24,8 +25,23 @@ export class TrainingDeliveryButtonComponent {
       startWith(false), catchError(() => of(true))) : of(false))), { initialValue: false });
   readonly visible = computed(() => !!this.users.user()?.uid
     && ((this.scope() !== 'history' && this.delivery.anyReady()) || this.hasRecords()));
+  readonly singleProvider = computed(() => {
+    const providers = PLANNED_WORKOUT_PROVIDER_IDS.filter(provider => this.delivery.isReady(provider));
+    return providers.length === 1 ? providers[0] : null;
+  });
+  readonly buttonLabel = computed(() => {
+    if (this.scope() === 'history') return 'Delivery history';
+    if (this.hasRecords()) return 'Sync details';
+    const provider = this.singleProvider();
+    const label = provider ? PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label : null;
+    return this.scope() === 'plan' ? label ? `Sync with ${label}` : 'Sync workouts'
+      : this.standalone() ? label ? `Send to ${label}` : 'Send workout' : 'Sync details';
+  });
   open(): void {
-    if (!this.users.user()?.uid || this.disabled()) return;
-    this.dialog.open(TrainingDeliveryDialogComponent, { data: this.context(), width: '640px', maxWidth: '95vw' });
+    if (!this.visible() || this.disabled()) return;
+    const provider = this.singleProvider();
+    const data: TrainingDeliveryDialogData = { ...this.context(),
+      ...(!this.hasRecords() && provider && (this.scope() === 'plan' || this.standalone()) ? { initialProvider: provider } : {}) };
+    this.dialog.open(TrainingDeliveryDialogComponent, { data, width: '640px', maxWidth: '95vw' });
   }
 }

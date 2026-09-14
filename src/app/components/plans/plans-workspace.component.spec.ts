@@ -4,6 +4,7 @@ import { Location } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { MatDialog } from '@angular/material/dialog';
+import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDatepickerInput } from '@angular/material/datepicker';
 import { MatSelect } from '@angular/material/select';
@@ -24,8 +25,9 @@ import {
 import { PlansWorkspaceComponent } from './plans-workspace.component';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { TRAINING_PLAN_COLOR_OPTIONS, trainingPlanAppearance } from '../../helpers/training-plan-appearance.helper';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { createRequire } from 'node:module';
 
 describe('PlansWorkspaceComponent', () => {
   const user = { uid: TRAINING_PLANNING_UI_ALLOWED_UIDS[0], settings: { unitSettings: {} } };
@@ -86,6 +88,7 @@ describe('PlansWorkspaceComponent', () => {
       imports: [PlansWorkspaceComponent],
       providers: [
         provideRouter([]),
+        { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
         { provide: ActivatedRoute, useValue: route },
         { provide: AppUserService, useValue: { user: signal(user), user$: of(user) } },
         { provide: AppHapticsService, useValue: haptics },
@@ -1009,6 +1012,38 @@ describe('PlansWorkspaceComponent', () => {
     await pending;
 
     expect(fixture.componentInstance.historyPanel()).toBeNull();
+  });
+  it('keeps long revision histories bounded and deleted-workout details surface-free', async () => {
+    schedule.workouts.push({ ...schedule.workouts[0], id: 'deleted', lifecycle: 'deleted' });
+    const fixture = await renderPlans();
+    fixture.componentInstance.historyPanel.set({ scope: { kind: 'plan', id: 'active-plan' }, status: 'ready',
+      entries: Array.from({ length: 50 }, (_, index) => ({ revision: 50 - index, operationKind: 'update-workout',
+        createdAtMs: 1_789_000_000_000 - index * 60000, mutationId: 'edit-' + index, isCheckpoint: false })), nextBeforeRevision: null });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.history-entry')).toHaveLength(50);
+    expect(fixture.nativeElement.querySelector('.history-entries').getAttribute('tabindex')).toBe('0');
+    expect(fixture.nativeElement.querySelector('.history-entry button[mat-stroked-button]')).toBeNull();
+    const disclosure = fixture.nativeElement.querySelector('button[aria-controls="deleted-workout-list"]');
+    const list = fixture.nativeElement.querySelector('#deleted-workout-list');
+    expect(list.hidden).toBe(true); expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+    disclosure.click(); fixture.detectChanges();
+    expect(list.hidden).toBe(false); expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+    expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+    if (process.env.TRAINING_DELIVERY_QA_DIR) {
+      const sass = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'))('sass');
+      const css = [
+        ['app-plans-workspace', 'src/app/components/plans/plans-workspace.component.scss'],
+        ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
+      ].map(([host, file]) => sass.compileString(host + ' {' + readFileSync(file, 'utf8')
+        .replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&') + '}').css).join('\n');
+      // Export the real rendered history, not a hand-maintained visual facsimile.
+      writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, 'revision-history.html'),
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        + '<link rel="stylesheet" href="styles.css">' + Array.from(document.head.querySelectorAll('style')).map(style => style.outerHTML).join('')
+        + '<style>' + css + '</style></head><body><app-plans-workspace><main class="plans-workspace qs-workspace-page">'
+        + fixture.nativeElement.querySelector('.history-panel').outerHTML + '</main></app-plans-workspace></body></html>');
+    }
   });
 
   it('does not continue a restore after its history panel is closed', async () => {

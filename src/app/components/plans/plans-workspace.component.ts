@@ -216,6 +216,7 @@ export class PlansWorkspaceComponent {
   readonly workoutDatePickerValue = computed(() => workoutDatePickerInput(this.editor()?.value.localDate ?? ''));
   readonly busyAction = signal<string | null>(null);
   readonly historyPanel = signal<HistoryPanelState | null>(null);
+  readonly deletedWorkoutsExpanded = signal(false);
   readonly browsing = computed(() => !this.editor() && !this.showPlanForm());
   private readonly acknowledgedPlan = signal<{
     uid: string;

@@ -14,7 +14,11 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 import { TRAINING_DELIVERY_STATUS_LABELS, trainingDeliveryCommandError, trainingDeliveryCopyMessage } from '../../helpers/training-delivery-display.helper';
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
 
-export interface TrainingDeliveryDialogData { scope: TrainingDeliveryViewScope; id: string; title: string; }
+export interface TrainingDeliveryDialogData {
+  scope: TrainingDeliveryViewScope; id: string; title: string;
+  /** Open a read-only consent check directly when there is only one available destination. */
+  initialProvider?: PlannedWorkoutProviderId;
+}
 interface DeliveryDraft { provider: PlannedWorkoutProviderId; action: TrainingDeliveryAction; timeZone: string; approvalDigest?: string; }
 
 @Component({ selector: 'app-training-delivery-dialog', standalone: true,
@@ -30,13 +34,18 @@ export class TrainingDeliveryDialogComponent {
   readonly haptics = inject(AppHapticsService);
   private readonly destroyRef = inject(DestroyRef);
   private requestVersion = 0;
+  private initialReviewHandled = false;
   readonly uid = toSignal(this.users.user$.pipe(map(user => user?.uid ?? '')), { initialValue: '' });
   private readonly initialUid = this.users.user()?.uid;
+  private readonly sameAccount = computed(() => !!this.initialUid && this.uid() === this.initialUid && this.users.user()?.uid === this.initialUid);
   readonly error = signal<string | null>(null);
   readonly phase = signal<'preview' | 'saving' | null>(null);
   readonly busy = computed(() => this.phase() !== null);
   readonly notice = signal<string | null>(null);
   readonly draft = signal<DeliveryDraft | null>(null);
+  readonly editingTimeZone = signal(false);
+  readonly guidanceExpanded = signal(false);
+  readonly attemptsExpanded = signal<string | null>(null);
   readonly preview = signal<{ result: TrainingDeliveryPreviewV1; command: TrainingDeliveryCommandV1 } | null>(null);
   private readonly statusLimit = signal(TRAINING_DELIVERY_PAGE_SIZE);
   // Keep the entire loaded prefix live: separate cursor snapshots leave stale rows
@@ -62,7 +71,38 @@ export class TrainingDeliveryDialogComponent {
   readonly canReview = computed(() => this.view().loaded && !this.view().error && !!this.schedule() && this.data.scope !== 'history'
     && (!!this.scopeRecord() || this.statuses().length > 0));
   readonly statuses = computed(() => this.view().statuses);
-  readonly providerLabel = (provider: PlannedWorkoutProviderId) => PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label;
+  readonly draftLabel = computed(() => {
+    const draft = this.draft();
+    return draft ? PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[draft.provider].label : '';
+  });
+  readonly dialogTitle = computed(() => {
+    if (this.data.scope === 'history') return 'Delivery history';
+    switch (this.draft()?.action) {
+      case 'configure': return `Sync with ${this.draftLabel()}`;
+      case 'send': return `Send to ${this.draftLabel()}`;
+      case 'resume': return `Resume ${this.draftLabel()} sync`;
+      case 'stop': return `Stop ${this.draftLabel()} sync?`;
+      case 'approve': return `Review ${this.draftLabel()} differences`;
+      case 'retry': return `Recover ${this.draftLabel()} delivery`;
+      default: return 'Workout sync';
+    }
+  });
+  readonly canChangeTimeZone = computed(() => {
+    const action = this.draft()?.action;
+    return action === 'configure' || action === 'send' || (action === 'resume' && !this.planBound());
+  });
+  readonly confirmLabel = computed(() => {
+    const draft = this.draft();
+    const enabled = this.view().settings.some(item => item.provider === draft?.provider && item.enabled);
+    switch (draft?.action) {
+      case 'stop': return 'Stop sync';
+      case 'retry': return 'Request recovery';
+      case 'approve': return 'Approve differences';
+      case 'resume': return 'Resume sync';
+      case 'configure': return enabled ? 'Save changes' : 'Enable sync';
+      default: return enabled ? 'Save changes' : 'Send workout';
+    }
+  });
   readonly rows = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.map(provider => {
     const setting = this.view().settings.find(item => item.provider === provider);
     const currentPlanId = this.schedule()?.workouts.find(item => item.id === this.data.id)?.planId;
@@ -71,7 +111,10 @@ export class TrainingDeliveryDialogComponent {
       const workout = this.schedule()?.workouts.find(item => item.id === status.workoutId);
       return { ...status, title: workout?.title ?? (this.scheduleView().error ? 'Workout unavailable'
         : this.scheduleView().loaded ? 'Deleted workout' : 'Loading workout…'), sourceExists: !!workout && workout.lifecycle !== 'deleted',
-        label: TRAINING_DELIVERY_STATUS_LABELS[status.status], copyMessage: trainingDeliveryCopyMessage(status), route: trainingPlansWorkoutRoute(status.workoutId) };
+        label: TRAINING_DELIVERY_STATUS_LABELS[status.status], copyMessage: trainingDeliveryCopyMessage(status),
+        timestamp: status.lastAcceptedAtMs ?? status.lastAttemptAtMs ?? status.updatedAtMs,
+        timestampLabel: status.lastAcceptedAtMs !== null ? 'Last confirmed' : status.lastAttemptAtMs !== null ? 'Last attempt' : 'Updated',
+        route: trainingPlansWorkoutRoute(status.workoutId) };
     });
     const ready = this.delivery.isReady(provider);
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
@@ -102,19 +145,40 @@ export class TrainingDeliveryDialogComponent {
         this.preview.set(null); this.draft.set(null); this.dialogRef.close();
       }
     });
+    effect(() => {
+      // Presence is a lightweight entry-point hint. Wait for authoritative owner-visible
+      // settings/schedule before skipping the provider chooser; never auto-consent.
+      if (this.initialReviewHandled || !this.data.initialProvider || !this.canReview()) return;
+      this.initialReviewHandled = true;
+      const provider = this.data.initialProvider;
+      if (this.delivery.isReady(provider) && this.canSend() && !this.planBound()
+        && !this.view().settings.some(item => item.provider === provider)
+        && !this.statuses().some(item => item.provider === provider)) {
+        void this.begin(provider, this.data.scope === 'plan' ? 'configure' : 'send');
+      }
+    });
   }
-  begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string): void {
-    if (this.busy() || !this.uid() || !this.canReview() || this.data.scope === 'history'
+  async begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string): Promise<void> {
+    if (this.busy() || !this.sameAccount() || !this.canReview() || this.data.scope === 'history'
       || (!this.canSend() && !['stop', 'retry'].includes(action))) return;
     const setting = this.view().settings.find(item => item.provider === provider);
     this.error.set(null); this.preview.set(null); this.notice.set(null);
+    this.editingTimeZone.set(false);
     this.draft.set({ provider, action, timeZone: setting?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       ...(approvalDigest ? { approvalDigest } : {}) });
+    await this.review();
   }
   updateTimeZone(value: string): void {
     if (this.busy()) return;
     this.draft.update(draft => draft ? { ...draft, timeZone: value } : null);
-    this.preview.set(null);
+    this.preview.set(null); this.error.set(null);
+  }
+  toggleTimeZone(): void {
+    if (this.busy()) return;
+    this.editingTimeZone.update(value => !value);
+  }
+  toggleAttempts(id: string): void {
+    this.attemptsExpanded.update(value => value === id ? null : id);
   }
   cancelReview(): void {
     if (this.phase() === 'saving') return;
@@ -123,10 +187,10 @@ export class TrainingDeliveryDialogComponent {
   }
   async review(): Promise<void> {
     const draft = this.draft(); const scope = this.scopeRecord(); const schedule = this.schedule(); const uid = this.uid();
-    if (!draft || !schedule || !uid || this.busy() || !this.canReview() || this.data.scope === 'history') return;
+    if (!draft || !schedule || !this.sameAccount() || this.busy() || !this.canReview() || this.data.scope === 'history') return;
     const version = ++this.requestVersion;
-    const current = () => !this.destroyRef.destroyed && this.uid() === uid && this.requestVersion === version;
-    this.phase.set('preview'); this.error.set(null);
+    const current = () => !this.destroyRef.destroyed && this.sameAccount() && this.uid() === uid && this.requestVersion === version;
+    this.phase.set('preview'); this.error.set(null); this.preview.set(null);
     try {
       const command: TrainingDeliveryCommandV1 = { schemaVersion: 1, mutationId: this.delivery.createMutationId(),
         scope: this.data.scope, scopeId: this.data.id, provider: draft.provider, action: draft.action,
@@ -137,6 +201,7 @@ export class TrainingDeliveryDialogComponent {
         ...(draft.action === 'approve' ? { approvalDigest: draft.approvalDigest } : {}) };
       const result = await this.delivery.preview(command, current);
       if (!current()) return;
+      this.editingTimeZone.set(false);
       this.preview.set({ result, command: command.action === 'approve' && result.approvalDigest
         ? { ...command, approvalDigest: result.approvalDigest } : command });
     } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, false)); this.haptics.error(); } }
@@ -144,9 +209,9 @@ export class TrainingDeliveryDialogComponent {
   }
   async confirm(): Promise<void> {
     const preview = this.preview(); const uid = this.uid();
-    if (!preview || !uid || !this.canConfirm() || this.busy()) return;
+    if (!preview || !this.sameAccount() || !this.canConfirm() || this.busy()) return;
     const version = ++this.requestVersion;
-    const current = () => !this.destroyRef.destroyed && this.uid() === uid && this.requestVersion === version;
+    const current = () => !this.destroyRef.destroyed && this.sameAccount() && this.uid() === uid && this.requestVersion === version;
     this.phase.set('saving'); this.error.set(null);
     try {
       // Retain this exact mutation ID on failure, so an uncertain response is safe to retry.
@@ -160,11 +225,11 @@ export class TrainingDeliveryDialogComponent {
     finally { if (current()) this.phase.set(null); }
   }
   loadMore(): void {
-    if (!this.uid() || this.busy() || !this.canLoadMore()) return;
+    if (!this.sameAccount() || this.busy() || !this.canLoadMore()) return;
     this.statusLimit.update(count => count + TRAINING_DELIVERY_PAGE_SIZE);
   }
   inspectWorkout(status: TrainingDeliveryStatusV1): void {
-    if (!this.uid() || this.busy()) return;
+    if (!this.sameAccount() || this.busy()) return;
     const title = this.schedule()?.workouts.find(workout => workout.id === status.workoutId)?.title ?? 'Deleted workout';
     this.dialogRef.close();
     this.dialog.open(TrainingDeliveryDialogComponent, { data: { scope: 'workout', id: status.workoutId, title },

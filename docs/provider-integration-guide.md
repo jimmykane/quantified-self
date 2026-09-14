@@ -52,6 +52,12 @@ authoring is free and independent of connected services. Any future provider syn
 directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
 connection alone never opts workouts into delivery.
 
+The Training UI checks availability and compatibility automatically on entering sync consent. With one ready provider,
+**Sync with Garmin** → **Enable sync** (plan) or **Send to Garmin** → **Send workout** (standalone) is the normal path;
+subsequent eligible edits reconcile automatically. Opening the dialog never mutates consent. The saved/browser time
+zone is shown inline and changes explicitly; mapping degradation still needs per-workout approval. Troubleshooting is
+secondary, with compact status/history rows and surface-free Show/Hide details matching existing Training controls.
+
 Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
 actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
 controls and generic provider-copy retention warnings. This does not authorize transport work, alter disconnect or

@@ -575,12 +575,13 @@
     }
 
     @if (browsing() && deletedWorkoutRows().length) {
-      <mat-expansion-panel class="deleted-workouts-panel" (opened)="haptics.selection()" (closed)="haptics.selection()">
-        <mat-expansion-panel-header>
-          <mat-panel-title>Deleted workouts</mat-panel-title>
-          <mat-panel-description>{{ deletedWorkoutRows().length }} recoverable</mat-panel-description>
-        </mat-expansion-panel-header>
-        <mat-list>
+      <section class="deleted-workouts-panel" aria-label="Deleted workouts">
+        <button mat-button type="button" appHapticTap (click)="deletedWorkoutsExpanded.set(!deletedWorkoutsExpanded())"
+          [attr.aria-expanded]="deletedWorkoutsExpanded()" aria-controls="deleted-workout-list">
+          <mat-icon aria-hidden="true">{{ deletedWorkoutsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+          Deleted workouts · {{ deletedWorkoutRows().length }} recoverable
+        </button>
+        <mat-list id="deleted-workout-list" [hidden]="!deletedWorkoutsExpanded()">
           @for (row of deletedWorkoutRows(); track row.workout.id) {
             <mat-list-item>
               <mat-icon matListItemIcon aria-hidden="true">delete</mat-icon>
@@ -604,7 +605,7 @@
             </mat-list-item>
           }
         </mat-list>
-      </mat-expansion-panel>
+      </section>
     }
 
     @if (historyPanel(); as history) {
@@ -626,14 +627,14 @@
           } @else if (history.entries.length === 0) {
             <p>No revisions are available.</p>
           } @else {
-            <ul class="history-entries" aria-label="Schedule revisions">
+            <ul class="history-entries" aria-label="Schedule revisions" tabindex="0">
               @for (entry of history.entries; track entry.revision) {
                 <li class="history-entry">
                   <div class="history-entry-details">
                     <h3>Revision {{ entry.revision }} · {{ entry.operationKind }}</h3>
                     <p>{{ entry.createdAtMs | date:'medium' }}{{ entry.isCheckpoint ? ' · checkpoint' : '' }}</p>
                   </div>
-                  <button appHapticTap mat-stroked-button type="button" (click)="restoreHistoryEntry(entry)"
+                  <button appHapticTap mat-button type="button" (click)="restoreHistoryEntry(entry)"
                     [disabled]="busyAction() !== null">
                     <span class="button-content">
                       @if (busyAction() === 'restore-' + entry.revision) {

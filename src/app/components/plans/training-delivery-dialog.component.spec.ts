@@ -1,6 +1,8 @@
 import { ApplicationRef, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog } from '@angular/material/dialog';
+import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
+import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { BehaviorSubject, of, throwError } from 'rxjs';
@@ -37,6 +39,8 @@ describe('Training provider delivery controls', () => {
       mutate: vi.fn(async () => ({})) };
     await TestBed.configureTestingModule({ imports: [TrainingDeliveryDialogComponent, TrainingDeliveryButtonComponent], providers: [
       provideRouter([]), provideNoopAnimations(), { provide: AppUserService, useValue: { user, user$ } },
+      { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+      { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
       { provide: AppHapticsService, useValue: haptics }, { provide: TrainingDeliveryService, useValue: service },
       { provide: MAT_DIALOG_DATA, useValue: { scope: 'workout', id: 'w', title: 'Morning run' } },
       { provide: MatDialogRef, useValue: { close } }, { provide: MatDialog, useValue: { open: vi.fn() } },
@@ -51,7 +55,8 @@ describe('Training provider delivery controls', () => {
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Delivery uncertain'); expect(text).toContain('Stop sync');
     expect(text).not.toContain('Send workout'); expect(text).not.toContain('Configure sync');
-    expect(text).toContain('Last attempt:'); expect(text).toContain('Failed attempts: 1');
+    expect(text).toContain('Last attempt'); expect(text).toContain('Failed attempts');
+    expect(fixture.nativeElement.querySelector('.delivery-attempts').hidden).toBe(true);
     expect(haptics.selection).not.toHaveBeenCalled(); expect(haptics.success).not.toHaveBeenCalled();
     // Multiple controls belong below the status, not in the compact heading's
     // single-action slot, where they squeeze the provider name at phone widths.
@@ -61,7 +66,7 @@ describe('Training provider delivery controls', () => {
     service.isReady.mockReturnValue(true);
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const component = fixture.componentInstance;
-    component.begin('garmin', 'send'); component.updateTimeZone('Europe/Helsinki');
+    await component.begin('garmin', 'send'); component.updateTimeZone('Europe/Helsinki');
     expect(service.mutate).not.toHaveBeenCalled();
     await component.review();
     expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ expectedScheduleRevision: 3,
@@ -71,13 +76,106 @@ describe('Training provider delivery controls', () => {
     await component.confirm(); expect(haptics.success).toHaveBeenCalledOnce();
     expect(service.mutate.mock.calls[0][0]).toEqual(service.mutate.mock.calls[1][0]);
   });
+  it.each(['plan', 'workout'] as const)('opens the only destination directly for a new %s, checks automatically, and waits for consent', async scope => {
+    service.isReady.mockImplementation(provider => provider === 'garmin');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope, id: 'w', title: 'Morning run', initialProvider: 'garmin' } });
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [{ id: 'w', revision: 2, lifecycle: 'active' }], workouts: [{ id: 'w', revision: 2, planId: null }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(service.preview).toHaveBeenCalledOnce();
+    expect(service.preview.mock.calls[0][0].action).toBe(scope === 'plan' ? 'configure' : 'send');
+    expect(service.mutate).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).not.toContain('Preview change');
+    expect(fixture.nativeElement.querySelector('#delivery-time-zone').hidden).toBe(true);
+    const consent = fixture.nativeElement.querySelector('.delivery-review-actions button') as HTMLButtonElement;
+    expect(consent.textContent?.trim()).toBe(scope === 'plan' ? 'Enable sync' : 'Send workout');
+    expect(consent.disabled).toBe(false); consent.click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(service.mutate).toHaveBeenCalledOnce();
+    expect(service.mutate.mock.calls[0][0]).toEqual(service.preview.mock.calls[0][0]);
+    expect(fixture.componentInstance.draft()).toBeNull();
+    expect(service.preview).toHaveBeenCalledOnce(); // live updates do not reopen consent
+  });
+  it('waits for settings to load and never auto-reviews existing consent from a stale presence hint', async () => {
+    const view$ = new BehaviorSubject({ settings: [{ provider: 'garmin', enabled: true, timeZone: 'Europe/Helsinki' }], statuses: [] });
+    service.isReady.mockImplementation(provider => provider === 'garmin'); service.watchScope.mockReturnValue(view$);
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'workout', id: 'w', title: 'Morning run', initialProvider: 'garmin' } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges(); await fixture.whenStable();
+    expect(fixture.componentInstance.draft()).toBeNull(); expect(service.preview).not.toHaveBeenCalled();
+    view$.next({ settings: [], statuses: [] }); fixture.detectChanges(); await fixture.whenStable();
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it('requires a fresh automatic check after an explicit time-zone edit and keeps failed checks retryable', async () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    await component.begin('garmin', 'send');
+    component.toggleTimeZone(); component.updateTimeZone('America/New_York'); fixture.detectChanges();
+    expect(component.canConfirm()).toBe(false);
+    await component.confirm(); expect(service.mutate).not.toHaveBeenCalled();
+    const response = { ...await service.preview.mock.results[0].value, timeZone: 'America/New_York' };
+    service.preview.mockRejectedValueOnce({ name: 'TimeoutError' }); await component.review();
+    expect(component.canConfirm()).toBe(false); expect(component.editingTimeZone()).toBe(true);
+    service.preview.mockResolvedValueOnce(response); await component.review();
+    expect(component.preview()?.command.timeZone).toBe('America/New_York');
+    expect(component.editingTimeZone()).toBe(false); expect(service.mutate).not.toHaveBeenCalled();
+    await component.confirm(); expect(service.mutate.mock.calls[0][0].timeZone).toBe('America/New_York');
+  });
+  it('does not turn mapping warnings into automatic degradation approval', async () => {
+    const response = await service.preview(); service.preview.mockClear();
+    service.preview.mockResolvedValue({ ...response, warningCount: 1, issues: ['Power target requires review.'], approvalDigest: 'latest-digest' });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    await component.begin('garmin', 'send'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('degraded workouts require individual approval');
+    expect(service.mutate).not.toHaveBeenCalled();
+    await component.confirm();
+    expect(service.mutate.mock.calls[0][0]).not.toHaveProperty('approvalDigest');
+    await component.begin('garmin', 'approve', 'old-digest');
+    expect(service.mutate).toHaveBeenCalledOnce(); // approving is a separate, explicit action
+    await component.confirm();
+    expect(service.mutate.mock.calls[1][0]).toMatchObject({ action: 'approve', approvalDigest: 'latest-digest' });
+  });
+  it('renders 25 dense history summaries without a panel or repeated attempt/help details per workout', () => {
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'history', id: 'current', title: 'All deliveries' } });
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: Array.from({ length: 25 }, (_, i) => ({ ...status, id: String(i) })) }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.delivery-status--summary');
+    expect(rows).toHaveLength(25);
+    expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.delivery-attempts')).toBeNull();
+    expect(rows[0].querySelectorAll('p')).toHaveLength(1);
+    expect(rows[0].querySelector('button').getAttribute('aria-label')).toBe('Delivery details for Morning run');
+    expect(rows[0].textContent).toContain('2026');
+  });
+  it('uses surface-free disclosures with controlled regions and one feedback owner', () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    for (const id of ['delivery-attempt-delivery', 'delivery-guidance-details']) {
+      const button = fixture.nativeElement.querySelector('button[aria-controls="' + id + '"]') as HTMLButtonElement;
+      const region = fixture.nativeElement.querySelector('#' + id) as HTMLElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false'); expect(region.hidden).toBe(true);
+      button.click(); fixture.detectChanges();
+      expect(button.getAttribute('aria-expanded')).toBe('true'); expect(region.hidden).toBe(false);
+    }
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+  });
   it('clears staged approval and records and closes when the account changes', async () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const component = fixture.componentInstance;
-    component.begin('garmin', 'stop'); await component.review();
+    await component.begin('garmin', 'stop');
     user.set(null); user$.next(null); fixture.detectChanges();
     expect(component.preview()).toBeNull(); expect(component.view().statuses).toEqual([]); expect(close).toHaveBeenCalled();
     await component.confirm(); expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it('blocks actions immediately on account replacement before the close effect or user stream runs', async () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    await component.begin('garmin', 'send'); service.preview.mockClear();
+    user.set({ uid: 'replacement' });
+    await component.confirm(); await component.begin('garmin', 'send'); await component.review();
+    expect(service.mutate).not.toHaveBeenCalled(); expect(service.preview).not.toHaveBeenCalled();
   });
   it('lets the user cancel a read-only preview and ignores its late response', async () => {
     const response = await service.preview();
@@ -85,8 +183,7 @@ describe('Training provider delivery controls', () => {
     service.preview.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const component = fixture.componentInstance;
-    component.begin('garmin', 'stop');
-    const pending = component.review(); fixture.detectChanges();
+    const pending = component.begin('garmin', 'stop'); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Checking availability');
     expect(Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
       .find(button => button.textContent?.trim() === 'Cancel')?.disabled).toBe(false);
@@ -99,11 +196,10 @@ describe('Training provider delivery controls', () => {
     const response = await service.preview();
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const component = fixture.componentInstance;
-    component.begin('garmin', 'stop');
-    if (phase === 'saving') await component.review();
+    if (phase === 'saving') await component.begin('garmin', 'stop');
     let resolve!: (value: unknown) => void;
     service[phase === 'saving' ? 'mutate' : 'preview'].mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-    const pending = phase === 'saving' ? component.confirm() : component.review();
+    const pending = phase === 'saving' ? component.confirm() : component.begin('garmin', 'stop');
     fixture.destroy(); resolve(response); await pending;
     expect(haptics.success).not.toHaveBeenCalled(); expect(haptics.error).not.toHaveBeenCalled();
     if (phase === 'preview') expect(component.preview()).toBeNull();
@@ -111,15 +207,16 @@ describe('Training provider delivery controls', () => {
   it('reports a preview timeout as read-only and distinguishes saving from delivery success', async () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const component = fixture.componentInstance;
-    component.begin('garmin', 'stop'); service.preview.mockRejectedValueOnce({ name: 'TimeoutError' });
-    await component.review();
+    service.preview.mockRejectedValueOnce({ name: 'TimeoutError' });
+    await component.begin('garmin', 'stop');
     expect(component.busy()).toBe(false); expect(component.error()).toContain('No sync settings were changed');
     await component.review(); await component.confirm(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Eligible copies will be removed in the background');
   });
   it('does not call a preview with an invalid IANA zone', async () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    fixture.componentInstance.begin('garmin', 'send'); fixture.componentInstance.updateTimeZone('bad/zone');
+    await fixture.componentInstance.begin('garmin', 'send'); service.preview.mockClear();
+    fixture.componentInstance.updateTimeZone('bad/zone');
     await fixture.componentInstance.review();
     expect(service.preview).not.toHaveBeenCalled();
     expect(fixture.componentInstance.error()).toContain('time zone');
@@ -149,7 +246,7 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Resume delivery');
     expect(fixture.nativeElement.textContent).not.toContain('Sync off');
     expect(haptics.selection).not.toHaveBeenCalled();
-    (fixture.nativeElement.querySelector('mat-expansion-panel-header') as HTMLElement).click();
+    (fixture.nativeElement.querySelector('button[aria-controls="delivery-attempt-delivery"]') as HTMLElement).click();
     expect(haptics.selection).toHaveBeenCalledOnce();
   });
   it.each(['send', 'stop'] as const)('shows permission repair with zero mapping warnings when reviewing %s', async action => {
@@ -157,7 +254,7 @@ describe('Training provider delivery controls', () => {
     service.preview.mockResolvedValue({ ...(await service.preview()), connection: 'connection_repair', warningCount: 0,
       issues: ['Garmin Training permission is required. Reconnect Garmin and allow training workouts.'] });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    fixture.componentInstance.begin('garmin', action); await fixture.componentInstance.review(); fixture.detectChanges();
+    await fixture.componentInstance.begin('garmin', action); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Garmin Training permission is required. Reconnect Garmin');
     expect(fixture.nativeElement.textContent).not.toContain('Workout Import');
     expect(fixture.nativeElement.textContent).not.toContain('workouts need review');
@@ -198,7 +295,7 @@ describe('Training provider delivery controls', () => {
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, workoutId: 'deleted' }] }));
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const details = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
-      .find(button => button.textContent?.trim() === 'Delivery details');
+      .find(button => button.getAttribute('aria-label') === 'Delivery details for Deleted workout');
     expect(details).toBeDefined(); details!.click();
     expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent,
       expect.objectContaining({ data: { scope: 'workout', id: 'deleted', title: 'Deleted workout' } }));
@@ -212,7 +309,7 @@ describe('Training provider delivery controls', () => {
     const component = fixture.componentInstance;
     expect(fixture.nativeElement.textContent).not.toContain('Send workout');
     component.begin('garmin', 'send'); expect(component.draft()).toBeNull();
-    component.begin('garmin', 'retry'); await component.review();
+    await component.begin('garmin', 'retry');
     expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ scope: 'workout', scopeId: 'w', expectedScopeRevision: 0, action: 'retry' }), expect.any(Function));
   });
   it('does not expose a button when no provider is ready and no settings/status exist', () => {
@@ -221,6 +318,20 @@ describe('Training provider delivery controls', () => {
     fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p'); fixture.componentRef.setInput('title', 'Plan');
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button')).toBeNull();
+  });
+  it.each([1, 2])('opens the consent check directly only for a single ready provider (%s ready)', count => {
+    const open = vi.fn();
+    TestBed.overrideComponent(TrainingDeliveryButtonComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
+    service.anyReady = () => true; service.watchPresence.mockReturnValue(of(false));
+    service.isReady.mockImplementation(provider => provider === 'garmin' || (count === 2 && provider === 'coros'));
+    const fixture = TestBed.createComponent(TrainingDeliveryButtonComponent);
+    fixture.componentRef.setInput('scope', 'plan'); fixture.componentRef.setInput('entityId', 'p'); fixture.componentRef.setInput('title', 'Plan');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain(count === 1 ? 'Sync with Garmin' : 'Sync workouts');
+    fixture.nativeElement.querySelector('button').click();
+    const data = open.mock.calls[0][1].data;
+    expect(data.initialProvider).toBe(count === 1 ? 'garmin' : undefined);
+    expect(service.mutate).not.toHaveBeenCalled();
   });
   it('shows Send only for the pilot and hides it on account switch or sign-out without creating consent', () => {
     service.watchPresence.mockReturnValue(of(false));
@@ -271,18 +382,17 @@ describe('Training provider delivery controls', () => {
     render('delivery-status'); render('delivery-status-dark');
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     expect(document.querySelector('[role="dialog"]')?.classList.contains('mdc-dialog--open')).toBe(true);
-    expect(document.querySelector('h2')?.textContent).toContain('Provider delivery');
+    expect(document.querySelector('h2')?.textContent).toContain('Workout sync');
     expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-labelledby')).toBe(document.querySelector('h2')?.id);
-    ref.componentInstance.begin('garmin', 'send'); render('delivery-settings');
-    await ref.componentInstance.review(); render('delivery-preview');
+    const check = ref.componentInstance.begin('garmin', 'send'); render('delivery-settings');
+    await check; render('delivery-preview');
     ref.componentInstance.phase.set('saving'); render('delivery-pending'); ref.componentInstance.phase.set(null);
     ref.componentRef!.changeDetectorRef.detectChanges();
     Array.from(document.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Cancel')!.click();
     expect(ref.componentInstance.draft()).toBeNull();
     expect(ref.componentInstance.preview()).toBeNull();
-    ref.componentInstance.begin('garmin', 'retry');
     service.preview.mockResolvedValue({ ...(await service.preview()), hasPro: false, effect: 'retry' });
-    await ref.componentInstance.review(); render('delivery-retry');
+    await ref.componentInstance.begin('garmin', 'retry'); render('delivery-retry');
     expect(ref.componentInstance.canConfirm()).toBe(true);
     expect(document.body.textContent).toContain('Retry does not resume stopped sync');
     await ref.componentInstance.confirm();
@@ -298,8 +408,29 @@ describe('Training provider delivery controls', () => {
     await TestBed.inject(ApplicationRef).whenStable();
     ref = TestBed.inject(MatDialog).openDialogs.at(-1)!;
     expect(ref.componentInstance.data).toEqual({ scope: 'workout', id: 'deleted', title: 'Deleted workout' });
-    ref.componentInstance.begin('garmin', 'retry'); await ref.componentInstance.review(); render('delivery-deleted-recovery');
+    await ref.componentInstance.begin('garmin', 'retry'); render('delivery-deleted-recovery');
     expect(ref.componentInstance.preview()?.command.expectedScopeRevision).toBe(0);
     ref.close();
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [] }));
+    vi.spyOn(TestBed.inject(TrainingPlansService), 'watchSchedule').mockReturnValue(of({ state: { revision: 3 },
+      plans: [{ id: 'p', revision: 2, lifecycle: 'active' }], workouts: [] }) as never);
+    service.preview.mockResolvedValue({ ...(await service.preview()), hasPro: true, effect: 'enable', eligibleCount: 12 });
+    ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'plan', id: 'p', title: 'Autumn training · September–December', initialProvider: 'garmin' }, width: '640px', maxWidth: '95vw',
+    });
+    TestBed.inject(ApplicationRef).tick();
+    await TestBed.inject(ApplicationRef).whenStable(); render('plan-enable'); render('plan-enable-dark');
+    expect(ref.componentInstance.confirmLabel()).toBe('Enable sync');
+    expect(ref.componentInstance.canConfirm()).toBe(true); expect(ref.componentInstance.busy()).toBe(false);
+    ref.componentInstance.toggleTimeZone(); render('plan-time-zone'); ref.close();
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: Array.from({ length: 25 }, (_, index) => ({
+      ...status, id: 'history-' + index, status: index % 3 === 0 ? 'needs_attention' : 'delivered',
+      lastAcceptedAtMs: index % 3 === 0 ? null : status.lastAttemptAtMs,
+    })) }));
+    ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'history', id: 'current', title: 'All provider deliveries' }, width: '640px', maxWidth: '95vw',
+    });
+    await TestBed.inject(ApplicationRef).whenStable(); render('delivery-history-many'); render('delivery-history-many-dark');
+    expect(document.querySelectorAll('.delivery-status--summary')).toHaveLength(25); ref.close();
   });
 });

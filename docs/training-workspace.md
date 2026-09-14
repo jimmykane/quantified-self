@@ -357,7 +357,11 @@ A newly created plan remains selectable using the server-acknowledged record and
 plan and state listeners catch up. This transient, user-scoped bridge prevents jumping back to a previously active plan
 or issuing the next mutation against the pre-creation revision; it does not replace the live schedule or persist a cache.
 Revision history uses wrapping semantic rows with Material restore buttons so operation and date details remain readable
-on phones rather than being truncated in single-line list slots. Failed history reads have an explicit Retry action.
+on phones rather than being truncated in single-line list slots. Rows use compact body typography, small secondary dates,
+6px vertical padding and text Restore actions. The keyboard-focusable list is bounded to 24rem/half the viewport, keeping
+long edit histories from taking over the page. Deleted workouts use the same surface-free Show/Hide Material-button
+pattern as Training recovery details, with controlled hidden content and haptic feedback, not a raised expansion panel.
+Failed history reads have an explicit Retry action.
 
 The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
 workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and
@@ -510,14 +514,25 @@ The workspace's **Delivery history** entry appears only when delivery records ex
 their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
 only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
 cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
-but cannot bypass explicit-disconnect epochs. Preview precedes consent; an uncertain callable response retains the
-same mutation ID for Retry. Preview is explicitly read-only, has a 30-second end-to-end deadline (including readiness),
+but cannot bypass explicit-disconnect epochs. New opt-in with one ready provider opens the automatic read-only check
+directly from **Sync with Garmin** / **Send to Garmin**. The dialog waits for owner settings and schedule before taking
+that shortcut; existing records or inherited plan consent open details instead. Multiple providers keep a chooser.
+There is no manual Preview step: availability/compatibility checks run on entering a change, then the single **Enable
+sync** / **Send workout** confirmation grants consent. Opening, reloading, cancelling, and live updates never opt in.
+The saved/browser IANA zone is shown inline; **Change** reveals its field and **Use time zone** rechecks without saving.
+Changing a zone invalidates the earlier preview. Degradation still requires explicit per-workout approval; enabling sync
+never approves warnings. An uncertain callable response retains the same mutation ID for retrying confirmation.
+Preview is explicitly read-only, has a 30-second end-to-end deadline (including readiness),
 and can be cancelled; saving has a 70-second deadline and retains its exact receipt identity on an uncertain response.
 Late results after cancellation, destruction or account change cannot replace the current review. Account/view guards
 also prevent a delayed readiness retry from starting a stale callable. Saving settings is labelled separately from
 confirmed remote delivery. A retained artifact without a fully confirmed first delivery is explained as unconfirmed,
-not as a known different workout. Attempt timestamps/counts and lifecycle guidance use Material disclosures; the next
-automatic check remains visible. Already inherited plan delivery does not offer a misleading Resume action.
+not as a known different workout. Plan/history lists show compact title/status/time rows with a labelled details arrow,
+not an expanded explanation or attempt card per record. They show the current safe projection per delivery identity,
+not private attempt journals or one public record per authored edit. Workout attempt timestamps/counts and lifecycle
+guidance use surface-free Show/Hide Material buttons with `aria-expanded`/`aria-controls`, matching Training recovery
+details; no raised expansion panels. The next automatic check remains visible in workout details. Already inherited plan
+delivery does not offer a misleading Resume action.
 Account changes clear drafts/results and close the dialog. The planning UI rollout described
 above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
 Completed activity totals are unchanged.
@@ -533,10 +548,12 @@ any receipt TTL policy only with separate approval. Do not enable provider HTTP 
 their contract/sandbox gates; completion matching remains #651 and Sports Lib extraction #654.
 
 For isolated visual QA, create a temporary directory and set `TRAINING_DELIVERY_QA_DIR` to it when running
-`npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts`. The test exports synthetic Material
-dialog DOM for status, settings, preview, pending, Retry, history and deleted-source recovery states, including the real component SCSS compiled with the
-Angular build's Sass dependency. Build the local app, then link/copy `dist/browser/styles.css` and `dist/browser/media`
-beside the HTML. Open those fixtures in a browser at 320, 390 and 1440px in light/dark themes; verify readable status,
+`npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts src/app/components/plans/plans-workspace.component.spec.ts`.
+The tests export synthetic Material dialog DOM for status, automatic checking, consent, time-zone editing, pending,
+Retry, 25-row delivery history and deleted-source recovery, plus a 50-row authored revision history. They include the
+app's Material Symbols default, generated component styles, and real component SCSS compiled with the Angular build's
+Sass dependency. Build the local app, then copy its emitted `dist/browser/styles-*.css` as `styles.css` and link/copy
+`dist/browser/media` beside the HTML. Open those fixtures in a browser at 320, 390 and desktop widths in light/dark themes; verify readable status,
 labelled inputs, named dialog, wrapping, scrolling, Close, and disabled pending controls with no horizontal overflow.
 These rendered fixtures contain no application backend or selectable transport. Component tests exercise actual actions
 and account reset; emulator tests exercise backend lifecycle. Browser emulation does not establish physical vibration.
