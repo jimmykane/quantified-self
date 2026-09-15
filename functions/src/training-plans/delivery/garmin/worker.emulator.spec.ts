@@ -14,6 +14,8 @@ import { GarminHttpFixture } from '../test-support/garmin-http-fixture';
 import { GarminTrainingTransport } from './transport';
 import { GarminTrainingHttpError } from './http';
 import { authorizeGarminTrainingRequest } from './authorization';
+import { GARMIN_INSPECTION_POLICY } from './inspection';
+import { processTrainingVerification } from '../verification-worker';
 
 // Real Firestore authority and worker transactions; shared OAuth refresh is replaced
 // with its persisted result, and every provider request stays in the synthetic server.
@@ -30,6 +32,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
   let server: GarminHttpFixture;
   let now: number;
   let pro: boolean;
+  let proveRepair: boolean;
   const user = () => db.collection('users').doc(uid);
   const credential = () => db.collection(service.tokens).doc(uid).collection('tokens').doc('current');
   const ledger = async () => (await user().collection(DELIVERY_LEDGER).get()).docs[0]?.data() as DeliveryLedgerV1;
@@ -56,15 +59,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
   };
   beforeEach(async () => {
     uid = `garmin-delivery-test-${randomUUID()}`; users.push(uid);
-    now = Date.parse('2026-09-14T10:00:00Z'); pro = true; server = new GarminHttpFixture();
-    const bind = (operation: DeliveryOperation) => new GarminTrainingTransport(async (request, beforeSend) => {
+    now = Date.parse('2026-09-14T10:00:00Z'); pro = true; proveRepair = false; server = new GarminHttpFixture();
+    const inspectionPolicy = () => ({ ...GARMIN_INSPECTION_POLICY, authoritativeAbsence: proveRepair, repairReady: proveRepair });
+    const bind = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new GarminTrainingTransport(async (request, beforeSend) => {
       await authorizeGarminTrainingRequest(db, uid, operation);
       return server.request(request, beforeSend);
-    }, () => now);
+    }, () => now, inspectionPolicy());
     const policy = new GarminTrainingTransport(server.request, () => now);
     runtime = { ...productionDeliveryRuntime(db), now: () => now, hasPro: async () => pro,
       transport: provider => provider !== 'garmin' ? null : {
         mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays,
+        ...(proveRepair ? { inspection: { policy: inspectionPolicy(), inspect: (request, guard) => bind(request).inspection.inspect(request, guard) } } : {}),
         assess: (...args) => policy.assess(...args), canRemove: (...args) => policy.canRemove(...args),
         execute: (operation, checkpoint, guard) => bind(operation).execute(operation, checkpoint, guard),
         recover: (operation, checkpoint, guard) => bind(operation).recover(operation, checkpoint, guard),
@@ -108,6 +113,58 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.workouts.size + server.schedules.size).toBe(0);
     expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(2);
   }, 30_000);
+
+  it.each(['accepted', 'rejected'] as const)('withdraws the surviving original schedule when Stop interrupts a repair after a %s replacement POST', async outcome => {
+    proveRepair = true;
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.workouts.delete(original.ids.workout);
+    await processTrainingVerification(runtime, uid, id); now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification?.state).toBe('restoring');
+    const stop = async (request: { method: string; path: string }) => {
+      if (request.method !== 'POST' || !request.path.includes('workout')) return;
+      server.afterHandle = null; server.beforeHandle = null;
+      await command('stop'); await drain();
+      if (outcome === 'rejected') throw new GarminTrainingHttpError('retryable', true);
+    };
+    if (outcome === 'accepted') server.afterHandle = stop; else server.beforeHandle = stop;
+    await processTrainingDelivery(runtime, uid, id);
+    for (let pass = 0; pass < 4; pass++) { await retry(id); await drain(); }
+    expect(server.schedules.size).toBe(0);
+    expect(server.workouts.size).toBe(0);
+    expect((await ledger()).attempt).toBeNull();
+  });
+
+  it.each(['ready', 'inspection-paused'] as const)('finishes the latest edit after partial repair, respecting %s readiness', async readiness => {
+    proveRepair = true;
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.workouts.delete(original.ids.workout);
+    await processTrainingVerification(runtime, uid, id); now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || !request.path.includes('workout')) return;
+      server.afterHandle = null; await edit();
+    };
+    await processTrainingDelivery(runtime, uid, id);
+    await retry(id); await drain(); // Recover and retire the old authored revision.
+    if (readiness === 'inspection-paused') {
+      proveRepair = false;
+      const count = server.calls.length;
+      await retry(id);
+      expect(server.calls).toHaveLength(count);
+      expect((await ledger()).repair?.continuation).toBe(true);
+      proveRepair = true; await mark(); await drain();
+    }
+    for (let pass = 0; pass < 4; pass++) { await retry(id); await drain(); }
+    expect((await ledger()).status).toBe('delivered');
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    expect(server.workouts.values().next().value?.workoutName).toBe('Revised run');
+    expect(server.schedules.get(original.ids.schedule)?.date).toBe('2026-09-21');
+    expect(server.schedules.get(original.ids.schedule)?.workoutId).toBe((await ledger()).actual!.ids.workout);
+    expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(2);
+  });
 
   it('confirms an empty successful schedule create in one worker attempt, retaining one identity under duplicate dispatch', async () => {
     const request = server.request;

@@ -26,6 +26,7 @@ describe('Garmin delivery credential binding', () => {
     expect(await authorizeGarminTrainingRequest(db, 'fixture-uid', operation)).toBe('fixture-token');
     expect(mocks.refresh).toHaveBeenCalledWith(authority.token, ServiceNames.GarminAPI, false, {
       opaqueTelemetry: true, expectedActiveOAuthCredentialGeneration: 'credential',
+      beforeRefreshRequest: expect.any(Function),
     });
     expect(mocks.read).toHaveBeenCalledTimes(2); expect(mocks.deletion).toHaveBeenCalledTimes(2);
   });

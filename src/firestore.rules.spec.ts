@@ -1508,7 +1508,7 @@ describe('Firestore Security Rules', () => {
             it('allows only owner reads of delivery projections and denies internal delivery state even to owners', async () => {
                 const owner = testEnv.authenticatedContext(userId).firestore();
                 const other = testEnv.authenticatedContext(otherId).firestore();
-                for (const collection of ['trainingDeliverySettings', 'trainingDeliveryStatuses']) {
+                for (const collection of ['trainingDeliverySettings', 'trainingDeliveryStatuses', 'trainingDeliveryVerifications']) {
                     const path = `users/${userId}/${collection}/example`;
                     await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(path).set({ schemaVersion: 1 }));
                     await assertSucceeds(owner.doc(path).get());
@@ -1523,7 +1523,11 @@ describe('Firestore Security Rules', () => {
                     `users/${userId}/trainingDeliveryLedger/id/attempts/attempt`,
                     `users/${userId}/trainingDeliveryState/current`,
                     `users/${userId}/trainingDeliveryState/current/receipts/mutation`,
-                    `users/${userId}/trainingDeliveryScopes/workout`, 'trainingDeliveryQueue/job']) {
+                    `users/${userId}/trainingDeliveryScopes/workout`, 'trainingDeliveryQueue/job', 'trainingProviderCapacity/garmin_app',
+                    `users/${userId}/trainingProviderCapacity/garmin_account`,
+                    `users/${userId}/trainingDeliveryLedger/id/inspections/read`,
+                    `users/${userId}/trainingDeliveryLedger/id/attempts/attempt/acceptances/checkpoint`,
+                    `users/${userId}/trainingDeliveryState/current/checks/workout_w_garmin`]) {
                     await assertFails(owner.doc(path).get());
                     await assertFails(owner.doc(path).set({ forged: true }));
                 }

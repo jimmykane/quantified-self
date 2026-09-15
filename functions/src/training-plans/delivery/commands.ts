@@ -15,9 +15,11 @@ import { deliveryIdentity } from './intent';
 import { assessTrainingDeliveryMapping } from './mapping';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { productionDeliveryRuntime } from './runtime';
+import type { TrainingVerificationReceiptV1 } from '../../../../shared/training-provider-verification';
+import { VERIFICATION_COALESCE_MS } from './verification-contracts';
 
 export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: string, raw: unknown,
-  previewOnly: boolean): Promise<TrainingDeliveryPreviewV1 | TrainingDeliverySettingsV1> {
+  previewOnly: boolean): Promise<TrainingDeliveryPreviewV1 | TrainingDeliverySettingsV1 | TrainingVerificationReceiptV1> {
   const command: TrainingDeliveryCommandV1 = parseTrainingDeliveryCommandV1(raw);
   const user = runtime.db.collection('users').doc(uid);
   const privateState = user.collection(DELIVERY_STATE).doc('current');
@@ -55,6 +57,25 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     }
     const connection = await runtime.connection(tx, uid, command.provider);
     const transport = runtime.transport(command.provider, uid);
+    if (command.action === 'check') {
+      if (previewOnly) throw new HttpsError('invalid-argument', 'Remote checks use the mutation command, not a preview.');
+      if (!pro) throw new HttpsError('permission-denied', 'Remote checking requires Pro or an active grace period.');
+      if (!transport?.inspection || transport.inspection.policy.mode === 'unavailable') throw new HttpsError('failed-precondition', 'Remote checking is unavailable.');
+      if (connection.state !== 'connected') throw new HttpsError('failed-precondition', 'Check your provider connection first.');
+      const checkRef = privateState.collection('checks').doc(deliverySettingsId(command.scope, command.scopeId, command.provider));
+      const prior = await tx.get(checkRef);
+      const now = runtime.now();
+      const coalesced = prior.exists && prior.data()!.requestedAtMs > now - VERIFICATION_COALESCE_MS;
+      const notBeforeMs = Math.max(now, await runtime.requestNotBefore?.(tx, uid, command.provider, connection.destinationKey) ?? now);
+      const result: TrainingVerificationReceiptV1 = { schemaVersion: 1, action: 'check', result: coalesced ? 'coalesced' : notBeforeMs > now ? 'deferred' : 'queued',
+        requestedAtMs: coalesced ? prior.data()!.requestedAtMs : now, notBeforeMs };
+      if (!coalesced) {
+        tx.set(checkRef, { requestedAtMs: now });
+        stageTrainingDeliveryReconciliation(tx, runtime.db, uid);
+      }
+      tx.create(receiptRef, { hash, result, createdAtMs: now, expireAt: Timestamp.fromMillis(now + 30 * 86_400_000) });
+      return result;
+    }
     // A deleted source can recover only a server-owned identity for this exact account.
     // Never recreate authored data, consent, or an identity from a client-supplied remote ID.
     const retained = retired ? (await tx.get(user.collection(DELIVERY_LEDGER).doc(

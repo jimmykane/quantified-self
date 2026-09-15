@@ -139,6 +139,9 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
 }
 
 interface GetTokenDataOptions {
+  /** Optional caller-owned quota admission, after claiming refresh but before HTTP.
+   * Throwing here releases the refresh lease without classifying an auth failure. */
+  beforeRefreshRequest?: () => Promise<void>;
   recoverTerminalAuthFailure?: boolean;
   allowSupersededSnapshotRetry?: boolean;
   allowDisconnectPendingTokenUse?: boolean;
@@ -473,6 +476,7 @@ export async function getTokenData(
       : null;
 
     let responseToken: any;
+    await options.beforeRefreshRequest?.();
     try {
       responseToken = await refreshToken.refresh({}, {
         timeout: TOKEN_REFRESH_REQUEST_TIMEOUT_MS,

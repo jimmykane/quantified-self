@@ -6,14 +6,17 @@ import { readTrainingDeliveryAuthority } from './connection';
 import { GarminTrainingTransport } from './garmin/transport';
 import { createGarminTrainingClient } from './garmin/http';
 import { authorizeGarminTrainingRequest } from './garmin/authorization';
+import { GARMIN_PRODUCTION_WINDOWS, productionRequestCapacity } from './request-capacity';
 export { DELIVERY_SERVICES } from './connection';
 
 function garminTransport(db: admin.firestore.Firestore, uid: string): TrainingDeliveryTransport {
-  const bound = (operation: DeliveryOperation) => new GarminTrainingTransport(
-    createGarminTrainingClient(() => authorizeGarminTrainingRequest(db, uid, operation)));
+  const bound = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new GarminTrainingTransport(
+    createGarminTrainingClient(() => authorizeGarminTrainingRequest(db, uid, operation), fetch, Date.now,
+      productionRequestCapacity(db, uid, 'garmin', operation.destinationKey, GARMIN_PRODUCTION_WINDOWS)));
   const policy = new GarminTrainingTransport(async () => { throw new Error('Unbound transport'); });
   return {
     mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays,
+    inspection: { policy: policy.inspection.policy, inspect: (request, guard) => bound(request).inspection.inspect(request, guard) },
     assess: (workout, destination, zone) => policy.assess(workout, destination, zone),
     canRemove: (artifact, today) => policy.canRemove(artifact, today),
     execute: (operation, checkpoint, guard) => bound(operation).execute(operation, checkpoint, guard),
@@ -26,6 +29,8 @@ function garminTransport(db: admin.firestore.Firestore, uid: string): TrainingDe
 export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRuntime {
   return {
     db, now: Date.now, hasPro: hasProAccess,
+    requestNotBefore: (tx, uid, provider, destination) => provider === 'garmin'
+      ? productionRequestCapacity(db, uid, provider, destination, GARMIN_PRODUCTION_WINDOWS).notBefore(tx) : Promise.resolve(0),
     transport: (provider, uid) => provider === 'garmin' && isTrainingProviderDeliveryEnabled(provider, uid) ? garminTransport(db, uid) : null,
     connection: async (tx, uid, provider) => (await readTrainingDeliveryAuthority(db, tx, uid, provider)).connection,
   };

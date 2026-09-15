@@ -76,10 +76,13 @@ async function readBounded(response: Response): Promise<string> {
 
 /** One request only. Durable worker backoff owns retries. Exact host, no redirects. */
 export function createGarminTrainingClient(authorize: () => Promise<string>,
-  fetcher: typeof fetch = fetch, now: () => number = Date.now): GarminTrainingClient {
+  fetcher: typeof fetch = fetch, now: () => number = Date.now,
+  capacity?: { reserve(): Promise<void>; defer(untilMs: number): Promise<void> }): GarminTrainingClient {
   return async (request, beforeSend) => {
     if (!validRequest(request)) throw new GarminTrainingHttpError('terminal', true);
     const token = await authorize();
+    // Admission precedes the operation-start journal: quota deferral is NOT an uncertain POST.
+    await capacity?.reserve();
     await beforeSend();
     const mutating = request.method !== 'GET';
     let httpStatus: number | undefined;
@@ -92,22 +95,29 @@ export function createGarminTrainingClient(authorize: () => Promise<string>,
       });
       httpStatus = response.status;
       failurePhase = 'response';
+      const retry = response.headers.get('retry-after');
+      const delay = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - now() : NaN;
+      if (response.status === 429) {
+        const invalidDelay = Number.isFinite(delay) && delay > Number.MAX_SAFE_INTEGER - now();
+        const retryAfterMs = Number.isFinite(delay) && delay > 0 ? delay : 86_400_000;
+        try {
+          await response.body?.cancel().catch(() => undefined);
+          if (!invalidDelay) await capacity?.defer(now() + retryAfterMs);
+        } catch {
+          // A failed local quota write cannot erase Garmin's explicit rejection and
+          // turn this POST into an uncertain create. The worker also retains this delay.
+        }
+        throw new GarminTrainingHttpError(invalidDelay ? 'terminal' : 'deferred', true, invalidDelay ? 0 : retryAfterMs);
+      }
       if (response.status === 404 && ['GET', 'DELETE'].includes(request.method)) {
         await response.body?.cancel();
         return { status: 404, body: null };
       }
       if (!response.ok) {
-        const retry = response.headers.get('retry-after');
-        const delay = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - now() : NaN;
         await response.body?.cancel();
         const status = response.status;
         if (status === 401) throw new GarminTrainingHttpError('auth', true);
         if (status === 403 || status === 412) throw new GarminTrainingHttpError('permission', true);
-        if (status === 429 && Number.isFinite(delay) && delay > Number.MAX_SAFE_INTEGER - now()) {
-          throw new GarminTrainingHttpError('terminal', true);
-        }
-        if (status === 429) throw new GarminTrainingHttpError('retryable', true,
-          Number.isFinite(delay) && delay > 0 ? delay : 86_400_000);
         if (status === 408 || status >= 500) throw new GarminTrainingHttpError(mutating ? 'uncertain' : 'retryable', false);
         throw new GarminTrainingHttpError('terminal', status >= 400 && status < 500);
       }

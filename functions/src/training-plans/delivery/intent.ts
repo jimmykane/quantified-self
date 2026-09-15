@@ -22,8 +22,9 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     desired, status, timeZone, digest: digest || hashTrainingScheduleRequestPayload({ desired, status, timeZone }), issues, approvalDigest,
   });
   const today = trainingDeliveryLocalDate(nowMs, timeZone);
-  if (ledger?.actual?.completed) return result('preserve', 'completed');
-  if ((ledger?.actual && ledger.actual.localDate < today) || (workout && workout.localDate < today)) return result('preserve', 'past');
+  const retained = [ledger?.actual, ledger?.repair?.original].filter(artifact => !!artifact);
+  if (retained.some(artifact => artifact.completed)) return result('preserve', 'completed');
+  if (retained.some(artifact => artifact.localDate < today) || (workout && workout.localDate < today)) return result('preserve', 'past');
   // Explicit disconnect ends consent, but must NOT withdraw provider copies.
   if (setting && setting.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
   if (!setting && ledger && ledger.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
@@ -35,7 +36,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
     || (setting.scopeGeneration === context.scopeGeneration && setting.associationPlanId === (workout?.planId ?? null)));
   const stopped = override?.suppressed || !validConsent || !workout || workout.lifecycle !== 'planned';
   if (stopped || (workout?.planId && !context.planActive)) {
-    if (ledger?.actual && transport && !transport.canRemove(ledger.actual, today)) return result('preserve', 'needs_attention');
+    if (transport && retained.some(artifact => !transport.canRemove(artifact, today))) return result('preserve', 'needs_attention');
     return result('absent', workout?.planId && !context.planActive && !stopped ? 'paused_plan' : 'stopped');
   }
   if (!context.hasPro) return result('preserve', 'paused_pro');

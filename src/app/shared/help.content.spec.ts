@@ -31,7 +31,7 @@ describe('help.content', () => {
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('not enabled yet');
-    expect(content).toContain('private evaluation pilot, not a public launch');
+    expect(content).toContain('private production pilot, not a public launch');
     expect(content).toContain('Older connections may need this even when activity imports work');
     expect(content).toContain('Stopping workout sync keeps your provider account connected');
     expect(content).toContain('If you separately choose to disconnect a provider or delete your Quantified Self account');
@@ -527,7 +527,7 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Garmin workout delivery is available only to the private evaluation pilot');
+    expect(planningSection?.content).toContain('Garmin workout delivery is available only to the private production pilot');
     expect(planningSection?.content).toContain('COROS, Wahoo and Suunto delivery are not enabled yet');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
