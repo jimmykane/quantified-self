@@ -167,6 +167,13 @@ describe('refreshed email template catalog', () => {
         expect(readTemplate('partials/email_founder_header.hbs')).toContain('class="letter" width="100%"');
     });
 
+    it('keeps the transactional footer aligned with the product positioning', () => {
+        const tagline = 'Quantified Self · Your training data, connected and in context';
+
+        expect(readTemplate('partials/email_transactional_footer.hbs')).toContain(tagline);
+        expect(readTemplate('partials/email_transactional_footer.txt.hbs')).toContain(tagline);
+    });
+
     it('allowlists refreshed templates and always excludes development_update from seeding', () => {
         expect(selectRefreshedTemplates().some(template => template.id === DEVELOPMENT_UPDATE_TEMPLATE_ID)).toBe(false);
         expect(() => selectRefreshedTemplates([DEVELOPMENT_UPDATE_TEMPLATE_ID])).toThrow(/intentionally excluded/);
