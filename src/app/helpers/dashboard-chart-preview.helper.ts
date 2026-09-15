@@ -1,3 +1,5 @@
+import { dashboardChartHasRecordedData, resolveDashboardChartAvailability, type DashboardChartAvailability } from './dashboard-chart-availability.helper';
+import type { DashboardDerivedMetricStatus } from './derived-metric-status.helper';
 import { normalizeDashboardTileEventFilters } from './dashboard-tile-event-filters.helper';
 import { getDashboardPowerCurveScopeDefinition, resolveDashboardPowerCurveTileDisplayScope } from './dashboard-power-curve-scope.helper';
 import { ActivityTypes, DataActivityTypes, DataAscent, DataDistance, DataDuration, DataEnergy, DataHeartRateAvg, DataStartPosition, EventInterface, FileType, Privacy, SportsLib, TileChartSettingsInterface, TileSettingsInterface, TileTypes, encodeRoutePolyline5 } from '@sports-alliance/sports-lib';
@@ -13,14 +15,31 @@ import type { SleepSession } from '@shared/sleep';
 import { SLEEP_PROVIDERS } from '@shared/sleep';
 import type { DashboardSleepTrendPoint } from './dashboard-sleep-chart.helper';
 
-export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & { tileEventAnchorsByOrder?: Record<number, number | null> };
+export type DashboardPreviewLoadState = 'loading' | 'ready' | 'error';
+export type DashboardPreviewInput = Parameters<typeof buildDashboardTileViewModels>[0] & {
+  tileEventAnchorsByOrder?: Record<number, number | null>;
+  previewStates?: Record<string, DashboardPreviewLoadState>;
+  previewEventsByRange?: Record<string, EventInterface[]>;
+  previewMetricStatuses?: Partial<Record<DerivedMetricKind, DashboardDerivedMetricStatus>>;
+};
+export function dashboardPreviewSourceKeys(tile: TileSettingsInterface): string[] {
+  const kinds = dashboardPreviewMetricKinds(tile);
+  if (kinds.length) return kinds.map(kind => `derived:${kind}`);
+  if (C.isDashboardHrvTrendChartType(tile['chartType'])) return ['hrv'];
+  if (C.isDashboardSleepBackedChartType(tile['chartType'])) return ['sleep'];
+  if (tile.type === TileTypes.Map && tile['mapSource'] === 'routes') return ['routes'];
+  return [`events:${normalizeDashboardTileEventFilters(tile['eventFilters']).range}`];
+}
+export function dashboardPreviewIsManaged(tile: TileSettingsInterface, seed: DashboardPreviewInput): boolean {
+  return dashboardPreviewSourceKeys(tile).every(key => !!seed.previewStates?.[key]);
+}
 /** Reuse only a current window; saved orders cannot be used for candidate previews. */
 export function buildDashboardPreviewSeed(tile: TileSettingsInterface, seed: DashboardPreviewInput, now = Date.now()): DashboardPreviewInput {
   const range = normalizeDashboardTileEventFilters(tile['eventFilters']).range;
   const saved = seed.tiles.find(candidate => !seed.tileEventAnchorsByOrder?.[candidate.order]
     && normalizeDashboardTileEventFilters(candidate['eventFilters']).range === range
     && seed.tileEventsByOrder?.[candidate.order]);
-  const input: DashboardPreviewInput = { ...seed, tiles: [tile], events: saved ? seed.tileEventsByOrder?.[saved.order] || [] : [], tileEventsByOrder: null };
+  const input: DashboardPreviewInput = { ...seed, tiles: [tile], events: seed.previewEventsByRange?.[range] ?? (saved ? seed.tileEventsByOrder?.[saved.order] || [] : []), tileEventsByOrder: null };
   const window = seed.sleepTrendWindow;
   if (!window || Math.abs(now - window.endMs) > 86400000 || Math.abs(window.endMs - window.startMs - 14*86400000) > 86400000) input.sleepSessions = [];
   const hrvWindow = dashboardHrvWindows('14d', now).visible;
@@ -31,25 +50,33 @@ export function buildDashboardPreviewSeed(tile: TileSettingsInterface, seed: Das
 export interface DashboardChartPreview {
   tile: DashboardTileViewModel;
   source: 'user' | 'example';
+  availability?: DashboardChartAvailability;
   loading: boolean;
   note: string;
   calendarEvents: EventInterface[];
   anchorMs: number;
+  startOfWeek?: number | null;
 }
 
-/** List previews use current, already-loaded data only. Missing sources stay explicit examples. */
+/** List and detail previews share the picker’s current data. Missing sources stay explicit examples. */
 export function buildDashboardThumbnailPreview(tile: TileSettingsInterface, seed: DashboardPreviewInput): DashboardChartPreview {
   const input = buildDashboardPreviewSeed(tile, seed);
   const existing = buildDashboardTileViewModels(input)[0];
-  const type = `${tile['chartType'] || ''}`;
-  if (C.isDashboardKpiChartType(type) && type !== C.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) {
-    const context = existing[contexts[type]] as { trend8Weeks?: { value: number | null }[]; trend?: { value: number | null }[] } | undefined;
-    // A headline alone cannot draw a sparkline. Keep its illustrative fallback labelled as example data.
-    if (!(context?.trend8Weeks || context?.trend)?.some(point => Number.isFinite(point.value))) return buildDashboardExamplePreview(tile);
-  }
-  return dashboardPreviewHasData(existing, input)
+  const availability = resolveDashboardChartAvailability(existing, input,
+    dashboardPreviewSourceKeys(tile).map(key => input.previewStates?.[key]),
+    dashboardPreviewMetricKinds(tile).map(kind => input.previewMetricStatuses?.[kind]));
+  const preview: DashboardChartPreview = availability.hasData
     ? { tile: existing, source: 'user', loading: false, note: '', calendarEvents: input.events || [], anchorMs: Date.now() }
     : buildDashboardExamplePreview(tile);
+  return { ...preview, startOfWeek: seed.startOfWeek, availability,
+    loading: availability.state === 'loading' || availability.state === 'updating',
+    note: availability.reason };
+
+}
+
+export function dashboardPreviewSourceLabel(preview: DashboardChartPreview): string {
+  const source = preview.source === 'user' ? 'Your data' : 'Example data';
+  return preview.loading ? `${source} · Loading your data…` : source;
 }
 
 const DAY = 86400000;
@@ -76,17 +103,28 @@ const metricKinds: Partial<Record<keyof DashboardChartTileViewModel, DerivedMetr
   powerCurve: [M.PowerCurve], aerobicCapacity: [M.TrainingCapacity], aerobicDurability: [M.TrainingDurability],
 };
 export function dashboardPreviewMetricKinds(tile: TileSettingsInterface): DerivedMetricKind[] {
+  if (`${tile['chartType']}` === K.DASHBOARD_RECOVERY_DEBT_KPI_CHART_TYPE) return [M.FormNow, M.FreshnessForecast, M.FormPlus7d];
+  if (`${tile['chartType']}` === K.DASHBOARD_TRAINING_BALANCE_KPI_CHART_TYPE) return [M.IntensityDistribution, M.EasyPercent, M.HardPercent];
   return metricKinds[contexts[(tile as TileChartSettingsInterface).chartType]] || [];
 }
+/** Snapshot context keys used by the picker; these are read-only dependencies, never rebuild requests. */
+export const DASHBOARD_PREVIEW_METRIC_CONTEXTS: Partial<Record<DerivedMetricKind, keyof NonNullable<DashboardPreviewInput['derivedMetrics']>>> = {
+  [M.Form]: 'formPoints', [M.FormNow]: 'formNow', [M.RecoveryNow]: 'recoveryNow', [M.Acwr]: 'acwr',
+  [M.RampRate]: 'rampRate', [M.MonotonyStrain]: 'monotonyStrain', [M.FormPlus7d]: 'formPlus7d',
+  [M.EasyPercent]: 'easyPercent', [M.HardPercent]: 'hardPercent', [M.EfficiencyDelta4w]: 'efficiencyDelta4w',
+  [M.FreshnessForecast]: 'freshnessForecast', [M.IntensityDistribution]: 'intensityDistribution',
+  [M.EfficiencyTrend]: 'efficiencyTrend', [M.PowerCurve]: 'powerCurve',
+  [M.TrainingCapacity]: 'trainingCapacity', [M.TrainingDurability]: 'trainingDurability',
+};
+export function dashboardPreviewMissingMetricKinds(tiles: readonly TileSettingsInterface[], seed: DashboardPreviewInput): DerivedMetricKind[] {
+  return [...new Set(tiles.flatMap(dashboardPreviewMetricKinds))].filter(kind => {
+    const value = seed.derivedMetrics?.[DASHBOARD_PREVIEW_METRIC_CONTEXTS[kind]];
+    return value == null || Array.isArray(value) && !value.length
+      || ['stale', 'building', 'queued', 'processing', 'failed', 'missing'].includes(seed.previewMetricStatuses?.[kind]);
+  });
+}
 export function dashboardPreviewHasData(tile: DashboardTileViewModel, input: DashboardPreviewInput): boolean {
-  if (tile.type === TileTypes.Map) return tile['mapSource'] === 'routes' ? !!tile['routePreviews']?.length : !!tile['events']?.length;
-  const chart = tile as DashboardChartTileViewModel;
-  if (`${chart.chartType}` === K.DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE) return !!input.events?.length;
-  const context = contexts[chart.chartType];
-  if (C.isDashboardHrvTrendChartType(chart.chartType)) return !!chart.hrvTrend?.charts.length && !chart.hrvTrend.loading && !chart.hrvTrend.error;
-  if (context === 'sleepTrend') return chart.sleepTrend?.hasRealPoints === true;
-  if (context === 'powerCurve') return !!chart.powerCurve?.series?.length;
-  return context ? !!chart[context] : !!chart.data?.length;
+  return dashboardChartHasRecordedData(tile, input);
 }
 
 export function buildDashboardExampleEvents(anchorMs = ANCHOR): EventInterface[] {
@@ -166,5 +204,5 @@ export function buildDashboardExamplePreview(tile: TileSettingsInterface): Dashb
     chartVm.hrvTrend = buildDashboardHrvContext(emptyResult(windows.visible), emptyResult(windows.history), sessions, windows.visible);
     chartVm.hrvTrend.charts = chartVm.hrvTrend.charts.map(chart => ({ ...chart, model: { ...chart.model, series: { ...chart.model.series, sourceLabel: 'Example source' }, ariaLabel: chart.model.ariaLabel.replace('Suunto', 'Example source') } }));
   }
-  return { tile: vm, source: 'example', loading: false, note: 'Your data is not available for this chart yet.', calendarEvents: events, anchorMs: ANCHOR };
+  return { tile: vm, source: 'example', loading: false, note: 'Your data is not available for this chart yet.', availability: { state: 'no-data', label: 'Example data', reason: 'Your data is not available for this chart yet.', hasData: false }, calendarEvents: events, anchorMs: ANCHOR };
 }

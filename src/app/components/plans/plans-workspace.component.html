@@ -8,7 +8,7 @@
     [status]="pageStatus()">
     @if (browsing()) {
     <div pageHeaderActions class="plans-header-actions">
-      <app-training-delivery-button scope="history" entityId="current" title="All provider deliveries"
+      <app-training-delivery-button scope="history" entityId="current" title="Plans and standalone workouts"
         [disabled]="busyAction() !== null"></app-training-delivery-button>
       <a mat-button routerLink="/calendar" appHapticTap>
         <mat-icon aria-hidden="true">calendar_month</mat-icon>
@@ -134,8 +134,6 @@
             </mat-select>
           </mat-form-field>
             <div class="plan-actions">
-              <app-training-delivery-button scope="plan" [entityId]="plan.id" [title]="plan.name"
-                [disabled]="busyAction() !== null"></app-training-delivery-button>
               <button appHapticTap mat-icon-button type="button" [matMenuTriggerFor]="planActionsMenu"
                 [disabled]="busyAction() !== null" matTooltip="Plan actions"
                 [attr.aria-label]="selectedPlanActionBusy() ? 'Updating plan' : 'Plan actions'">
@@ -172,7 +170,7 @@
                   <mat-icon aria-hidden="true">delete</mat-icon><span>Delete plan</span>
                 </button>
               </mat-menu>
-              <mat-menu #planColorMenu="matMenu" class="qs-menu-panel">
+              <mat-menu #planColorMenu="matMenu" class="qs-menu-panel" [hasBackdrop]="false">
                 @for (option of planColorOptions; track option.id) {
                   <button mat-menu-item type="button" [disabled]="busyAction() !== null"
                     [attr.aria-label]="option.label + (selectedPlanAppearance().id === option.id ? ', current plan color' : '')"
@@ -193,6 +191,9 @@
               <span>Visible here. Hidden from the main Calendar until this plan is active.</span>
             }
           </div>
+          <app-training-delivery-button scope="plan" [entityId]="plan.id" [title]="plan.name"
+            [summaryWorkouts]="schedule().workouts" [summaryPlan]="plan"
+            [disabled]="busyAction() !== null"></app-training-delivery-button>
 
           @if (renamingPlanId() === plan.id) {
             <div class="inline-plan-action">
@@ -304,8 +305,11 @@
             </mat-form-field>
             <mat-form-field>
               <mat-label>Date</mat-label>
-              <input matInput type="date" [ngModel]="session.value.localDate"
-                (ngModelChange)="updateEditorField('localDate', $event)">
+              <input matInput required [matDatepicker]="workoutDatePicker" [ngModel]="workoutDatePickerValue()"
+                (dateChange)="updateWorkoutDate($event.value)">
+              <mat-datepicker-toggle matSuffix [for]="workoutDatePicker"></mat-datepicker-toggle>
+              <mat-datepicker #workoutDatePicker (opened)="haptics.selection()"></mat-datepicker>
+              <mat-error>Choose a valid date.</mat-error>
             </mat-form-field>
             <mat-form-field>
               <mat-label>Sport</mat-label>
@@ -405,14 +409,15 @@
             }
           </section>
           </fieldset>
-        <div class="form-actions editor-save-actions">
-          @if (session.original; as workout) {
+          @if (savedEditorWorkout(); as workout) {
             <app-training-delivery-button scope="workout" [entityId]="workout.id" [title]="workout.title"
+              [summaryWorkouts]="[workout]" [summaryPlan]="savedEditorPlan()"
               [standalone]="workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
           }
+        <div class="form-actions editor-save-actions">
           <button appHapticTap mat-button type="button" (click)="cancelEditor()" [disabled]="busyAction() !== null">Cancel</button>
           <button appHapticTap mat-flat-button type="button" (click)="saveWorkout()"
-            [disabled]="busyAction() !== null || !session.value.title.trim() || session.value.nodes.length === 0">
+            [disabled]="busyAction() !== null || !session.value.title.trim() || !workoutDatePickerValue() || session.value.nodes.length === 0">
             <span class="button-content">
               @if (busyAction() === 'save-workout') {
                 <mat-spinner diameter="18"></mat-spinner>
@@ -531,9 +536,10 @@
                     <li>{{ summary }}</li>
                   }
                 </ol>
-              <div compactRowAction class="workout-row-actions">
                 <app-training-delivery-button scope="workout" [entityId]="row.workout.id" [title]="row.workout.title"
+                  [summaryWorkouts]="[row.workout]" [summaryPlan]="view() === 'plans' ? selectedPlan() : null"
                   [standalone]="row.workout.planId === null" [disabled]="busyAction() !== null"></app-training-delivery-button>
+              <div compactRowAction class="workout-row-actions">
                 <button appHapticTap mat-button type="button" aria-label="Edit workout" (click)="editWorkout(row.workout)" [disabled]="busyAction() !== null">
                   <mat-icon aria-hidden="true">edit</mat-icon><span>Edit</span>
                 </button>
@@ -572,12 +578,13 @@
     }
 
     @if (browsing() && deletedWorkoutRows().length) {
-      <mat-expansion-panel class="deleted-workouts-panel" (opened)="haptics.selection()" (closed)="haptics.selection()">
-        <mat-expansion-panel-header>
-          <mat-panel-title>Deleted workouts</mat-panel-title>
-          <mat-panel-description>{{ deletedWorkoutRows().length }} recoverable</mat-panel-description>
-        </mat-expansion-panel-header>
-        <mat-list>
+      <section class="deleted-workouts-panel" aria-label="Deleted workouts">
+        <button mat-button type="button" appHapticTap (click)="deletedWorkoutsExpanded.set(!deletedWorkoutsExpanded())"
+          [attr.aria-expanded]="deletedWorkoutsExpanded()" aria-controls="deleted-workout-list">
+          <mat-icon aria-hidden="true">{{ deletedWorkoutsExpanded() ? 'expand_less' : 'expand_more' }}</mat-icon>
+          Deleted workouts · {{ deletedWorkoutRows().length }} recoverable
+        </button>
+        <mat-list id="deleted-workout-list" [hidden]="!deletedWorkoutsExpanded()">
           @for (row of deletedWorkoutRows(); track row.workout.id) {
             <mat-list-item>
               <mat-icon matListItemIcon aria-hidden="true">delete</mat-icon>
@@ -601,7 +608,7 @@
             </mat-list-item>
           }
         </mat-list>
-      </mat-expansion-panel>
+      </section>
     }
 
     @if (historyPanel(); as history) {
@@ -623,14 +630,14 @@
           } @else if (history.entries.length === 0) {
             <p>No revisions are available.</p>
           } @else {
-            <ul class="history-entries" aria-label="Schedule revisions">
+            <ul class="history-entries" aria-label="Schedule revisions" tabindex="0">
               @for (entry of history.entries; track entry.revision) {
                 <li class="history-entry">
                   <div class="history-entry-details">
                     <h3>Revision {{ entry.revision }} · {{ entry.operationKind }}</h3>
                     <p>{{ entry.createdAtMs | date:'medium' }}{{ entry.isCheckpoint ? ' · checkpoint' : '' }}</p>
                   </div>
-                  <button appHapticTap mat-stroked-button type="button" (click)="restoreHistoryEntry(entry)"
+                  <button appHapticTap mat-button type="button" (click)="restoreHistoryEntry(entry)"
                     [disabled]="busyAction() !== null">
                     <span class="button-content">
                       @if (busyAction() === 'restore-' + entry.revision) {

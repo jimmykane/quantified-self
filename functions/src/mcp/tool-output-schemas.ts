@@ -1,3 +1,6 @@
+import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
+import { isReadinessHrvRangeValidAt, normalizeReadinessHrvPersonalRange } from '../../../shared/readiness-hrv-validation';
+import { currentHrvRangeSchema, currentReadinessHistorySchema } from './readiness-output-schemas';
 import { MCP_ACTIVITY_SAMPLES_SCHEMA } from './activity-samples.schema';
 import {
   ChartDataCategoryTypes,
@@ -16,7 +19,7 @@ import {
 import {
   READINESS_FORMULA_VERSION,
   READINESS_TOTAL_SIGNAL_COUNT,
-} from '../../../shared/readiness';
+} from '../../../shared/readiness-legacy';
 import { PUBLIC_TRAINING_DISCIPLINES } from '../../../shared/training-disciplines';
 import {
   MCP_ACTIVITY_CHART_DEFAULT_LOCATION_POINTS,
@@ -58,6 +61,8 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'query_sleep_summary',
   'get_sleep_trend',
   'get_today_readiness',
+  'get_current_readiness',
+  'get_readiness_history',
   'get_daily_report',
   'get_daily_briefing',
   'list_activity_types',
@@ -866,6 +871,31 @@ function createTodayReadinessOutputSchema() {
   });
 }
 
+function createCurrentReadinessOutputSchema() {
+  return z.strictObject({ ...createTodayReadinessOutputSchema().shape,
+    formulaVersion: z.literal(4),
+    drivers: z.strictObject({ load: todayReadinessLoadDriver, sleep: todayReadinessSleepDriver,
+      overnightHeartRate: todayReadinessOvernightHeartRateDriver,
+      hrv: z.strictObject({ weightPercent: z.literal(20), baselineWindowDays: z.literal(60), currentWindowDays: z.literal(7),
+        personalRange: currentHrvRangeSchema.nullable() }),
+    }),
+  }).superRefine((value, context) => {
+    const range = normalizeReadinessHrvPersonalRange(value.drivers.hrv.personalRange);
+    const score = calculateCurrentReadinessScore({ form: value.drivers.load.form, rampRate: value.drivers.load.rampRate,
+      sleepScore: value.drivers.sleep.score, hrvPersonalRange: range,
+      overnightHeartRateRatio: value.drivers.overnightHeartRate.combinedRatio });
+    const expectedLabel = score ? score.score >= 75 ? 'Ready' : score.score >= 55 ? 'Mixed' : 'Recover' : null;
+    if (value.score !== (score?.score ?? null) || value.label !== expectedLabel
+      || value.status !== (score ? 'available' : 'no_signal')
+      || value.availableSignalCount !== (score?.availableSignalCount ?? 0)
+      || value.availableWeightPercent !== (score?.availableWeight ?? 0)
+      || value.confidence !== (score ? resolveReadinessConfidence(score.availableWeight, value.baselineEvidenceCount) : null)
+      || (range !== null && !isReadinessHrvRangeValidAt(range, value.asOfTimeMs))) {
+      context.addIssue({ code: 'custom', message: 'Readiness must match its current range and other drivers.' });
+    }
+  });
+}
+
 const dailyReportSleep = z.strictObject({
   status: z.enum(['available', 'no_completed_session']),
   latestSession: dailyReportSleepSession.nullable(),
@@ -1437,9 +1467,11 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
       buckets: z.array(sleepSummaryBucket),
     }),
     get_today_readiness: createTodayReadinessOutputSchema(),
+    get_current_readiness: createCurrentReadinessOutputSchema(),
+    get_readiness_history: currentReadinessHistorySchema,
     get_daily_report: z.strictObject({
       sleep: dailyReportSleep,
-      readiness: createTodayReadinessOutputSchema(),
+      readiness: createCurrentReadinessOutputSchema(),
       trainingSummary: dailyTrainingSummary,
     }),
     get_daily_briefing: z.strictObject({

@@ -102,6 +102,12 @@ Hosting routes these paths to `mcpApi`:
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
 the client successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
+Each connection lists every supported permission as a disabled checkbox labelled with the permission name.
+Only scopes returned for that connection are checked; missing permissions, including scopes added since authorization,
+remain unchecked. This display does not expand grants. Users reconnect and review authorization to change permissions.
+The authorization overview shows compact permission names with individually labelled info buttons. Each opens a
+standard Material dialog using the same permission description as consent, with its parent requirement and reconnect
+guidance. Details remain accessible by touch and keyboard without repeating all descriptions in the page.
 
 ## Public discovery and indexing
 
@@ -495,7 +501,9 @@ The analytics and map entries follow the
 | `list_sleep_vitals` | `sleep:read` | Bounded account-specific discovery of available safe aggregate sleep vitals and their session coverage |
 | `list_sleep_sessions` | `sleep:read` | Paginated redacted normalized session summaries |
 | `query_sleep_summary` | `sleep:read` | Day/week/month sleep aggregates in an explicit timezone |
-| `get_today_readiness` | `metrics:read` + `sleep:read` | Live Dashboard Today-equivalent readiness with Load, Sleep, HRV, and Overnight HR evidence |
+| `get_today_readiness` | `metrics:read` + `sleep:read` | Registered legacy formula-3 readiness; retained for compatibility |
+| `get_current_readiness` | `metrics:read` + `sleep:read` | Current app formula-4 readiness with the shared seven-day HRV average and 60-day range |
+| `get_readiness_history` | `metrics:read` + `sleep:read` + `health:read` | Ready current-formula 14-day UTC history with identity-free HRV range evidence |
 | `get_daily_report` | `metrics:read` + `sleep:read` | One-call latest sleep with safe HRV/heart-rate aggregates, live readiness, and current-versus-usual Training context |
 | `get_daily_briefing` | `metrics:read` + `sleep:read` | Compact timezone-aware latest completed sleep, current-versus-usual 28-day Training summary, and current UTC-day readiness status |
 | `list_activity_types` | Authenticated client; no data scope | Static canonical Sports Lib activity types with group and indoor hints for activity and route filters; no account read |
@@ -523,7 +531,7 @@ publicly visible internet state. The already-registered `find_*_near_location` v
 `openWorldHint: true` metadata for compatibility, while server instructions route new requests to the corrected
 additive tools. The HTTP layer checks every required scope before the tool call and only registers tools covered by the
 bearer token. `get_activity_metrics`, `get_activity_overview`, `rank_activities_by_metric`,
-`get_today_readiness`, `get_daily_report`, and `get_daily_briefing` are registered only when all of their respective
+`get_current_readiness`, `get_readiness_history`, `get_today_readiness`, `get_daily_report`, and `get_daily_briefing` are registered only when all of their respective
 scopes are present.
 
 ### Strict structured output
@@ -1166,7 +1174,7 @@ the same normalized sleep fields and safe value rules for its allowed latest-nig
 physiology stays absent/null and is never converted to zero. Server and bundled-skill instructions explicitly route
 multi-day physiology questions to `get_sleep_trend` and availability-only questions to `list_sleep_vitals`.
 
-With both `health:read` and `sleep:read`, these Sleep reads, `get_daily_report`, and `get_today_readiness` can also fill
+With both `health:read` and `sleep:read`, these Sleep reads, `get_daily_report`, `get_current_readiness`, and `get_today_readiness` can also fill
 missing nightly HRV from a matching canonical Health overnight-average summary. Matching is by owner, provider/account,
 provider date, and overlapping main-sleep interval. Native Sleep HRV is preserved, each night is supplemented once,
 and conflicts, spot/activity/manual HRV, and unidentified legacy accounts are excluded. Health is never read through
@@ -1185,11 +1193,43 @@ deliberately.
 
 ## Current readiness and daily report projections
 
-### Live today readiness
+### Current live readiness and history
 
-`get_today_readiness` is the one-call source for the current recovery-aware score and requires both `metrics:read` and
-`sleep:read`. It deliberately does not widen the frozen daily-briefing output. The caller supplies an IANA timezone for
-local-day context, while the score retains the Dashboard and Training UTC-day boundary.
+`get_current_readiness` is the preferred live readiness tool. It requires `metrics:read` plus `sleep:read` and an explicit
+IANA timezone. Like Dashboard Today and Training, it uses current UTC-day Form/ramp and the shared formula-4 evaluator
+in `shared/readiness.ts`. A bounded 60-day projection reads at most 257 Sleep documents to enforce a 256-session limit.
+Load, Sleep and Overnight HR selection and weights are unchanged from the legacy contract described below.
+
+The HRV driver contains `weightPercent: 20`, `baselineWindowDays: 60`, `currentWindowDays: 7` and nullable `personalRange`.
+Range evidence explicitly contains baseline/current observed-day counts and required counts (14/3), baseline mean,
+seven-day average, numeric range in milliseconds, classification/tone, latest nightly milliseconds and observation
+timestamp. A missing source is null; building or insufficient history has null averages and range with explicit counts.
+Provider/account/measurement keys and original observations never leave the projection. The weekly average uses the
+same daily-median calculation as Health for matching overnight evidence and evaluation time, independent of the visible
+chart range. Latest nightly HRV remains distinct from the weekly average. See `docs/training-workspace.md` for the
+canonical formula, source matching, confidence, missing-data and scoring rules. The strict output boundary verifies the
+score, label, weights, count, confidence and HRV cutoff; private neighboring fields fail the whole output.
+
+`get_readiness_history` has no inputs and requires `metrics:read`, `sleep:read` and `health:read`. Persisted history can
+contain absolute HRV values enriched from Health; it cannot safely reconstruct a Sleep-only alternative. Registration,
+HTTP prechecks and the data service enforce all three grants before reading. It reads one ready `training_readiness` snapshot
+and returns only validated formula-4 history: 14 contiguous UTC days, evaluation timestamps and identity-free signals,
+including each day's HRV range. `hrvRatio` here means seven-day average divided by the 60-day mean, not last-night HRV.
+Missing, old or inconsistent history returns `metric_not_ready`; this read-only tool never queues a rebuild. Internal
+`evidenceVersion` and `legacyPoints` are stripped. The response has the existing daily-report 16-KiB bound.
+
+These tools are additive because registered schemas are frozen. The pending contract record binds their candidate
+digest to a developer refresh; it does not promote the registered baseline. Server deployment and registered ChatGPT app
+rescan are required before clients can discover them. Updated bundled Training/Sleep/Health/cross-domain skills prefer
+the advertised current formula; validate and sync those bundles separately, without changing grants. The built-in
+Assistant allows the live tool and supplies its explicit timezone. It omits stored readiness history because its
+existing grants exclude Health; this change does not expand the Assistant's data permissions.
+
+### Legacy live today readiness
+
+`get_today_readiness` retains registered formula 3 and requires both `metrics:read` and `sleep:read`. It must not be
+presented as the current app's formula. The caller supplies an IANA timezone for local-day context, while the score
+retains its original UTC-day boundary.
 
 The tool reads exactly the ready `form`, `form_now`, and `ramp_rate` snapshot documents plus one bounded 30-day,
 readiness-only sleep projection. That dedicated Firestore field mask reads only provider grouping, sleep date,
@@ -1199,7 +1239,7 @@ The tool rebuilds the current zero-load decay series from Form's persisted daily
 seven-day CTL ramp, using the current-day compact snapshots only for a value the series cannot supply. This is the same
 source-selection contract as Dashboard Today. The load calculation shares the canonical CTL/ATL constants and daily-load
 builder with the dashboard, while scoring and sleep-evidence selection call the environment-neutral
-`shared/readiness.ts` evaluator.
+`shared/readiness-legacy.ts` evaluator.
 
 The response returns the score, label, confidence, total/available driver count, available original weight before
 missing-driver renormalization, aggregate baseline-evidence count, and four explicit driver groups:
@@ -1222,10 +1262,10 @@ use `get_sleep_trend` for trend questions.
 
 `get_daily_report` is the preferred one-call source for a good-morning request or current daily report. It requires both
 `metrics:read` and `sleep:read`, accepts one explicit IANA timezone, and preserves the same local-day-context versus
-UTC-readiness-boundary distinction as `get_today_readiness`.
+UTC-readiness-boundary distinction as `get_current_readiness`.
 
 The report reuses the live readiness loader, Form/ramp source selection, deterministic same-provider/date sleep grouping,
-and shared readiness evaluator rather than chaining public tool calls or defining another score. One projected 30-day
+and shared readiness evaluator rather than chaining public tool calls or defining another score. One projected 60-day
 sleep query supplies both the report and readiness. It reads at most 257 documents to enforce an at-most-256-session
 bound and selects only provider grouping, sleep date, start/end/duration, in-bed duration, normalized timezone offset,
 nap state, score value/qualifier, aggregate average/overnight HRV, and aggregate average/minimum sleep HR. Provider
@@ -1236,14 +1276,20 @@ explicit four-field aggregate-vital allowlist: average and overnight HRV in mill
 heart rate in beats per minute. Each missing value is `null`; a grouped sleep returns in-bed duration only when every
 fragment recorded it, preventing a partial sum from looking complete. Raw samples, SpO₂, respiration, provider identity,
 source metadata, and score components are absent. The duration comparison uses up to 14 earlier same-provider nights
-and requires at least three before returning an average or delta.
+within the last 30 days and requires at least three before returning an average or delta.
 
-The nested readiness object is the exact strict `get_today_readiness` result, including safe driver values, baselines,
+The nested readiness object is the exact strict `get_current_readiness` result, including safe driver values, baselines,
 ratios, evidence states, and freshness. The Training summary reuses the frozen briefing's strict current-versus-usual
 equivalent 28-day projection. Server instructions tell clients to lead with sleep and recorded HRV/heart-rate values,
 summarize readiness in one sentence using at most two relevant available drivers, then summarize Training. The report
 does not diagnose illness, prescribe a workout, or establish a multi-day trend; use `get_sleep_trend` when the question
 asks about change over time, SpO₂, or respiration.
+
+The daily-report tool is still additive to the registered baseline, so its nested current shape evolves in the same
+digest-bound pending change. Registered `get_training_metric(training_readiness)` and the compact briefing continue to
+project formula-3 `legacyPoints` when the internal snapshot is formula 4. The shared legacy validator rejects missing
+or inconsistent legacy evidence; never relabel formula-4 scores as formula 3. Internal formula-3 snapshots still use
+their original projection. No public legacy schema or annotation changes.
 
 ### Compact briefing
 
@@ -1464,9 +1510,10 @@ after validation, but no additional server deployment or registered-app rescan o
   allowlisted type metadata and per-type session counts.
 - One-call sleep trends use that same at-most-1,000-session bounded read, return only fixed coverage metadata and strict
   summary buckets, and do not perform a separate discovery read.
-- Live readiness reads at most 257 projected sleep documents to enforce an at-most-256-session 30-day bound, reads
+- Live readiness reads at most 257 projected sleep documents to enforce an at-most-256-session 60-day bound (30 days for legacy readiness), reads
   exactly the three ready load snapshots in parallel, and returns at most 16 KiB. Its score uses only the latest
-  eligible main sleep plus up to 14 same-provider baseline nights after deterministic same-date aggregation.
+  eligible main sleep and source-matched overnight context. Current HRV uses the shared 60-day range and seven-day
+  average; legacy HRV and Overnight HR retain up to 14 prior same-provider nights within 30 days.
 - A daily report reuses that same bounded sleep/readiness work, reads only the additional ready `training_summary`
   snapshot, compares duration with at most 14 earlier same-provider nights, and returns at most 16 KiB.
 - Sleep pages are at most 100 sessions and use a per-connection encrypted cursor that does not expose the Firestore

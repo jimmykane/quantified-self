@@ -74,7 +74,7 @@ describe('training derived metric normalizers', () => {
     const asOfDayMs = Date.UTC(2026, 6, 16);
     const points = Array.from({ length: 14 }, (_, index) => ({
       dayMs: asOfDayMs - ((13 - index) * 24 * 60 * 60 * 1000),
-      score: index === 0 ? null : 65,
+      score: index === 0 ? null : 64,
       label: index === 0 ? null : 'Mixed',
       confidence: index === 0 ? null : 'medium',
       availableSignalCount: index === 0 ? 0 : 4,
@@ -84,13 +84,19 @@ describe('training derived metric normalizers', () => {
       rampRate: index === 0 ? null : 1,
       sleepScore: index === 0 ? null : 80,
       latestSleepAtMs: index === 0 ? null : asOfDayMs - ((13 - index) * 24 * 60 * 60 * 1000) + (6 * 60 * 60 * 1000),
-      hrvRatio: index === 0 ? null : 1.05,
+      hrvRatio: index === 0 ? null : 1,
+      hrvPersonalRange: index === 0 ? null : {
+        tone: 'positive', reason: 'within_range', observationDayCount: 14, requiredObservationDayCount: 14,
+        currentObservationDayCount: 7, requiredCurrentObservationDayCount: 3,
+        baselineAverage: 50, currentAverage: 50, normalRange: { min: 50, max: 50 }, latestMs: 50,
+        latestAtMs: asOfDayMs - ((13 - index) * 86400000) + 21600000,
+      },
       averageHeartRateRatio: index === 0 ? null : 0.98,
       minimumHeartRateRatio: index === 0 ? null : 0.98,
       overnightHeartRateRatio: index === 0 ? null : 0.98,
     }));
     const payload = {
-      formulaVersion: 3,
+      formulaVersion: 4,
       evidenceVersion: 1,
       dayBoundary: 'UTC',
       asOfDayMs,

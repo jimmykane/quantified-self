@@ -7,6 +7,7 @@ import { HEALTH_METRIC_IDS } from '../../../shared/health';
 import { isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 import { enqueueDerivedMetricsIngressTask } from '../shared/cloud-tasks';
 import { getUserDeletionGuardState } from '../shared/user-deletion-guard';
+import { hasDerivedMetricSourceChange } from './derived-metrics-source-change';
 
 const DERIVED_METRICS_SOURCE_TRIGGER_MEMORY = '512MiB';
 
@@ -51,18 +52,12 @@ async function handleDerivedMetricsSourceWrite(
     if (!beforeExists && !afterExists) {
         return;
     }
-    const sourceId = resolveDerivedMetricsSourceId(event, source);
-    const deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
-    if (deletionGuard.shouldSkip) {
-        logger.info('[derived-metrics] Skipping ingress enqueue because user deletion is in progress or user root is missing.', {
-            uid,
-            source,
-            sourceId,
-            userExists: deletionGuard.userExists,
-            deletionInProgress: deletionGuard.deletionInProgress,
-        });
+    if (beforeExists && afterExists && !hasDerivedMetricSourceChange(
+        source, event.data?.before?.data?.(), event.data?.after?.data?.(),
+    )) {
         return;
     }
+    const sourceId = resolveDerivedMetricsSourceId(event, source);
 
     // Debounce mutation ingress by uid + short time bucket.
     // Deterministic Cloud Task naming ensures one pending ingress task per bucket.
@@ -94,6 +89,15 @@ async function handleDerivedMetricsSourceWrite(
         ]
         : [];
     if (source === 'health' && healthMetricKinds.length === 0) {
+        return;
+    }
+    const deletionGuard = await getUserDeletionGuardState(admin.firestore(), uid);
+    if (deletionGuard.shouldSkip) {
+        logger.info('[derived-metrics] Skipping ingress enqueue because user deletion is in progress or user root is missing.', {
+            uid, source, sourceId,
+            userExists: deletionGuard.userExists,
+            deletionInProgress: deletionGuard.deletionInProgress,
+        });
         return;
     }
     const targetedIngressOptions = sleepIngressOptions || (source === 'health'

@@ -1,7 +1,7 @@
 @if (showAddAction()) {
-  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" (click)="toggle()">
-    <mat-icon>add</mat-icon>
+  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" matBadge="New" matBadgeSize="medium" [matBadgeHidden]="!unseen().length" [matBadgeDescription]="newBadgeDescription()" (click)="toggle()">
     <span>{{ sectionPresentation().add }}</span>
+    <mat-icon iconPositionEnd>add</mat-icon>
   </button>
 }
 <ng-template #picker>
@@ -15,16 +15,20 @@
     <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [disabled]="state.busy()" [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
       @if (lane() === 'kpi') {
-      <mat-chip-listbox aria-label="KPI group" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
+      <div class="chart-library-filters">
+      <mat-chip-listbox aria-label="KPI group" [hideSingleSelectionIndicator]="true" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
         <mat-chip-option value="all">All</mat-chip-option><mat-chip-option value="load">Load</mat-chip-option><mat-chip-option value="readiness">Readiness</mat-chip-option><mat-chip-option value="execution">Execution</mat-chip-option>
       </mat-chip-listbox>
+      </div>
       }
       <p class="chart-library-count" aria-live="polite">{{ availableCountLabel() }}</p>
       <mat-action-list class="chart-library-list qs-scrollbar" [attr.aria-label]="'Available ' + sectionPresentation().plural">
-        @for (entry of rowPreviews(); track entry.definition.id) {
+        @for (entry of rowPreviews(); track entry.definition.id; let index = $index) {
+          @if (index === 0 && suggested().length) { <h3 matSubheader>Suggested for you</h3> }
+          @if (index === suggested().length && suggested().length && rowPreviews().length > suggested().length) { <h3 matSubheader>More {{ sectionPresentation().plural }}</h3> }
           <button mat-list-item type="button" [attr.data-preset-id]="entry.definition.id" [attr.aria-pressed]="state.selected()?.definition?.id === entry.definition.id" [attr.aria-label]="'Preview ' + entry.definition.label" [attr.aria-describedby]="'chart-source-' + entry.definition.id" [disabled]="state.busy()" (click)="select(entry)">
-            <span matListItemTitle>{{ entry.title }}</span>
-            <span matListItemLine [id]="'chart-source-' + entry.definition.id">{{ entry.format }} · {{ entry.preview.source === 'user' ? 'Your data' : 'Example data' }}</span>
+            <span matListItemTitle>{{ entry.title }}@if (entry.isNew) { <span class="chart-library-new-label"> · New</span> }</span>
+            <span matListItemLine [id]="'chart-source-' + entry.definition.id" [matTooltip]="entry.sourceLabel">{{ entry.format }} · {{ entry.sourceLabel }}</span>
             <span matListItemMeta class="chart-library-row-meta" aria-hidden="true">
               <app-dashboard-chart-thumbnail [preview]="entry.preview" [darkTheme]="darkTheme()"></app-dashboard-chart-thumbnail>
               <mat-icon>chevron_right</mat-icon>
@@ -54,7 +58,7 @@
         }
         <section class="chart-library-preview qs-scrollbar" [attr.aria-label]="draftPresentation().preview">
           <h3>{{ state.configuring() ? 'Live preview' : previewTitle() }}</h3>
-          <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="seed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
+          <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="previewSeed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
           @if (!creatingCustom()) {
             <div class="chart-library-explanation">
               @for (paragraph of explanationParagraphs(); track $index) { <p>{{ paragraph }}</p> }

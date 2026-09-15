@@ -6,10 +6,6 @@ import { TileSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppUserInterface, AppDashboardSettingsInterface } from '../../../models/app-user.interface';
 import { DashboardConfigurationService, cloneDashboardSettings, assertDashboardConfigurationCurrent } from '../../../services/dashboard-configuration.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
-import { AppEventService } from '../../../services/app.event.service';
-import { AppSleepService } from '../../../services/app.sleep.service';
-import { AppRouteService } from '../../../services/app.route.service';
-import { DashboardDerivedMetricsService } from '../../../services/dashboard-derived-metrics.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { DashboardTileLaneKey, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
 import { DashboardChartCatalogEntry } from '../../../helpers/dashboard-chart-catalog.helper';
@@ -21,10 +17,6 @@ export class DashboardChartLibraryState implements OnDestroy {
   private readonly persistence = inject(DashboardConfigurationService);
   private readonly dialog = inject(MatDialog);
   readonly haptics = inject(AppHapticsService);
-  private readonly events = inject(AppEventService);
-  private readonly sleep = inject(AppSleepService);
-  private readonly routes = inject(AppRouteService);
-  private readonly derived = inject(DashboardDerivedMetricsService);
   readonly activeLane = signal<DashboardTileLaneKey | null>(null);
   readonly selected = signal<DashboardChartCatalogEntry | null>(null);
   readonly draft = signal<TileSettingsInterface | null>(null);
@@ -208,7 +200,7 @@ export class DashboardChartLibraryState implements OnDestroy {
       } : null;
       this.undoAvailable.set(allowUndo);
       this.changed$.next(order);
-    } }, this.haptics, this.sleep, this.events, this.routes, this.derived);
+    } }, this.haptics);
     controller.initialize();
     return controller;
   }

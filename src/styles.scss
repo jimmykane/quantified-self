@@ -9,6 +9,7 @@
 @use 'styles/panels';
 @use 'styles/icons';
 @use 'styles/app-loader';
+@use 'styles/scrollbars';
 
 /* Bundle app fonts locally to avoid runtime dependency on external font CDNs. */
 @import '@fontsource/inter/300.css';
@@ -574,99 +575,14 @@ mat-table {
   display: inline-block;
 }
 
-/* Reusable Custom Scrollbar */
-@mixin qs-scrollbar-skin {
-  /* Firefox */
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 36%, transparent) transparent;
-
-  &::-webkit-scrollbar {
-    height: 10px;
-    /* Horizontal scrollbar height */
-    width: 10px;
-    /* Vertical scrollbar width */
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-    border-radius: 999px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 30%, transparent);
-    border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: content-box;
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 46%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
-  }
-
-  &::-webkit-scrollbar-track-piece {
-    border-radius: 999px;
-  }
-
-  &::-webkit-scrollbar-corner {
-    background: transparent;
-    border-radius: 999px;
-  }
-}
-
-.qs-scrollbar {
-  @include qs-scrollbar-skin;
-}
-
-/* Also style shell-level scroll containers (their scrollbar is often the visible one) */
-.app-sidenav-container .mat-drawer-content,
-.app-sidenav-container .mat-drawer-inner-container {
-  @include qs-scrollbar-skin;
-}
-
-/* Dark theme support for global scrollbar */
-.dark-theme .qs-scrollbar {
-  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
-
-  &::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
-  }
-}
-
-.dark-theme .app-sidenav-container .mat-drawer-content,
-.dark-theme .app-sidenav-container .mat-drawer-inner-container {
-  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
-
-  &::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
-  }
-}
+/* Shared thin scrollbars apply to every surface, not just opted-in panels. */
+@include scrollbars.global(mat.get-theme-color($app-dark-theme, on-surface));
 
 /* Bottom Sheet Overrides
    Style the sheet once via the Material host class to avoid double-stacking when a panelClass is also present.
 */
 .mat-bottom-sheet-container {
   @extend .qs-glass-card-panel;
-  @extend .qs-scrollbar;
   --qs-glass-panel-blur: 16px;
   --mat-bottom-sheet-container-background-color: var(--qs-overlay-surface);
   --mat-bottom-sheet-container-shape: 20px;
@@ -704,20 +620,11 @@ mat-table {
   min-height: 0;
 }
 
-/* Ensure bottom sheet scroll areas inherit the QS scrollbar styling */
+/* Keep the sheet's content as its scroll owner; the global skin handles appearance. */
 .mat-bottom-sheet-container .bottom-sheet-content {
-  @extend .qs-scrollbar;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-
-  &::-webkit-scrollbar-track {
-    background: var(--qs-overlay-surface);
-  }
-
-  &::-webkit-scrollbar-corner {
-    background: var(--qs-overlay-surface);
-  }
 }
 
 /* Keep mobile-sized sheets wide through Material's medium breakpoint. */
@@ -861,7 +768,6 @@ tr.mat-row:focus,
 /* Base menu panel style applied globally via MAT_MENU_DEFAULT_OPTIONS */
 .mat-mdc-menu-panel.qs-menu-panel {
   @extend .qs-glass-card-panel;
-  @include qs-scrollbar-skin;
   --mat-menu-container-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
   box-shadow: var(--qs-overlay-shadow) !important;
@@ -888,7 +794,6 @@ tr.mat-row:focus,
 }
 
 .mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
-  @extend .qs-scrollbar;
   overflow: auto;
   max-height: inherit;
   border-radius: inherit;
@@ -1170,33 +1075,15 @@ tr.mat-row:focus,
   max-width: min(320px, calc(100vw - 24px)) !important;
 }
 
-/* Apply QS scrollbar skin to all Material select panels globally. */
+/* Select/autocomplete surfaces share the global scrollbar skin automatically. */
 .mat-mdc-select-panel {
   --mat-select-panel-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
-  @include qs-scrollbar-skin;
 }
 
 .mat-mdc-autocomplete-panel {
   --mat-autocomplete-background-color: var(--qs-overlay-surface);
   background: var(--qs-overlay-surface) !important;
-  @include qs-scrollbar-skin;
-}
-
-.dark-theme .mat-mdc-select-panel {
-  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
-
-  &::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
-  }
-
-  &::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
-  }
 }
 
 .mat-mdc-select-panel.qs-config-submenu-compact {

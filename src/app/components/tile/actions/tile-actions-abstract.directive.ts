@@ -1,4 +1,5 @@
 import { DASHBOARD_TILE_PRESENTATIONS, DashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
+import { syncDashboardChartSuggestionStates } from '../../../helpers/dashboard-chart-discovery.helper';
 import { MatMenuTrigger } from '@angular/material/menu';
 import equal from 'fast-deep-equal';
 import { DashboardConfigurationService, cloneDashboardSettings } from '../../../services/dashboard-configuration.service';
@@ -68,6 +69,10 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   }
 
   protected async persistUserSettings(): Promise<unknown> {
+    if (this.pendingBaseline) {
+      syncDashboardChartSuggestionStates(this.user.settings.dashboardSettings,
+        this.pendingBaseline.tiles || [], this.user.settings.dashboardSettings.tiles || [], Date.now());
+    }
     const dashboardSettingsPatch = cloneDashboardSettings(this.buildDashboardSettingsPersistencePatch());
     if (Object.keys(dashboardSettingsPatch).length === 0) {
       return this.withSavingState(() => Promise.resolve());
@@ -102,6 +107,8 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
 
     return {
       tiles: dashboardSettings.tiles || [],
+      ...(this.pendingBaseline && !equal(this.pendingBaseline.autoTiles, dashboardSettings.autoTiles)
+        ? { autoTiles: dashboardSettings.autoTiles } : {}),
     };
   }
 

@@ -96,8 +96,8 @@ describe('WhatsNewDialogComponent', () => {
         expect(mockUpdateService.activateUpdate).toHaveBeenCalled();
     });
 
-    it('should use flush mobile content alignment only for the single-entry notification feed', () => {
-        changelogsSignal.set([{
+    it('should show only the latest release as an open notification article', () => {
+        const release: ChangelogPost = {
             id: 'release-1',
             title: 'Test release',
             description: 'Release details',
@@ -105,9 +105,13 @@ describe('WhatsNewDialogComponent', () => {
             type: 'minor',
             version: '1.0.0',
             published: true
-        }]);
+        };
+        changelogsSignal.set([release, { ...release, id: 'release-2', title: 'Previous release' }]);
         fixture.detectChanges();
 
-        expect(fixture.nativeElement.querySelector('.changelog-panel-notification')).not.toBeNull();
+        expect(fixture.nativeElement.querySelectorAll('article.changelog-notification')).toHaveLength(1);
+        expect(fixture.nativeElement.querySelector('h3').textContent).toContain(release.title);
+        expect(fixture.nativeElement.querySelector('mat-expansion-panel')).toBeNull();
+        expect(fixture.nativeElement.textContent).not.toContain('Previous release');
     });
 });

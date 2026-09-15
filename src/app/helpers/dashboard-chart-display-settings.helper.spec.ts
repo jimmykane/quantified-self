@@ -17,7 +17,7 @@ describe('dashboard-chart-display-settings.helper', () => {
       formTimelineWindow: 'w',
     });
     expect(getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_INTENSITY_DISTRIBUTION_CHART_TYPE)).toEqual({
-      derivedChartRange: '1y',
+      derivedChartRange: '12w',
     });
     expect(getDefaultDashboardChartTileDisplaySettingsForChartType(DASHBOARD_POWER_CURVE_CHART_TYPE)).toEqual({
       powerCurveCompareMode: 'latest',

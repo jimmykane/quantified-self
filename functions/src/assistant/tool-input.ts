@@ -21,6 +21,7 @@ const ASSISTANT_TIME_ZONE_DEFAULT_TOOL_NAMES = new Set<AssistantMcpToolName>([
   'query_metrics',
   'get_sleep_trend',
   'get_today_readiness',
+  'get_current_readiness',
   'get_daily_report',
 ]);
 const ASSISTANT_DATE_RANGE_TOOL_NAMES = new Set<AssistantMcpToolName>([

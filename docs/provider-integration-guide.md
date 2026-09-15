@@ -52,6 +52,29 @@ authoring is free and independent of connected services. Any future provider syn
 directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider
 connection alone never opts workouts into delivery.
 
+The Training UI checks availability and compatibility automatically on entering sync consent. With one ready provider,
+**Sync plan with Garmin** → **Enable plan sync** (plan) or **Send to Garmin** → **Send workout** (standalone) is the normal path;
+subsequent eligible edits reconcile automatically. Opening the dialog never mutates consent. The saved/browser time
+zone is shown inline and changes explicitly; mapping degradation still needs per-workout approval. Troubleshooting is
+secondary, with compact status/history rows and surface-free Show/Hide details matching existing Training controls.
+Existing sync settings open without a new preview or active Save action. Only an actual validated time-zone change
+enables **Save changes**, after a debounced read-only check; reverting disables it again. One footer distinguishes
+Cancel/confirmation from overview Close and in-flight saving. Initial Enable/Send and fresh-account consent remain
+explicit, and uncertain saves retain their original receipt. See Training's detailed UI contract for cancellation rules.
+**Plan sync** separates automatic plan-level settings from **Workout sync status** rows. Each row represents an individual
+workout, shows its scheduled date, and opens **Workout sync** details; editing is a separate action. **Stop plan sync** and
+**Stop workout sync** name their different scopes explicitly. Plan sync means automatic per-workout delivery, not native
+provider training-plan parity. Inherited workout reviews show the server-resolved parent-plan zone, not a retained
+override's older zone. Transport timestamps appear in workout details separately from scheduled dates and reflect the
+latest attempt or confirmation; an older success never masks a newer failed attempt.
+
+Plan and workout surfaces show per-service destination summaries from the safe delivery projections. Plan totals are
+aggregates of all current authored workouts, not evidence of a native provider plan or device receipt. Only complete,
+unchanged confirmations for the matching destination count as synced; earlier-account/removed-source records remain
+history. Waiting, paused, unsupported, approval and failure states stay visible. Bounded/incomplete or failed reads must
+not claim complete success. Rendering these summaries performs owner-visible reads only, never provider calls or consent
+changes. See the Training workspace source of truth for identity matching, read bounds and tests.
+
 Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
 actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
 controls and generic provider-copy retention warnings. This does not authorize transport work, alter disconnect or
@@ -59,11 +82,16 @@ deletion behavior, or enable a provider. See the [Training workspace source of t
 shared gate and account-change behavior.
 
 The versioned research snapshot lives in `shared/planned-workout-providers.ts`; pure fixture serializers live under
-`functions/src/training-plans/providers/`. Every provider delivery flag is currently `false`:
+`functions/src/training-plans/providers/`. Every public provider delivery flag is currently `false`. The separate
+exact-UID Garmin evaluation exception in `shared/training-delivery-rollout.ts` is enforced by both the production runtime
+and reactive frontend controls; it does not depend on the presentation-only allowlist. It retains Pro, explicit consent,
+connection authority and `WORKOUT_IMPORT` checks. Legacy connections must reconnect rather than have permission inferred.
+See the [private pilot operational boundary](training-workspace.md#private-garmin-evaluation-pilot) for deployment,
+preflight and rollback. This is controlled evaluation, not sandbox certification or public rollout:
 
 | Provider | Proof state | Truthful model and current gate |
 | --- | --- | --- |
-| Garmin | `fixture-only` | The local ignored Training API V2 partner contract proves separate Workout and Workout Schedule CRUD, `WORKOUT_IMPORT`, 100-step single-sport limits, and primary/secondary target fields. Redacted Running/Cycling fixtures cover time/distance/manual steps and repeats. Evaluation credentials, device coverage, completion correlation, and sandbox CRUD remain unproven. |
+| Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested HTTP adapter cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Real delivery is restricted to the explicit private pilot. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Actual evaluation response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
 | COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
 | Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
 | Suunto | `fixture-only` | A scheduled workout maps to one dated SuuntoPlus Guide, not a native training-plan calendar. Time, distance, manual transition, repeats, and absolute HR/power/speed/pace/cadence targets map to Guide JSON; cadence converts from rpm to hertz. Guide entitlement, ZIP/icon transport, watch storage/pinning, supported-device behavior, CRUD, and FIT correlation need sandbox proof. |
@@ -109,7 +137,22 @@ Fixture compatibility is not delivery readiness. Before any adapter flag changes
 update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and provider-specific horizon behavior. The
 shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved only with an excluded
 test transport. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
-source of truth for its contracts, operations, evidence and maintenance. Every real provider transport remains unavailable.
+source of truth for its contracts, operations, evidence and maintenance. Garmin's #647 adapter additionally runs through
+synthetic HTTP fixtures and real Firestore transactions; real transport remains unavailable outside the private Garmin pilot.
+The [Garmin adapter boundary](training-workspace.md#garmin-workoutcalendar-adapter-647) documents the per-request authority
+guard, step journal, exact endpoints, request bounds, permission flow and remaining certification checklist. In particular,
+Garmin's documented first workout POST has no external idempotency/lookup key: unknown acceptance remains blocked for
+attention, never retried blindly. Do not turn an empty schedule lookup into proof that a POST failed. HTTP response
+handling includes documented empty schedule-create success: a POST 204 is followed by an exact workout/date lookup,
+and only one matching schedule ID confirms that artifact. No match or multiple matches keep the journal uncertain.
+Allowlisted HTTP status and failure-phase diagnostics distinguish transport failures without logging raw provider data.
+Functions-only emulation can still write live Firestore and trigger deployed delivery workers; isolate bulk/failure
+tests with the demo Firestore suite and synthetic transport, not just a localhost callable URL. HTTP response
+tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from
+completed mutation. Interrupted edits invalidate the old fully accepted payload digest, and provider-imposed retry
+deadlines survive authored changes and manual Retry; these are tested locally, not certified provider semantics. Focused Garmin
+sandbox/device evidence, quota/pacing validation and operator recovery are tracked in epic subissue #698; #647 stays open
+until its original certification acceptance is satisfied.
 Provider certification, production observability and kill switches remain tracked under epic #583. Do not hide an unmet gate in a code comment or silently
 narrow the epic acceptance criteria.
 
@@ -515,6 +558,34 @@ Unified health history is retained on provider disconnect and removed on account
 The frontend should reuse the Services and provider-presentation patterns rather than create a one-off integration page.
 
 ### Required product surfaces
+
+Garmin's connection overview displays supported permissions per browser-safe account snapshot, including optional
+Training and Course Import grants. `WORKOUT_IMPORT` is displayed as **Training** in UI, help and delivery errors;
+retain the API identifier in authorization checks. Explicit empty arrays mean not granted; absent or malformed arrays mean not reported,
+not denial or endless loading. Deferred `MCT_EXPORT` (#621) is excluded from the catalog and display even if already
+granted; it is not required by QS. Other extra provider permission names remain visible as text, and separate accounts' grants
+are never combined for display or authority. The rows are a last-reported snapshot, not a live Garmin check or local
+consent toggles. **Manage in Garmin** opens the existing connected-app management path. Healthy connections have no
+**Reconnect** or reauthorization upsell, including when grants are missing or unknown. **Reconnect** remains only for
+reconnect-required or manual-review disconnect recovery; disconnected accounts retain **Connect**. Permission callbacks
+update the saved grants. Do not require an explicit disconnect to refresh consent: it disables other sync routes.
+Pending disconnect/reconnect actions cannot overlap, and merely rendering the
+view does not contact Garmin, refresh credentials, change grants, or opt workouts into delivery.
+History and route-upload tools distinguish a pending projection from an unreported/malformed permission snapshot;
+the latter directs users to Garmin permission management or support instead of a permanent spinner. Permission checks normalize the
+same grant names as the overview. Locked Garmin tools use explicit keyboard-accessible Pro buttons, not clickable
+panels, with one selection haptic per action.
+
+The shared connection view binds OAuth URL/callback completion and disconnect confirmation/result feedback to the
+originating UID and view revision. Account changes clear old projections and pending UI state; teardown and account
+changes dismiss the owned confirmation and discard late redirects, navigation, status, and haptics. Provider-specific
+initialization also checks teardown before creating secondary connection listeners. Disconnect locks
+before confirmation so duplicate actions and reconnect cannot overlap. This suppresses stale client effects without
+cancelling or reauthorizing server work already started for the original account.
+OAuth-start and disconnect requests also capture the Firebase auth user instance and UID. Their optional local
+dispatch check runs after App Check readiness/refresh and before every disconnect retry, so a delayed client attempt
+cannot move to a replacement signed-in account or a closed view. The check is never sent to Functions and does not
+replace Auth/App Check or server connection fencing; an already dispatched request is not cancelled.
 
 - Add the provider to `ServicesComponent`, its navigation order, connection-state map, query-param selection, and focused tool-dialog switch.
 - Create or adapt a provider service component using `ServicesAbstractComponentDirective`. Keep connection summary and advanced tools compatible with the dialog contract (`showConnectionSummary`, `showAdvancedTools`, `activeProviderTool`, and `showOnlyActiveProviderTool`).

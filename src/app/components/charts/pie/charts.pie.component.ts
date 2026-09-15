@@ -1,3 +1,4 @@
+import { DASHBOARD_CATEGORY_PALETTE } from '../../../helpers/dashboard-chart-series.helper';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -107,18 +108,7 @@ export class ChartsPieComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   private readonly chartHost: EChartsHostController;
   private layoutSize: { width: number; height: number } | null = null;
-  private readonly dateTypePalette: string[] = [
-    AppColors.Blue,
-    AppColors.Green,
-    AppColors.Orange,
-    AppColors.Purple,
-    AppColors.LightBlue,
-    AppColors.Yellow,
-    AppColors.Pink,
-    AppColors.Red,
-    AppColors.DeepBlue,
-    AppColors.LightGreen
-  ];
+  private readonly dateTypePalette = DASHBOARD_CATEGORY_PALETTE;
   private static readonly EMPTY_DATA_UPDATE_SETTINGS: ChartSetOptionSettings = {
     notMerge: true,
     lazyUpdate: false

@@ -16,6 +16,7 @@ import { ActivitySyncRouteControlComponent } from '../components/services/activi
 import { RouteDeliverySyncRouteControlComponent } from '../components/services/route-delivery-sync-route-control/route-delivery-sync-route-control.component';
 import { McpConnectionsComponent } from '../components/mcp-connections/mcp-connections.component';
 import { ProviderDataFlowMatrixComponent } from '../components/shared/provider-data-flow-matrix/provider-data-flow-matrix.component';
+import { GarminPermissionsComponent } from '../components/services/garmin/garmin-permissions.component';
 
 @NgModule({
     imports: [
@@ -25,6 +26,7 @@ import { ProviderDataFlowMatrixComponent } from '../components/shared/provider-d
         ServicesRoutingModule,
         McpConnectionsComponent,
         ProviderDataFlowMatrixComponent,
+        GarminPermissionsComponent,
     ],
     exports: [],
     declarations: [

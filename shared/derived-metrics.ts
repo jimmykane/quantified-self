@@ -10,7 +10,7 @@ import {
 } from './training-disciplines';
 import type { SleepProvider } from './sleep';
 import type { HealthProvider } from './health';
-import type { ReadinessConfidence, ReadinessLabel } from './readiness';
+import type { ReadinessConfidence, ReadinessLabel, ReadinessHrvPersonalRange } from './readiness';
 
 export const DERIVED_METRIC_KINDS = {
   Form: 'form',
@@ -976,7 +976,7 @@ export interface DerivedTrainingBuildComparisonMetricPayload {
   disciplines: DerivedTrainingBuildComparisonDiscipline[];
 }
 
-export interface DerivedTrainingReadinessHistoryPoint {
+export interface LegacyDerivedTrainingReadinessHistoryPoint {
   dayMs: number;
   score: number | null;
   label: ReadinessLabel | null;
@@ -994,7 +994,23 @@ export interface DerivedTrainingReadinessHistoryPoint {
   overnightHeartRateRatio: number | null;
 }
 
+export interface DerivedTrainingReadinessHistoryPoint extends LegacyDerivedTrainingReadinessHistoryPoint {
+  hrvPersonalRange: ReadinessHrvPersonalRange | null;
+}
+
+export interface LegacyDerivedTrainingReadinessMetricPayload {
+  evidenceVersion?: number;
+  formulaVersion: number;
+  dayBoundary: 'UTC';
+  asOfDayMs: number;
+  generatedAtMs: number;
+  historyDays: 14;
+  points: LegacyDerivedTrainingReadinessHistoryPoint[];
+}
+
 export interface DerivedTrainingReadinessMetricPayload {
+  /** Frozen formula-3 history for registered MCP clients, never used by the app. */
+  legacyPoints?: LegacyDerivedTrainingReadinessHistoryPoint[];
   /** Internal evidence pipeline version; omitted from public MCP projections. */
   evidenceVersion?: number;
   formulaVersion: number;

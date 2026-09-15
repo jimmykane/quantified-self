@@ -8,6 +8,7 @@ import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deleti
 import { enqueueTrainingDeliveryTask, getCloudTaskQueueDepthForQueue } from '../../shared/cloud-tasks';
 import { CLOUD_TASK_RETRY_CONFIG, MAX_PENDING_TASKS } from '../../shared/queue-config';
 import { config } from '../../config';
+import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 import { DELIVERY_QUEUE, type DeliveryRuntime } from './contracts';
 import { productionDeliveryRuntime } from './runtime';
 import { reconcileTrainingDeliveryPage } from './store';
@@ -39,6 +40,7 @@ export async function dispatchTrainingDeliveryJob(runtime: DeliveryRuntime, id: 
 }
 
 export const processTrainingDeliveryTask = onTaskDispatched({ region, timeoutSeconds: 120, memory: '512MiB',
+  secrets: FUNCTION_SECRET_BINDINGS.processTrainingDeliveryTask,
   retryConfig: CLOUD_TASK_RETRY_CONFIG, rateLimits: { maxConcurrentDispatches: 10, maxDispatchesPerSecond: 10 } }, async request => {
   const id = request.data?.queueItemId;
   if (typeof id !== 'string' || !/^(reconcile_)?[a-f0-9]{64}$/.test(id)) return;

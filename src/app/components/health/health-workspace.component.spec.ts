@@ -120,7 +120,8 @@ class HealthMetricChartStubComponent {
   @Input() chartStatuses: Readonly<Record<string, unknown>> = {};
 }
 
-const todayDate = localCalendarDate();
+const testNowMs = Date.UTC(2026, 8, 14, 12);
+const todayDate = localCalendarDate(testNowMs);
 
 @Component({ selector: 'app-timeline-notes-workspace', standalone: true, template: '<button>Timeline notes</button>' })
 class TimelineNotesWorkspaceStubComponent { context = () => null; }
@@ -341,6 +342,12 @@ function hrvBaselineSleepSessions(): SleepSession[] {
 }
 
 describe('HealthWorkspaceComponent', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(testNowMs);
+  });
+  afterEach(() => vi.useRealTimers());
+
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   let fixture: ComponentFixture<HealthWorkspaceComponent>;
   let component: HealthWorkspaceComponent;
@@ -942,7 +949,7 @@ describe('HealthWorkspaceComponent', () => {
     const hrvCard = host.querySelector<HTMLElement>('[aria-labelledby="health-priority-card-heart_rate_variability"]');
     expect(hrvCard?.textContent).toContain('Within personal range');
     expect(hrvCard?.textContent).toContain('7-day average');
-    expect(hrvCard?.textContent).toContain('Range');
+    expect(hrvCard?.textContent).toContain('60-day range');
     expect(hrvCard?.querySelector<HTMLElement>('.health-priority-range-status-dot')?.style.backgroundColor).not.toBe('');
     const setOption = TestBed.inject(EChartsLoaderService).setOption as ReturnType<typeof vi.fn>;
     let hrvChartOption: { series?: Array<{ lineStyle?: { color?: string } }> } | undefined;
@@ -1139,7 +1146,10 @@ describe('HealthWorkspaceComponent', () => {
     });
 
     expect(component.metricCatalogGroups().flatMap(group => group.metrics))
-      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
+      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length - 3);
+    for (const metric of [HEALTH_METRIC_IDS.Distance, HEALTH_METRIC_IDS.ActiveDuration, HEALTH_METRIC_IDS.Altitude]) {
+      expect(component.availableMetricSelections()).not.toContain(metric);
+    }
     expect(component.showSleepMetric()).toBe(true);
     expect(component.routeState().metric).toBe(HEALTH_METRIC_IDS.RestingHeartRate);
     expect((fixture.nativeElement as HTMLElement).textContent)
@@ -1165,7 +1175,7 @@ describe('HealthWorkspaceComponent', () => {
     });
 
     expect(component.metricCatalogGroups().flatMap(group => group.metrics))
-      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length);
+      .toHaveLength(Object.keys(HEALTH_METRIC_CATALOG).length - 3);
     expect(component.showSleepMetric()).toBe(false);
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Sleep overview');
   });

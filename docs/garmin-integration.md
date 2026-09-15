@@ -78,6 +78,41 @@ Health minimum-start clipping independently adds up to 30 seconds of headroom af
 
 Sleep and Health share the existing 30-day Garmin history cooldown, but their ranges are independent: a provider-discovered Sleep minimum does not shorten another Health family's range. The callable reports `sleepQueued` and `healthQueued` separately while retaining `queued` as the number of Sleep date-range requests. Garmin Summary Resender remains an operational recovery option for a deliberately bounded family/range after live delivery is healthy; it is not the normal user history flow, and no local credential migration script is required.
 
+## Permission visibility and management
+
+Connections → Garmin shows compact permission rows from the existing backend-owned connection-account projection.
+Each account keeps its own grants: `Granted`, `Not granted` for an explicitly absent grant, or `Not reported` when the
+saved permissions array is missing/malformed. The view includes the five supported permission families and extra
+provider-reported scope names without implying QS feature availability. `MCT_EXPORT` remains deferred under #621:
+it is excluded from the catalog and display, even when an existing account reports that grant. It is not required by QS.
+The OAuth adapter still sends the generic `PARTNER_WRITE PARTNER_READ CONNECT_READ CONNECT_WRITE` scopes, not the
+permission catalog; this display/catalog change does not alter Garmin-hosted consent or remove saved grants.
+The view never reads OAuth documents or writes grants.
+User-facing labels, help and delivery errors call `WORKOUT_IMPORT` **Training**, matching Garmin's permission name;
+the API identifier and authorization checks remain unchanged.
+Unknown legacy permissions do not hide the known account behind a permanent loading message.
+History and route-upload tools also distinguish unknown permissions from an active load, and direct users to Garmin
+permission management or support when details remain unavailable. Their checks use the same trimmed grant names as the displayed rows;
+malformed arrays remain unknown. Pro prompts are focusable Material buttons with a single selection haptic.
+
+**Manage in Garmin** opens Garmin Connect's account/Connected Apps management; choose Quantified Self and manage the
+permissions Garmin exposes there. Healthy connections have no **Reconnect** or reauthorization upsell action, even
+when individual grants are missing or unreported. **Reconnect** is reserved for reconnect-required and manual-review
+disconnect recovery; disconnected users retain **Connect**. Permission callbacks update the saved grants automatically.
+Viewing grants and opening Garmin's management UI do not require Pro. A pending OAuth start disables Disconnect and
+other connection actions; disconnect-pending still blocks ordinary reconnect. Loading a new account hides the prior
+permission snapshot. Permission callbacks and successful OAuth continue to update the safe projection; there is no
+new callable, live polling, browser token access, or frontend grant mutation. Backend delivery readiness/consent checks
+remain authoritative. Garmin's [account preferences guidance](https://support.garmin.com/en-SG/?faq=JwIU2Sofyy6ThtzhH8ENX6)
+describes connected-app management.
+
+Shared connection UI results are pinned to the originating user and view lifetime. Switching accounts/signing out
+clears prior connection details immediately, and pending OAuth redirects/callbacks or disconnect results cannot update
+a replacement view. Disconnect confirmation is locked against duplicate actions, dismissed on account change/teardown,
+and rechecked before dispatch. Server-side connection authority and operations already in flight remain unchanged.
+OAuth-start and disconnect dispatch/retries also check the original Firebase auth user after App Check waits, stopping
+unsent work when the account or view changes instead of letting a delayed retry use a replacement account.
+
 ## Training-planning proof boundary
 
 The ignored local Garmin Training API V2 version 1.0 partner contract is available for development, but it is never
@@ -87,11 +122,27 @@ Workout content and date-only Workout Schedule payloads are deliberately separat
 their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
 heart-rate/power/speed/pace/cadence ranges.
 
-All Garmin planned-workout delivery remains disabled. Relative targets require explicit degradation approval because
+Public Garmin planned-workout delivery remains disabled. A separate backend-enforced exact-UID evaluation pilot can
+use the existing app's explicit Send/plan consent flow; see the [pilot boundary](training-workspace.md#private-garmin-evaluation-pilot).
+The pilot does not bypass Pro, current connection generations or `WORKOUT_IMPORT`; older connections must reconnect.
+It is independent of the Training UI allowlist and does not constitute completed sandbox/device certification.
+Relative targets require explicit degradation approval because
 the provider percentage fields do not transmit Quantified Self's stored reference snapshot. Secondary targets are
-rejected outside cycling and remain device-dependent for cycling. Evaluation credentials, representative device access,
-create/update/reschedule/delete/duplicate evidence, reconnect behavior, production review, and completed-activity
-correlation remain in issues #645 and #647. This proof does not authorize a provider call or deployment.
+rejected outside cycling and remain device-dependent for cycling. The #647 adapter now has synthetic HTTP and real
+Firestore worker tests for separate CRUD, Long IDs, partial recovery, permission repair, reconnect and deletion races.
+It reuses existing Garmin OAuth refresh/connection authority and binds existing OAuth secrets only to the Training task
+worker. Missing `WORKOUT_IMPORT` requires reconnect; it never grants permission from a browser-supplied account.
+The private ledger retains workout, schedule and workout-owner IDs independently of authored documents. The documented
+first-create endpoint has no idempotency key or external-ID lookup, so an unknown first-create outcome stays blocked for
+attention rather than being posted again. Provider responses and credentials never enter browser status or diagnostics.
+Past/completed copies remain protected, and provider-held copies may remain after disconnect/account deletion.
+
+The detailed implementation and certification checklist live in the
+[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Actual evaluation credential authority,
+request/response and schedule-list/404 behavior, device rendering, sandbox CRUD/reconnect evidence and production review
+remain outstanding in #645/#647/#698/#655; #698 tracks the focused sandbox/device evidence and operator recovery
+procedure. Completed-activity correlation remains #651. No new completion hook is implemented.
+Neither the adapter nor the offline proof authorizes a provider call, deployment, or production enablement.
 
 ## Production configuration
 

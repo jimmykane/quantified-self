@@ -1,3 +1,4 @@
+import { dismissAllDashboardChartSuggestions, syncDashboardChartSuggestionStates } from '../../../helpers/dashboard-chart-discovery.helper';
 import { DashboardConfigurationConflict } from '../../../services/dashboard-configuration.service';
 import { matchesDashboardPreset } from '../../../helpers/dashboard-chart-catalog.helper';
 import { MatDialog } from '@angular/material/dialog';
@@ -102,20 +103,11 @@ import {
   DASHBOARD_MANAGER_PRESET_IDS,
   getDashboardManagerPresetDefinition,
   getDashboardManagerPresetDefinitions,
-  getDashboardManagerRecommendedPresetDefinitions,
-  type DashboardManagerPresetEligibility,
   type DashboardManagerPresetCategory,
   type DashboardManagerPresetDefinition,
   type DashboardManagerPresetId,
 } from '../../../helpers/dashboard-manager-presets.helper';
 import { AppHapticsService } from '../../../services/app.haptics.service';
-import { AppSleepService } from '../../../services/app.sleep.service';
-import { AppEventService } from '../../../services/app.event.service';
-import { AppRouteService } from '../../../services/app.route.service';
-import {
-  createDashboardDerivedMetricsMissingState,
-  DashboardDerivedMetricsService,
-} from '../../../services/dashboard-derived-metrics.service';
 import {
   cloneDashboardTileEventFilters,
   DASHBOARD_TILE_EVENT_RANGE_OPTIONS,
@@ -133,7 +125,7 @@ import {
   DASHBOARD_DEFAULT_TILE_SIZE,
 } from '../../../helpers/dashboard-tile-default-size.helper';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
-import { firstValueFrom, Subscription } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
 import {
   DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,
@@ -166,13 +158,6 @@ import {
   resolveDashboardPowerCurveTileScope,
   type DashboardPowerCurveScope,
 } from '../../../helpers/dashboard-power-curve-scope.helper';
-import {
-  buildDashboardAerobicCapacityContext,
-  buildDashboardAerobicDurabilityContext,
-} from '../../../helpers/dashboard-training-insights.helper';
-import { buildDashboardPowerCurveContextFromSnapshot } from '../../../helpers/dashboard-power-curve.helper';
-import { DERIVED_METRIC_KINDS } from '@shared/derived-metrics';
-import type { SleepSession } from '@shared/sleep';
 
 export interface DashboardTileConfigurationData {
   user: AppUserInterface;
@@ -212,8 +197,6 @@ interface DashboardManagerSettingsSnapshot {
 type DashboardManagerSavingAction = 'save' | 'todaySummary' | 'resetToDefault' | 'addAll' | 'removeAll' | null;
 
 export class DashboardTileConfiguration {
-  private static readonly recommendedActivityLookbackMs = 90 * 24 * 60 * 60 * 1000;
-  private static readonly recommendedSleepLookbackMs = 14 * 24 * 60 * 60 * 1000;
   private static readonly excludedChartTypePatterns = [
     /^bri.*dev/i,
     /^spiral$/i,
@@ -438,18 +421,7 @@ export class DashboardTileConfiguration {
   public savingAction: DashboardManagerSavingAction = null;
   public saveError = '';
   public showTodaySummary = true;
-  public recommendedEligibility: DashboardManagerPresetEligibility = {
-    'activity-history': false,
-    sleep: false,
-    'cycling-power': false,
-    'running-power': false,
-    'aerobic-capacity': false,
-    'aerobic-durability': false,
-    'event-map': false,
-    routes: false,
-  };
   private hasSavedChanges = false;
-  private bulkEligibilitySubscription = new Subscription();
 
 
   constructor(
@@ -458,10 +430,6 @@ export class DashboardTileConfiguration {
     private dialog: MatDialog,
     private userService: Pick<AppUserService, 'updateUserProperties'>,
     private hapticsService: AppHapticsService,
-    private sleepService: AppSleepService,
-    private eventService: AppEventService,
-    private routeService: AppRouteService,
-    private derivedMetricsService: DashboardDerivedMetricsService,
   ) { }
 
   initialize(): void {
@@ -505,7 +473,6 @@ export class DashboardTileConfiguration {
 
 
   destroy(): void {
-    this.bulkEligibilitySubscription.unsubscribe();
   }
 
   get dashboardTiles(): TileSettingsInterface[] {
@@ -1016,28 +983,22 @@ export class DashboardTileConfiguration {
     }
 
     this.hapticsService.selection();
+    const confirmed = await firstValueFrom(this.dialog.open(ConfirmationDialogComponent, { data: {
+      title: 'Reset to starter dashboard?',
+      message: 'This replaces your current layout with Today, Weekly Training Time, and Calendar. Your recorded data is kept.',
+      confirmLabel: 'Reset dashboard', cancelLabel: 'Cancel',
+    } }).afterClosed().pipe(take(1)));
+    if (confirmed !== true || this.isSaving) return;
     this.startSaving('resetToDefault');
     this.saveError = '';
     const dashboardSettings = this.data.user.settings.dashboardSettings;
     const previousSettings = this.snapshotDashboardSettings(dashboardSettings);
 
     try {
-      await this.refreshRecommendedEligibility();
-    } catch (error) {
-      this.saveError = 'Could not load recommended dashboard tiles. Please try again.';
-      this.hapticsService.error();
-      console.error('[DashboardTileConfiguration] Failed to load recommended dashboard tiles', error);
-      this.stopSaving();
-      return;
-    }
-
-    try {
-      const recommendedTiles = this.getAllDashboardManagerPresetTiles(
-        getDashboardManagerRecommendedPresetDefinitions(this.recommendedEligibility),
-      );
-      dashboardSettings.tiles = recommendedTiles;
+      const starterTiles = AppUserUtilities.getDefaultUserDashboardTiles();
+      dashboardSettings.tiles = starterTiles;
       this.setTodaySummaryVisibility(dashboardSettings, true);
-      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, recommendedTiles);
+      this.syncAutoTileStateAfterSave(dashboardSettings, previousSettings.tiles, starterTiles);
       await this.persistDashboardSettings(dashboardSettings);
       this.hasSavedChanges = true;
       this.hapticsService.success();
@@ -1345,6 +1306,7 @@ export class DashboardTileConfiguration {
     nextTiles: TileSettingsInterface[],
   ): void {
     const nowMs = Date.now();
+    syncDashboardChartSuggestionStates(dashboardSettings, previousTiles, nextTiles, nowMs);
     this.syncSleepTrendAutoTileStateAfterSave(dashboardSettings, previousTiles, nextTiles, nowMs);
     this.syncChartBackedAutoTileStatesAfterSave(dashboardSettings, previousTiles, nextTiles, nowMs);
   }
@@ -1585,7 +1547,7 @@ export class DashboardTileConfiguration {
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       data: {
         title: 'Clear dashboard?',
-        message: 'This hides the Today summary and clears every chart and map tile. Automatic dashboard suggestions will also stay dismissed until you add them again.',
+        message: 'This hides the Today summary and clears every chart and map tile. Chart suggestions will stay dismissed until you add them again.',
         confirmLabel: 'Remove all',
         cancelLabel: 'Cancel',
         confirmColor: 'warn',
@@ -1653,94 +1615,11 @@ export class DashboardTileConfiguration {
     return Math.max(...tiles.map(tile => Number(tile?.order || 0))) + 1;
   }
 
-  private async refreshRecommendedEligibility(): Promise<void> {
-    const uid = `${this.data?.user?.uid || ''}`.trim();
-    if (!uid) {
-      throw new Error('Dashboard recommendations require a user id.');
-    }
-
-    const [events, sleepSessions, hasRoutes, derivedState] = await Promise.all([
-      firstValueFrom(this.watchRecommendedActivityEvents().pipe(take(1))),
-      firstValueFrom(this.watchRecommendedSleepSessions(uid).pipe(take(1))),
-      firstValueFrom(this.routeService.watchHasAnyRoutePreview(uid).pipe(take(1))),
-      firstValueFrom(this.derivedMetricsService.watch(this.data.user, {
-        metricKinds: this.getBulkEligibilityMetricKinds(),
-      }).pipe(take(1))),
-    ]);
-
-    this.updateActivityEligibility(events.length > 0);
-    this.updateSleepEligibility(sleepSessions);
-    this.recommendedEligibility.routes = hasRoutes === true;
-    this.updateDerivedEligibility(derivedState);
-  }
-
-  private watchRecommendedActivityEvents(nowMs = Date.now()) {
-    return this.eventService.getEventsBy(this.data.user, [
-      {
-        fieldPath: 'startDate',
-        opStr: '>=',
-        value: Math.max(0, nowMs - DashboardTileConfiguration.recommendedActivityLookbackMs),
-      },
-      { fieldPath: 'startDate', opStr: '<=', value: nowMs },
-    ], 'startDate', false, 1);
-  }
-
-  private watchRecommendedSleepSessions(uid: string, nowMs = Date.now()) {
-    return this.sleepService.watchForDashboard(
-      uid,
-      Math.max(0, nowMs - DashboardTileConfiguration.recommendedSleepLookbackMs),
-      nowMs,
-    );
-  }
-
-  private updateActivityEligibility(hasEvents: boolean): void {
-    this.recommendedEligibility['activity-history'] = hasEvents;
-    this.recommendedEligibility['event-map'] = hasEvents;
-  }
-
-  private updateSleepEligibility(sessions: readonly SleepSession[]): void {
-    this.recommendedEligibility.sleep = sessions.length > 0;
-  }
-
-  private updateDerivedEligibility(
-    state: ReturnType<typeof createDashboardDerivedMetricsMissingState>,
-  ): void {
-    this.recommendedEligibility['aerobic-capacity'] = buildDashboardAerobicCapacityContext(
-      state.trainingCapacity,
-    ) !== null;
-    this.recommendedEligibility['aerobic-durability'] = buildDashboardAerobicDurabilityContext(
-      state.trainingDurability,
-    ) !== null;
-    const cyclingPower = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
-      scope: 'cycling',
-      range: '1y',
-    });
-    const runningPower = buildDashboardPowerCurveContextFromSnapshot(state.powerCurve, {
-      scope: 'running',
-      range: '1y',
-    });
-    this.recommendedEligibility['cycling-power'] = !!cyclingPower?.matchedEventCount && cyclingPower.series.length > 0;
-    this.recommendedEligibility['running-power'] = !!runningPower?.matchedEventCount && runningPower.series.length > 0;
-  }
-
-  private getBulkEligibilityMetricKinds() {
-    return [
-      DERIVED_METRIC_KINDS.TrainingCapacity,
-      DERIVED_METRIC_KINDS.TrainingDurability,
-      DERIVED_METRIC_KINDS.PowerCurve,
-    ];
-  }
-
-  private resetRecommendedEligibility(): void {
-    Object.keys(this.recommendedEligibility).forEach((key) => {
-      this.recommendedEligibility[key as keyof DashboardManagerPresetEligibility] = false;
-    });
-  }
-
   private markAllDashboardAutoTilesDismissed(
     dashboardSettings: AppDashboardSettingsInterface,
     nowMs: number,
   ): void {
+    dismissAllDashboardChartSuggestions(dashboardSettings, nowMs);
     markDashboardAutoTileDismissed(
       dashboardSettings,
       DASHBOARD_AUTO_TILE_ACTIVITY_CALENDAR_ID,

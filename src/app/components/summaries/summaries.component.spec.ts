@@ -41,7 +41,6 @@ import type { SleepSession } from '@shared/sleep';
 import { AppSleepService } from '../../services/app.sleep.service';
 import { AppEventService } from '../../services/app.event.service';
 import { AppRouteService } from '../../services/app.route.service';
-import { DashboardAutoTileService } from '../../services/dashboard-auto-tile.service';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import * as dashboardTileViewModelHelper from '../../helpers/dashboard-tile-view-model.helper';
 import {
@@ -76,7 +75,6 @@ describe('SummariesComponent', () => {
   let mockSleepService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockEventService: { getEventsBy: ReturnType<typeof vi.fn> };
   let mockRouteService: { watchRecentRoutePreviews: ReturnType<typeof vi.fn> };
-  let mockDashboardAutoTileService: { watchForDashboard: ReturnType<typeof vi.fn> };
   let mockLogger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; log: ReturnType<typeof vi.fn> };
   let mockDialog: { open: ReturnType<typeof vi.fn> };
   let mockBottomSheet: { open: ReturnType<typeof vi.fn> };
@@ -150,9 +148,6 @@ describe('SummariesComponent', () => {
     mockRouteService = {
       watchRecentRoutePreviews: vi.fn().mockReturnValue(of([])),
     };
-    mockDashboardAutoTileService = {
-      watchForDashboard: vi.fn().mockImplementation(() => new Subscription()),
-    };
     mockLogger = { error: vi.fn(), warn: vi.fn(), log: vi.fn() };
     mockDialog = {
       open: vi.fn().mockReturnValue({
@@ -195,7 +190,7 @@ describe('SummariesComponent', () => {
         { provide: DashboardHrvService, useValue: { watch: vi.fn(() => EMPTY) } },
         { provide: AppEventService, useValue: mockEventService },
         { provide: AppRouteService, useValue: mockRouteService },
-        { provide: DashboardAutoTileService, useValue: mockDashboardAutoTileService },
+
         { provide: LoggerService, useValue: mockLogger },
         { provide: MatDialog, useValue: mockDialog },
         { provide: MatBottomSheet, useValue: mockBottomSheet },
@@ -278,6 +273,8 @@ describe('SummariesComponent', () => {
   });
 
   it('retains the last complete HRV window through rapid paging and failed refreshes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 10, 12));
     const first$ = new Subject<DashboardHrvContext>();
     const second$ = new Subject<DashboardHrvContext>();
     const third$ = new Subject<DashboardHrvContext>();
@@ -1251,7 +1248,7 @@ describe('SummariesComponent', () => {
     (component as any).derivedRampRateContext = { rampRate: 1, latestDayMs: nowMs };
     (component as any).derivedRecoveryNowContext = { totalSeconds: 7_200, endTimeMs: nowMs };
     (component as any).readinessSleepSessions = [
-      ...Array.from({ length: 5 }, (_, index) => ({
+      ...Array.from({ length: 15 }, (_, index) => ({
         id: `baseline-${index}`,
         sleepDate: new Date(nowMs - ((index + 2) * 86_400_000)).toISOString().slice(0, 10),
         startTimeMs: nowMs - ((index + 2) * 86_400_000) - (9 * 3_600_000),
@@ -1288,7 +1285,10 @@ describe('SummariesComponent', () => {
       .not.toContain('Imported recovery estimate');
     expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
       .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
-    expect(nativeElement.querySelector('dd[data-tone="positive"]')?.textContent).toContain('+10%');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('7-day average');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('60-day range');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night 55 ms');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv app-metric-indicator')).toBeNull();
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
@@ -1353,7 +1353,7 @@ describe('SummariesComponent', () => {
         formNowStatus: 'ready',
         rampRateStatus: 'ready',
       };
-      // Synthetic readings reproduce the reported 75 (load only) -> 62 (four signals) transition.
+      // Synthetic readings reproduce the reported 75 (load only) -> 67 (three signals; HRV range still building) transition.
       nights = Array.from({ length: 6 }, (_, index): SleepSession => ({
         id: `night-${index}`,
         userID: 'readiness-owner',
@@ -1389,8 +1389,8 @@ describe('SummariesComponent', () => {
       if (first === 'load') sleep$.next(nights);
       else load$.next(loadState);
 
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 62, availableSignalCount: 4 });
-      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('62/100');
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
+      expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('67/100');
       expect(element.querySelector('[aria-label="Loading readiness"]')).toBeNull();
       expect(element.querySelector('.dashboard-current-state-primary[aria-busy="false"]')).not.toBeNull();
       expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
@@ -1403,7 +1403,7 @@ describe('SummariesComponent', () => {
       expect(render().querySelector('.dashboard-current-state-row')?.textContent).toContain('No eligible night');
       // Newly imported sleep continues updating the open dashboard.
       sleep$.next(nights);
-      expect(component.dashboardTodayReadiness.score).toBe(62);
+      expect(component.dashboardTodayReadiness.score).toBe(67);
     });
 
     it('settles an unchanged missing load result instead of remaining on loading', () => {
@@ -1425,7 +1425,7 @@ describe('SummariesComponent', () => {
       load$.next(loadState);
       sleep$.next(nights);
       sleep$.error(new Error('refresh failed'));
-      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 62, availableSignalCount: 4 });
+      expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
       expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be refreshed');
       await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
@@ -1561,6 +1561,7 @@ describe('SummariesComponent', () => {
     });
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith({
+      previewMetricStatuses: expect.objectContaining({ form: 'missing', acwr: 'missing' }),
       tileEventAnchorsByOrder: {},
       hrvTrend: null,
       hrvPreferredSource: null,
@@ -1602,136 +1603,13 @@ describe('SummariesComponent', () => {
     expect(component.tiles).toBe(builtTiles);
   });
 
-  it('subscribes to dashboard auto tiles for editable owner dashboards', async () => {
-    const autoTileSubscription = new Subscription();
-    const unsubscribeSpy = vi.spyOn(autoTileSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard.mockReturnValueOnce(autoTileSubscription);
-    component.user = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
+  it('does not populate an intentionally empty dashboard during owner hydration', async () => {
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as never;
     component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      showActions: {
-        currentValue: true,
-        previousValue: false,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenCalledWith(component.user);
-
+    await component.ngOnChanges({ user: { currentValue: component.user, firstChange: true, isFirstChange: () => true } } as never);
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+    expect(mockUserService.updateUserProperties).not.toHaveBeenCalled();
     component.ngOnDestroy();
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('resubscribes dashboard auto tiles when the owner user object refreshes with the same uid', async () => {
-    const firstSubscription = new Subscription();
-    const secondSubscription = new Subscription();
-    const firstUnsubscribeSpy = vi.spyOn(firstSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard
-      .mockReturnValueOnce(firstSubscription)
-      .mockReturnValueOnce(secondSubscription);
-    const originalUser = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [], testSettingsVersion: 'stale' } },
-    } as any;
-    const refreshedUser = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [], testSettingsVersion: 'fresh' } },
-    } as any;
-    component.user = originalUser;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: originalUser,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    component.user = refreshedUser;
-    await component.ngOnChanges({
-      user: {
-        currentValue: refreshedUser,
-        previousValue: originalUser,
-        firstChange: false,
-        isFirstChange: () => false,
-      } as any,
-    });
-
-    expect(firstUnsubscribeSpy).toHaveBeenCalledTimes(1);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenCalledTimes(2);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenNthCalledWith(1, originalUser);
-    expect(mockDashboardAutoTileService.watchForDashboard).toHaveBeenNthCalledWith(2, refreshedUser);
-  });
-
-  it('does not subscribe to dashboard auto tiles for shared target dashboards', async () => {
-    component.user = {
-      uid: 'viewer-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
-    component.eventUser = { uid: 'target-user' } as any;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-      eventUser: {
-        currentValue: component.eventUser,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    expect(mockDashboardAutoTileService.watchForDashboard).not.toHaveBeenCalled();
-  });
-
-  it('unsubscribes dashboard auto tiles when dashboard actions become read-only', async () => {
-    const autoTileSubscription = new Subscription();
-    const unsubscribeSpy = vi.spyOn(autoTileSubscription, 'unsubscribe');
-    mockDashboardAutoTileService.watchForDashboard.mockReturnValueOnce(autoTileSubscription);
-    component.user = {
-      uid: 'owner-user',
-      settings: { dashboardSettings: { tiles: [] } },
-    } as any;
-    component.showActions = true;
-
-    await component.ngOnChanges({
-      user: {
-        currentValue: component.user,
-        previousValue: null,
-        firstChange: true,
-        isFirstChange: () => true,
-      } as any,
-    });
-
-    component.showActions = false;
-    await component.ngOnChanges({
-      showActions: {
-        currentValue: false,
-        previousValue: true,
-        firstChange: false,
-        isFirstChange: () => false,
-      } as any,
-    });
-
-    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should keep table date-range state out of tile view-model building', async () => {
@@ -2658,7 +2536,7 @@ describe('SummariesComponent', () => {
 
     const readinessStream = sleepStreams.find(({ startMs, endMs }) => (
       endMs === Number.MAX_SAFE_INTEGER
-      && startMs === nowMs - (30 * dayMs)
+      && startMs === nowMs - (60 * dayMs)
     ));
     expect(readinessStream).toBeTruthy();
     readinessStream?.stream.next([{ id: 'current-sleep' }]);

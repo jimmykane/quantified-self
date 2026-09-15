@@ -1,6 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Clipboard, ClipboardModule } from '@angular/cdk/clipboard';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, TemplateRef, computed, inject, signal } from '@angular/core';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { MCP_SCOPE_CONTENT, MCP_SCOPE_PARENTS, type McpScope } from '../../helpers/mcp-permissions.helper';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -43,6 +46,7 @@ interface McpConnection {
     MatCardModule,
     MatCheckboxModule,
     MatDividerModule,
+    MatDialogModule,
     MatIconModule,
     MatProgressSpinnerModule,
   ],
@@ -55,6 +59,8 @@ export class McpConnectionsComponent implements OnInit {
   private readonly logger = inject(LoggerService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly windowService = inject(AppWindowService);
+  private readonly dialog = inject(MatDialog);
+  readonly haptics = inject(AppHapticsService);
 
   readonly connections = signal<McpConnection[]>([]);
   readonly loading = signal(true);
@@ -73,6 +79,26 @@ export class McpConnectionsComponent implements OnInit {
     'route-location:read': 'Saved-route locations and geometry',
   };
   readonly mcpEndpoint = `${this.windowService.currentDomain}/mcp`;
+  readonly permissionInfo = Object.entries(MCP_SCOPE_CONTENT).map(([scope, content]) => ({
+    scope,
+    ...content,
+    parentTitle: MCP_SCOPE_PARENTS[scope as McpScope]
+      ? MCP_SCOPE_CONTENT[MCP_SCOPE_PARENTS[scope as McpScope]!].title : null,
+  }));
+
+  showPermissionInfo(permission: typeof this.permissionInfo[number], template: TemplateRef<unknown>): void {
+    this.haptics.selection();
+    this.dialog.open(template, { data: permission, width: '480px', maxWidth: 'calc(100vw - 32px)' });
+  }
+  readonly connectionDetails = computed(() => this.connections().map(connection => {
+    const granted = new Set<string>(connection.scopes);
+    return {
+      ...connection,
+      permissions: Object.entries(this.scopeLabels).map(([scope, label]) => ({
+        scope, label, granted: granted.has(scope),
+      })),
+    };
+  }));
 
   ngOnInit(): void {
     void this.loadConnections();

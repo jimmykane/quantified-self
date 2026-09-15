@@ -4,6 +4,7 @@ import { MatIconTestingModule } from '@angular/material/icon/testing';
 import { By } from '@angular/platform-browser';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { CompactRowComponent } from './compact-row.component';
+import { readFileSync } from 'node:fs';
 
 @Component({
   standalone: true,
@@ -116,5 +117,17 @@ describe('CompactRowComponent', () => {
     compactFixture.componentRef.setInput('fillHeight', false);
     compactFixture.detectChanges();
     expect(compactFixture.nativeElement.classList).not.toContain('compact-row-host--fill-height');
+  });
+
+  it('keeps dense column alignment and responsive actions scoped away from stacked rows', () => {
+    const styles = readFileSync('src/app/components/shared/compact-row/compact-row.component.scss', 'utf8');
+    const denseColumns = styles.slice(styles.indexOf('.compact-row--compact.compact-row--columns {'));
+    expect(denseColumns).toContain('grid-template-columns: 24px minmax(140px, 180px) minmax(0, 1fr) auto');
+    expect(denseColumns).toContain('align-items: center');
+    expect(denseColumns).toContain('align-self: center');
+    expect(denseColumns).toContain('@media (max-width: 900px)');
+    expect(denseColumns).toContain('grid-column: 3;\n      grid-row: 1;');
+    expect(denseColumns).toContain('.compact-row__body { grid-column: 2 / -1; grid-row: 2; }');
+    expect(denseColumns).toContain('&.compact-row--without-icon');
   });
 });

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService, isActionableProfileReadState } from './app.user.service';
 import { Auth, authState, user } from 'app/firebase/auth';
-import { Firestore, collectionData, doc, docData, setDoc, updateDoc } from 'app/firebase/firestore';
+import { Firestore, collectionData, doc, docData, setDoc, updateDoc, runTransaction } from 'app/firebase/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -40,6 +40,7 @@ vi.mock('app/firebase/firestore', async (importOriginal) => {
         docData: vi.fn().mockReturnValue(of({})),
         collectionData: vi.fn().mockReturnValue(of([])),
         setDoc: vi.fn().mockResolvedValue(undefined),
+        runTransaction: vi.fn(),
         updateDoc: vi.fn().mockResolvedValue(undefined),
     };
 });
@@ -63,6 +64,9 @@ describe('AppUserService', () => {
         (collectionData as any).mockReturnValue(of([]));
         (setDoc as any).mockReset();
         (setDoc as any).mockResolvedValue(undefined);
+        vi.mocked(runTransaction).mockImplementation(async (_db, callback) => callback({
+            get: async () => ({ data: () => ({}) }), set: setDoc,
+        } as never));
         (updateDoc as any).mockReset();
         (updateDoc as any).mockResolvedValue(undefined);
 
@@ -2113,6 +2117,20 @@ describe('AppUserService', () => {
             expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { displayName: 'New Name' });
         });
 
+        it.each(['profile', 'properties'])('preserves newer chart acknowledgements in a stale %s save', async mode => {
+            const set = vi.fn();
+            vi.mocked(runTransaction).mockImplementation(async (_db, callback) => callback({
+                get: async () => ({ data: () => ({ appSettings: { dashboardChartLibrarySeen: { kpi: 4, 'section:trainingState': 3 } } }) }), set,
+            } as never));
+            const owner = { uid: 'u1', settings: { appSettings: { theme: 'dark', dashboardChartLibrarySeen: { kpi: 2 } } } } as AppUserInterface;
+            if (mode === 'profile') await service.updateUser(owner);
+            else await service.updateUserProperties(owner, { settings: owner.settings });
+            expect(set).toHaveBeenCalledWith(expect.anything(), { appSettings: {
+                theme: 'dark', dashboardChartLibrarySeen: { kpi: 4, 'section:trainingState': 3 },
+            } }, { merge: true });
+            expect(owner.settings.appSettings.dashboardChartLibrarySeen).toEqual({ kpi: 2 });
+        });
+
         it('should split writes for legal fields', async () => {
             const user = { uid: 'test-uid' } as AppUserInterface;
             const propertiesToUpdate = {
@@ -2660,26 +2678,26 @@ describe('AppUserService', () => {
                 const serviceName = 'COROS API' as any;
                 await service.deauthorizeService(serviceName);
 
-                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeCOROSAPI');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeCOROSAPI', undefined, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Suunto', async () => {
                 const serviceName = 'Suunto app' as any;
                 await service.deauthorizeService(serviceName);
 
-                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeSuuntoApp');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeSuuntoApp', undefined, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Garmin', async () => {
                 const serviceName = 'Garmin API' as any;
                 await service.deauthorizeService(serviceName);
 
-                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeGarminAPI');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeGarminAPI', undefined, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Wahoo', async () => {
                 await service.deauthorizeService(ServiceNames.WahooAPI);
-                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeWahooAPI');
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeWahooAPI', undefined, { canExecute: expect.any(Function) });
             });
 
             it('retries a disconnect blocked by token refresh', async () => {
@@ -2723,6 +2741,29 @@ describe('AppUserService', () => {
                 await expect(service.deauthorizeService(ServiceNames.WahooAPI)).rejects.toBe(error);
                 expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
             });
+
+            it.each(['switch', 'sign out', 'close view'])('cancels a delayed disconnect retry on %s', async change => {
+                vi.useFakeTimers();
+                try {
+                    let currentView = true;
+                    mockFunctionsService.call.mockRejectedValueOnce({
+                        code: 'functions/unavailable', details: {
+                            reason: 'service_disconnect_in_progress', blocker: 'token_refresh',
+                            retryAt: Date.now() + 100, retryDeadlineAt: Date.now() + 90_000,
+                        },
+                    });
+                    const result = service.deauthorizeService(ServiceNames.GarminAPI, () => currentView);
+                    const cancelled = expect(result).rejects.toThrow('Operation cancelled');
+                    await vi.advanceTimersByTimeAsync(0);
+                    if (change === 'switch') mockAuth.currentUser = { ...mockAuth.currentUser, uid: 'other-user' };
+                    else if (change === 'sign out') mockAuth.currentUser = null;
+                    else currentView = false;
+                    await vi.advanceTimersByTimeAsync(1_000);
+                    await cancelled;
+                    expect(mockFunctionsService.call).toHaveBeenCalledTimes(1);
+                    expect(mockFunctionsService.call.mock.calls[0][2].canExecute()).toBe(false);
+                } finally { vi.useRealTimers(); }
+            });
         });
 
         describe('getCurrentUserServiceTokenAndRedirectURI', () => {
@@ -2733,7 +2774,7 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=COROS%20API&connect=1',
-                });
+                }, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Suunto', async () => {
@@ -2742,7 +2783,7 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Suunto%20app&connect=1',
-                });
+                }, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Garmin', async () => {
@@ -2751,7 +2792,7 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getGarminAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Garmin%20API&connect=1',
-                });
+                }, { canExecute: expect.any(Function) });
             });
 
             it('should call cloud function for Wahoo', async () => {
@@ -2759,7 +2800,19 @@ describe('AppUserService', () => {
 
                 expect(mockFunctionsService.call).toHaveBeenCalledWith('getWahooAPIAuthRequestTokenRedirectURI', {
                     redirectUri: 'http://localhost/services?serviceName=Wahoo%20API&connect=1',
-                });
+                }, { canExecute: expect.any(Function) });
+            });
+
+            it('pins OAuth dispatch to the initiating Firebase user and view', async () => {
+                let currentView = true;
+                await service.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminAPI, () => currentView);
+                const canExecute = mockFunctionsService.call.mock.calls[0][2].canExecute;
+                expect(canExecute()).toBe(true);
+                currentView = false;
+                expect(canExecute()).toBe(false);
+                currentView = true;
+                mockAuth.currentUser = { ...mockAuth.currentUser };
+                expect(canExecute()).toBe(false);
             });
         });
 

@@ -9,12 +9,19 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-browser { display: flex; flex-direction: column; overflow: hidden; border-inline-end: 1px solid var(--mat-sys-outline-variant); padding-inline-end: 16px; }
 .chart-library-detail { overflow: auto; }
 .chart-library-browser > mat-form-field { width: 100%; margin-block: 8px 12px; }
+/* Intrinsic width keeps Material's chip row from wrapping as selection/fonts settle.
+   The app-owned scroll rail preserves chip touch/focus space without styling Material internals. */
+.chart-library-filters { flex: 0 0 auto; min-width: 0; overflow-x: auto; padding-block: 4px; scrollbar-width: none; }
+/* Like the workspace navigation rail, keep scrolling without a scrollbar appearing and changing its height. */
+.chart-library-filters::-webkit-scrollbar { display: none; }
+.chart-library-filters > mat-chip-listbox { width: max-content; min-width: 100%; }
 .chart-library-list { min-height: 0; flex: 1 1 auto; overflow: auto; }
 .chart-library-list button { border-radius: 8px; border-inline-start: 3px solid transparent; }
 /* The action list keeps the preview selection visible independently of hover/focus. */
 .chart-library-list button[aria-pressed="true"] { background: var(--mat-sys-secondary-container); border-inline-start-color: var(--mat-sys-primary); }
 .chart-library-list .chart-library-row-meta { display: flex; align-items: center; align-self: center; gap: 8px; margin-inline: 8px 12px; }
 .chart-library-row-meta > mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.chart-library-list [matListItemLine] { font: var(--mat-sys-body-small); }
 .chart-library-count, .chart-library-empty, .chart-library-destination, .chart-library-preview-placeholder p { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
 .chart-library-count { margin-block: 12px 4px; }
 .chart-library-empty { padding: 12px; }
@@ -58,3 +65,5 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 
 .chart-library-explanation { max-width: 65ch; font: var(--mat-sys-body-medium); }
 .chart-library-explanation p { margin-block: 0 12px; }
+
+.chart-library-new-label { color: var(--mat-sys-primary); font: var(--mat-sys-label-small); }

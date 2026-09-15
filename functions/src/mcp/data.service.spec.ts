@@ -50,7 +50,7 @@ import {
 } from '../../../shared/derived-metrics';
 import {
   buildReadinessSignals,
-} from '../../../shared/readiness';
+} from '../../../shared/readiness-legacy';
 import { SLEEP_PROVIDERS } from '../../../shared/sleep';
 import {
   HEALTH_COVERAGE_STATUSES,
@@ -5688,6 +5688,13 @@ describe('MCP data service', () => {
     });
   });
 
+  it.each([[], ['metrics:read', 'sleep:read'], ['metrics:read', 'health:read'], ['sleep:read', 'health:read']])(
+    'requires all readiness-history grants before reading a snapshot: %j', async (...scopes) => {
+      await expect(createMcpDataService(dependencies).getReadinessHistory({ uid: 'user-1', scopes }))
+        .rejects.toMatchObject({ code: 'invalid_request' });
+      expect(dependencies.fetchDerivedSnapshot).not.toHaveBeenCalled();
+    });
+
 
   it('projects the updated internal recovery snapshots onto the frozen MCP versions', async () => {
     const { buildTrainingReadinessMetricPayload, buildTrainingBuildComparisonMetricPayload } = await import('../derived-metrics/derived-metrics.service');
@@ -5704,6 +5711,43 @@ describe('MCP data service', () => {
     expect(publicReadiness.payload).not.toHaveProperty('evidenceVersion');
     expect(publicReadiness.payload).toMatchObject({formulaVersion: 3});
     expect(publicRecovery.payload).toMatchObject({recoveryVersion: 3});
+  });
+
+  it('returns the same rolling HRV range in the current tool, daily report and current history while preserving formula 3', async () => {
+    const { buildTrainingReadinessMetricPayload } = await import('../derived-metrics/derived-metrics.service');
+    const now = Date.parse('2026-07-27T12:00:00Z');
+    const day = 86400000;
+    const documents = Array.from({ length: 60 }, (_, index) => {
+      const end = now - (59 - index) * day - 4 * 3600000;
+      return { ...sleepDocument({ sleepDate: new Date(end).toISOString().slice(0, 10),
+        startTimeMs: end - 8 * 3600000, endTimeMs: end, durationSeconds: 28800,
+        vitals: { averageHrvMs: index < 46 ? 45 : index === 59 ? 32 : 31, averageHeartRateBpm: 60 },
+      }), id: `night-${index}` };
+    });
+    vi.mocked(dependencies.now).mockReturnValue(now);
+    vi.mocked(dependencies.fetchReadinessSleepDocuments).mockResolvedValue(documents);
+    const service = createMcpDataService(dependencies);
+    const current = await service.getCurrentReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const report = await service.getDailyReport({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    const legacy = await service.getTodayReadiness({ uid: 'user-1', timeZone: 'Europe/Helsinki' });
+    expect(current.formulaVersion).toBe(4);
+    expect(current.drivers.hrv.personalRange).toMatchObject({ latestMs: 32, reason: 'outside_range', observationDayCount: 60, currentObservationDayCount: 7 });
+    expect(current.drivers.hrv.personalRange?.currentAverage).toBeCloseTo(31 + 1 / 7);
+    expect(report.readiness).toEqual(current);
+    expect(legacy.formulaVersion).toBe(3);
+    expect(legacy.drivers.hrv).toMatchObject({ latestMs: 32, baselineMedianMs: 31, baselineNightCount: 14 });
+    expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenNthCalledWith(1, 'user-1', now - 60 * day, now, 257);
+    expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenLastCalledWith('user-1', now - 30 * day, now, 257);
+    const payload = buildTrainingReadinessMetricPayload([], 0, documents.map(doc => ({ id: doc.id, data: () => doc.data })) as never, now).payload;
+    vi.mocked(dependencies.fetchDerivedSnapshot).mockResolvedValue({ status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION, payload });
+    const history = await service.getReadinessHistory({ uid: 'user-1', scopes: ['metrics:read', 'sleep:read', 'health:read'] });
+    expect(history.points.at(-1)?.hrvPersonalRange).toEqual(current.drivers.hrv.personalRange);
+    expect(history).not.toHaveProperty('legacyPoints');
+    expect(history).not.toHaveProperty('evidenceVersion');
+    const oldHistory = await service.getTrainingMetric('user-1', DERIVED_METRIC_KINDS.TrainingReadiness);
+    expect(oldHistory.payload).toMatchObject({ formulaVersion: 3 });
+    expect(JSON.stringify(current)).not.toContain('private');
+    expect(JSON.stringify(history)).not.toContain('SourceKey');
   });
 
   it('supplements daily-report HRV only with explicit Health and Sleep grants', async () => {
@@ -5723,7 +5767,7 @@ describe('MCP data service', () => {
     expect(dependencies.supplementSleepDocuments).not.toHaveBeenCalled();
     const withHealth = await service.getDailyReport({uid: 'user-1', timeZone: 'UTC', scopes: ['metrics:read', 'sleep:read', 'health:read']});
     expect(withHealth.sleep.latestSession?.vitals.overnightHrvMs).toBe(44);
-    expect(withHealth.readiness.drivers.hrv.latestMs).toBe(44);
+    expect(withHealth.readiness.drivers.hrv.personalRange?.latestMs).toBe(44);
     expect(JSON.stringify(withHealth)).not.toContain('private-provider-user');
     expect(JSON.stringify(withHealth)).not.toContain('SourceKey');
     vi.mocked(dependencies.fetchSleepDocuments).mockResolvedValue([original]);
@@ -5836,8 +5880,8 @@ describe('MCP data service', () => {
         asOfTimeMs: nowTimeMs,
         timeZone: 'Europe/Helsinki',
         status: 'available',
-        availableSignalCount: 3,
-        availableWeightPercent: 60,
+        availableSignalCount: 2,
+        availableWeightPercent: 40,
         baselineEvidenceCount: 3,
         drivers: {
           load: {
@@ -5847,13 +5891,7 @@ describe('MCP data service', () => {
             status: 'available',
             recordedScore: 84,
           },
-          hrv: {
-            status: 'available',
-            latestMs: 55,
-            baselineMedianMs: 50,
-            baselineNightCount: 3,
-            ratio: 1.1,
-          },
+          hrv: { personalRange: { latestMs: 55, reason: 'building_baseline', observationDayCount: 4 } },
           overnightHeartRate: {
             status: 'available',
             average: {
@@ -5875,7 +5913,7 @@ describe('MCP data service', () => {
     });
     expect(dependencies.fetchReadinessSleepDocuments).toHaveBeenCalledWith(
       'user-1',
-      nowTimeMs - 30 * 24 * 60 * 60 * 1000,
+      nowTimeMs - 60 * 24 * 60 * 60 * 1000,
       nowTimeMs,
       257,
       true,
@@ -5935,9 +5973,7 @@ describe('MCP data service', () => {
           sleep: {
             status: 'no_recent_session',
           },
-          hrv: {
-            status: 'not_recorded',
-          },
+          hrv: { personalRange: null },
           overnightHeartRate: {
             status: 'not_recorded',
           },
@@ -6042,10 +6078,7 @@ describe('MCP data service', () => {
       durationSeconds: 28_800,
       recordedScore: 82,
     });
-    expect(result.readiness.drivers.hrv).toMatchObject({
-      latestMs: 55,
-      baselineMedianMs: 50,
-    });
+    expect(result.readiness.drivers.hrv.personalRange).toMatchObject({ latestMs: 60, reason: 'building_baseline' });
     expect(result.readiness.drivers.overnightHeartRate).toMatchObject({
       average: {
         latestBpm: 49,

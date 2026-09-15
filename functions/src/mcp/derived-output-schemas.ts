@@ -7,7 +7,7 @@ import {
   DerivedMetricKind,
   TRAINING_BUILD_DURATION_WEEKS,
 } from '../../../shared/derived-metrics';
-import { READINESS_FORMULA_VERSION } from '../../../shared/readiness';
+import { READINESS_FORMULA_VERSION } from '../../../shared/readiness-legacy';
 import {
   POWER_CAPACITY_DISCIPLINES,
   PUBLIC_TRAINING_DISCIPLINES,

@@ -1,3 +1,4 @@
+import { DashboardChartDiscoveryService } from '../../../services/dashboard-chart-discovery.service';
 import { CommonModule } from '@angular/common';
 import { DashboardTileEditorComponent } from './dashboard-tile-editor.component';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
@@ -8,7 +9,9 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
+import { DashboardHrvService } from '../../../services/dashboard-hrv.service';
+import { createDashboardDerivedMetricsMissingState } from '../../../services/dashboard-derived-metrics.service';
 import { MaterialModule } from '../../../modules/material.module';
 import { DashboardChartLibraryComponent } from './dashboard-chart-library.component';
 import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
@@ -19,6 +22,7 @@ import { AppSleepService } from '../../../services/app.sleep.service';
 import { AppRouteService } from '../../../services/app.route.service';
 import { DashboardDerivedMetricsService } from '../../../services/dashboard-derived-metrics.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
+import { buildDashboardExampleEvents } from '../../../helpers/dashboard-chart-preview.helper';
 import { getDashboardChartCatalog } from '../../../helpers/dashboard-chart-catalog.helper';
 
 describe('responsive chart picker interactions', () => {
@@ -28,6 +32,9 @@ describe('responsive chart picker interactions', () => {
   let mobile = false;
   let discard = false;
   const save = vi.fn();
+  const discovery = { seenRevision: vi.fn((_owner: AppUserInterface, _lane: string) => 1), acknowledge: vi.fn().mockResolvedValue(undefined) };
+  const events = { getEventsBy: vi.fn() };
+  const derived = { watch: vi.fn(), ensureForDashboard: vi.fn() };
   const haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
   const settle = async () => {
     // Material portals attach outside the fixture; flush their async click handlers before checking both views.
@@ -37,10 +44,14 @@ describe('responsive chart picker interactions', () => {
   const button = (label: string): HTMLButtonElement => Array.from(document.body.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(element => element.textContent?.includes(label))!;
   beforeEach(async () => {
     vi.restoreAllMocks(); vi.clearAllMocks(); mobile = false; discard = false; save.mockResolvedValue(undefined);
+    discovery.seenRevision.mockImplementation((owner, lane) => owner.settings.appSettings?.dashboardChartLibrarySeen?.[lane] || 1);
+    discovery.acknowledge.mockResolvedValue(undefined);
+    derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState()));
+    events.getEventsBy.mockReturnValue(of([]));
     await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent, DashboardTileEditorComponent], imports: [CommonModule, MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
-      DashboardChartLibraryState, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
+      DashboardChartLibraryState, { provide: DashboardChartDiscoveryService, useValue: discovery }, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
       { provide: BreakpointObserver, useValue: { isMatched: () => mobile, observe: () => of({ matches: false, breakpoints: {} }) } },
-      { provide: AppEventService, useValue: {} }, { provide: AppSleepService, useValue: {} }, { provide: AppRouteService, useValue: {} }, { provide: DashboardDerivedMetricsService, useValue: {} },
+      { provide: AppEventService, useValue: events }, { provide: AppSleepService, useValue: { watchForDashboard: () => of([]) } }, { provide: AppRouteService, useValue: { watchRecentRoutePreviews: () => of([]) } }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: DashboardHrvService, useValue: { watch: () => of(null) } },
     ] }).compileComponents();
     const dialog = TestBed.inject(MatDialog);
     const realOpen = dialog.open.bind(dialog);
@@ -49,6 +60,152 @@ describe('responsive chart picker interactions', () => {
     user = { uid: 'test-owner', settings: { unitSettings: { speedUnits: [] }, dashboardSettings: { tiles: [] } } } as unknown as AppUserInterface;
     fixture = TestBed.createComponent(DashboardChartLibraryComponent); component = fixture.componentInstance;
     fixture.componentRef.setInput('user', user); fixture.componentRef.setInput('lane', 'kpi'); fixture.componentRef.setInput('seed', { tiles: [] }); fixture.detectChanges();
+  });
+  it('shows new types without fetching chart data and acknowledges only an opened browse list', async () => {
+    const entry = component['catalog'].find(entry => entry.definition.id === 'kpi-acwr')!;
+    entry.definition = { ...entry.definition, introducedIn: 2 };
+    fixture.componentRef.setInput('seed', { tiles: [] }); await settle();
+    expect(component.unseen()).toHaveLength(1);
+    expect(component.addActionLabel()).toContain('1 new');
+    // Material's small size is a dot and suppresses its text in the app's M3 theme.
+    expect(fixture.nativeElement.querySelector('.mat-badge-medium .mat-badge-content')?.textContent).toContain('New');
+    expect(derived.watch).not.toHaveBeenCalled();
+    expect(discovery.acknowledge).not.toHaveBeenCalled();
+    await component.toggle(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledWith(user, 'kpi', 2);
+    expect(component.rowPreviews()[0].isNew).toBe(true);
+    const refreshed = { ...user, settings: { ...user.settings, appSettings: { dashboardChartLibrarySeen: { kpi: 2 } } } };
+    fixture.componentRef.setInput('user', refreshed); await settle();
+    expect(component.unseen()).toHaveLength(0);
+    expect(component.rowPreviews()[0].isNew).toBe(true);
+    expect(derived.watch).toHaveBeenCalledOnce();
+    await component.close(); await settle();
+    await component.toggle(); await settle();
+    expect(component.rowPreviews().some(entry => entry.isNew)).toBe(false);
+    expect(discovery.acknowledge).toHaveBeenCalledOnce();
+  });
+
+  it('does not acknowledge new types when an existing tile is opened for editing', async () => {
+    const entry = component['catalog'].find(entry => entry.definition.id === 'kpi-acwr')!;
+    entry.definition = { ...entry.definition, introducedIn: 2 };
+    const existing = component['catalog'].find(entry => entry.definition.id === 'kpi-form-now')!.tile;
+    user.settings.dashboardSettings.tiles = [existing];
+    fixture.componentRef.setInput('seed', { tiles: [existing] }); await settle();
+    await component.state.edit(user, existing.order); await settle();
+    expect(discovery.acknowledge).not.toHaveBeenCalled();
+    expect(component.unseen()).toHaveLength(1);
+    await component.back(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledWith(user, 'kpi', 2);
+  });
+
+  it('keeps browsing usable after acknowledgement fails and retries on the next opening', async () => {
+    mobile = true;
+    const entry = component['catalog'].find(entry => entry.definition.id === 'kpi-acwr')!;
+    entry.definition = { ...entry.definition, introducedIn: 2 };
+    fixture.componentRef.setInput('seed', { tiles: [] }); await settle();
+    discovery.acknowledge.mockRejectedValueOnce(new Error('offline'));
+    await component.toggle(); await settle();
+    expect(component.state.busy()).toBe(false);
+    expect(component.state.error()).toBe('');
+    await component.select(component.rowPreviews()[0]); await settle();
+    expect(component.state.draft()).toBeTruthy();
+    await component.back(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledOnce();
+    await component.close(); await settle();
+    await component.toggle(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledTimes(2);
+  });
+
+  it('groups at most two ready suggestions without duplicating rows or changing a selected draft', async () => {
+    const source$ = new Subject<ReturnType<typeof buildDashboardExampleEvents>>();
+    events.getEventsBy.mockReturnValue(source$);
+    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
+    await component.toggle(); await settle();
+    const selected = component.state.selected()?.definition.id;
+    source$.next(buildDashboardExampleEvents(Date.now())); await settle();
+    expect(component.suggested().map(entry => entry.definition.id)).toEqual(['custom-weekly-training-time', 'curated-activity-calendar']);
+    expect(new Set(component.rowPreviews().map(entry => entry.definition.id)).size).toBe(component.rowPreviews().length);
+    expect(component.state.selected()?.definition.id).toBe(selected);
+    expect(document.body.textContent).toContain('Suggested for you');
+    component.filter('distance'); await settle();
+    expect(component.suggested()).toHaveLength(0);
+    expect(component.rowPreviews().every(entry => entry.definition.label.toLowerCase().includes('distance'))).toBe(true);
+  });
+
+  it('loads missing KPI data once per open picker, keeps filtering silent, and releases reads on close', async () => {
+    const snapshots$ = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    derived.watch.mockReturnValue(snapshots$);
+    expect(derived.watch).not.toHaveBeenCalled();
+    await component.toggle(); await settle();
+    expect(derived.watch).toHaveBeenCalledOnce();
+    expect(component.rowPreviews()[0].preview.loading).toBe(true);
+    const state = createDashboardDerivedMetricsMissingState();
+    state.acwr = { ratio: 1.6, acuteLoad7: 160, chronicLoad28: 100, latestDayMs: 3,
+      trend8Weeks: [{ time: 1, value: 1.2 }, { time: 3, value: 1.6 }] };
+    snapshots$.next(state); await settle();
+    const row = component.rowPreviews().find(entry => entry.definition.id === 'kpi-acwr')!;
+    expect(row.preview.source).toBe('user');
+    expect(row.preview.tile['acwr']).toEqual(state.acwr);
+    expect(component.previewSeed().derivedMetrics?.acwr).toEqual(state.acwr);
+    component.filter('ACWR'); await settle();
+    expect(component.rowPreviews()[0]).toBe(row);
+    expect(derived.watch).toHaveBeenCalledOnce();
+    expect(derived.ensureForDashboard).not.toHaveBeenCalled();
+    await component.close(); await settle();
+    expect(snapshots$.observed).toBe(false);
+    expect(component.previewSeed().derivedMetrics?.acwr).toBeUndefined();
+  });
+  it('drops another account’s fetched KPI data and unsubscribes before loading the new owner', async () => {
+    const old$ = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    const next$ = new Subject<ReturnType<typeof createDashboardDerivedMetricsMissingState>>();
+    derived.watch.mockReturnValueOnce(old$).mockReturnValueOnce(next$);
+    await component.toggle(); await settle();
+    const state = createDashboardDerivedMetricsMissingState();
+    state.acwr = { ratio: 1.6, acuteLoad7: 160, chronicLoad28: 100, latestDayMs: 3, trend8Weeks: [] };
+    old$.next(state); await settle();
+    fixture.componentRef.setInput('user', { ...user, uid: 'next-owner' }); await settle();
+    expect(old$.observed).toBe(false);
+    expect(component.previewSeed().derivedMetrics?.acwr).toBeUndefined();
+    expect(component.rowPreviews().find(entry => entry.definition.id === 'kpi-acwr')?.preview.source).toBe('example');
+    expect(derived.watch).toHaveBeenLastCalledWith(expect.objectContaining({ uid: 'next-owner' }), expect.anything());
+    fixture.destroy();
+    expect(next$.observed).toBe(false);
+  });
+  it('hydrates all activity rows through one read and retains previews while searching', async () => {
+    const source$ = new Subject<ReturnType<typeof buildDashboardExampleEvents>>();
+    events.getEventsBy.mockReturnValue(source$);
+    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
+    await component.toggle(); await settle();
+    expect(events.getEventsBy).toHaveBeenCalledOnce();
+    expect(component.rowPreviews().every(row => row.preview.loading)).toBe(true);
+    source$.next(buildDashboardExampleEvents(Date.now())); await settle();
+    const rows = component.rowPreviews();
+    expect(rows.every(row => row.preview.source === 'user' && !row.preview.loading)).toBe(true);
+    component.filter('Distance'); await settle();
+    expect(component.rowPreviews().every(row => rows.includes(row))).toBe(true);
+    expect(events.getEventsBy).toHaveBeenCalledOnce();
+    expect(derived.watch).not.toHaveBeenCalled();
+    await component.close(); await settle();
+    expect(source$.observed).toBe(false);
+    expect(component.previewSeed().previewEventsByRange).toBeUndefined();
+    expect(save).not.toHaveBeenCalled();
+  });
+  it('keeps reused dashboard data live without fetching again or changing the selection', async () => {
+    const existing = getDashboardChartCatalog().find(entry => entry.definition.id === 'custom-distance-columns')!.tile;
+    user.settings.dashboardSettings.tiles = [existing];
+    fixture.componentRef.setInput('lane', 'section:activityOverview');
+    fixture.componentRef.setInput('seed', { tiles: [existing], tileEventsByOrder: { [existing.order]: buildDashboardExampleEvents(Date.now()) } });
+    await settle(); await component.toggle(); await settle();
+    const selected = component.state.selected()?.definition.id;
+    expect(component.suggested()).toHaveLength(2);
+    expect(events.getEventsBy).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('seed', { tiles: [existing], tileEventsByOrder: { [existing.order]: [] } });
+    await settle();
+    expect(component.suggested()).toHaveLength(0);
+    expect(component.rowPreviews().every(row => row.preview.availability?.state === 'no-data')).toBe(true);
+    expect(component.state.selected()?.definition.id).toBe(selected);
+    expect(events.getEventsBy).not.toHaveBeenCalled();
   });
   it('opens a wide dialog without expanding the dashboard', async () => {
     await component.toggle(); await settle();
@@ -136,7 +293,7 @@ describe('responsive chart picker interactions', () => {
     expect(document.body.querySelectorAll('button[mat-list-item]')).toHaveLength(17);
     expect(document.body.querySelectorAll('button[mat-list-item] app-dashboard-chart-thumbnail')).toHaveLength(17);
     expect(document.body.querySelector('button[mat-list-item] [matListItemIcon]')).toBeNull();
-    expect(document.body.querySelector('button[mat-list-item] [matListItemLine]')?.textContent).toContain('KPI · Example data');
+    expect(document.body.querySelector('button[mat-list-item] [matListItemLine]')?.textContent).toContain('KPI · Example · Waiting for chart data');
     expect(document.body.querySelector('[aria-label="Next charts"]')).toBeNull();
     component.selectGroup('execution'); component.filter('aerobic'); await settle();
     expect(document.body.querySelectorAll('button[mat-list-item]')).toHaveLength(2);

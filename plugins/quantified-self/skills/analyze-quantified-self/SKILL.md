@@ -38,7 +38,10 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 5. Describe association rather than causation. Call out sparse or mismatched coverage that weakens the comparison.
 6. For a current readiness or recovery-aware score, prefer the server's advertised live-readiness capability when
    `metrics:read` and `sleep:read` are available. Preserve its UTC-day scoring boundary, local-day context, current load
-   freshness, safe latest aggregate HRV/heart-rate values, same-provider baseline medians, ratios, and evidence states.
+   freshness, seven-day HRV average, same-source 60-day range, separate latest nightly HRV, and overnight-heart-rate
+   medians, ratios and evidence states. Prefer the current formula capability; a tool labelled legacy is not the
+   current app score. For historical scores, use the matching current-history capability with Training, Sleep and Health
+   grants; saved HRV can include overnight Health readings.
    Use a separate bounded sleep trend when the user asks whether those values changed over several days.
 7. For a request such as “good morning,” a daily report, or a current readout, prefer the server's advertised daily
    report tool when both `metrics:read` and `sleep:read` are available. Pass an explicit IANA timezone. Lead with the
@@ -51,7 +54,9 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 
 - If a comparison needs the Health chart's personal HRV range, discover its dedicated shared-calculation capability.
   It needs both `health:read` and `sleep:read`; never estimate the band from downsampled Health points. Preserve source
-  separation, historical status, and insufficient-history results. This is not the Training readiness baseline.
+  separation, historical status, and insufficient-history results. Current Training readiness shares this rolling HRV
+  calculation for the same overnight source and evaluation date. A year-long chart still uses a 60-day baseline at
+  each point; distinguish individual nightly values from the seven-day headline and the combined readiness score.
 
 - Treat a missing permission, unavailable source, processing budget, incomplete page, and genuinely absent data as
   different outcomes. Name the permission that must be granted through reconnection.

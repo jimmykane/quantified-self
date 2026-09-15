@@ -1,3 +1,5 @@
+import { readinessHrvObservations } from '../../../shared/readiness';
+import { buildReadinessSignals as buildLegacyReadinessSignals } from '../../../shared/readiness-legacy';
 import { supplementNightlyHrvSleepDocuments } from '../sleep/nightly-hrv';
 import { sleepEvidenceSourceKey, sleepHrvSourceKey, aggregateNightlyHrvEvidence } from '../../../shared/nightly-hrv';
 import * as admin from 'firebase-admin';
@@ -160,7 +162,6 @@ import {
     normalizeSleepProvider,
     SLEEP_PROVIDERS,
     SLEEP_SESSIONS_COLLECTION_ID,
-    SLEEP_SPORTS_LIB_METRIC_FIELDS,
     type SleepProvider,
     type SleepSession,
 } from '../../../shared/sleep';
@@ -210,50 +211,19 @@ import {
 } from '../shared/user-deletion-guard';
 import { getDerivedMetricsUidAllowlist, isDerivedMetricsUidAllowed } from './derived-metrics-uid-gate';
 
+import {
+    DERIVED_METRICS_EVENT_FIELDS,
+    DERIVED_METRICS_ACTIVITY_FIELDS,
+    DERIVED_METRICS_TRAINING_SLEEP_FIELDS,
+    DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS,
+} from './derived-metrics-source-fields';
+import {
+    createTrainingBuildWorkoutSeedMetadata, resolveTrainingBuildWorkoutSeed, trainingBuildSettingsKey,
+    type TrainingBuildWorkoutSeed, type TrainingBuildWorkoutSeedContext,
+} from './training-build-workout-seed';
+
 const FORM_STAT_TYPE = 'Training Stress Score';
 const LEGACY_FORM_STAT_TYPE = 'Power Training Stress Score';
-const DERIVED_METRICS_EVENT_FIELDS = ['startDate', 'endDate', 'stats', 'tags', 'benchmarkReviewTags', 'name', 'isMerge', 'mergeType', 'creator', 'serviceName', 'sourceServiceName'] as const;
-const DERIVED_METRICS_ACTIVITY_FIELDS = ['eventID', 'startDate', 'endDate', 'type', 'stats', 'creator', 'serviceName', 'sourceServiceName'] as const;
-const DERIVED_METRICS_TRAINING_SLEEP_FIELDS = [
-    'source.provider',
-    'source.providerUserId',
-    'sleepDate',
-    'startTimeMs',
-    'endTimeMs',
-    'timezoneOffsetSeconds',
-    'durationSeconds',
-    'sportsLibData.schemaVersion',
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv}`,
-    'isNap',
-    'providerFields.suunto.timestamp',
-    'vitals.overnightHrvMs',
-    'vitals.averageHrvMs',
-] as const;
-const DERIVED_METRICS_TRAINING_READINESS_SLEEP_FIELDS = [
-    'source.provider',
-    'source.providerUserId',
-    'sleepDate',
-    'startTimeMs',
-    'endTimeMs',
-    'timezoneOffsetSeconds',
-    'durationSeconds',
-    'sportsLibData.schemaVersion',
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Duration}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.Score}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.OvernightHrv}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHrv}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.AverageHeartRate}`,
-    `sportsLibData.metrics.${SLEEP_SPORTS_LIB_METRIC_FIELDS.MinimumHeartRate}`,
-    'isNap',
-    'score.value',
-    'providerFields.suunto.timestamp',
-    'vitals.overnightHrvMs',
-    'vitals.averageHrvMs',
-    'vitals.averageHeartRateBpm',
-    'vitals.minimumHeartRateBpm',
-] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_TREND_WEEKS = 8;
 const FORECAST_DAYS = 7;
@@ -357,6 +327,23 @@ export interface StartDerivedMetricsProcessingResult {
     dirtyMetricKinds: DerivedMetricKind[];
     startedAtMs: number;
     eventMutationVersion: number;
+    workoutInputsVersion: number;
+}
+
+export interface DerivedMetricsProcessingClaim {
+    generation: number;
+    startedAtMs: number;
+}
+
+function matchesProcessingClaim(data: unknown, claim: DerivedMetricsProcessingClaim): boolean {
+    const coordinator = parseCoordinator(data);
+    return coordinator.status === 'processing' && coordinator.generation === claim.generation
+        && coordinator.startedAtMs === claim.startedAtMs;
+}
+
+function readWorkoutInputsVersion(data: unknown): number {
+    const value = (data as { workoutInputsVersion?: unknown } | undefined)?.workoutInputsVersion;
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
 
 export interface CompleteDerivedMetricsProcessingResult {
@@ -400,6 +387,7 @@ interface DerivedMetricBuildExecutionContext {
 }
 
 interface DerivedMetricBuildSourceDocs {
+    trainingBuildWorkoutSeed?: TrainingBuildWorkoutSeed | null;
     formDocs?: readonly FirestoreQueryDocumentSnapshot[];
     recoveryNowDocs?: readonly FirestoreQueryDocumentSnapshot[];
     trainingActivityDocs?: readonly FirestoreQueryDocumentSnapshot[];
@@ -3755,6 +3743,8 @@ function resolveTrainingReadinessSleepEvidence(
             averageHeartRateBpm: toFiniteNumber(vitals.averageHeartRateBpm),
             minimumHeartRateBpm: toFiniteNumber(vitals.minimumHeartRateBpm),
         };
+        point.hrvObservations = readinessHrvObservations({ ...point,
+            sleepDate: typeof data.sleepDate === 'string' ? data.sleepDate : point.sleepDate });
         const key = JSON.stringify([point.sleepDate, point.sourceKey]);
         groups.set(key, [...(groups.get(key) || []), point]);
     });
@@ -3779,6 +3769,7 @@ function resolveTrainingReadinessSleepEvidence(
             endTimeMs: Math.max(...points.map(point => point.endTimeMs as number)),
             totalSeconds: points.reduce((total, point) => total + Math.max(0, point.totalSeconds || 0), 0),
             ...aggregateNightlyHrvEvidence(points),
+            hrvObservations: points.flatMap(readinessHrvObservations),
             averageHeartRateBpm: averageHeartRateValues.length
                 ? averageHeartRateValues.reduce((total, value) => total + value, 0) / averageHeartRateValues.length
                 : null,
@@ -3852,6 +3843,7 @@ export function buildTrainingReadinessMetricPayload(
     const loadPointsByDay = new Map(loadPoints.map(point => [point.dayMs, point]));
     const sleepPoints = resolveTrainingReadinessSleepEvidence(sleepDocs);
     const points: DerivedTrainingReadinessMetricPayload['points'] = [];
+    const legacyPoints: NonNullable<DerivedTrainingReadinessMetricPayload['legacyPoints']> = [];
 
     for (let dayMs = firstDayMs; dayMs <= asOfDayMs; dayMs += DAY_MS) {
         const loadPoint = loadPointsByDay.get(dayMs) || null;
@@ -3885,15 +3877,26 @@ export function buildTrainingReadinessMetricPayload(
             sleepScore: null,
             latestSleepAtMs: null,
             hrvRatio: null,
+            hrvPersonalRange: null,
             averageHeartRateRatio: null,
             minimumHeartRateRatio: null,
             overnightHeartRateRatio: null,
         });
     }
 
+    for (const point of points) {
+        const evaluatedAtMs = point.dayMs === asOfDayMs ? nowMs : point.dayMs + DAY_MS - 1;
+        const legacy = buildLegacyReadinessSignals({ form: point.form, rampRate: point.rampRate, sleepPoints, nowMs: evaluatedAtMs });
+        legacyPoints.push(legacy ? { dayMs: point.dayMs, ...legacy } : {
+            dayMs: point.dayMs, form: point.form, rampRate: point.rampRate, totalSignalCount: 4,
+            score: null, label: null, confidence: null, availableSignalCount: 0, baselineEvidenceCount: 0,
+            sleepScore: null, latestSleepAtMs: null, hrvRatio: null,
+            averageHeartRateRatio: null, minimumHeartRateRatio: null, overnightHeartRateRatio: null });
+    }
     return {
         sourceEventCount,
         payload: {
+            legacyPoints,
             formulaVersion: READINESS_FORMULA_VERSION,
             evidenceVersion: READINESS_EVIDENCE_VERSION,
             dayBoundary: 'UTC',
@@ -4321,10 +4324,6 @@ export function buildTrainingBuildComparisonMetricPayload(
     sleepDocs: readonly FirestoreQueryDocumentSnapshot[] = [],
 ): DerivedMetricBuildResult<DerivedTrainingBuildComparisonMetricPayload> {
     const asOfDayMs = resolveUtcDayStartMs(nowMs);
-    const sleepNights = resolveTrainingSleepNights(sleepDocs);
-    const recoveryCurrentStartDayMs = asOfDayMs - ((TRAINING_RECOVERY_CURRENT_WINDOW_DAYS - 1) * DAY_MS);
-    const recoveryReferenceEndDayMs = recoveryCurrentStartDayMs - DAY_MS;
-    const recoveryReferenceStartDayMs = recoveryReferenceEndDayMs - ((TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS - 1) * DAY_MS);
     const eventsByDiscipline = groupTrainingBuildActivitiesByDiscipline(activities);
 
     const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
@@ -4407,13 +4406,7 @@ export function buildTrainingBuildComparisonMetricPayload(
             selection: reference,
             current,
             benchmark,
-            recovery: buildTrainingRecoveryComparison(
-                sleepNights,
-                currentStartDayMs,
-                asOfDayMs,
-                reference.windowStartDayMs,
-                reference.windowEndDayMs,
-            ),
+            recovery: null,
             durabilityComparisons: buildTrainingBuildDurabilityComparisons(current, benchmark),
             suggestedRaces,
             suggestedEvents,
@@ -4422,20 +4415,35 @@ export function buildTrainingBuildComparisonMetricPayload(
 
     return {
         sourceEventCount: activities.filter(isClassifiedTrainingActivitySource).length,
-        payload: {
-            recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
+        payload: refreshTrainingBuildComparisonRecovery({
             dayBoundary: 'UTC',
             asOfDayMs,
             excludesMergedEvents: true,
-            recovery: buildTrainingRecoveryComparison(
-                sleepNights,
-                recoveryCurrentStartDayMs,
-                asOfDayMs,
-                recoveryReferenceStartDayMs,
-                recoveryReferenceEndDayMs,
-            ),
             disciplines,
-        },
+        }, sleepDocs),
+    };
+}
+
+/** Recompute every sleep/HRV field without replaying unchanged workout history. */
+export function refreshTrainingBuildComparisonRecovery(
+    workout: Omit<DerivedTrainingBuildComparisonMetricPayload, 'recovery' | 'recoveryVersion'>,
+    sleepDocs: readonly FirestoreQueryDocumentSnapshot[],
+): DerivedTrainingBuildComparisonMetricPayload {
+    const sleepNights = resolveTrainingSleepNights(sleepDocs);
+    const currentStart = workout.asOfDayMs - ((TRAINING_RECOVERY_CURRENT_WINDOW_DAYS - 1) * DAY_MS);
+    const referenceEnd = currentStart - DAY_MS;
+    const referenceStart = referenceEnd - ((TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS - 1) * DAY_MS);
+    return {
+        ...workout,
+        recoveryVersion: DERIVED_TRAINING_BUILD_COMPARISON_RECOVERY_VERSION,
+        recovery: buildTrainingRecoveryComparison(sleepNights, currentStart, workout.asOfDayMs, referenceStart, referenceEnd),
+        disciplines: workout.disciplines.map(discipline => ({
+            ...discipline,
+            recovery: discipline.status === 'ready' && discipline.current && discipline.benchmark
+                ? buildTrainingRecoveryComparison(sleepNights, discipline.current.windowStartDayMs,
+                    discipline.current.windowEndDayMs, discipline.benchmark.windowStartDayMs, discipline.benchmark.windowEndDayMs)
+                : null,
+        })),
     };
 }
 
@@ -5216,7 +5224,10 @@ function createDerivedMetricBuildExecutionContext(
         if (trainingBuildComparisonBuildResultCache) {
             return trainingBuildComparisonBuildResultCache;
         }
-        trainingBuildComparisonBuildResultCache = buildTrainingBuildComparisonMetricPayload(
+        trainingBuildComparisonBuildResultCache = sourceDocs.trainingBuildWorkoutSeed ? {
+            sourceEventCount: sourceDocs.trainingBuildWorkoutSeed.sourceEventCount,
+            payload: refreshTrainingBuildComparisonRecovery(sourceDocs.trainingBuildWorkoutSeed.payload, trainingBuildSleepDocs),
+        } : buildTrainingBuildComparisonMetricPayload(
             trainingActivities,
             trainingBuildBenchmarkSettings,
             nowMs,
@@ -5618,6 +5629,7 @@ export async function fetchTrainingBuildSleepDocs(
     activities: readonly DerivedTrainingActivitySource[],
     benchmarkSettings: unknown,
     nowMs = Date.now(),
+    workoutSeed?: TrainingBuildWorkoutSeed | null,
 ): Promise<FirestoreQueryDocumentSnapshot[]> {
     const eventsByDiscipline = groupTrainingBuildActivitiesByDiscipline(activities);
     const selections = resolveTrainingBuildBenchmarkSelections(benchmarkSettings);
@@ -5626,6 +5638,14 @@ export async function fetchTrainingBuildSleepDocs(
         - (((TRAINING_RECOVERY_CURRENT_WINDOW_DAYS + TRAINING_RECOVERY_REFERENCE_WINDOW_DAYS) - 1) * DAY_MS);
     const ranges: TrainingSleepFetchRange[] = [{ startDayMs: recentStartDayMs, endDayMs: asOfDayMs }];
     TRAINING_DISCIPLINES.forEach((discipline) => {
+        if (workoutSeed) {
+            const cached = workoutSeed.payload.disciplines.find(item => item.discipline === discipline);
+            if (cached?.status === 'ready' && cached.current && cached.benchmark) {
+                ranges.push({ startDayMs: cached.current.windowStartDayMs, endDayMs: cached.current.windowEndDayMs },
+                    { startDayMs: cached.benchmark.windowStartDayMs, endDayMs: cached.benchmark.windowEndDayMs });
+            }
+            return;
+        }
         const selection = selections[discipline];
         if (!selection) {
             return;
@@ -5693,19 +5713,46 @@ export interface DerivedFormSnapshotSeed {
     dailyLoads: DerivedFormDailyLoadEntry[];
 }
 
+export async function fetchTrainingBuildWorkoutSeed(
+    uid: string, context: TrainingBuildWorkoutSeedContext,
+): Promise<TrainingBuildWorkoutSeed | null> {
+    const snapshot = await getMetricDocRef(uid, DERIVED_METRIC_KINDS.TrainingBuildComparison).get();
+    return resolveTrainingBuildWorkoutSeed(snapshot.data(), context);
+}
+
 export async function fetchDerivedFormSnapshotSeed(uid: string): Promise<DerivedFormSnapshotSeed | null> {
     const snapshot = await getMetricDocRef(uid, DERIVED_METRIC_KINDS.Form).get();
     const data = (snapshot.data() || {}) as Record<string, unknown>;
     const payload = (data.payload && typeof data.payload === 'object')
         ? data.payload as Record<string, unknown>
         : {};
+    const isCount = (value: unknown): value is number => typeof value === 'number'
+        && Number.isSafeInteger(value) && value >= 0;
+    const loads = payload.dailyLoads;
+    // Normalization is appropriate for display, not for cache admission: dropping
+    // missing/malformed entries here would silently replace real load with zero.
+    if (data.entryType !== DERIVED_METRICS_ENTRY_TYPES.Snapshot || data.metricKind !== DERIVED_METRIC_KINDS.Form
+        || data.status !== 'ready' || data.schemaVersion !== DERIVED_METRIC_SCHEMA_VERSION
+        || !isCount(data.builtFromEventMutationVersion) || !isCount(data.sourceEventCount) || !isCount(data.sourceDocCount)
+        || data.sourceDocCount < data.sourceEventCount || payload.dayBoundary !== 'UTC'
+        || payload.excludesMergedEvents !== true || !Array.isArray(loads)
+        || loads.length > data.sourceEventCount || (loads.length === 0) !== (data.sourceEventCount === 0)) return null;
+    let previousDay = -Infinity;
+    for (const entry of loads) {
+        if (!entry || typeof entry !== 'object' || !Number.isSafeInteger(entry.dayMs)
+            || entry.dayMs % DAY_MS !== 0 || entry.dayMs <= previousDay
+            || typeof entry.load !== 'number' || !Number.isFinite(entry.load) || entry.load < 0) return null;
+        previousDay = entry.dayMs;
+    }
+    if (payload.rangeStartDayMs !== (loads[0]?.dayMs ?? null)
+        || payload.rangeEndDayMs !== (loads[loads.length - 1]?.dayMs ?? null)) return null;
     return {
-        status: toSafeString(data.status) || null,
-        schemaVersion: toFiniteNumber(data.schemaVersion),
-        builtFromEventMutationVersion: toFiniteNumber(data.builtFromEventMutationVersion),
-        sourceEventCount: Math.max(0, Math.floor(toFiniteNumber(data.sourceEventCount) || 0)),
-        sourceDocCount: Math.max(0, Math.floor(toFiniteNumber(data.sourceDocCount) || 0)),
-        dailyLoads: normalizeDerivedFormDailyLoads(payload.dailyLoads),
+        status: data.status,
+        schemaVersion: data.schemaVersion,
+        builtFromEventMutationVersion: data.builtFromEventMutationVersion,
+        sourceEventCount: data.sourceEventCount,
+        sourceDocCount: data.sourceDocCount,
+        dailyLoads: loads.map(entry => ({ dayMs: entry.dayMs, load: entry.load })),
     };
 }
 
@@ -5740,6 +5787,8 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
     requestedMetricKinds: readonly unknown[] | null | undefined,
     options?: {
         incrementEventMutationVersion?: boolean;
+        // Only internal sleep/HRV ingress may preserve the workout projection.
+        preserveWorkoutInputs?: boolean;
     },
 ): Promise<EnsureDerivedMetricsResponse> {
     const metricKinds = normalizeDerivedMetricKinds(requestedMetricKinds);
@@ -5781,27 +5830,38 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             return;
         }
 
-        const coordinator = parseCoordinator(coordinatorSnapshot.data());
-        const nextDirtyMetricKinds = mergeDerivedMetricKinds(coordinator.dirtyMetricKinds, metricKinds);
+        const rawCoordinatorData = coordinatorSnapshot.data();
+        const coordinator = parseCoordinator(rawCoordinatorData);
         const isAlreadyQueuedOrProcessing = coordinator.status === 'queued' || coordinator.status === 'processing';
-        const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
         const coordinatorLikelyStuck = isAlreadyQueuedOrProcessing
             && isDerivedMetricsCoordinatorStuck(coordinator, nowMs);
+        // Replacing a stuck generation also fences its old worker. Carry its
+        // claimed work forward before clearing processingMetricKinds below.
+        const retainedMetricKinds = coordinatorLikelyStuck && coordinator.status === 'processing'
+            ? mergeDerivedMetricKinds(coordinator.dirtyMetricKinds,
+                resolveInFlightMetricKinds(rawCoordinatorData, coordinator.dirtyMetricKinds))
+            : coordinator.dirtyMetricKinds;
+        const nextDirtyMetricKinds = mergeDerivedMetricKinds(retainedMetricKinds, metricKinds);
+        const dirtyMetricKindsChanged = !hasSameDerivedMetricKinds(coordinator.dirtyMetricKinds, nextDirtyMetricKinds);
         const shouldIncrementEventMutationVersion = options?.incrementEventMutationVersion === true;
         const nextEventMutationVersion = shouldIncrementEventMutationVersion
             ? coordinator.eventMutationVersion + 1
             : coordinator.eventMutationVersion;
         const eventMutationVersionChanged = nextEventMutationVersion !== coordinator.eventMutationVersion;
+        const invalidateWorkoutInputs = options?.preserveWorkoutInputs !== true || shouldIncrementEventMutationVersion;
+        const workoutInputsVersion = readWorkoutInputsVersion(coordinatorSnapshot.data())
+            + (invalidateWorkoutInputs ? 1 : 0);
 
         // Coalesce repeated writes during bulk updates:
         // if a user is already queued/processing and the dirty set did not change,
         // avoid writing the coordinator doc again.
-        // Exception: event-write triggers increment the mutation version so completion
-        // freshness can be evaluated against an immutable source revision.
+        // Source mutations and explicit repairs still advance the reuse revision;
+        // only repeated sleep/HRV invalidations can skip that coordinator write.
         if (isAlreadyQueuedOrProcessing
             && !dirtyMetricKindsChanged
             && !coordinatorLikelyStuck
-            && !eventMutationVersionChanged) {
+            && !eventMutationVersionChanged
+            && !invalidateWorkoutInputs) {
             shouldEnqueue = false;
             generationToQueue = coordinator.generation;
             return;
@@ -5834,6 +5894,7 @@ export async function markDerivedMetricsDirtyAndMaybeQueue(
             status: nextStatus,
             generation: nextGeneration,
             eventMutationVersion: nextEventMutationVersion,
+            workoutInputsVersion,
             dirtyMetricKinds: nextDirtyMetricKinds,
             updatedAtMs: nowMs,
             ...(shouldResetLifecycleFields ? {
@@ -5945,12 +6006,14 @@ export async function startDerivedMetricsProcessing(
                 dirtyMetricKinds: inFlightMetricKinds,
                 startedAtMs: nowMs,
                 eventMutationVersion: coordinator.eventMutationVersion,
+                workoutInputsVersion: readWorkoutInputsVersion(rawCoordinatorData),
             };
             return;
         }
 
-        // A generation can only be freshly claimed from queued state.
-        if (coordinator.status !== 'queued') {
+        // A thrown worker failure retains dirty kinds in failed state. Cloud Tasks
+        // retries the same generation; acknowledging it here would lose that retry.
+        if (coordinator.status !== 'queued' && coordinator.status !== 'failed') {
             startedResult = null;
             return;
         }
@@ -5969,20 +6032,23 @@ export async function startDerivedMetricsProcessing(
             return;
         }
 
+        // Retry claims must differ even if the clock has not advanced since failure.
+        const claimedAtMs = Math.max(nowMs, (coordinator.startedAtMs ?? -1) + 1);
         transaction.set(coordinatorRef, {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
             status: 'processing',
             dirtyMetricKinds: [],
             processingMetricKinds: dirtyMetricKinds,
-            startedAtMs: nowMs,
+            startedAtMs: claimedAtMs,
             updatedAtMs: nowMs,
             lastError: null,
         }, { merge: true });
 
         startedResult = {
             dirtyMetricKinds,
-            startedAtMs: nowMs,
+            startedAtMs: claimedAtMs,
             eventMutationVersion: coordinator.eventMutationVersion,
+            workoutInputsVersion: readWorkoutInputsVersion(rawCoordinatorData),
         };
     });
 
@@ -5992,6 +6058,7 @@ export async function startDerivedMetricsProcessing(
 export async function completeDerivedMetricsProcessing(
     uid: string,
     generation: number,
+    claim?: DerivedMetricsProcessingClaim,
 ): Promise<CompleteDerivedMetricsProcessingResult> {
     const coordinatorRef = getCoordinatorDocRef(uid);
     const nowMs = Date.now();
@@ -6002,13 +6069,15 @@ export async function completeDerivedMetricsProcessing(
     };
 
     await admin.firestore().runTransaction(async (transaction) => {
+        // Firestore may retry after another attempt completes or replaces this claim.
+        completion = { requeued: false, nextGeneration: null, dirtyMetricKinds: [] };
         const coordinatorSnapshot = await transaction.get(coordinatorRef);
         if (!coordinatorSnapshot.exists) {
             return;
         }
 
         const coordinator = parseCoordinator(coordinatorSnapshot.data());
-        if (coordinator.generation !== generation) {
+        if (coordinator.generation !== generation || (claim && !matchesProcessingClaim(coordinatorSnapshot.data(), claim))) {
             return;
         }
 
@@ -6087,6 +6156,7 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
     generation: number,
     processedMetricKinds: readonly DerivedMetricKind[],
     logContext: string,
+    claim?: DerivedMetricsProcessingClaim,
 ): Promise<AbandonDerivedMetricsProcessingAfterWriteBlockResult> {
     const db = admin.firestore();
     const normalizedMetricKinds = normalizeDerivedMetricKindsStrict(processedMetricKinds);
@@ -6121,7 +6191,8 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
             }
 
             const coordinator = parseCoordinator(coordinatorSnapshot.data());
-            if (coordinator.generation !== generation || coordinator.status !== 'processing') {
+            if (coordinator.generation !== generation || coordinator.status !== 'processing'
+                || (claim && !matchesProcessingClaim(coordinatorSnapshot.data(), claim))) {
                 return;
             }
 
@@ -6240,12 +6311,13 @@ export async function abandonDerivedMetricsProcessingAfterWriteBlock(
                     '[derived-metrics] Cleaned up derived metrics after write-block follow-up enqueue failure.',
                 );
             }
-            await coordinatorRef.set({
-                entryType: DERIVED_METRICS_ENTRY_TYPES.Coordinator,
-                status: 'failed',
-                lastError: toSafeString((error as { message?: unknown } | null)?.message) || 'enqueue_write_block_follow_up_failed',
-                updatedAtMs: Date.now(),
-            }, { merge: true });
+            await markDerivedMetricsEnqueueFailed(
+                uid,
+                requeueResult.nextGeneration,
+                error,
+                'write-block follow-up enqueue failure',
+                'enqueue_write_block_follow_up_failed',
+            );
         }
     }
 
@@ -6257,6 +6329,7 @@ export async function failDerivedMetricsProcessing(
     generation: number,
     error: unknown,
     processedMetricKinds: readonly DerivedMetricKind[],
+    claim?: DerivedMetricsProcessingClaim,
 ): Promise<void> {
     const coordinatorRef = getCoordinatorDocRef(uid);
     const nowMs = Date.now();
@@ -6269,7 +6342,7 @@ export async function failDerivedMetricsProcessing(
         }
 
         const coordinator = parseCoordinator(coordinatorSnapshot.data());
-        if (coordinator.generation !== generation) {
+        if (coordinator.generation !== generation || (claim && !matchesProcessingClaim(coordinatorSnapshot.data(), claim))) {
             return;
         }
 
@@ -6292,33 +6365,50 @@ export async function failDerivedMetricsProcessing(
     });
 }
 
+async function commitDerivedMetricSnapshotWrites(
+    uid: string,
+    writes: readonly { metricKind: DerivedMetricKind; data: Record<string, unknown> }[],
+    claim?: DerivedMetricsProcessingClaim,
+): Promise<boolean> {
+    return admin.firestore().runTransaction(async transaction => {
+        if (claim) {
+            const coordinator = await transaction.get(getCoordinatorDocRef(uid));
+            if (!coordinator.exists || !matchesProcessingClaim(coordinator.data(), claim)) return false;
+        }
+        // The deletion guard participates in the same commit, including transaction retries.
+        if (await readDerivedMetricsWriteBlockedInTransaction(transaction, uid, 'snapshot commit')) return false;
+        for (const write of writes) {
+            transaction.set(getMetricDocRef(uid, write.metricKind), write.data, { merge: true });
+        }
+        return true;
+    });
+}
+
 export async function markDerivedMetricSnapshotsBuilding(
     uid: string,
     metricKinds: readonly DerivedMetricKind[],
-): Promise<void> {
+    claim?: DerivedMetricsProcessingClaim,
+): Promise<boolean> {
     if (await readDerivedMetricsWriteBlocked(uid, 'snapshot building write', { metricKinds })) {
-        return;
+        return false;
     }
 
     const nowMs = Date.now();
-    const batch = admin.firestore().batch();
-    metricKinds.forEach((metricKind) => {
-        batch.set(getMetricDocRef(uid, metricKind), {
+    return commitDerivedMetricSnapshotWrites(uid, metricKinds.map(metricKind => ({ metricKind, data: {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             status: 'building',
             updatedAtMs: nowMs,
             lastError: null,
-        }, { merge: true });
-    });
-    await batch.commit();
+        } })), claim);
 }
 
 export async function markDerivedMetricSnapshotsFailed(
     uid: string,
     metricKinds: readonly DerivedMetricKind[],
     error: unknown,
+    claim?: DerivedMetricsProcessingClaim,
 ): Promise<void> {
     if (await readDerivedMetricsWriteBlocked(uid, 'snapshot failure write', { metricKinds })) {
         return;
@@ -6326,18 +6416,14 @@ export async function markDerivedMetricSnapshotsFailed(
 
     const nowMs = Date.now();
     const errorMessage = toSafeString((error as { message?: unknown } | null)?.message) || toSafeString(error) || 'unknown_error';
-    const batch = admin.firestore().batch();
-    metricKinds.forEach((metricKind) => {
-        batch.set(getMetricDocRef(uid, metricKind), {
+    await commitDerivedMetricSnapshotWrites(uid, metricKinds.map(metricKind => ({ metricKind, data: {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
             status: 'failed',
             updatedAtMs: nowMs,
             lastError: errorMessage,
-        }, { merge: true });
-    });
-    await batch.commit();
+        } })), claim);
 }
 
 export async function writeDerivedMetricSnapshotsReady(
@@ -6350,16 +6436,18 @@ export async function writeDerivedMetricSnapshotsReady(
         formDailyLoads?: readonly DerivedFormDailyLoadEntry[] | null;
         formSourceEventCount?: number | null;
         formSourceDocCount?: number | null;
+        workoutInputsVersion?: number;
+        claim?: DerivedMetricsProcessingClaim;
     },
-): Promise<void> {
+): Promise<boolean> {
     if (await readDerivedMetricsWriteBlocked(uid, 'snapshot ready write', { metricKinds })) {
-        return;
+        return false;
     }
 
     const nowMs = Number.isFinite(options?.buildAtMs)
         ? options?.buildAtMs as number
         : Date.now();
-    const batch = admin.firestore().batch();
+    const writes: { metricKind: DerivedMetricKind; data: Record<string, unknown> }[] = [];
     const normalizedFormDailyLoads = normalizeDerivedFormDailyLoads(options?.formDailyLoads || []);
     const hasDailyLoadContextOverride = normalizedFormDailyLoads.length > 0
         || Number.isFinite(options?.formSourceEventCount)
@@ -6422,7 +6510,20 @@ export async function writeDerivedMetricSnapshotsReady(
         buildResult: DerivedMetricBuildResult<TPayload>,
         sourceDocCount: number,
     ): void => {
-        batch.set(getMetricDocRef(uid, metricKind), {
+        const workoutSeed = sourceDocs.trainingBuildWorkoutSeed;
+        const isBuildComparison = metricKind === DERIVED_METRIC_KINDS.TrainingBuildComparison;
+        const workoutInputsReuse = isBuildComparison && Number.isSafeInteger(options?.workoutInputsVersion)
+            ? workoutSeed?.metadata ?? createTrainingBuildWorkoutSeedMetadata(
+                buildResult.payload as DerivedTrainingBuildComparisonMetricPayload,
+                { sourceVersion: options!.workoutInputsVersion!, nowMs,
+                    settingsKey: trainingBuildSettingsKey(resolveTrainingBuildBenchmarkSelections(sourceDocs.trainingBuildBenchmarkSettings)) },
+                buildContext.trainingActivities.map(activity => activity.startMs), formSourceDocCount, trainingActivitySourceDocCount,
+            ) : null;
+        // Source counts describe the result's inputs; worker logs separately count actual reads.
+        const persistedSourceDocCount = isBuildComparison && workoutSeed
+            ? workoutSeed.metadata.formSourceDocCount + workoutSeed.metadata.activitySourceDocCount + 1 + trainingBuildSleepSourceDocCount
+            : sourceDocCount;
+        writes.push({ metricKind, data: {
             entryType: DERIVED_METRICS_ENTRY_TYPES.Snapshot,
             metricKind,
             schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
@@ -6430,10 +6531,11 @@ export async function writeDerivedMetricSnapshotsReady(
             updatedAtMs: nowMs,
             builtFromEventMutationVersion,
             sourceEventCount: buildResult.sourceEventCount,
-            sourceDocCount,
+            sourceDocCount: persistedSourceDocCount,
             payload: buildResult.payload,
             lastError: null,
-        }, { merge: true });
+            ...(isBuildComparison ? { workoutInputsReuse } : {}),
+        } });
     };
 
     metricKinds.forEach((metricKind) => {
@@ -6446,7 +6548,7 @@ export async function writeDerivedMetricSnapshotsReady(
         persistBuildResult(metricKind, buildResult, sourceDocCount);
     });
 
-    await batch.commit();
+    return commitDerivedMetricSnapshotWrites(uid, writes, options?.claim);
 }
 
 export function getDefaultDerivedMetricKindsForDashboard(): DerivedMetricKind[] {

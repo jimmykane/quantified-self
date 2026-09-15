@@ -875,6 +875,32 @@ describe('ChartsColumnsComponent', () => {
     expect(tooltipText).toContain('Maximum');
   });
 
+  it('keeps sport duration separate from its percentage and activity count in narrow tooltips', () => {
+    component.chartDataType = DataDuration.type;
+    component.chartDataValueType = ChartDataValueTypes.Total;
+    const container = document.createElement('div');
+    container.innerHTML = component['formatDateActivityTooltip']([
+      {
+        index: 0, label: 'Week 28 06 Jul 2026', time: Date.UTC(2026, 6, 6),
+        total: 36000, count: 6, rawItem: null,
+        segments: [
+          { activityKey: 'MountainBiking', activityType: ActivityTypes.MountainBiking, label: 'Mountain Biking', colorKey: ActivityTypes.MountainBiking, rawValue: 28800, value: 28800, percent: 80, count: 5 },
+          { activityKey: 'Cycling', activityType: ActivityTypes.Cycling, label: 'Cycling', colorKey: ActivityTypes.Cycling, rawValue: 7200, value: 7200, percent: 20, count: 1 },
+        ],
+      },
+    ], [{ dataIndex: 0 }], new Map([['MountainBiking', '#42a5f5'], ['Cycling', '#16B4EA']]));
+
+    const rows = Array.from(container.querySelectorAll('[aria-label]')).slice(2);
+    expect(rows).toHaveLength(2);
+    rows.forEach((row, index) => {
+      const value = formatDashboardNumericValue(DataDuration.type, index === 0 ? 28800 : 7200);
+      expect(row.children[0].lastElementChild?.textContent).toBe(value);
+      expect(row.children[0].textContent).not.toContain('%');
+      expect(row.children[1].textContent).toBe(index === 0 ? '80.0% of total · 5 activities' : '20.0% of total · 1 activity');
+      expect(row.getAttribute('aria-label')).toContain(value);
+    });
+  });
+
   it('should enable segmented stacked date rendering for non-total metrics only when explicitly preferred', async () => {
     const activityTypeAliases = Object.keys(ActivityTypes).filter((key) => (
       Number.isNaN(Number(key))

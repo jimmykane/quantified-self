@@ -184,7 +184,17 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        return [buildDashboardActivityCalendarTile(0)];
+        return [
+            {
+                ...AppUserUtilities.getDefaultUserDashboardChartTile(),
+                name: 'Weekly Training Time',
+                chartType: ChartTypes.ColumnsVertical,
+                dataType: DataDuration.type,
+                dataCategoryType: ChartDataCategoryTypes.DateType,
+                dataTimeInterval: TimeIntervals.Weekly,
+            },
+            buildDashboardActivityCalendarTile(1),
+        ];
     }
 
     private static getDefaultUserDashboardRecoveryTile(order: number): TileChartSettingsInterface {

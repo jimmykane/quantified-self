@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { AppHapticsService } from '../../../services/app.haptics.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { of } from 'rxjs';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
@@ -26,6 +27,7 @@ describe('CalendarMonthPickerBottomSheetComponent', () => {
       providers: [
         { provide: MAT_BOTTOM_SHEET_DATA, useValue: { ...data, timelineNotes } },
         { provide: AppHapticsService, useValue: { selection } },
+        { provide: AppUserService, useValue: { user: signal(data.user), user$: of(data.user) } },
         { provide: MatBottomSheetRef, useValue: { dismiss } },
         { provide: MatBottomSheet, useValue: { open: vi.fn() } },
         { provide: ActivityCalendarService, useValue: { watchEvents: vi.fn().mockReturnValue(of([])) } },

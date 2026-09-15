@@ -565,7 +565,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
     instructions.push(
-      'For a good-morning request or current daily report, use get_daily_report. For multi-day sleep, HRV, heart-rate, SpO2, or respiration trends, use get_sleep_trend. Use get_today_readiness only for the current recovery score and its evidence. Supply the requested IANA time zone.',
+      'For a good-morning request or current daily report, use get_daily_report. For multi-day sleep, HRV, heart-rate, SpO2, or respiration trends, use get_sleep_trend. Use get_current_readiness for the current recovery score and its evidence. Supply the requested IANA time zone.',
     );
   } else if (auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)) {
     instructions.push(
@@ -632,7 +632,7 @@ function buildMcpServerInstructions(auth: AuthenticatedMcpRequest): string {
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
     instructions.push(
-      'get_today_readiness calculates the live UTC-day readiness used by Dashboard Today from current Form/ramp and bounded same-provider sleep baselines. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
+      'get_current_readiness calculates the live formula-4 UTC-day readiness used by Dashboard Today, with a 7-day HRV average and shared 60-day personal range. get_today_readiness and the generic training_readiness metric preserve formula 3 for legacy clients. Current readiness history additionally requires Health access because stored HRV may include overnight Health records. For get_daily_report, lead with sleep and its recorded aggregate HRV/heart-rate values, summarize readiness in one sentence using at most the two most relevant available drivers, then summarize the current-versus-usual Training context. Keep get_daily_briefing only for clients that explicitly request its legacy physiology-free projection. These tools are not workout plans or medical advice.',
     );
   }
   instructions.push(
@@ -1033,9 +1033,24 @@ export function createMcpServer(
     auth.scopes.includes(MCP_OAUTH_SCOPES.MetricsRead)
     && auth.scopes.includes(MCP_OAUTH_SCOPES.SleepRead)
   ) {
+    registerMcpTool(server, 'get_current_readiness', {
+      title: 'Get current readiness',
+      description: 'Get the current formula-4 Dashboard Today readiness. HRV compares a rolling 7-day average with the same source-specific 60-day personal range used by Health, requiring 14 baseline and 3 recent observation days. Returns latest nightly HRV separately, explicit missing evidence, Load, Sleep and Overnight HR. All HRV values are milliseconds. No provider identity, raw samples, diagnosis or workout prescription.',
+      inputSchema: z.object({ timeZone: z.string().min(1).max(80).describe('IANA timezone for local-day context; scoring retains its UTC day boundary.') }),
+      outputSchema: outputSchemas.get_current_readiness,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, input => runReadOnlyTool('get_current_readiness', () => dataService.getCurrentReadiness({ uid: auth.uid, scopes: auth.scopes, timeZone: input.timeZone })));
+
+    if (auth.scopes.includes(MCP_OAUTH_SCOPES.HealthRead)) registerMcpTool(server, 'get_readiness_history', {
+      title: 'Get current readiness history',
+      description: 'Read the ready formula-4 14-day readiness snapshot. Requires Training metrics, Sleep and Health access because stored HRV can include overnight Health evidence. Each UTC day uses its own trailing 60-day HRV range and 7-day average without future evidence. HRV values are milliseconds. Returns explicit gaps and evidence counts without provider identity or raw samples. Use get_current_readiness for the live score.',
+      inputSchema: z.object({}), outputSchema: outputSchemas.get_readiness_history,
+      annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    }, () => runReadOnlyTool('get_readiness_history', () => dataService.getReadinessHistory({ uid: auth.uid, scopes: auth.scopes })));
+
     registerMcpTool(server, 'get_today_readiness', {
       title: 'Get today readiness',
-      description: 'Calculate the same live recovery-aware readiness shown by Dashboard Today from current UTC-day Form/ramp and a bounded 30-day sleep query. Returns the score plus explicit Load, Sleep, HRV, and Overnight HR drivers, including latest safe aggregate values, same-provider baseline medians, evidence counts, ratios, and freshness. Provider identity, raw samples, activities, locations, workout plans, diagnosis, and medical advice are excluded.',
+      description: 'Legacy formula-3 readiness for compatibility; use get_current_readiness for Dashboard Today. Calculate legacy readiness from current UTC-day Form/ramp and a bounded 30-day sleep query. Returns the score plus explicit Load, Sleep, HRV, and Overnight HR drivers, including latest safe aggregate values, same-provider baseline medians, evidence counts, ratios, and freshness. Provider identity, raw samples, activities, locations, workout plans, diagnosis, and medical advice are excluded.',
       inputSchema: z.object({
         timeZone: z.string()
           .min(1)
@@ -1586,8 +1601,12 @@ export function requiredScopesForRequest(body: unknown): McpOAuthScope[] {
   ].includes(toolName)) {
     return [MCP_OAUTH_SCOPES.SleepRead];
   }
+  if (toolName === 'get_readiness_history') {
+    return [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead, MCP_OAUTH_SCOPES.HealthRead];
+  }
   if ([
     'get_today_readiness',
+    'get_current_readiness',
     'get_daily_report',
     'get_daily_briefing',
   ].includes(toolName)) {

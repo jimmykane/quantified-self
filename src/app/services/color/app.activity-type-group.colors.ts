@@ -1,4 +1,4 @@
-import { ActivityTypeGroups, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
+import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper, type ActivityTypeGroup } from '@sports-alliance/sports-lib';
 
 export const AppActivityTypeGroupColors: Record<ActivityTypeGroup, string> = {
   [ActivityTypeGroups.RunningGroup]: '#FDD300',
@@ -19,3 +19,12 @@ export const AppActivityTypeGroupColors: Record<ActivityTypeGroup, string> = {
   [ActivityTypeGroups.TeamRacketGroup]: '#9A7DEA',
   [ActivityTypeGroups.UnspecifiedGroup]: '#A3ADB0',
 };
+
+export function resolveActivityTypeVisualGroup(activityType: ActivityTypes): ActivityTypeGroup {
+  return activityType === ActivityTypes.Trekking
+    ? ActivityTypeGroups.OutdoorAdventuresGroup
+    : ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+}
+export function resolveActivityTypeColor(activityType: ActivityTypes): string {
+  return AppActivityTypeGroupColors[resolveActivityTypeVisualGroup(activityType)];
+}

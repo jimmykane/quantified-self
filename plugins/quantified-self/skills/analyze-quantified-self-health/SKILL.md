@@ -33,6 +33,9 @@ Use recorded Health metrics, not workout aggregates, as the source of all-day hi
   sample points. Pass explicit timezone-offset start/end instants. Preserve each source/account/semantic series,
   historical point status, daily range boundaries, and insufficient-history states. A range on a missing-reading day
   is a baseline, not an invented HRV measurement; it is not a diagnosis or the provider's proprietary algorithm.
+  Current Training readiness shares the same seven-day average and 60-day range for matching overnight evidence.
+  A chart's visible range does not change these windows. Keep latest nightly HRV separate from the weekly average;
+  spot, workout and manual HRV do not become readiness inputs. Readiness itself requires the Training and Sleep grants.
 
 - Health metrics requires `health:read`. Explain reconnection when it is missing; never substitute another user's data.
 - Body composition also requires `measurements:read` and returns identity-free date buckets only. Use the focused

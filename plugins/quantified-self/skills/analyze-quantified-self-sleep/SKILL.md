@@ -32,15 +32,18 @@ returned.
    and average/minimum sleep heart rate when present, then keep Readiness to one sentence using at most two relevant
    available drivers. It is a current-context shortcut, not a historical sleep trend or a medical assessment.
 7. If the user asks specifically how today's Training readiness incorporates sleep or HRV, use the advertised
-   live-readiness capability when both permissions are present. Keep its latest safe aggregate HRV/heart-rate values,
-   same-provider baseline medians, ratios, and evidence states distinct from the longer sleep trend. Readiness does not
+   current-formula live-readiness capability when both permissions are present. Keep its seven-day HRV average,
+   same-source 60-day range and latest nightly HRV distinct, and preserve the separate overnight-heart-rate medians,
+   ratios and evidence states. Tools labelled legacy retain an older formula and cannot describe the current app score. Readiness does not
    include blood oxygen or respiration; query the ordinary sleep trend separately when the user asks about those vitals.
 
 ## Limits
 
 - For personal HRV ranges, use the advertised shared personal-range capability when both `sleep:read` and `health:read`
   are granted. Keep its source-separated nightly classifications distinct from its seven-day headline and from Training
-  readiness. If unavailable, report recorded HRV through the ordinary Sleep trend without reconstructing the range.
+  readiness's combined score. Current readiness shares the same rolling HRV range for matching overnight evidence;
+  changing the chart's visible date range does not change its 60-day baseline or seven-day average. If unavailable,
+  report recorded HRV through the ordinary Sleep trend without reconstructing the range.
 
 - If `sleep:read` is missing, explain that Sleep summaries access must be granted through reconnection.
 - All-day Health HRV and stress are a different domain and need the focused Health workflow and `health:read`.

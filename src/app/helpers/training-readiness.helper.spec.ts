@@ -14,6 +14,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: 90,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
+      hrvPersonalRange: null,
       hrvRatio: 1.1,
       averageHeartRateRatio: 0.95,
       minimumHeartRateRatio: 0.96,
@@ -32,13 +33,15 @@ describe('training-readiness.helper', () => {
     expect(view.metricRows.map(row => [row.label, row.valueText])).toEqual([
       ['Load context', 'Form +10 · Ramp +1'],
       ['Sleep', '90/100'],
-      ['HRV vs baseline', '+10%'],
+      ['HRV · 7-day average', '—'],
       ['Overnight HR vs baseline', '-5%'],
     ]);
+    expect(view.metricRows.find(row => row.label === 'HRV · 7-day average')?.detailText)
+      .toBe('No recent HRV · 60-day personal range');
     expect(view.implicationTitle).toBe('Signals are broadly supportive');
     expect(view.implicationText).toContain('does not choose a workout');
     expect(view.sourceText).toContain('bounded sleep envelope');
-    expect(view.sourceText).toContain('same 30-day window applied at each daily cutoff');
+    expect(view.sourceText).toContain('same 60-day HRV window applied at each daily cutoff');
     expect(view.sourceText).toContain('browser does not load workout history');
   });
 
@@ -67,6 +70,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: null,
       latestSleepAtMs: null,
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -85,6 +89,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
       sleepScore: 85,
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -115,6 +120,7 @@ describe('training-readiness.helper', () => {
       rampRate: null,
       sleepScore: 80,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -144,6 +150,7 @@ describe('training-readiness.helper', () => {
       rampRate: index === 5 ? null : 1,
       sleepScore: index === 5 ? null : 80,
       latestSleepAtMs: index === 5 ? null : asOfDayMs,
+      hrvPersonalRange: null,
       hrvRatio: index === 5 ? null : 1,
       averageHeartRateRatio: index === 5 ? null : 1,
       minimumHeartRateRatio: index === 5 ? null : 1,
@@ -160,6 +167,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: 90,
       latestSleepAtMs: asOfDayMs,
+      hrvPersonalRange: null,
       hrvRatio: 1.1,
       averageHeartRateRatio: 0.95,
       minimumHeartRateRatio: 0.96,
@@ -210,6 +218,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: 80,
       latestSleepAtMs: asOfDayMs,
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -226,6 +235,7 @@ describe('training-readiness.helper', () => {
       rampRate: 1,
       sleepScore: 90,
       latestSleepAtMs: Date.UTC(2026, 6, 16, 6),
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
@@ -265,6 +275,7 @@ describe('training-readiness.helper', () => {
       rampRate: null,
       sleepScore: null,
       latestSleepAtMs: null,
+      hrvPersonalRange: null,
       hrvRatio: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,

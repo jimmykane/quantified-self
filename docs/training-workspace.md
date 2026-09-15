@@ -78,8 +78,9 @@ The following rules are architectural constraints:
 - Bounded current scores use the shared lightweight metric indicator rather than a chart instance. Readiness uses a
   0–100 track with its canonical 55 and 75 category boundaries; eligible source sleep scores use a 0–100 track without
   inventing new thresholds. Four discrete segments communicate readiness signal coverage independently from score and
-  confidence. HRV and Overnight HR use a baseline-centered ±20% display while retaining the exact ratio text and the
-  metric-specific direction (lower Overnight HR may be supportive). Score fills start at zero and remain visible beneath
+  confidence. HRV shows its seven-day average, 60-day personal range, status and latest nightly value using the shared
+  `readiness-hrv-display.helper.ts` formatter. Overnight HR retains the baseline-centered ±20% display and exact ratio
+  text (lower Overnight HR may be supportive). Score fills start at zero and remain visible beneath
   their threshold markers. Missing evidence leaves an empty track, never zero.
 - Training-time and workout-count comparisons may use the same baseline-centered visual, but CTL, ATL, Form, ramp,
   ACWR, monotony, strain, FTP, VO2 max, recovery time, and power-system capacity must not be normalized into arbitrary
@@ -135,7 +136,7 @@ flowchart TD
     C --> F["Event/activity write ingress"]
     D --> F
     S["Sleep session write"] --> G["Targeted sleep ingress"]
-    S --> P["Bounded 30-day live sleep listener"]
+    S --> P["Bounded 60-day live sleep listener"]
     U["Training benchmark callable"] --> H["Training settings"]
     U --> I["Mark training_build_comparison dirty"]
     V["Destination and shortcuts"] --> W["Direct owner Firestore write: appSettings.trainingWorkspace"]
@@ -165,8 +166,10 @@ The page is eventually consistent. A complete event/activity historical scan hap
 browser. The browser can continue showing the latest complete payload while a newer generation is building. The only
 live contextual read added by Readiness is the bounded sleep-session listener shown above; it does not read event or
 activity history. A readiness-only worker refresh reuses a compatible Form snapshot seed and fetches only the bounded
-sleep envelope, so it does not perform a new event or activity scan. Event-driven all-metric builds still share their
-already-loaded Form history, and the existing sleep-triggered Best Build comparison retains its broader dependencies.
+sleep envelope when the Form seed is compatible. Sleep/HRV-triggered Best Build comparison can reuse the workout
+portion of its completed snapshot, so a combined Best Build + Readiness refresh can also avoid both historical scans.
+Missing or stale seeds fall back to the existing full build; event-driven all-metric builds still share their loaded
+Form history and canonical parent/activity join.
 
 ## Route and Frontend Entry Points
 
@@ -293,6 +296,9 @@ compact mode, matching Health. Each labelled row retains its sport, date, unit-a
 dividers separate consecutive workouts without card borders or a multi-column card grid. Skipped workouts keep an
 explicit state marker; normal planned workouts need no repeated badge.
 
+The Plan color submenu explicitly omits a backdrop so the app's top-level menu backdrop default cannot intercept pointer
+hover over sibling plan actions. Click/touch selection and Material's native keyboard submenu navigation remain unchanged.
+
 Creation includes a named Material **Plan color** selector; existing plans use **Plan actions -> Plan color**. The selected
 color appears beside the plan name and accents its schedule. `training-plan-appearance.helper.ts` maps the allowlisted
 names to the existing `AppColors` palette, blended toward theme foreground for legibility; Default follows theme primary.
@@ -336,7 +342,9 @@ completed-activity matching, or new metric is introduced by this presentation ch
 Creating a plan or editing a workout is a focused view: scope navigation, lists, and other editors are hidden until Save
 or Cancel. The title field receives focus on entry; focus returns to the contextual add action (or scope navigation) on
 exit. A successful workout save selects its destination scope, including standalone/plan transfers. Pending saves disable
-native inputs and Material selectors, retain the draft on failure, and use a stable icon/spinner content row. Save/Cancel
+native inputs and Material selectors, retain the draft on failure, and use a stable icon/spinner content row. The workout
+date uses the app's localized Material date picker while persisting the unchanged `YYYY-MM-DD` calendar label; clearing or
+typing an invalid value blocks saving instead of retaining the previous date. Save/Cancel
 stay in a sticky, safe-area-aware footer for long mobile editors. Plan/workout forms are unboxed sections, and editable
 steps and repeat blocks reuse the same compact-row primitive with labelled headings and projected remove controls.
 The revision-history section also uses that primitive, while destructive plan confirmation retains its Material card.
@@ -349,7 +357,11 @@ A newly created plan remains selectable using the server-acknowledged record and
 plan and state listeners catch up. This transient, user-scoped bridge prevents jumping back to a previously active plan
 or issuing the next mutation against the pre-creation revision; it does not replace the live schedule or persist a cache.
 Revision history uses wrapping semantic rows with Material restore buttons so operation and date details remain readable
-on phones rather than being truncated in single-line list slots. Failed history reads have an explicit Retry action.
+on phones rather than being truncated in single-line list slots. Rows use compact body typography, small secondary dates,
+6px vertical padding and text Restore actions. The keyboard-focusable list is bounded to 24rem/half the viewport, keeping
+long edit histories from taking over the page. Deleted workouts use the same surface-free Show/Hide Material-button
+pattern as Training recovery details, with controlled hidden content and haptic feedback, not a raised expansion panel.
+Failed history reads have an explicit Retry action.
 
 The full Calendar, dashboard Activity Calendar tile, and Dashboard Today mini-calendar overlay standalone workouts and
 workouts from the active plan. Inactive-plan workouts remain visible only in `/training/plans`; skipped workouts stay visible and
@@ -389,9 +401,12 @@ explicitly allowlisted account. Other signed-in users are silently redirected fr
 `/training`; signed-out navigation keeps the existing authentication flow. The workspace also clears/hides its editor
 on account changes. Full Calendar, Activity Calendar tiles and Today mini-calendars omit planning listeners, overlays,
 empty-day planning announcements and day-sheet planning actions for other accounts, while completed activities,
-Timeline notes and selectable dates remain unchanged. An already-open day sheet hides planning when its owner changes.
+Timeline notes and selectable dates remain unchanged. Calendar planning checks the live signed-in viewer against the
+displayed owner, not just the popup's user snapshot. An already-open day sheet hides planning and its retained planning
+listener cancels on sign-out/account change, even after Material destroys the originating month popup.
 Help filters planning articles, links and mixed-section text before search and Markdown rendering, including public
-prerendering and account changes. Planning-specific disconnect/deletion instructions use the same gate; generic
+prerendering and account changes. Same-account profile refreshes preserve the rendered guide and its navigation state.
+Planning-specific disconnect/deletion instructions use the same gate; generic
 provider-copy retention warnings and public privacy disclosures remain available. Existing Training analysis is not
 gated. This is a frontend presentation rollout, **not backend authorization**: owner-scoped APIs, Rules, provider
 readiness flags and delivery entitlement enforcement are unchanged. Broader rollout remains tracked by #655.
@@ -400,8 +415,9 @@ readiness flags and delivery entitlement enforcement are unchanged. Broader roll
 
 The common delivery implementation lives in `functions/src/training-plans/delivery/`, with browser-safe v1 contracts in
 `shared/training-provider-delivery.ts`. It is independent of schedule history and leaves the exact `WorkoutStructureV1`
-JSON and Sports Lib conversion/formatting boundary unchanged. Real transports remain unavailable; the deterministic
-fake exists only in `delivery/test-support/`, is excluded from the Functions build, and has no browser/configuration switch.
+JSON and Sports Lib conversion/formatting boundary unchanged. Public provider switches remain disabled; a separate
+backend-enforced private Garmin evaluation pilot is described below. The Garmin adapter is implemented and tested offline under #647; deterministic fakes
+exist only in `delivery/test-support/`, are excluded from the Functions build, and have no browser/configuration switch.
 
 `previewTrainingProviderDelivery` and `mutateTrainingProviderDelivery` are focused, authenticated, App Check-enforced
 commands. Backend execution is necessary to resolve privileged connection authority and create background work; owner
@@ -443,14 +459,27 @@ can inspect the original unfinished operation with renewed authority. Auth/permi
 failed connection generation. Explicit disconnect increments the consent epoch in the existing OAuth disconnect's initial
 transaction; subscription-driven disconnect and authentication failures do not invalidate consent.
 Recovery is transport work too: an auth/permission-blocked generation cannot inspect an unfinished operation. After
-inspection proves nonacceptance, the worker repeats admission before executing; Stop, edits, Pro expiry, disconnect or
+inspection proves nonacceptance or a safely resumable partial operation, the worker repeats admission before executing; Stop, edits, Pro expiry, disconnect or
 account deletion during inspection cannot release the obsolete operation.
+Adapters receive the same admission guard before each individual HTTP request, including after credential refresh and
+the request-start journal. Reads can inspect an obsolete attempt; writes require its exact current intent and an unexpired
+lease. A v1 private progress journal distinguishes `ready`, `started`, definitively `rejected`, and `accepted` steps.
+New operations start with explicit null progress; missing legacy progress is unknown, not permission to repeat a create.
+Request-start checkpoints require the current lease; late acceptance evidence is retained even when that lease expired.
+Starting a mutating request clears the previous fully accepted payload digests, while retaining all remote IDs. An
+interrupted edit or removal may already have changed the provider; reverting QS to an older version must inspect and
+reconcile that version again instead of treating its historical success digest as current. Status projections therefore
+show the retained copy as different until the complete current operation is confirmed.
+If another lease/attempt has taken over, accepted evidence goes into immutable-per-worker `attempts/*/lateAcceptances/*`
+instead of overwriting the newer journal. Recovery is blocked for operator inspection even on Retry; current workers
+lose admission. The existing recursive account cleanup covers these nested evidence records.
 
 Every accepted artifact checkpoint survives a newer authored revision. The final acceptance records which operation and
 content were accepted, then reconciles current intent. Final upsert acceptance must identify at least one artifact and
 final removal must return none; inconsistent acknowledgements keep the operation unresolved for inspection instead of
 publishing false success. An interrupted/ambiguous operation is inspected before any repeat;
-only adapter-proven nonacceptance permits execution with the same operation identity. Uncertain inspection stops in
+only adapter-proven nonacceptance or a retained-ID, safely resumable partial operation permits continued execution.
+Superseded partial operations retain actual IDs for current-intent reconciliation and withdrawal. Uncertain inspection stops in
 `needs_attention`; Retry does not clear that evidence or blindly repeat a create. Account deletion fences all further local
 writes, including late acceptance checkpoints. Provider-held copies may remain after revoked access. Account cleanup
 recursively removes all five new user subtrees and all UID-associated top-level jobs; the recovery dispatcher also removes
@@ -478,17 +507,102 @@ Consent/lifecycle rules:
   the mismatch. A separate authored-content fingerprint avoids labelling unchanged Pro-paused copies as mismatches.
 
 The Material/compact-row delivery dialog is reached from the plan actions area, saved workout editor and workout rows.
+The selected plan, its workout rows and the saved-workout editor also show compact, clickable **per-service sync
+summaries**, using destination branding (for example, **Garmin Connect · 2 of 3 workouts synced**). Opening a summary
+opens the existing sync details; rendering it never previews, grants consent, retries or contacts a provider. Editor
+summaries describe the current saved workout, not an unsaved draft. Plan totals cover every current non-deleted workout
+in that plan, across its entire date range—not only the selected day or the first 25 dialog rows. Skipped, waiting,
+outside-window, paused, unsupported and unapproved workouts remain explicit non-success states in that denominator.
+Confirmed past/completed copies may count as synced only while the safe projection confirms unchanged content; they
+are labelled as left unchanged. Empty plans are not fully synced. Plan inactive and sync-off preferences are distinct
+from confirmed delivery, and per-workout failures cannot be hidden by other successful workouts.
+
+`training-delivery-summary.helper.ts` matches the server's JSON-framed SHA-256 delivery identity using the owner-visible
+opaque destination fingerprint and inherited plan/current standalone settings. This is read-time presentation matching,
+never credential or connection authority. Earlier-account and removed-source copies stay available in details but never
+inflate current-workout confirmation counts. A newer authored/settings timestamp, workout override or changed association
+withholds an older confirmation until the worker catches up. Summary reads use an owner-scoped live status query, bounded
+to 1,601 projections (400 current workouts × four providers plus look-ahead), separately from the dialog's 25-row history
+pagination. Plan summaries also watch bounded workout overrides by their plan association, so a new individual Stop
+invalidates the old plan-level success total before reconciliation. Both look-aheads withhold complete totals at the cap:
+show **Status incomplete**, not an allegedly complete total. Read/crypto failures show
+**Sync status unavailable**, never zero or success. Account changes clear visible results and cancel old subscriptions;
+same-scope authored edits recompute the summary without reopening its Firestore listeners.
+
+These are workout-delivery aggregates for all services, including services without a native plan object. A provider that
+does not support workout delivery cannot become synced merely through aggregation. **Synced** confirms the complete
+provider-side workout/schedule delivery reported by QS, not receipt on a watch or other device. The existing readiness,
+UID presentation, Pro, consent, ledger, Rules and provider-adapter boundaries are unchanged; this presentation needs no
+Functions or index deployment. Verification includes `training-delivery-summary.helper.spec.ts` and
+`training-delivery-button.component.spec.ts` alongside the existing service/workspace/dialog tests.
+The latter also exports synthetic light/dark multi-service mixed-result summaries when `TRAINING_DELIVERY_QA_DIR` is set,
+using the same local stylesheet fixture workflow below. These fixtures do not enable any provider transport.
+
+Entry points and default dialog titles distinguish **Plan sync**, **Workout sync**, and **Workout sync history**.
+The plan view names the plan, explains automatic per-workout sending, and separates **Plan sync settings** / **Stop plan
+sync** from a visible **Workout sync status** section. Those entries are individual workout delivery projections, never
+plan records or authored edit history. An inactive plan is explicitly labelled; enabled preferences alone do not claim
+that an inactive plan is sending. A missing status is not a confirmed delivery; the empty state explains the first check.
 Unavailable Send/configuration actions stay hidden, but existing settings, problems, reconnect links and Stop remain
 readable. Status details expand in groups of 25 using a live loaded-prefix query, so subsequent pages cannot retain stale
 statuses or miss records moving across page boundaries. Plan workouts retain Stop even when their first delivery fails.
-The workspace's **Delivery history** entry appears only when delivery records exist and remains reachable after deleting
+The workspace's **Workout sync history** entry appears only when delivery records exist and remains reachable after deleting
 their plan/workout. Each retained row opens delivery details independently of the authored editor. Deleted sources permit
 only Retry/Stop against the server-resolved existing account/workout identity (revision zero for a missing source); they
 cannot be sent, restored, or enrolled through these commands. Retry advances retained-record reconciliation without Pro
-but cannot bypass explicit-disconnect epochs. Preview precedes consent; an uncertain callable response retains the
-same mutation ID for Retry. Account changes clear drafts/results and close the dialog. The planning UI rollout described
+but cannot bypass explicit-disconnect epochs. New opt-in with one ready provider opens the automatic read-only check
+directly from **Sync plan with Garmin** / **Send to Garmin**. The dialog waits for owner settings and schedule before taking
+that shortcut; existing records or inherited plan consent open details instead. Multiple providers keep a chooser.
+There is no manual Preview step: availability/compatibility checks run on entering a change, then the single **Enable
+plan sync** / **Send workout** confirmation grants consent. Opening, reloading, cancelling, and live updates never opt in.
+The saved/browser IANA zone is shown inline for initial consent; **Change** reveals its field. Existing **Plan sync
+settings** / **Workout sync settings** open the field directly without a preview request or new consent. **Save changes**
+is disabled until a valid normalized time zone differs from the captured saved value and its read-only check succeeds.
+Time-zone edits debounce those checks by 400ms; there is no separate **Use time zone** step. Reverting an edit disables
+Save again, and typing cancels stale checks without locking the field. Cancellation, account change and teardown cancel
+pending checks. A changed settings revision requires reopening the view, except that an uncertain save can replay its
+exact existing receipt. Fresh-account consent remains an explicit Send/Enable action, not a no-op settings save.
+Account-consent warnings expose a separate **Review sync setup** action. Retained old-account warnings never change
+the meaning of opening current settings or enable an unchanged Save.
+Review actions live in one Material footer: **Cancel** plus the specific confirmation, or **Try again** after a failed
+check. Cancel discards the draft and returns to sync details; directly opened initial consent closes instead. Overview
+has only **Close**. Once saving starts, Cancel becomes **Close** alongside disabled **Saving…**, because closing cannot
+cancel a dispatched request. The initial consent label never changes to Save merely because a live settings echo arrives.
+Inherited workout details do not label a retained workout override's zone as the current plan zone: the parent plan's
+settings remain authoritative. Stop, Retry, Resume and approval reviews display the server-resolved zone read-only.
+Changing a zone invalidates the earlier preview. Degradation still requires explicit per-workout approval; enabling sync
+never approves warnings. An uncertain callable response retains the same mutation ID for retrying confirmation.
+Preview is explicitly read-only, has a 30-second end-to-end deadline (including readiness),
+and can be cancelled; saving has a 70-second deadline and retains its exact receipt identity on an uncertain response.
+Late results after cancellation, destruction or account change cannot replace the current review. Account/view guards
+also prevent a delayed readiness retry from starting a stale callable. Saving settings is labelled separately from
+confirmed remote delivery. A retained artifact without a fully confirmed first delivery is explained as unconfirmed,
+not as a known different workout. Plan/history lists use one full-width Material button per compact workout row, showing
+the title, authored scheduled date and current status. The title and arrow have the same action: open workout sync
+details, not the workout editor. Loaded rows sort by scheduled date with ID tie-breaking; retained records without a
+source date sort last and do not invent one. The live loaded-prefix query remains bounded and **Show more workout
+statuses** expands it; sorting does not claim all history has been loaded. History rows identify the current plan or
+Standalone, and transferred/deleted sources remain labelled rather than silently appearing to belong to the old plan.
+Workout details name their parent plan or Standalone, clearly label **Stop workout sync** / **Resume workout sync**,
+and explain that other workouts are unaffected. **Back to plan sync** / **Back to sync history** returns to the originating
+overview without commands or new consent; **Edit workout** is a separate labelled route action and remains absent for
+deleted sources. Navigation retains account/busy guards and haptics. The lists show the current safe projection per
+delivery identity, not private attempt journals or one public record per authored edit. Only workout details show a
+labelled transport timestamp, separate from the scheduled date: it is the newer of the last attempt
+and confirmation (confirmation wins a tie), falling back to the status update only when neither exists; a later failed
+attempt cannot be hidden behind an older success. Workout attempt timestamps/counts and lifecycle
+guidance use surface-free Show/Hide Material buttons with `aria-expanded`/`aria-controls`, matching Training recovery
+details; no raised expansion panels. The next automatic check remains visible in workout details. Already inherited plan
+delivery does not offer a misleading Resume action. A prior plan's suppression cannot hide Stop after a transfer,
+including before the first new status arrives; a prior plan's stopped status cannot offer Resume for the current plan.
+After Resume, current-scope settings take precedence over an older stopped status until reconciliation catches up.
+Account changes clear drafts/results and close the dialog. The planning UI rollout described
 above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
 Completed activity totals are unchanged.
+The sync dialog's **How sync works** guidance explains stopping updates and requesting removal of upcoming synced
+workouts in plain language. It explicitly preserves the QS plan/workout and provider connection, distinguishes plan
+pause from Pro expiry, and protects past/completed workouts. Do not suggest disconnecting or introduce account-deletion
+warnings in this normal sync guidance; those consequences belong in Help and the relevant account screens.
 Connected-provider summaries and account-deletion confirmation explain that local cleanup does not guarantee removal
 of provider-held copies, and direct planning-enabled users to Stop sync before revoking access.
 
@@ -497,30 +611,40 @@ HTTP calls, including changes during inspection and failed withdrawals after sou
 addition to the Functions unit suite. Use `npm run test:rules` for owner/cross-user/write/internal-record denial. Frontend coverage includes
 `training-delivery-dialog.component.spec.ts`, `training-delivery.service.spec.ts` and the existing Plans/calendar suites.
 Build Functions and run `npm --prefix functions run secrets:check`; there are no new secrets. Deploy indexes/Functions and
-any receipt TTL policy only with separate approval. Do not add provider HTTP transports until #645 and #647–#650 pass
+any receipt TTL policy only with separate approval. Do not enable provider HTTP transports until #645 and #647–#650 pass
 their contract/sandbox gates; completion matching remains #651 and Sports Lib extraction #654.
 
 For isolated visual QA, create a temporary directory and set `TRAINING_DELIVERY_QA_DIR` to it when running
-`npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts`. The test exports synthetic Material
-dialog DOM for status, settings, preview, pending, Retry, history and deleted-source recovery states, including the real component SCSS compiled with the
-Angular build's Sass dependency. Build the local app, then link/copy `dist/browser/styles.css` and `dist/browser/media`
-beside the HTML. Open those fixtures in a browser at 320, 390 and 1440px in light/dark themes; verify readable status,
+`npx vitest run src/app/components/plans/training-delivery-dialog.component.spec.ts src/app/components/plans/plans-workspace.component.spec.ts`.
+The tests export synthetic Material dialog DOM for status, automatic checking, consent, time-zone editing, pending,
+Retry, unchanged/changed/saving settings, plan overview, plan-bound workout details, plan/workout Stop review, 25-row workout sync history and deleted-source
+recovery, plus a 50-row authored revision history. Plan fixtures cross the year boundary and include a long workout title. They include the
+app's Material Symbols default, generated component styles, and real component SCSS compiled with the Angular build's
+Sass dependency. Build the local app, then copy its emitted `dist/browser/styles-*.css` as `styles.css` and link/copy
+`dist/browser/media` beside the HTML. Open those fixtures in a browser at 320, 390 and desktop widths in light/dark themes; verify readable status,
 labelled inputs, named dialog, wrapping, scrolling, Close, and disabled pending controls with no horizontal overflow.
 These rendered fixtures contain no application backend or selectable transport. Component tests exercise actual actions
 and account reset; emulator tests exercise backend lifecycle. Browser emulation does not establish physical vibration.
 
 Allowlisted diagnostics use the `[TrainingDelivery]` message with `event`, `provider`, `operation`, `category`, `retryCount`,
-`latencyMs`, `inspected`, and `dispatched` fields only. They exclude workout titles, recipes, IDs, tokens and provider errors.
+`latencyMs`, `inspected`, `dispatched`, and optional allowlisted `httpStatus`/`failurePhase` fields only. Failure phase is
+one of `request`, `response`, `decode`, or `contract`; HTTP status is an integer from 100 through 599. They exclude workout
+titles, recipes, IDs, tokens, raw response bodies, URLs and provider error messages.
 Cloud Logging filters: `jsonPayload.message="[TrainingDelivery]"`; add `jsonPayload.event="failure"` and group by
 `jsonPayload.category`/`jsonPayload.provider` for failures or missing permissions; use `accepted` with `latencyMs` for
 delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptance`/`recovery_dispatch` for recovery.
-Production dashboards, alerts, certification and manual enablement remain #655.
+For HTTP failures, group by `jsonPayload.httpStatus` and `jsonPayload.failurePhase` to distinguish rejected responses
+from network uncertainty and response decoding. Legacy failure records lack these fields and cannot prove a specific
+provider response status after the fact.
+Production dashboards, alerts and broader rollout remain #655; Garmin evaluation evidence remains #698.
 
 ### Provider proof status
 
-`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four delivery switches remain
-false. Garmin, COROS, Wahoo, and Suunto are `fixture-only`: pure serializers and redacted fixtures prove documented
-mapping behavior, but there is no provider transport, token use, schedule write, ZIP upload, or production action. The
+`shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four public delivery switches remain
+false. Garmin, COROS, Wahoo, and Suunto remain `fixture-only`: serializers prove documented mapping, and Garmin now
+also has an offline-tested HTTP adapter. Offline verification does not constitute a real provider request or device result.
+The UID-restricted evaluation exception below enables that evidence to be collected without public launch.
+COROS, Wahoo and Suunto have no production transport binding yet. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -534,6 +658,88 @@ combinations fail instead of being approximated. The common lifecycle is proved 
 real provider HTTP, callbacks and sandbox certification remain #645 and #647–#650. Rollout, AI, templates, completion
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
+
+#### Private Garmin evaluation pilot
+
+`shared/training-delivery-rollout.ts` contains a separate, exact-match Garmin pilot allowlist. It is not derived from
+the presentation-only Training UI gate. An empty pilot list disables the exception; it never means everyone. The
+production runtime selects the real Garmin adapter only when this per-user gate admits the identity. Callables use
+the authenticated UID, workers use server-owned job identity, and the worker rechecks transport readiness immediately
+before provider I/O. Request data cannot select a UID, destination, credential or test transport. Frontend readiness
+uses the same predicate and recomputes on sign-in, account switch and sign-out; showing controls does not grant consent.
+
+The pilot retains Auth/App Check, Pro/grace, explicit plan or standalone consent, compatibility approval, destination
+authority, deletion fencing, and existing recovery/Stop rules. Legacy Garmin connections without current connection and
+credential generations or recorded `WORKOUT_IMPORT` must reconnect; do not fabricate permission or migrate consent.
+Connectivity's Garmin overview exposes per-account last-reported permission rows and a **Manage in Garmin** action.
+The permission is labelled **Training** in UI, help and delivery errors; `WORKOUT_IMPORT` remains the API identifier.
+Healthy connections use **Manage in Garmin**, not **Reconnect**, for permission changes. Reconnect remains available
+for connection recovery; an explicit disconnect is not needed for permission changes and disables other sync routes.
+An unknown snapshot is not a denied grant, and
+the display never authorizes delivery or changes consent. This permission-management UI is available to all connected
+Garmin users; the separate Training UI and backend pilot UID restrictions are unchanged.
+Start evaluation with one explicitly sent future standalone workout, not an opted-in multi-workout plan.
+
+Deployment requires separate explicit approval. Before activation, inspect only the pilot account's existing settings,
+ledger and queued work so previously recorded opt-ins cannot unexpectedly resume. Deploy the two delivery callables
+(`previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`) and `processTrainingDeliveryTask`, then the
+production frontend. Existing queue dispatchers and schedule/connection/entitlement marker writers do not select
+transports and need no change for this gate; no Rules/index/secret changes are introduced. To disable the pilot, clear
+the list and redeploy those backend functions and frontend. That blocks transport, including withdrawals, but preserves
+consent and evidence; use Stop while access is valid first if eligible provider copies must be removed. Deployment alone
+neither creates consent nor sends a workout. This evaluation exception does not satisfy #698's sandbox/device proof or
+#655's public rollout gates, and does not change #651 completion matching or #654 Sports Lib extraction.
+
+### Garmin workout/calendar adapter (#647)
+
+`delivery/garmin/` binds the existing serializer to Training API V2. It creates workout content using the partner
+contract's exact `POST /workoutportal/workout/v2` path; GET/PUT/DELETE use `/training-api/workout/v2/{workoutId}`.
+Calendar entries use a separate `/training-api/schedule/` lifecycle. No private endpoint is guessed and no callback is
+added. Updates inspect and retain workout, schedule and owner IDs; the workout's owner ID is not its OAuth user ID.
+Decimal Long IDs stay exact strings in the private ledger and numeric Long values on the wire. A date-only change
+updates the retained schedule without rewriting unchanged content. Withdrawal deletes the schedule before the workout,
+and source deletion does not delete the delivery ledger needed to finish that withdrawal.
+
+Each request resolves one active server-owned Garmin credential with `WORKOUT_IMPORT`, a current connection generation
+and one unambiguous account. Missing permission produces a safe reconnect explanation in preview/status. Shared token
+refresh leases and lifecycle fencing are reused; authority is rechecked after refresh and before HTTP. Only
+`processTrainingDeliveryTask` gains the existing Garmin OAuth secret pair; commands/dispatchers gain no secrets.
+The HTTP client admits only exact Garmin paths/host, rejects redirects, times out after 10 seconds and caps responses
+at 2 MiB. It never persists/logs raw response bodies, credentials or provider errors. HTTP 401 blocks for reconnect;
+403/412 block for permission repair; 429 honors Retry-After, defaulting conservatively to 24 hours when quota is unknown.
+The private ledger retains the adapter's not-before deadline independently of ordinary retry counters, so an edit,
+Stop/resume, or explicit Retry cannot shorten it. This is per-delivery backoff, not account/partner quota pacing; the
+latter remains part of #698's certification gate. There is no nested HTTP retry loop.
+Only documented synchronous success codes confirm completion. Unexpected successful statuses (including 202) remain
+unconfirmed; an empty/null successful GET never means the artifact is absent. Only an explicit 404 enters the missing
+artifact path, with actual provider 404 semantics still subject to certification. Schedule PUT accepts an empty 204;
+a 200 response must supply the validated schedule record before QS records the new date.
+The documented schedule POST 204 path immediately inspects the exact retained workout/date to obtain a unique schedule
+ID, rather than waiting for ordinary retry backoff solely because the response was empty. Empty/ambiguous inspection
+remains unconfirmed and retains the started journal; it never authorizes a second POST. A first workout POST without an
+ID still cannot be recovered this way. Synthetic tests cover immediate recovery and empty/duplicate lookup results.
+
+Every accepted artifact is journaled before another write. An interrupted schedule create can recover through one exact
+workout/date match in the date-range lookup; empty or ambiguous results are not proof of nonacceptance. Retained-ID
+PUT/DELETE operations are inspected before safe continuation. The documented API supplies neither a first-workout-create
+idempotency key nor a lookup by external workout identity: an accepted first POST with a lost ID stops in
+`needs_attention`, including on explicit Retry. It must not be retried by title, `workoutSourceId`, a guessed endpoint or
+a fresh operation ID. Such copies require operator/provider reconciliation; the adapter does not claim exactly-once
+first creates. The QS scheduling horizon is 365 days as a conservative product policy, not a documented Garmin maximum.
+Past/provider-confirmed completed artifacts are not rewritten or removed; a schedule observed moved into the past is
+retained with that observed date. No completed-activity matching or new provider hook is claimed (#651).
+
+Verification combines synthetic request/response fixtures (including signed-64-bit boundary IDs), HTTP/authorization/
+transport unit tests and real Firestore worker transactions through the excluded synthetic server. It covers duplicate
+workers, edits/Stop/expiry/lease expiry between artifacts, edit-then-revert after remote acceptance, Retry-After across
+edits and manual Retry, malformed/empty/asynchronous success responses, lost responses and persistence, same-account permission repair,
+changed-account reconnect, disconnect and account deletion. Run `npm run test:training-delivery` plus the existing Rules,
+secret registration and frontend suites. Sandbox/device certification remains a separate gate: confirm the documented
+create path in the evaluation tenant, actual response/404 semantics and schedule-list wrapper/pagination, quota/horizon,
+Training permission approval, all CRUD/recovery scenarios and representative device rendering before public Garmin enablement.
+The focused epic subissue #698 owns this remaining sandbox/device evidence, request-pacing validation and operator
+recovery procedure. Keep #647 open until its certification acceptance is evidenced; #645 owns access/contract questions
+and #655 owns production rollout. None of these tests constitutes a real Garmin sandbox or watch result.
 
 ### Product analytics
 
@@ -614,13 +820,13 @@ The join retains references to the selected child and parent data instead of clo
 
 Training uses main overnight sleep sessions for contextual comparisons. Naps are excluded. The backend has two narrow
 sleep sources: `training_build_comparison` fetches the 28/84-day and selected build ranges, while `training_readiness`
-fetches a bounded sleep-end envelope of about 43 days. That envelope lets each of the 14 daily cutoffs independently
-apply the canonical 30-day sleep lookback without querying event or activity history. Separately, Training Readiness and
+fetches a bounded sleep-end envelope of about 73 days. That envelope lets each of the 14 daily cutoffs independently
+apply the 60-day HRV lookback without querying event or activity history. Separately, Training Readiness and
 the fixed Dashboard Today Readiness summary each use the same bounded live-query contract: it is lower-bounded to the
-last 30 days, keeps an open upper bound for newly imported nights, and never loads event or activity history. A local
+last 60 days, keeps an open upper bound for newly imported nights, and never loads event or activity history. A local
 refresh timer re-evaluates the shared result when a future-dated record becomes eligible, the latest night reaches its
 48-hour limit,
-or a night leaves the 30-day baseline window; it reschedules after every boundary and caps long browser timers. Both
+or an observation leaves the 7-day HRV average, 30-day Overnight HR or 60-day HRV baseline window; it reschedules after every boundary and caps long browser timers. Both
 live and backend paths reject unknown providers or invalid sleep dates, ignore non-positive physiological samples, and
 discard unusable timezone offsets instead of letting malformed evidence change or break the result. The backend readiness
 projection must include average and minimum sleep HR as well as HRV fields; the shared formula gives average sleep HR
@@ -681,6 +887,8 @@ Every metric kind has its own snapshot document. The important fields are:
 ```
 
 The coordinator owns `generation`, `eventMutationVersion`, dirty kinds, processing state, timestamps, and the last error.
+An internal `workoutInputsVersion` also invalidates workout reuse for explicit repairs and non-sleep inputs, even when
+the event mutation version does not change. It is not a new public metric or formula version.
 A generation claim prevents an old Cloud Task from overwriting a newer request.
 
 ## Training Sport Registry and Contexts
@@ -809,14 +1017,16 @@ Training state and Readiness are fixed inside the optional Today summary:
   it to current Form/ramp and bounded live sleep. Training uses that same live current result and also reads a
   backend-derived
   `training_readiness` snapshot containing 14 UTC-aligned daily cutoffs. Each historical day uses the Form state for that
-  day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff; a night older than 48 hours is
-  ineligible. HRV, average-heart-rate, and minimum-heart-rate baselines use up to 14 prior nights from the same provider and account
+  day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff. Sleep and Overnight HR require
+  a latest night no older than 48 hours. HRV compares a seven-day average with the same rolling 60-day personal range
+  used by Health and the Dashboard HRV chart, with at least 14 baseline days and three current days. Average-heart-rate
+  and minimum-heart-rate baselines retain up to 14 prior nights from the same provider and account within 30 days
   and require at least three prior values for the matching measure. Average and minimum HR are not independent score
   drivers: their ratios are bounded to `0.8..1.2`, then combined into one Overnight HR ratio at 70% average and 30%
   minimum, with fallback to whichever is available. Lower HR relative to personal baseline supports that driver. The
-  live sleep query is lower-bounded to 30 days and keeps an open upper bound so an open page can
+  live sleep query is lower-bounded to 60 days and keeps an open upper bound so an open page can
   receive newly imported nights. The backend sleep query is bounded at both ends to the envelope required for all 14
-  cutoffs, and the formula then applies its own 30-day lookback at each cutoff. Future records are ignored. Training
+  cutoffs, and the formula applies each driver's own rolling lookback at each cutoff. Future records are ignored. Training
   replaces the final chart point with the live current result only when the retained snapshot is for the current UTC day,
   so the headline and today's dot stay in sync without plotting a new score on yesterday after a day rollover. Score,
   status, confidence, timestamp, driver freshness, baseline evidence count, and missing values stay separate. Persisting
@@ -828,11 +1038,12 @@ Training state and Readiness are fixed inside the optional Today summary:
   retired pre-release raw value `KpiReadinessConfidence` has a narrow cleanup predicate for local preview settings; it
   is not part of the active dashboard chart-type union, renderer, manual choices, presets, or recommendations. Equal-time
   sleep records use stable provider, date, and ID tie-breakers so live and historical calculations
-  cannot select different latest evidence because query order changed. MCP's additive `get_today_readiness` tool applies
-  this same live formula, current Form/ramp preference, bounded 30-day sleep source, and same-provider baselines. It
+  cannot select different latest evidence because query order changed. MCP's additive `get_current_readiness` tool applies
+  this same live formula, current Form/ramp preference, bounded 60-day sleep source, and source-separated HRV range. It
   exposes only an explicit identity-free driver projection with safe aggregate HRV/heart-rate values and evidence
   states. The additive `get_daily_report` reuses that live projection plus the safe latest-night aggregate values and
-  compact Training Summary; the frozen daily briefing remains unchanged.
+  compact Training Summary. `get_readiness_history` exposes the current 14-day series. Registered
+  `get_today_readiness`, generic readiness snapshots and the frozen daily briefing retain formula 3 for compatibility.
 - **Nightly HRV evidence** comes from the shared read-time resolver in `shared/nightly-hrv.ts`. Native normalized Sleep
   HRV wins; otherwise a canonical overnight-average Health summary may fill a missing main night only for the same
   owner, provider/account, provider date, and overlapping sleep interval. A reading contributes once across fragments.
@@ -846,9 +1057,10 @@ Training state and Readiness are fixed inside the optional Today summary:
   separate historical benchmark windows have separate Health reads. Existing normalized history needs no reimport.
   HRV Health creates, updates, and deletes invalidate only readiness and build comparison via the existing ingress queue.
   `training_readiness.payload.evidenceVersion = 1` lets the frontend and backend freshness gate rebuild old readiness
-  inputs without changing formula version 3. Recovery version 4 withholds HRV comparison across incompatible sources.
-  MCP projects out the internal readiness evidence version and retains its registered recovery version 3; its formulas
-  and wire shapes are unchanged. Rebuilds use the ordinary targeted ensure lifecycle, without a production migration.
+  inputs independently from the formula version. Readiness formula 4 adds the shared HRV range. Recovery version 4 withholds HRV comparison across incompatible sources.
+  MCP projects out the internal readiness evidence version. Registered readiness and recovery tools retain their
+  version-3 formulas and wire shapes; additive current-readiness tools expose formula 4. Rebuilds use the ordinary
+  targeted ensure lifecycle, without a production migration.
 - **Body-weight trend** first reads positive canonical `body_weight` point measurements from Health. Provider and manual
   measurements are independent sources; each provider/account series reduces multiple values on one UTC day to a median.
   If any real Health Weight exists in the retained source window, workout profile Weight is excluded globally. Otherwise,
@@ -859,21 +1071,28 @@ Training state and Readiness are fixed inside the optional Today summary:
   never exposes source-account keys. This remains neutral context, not a health assessment, training prescription, or
   input to Readiness, Form, or the TSS-only Training state.
 
-Dashboard **Reset to recommended** recommendation eligibility may inspect existing snapshot documents to decide whether these tiles are
-useful. Activity-backed recommendations require evidence in the default 90-day tile window, Sleep requires evidence in
-its default 14-day window, and Power Curve uses each discipline's prepared 1-year snapshot. It does not request a rebuild
-merely because the inline chart library was opened. Selecting a chart reads existing prepared snapshots only;
-thumbnail examples and preview fallback data never enter Training calculations or trigger a rebuild.
+Dashboard **Reset to starter dashboard** restores Today, Weekly Training Time (90 days), and Calendar after confirmation.
+Suggestions inside the chart library use existing displayable evidence: activity charts use their bounded event window,
+Sleep and HRV use 14 days, and Power Curve uses each discipline's prepared 1-year snapshot. New Intensity and Efficiency
+tiles show 12 weeks; existing saved ranges remain unchanged. The library opts into per-metric read-error reporting from
+`DashboardDerivedMetricsService.watch`, retaining last available values with an error notice and keeping other metrics
+usable. It never calls ensure/rebuild; the normal Dashboard and Training freshness lifecycle remains independent.
+Thumbnail examples and preview fallback data never enter Training calculations or trigger a rebuild.
 
 ### Writes and ingress
 
-- Event creates, updates, and deletes enqueue debounced derived-metric ingress.
-- Activity creates, updates, and deletes enqueue the same ingress.
+- Event/activity creates and deletes enqueue debounced derived-metric ingress. Updates enqueue only when calculation
+  inputs change. `derived-metrics-source-fields.ts` shares the query projections with trigger comparisons, including
+  event classification/merge metadata and activity ownership/type; activity comparisons additionally include swim lengths.
+- Sleep and Health updates likewise ignore ingestion-only timestamps and revision watermarks. Changes to canonical
+  measurements, eligibility, source identity, dates, offsets, or other consumed fields still invalidate normally.
 - Sleep writes enqueue `training_build_comparison` and `training_readiness` and do not increment the event mutation
-  version. Readiness itself has no activity dependency and can reuse the Form seed; the pre-existing build comparison
-  still owns the wider activity/settings scan needed for build-range recovery context.
-- Health source-record creates, updates, and deletes enqueue only `body_weight_trend` and `training_capacity`. They do
-  not increment the event mutation version; irrelevant Health metrics produce no Training work.
+  version or workout-input revision. Readiness has no activity dependency and can reuse the Form seed; Build Comparison
+  can reuse its validated workout projection and always recomputes sleep/HRV recovery.
+- Health mutations target Weight → `body_weight_trend`, VO2 → `training_capacity`, and HRV →
+  `training_build_comparison` + `training_readiness`. HRV-only ingress preserves the workout-input revision. Other
+  Health invalidations conservatively invalidate reuse. Unrelated Health metrics return before deletion-guard reads
+  and produce no Training work. Relevant creates and deletes always retain the deletion guard.
 - The benchmark callable marks only `training_build_comparison` dirty.
 - Destination and shortcut changes write only `appSettings.trainingWorkspace` through the normal owner-authorized
   Firestore settings path. They do not dirty or rebuild derived metrics because they are presentation state.
@@ -910,7 +1129,7 @@ seed and the bounded sleep envelope; it does not trigger an event or activity hi
 when the readiness payload evolves so backend freshness cannot call an invalid document fresh while the frontend remains
 indefinitely on Preparing.
 
-The readiness payload also carries `formulaVersion: 3`. This is intentionally independent of the global derived schema:
+The readiness payload also carries `formulaVersion: 4`. This is intentionally independent of the global derived schema:
 changing the current/historical readiness formula or its persisted input projection invalidates only
 `training_readiness`, preserving compatible snapshots for every unrelated kind.
 
@@ -937,15 +1156,73 @@ builders; do not restore separate joined copies or per-activity spread clones.
 The derived worker:
 
 1. Claims the expected coordinator generation.
-2. Marks requested snapshots `building`.
-3. Resolves source requirements for only the dirty kinds.
+2. Resolves dirty-kind requirements and reads any completed workout/Form seeds before changing snapshot status.
+3. Marks requested snapshots `building`.
 4. Fetches events, normalized activities, bounded recovery events, settings, swim lengths, and sleep only as required.
 5. Builds payloads with a single `buildAtMs` anchor.
-6. Re-checks the user deletion guard before every write stage.
-7. Writes all requested snapshots `ready` with the same mutation version.
+6. Re-checks the user deletion guard before every write stage and inside the snapshot commit transaction.
+7. Writes all requested snapshots `ready` with the same mutation version, fenced by generation and claim start time.
 8. Completes the generation or requeues newly dirtied kinds.
 
 Failures mark affected snapshots failed, preserve an error, and are rethrown so the Cloud Tasks retry policy can apply.
+The next attempt can claim that same generation from `failed` and consume its retained dirty kinds. Its claim timestamp
+is strictly newer than the previous claim, including same-millisecond retries. Healthy processing duplicates and
+completed generations remain no-ops. When ingress replaces a stuck processing generation, it carries the union of
+in-flight, pending, and newly requested metric kinds into the replacement; fencing the old worker must not discard its
+work. Enqueue-failure updates, including write-block recovery, are transactional and only mark the matching generation
+failed while it is still queued, never after its replacement has already started.
+
+### Reusing Build Comparison workout inputs
+
+`training-build-workout-seed.ts` validates internal `workoutInputsReuse` metadata on the existing Build Comparison
+snapshot; it does not create another history collection. Reuse is eligible only for Build Comparison alone or combined
+with projection-sensitive kinds that need no activity scan (Power Curve is projection-sensitive but still requires
+activities, so it is explicitly excluded from this reuse path). It requires a ready snapshot, the exact current
+derived schema and seed version, exact event/workout-input revisions, canonical benchmark-settings hash, current UTC
+day, and matching workout-payload digest. Missing, failed, malformed, legacy, edited, or otherwise incompatible inputs
+take the full-build path. Explicit ensure/repair calls and benchmark changes invalidate the internal revision; event
+and activity ingress also advances the event mutation version.
+
+The seed expires at the earlier of the next UTC midnight and the next persisted future activity's start time. A
+recovery-only refresh retains the original expiry, source counts, and workout metadata; it never extends the lease.
+Sleep/HRV recovery (headline and each configured sport's current/benchmark windows) is recomputed with the same helper
+used by full builds. Cached windows determine the same merged sleep-date queries, including historical event anchors.
+Readiness retains its separate end-time-bounded sleep query and nightly-HRV enrichment; different sleep predicates
+are not treated as interchangeable. If the Form seed is unavailable, Readiness still scans events, while a valid Build
+seed can independently avoid the activity scan. Existing formula payloads and frontend behavior are unchanged.
+Form seed admission also requires the exact current schema and claimed event revision, canonical UTC day/load entries,
+strictly ordered unique days, finite nonnegative loads, consistent range endpoints and source counts. Missing or
+malformed history is a cache miss, not an empty/zero-load replacement. A genuinely empty Form history remains reusable.
+
+Every worker snapshot commit checks the deletion tombstone/user root and current claim transactionally. Reclaimed or
+superseded attempts cannot publish, fail, or complete a newer attempt. A rejected building/ready commit does not clear
+the claimed work; the existing guarded abandon/requeue path handles it. A mutation arriving during a build retains its
+dirty kinds and advances the revision, so a follow-up generation cannot reuse that build's old workout inputs.
+
+No migration, index, source-data rewrite, or backfill is required. Snapshots warm lazily on their next full build.
+Release the event/activity/sleep/Health triggers, ingress worker, derived worker, ensure callable, and benchmark callable
+together so all dirty-mark writers use the same invalidation rules. Deployment requires separate approval. Bump the
+seed version (or global derived schema) when changing workout projection semantics; recovery-only formula changes
+still recompute recovery through the shared helper. Removing this optimization restores the full-build path and does
+not require deleting metadata or any source data.
+
+For verification, compare `usedTrainingBuildWorkoutSeed`, `usedProjectionFormSnapshotSeed`,
+`formEventDocsScanned`, `trainingActivityDocsScanned`, `reusedTrainingBuildEventDocs`, and
+`reusedTrainingBuildActivityDocs`. Reused counts describe inputs represented by the snapshot, not billed reads saved
+in every mixed task. `sourceFetchDurationMs` covers source loading after seed lookup, and
+`snapshotBuildAndWriteDurationMs` covers calculation/write and nearby guards; total `durationMs` includes all stages.
+These are aggregate operational counters, not exact Firestore billing attribution: control-document reads, nightly-HRV
+enrichment, empty-query minimums, and retries are not included in the source-document counters. Measure realized
+savings from deployment onward; do not equate the eligible workload share with a guaranteed reduction in the bill.
+
+Regression coverage includes pure full/reused recovery equivalence, seed expiry/corruption/version validation, worker
+query selection and fallbacks, plus loopback-only Firestore tests for ownership, concurrent claims, invalidation during
+processing, a real worker retry after a transient cache-read failure, preserved in-flight work on replacement,
+late enqueue-failure fencing, and deletion starting between the preliminary check and commit:
+
+```bash
+npx firebase emulators:exec --project demo-derived-metrics-reuse --only firestore 'npm --prefix functions test -- src/derived-metrics/derived-metrics-reuse.emulator.spec.ts'
+```
 
 ## Page Lifecycle and Destination Navigation
 
@@ -1118,7 +1395,7 @@ combines only:
 
 - the current UTC-day Form series as one 40% Load driver (with the Form Now/Ramp snapshots used only when the series cannot provide the needed value);
 - sleep score when recorded, otherwise a duration-based score centered on eight hours, at 25%;
-- latest-night HRV versus up to 14 prior nights from the same provider, at 20%; and
+- seven-day average HRV versus the rolling 60-day personal range for the same provider/account/measurement source, at 20%; and
 - one 15% Overnight HR driver that blends same-provider average sleep HR (70%) and minimum sleep HR (30%).
 
 Each available HR ratio is bounded to 80–120% of its own baseline before blending; if one HR measure is unavailable,
@@ -1126,14 +1403,39 @@ the other supplies the driver. Lower HR supports the score only relative to the 
 and is not a universal medical claim. Missing drivers are excluded and available weights are renormalized rather than treating
 missing evidence as zero.
 
+HRV uses `shared/personal-metric-range.ts`, exactly as the Health and Dashboard nightly HRV charts do. Multiple
+readings on the same provider calendar date reduce to a median; original fragment observations survive sleep grouping
+so the readiness input cannot become a different mean. Each original HRV observation is filtered at the cutoff before
+selecting its source; a later fragment of the same night cannot hide an already completed reading. The baseline is the mean ± one population standard deviation
+over the preceding 60 days, including current observations. At least 14 observed days are required, plus three observed
+days in the last seven days for the current average. Every historical date uses only observations completed by its own
+cutoff. Selecting a year of chart history changes the view, never these calculation windows. Dedicated overnight and
+sleep-session-average sources remain separate; spot, workout and manual HRV are not readiness inputs.
+
+Formula 4 retains the HRV component's neutral score of 50 and its 20% weight when the weekly average is within the range.
+Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange / baselineMean)`. An unusually high value
+earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
+The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
+direction and latest nightly reading separately, instead of a percentage against a different short median. Weekly HRV
+can remain available without a night in the last 48 hours while at least three recent days remain.
+
+The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from
+the existing Form seed and bounded Sleep/Health evidence. No event reparse, global derived-schema bump or bulk migration
+is needed. Deploy the verified Functions update before the frontend rollout so formula-4 history can be generated.
+The builder also stores identity-free `legacyPoints` calculated by the frozen `shared/readiness-legacy.ts` evaluator.
+Only registered legacy MCP projections consume those points; the current frontend and new tools strip them. Old scores
+are never relabelled as formula 4, and new scores are never relabelled as formula 3. The current history validator requires
+the full HRV evidence and recomputes the score, classification, ratios and cutoff bounds. A nonempty current window
+must contain a latest reading within seven days, and current-day counts cannot exceed baseline-day counts.
+
 Provider coverage follows the normalized sleep document rather than assumptions about a device. The current Suunto
 mapper persists average and minimum sleep HR, the COROS mapper persists average sleep HR, and the Garmin Health sleep
 summary mapper currently persists neither normalized sleep-HR measure. The score therefore uses only the measures that
 are actually present; provider-specific omissions remain missing and do not become neutral or zero-valued evidence.
 
-The sleep listener is lower-bounded to 30 days, excludes naps, ignores future-dated records, and accepts a latest night
-only through 48 hours after its end. The card also refreshes when a future record becomes eligible or baseline evidence
-leaves the 30-day window, even if Firestore emits nothing. Score, status, confidence, calculation timestamp, signal
+The sleep listener is lower-bounded to 60 days, excludes naps and ignores future-dated records. Sleep and Overnight HR
+accept a latest night only through 48 hours after its end. The card also refreshes when a future record becomes eligible
+or evidence leaves the 7/30/60-day windows, even if Firestore emits nothing. Score, status, confidence, calculation timestamp, signal
 count, driver values, and driver freshness are shown separately. Combined Form/ramp freshness is the oldest contributing
 timestamp. The training implication is deliberately non-prescriptive: it summarizes whether evidence is supportive,
 mixed, or strained and directs attention to the drivers rather than choosing a workout. Failed Form/ramp reads and a
@@ -1159,7 +1461,7 @@ controls so athletes do not interpret a sleep change as a recalculation of train
 The same card plots a backend-derived 14-day series. `training_readiness` declares only `formDocs` and
 `trainingReadinessSleepDocs`; it never declares activities or settings. On a readiness-only refresh, the worker accepts a
 schema-compatible Form snapshot seed, avoids a full event scan, and queries a bounded sleep-end envelope covering every
-daily cutoff's own 30-day lookback. Each daily point evaluates the shared formula at that UTC day's final millisecond,
+daily cutoff's own 60-day HRV lookback (30 days for Overnight HR). Each daily point evaluates the shared formula at that UTC day's final millisecond,
 except today, which uses the worker build timestamp. Missing scores remain chart gaps and the frontend rejects malformed,
 non-contiguous, or internally inconsistent payloads, including confidence that does not match the recorded signal and
 baseline evidence counts. The latest complete series may remain visible while its status is updating or after a failed
@@ -2045,7 +2347,7 @@ ready/building/failed/stale/missing/schema-mismatch. It never returns payloads, 
 device/provider provenance. Clients should use it before `get_training_metric` so a missing or rebuilding snapshot is
 not mistaken for an unsupported Training capability.
 
-The explicitly named live `get_today_readiness` tool is not a derived-snapshot projection. It requires both
+The explicitly named live `get_current_readiness` tool is not a derived-snapshot projection. It requires both
 Training-metric and sleep grants, reads the ready Form/Form Now/Ramp snapshots plus one bounded normalized sleep query,
 rebuilds the same current UTC-day zero-load decay used by Dashboard Today, and calls the shared readiness evaluator. It
 exists because the persisted 14-day `training_readiness` point can lag newly imported sleep and because the registered
@@ -2053,7 +2355,11 @@ daily-briefing schema is frozen. The additive `get_daily_report` shares that liv
 average/overnight HRV plus average/minimum sleep HR for the latest grouped main sleep, and adds the existing strict
 Training Summary projection. `shared/training-load.ts` owns the canonical daily load builder and CTL/ATL constants used
 by the frontend, live MCP projection, and derived-metric backend, while `shared/readiness.ts` owns scoring and evidence
-selection. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
+selection. `get_readiness_history` provides the matching current snapshot and additionally requires `health:read`,
+because its persisted HRV evidence can include absolute overnight Health values. The tool is withheld without all
+three grants, and the data service checks them before reading.
+`get_today_readiness` and generic readiness snapshot reads retain registered formula 3; clients must not present those
+as the current app formula. Never replace either MCP allowlist with raw snapshot, provider, or sleep-session documents.
 
 The built-in Assistant consumes this same strict `get_training_metric` projection. Its optional deterministic chart
 adapter takes Training titles from the MCP catalog and plots only supported trend arrays. For the `form` payload it
@@ -2202,6 +2508,11 @@ that does not retain the Admin SDK's legacy static exports.
 The localhost frontend normally calls emulated Functions; `local-prod-functions` explicitly targets production Functions.
 Backend code can still reach real services depending on environment variables and credentials, so verify the active
 project and never assume `localhost` means isolated data.
+In particular, Functions-only emulation does not emulate Firestore triggers, Cloud Tasks or Garmin. A local Training
+mutation against live Firestore can enqueue the deployed delivery worker; rebuilding local Functions will not update
+that worker. Use `npm run test:training-delivery` for bulk/failure stress tests: its demo Firestore project and injected
+synthetic transports cannot call Garmin. Real-account UI checks are bounded pilot operations requiring explicit scope;
+do not use a Functions-only environment for destructive or bulk tests.
 
 The Functions emulator sets `FUNCTIONS_EMULATOR=true`, which bypasses the manual callable App Check guard only inside
 that local worker. Production and beta callables continue to require App Check. This keeps a hosted debug-token exchange

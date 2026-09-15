@@ -33,7 +33,7 @@
       <button mat-icon-button appHapticTap aria-label="Dashboard options" [matMenuTriggerFor]="dashboardOptions" [disabled]="library.busy()"><mat-icon>more_horiz</mat-icon></button>
       <mat-menu #dashboardOptions="matMenu" class="qs-menu-panel">
         <button mat-menu-item (click)="library.bulk($any(user), 'today')"><mat-icon>{{ showTodaySummary ? 'visibility_off' : 'visibility' }}</mat-icon><span>{{ showTodaySummary ? 'Hide Today summary' : 'Show Today summary' }}</span></button>
-        <button mat-menu-item (click)="library.bulk($any(user), 'reset')"><mat-icon>restart_alt</mat-icon><span>Reset to recommended</span></button>
+        <button mat-menu-item (click)="library.bulk($any(user), 'reset')"><mat-icon>restart_alt</mat-icon><span>Reset to starter dashboard</span></button>
         <button mat-menu-item (click)="library.bulk($any(user), 'all')"><mat-icon>library_add</mat-icon><span>Add all presets</span></button>
         <button mat-menu-item (click)="library.bulk($any(user), 'clear')"><mat-icon>delete_sweep</mat-icon><span>Remove all</span></button>
       </mat-menu>
@@ -100,7 +100,15 @@
     <dl>
       <div><dt>Load</dt><dd>{{ dashboardTodayReadiness.loadText }}</dd><small>Form / ramp</small></div>
       <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
-      <div><dt>HRV</dt><dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd><app-metric-indicator variant="deviation" label="HRV" [value]="dashboardTodayReadiness.hrvDeviationPercent" [tone]="dashboardTodayReadiness.hrvTone" [compact]="true"></app-metric-indicator><small>vs baseline</small></div>
+      <div class="dashboard-readiness-hrv">
+        <dt>HRV · 7-day average</dt>
+        <dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd>
+        <small>{{ dashboardTodayReadiness.hrvStatusText }}</small>
+        <small>{{ dashboardTodayReadiness.hrvRangeText }}</small>
+        @if (dashboardTodayReadiness.hrvLatestText) {
+          <small>{{ dashboardTodayReadiness.hrvLatestText }}</small>
+        }
+      </div>
       <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><app-metric-indicator variant="deviation" label="Overnight heart rate" [value]="dashboardTodayReadiness.overnightHeartRateDeviationPercent" [tone]="dashboardTodayReadiness.overnightHeartRateTone" [compact]="true"></app-metric-indicator><small>vs baseline · lower supports</small></div>
     </dl>
   </section>

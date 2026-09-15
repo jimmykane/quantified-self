@@ -14,7 +14,7 @@ import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { Router } from '@angular/router';
 import type { EventInterface, User } from '@sports-alliance/sports-lib';
-import { catchError, finalize, map, of, shareReplay, startWith, Subscription, switchMap, take } from 'rxjs';
+import { catchError, distinctUntilChanged, finalize, map, of, shareReplay, startWith, Subscription, switchMap, take } from 'rxjs';
 import { isTimelineNoteVisible, timelineNoteOverlaps } from '@shared/timeline-notes';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { calendarTimelineNoteRange, calendarTimelineNotesByDate } from '../../../helpers/calendar-timeline-notes.helper';
@@ -27,6 +27,7 @@ import {
 } from '../../../helpers/activity-calendar.helper';
 import { SharedModule } from '../../../modules/shared.module';
 import { ActivityCalendarService } from '../../../services/activity-calendar.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { CalendarDayDetailsNavigationService } from '../../../services/calendar-day-details-navigation.service';
 import { isTrainingPlanningUIAllowed } from '@shared/training-planning-rollout';
 import {
@@ -66,6 +67,7 @@ interface ActivityCalendarTilePlansState {
 export class ActivityCalendarTileComponent {
   private readonly calendarService = inject(ActivityCalendarService);
   private readonly plansService = inject(TrainingPlansService);
+  private readonly users = inject(AppUserService);
   private readonly bottomSheet = inject(MatBottomSheet);
   private readonly router = inject(Router);
   private readonly dayDetailsNavigation = inject(CalendarDayDetailsNavigationService);
@@ -76,7 +78,8 @@ export class ActivityCalendarTileComponent {
   private readonly today = signal(new Date());
 
   readonly user = input<User | null | undefined>(null);
-  readonly hasTrainingPlanningUIAccess = computed(() => isTrainingPlanningUIAllowed(this.user()?.uid));
+  readonly hasTrainingPlanningUIAccess = computed(() => this.user()?.uid === this.users.user()?.uid
+    && isTrainingPlanningUIAllowed(this.users.user()?.uid));
   /** Keep the workspace signal live even when the month popup is replaced by a day sheet. */
   readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
   private readonly notesContext = computed(() => {
@@ -109,10 +112,16 @@ export class ActivityCalendarTileComponent {
   private readonly plansSource = computed(() => {
     const user = this.user();
     if (!isTrainingPlanningUIAllowed(user?.uid)) return of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState);
-    return this.plansService.watchSchedule(user.uid).pipe(
-      map(schedule => ({ status: 'ready', schedule }) as ActivityCalendarTilePlansState),
-      startWith({ status: 'loading', schedule: null } as ActivityCalendarTilePlansState),
-      catchError(() => of({ status: 'error', schedule: null } as ActivityCalendarTilePlansState)),
+    // A popup's user input is a snapshot. Keep the live viewer fence inside the shared
+    // stream so it also cancels a day-sheet listener after Material destroys this tile.
+    return this.users.user$.pipe(
+      map(viewer => viewer?.uid ?? null),
+      distinctUntilChanged(),
+      switchMap(viewerUid => viewerUid === user.uid ? this.plansService.watchSchedule(user.uid).pipe(
+        map(schedule => ({ status: 'ready', schedule }) as ActivityCalendarTilePlansState),
+        startWith({ status: 'loading', schedule: null } as ActivityCalendarTilePlansState),
+        catchError(() => of({ status: 'error', schedule: null } as ActivityCalendarTilePlansState)),
+      ) : of({ status: 'ready', schedule: null } as ActivityCalendarTilePlansState)),
       shareReplay({ bufferSize: 1, refCount: true }),
     );
   });

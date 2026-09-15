@@ -517,28 +517,27 @@
   }
 }
 
-@media (max-width: 860px) {
-  .activity-calendar--fill-height,
-  .activity-calendar--fill-height .activity-calendar-months,
-  .activity-calendar--fill-height .activity-calendar-month {
-    height: 100%;
-    min-height: 0;
-  }
+// Fixed-height tiles distribute their visible weeks evenly at every viewport width.
+.activity-calendar--fill-height,
+.activity-calendar--fill-height .activity-calendar-months,
+.activity-calendar--fill-height .activity-calendar-month {
+  height: 100%;
+  min-height: 0;
+}
 
-  .activity-calendar--fill-height .activity-calendar-month {
-    display: grid;
-    grid-template-rows: 28px minmax(0, 1fr);
-  }
+.activity-calendar--fill-height .activity-calendar-month {
+  display: grid;
+  grid-template-rows: 28px minmax(0, 1fr);
+}
 
-  .activity-calendar--fill-height .activity-calendar-days {
-    min-height: 0;
-    grid-template-rows: repeat(6, minmax(0, 1fr));
-  }
+.activity-calendar--fill-height .activity-calendar-days {
+  min-height: 0;
+  grid-auto-rows: minmax(0, 1fr);
+}
 
-  .activity-calendar--fill-height .activity-calendar-day {
-    min-height: 0;
-    padding-block: 0;
-  }
+.activity-calendar--fill-height .activity-calendar-day {
+  min-height: 0;
+  padding-block: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

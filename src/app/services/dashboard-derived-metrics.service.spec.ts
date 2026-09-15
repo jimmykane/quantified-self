@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { firstValueFrom, of, Subject } from 'rxjs';
+import { firstValueFrom, of, Subject, throwError } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Firestore, doc, docData } from 'app/firebase/firestore';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -119,6 +119,29 @@ describe('DashboardDerivedMetricsService', () => {
     expect(state).toEqual<DashboardDerivedMetricsState>(createMissingState());
     expect(doc).not.toHaveBeenCalled();
     expect(docData).not.toHaveBeenCalled();
+  });
+
+  it('reports preview read failures per metric and retains the last successful payload', () => {
+    const source$ = new Subject<Record<string, unknown>>();
+    hoisted.docDataMock.mockReturnValueOnce(source$).mockReturnValueOnce(of(undefined));
+    const states: DashboardDerivedMetricsState[] = [];
+    service.watch({ uid: 'preview-owner' }, {
+      metricKinds: [DERIVED_METRIC_KINDS.Form, DERIVED_METRIC_KINDS.Acwr], reportReadErrors: true,
+    }).subscribe(state => states.push(state));
+    source$.next({ status: 'ready', schemaVersion: DERIVED_METRIC_SCHEMA_VERSION,
+      payload: { dailyLoads: [{ dayMs: Math.floor(Date.now() / 86400000) * 86400000 - 86400000, load: 30 }] } });
+    const points = states.at(-1)!.formPoints;
+    expect(points?.length).toBeGreaterThan(0);
+    source$.error(new Error('permission-denied'));
+    expect(states.at(-1)).toMatchObject({ formStatus: 'failed', acwrStatus: 'missing', formPoints: points });
+    expect(mockFunctionsService.call).not.toHaveBeenCalled();
+  });
+
+  it('opts into explicit read errors without changing existing refresh callers', async () => {
+    hoisted.docDataMock.mockReturnValue(throwError(() => new Error('offline')));
+    const metricKinds = [DERIVED_METRIC_KINDS.Acwr];
+    expect((await firstValueFrom(service.watch({ uid: 'owner' }, { metricKinds }))).acwrStatus).toBe('missing');
+    expect((await firstValueFrom(service.watch({ uid: 'owner' }, { metricKinds, reportReadErrors: true }))).acwrStatus).toBe('failed');
   });
 
   it('maps derived snapshots to form points and recovery-now context', async () => {
@@ -765,6 +788,7 @@ describe('DashboardDerivedMetricsService', () => {
       sleepScore: null,
       latestSleepAtMs: null,
       hrvRatio: null,
+      hrvPersonalRange: null,
       averageHeartRateRatio: null,
       minimumHeartRateRatio: null,
       overnightHeartRateRatio: null,

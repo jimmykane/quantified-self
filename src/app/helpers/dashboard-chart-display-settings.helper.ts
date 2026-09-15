@@ -94,7 +94,10 @@ export function normalizeDashboardChartTileDisplaySettingsForChartType(
 export function getDefaultDashboardChartTileDisplaySettingsForChartType(
   chartType: unknown,
 ): AppDashboardChartTileDisplaySettingsInterface | undefined {
-  return normalizeDashboardChartTileDisplaySettingsForChartType(chartType, {}, true);
+  // New tiles use a shorter overview; normalization retains the legacy 1-year fallback.
+  return normalizeDashboardChartTileDisplaySettingsForChartType(chartType, {
+    derivedChartRange: '12w',
+  }, true);
 }
 
 export function cloneDashboardChartTileDisplaySettingsForChartType(

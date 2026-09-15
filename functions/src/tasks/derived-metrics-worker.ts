@@ -16,6 +16,7 @@ import {
     hasAnyDerivedMetricsHealthRecord,
     fetchRecoveryLookbackEventDocs,
     fetchTrainingBuildBenchmarkSettings,
+    fetchTrainingBuildWorkoutSeed,
     fetchTrainingBuildSleepDocs,
     fetchTrainingReadinessSleepDocs,
     getDerivedRecoveryLookbackWindowSeconds,
@@ -24,9 +25,11 @@ import {
     markDerivedMetricSnapshotsBuilding,
     markDerivedMetricSnapshotsFailed,
     resolveDerivedMetricSourceRequirements,
+    resolveTrainingBuildBenchmarkSelections,
     startDerivedMetricsProcessing,
     writeDerivedMetricSnapshotsReady,
 } from '../derived-metrics/derived-metrics.service';
+import { trainingBuildSettingsKey } from '../derived-metrics/training-build-workout-seed';
 
 interface DerivedMetricsTaskPayload {
     uid: string;
@@ -63,6 +66,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
     }
 
     const dirtyMetricKinds = startResult.dirtyMetricKinds;
+    const claim = { generation: Math.floor(generation), startedAtMs: startResult.startedAtMs };
     if (!dirtyMetricKinds.length) {
         logger.info('[derived-metrics] No dirty metric kinds to process.', {
             uid,
@@ -75,6 +79,7 @@ export const processDerivedMetricsTask = onTaskDispatched({
         Math.floor(generation),
         dirtyMetricKinds,
         logContext,
+        claim,
     );
 
     try {
@@ -82,10 +87,31 @@ export const processDerivedMetricsTask = onTaskDispatched({
             await abandonAfterWriteBlock('task before snapshot building');
             return;
         }
-        await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds);
         const buildAtMs = Date.now();
-        const sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
-        const projectionOnlyKinds = areOnlyProjectionSensitiveMetricKinds(dirtyMetricKinds);
+        let sourceRequirements = resolveDerivedMetricSourceRequirements(dirtyMetricKinds);
+        const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings
+            ? await fetchTrainingBuildBenchmarkSettings(uid) : {};
+        const remainingMetricKinds = dirtyMetricKinds.filter(kind => kind !== DERIVED_METRIC_KINDS.TrainingBuildComparison);
+        const remainingSourceRequirements = resolveDerivedMetricSourceRequirements(remainingMetricKinds);
+        const canReuseWorkoutInputs = dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingBuildComparison)
+            && (!remainingMetricKinds.length || areOnlyProjectionSensitiveMetricKinds(remainingMetricKinds))
+            && !remainingSourceRequirements.needsTrainingActivityDocs;
+        // Read completed seeds before marking this generation's snapshots building.
+        const trainingBuildWorkoutSeed = canReuseWorkoutInputs ? await fetchTrainingBuildWorkoutSeed(uid, {
+            nowMs: buildAtMs, sourceVersion: startResult.workoutInputsVersion,
+            eventMutationVersion: startResult.eventMutationVersion,
+            settingsKey: trainingBuildSettingsKey(resolveTrainingBuildBenchmarkSelections(trainingBuildBenchmarkSettings)),
+        }) : null;
+        if (trainingBuildWorkoutSeed) {
+            sourceRequirements = {
+                ...remainingSourceRequirements,
+                needsTrainingBuildBenchmarkSettings: true,
+                needsTrainingBuildSleepDocs: true,
+            };
+        }
+        const projectionOnlyKinds = areOnlyProjectionSensitiveMetricKinds(
+            trainingBuildWorkoutSeed ? remainingMetricKinds : dirtyMetricKinds,
+        );
         let projectionFormSnapshotSeed: Awaited<ReturnType<typeof fetchDerivedFormSnapshotSeed>> = null;
         // Activity-backed metrics require both normalized activities and their parent
         // event metadata. Form's daily-load seed cannot replace that join input.
@@ -94,10 +120,9 @@ export const processDerivedMetricsTask = onTaskDispatched({
             && !sourceRequirements.needsTrainingActivityDocs;
         if (canUseProjectionSeed) {
             const candidateProjectionSeed = await fetchDerivedFormSnapshotSeed(uid);
-            const hasCompatibleSchema = Number.isFinite(candidateProjectionSeed?.schemaVersion)
-                && (candidateProjectionSeed?.schemaVersion as number) >= DERIVED_METRIC_SCHEMA_VERSION;
-            const hasCompatibleBuildMutationVersion = Number.isFinite(candidateProjectionSeed?.builtFromEventMutationVersion)
-                && (candidateProjectionSeed?.builtFromEventMutationVersion as number) >= startResult.eventMutationVersion;
+            const hasCompatibleSchema = candidateProjectionSeed?.schemaVersion === DERIVED_METRIC_SCHEMA_VERSION;
+            const hasCompatibleBuildMutationVersion = candidateProjectionSeed?.builtFromEventMutationVersion
+                === startResult.eventMutationVersion;
             if (
                 candidateProjectionSeed
                 && candidateProjectionSeed.status === 'ready'
@@ -107,6 +132,11 @@ export const processDerivedMetricsTask = onTaskDispatched({
                 projectionFormSnapshotSeed = candidateProjectionSeed;
             }
         }
+        if (await markDerivedMetricSnapshotsBuilding(uid, dirtyMetricKinds, claim) === false) {
+            await abandonAfterWriteBlock('snapshot building commit rejected');
+            return;
+        }
+        const sourceFetchStart = Date.now();
         const formDocs = sourceRequirements.needsFormDocs
             ? (
                 projectionFormSnapshotSeed
@@ -130,15 +160,13 @@ export const processDerivedMetricsTask = onTaskDispatched({
                     || dirtyMetricKinds.includes(DERIVED_METRIC_KINDS.TrainingPowerSystems),
             })
             : [];
-        const trainingBuildBenchmarkSettings = sourceRequirements.needsTrainingBuildBenchmarkSettings
-            ? await fetchTrainingBuildBenchmarkSettings(uid)
-            : {};
         const trainingBuildSleepDocs = sourceRequirements.needsTrainingBuildSleepDocs
             ? await fetchTrainingBuildSleepDocs(
                 uid,
                 trainingActivities,
                 trainingBuildBenchmarkSettings,
                 buildAtMs,
+                trainingBuildWorkoutSeed,
             )
             : [];
         const trainingReadinessSleepDocs = sourceRequirements.needsTrainingReadinessSleepDocs
@@ -179,15 +207,18 @@ export const processDerivedMetricsTask = onTaskDispatched({
                 )
                 : Promise.resolve([]),
         ]);
+        const sourceFetchDurationMs = Date.now() - sourceFetchStart;
+        const snapshotBuildStart = Date.now();
 
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before snapshot ready write', { generation, dirtyMetricKinds })) {
             await abandonAfterWriteBlock('task before snapshot ready write');
             return;
         }
-        await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
+        const published = await writeDerivedMetricSnapshotsReady(uid, dirtyMetricKinds, {
             formDocs,
             recoveryNowDocs,
             trainingActivityDocs,
+            ...(trainingBuildWorkoutSeed ? { trainingBuildWorkoutSeed } : {}),
             ...(sourceRequirements.needsTrainingActivityDocs ? { trainingActivities } : {}),
             ...(sourceRequirements.needsTrainingBuildBenchmarkSettings ? { trainingBuildBenchmarkSettings } : {}),
             ...(sourceRequirements.needsTrainingBuildSleepDocs ? { trainingBuildSleepDocs } : {}),
@@ -197,16 +228,23 @@ export const processDerivedMetricsTask = onTaskDispatched({
             ...(sourceRequirements.needsVo2HealthDocs ? { vo2HealthDocs } : {}),
         }, {
             buildAtMs,
+            claim,
+            workoutInputsVersion: startResult.workoutInputsVersion,
             builtFromEventMutationVersion: startResult.eventMutationVersion,
             formDailyLoads: projectionFormSnapshotSeed?.dailyLoads || [],
             formSourceEventCount: projectionFormSnapshotSeed?.sourceEventCount ?? null,
             formSourceDocCount: projectionFormSnapshotSeed?.sourceDocCount ?? null,
         });
+        if (published === false) {
+            await abandonAfterWriteBlock('snapshot ready commit rejected');
+            return;
+        }
         if (await isDerivedMetricsUserWriteBlocked(uid, 'task before processing completion', { generation, dirtyMetricKinds })) {
             await abandonAfterWriteBlock('task before processing completion');
             return;
         }
-        const completion = await completeDerivedMetricsProcessing(uid, Math.floor(generation));
+        const snapshotBuildAndWriteDurationMs = Date.now() - snapshotBuildStart;
+        const completion = await completeDerivedMetricsProcessing(uid, Math.floor(generation), claim);
 
         logger.info('[derived-metrics] Processed derived metrics task.', {
             uid,
@@ -224,6 +262,12 @@ export const processDerivedMetricsTask = onTaskDispatched({
             hasAnyBodyWeightHealthRecord,
             vo2HealthDocsScanned: vo2HealthDocs.length,
             usedProjectionFormSnapshotSeed: !!projectionFormSnapshotSeed,
+            usedTrainingBuildWorkoutSeed: !!trainingBuildWorkoutSeed,
+            reusedTrainingBuildEventDocs: trainingBuildWorkoutSeed?.metadata.formSourceDocCount || 0,
+            reusedTrainingBuildActivityDocs: trainingBuildWorkoutSeed?.metadata.activitySourceDocCount || 0,
+            workoutInputsVersion: startResult.workoutInputsVersion,
+            sourceFetchDurationMs,
+            snapshotBuildAndWriteDurationMs,
             projectionFormSnapshotDailyLoadDays: projectionFormSnapshotSeed?.dailyLoads?.length || 0,
             recoveryLookbackWindowSeconds: getDerivedRecoveryLookbackWindowSeconds(),
             requeued: completion.requeued,
@@ -243,8 +287,8 @@ export const processDerivedMetricsTask = onTaskDispatched({
             durationMs: Date.now() - processingStart,
         });
         if (!await isDerivedMetricsUserWriteBlocked(uid, 'task before failure writes', { generation, dirtyMetricKinds })) {
-            await markDerivedMetricSnapshotsFailed(uid, dirtyMetricKinds, processingError);
-            await failDerivedMetricsProcessing(uid, Math.floor(generation), processingError, dirtyMetricKinds);
+            await markDerivedMetricSnapshotsFailed(uid, dirtyMetricKinds, processingError, claim);
+            await failDerivedMetricsProcessing(uid, Math.floor(generation), processingError, dirtyMetricKinds, claim);
         } else {
             await abandonAfterWriteBlock('task before failure writes');
         }

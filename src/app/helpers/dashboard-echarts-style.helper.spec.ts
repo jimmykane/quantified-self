@@ -133,4 +133,26 @@ describe('buildDashboardEChartsStyleTokens', () => {
     expect(html).toContain('HRV');
     expect(html).toContain('62 ms');
   });
+
+  it('allows long labels and values to wrap within a bounded card without hiding their content', () => {
+    const label = 'Mountain Biking with a long activity label';
+    const value = '12d 23h 59m 59s (100.0%), 100 activities';
+    const container = document.createElement('div');
+    container.innerHTML = renderDashboardEChartsTooltipCard(buildDashboardEChartsStyleTokens(false, 320), {
+      rows: [{ label, value, markerColor: '#42a5f5' }],
+    });
+    const row = container.querySelector('[aria-label]')!;
+    const line = row.firstElementChild as HTMLElement;
+    const labelElement = line.firstElementChild!.lastElementChild as HTMLElement;
+    const valueElement = line.lastElementChild as HTMLElement;
+
+    expect(row.getAttribute('aria-label')).toBe(`${label}: ${value}`);
+    expect(line.style.flexWrap).toBe('wrap');
+    for (const element of [labelElement, valueElement]) {
+      expect(element.style.whiteSpace).toBe('normal');
+      expect(element.style.overflowWrap).toBe('anywhere');
+    }
+    expect(valueElement.style.maxWidth).toBe('100%');
+    expect(valueElement.style.marginInlineStart).toBe('auto');
+  });
 });

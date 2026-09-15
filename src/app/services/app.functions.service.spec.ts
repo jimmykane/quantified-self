@@ -188,6 +188,28 @@ describe('AppFunctionsService', () => {
         expect(mocks.callableSpy).not.toHaveBeenCalled();
     });
 
+    it('does not dispatch a cancelled operation, including on the emulator', async () => {
+        mocks.setLocalhost(true); mocks.setUseFunctionsEmulator(true);
+        await expect(service.call('defaultRegionFunc' as any, undefined, { canExecute: () => false }))
+            .rejects.toThrow('Operation cancelled');
+        expect(mocks.callableSpy).not.toHaveBeenCalled();
+        expect(mocks.ensureReadyMock).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('rechecks local cancellation after App Check (retry: %s)', async retry => {
+        let current = true;
+        if (retry) mocks.callableSpy.mockRejectedValueOnce({
+            code: 'functions/failed-precondition', message: 'App Check verification failed.',
+        });
+        mocks.ensureReadyMock.mockImplementation(async (refresh?: boolean) => {
+            if (!retry || refresh) current = false;
+        });
+        await expect(service.call('defaultRegionFunc' as any, { value: 1 }, { canExecute: () => current }))
+            .rejects.toThrow('Operation cancelled');
+        expect(mocks.callableSpy).toHaveBeenCalledTimes(retry ? 1 : 0);
+        if (retry) expect(mocks.callableSpy).toHaveBeenCalledWith({ value: 1 });
+    });
+
     it('does not gate an emulated callable on hosted App Check readiness', async () => {
         TestBed.resetTestingModule();
         mocks.setLocalhost(true);

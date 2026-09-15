@@ -36,8 +36,8 @@ export class ActivityCalendarGridComponent implements OnChanges {
   ngOnChanges(): void {
     this.isMonthPicker = this.compact && !this.fillHeight && this.model?.view === 'month';
     const months = this.model?.months ?? [];
-    // Keep the query window and fixed-height calendars intact. Only the picker omits empty trailing weeks.
-    this.visibleMonths = this.isMonthPicker && this.hideOutsideDays
+    // Trim only the rendered compact month; the source model and its query window stay intact.
+    this.visibleMonths = this.compact && this.model?.view === 'month' && this.hideOutsideDays
       ? months.map(month => {
         const lastDay = month.days.reduce((last, day, index) => day.inPrimaryPeriod ? index : last, -1);
         return { ...month, days: month.days.slice(0, Math.ceil((lastDay + 1) / 7) * 7) };

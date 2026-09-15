@@ -18,7 +18,7 @@ import { DELIVERY_SERVICES, productionDeliveryRuntime } from './runtime';
 import { deliveryIdentity } from './intent';
 import { projectDelivery } from './store';
 
-describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Firestore transactions', () => {
+describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Firestore transactions', { timeout: 30_000 }, () => {
   // Never accept a production project or a non-loopback emulator endpoint.
   const host = process.env.FIRESTORE_EMULATOR_HOST;
   if (host && !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error('Loopback emulator required.');
@@ -96,6 +96,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     }
     await db.terminate();
   }, 120_000);
+  it('rejects non-pilot opt-in at the backend even with Pro and an authoritative connection', async () => {
+    runtime.transport = productionDeliveryRuntime(db).transport;
+    expect(await trainingDeliveryCommand(runtime, uid, command(), true)).toMatchObject({ available: false });
+    await expect(trainingDeliveryCommand(runtime, uid, command(), false)).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+    expect((await db.collection(DELIVERY_QUEUE).where('uid', '==', uid).get()).empty).toBe(true);
+    expect(await ledgers()).toEqual([]);
+  });
+  it('fences existing queued work for a non-pilot UID before any transport operation', async () => {
+    const ledger = await send();
+    runtime.transport = productionDeliveryRuntime(db).transport;
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls).toHaveLength(0);
+    expect((await ledgers())[0]).toMatchObject({ status: 'provider_unavailable', actual: null, attempt: null });
+    expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).exists).toBe(false);
+  });
   it('replays receipts, rejects conflicts/reused IDs, and performs one create for duplicate concurrent tasks', async () => {
     const request = command();
     const setting = await trainingDeliveryCommand(runtime, uid, request, false);
@@ -404,7 +420,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     const root = db.collection(service.tokens).doc(uid);
     await user.collection('meta').doc(service.name).set({ connectionState: 'connected', connectionStateGeneration: 'g1' });
     await root.set({ activeOAuthCredentialGeneration: 'credential' });
-    await root.collection('tokens').doc('first').set({ userID: 'provider-a', tokenCredentialGeneration: 'credential', accessToken: 'fixture-only' });
+    await root.collection('tokens').doc('first').set({ userID: 'provider-a', tokenCredentialGeneration: 'credential', accessToken: 'fixture-only', serviceName: service.name, permissions: ['WORKOUT_IMPORT'] });
     const actual = productionDeliveryRuntime(db);
     const resolve = () => db.runTransaction(tx => actual.connection(tx, uid, 'garmin'));
     expect((await resolve()).state).toBe('connected');

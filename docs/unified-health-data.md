@@ -317,6 +317,15 @@ The Health workspace defines no preferred-source policy for calculations or the 
 
 ## Health workspace contract
 
+The Health explorer hides `distance`, `active_duration`, and `altitude` from both the complete and availability-filtered
+metric pickers. Previously saved selections of these metrics fall back to Resting heart rate through the normal workspace
+selection handling. This is a frontend display policy only: provider requests, ingestion, storage, shared metric definitions,
+and MCP access are unchanged. Steps, floors climbed, and moderate/vigorous intensity durations remain selectable.
+Garmin imports distance and active duration from `dailies`, bundled with steps, energy, heart rate, and stress.
+Altitude is mapped from Suunto 24/7 Activity `entryData.Altitude` into interval sample chunks; the Garmin Health mapper
+does not emit altitude. Suunto's same Activity response also supplies heart-rate and other 24/7 samples, so there is no
+altitude-only request to disable in the current integration. Altitude readings are not workout ascent/descent totals.
+
 Health uses the shared `app-compact-row` primitive for Highlights and provider chart sections, with its compact stacked
 layout. Dividers separate sections instead of nested card outlines; the metric explorer and normalized Sleep chart do
 not add another card wrapper. The Sources sheet, date controls, observation-table disclosure, provider isolation,

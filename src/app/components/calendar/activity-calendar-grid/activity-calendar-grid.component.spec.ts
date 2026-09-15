@@ -174,7 +174,7 @@ describe('ActivityCalendarGridComponent', () => {
     [2026, 8, DaysOfTheWeek.Monday, 35],
     [2026, 7, DaysOfTheWeek.Monday, 42],
     [2026, 7, DaysOfTheWeek.Sunday, 42],
-  ])('shows only occupied weeks in the picker for %i/%i, week start %i', async (year, month, startOfWeek, count) => {
+  ])('shows only occupied weeks in compact tiles and pickers for %i/%i, week start %i', async (year, month, startOfWeek, count) => {
     const fixture = await renderGrid('month', true, []);
     const model = buildActivityCalendarViewModel([], {
       view: 'month', anchorDate: new Date(year, month, 1), startOfWeek, now: new Date(year, month, 1),
@@ -192,7 +192,7 @@ describe('ActivityCalendarGridComponent', () => {
       .toHaveLength(new Date(year, month + 1, 0).getDate());
     expect(model.months[0].days).toHaveLength(42);
     fixture.componentRef.setInput('fillHeight', true); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day')).toHaveLength(42);
+    expect(fixture.nativeElement.querySelectorAll('.activity-calendar-day')).toHaveLength(count);
     expect(fixture.nativeElement.querySelector('.activity-calendar--picker')).toBeNull();
     fixture.componentRef.setInput('fillHeight', false);
     fixture.componentRef.setInput('hideOutsideDays', false); fixture.detectChanges();
@@ -315,18 +315,16 @@ describe('ActivityCalendarGridComponent', () => {
     expect(compactStageRule).toContain('flex: 0 0 20px;');
   });
 
-  it('fits all six compact calendar weeks inside the available mobile tile height', () => {
+  it('distributes visible weeks across the tile height without limiting the layout to mobile', () => {
     const styles = readFileSync(
       resolve(process.cwd(), 'src/app/components/calendar/activity-calendar-grid/activity-calendar-grid.component.scss'),
       'utf8',
     );
-    const mobileStyles = styles.match(/@media \(max-width: 860px\)\s*\{([\s\S]*)\}\s*@media \(prefers-reduced-motion:/)?.[1];
-
-    expect(mobileStyles).not.toContain('.activity-calendar--compact');
-    expect(mobileStyles).toMatch(
-      /\.activity-calendar--fill-height \.activity-calendar-days\s*\{[^}]*min-height:\s*0;[^}]*grid-template-rows:\s*repeat\(6, minmax\(0, 1fr\)\);/s,
+    expect(styles).not.toContain('@media (max-width: 860px)');
+    expect(styles).toMatch(
+      /\.activity-calendar--fill-height \.activity-calendar-days\s*\{[^}]*min-height:\s*0;[^}]*grid-auto-rows:\s*minmax\(0, 1fr\);/s,
     );
-    expect(mobileStyles).toMatch(
+    expect(styles).toMatch(
       /\.activity-calendar--fill-height \.activity-calendar-day\s*\{[^}]*min-height:\s*0;[^}]*padding-block:\s*0;/s,
     );
   });

@@ -14,6 +14,7 @@ export interface DeliveryConnection {
   destinationKey: string;
   generation: string;
   epoch: number;
+  issues?: string[];
 }
 export interface DeliveryAssessment {
   level: 'exact' | 'degraded' | 'unsupported';
@@ -38,9 +39,24 @@ export interface DeliveryOperation {
   contentDigest: string | null;
   workout: ScheduledWorkoutV1 | null;
   artifact: DeliveryArtifact | null;
+  /** Internal transport journal. null proves a new operation has made no request;
+   * absence is a legacy/unknown journal and must not authorize a non-idempotent retry. */
+  progress?: DeliveryTransportProgress | null;
+  /** Conflicting late acceptance is retained separately and needs operator inspection.
+   * Retry must not execute from a journal that may have been overtaken by another lease. */
+  recoveryBlocked?: boolean;
 }
+export interface DeliveryTransportProgress {
+  version: 1;
+  step: string;
+  state: 'ready' | 'started' | 'rejected' | 'accepted';
+}
+export type DeliveryCheckpoint = (artifact: DeliveryArtifact | null, progress?: DeliveryTransportProgress | null) => Promise<void>;
+/** Recheck the exact attempt, lease, current intent and authority before EVERY request.
+ * Reads may inspect an obsolete operation; writes must still match current intent. */
+export type DeliveryRequestGuard = (mutating: boolean) => Promise<void>;
 export type DeliveryRecovery = { kind: 'accepted'; artifact: DeliveryArtifact | null }
-  | { kind: 'not-accepted' } | { kind: 'uncertain' };
+  | { kind: 'not-accepted' } | { kind: 'resume' } | { kind: 'uncertain' };
 
 /** Adapters must checkpoint every accepted artifact (e.g. workout, then schedule).
  * Final upsert acceptance requires a nonempty artifact identity; final removal requires null.
@@ -50,12 +66,23 @@ export interface TrainingDeliveryTransport {
   horizonDays: number;
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string): boolean;
-  execute(operation: DeliveryOperation, checkpoint: (artifact: DeliveryArtifact | null) => Promise<void>): Promise<DeliveryArtifact | null>;
-  recover(operation: DeliveryOperation): Promise<DeliveryRecovery>;
+  execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
+  recover(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryRecovery>;
 }
 export class TrainingDeliveryTransportError extends Error {
+  readonly diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' };
   constructor(public readonly kind: 'retryable' | 'auth' | 'permission' | 'terminal' | 'uncertain',
-    public readonly retryAfterMs = 0) { super(kind); }
+    public readonly retryAfterMs = 0,
+    diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' } = {}) {
+    super(kind);
+    // Allowlisted diagnostics only: never forward HTTP bodies, URLs, IDs or error messages.
+    this.diagnostics = {
+      ...(Number.isInteger(diagnostics.httpStatus) && diagnostics.httpStatus! >= 100 && diagnostics.httpStatus! <= 599
+        ? { httpStatus: diagnostics.httpStatus } : {}),
+      ...(['request', 'response', 'decode', 'contract'].includes(diagnostics.failurePhase ?? '')
+        ? { failurePhase: diagnostics.failurePhase } : {}),
+    };
+  }
 }
 export interface DeliveryRuntime {
   db: Firestore;
@@ -89,6 +116,9 @@ export interface DeliveryLedgerV1 {
   lease: { id: string; expiresAtMs: number } | null;
   retries: number;
   retryAtMs: number;
+  /** Adapter-imposed minimum delay survives authored edits and explicit Retry.
+   * Optional only for older ledgers; this is not an account-wide quota scheduler. */
+  providerNotBeforeMs?: number;
   blockedConnectionGeneration: string | null;
   lastAttemptAtMs: number | null;
   lastAcceptedAtMs: number | null;

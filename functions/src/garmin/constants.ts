@@ -8,7 +8,6 @@ export const GARMIN_ALL_PERMISSIONS = [
     'WORKOUT_IMPORT',
     'HEALTH_EXPORT',
     'COURSE_IMPORT',
-    'MCT_EXPORT'
 ];
 
 export const GARMIN_REQUIRED_PERMISSIONS = [

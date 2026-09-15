@@ -15,6 +15,7 @@ import { GARMIN_REQUIRED_PERMISSIONS } from '../../../../../functions/src/garmin
 import { ACTIVITY_SYNC_ROUTE_IDS } from '@shared/activity-sync-routes';
 import { isActivitySyncRouteUIDAllowlisted } from '@shared/activity-sync-rollout';
 import { Subscription } from 'rxjs';
+import { GARMIN_PERMISSION_DETAILS } from '../../../helpers/garmin-permissions.helper';
 import {
   buildSuuntoServiceConnectionViewModel,
   SuuntoServiceConnectionViewModel,
@@ -23,6 +24,7 @@ import { GARMIN_SLEEP_BACKFILL_REQUIRED_PERMISSIONS } from '@shared/sleep-backfi
 import {
   GARMIN_ROUTE_SEND_REQUIRED_PERMISSIONS,
   getGarminProviderUserIdFromTokenLike,
+  getGarminPermissionsFromTokenLike,
   hasConnectedGarminToken,
   selectPreferredGarminTokenLike,
 } from '@shared/garmin-service-token';
@@ -43,23 +45,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   public serviceName: ServiceNames = ServiceNames.GarminAPI;
 
-  public readonly permissionLabels: { [key: string]: string } = {
-    'HISTORICAL_DATA_EXPORT': 'History Importer',
-    'ACTIVITY_EXPORT': 'Activity Sync',
-    'WORKOUT_IMPORT': 'Workout Import',
-    'HEALTH_EXPORT': 'Health Export',
-    'COURSE_IMPORT': 'Course Import',
-    'MCT_EXPORT': 'Menstrual Cycle Tracking Export'
-  };
-
-  public readonly permissionExplanations: { [key: string]: string } = {
-    'HISTORICAL_DATA_EXPORT': 'Without this, you cannot import your past activities from Garmin Connect.',
-    'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
-    'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
-    'HEALTH_EXPORT': 'Required for Garmin Sleep and supported Health summary imports.',
-    'COURSE_IMPORT': 'Required to send saved routes and manually selected GPX or FIT routes to Garmin Connect.',
-    'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
-  };
+  public readonly permissionLabels = Object.fromEntries(GARMIN_PERMISSION_DETAILS.map(permission => [permission.id, permission.label]));
+  public readonly permissionExplanations = Object.fromEntries(GARMIN_PERMISSION_DETAILS.map(permission => [permission.id, permission.description]));
 
   public readonly garminToSuuntoRouteID = ACTIVITY_SYNC_ROUTE_IDS.GarminAPI_to_SuuntoApp;
   public isSavingSyncRoute = false;
@@ -114,8 +101,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get shouldShowConnectAction(): boolean {
-    return (!this.isConnectedToService() || this.isReconnectRequired || this.isDisconnectManualReviewRequired)
-      && (!this.isDisconnectPending || this.isDisconnectManualReviewRequired);
+    return this.isDisconnectManualReviewRequired
+      || (!this.isDisconnectPending && (!this.isConnectedToService() || this.isReconnectRequired));
   }
 
   get connectButtonLabel(): string {
@@ -199,7 +186,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   get isHistoryImportLoading(): boolean {
-    return this.isLoading || !this.hasPermissionsLoaded;
+    return this.isLoading;
   }
 
   get hasGarminCourseImportPermission(): boolean {
@@ -218,6 +205,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
    * Attempts to open Garmin Connect mobile app, falls back to web
    */
   openGarminConnectApp(): void {
+    if (!this.user || this.isLoading || this.isConnecting || this.isDisconnecting || this.isDisconnectPending) return;
+    this.hapticsService.selection();
     this.deepLinkService.openGarminConnectApp();
   }
 
@@ -226,6 +215,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
       this.activeActivitySyncDestination = this.initialActivitySyncDestination;
     }
     await super.ngOnChanges();
+    if (this.connectionViewDestroyed) return;
     this.watchSuuntoConnectionState();
   }
 
@@ -279,6 +269,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return this.garminTokens
       .filter((token): token is Record<string, unknown> & { permissions: unknown[] } => (
         Array.isArray(token.permissions)
+        && token.permissions.every(permission => typeof permission === 'string' && permission.trim().length > 0)
         && !!getGarminProviderUserIdFromTokenLike(token)
       ));
   }
@@ -311,7 +302,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   private missingPermissionsForToken(token: { permissions: unknown[] }, requiredPermissions: readonly string[]): string[] {
-    const permissionSet = new Set(token.permissions.map(permission => `${permission}`));
+    const permissionSet = new Set(getGarminPermissionsFromTokenLike(token));
     return requiredPermissions.filter(permission => !permissionSet.has(permission));
   }
 

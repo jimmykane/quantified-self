@@ -1907,6 +1907,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       nowMs,
     });
     this.trainingReadiness = buildTrainingReadinessViewModel(context, {
+      unitSettings: this.unitSettings,
       isPreparing: !context && isUpdating,
       isUpdating,
       calculatedAtMs: nowMs,

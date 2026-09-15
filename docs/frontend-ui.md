@@ -64,6 +64,29 @@ Give each primary route title a stable `titleId` and reference it from the route
 `aria-labelledby`. Keep a title status concise and expose failures with the supplied warning status or an equivalent
 projected `role="alert"` state.
 
+## Shared scrollbars
+
+`src/styles/_scrollbars.scss`, included once by `src/styles.scss`, owns the app's thin, rounded QS scrollbar skin.
+It applies globally with zero-specificity defaults, including document scrolling, Material dialog content/surfaces,
+bottom sheets, menus, selects, autocomplete, nested lists/history, tables, textareas and custom scrollable panels.
+CDK overlays live outside app-root and are covered without a per-dialog class. The existing `qs-scrollbar` class
+remains supported, but forgetting it must not restore a stock scrollbar. Do not add per-component skins.
+
+Standard scrollbar properties and the existing WebKit fallback share Material on-surface colors, transparent tracks,
+and the existing light/dark opacities. The document scrollbar also follows the body's theme (the
+[viewport uses the root element's scrollbar color](https://www.w3.org/TR/css-scrollbars-1/#scrollbar-color), not body's);
+forced-colors mode keeps system colors. The browser still owns scrolling and platform-specific thumb behavior.
+
+The skin does not set overflow, heights, axes, gutters, overscroll behavior or touch handlers. Each component owns its
+scroll layout: constrain the intended content region, keep dialog/sheet headers and actions reachable, and avoid
+accidental nested scrollbars. Existing intentionally hidden sidebar/tab-rail scrollbars remain hidden via their more
+specific rules. Do not hide a needed scrollbar or clip content to mask a layout bug.
+
+For changes, run `src/styles/scrollbars.spec.ts` and the affected component suites, then a production build. Browser
+QA must include genuinely overflowing content in dialogs, sheets and nested panels, horizontal tables, long textareas,
+and light/dark desktop/320px views. Check computed styles, wheel/keyboard scrollability, no-overflow states and the
+existing hidden navigation exceptions; JSDOM alone cannot prove painted scrollbar size or platform touch behavior.
+
 ## Account profile recovery
 
 Firebase Auth identity and account-profile availability are separate states. Authenticated profile reads wait for
@@ -106,6 +129,11 @@ Health uses this combination for Highlights and source-separated charts. The pri
 rounded container, shadow, or nested content padding. `showDivider` controls the bottom divider.
 Training Plans uses the same compact stacked rows for workouts, editable step/repeat blocks, and its history section;
 workflow state and unit-aware workout summaries remain owned by Plans.
+
+Compact **column** lists (currently Garmin permission grants) center icon, heading, description, and trailing status,
+with 24px icons and tighter row padding. At narrow widths, the status stays beside the heading and the description
+wraps underneath; grant labels reserve an equal width so changing status cannot shift the description column.
+This density-specific layout does not change comfortable public rows or stacked Health/Training content.
 
 For stacked chart rows, `[fillHeight]="true"` opts into stretching the row body within its allocated height; it is
 ignored for column layouts and defaults to false. The Health metric explorer uses this on desktop to fill the space
@@ -160,7 +188,10 @@ indicator row for activity circles and Timeline notes. Note colors sit under the
 a short bottom rail. Only wholly empty trailing weeks are omitted (4–6 weeks remain, with weekday alignment preserved).
 The sheet's content scrolls when the viewport cannot accommodate the month. The header stays outside that scroll area,
 and the content respects the bottom safe-area inset. Do not constrain this popup to the dashboard tile's fixed height.
-The default `fillHeight=true` preserves dashboard tiles and chart-library previews; full Month, Week, and Year grids
+The default `fillHeight=true` makes dashboard tiles and chart-library previews distribute their visible weeks evenly
+across the available height at all viewport widths. Compact month grids with hidden outside dates omit wholly empty
+trailing weeks in both layouts, while retaining leading blanks and the original 42-day source/query model. Preview
+wrappers pass their fixed height through to the grid. Full Month, Week, and Year grids retain their existing rows and
 do not opt into the compact height-filling class.
 
 ## Dashboard chart picker
@@ -174,7 +205,10 @@ open section and one local draft. All custom metric charts and presets belong in
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
 there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
 existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
-Rows show the title, format, data-source label, and a small chart beside the chevron; only the selected chart mounts a full preview renderer.
+KPI filters use one horizontally scrollable row with Material's single-selection indicator hidden, retaining the selected
+color and accessible state. Their height stays stable during opening and selection; the rail reserves touch/focus space
+and permits narrow-screen overflow without overriding Material internals.
+Rows show the title, format, availability label, and a small chart beside the chevron; only the selected chart mounts a full preview renderer.
 Desktop opens with the first available chart selected, without extra haptic feedback or any save. Mobile starts with
 the list and opens details on selection. Back from a mobile preview restores focus to the selected row, scrolling it
 into view if needed. Selecting the same entry again is a silent no-op that preserves preview scroll
@@ -201,13 +235,13 @@ and generic tile. It resolves the existing stored renderer types; KPIs and Activ
 have their own UI kinds. Section terminology uses the full catalog, so adding presets or filtering the list cannot
 rename the section action. Draft terminology is recomputed after editor changes. Future renderer kinds belong in this
 resolver and label registry, with generic tile as the safe fallback. This does not change persistence or section routing.
-Chart and map action components use the same `tile-actions-menu.html` and base edit handler; chart-specific auto-tile
-dismissal remains in the chart component. Keep every `mat-menu-item`, including Remove, in the menu template itself:
+Chart and map action components use the same `tile-actions-menu.html` and base edit handler; catalog dismissal is synchronized in the common action persistence path, with legacy
+chart dismissal retained in the chart component. Keep every `mat-menu-item`, including Remove, in the menu template itself:
 Material cannot include items inside a child component’s view in its keyboard navigation. All menu mutations and
 editing are disabled during a pending save, with a spinner in the original action button. Rows and Columns use
 standard Material submenus with checked choices so arrow-key navigation can reach every layout setting.
 The header and Add/Save footer stay outside the scrolling content. The editor stays in the picker and reuses `DashboardTileConfiguration` for existing validation, defaults, uniqueness,
-recommendation eligibility, and auto-tile dismissal rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
+suggestion dismissal, and preset identity rules. Close, Back, backdrop taps, Escape, section switches, and bulk actions protect dirty drafts. Pending saves prevent
 dismissal. Owner/context destruction closes overlays and releases their preview subscriptions. On successful save,
 the dashboard waits for the overlay to close and the chart layout to refresh before focusing and revealing the saved
 chart; cancellation restores the original trigger focus. Existing-tile editing restores the tile's persistent action
@@ -219,17 +253,74 @@ Custom equivalence uses metric, chart style, aggregation, axis, and time bucket 
 New catalog entries need an example and catalog coverage. Homepage signal fixtures are re-exported from the shared
 `dashboard-chart-example-signals.helper.ts`; homepage renderers and dashboard previews remain the existing app charts.
 
+New accounts start with Today, Weekly Training Time (90-day weekly columns grouped by sport), and Calendar. The
+same fixed layout is available through **Reset to starter dashboard**, with a confirmation dialog. Reset requires no
+eligibility reads. Existing layouts, deliberate empty arrays, and saved ranges are preserved; there is no Calendar or
+Routes auto-add subscription. New Intensity/Efficiency tiles use 12 weeks; legacy missing-range normalization stays at
+one year. Sleep/HRV windows and personal-range calculations are unchanged.
+
+`dashboard-chart-discovery.helper.ts` ranks up to two ready, unadded, undismissed choices per section: Form → Sleep →
+HRV → Intensity; cycling → running Power Curve; Weekly Training Time → Calendar → Time by sport; Saved Routes →
+Activity Map; ACWR → Training Balance. Search and KPI groups apply before ranking. Suggestions appear once, followed
+by unseen releases and remaining entries. Availability updates never replace a selected draft. `autoTiles` now also
+stores `preset:<catalog-id>` states for every preset, falling back to legacy dismissal records. Tile-menu removal,
+Remove all, Add, and Undo share this state; dismissing suggestions never hides the manual catalog. Setup/provider
+prompts remain independent.
+
+`dashboard-chart-availability.helper.ts` supplies one status/reason to suggestions, thumbnails, and preview details.
+Readiness requires actual plotted values: usable TSS results, sleep points, individual or overnight HRV, sport-specific
+power-curve points, qualifying intensity/efficiency samples, valid GPS coordinates, or renderable route previews.
+Average power alone cannot qualify a curve; an HRV personal range is optional. Explicit insufficient-comparison history
+uses **Needs more history**. Completed empty sources use **No data in this period**, while loading, pending/stale metric
+snapshots, and errors remain distinct. Last available values may render during updates/errors but are not suggested.
+Synthetic examples are labelled and cannot qualify a suggestion.
+
+Catalog release notifications use each preset's explicit `introducedIn` revision and
+`appSettings.dashboardChartLibrarySeen[section]`. Keep `DASHBOARD_CHART_LIBRARY_BASELINE_REVISION` at 1 and stamp all
+original entries at 1. For an actual new chart type, increment `DASHBOARD_CHART_LIBRARY_CURRENT_REVISION` and stamp
+only the new entries; renames, styling, and description changes retain their revision. New accounts initialize all
+sections to the current revision; existing profiles without metadata use the rollout baseline. The Material **New**
+badge considers unseen, unadded catalog entries regardless of data eligibility. It is absent from shared/public views
+and included in the add action's accessible label.
+
+Opening a section's browse list snapshots its unseen IDs for that session and acknowledges that section only. Editing
+an existing tile does not acknowledge. `DashboardChartDiscoveryService` derives badges from bundled metadata and the
+already-loaded owner settings: no polling or chart reads. It writes only advancing acknowledgements using a Firestore
+transaction that keeps the maximum revision. Full profile settings saves preserve those maxima transactionally too,
+so an older device cannot replay stale acknowledgement state. Dashboard resets patch dashboard settings only.
+Acknowledgement failure never blocks navigation/Add and retries on a later opening, without a background retry loop.
+Successful local acknowledgements are cached by owner; profile-only refreshes do not restart preview subscriptions.
+
 `DashboardChartPreviewService` reads only. Row thumbnails use the shared ECharts host and a bounded, decorative shape
 from the existing preview view model, with no axes, values, tooltips, focus targets, or haptic handlers. The row's
 accessible description includes its format and data source. Preview models are cached across search/group filtering;
-closing the picker disposes its thumbnail charts. Thumbnail rendering uses loaded context or labelled examples and
-does not start additional reads. Selecting a
-chart lazily reads only the missing source (bounded activity window, 14 days of sleep, recent route previews, or the
-required prepared metric snapshots). Subscriptions are shared within a library and released when previews are destroyed.
+closing the picker disposes its thumbnail charts. Opening any section subscribes to its missing sources, scoped to the
+current owner: one combined prepared-metric subscription, one activity read per date range, 14 days of sleep, the shared
+HRV adapter, and up to 50 recent routes as needed. Reused dashboard contexts remain live rather than being copied into
+the library's fetched state, so later imports or removals update previews without another read. Pending or failed metric
+snapshots retain last available values; a completed empty result clears them. Per-metric read failures are reported
+explicitly rather than appearing as an indefinitely missing snapshot. List and detail previews share
+these results and per-source loading/error states; selecting an empty or failed result does not repeat the read.
+Filtering does not resubscribe, one failed source does not block other rows, and closing or changing owners releases
+all reads. Activity windows stay separate, with activity-type filters applied after the shared read; changing custom
+settings to another range loads that range for its detail preview.
+
+KPI trends and semantic colors come from `dashboard-kpi-sparkline.helper.ts`. Other thumbnails reuse the full charts’
+activity-group colors, category palette, pie grouping, date/activity segmentation, sleep stage definitions, Power colors,
+and HRV range/status renderer. Form retains its two panels, weekly derived charts respect their configured range, and
+Sleep includes available stages, naps and vitals. The render is sampled to at most 48 points per series, without labels
+or interactive overlays. A real headline without history stays real, with no invented sparkline. Shared series definitions
+live in `dashboard-chart-series.helper.ts`; public homepage examples remain synthetic.
+
 A historically navigated event/sleep window cannot supply a current preview. Preview event reads exclude merged events.
-Preview paths never call metric ensure/rebuild APIs or persist settings. Synthetic examples remain labelled during loading
+Preview data paths never call metric ensure/rebuild APIs or persist settings. Catalog acknowledgement is a separate settings-only action. Synthetic examples remain labelled during loading
 and on failure. Calendar previews use the stateless calendar grid, so browsing cannot read or edit planned workouts.
 All canonical values continue through existing chart renderers and Sports Lib with the signed-in user's unit settings.
+
+Dashboard tooltip metric rows use the shared `dashboard-echarts-style.helper.ts` renderer. Labels and values can wrap
+within the card's bounded width, with wrapped values remaining aligned to the end. Column-chart sport breakdowns keep
+the canonical metric on the main row and put the percentage of the total and activity count on a separate detail line,
+so long durations do not overlap sport names in compact tiles. Percentages appear only for total aggregation.
 
 The optional HRV preset (`HrvTrend`) belongs in Training State beside Sleep. `DashboardHrvService` supplies both the
 saved tile and picker with the same normalized Health/Sleep sources as the Health workspace. It reads one bounded,

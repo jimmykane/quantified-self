@@ -344,7 +344,7 @@ describe('MCP HTTP scope enforcement', () => {
       );
       expect(priorityPrefix).toContain('get_daily_report');
       expect(priorityPrefix).toContain('get_sleep_trend');
-      expect(priorityPrefix).toContain('get_today_readiness');
+      expect(priorityPrefix).toContain('get_current_readiness');
       expect(priorityPrefix).toContain(
         'current recovery score and its evidence',
       );
@@ -353,7 +353,7 @@ describe('MCP HTTP scope enforcement', () => {
         'summarize readiness in one sentence using at most the two most relevant available drivers',
       );
       expect(todayReadiness?.description).toContain(
-        'same live recovery-aware readiness shown by Dashboard Today',
+        'Legacy formula-3 readiness for compatibility',
       );
       expect(todayReadiness?.description).toContain('same-provider baseline medians');
       expect(dailyReport?.description).toContain(
@@ -380,6 +380,8 @@ describe('MCP HTTP scope enforcement', () => {
   });
 
   it('requires separate activity-detail and route scopes for granular tools', () => {
+    expect(requiredScopesForRequest({ method: 'tools/call', params: { name: 'get_readiness_history' } }))
+      .toEqual([MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.SleepRead, MCP_OAUTH_SCOPES.HealthRead]);
     expect(requiredScopesForRequest({
       method: 'tools/call',
       params: { name: 'list_activity_jumps' },
@@ -515,6 +517,7 @@ describe('MCP HTTP scope enforcement', () => {
       MCP_OAUTH_SCOPES.MetricsRead,
       MCP_OAUTH_SCOPES.SleepRead,
     ])).resolves.toEqual([
+      'get_current_readiness',
       'get_daily_briefing',
       'get_daily_report',
       'get_sleep_trend',

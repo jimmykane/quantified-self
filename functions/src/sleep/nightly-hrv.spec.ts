@@ -30,8 +30,9 @@ describe('shared nightly HRV', () => {
   });
   it('feeds historical readiness from existing canonical Health and Sleep records', async () => {
     const { buildTrainingReadinessMetricPayload } = await import('../derived-metrics/derived-metrics.service');
-    const inputs = [0, 1, 2, 3].map(offset => ({...sleep(), id: `night-${offset}`,
-      sleepDate: `2026-09-${String(11 - offset).padStart(2, '0')}`, startTimeMs: start - offset * 86400000, endTimeMs: end - offset * 86400000}));
+    const inputs = Array.from({ length: 16 }, (_, offset) => ({...sleep(), id: `night-${offset}`,
+      sleepDate: new Date(end - offset * 86400000).toISOString().slice(0, 10),
+      startTimeMs: start - offset * 86400000, endTimeMs: end - offset * 86400000}));
     const records = await Promise.all(inputs.map(async (session, offset) => {
       const r = await record();
       return {...r, calendarDate: session.sleepDate, startTimeMs: session.startTimeMs, endTimeMs: session.endTimeMs,
@@ -41,7 +42,12 @@ describe('shared nightly HRV', () => {
       data: encodeSleepSessionSportsLibData(session) as unknown as Record<string, unknown>})), async () => ({records}));
     const result = buildTrainingReadinessMetricPayload([], 0, documents.map(doc => ({id: doc.id, data: () => doc.data})), end + 3600000);
     expect(result.payload.evidenceVersion).toBe(1);
-    expect(result.payload.points[result.payload.points.length - 1].hrvRatio).toBe(1.1);
+    const today = result.payload.points[result.payload.points.length - 1];
+    expect(today.hrvPersonalRange).toMatchObject({ observationDayCount: 16, currentObservationDayCount: 7,
+      latestMs: 55, baselineAverage: 50 + 5 / 16 });
+    expect(today.hrvPersonalRange?.currentAverage).toBeCloseTo(50 + 5 / 7);
+    expect(today.hrvRatio).toBeCloseTo((50 + 5 / 7) / (50 + 5 / 16));
+    expect(result.payload.legacyPoints![result.payload.legacyPoints!.length - 1].hrvRatio).toBe(1.1);
     expect(JSON.stringify(result.payload)).not.toContain('fixture-account');
     expect(JSON.stringify(result.payload)).not.toContain('SourceKey');
   });

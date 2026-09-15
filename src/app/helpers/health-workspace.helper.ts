@@ -80,7 +80,9 @@ export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRat
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
 const HEALTH_WORKSPACE_METRICS = new Set<HealthWorkspaceMetricSelection>([
   ...APP_HEALTH_WORKSPACE_METRICS,
-]);
+].filter(metric => metric !== HEALTH_METRIC_IDS.Distance
+  && metric !== HEALTH_METRIC_IDS.ActiveDuration
+  && metric !== HEALTH_METRIC_IDS.Altitude));
 
 export interface HealthWorkspaceRouteState {
   metric: HealthWorkspaceMetricSelection;
@@ -406,7 +408,9 @@ export function navigateHealthWorkspaceWindow(
 export function buildHealthMetricCatalogGroups(
   availableMetricIds?: readonly HealthMetricId[],
 ): HealthMetricCatalogGroup[] {
-  const definitions = Object.values(HEALTH_METRIC_CATALOG);
+  // Keep collection and the shared metric contract intact; this is an explorer display choice.
+  const definitions = Object.values(HEALTH_METRIC_CATALOG)
+    .filter(definition => HEALTH_WORKSPACE_METRICS.has(definition.id));
   const available = availableMetricIds === undefined ? null : new Set(availableMetricIds);
   return CATEGORY_ORDER.map(category => ({
     id: category,
@@ -784,10 +788,14 @@ export function buildHealthHrvPersonalRangeStatus(
   unitSettings: UserUnitSettingsInterface | null = null,
   pointTimestampsMs: readonly number[] = series.points.map(point => point.timestampMs),
   startTimeMs?: number,
+  nowMs: number = Date.now(),
 ): HealthHrvPersonalRangeStatus | null {
   if (!isHealthHrvPersonalRangeSemanticVariant(series.semanticVariant)) {
     return null;
   }
+  // Today's range control ends at local midnight. Evaluate at now, like Readiness,
+  // so morning evidence does not fall out of the rolling windows hours too soon.
+  endTimeMs = Math.min(endTimeMs, nowMs);
   const observations = series.points.flatMap(point =>
     typeof point.value === 'number' && Number.isFinite(point.value)
       ? [{ timestampMs: point.timestampMs, calendarDate: point.calendarDate, value: point.value }]
@@ -875,7 +883,7 @@ export function buildHealthHrvPersonalRangeStatus(
       series.unit,
       series.nativeOnly,
       unitSettings,
-    )} · Range ${formatHealthValue(
+    )} · 60-day range ${formatHealthValue(
       series.metricId,
       normalRange.min,
       series.unit,
@@ -945,6 +953,7 @@ export function buildSleepPriorityRows(
       sleepPoint.id = id;
       delete sleepPoint.sourceKey;
       delete sleepPoint.hrvSourceKey;
+      delete sleepPoint.hrvObservations;
     }
     const scoreText = formatSleepMetricValue(
       SLEEP_SPORTS_LIB_METRIC_FIELDS.Score,

@@ -1,25 +1,39 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { Firestore, collection, collectionData, doc, docData, query, where, limit, orderBy } from 'app/firebase/firestore';
-import { combineLatest, map, Observable, of } from 'rxjs';
-import { PLANNED_WORKOUT_PROVIDER_IDS, isPlannedWorkoutProviderDeliveryEnabled } from '@shared/planned-workout-providers';
+import { combineLatest, finalize, firstValueFrom, from, map, Observable, of, timeout } from 'rxjs';
+import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
+import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
 import { deliverySettingsId, parseTrainingDeliverySettingsV1, parseTrainingDeliveryStatusV1,
   TRAINING_DELIVERY_PAGE_SIZE, TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliveryScope, type TrainingDeliverySettingsV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
+import { AppUserService } from './app.user.service';
+import { TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '@shared/training-plans';
 
-export interface TrainingDeliveryView { settings: TrainingDeliverySettingsV1[]; statuses: TrainingDeliveryStatusV1[]; }
+export interface TrainingDeliveryView {
+  settings: TrainingDeliverySettingsV1[];
+  statuses: TrainingDeliveryStatusV1[];
+  /** Summary-only look-ahead for plan workout overrides; ordinary dialog pagination is unchanged. */
+  summaryComplete?: boolean;
+}
 /** History is a read-only UI scope, never a delivery command or new consent scope. */
 export type TrainingDeliveryViewScope = TrainingDeliveryScope | 'history';
 export const EMPTY_TRAINING_DELIVERY_VIEW: TrainingDeliveryView = { settings: [], statuses: [] };
+export const TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS = 30_000;
+export const TRAINING_DELIVERY_SAVE_TIMEOUT_MS = 70_000;
+// One look-ahead beyond the current 400-workout/four-provider bound. Historical
+// identities can exceed it; summaries must then explicitly withhold complete totals.
+export const TRAINING_DELIVERY_SUMMARY_LIMIT = TRAINING_PLAN_MAX_CURRENT_WORKOUTS * PLANNED_WORKOUT_PROVIDER_IDS.length + 1;
 
 @Injectable({ providedIn: 'root' })
 export class TrainingDeliveryService {
   private readonly firestore = inject(Firestore);
   private readonly functions = inject(AppFunctionsService);
   private readonly browser = inject(BrowserCompatibilityService);
-  readonly isReady = isPlannedWorkoutProviderDeliveryEnabled;
-  readonly anyReady = PLANNED_WORKOUT_PROVIDER_IDS.some(isPlannedWorkoutProviderDeliveryEnabled);
+  private readonly users = inject(AppUserService);
+  readonly isReady = (provider: PlannedWorkoutProviderId) => isTrainingProviderDeliveryEnabled(provider, this.users.user()?.uid);
+  readonly anyReady = computed(() => PLANNED_WORKOUT_PROVIDER_IDS.some(provider => this.isReady(provider)));
 
   createMutationId(): string {
     return this.browser.createRandomUUID() ?? `delivery-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -47,10 +61,37 @@ export class TrainingDeliveryService {
       map(values => values.map(parseTrainingDeliveryStatusV1)));
     return combineLatest([settings$, statuses$]).pipe(map(([settings, statuses]) => ({ settings, statuses })));
   }
-  async preview(command: TrainingDeliveryCommandV1): Promise<TrainingDeliveryPreviewV1> {
-    return (await this.functions.call<TrainingDeliveryCommandV1, TrainingDeliveryPreviewV1>('previewTrainingProviderDelivery', command)).data;
+  watchSummaryScope(uid: string, scope: 'plan' | 'workout', id: string, parentPlanId: string | null): Observable<TrainingDeliveryView> {
+    const view$ = this.watchScope(uid, scope, id, TRAINING_DELIVERY_SUMMARY_LIMIT);
+    if (!uid) return view$;
+    if (scope === 'plan') {
+      const overrides$ = collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS),
+        where('scope', '==', 'workout'), where('associationPlanId', '==', id), limit(TRAINING_DELIVERY_SUMMARY_LIMIT))).pipe(
+        map(values => values.map(parseTrainingDeliverySettingsV1)));
+      return combineLatest([view$, overrides$]).pipe(map(([view, overrides]) => ({ ...view,
+        settings: [...view.settings, ...overrides], summaryComplete: overrides.length < TRAINING_DELIVERY_SUMMARY_LIMIT })));
+    }
+    if (!parentPlanId) return view$;
+    const parent$ = combineLatest(PLANNED_WORKOUT_PROVIDER_IDS.map(provider => docData(doc(this.firestore,
+      'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId('plan', parentPlanId, provider))))).pipe(
+      map(values => values.filter(value => value !== undefined).map(parseTrainingDeliverySettingsV1)));
+    return combineLatest([view$, parent$]).pipe(map(([view, parent]) => ({ ...view, settings: [...view.settings, ...parent] })));
   }
-  async mutate(command: TrainingDeliveryCommandV1): Promise<TrainingDeliverySettingsV1> {
-    return (await this.functions.call<TrainingDeliveryCommandV1, TrainingDeliverySettingsV1>('mutateTrainingProviderDelivery', command)).data;
+  async preview(command: TrainingDeliveryCommandV1, canExecute: () => boolean = () => true): Promise<TrainingDeliveryPreviewV1> {
+    return this.invoke<TrainingDeliveryPreviewV1>('previewTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_PREVIEW_TIMEOUT_MS);
+  }
+  async mutate(command: TrainingDeliveryCommandV1, canExecute: () => boolean = () => true): Promise<TrainingDeliverySettingsV1> {
+    return this.invoke<TrainingDeliverySettingsV1>('mutateTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_SAVE_TIMEOUT_MS);
+  }
+  private async invoke<T>(name: 'previewTrainingProviderDelivery' | 'mutateTrainingProviderDelivery',
+    command: TrainingDeliveryCommandV1, canExecute: () => boolean, timeoutMs: number): Promise<T> {
+    const uid = this.users.user()?.uid;
+    let active = true;
+    // Bound App Check/token readiness as well as HTTP. A timeout cannot undo an
+    // in-flight write: the dialog retains its mutation ID for a safe receipt replay.
+    const result = await firstValueFrom(from(this.functions.call<TrainingDeliveryCommandV1, T>(name, command, {
+      canExecute: () => active && !!uid && this.users.user()?.uid === uid && canExecute(),
+    })).pipe(timeout(timeoutMs), finalize(() => { active = false; })));
+    return result.data;
   }
 }

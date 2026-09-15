@@ -95,6 +95,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
       this.activeActivitySyncDestination = this.initialActivitySyncDestination;
     }
     await super.ngOnChanges();
+    if (this.connectionViewDestroyed) return;
     this.watchSuuntoConnectionState();
   }
 

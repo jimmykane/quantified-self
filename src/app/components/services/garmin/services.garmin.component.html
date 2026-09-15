@@ -1,14 +1,23 @@
 <ng-template #garminPermissionUpdateGuidance>
-  <p><strong>To update permissions:</strong></p>
-  <a class="tool-link" (click)="openGarminConnectApp(); $event.preventDefault()" href="javascript:void(0)">
-    Open Garmin Connect
-  </a>
+  <p><strong>Change permissions in Garmin Connect</strong></p>
+  <button mat-button type="button" (click)="openGarminConnectApp()"
+    [disabled]="!user || isLoading || isConnecting || isDisconnecting || isDisconnectPending">
+    <mat-icon>open_in_new</mat-icon> Manage in Garmin
+  </button>
   <p><strong>Navigate to:</strong></p>
   <ul class="permissions-list">
     <li><strong>Web:</strong> Account Information, then Connected Apps</li>
     <li><strong>App:</strong> More, Settings, then Connected Apps</li>
   </ul>
-  <p class="permission-description">After updating permissions, reconnect to refresh.</p>
+  <p class="permission-description">Select Quantified Self under Connected Apps to manage the permissions Garmin offers. Changes appear here after Garmin reports them. You do not need to disconnect in Quantified Self first.</p>
+</ng-template>
+
+<ng-template #unknownGarminPermissions>
+  <app-status-info type="info" title="Permission details unavailable">
+    Garmin has not reported permissions for this saved connection. This does not mean access was denied.
+    {{ showConnectionSummary ? 'Check access using Manage in Garmin below.' : 'Close this tool and use Manage in Garmin on the connection overview to check access.' }}
+    If permission details remain unavailable, contact support.
+  </app-status-info>
 </ng-template>
 
 <div
@@ -48,7 +57,7 @@
     @if (isConnectedToService()) {
     <div class="connection-account-row">
       <div class="connection-account-info">
-    @if (!garminUserID || !hasPermissionsLoaded) {
+    @if (isLoading || !garminUserID) {
     <app-service-syncing-state></app-service-syncing-state>
     } @else {
     <div class="connected-account-list" role="list">
@@ -85,7 +94,7 @@
       </div>
 
       <button mat-stroked-button class="connection-disconnect-button qs-mat-warn"
-        [disabled]="isLoading || isDisconnecting" (click)="deauthorizeService($event)">
+        [disabled]="isLoading || isDisconnecting || isConnecting" (click)="deauthorizeService($event)">
         @if (isDisconnecting) {
         <span class="connection-action-content">
           <mat-spinner diameter="20" class="qs-spinner-warn"></mat-spinner>
@@ -99,21 +108,9 @@
       </button>
     </div>
 
-    <div *ngIf="missingPermissions.length > 0" class="qs-warning-box">
-      <mat-icon>warning</mat-icon>
-      <div class="qs-warning-content">
-        <strong>Missing Permissions</strong>
-        <p>Some features are disabled. Missing permissions:</p>
-        <ul class="permissions-list">
-          <li *ngFor="let permission of missingPermissions">
-            <div class="permission-name">{{ getPermissionLabel(permission) }}</div>
-            <div class="permission-description">{{ getPermissionExplanation(permission) }}</div>
-          </li>
-        </ul>
-        <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
-      </div>
-    </div>
     }
+    <app-garmin-permissions [accounts]="user ? serviceTokens : undefined" [loading]="isLoading"></app-garmin-permissions>
+    <ng-container [ngTemplateOutlet]="garminPermissionUpdateGuidance"></ng-container>
     </div>
 
     <div connection-actions class="tool-actions">
@@ -125,7 +122,7 @@
       }
       @if (shouldShowConnectAction) {
       <button mat-flat-button class="qs-mat-primary"
-        [disabled]="!user || isLoading || isConnecting" (click)="connectWithService($event)">
+        [disabled]="!user || isLoading || isConnecting || isDisconnecting" (click)="connectWithService($event)">
         @if (isConnecting) {
         <span class="connection-action-content">
           <mat-spinner diameter="20" class="qs-spinner-accent"></mat-spinner>
@@ -133,7 +130,7 @@
         </span>
         } @else {
         <span class="connection-action-content">
-          <mat-icon>{{ canConnectServiceWithCurrentAccess ? (isReconnectRequired || isDisconnectManualReviewRequired ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
+          <mat-icon>{{ canConnectServiceWithCurrentAccess ? (connectButtonLabel === 'Reconnect' ? 'sync' : 'link') : 'workspace_premium' }}</mat-icon>
           {{ canConnectServiceWithCurrentAccess ? connectButtonLabel : 'View Pro plans' }}
         </span>
         }
@@ -200,23 +197,27 @@
     @if (!showOnlyActiveProviderTool || activeProviderTool === 'history') {
     <section
       class="provider-tool-panel"
-      [hidden]="activeProviderTool !== 'history'"
-      [class.locked-panel]="!hasProAccess"
-      (click)="!hasProAccess && triggerUpsell()">
+      [hidden]="activeProviderTool !== 'history'">
       @if (!hasProAccess) {
-      <div class="pro-required-inline">
+      <button mat-button type="button" class="pro-required-inline" appHapticTap (click)="triggerUpsell()">
         <mat-icon>lock</mat-icon>
         <span>History import is a Pro feature.</span>
-      </div>
+      </button>
       } @else if (isReconnectRequired) {
       <app-status-info type="info" title="Reconnect Garmin Required">
         Reconnect Garmin before importing history.
       </app-status-info>
       } @else if (isConnectedToService()) {
+      @if (isLoading) {
+      <app-service-syncing-state></app-service-syncing-state>
+      } @else if (!hasPermissionsLoaded) {
+      <ng-container [ngTemplateOutlet]="unknownGarminPermissions"></ng-container>
+      } @else {
       <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
         [missingPermissions]="missingPermissions" [isLoadingParent]="isHistoryImportLoading"
         [providerConnected]="true"
         (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
+      }
       } @else {
       <app-status-info type="info" title="Connect Account First">
         You need to connect your Garmin account before importing history.
@@ -228,8 +229,7 @@
     @if (!showOnlyActiveProviderTool || activeProviderTool === 'uploads') {
     <section
       class="provider-tool-panel"
-      [hidden]="activeProviderTool !== 'uploads'"
-      [class.locked-panel]="!hasProAccess">
+      [hidden]="activeProviderTool !== 'uploads'">
       <section class="tool-subsection">
         <div class="tool-subsection-header">
           <div class="tool-subsection-title">
@@ -241,7 +241,7 @@
           Select a GPX or FIT route file to create a Garmin Connect course. This sends the route directly to Garmin and does not create or retain a route in Quantified Self.
         </p>
         @if (!hasProAccess) {
-        <button mat-button type="button" class="pro-required-inline" (click)="triggerUpsell()">
+        <button mat-button type="button" class="pro-required-inline" appHapticTap (click)="triggerUpsell()">
           <mat-icon>lock</mat-icon>
           <span>Sending routes to Garmin is a Pro feature.</span>
         </button>
@@ -249,16 +249,18 @@
         <app-status-info type="info" title="Connect Account First">
           Connect Garmin before sending GPX or FIT routes.
         </app-status-info>
-        } @else if (!hasPermissionsLoaded) {
+        } @else if (isLoading) {
         <app-service-syncing-state></app-service-syncing-state>
+        } @else if (!hasPermissionsLoaded) {
+        <ng-container [ngTemplateOutlet]="unknownGarminPermissions"></ng-container>
         } @else if (!hasGarminCourseImportPermission) {
         <app-status-info type="info" title="Allow Course Import">
-          Reconnect Garmin and allow Course Import before sending routes.
+          Allow Course Import in Garmin Connect before sending routes.
         </app-status-info>
         } @else {
         <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess" [serviceName]="serviceName"></app-upload-route-to-service>
         <app-status-info type="info" title="Garmin course access">
-          Garmin receives a course created from the selected GPX or FIT route. If Course Import was enabled after you connected, reconnect Garmin once to refresh that permission.
+          Garmin receives a course created from the selected GPX or FIT route. Permission changes appear after Garmin reports them.
         </app-status-info>
         }
       </section>
@@ -269,9 +271,7 @@
     <section
       class="provider-tool-panel"
       [class.provider-tool-panel--focused]="showOnlyActiveProviderTool"
-      [hidden]="activeProviderTool !== 'auto-sync'"
-      [class.locked-panel]="!hasProAccess"
-        (click)="!hasProAccess && triggerUpsell()">
+      [hidden]="activeProviderTool !== 'auto-sync'">
         @if (showOnlyActiveProviderTool) {
         <mat-button-toggle-group
           class="activity-sync-destination-selector"
@@ -304,10 +304,10 @@
           <span>Send Garmin activities to Suunto</span>
         </div>
         @if (!hasProAccess) {
-        <div class="pro-required-inline">
+        <button mat-button type="button" class="pro-required-inline" appHapticTap (click)="triggerUpsell()">
           <mat-icon>lock</mat-icon>
           <span>Sending Garmin activities to Suunto is a Pro feature.</span>
-        </div>
+        </button>
         } @else if (isSuuntoReconnectRequired) {
         <app-status-info type="info" title="Reconnect Suunto Required">
           Reconnect Suunto before syncing Garmin activities.
@@ -327,7 +327,7 @@
           <mat-icon>warning</mat-icon>
           <div class="qs-warning-content">
             <strong>Allow automatic Garmin activity sync</strong>
-            <p>Reconnect Garmin and allow Activity Export so new Garmin activities can be sent to Suunto automatically.</p>
+            <p>Allow Activity Export in Garmin Connect so new Garmin activities can be sent to Suunto automatically.</p>
           </div>
         </div>
         }
