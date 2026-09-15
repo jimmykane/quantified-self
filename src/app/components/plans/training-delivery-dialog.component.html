@@ -6,12 +6,19 @@
     </button>
   }
   <div class="delivery-context">
-    <p class="delivery-subtitle">{{ scopeTitle() }}</p>
-    @if (workout(); as workout) {
-      <p class="delivery-caption">
-        <time [attr.datetime]="workout.localDate">{{ workout.localDate | date:'EEE, MMM d, y' }}</time>
-        · {{ workout.planId ? 'Plan: ' + (parentPlan()?.name ?? 'Unavailable plan') : 'Standalone workout' }}
-      </p>
+    <div class="delivery-context-copy">
+      <p class="delivery-subtitle">{{ scopeTitle() }}</p>
+      @if (workout(); as workout) {
+        <p class="delivery-caption">
+          <time [attr.datetime]="workout.localDate">{{ workout.localDate | date:'EEE, MMM d, y' }}</time>
+          · {{ workout.planId ? 'Plan: ' + (parentPlan()?.name ?? 'Unavailable plan') : 'Standalone workout' }}
+        </p>
+      }
+    </div>
+    @if (workoutRoute() && !draft()) {
+      <a mat-button class="delivery-edit-workout" [routerLink]="workoutRoute()" appHapticTap (click)="dialogRef.close()">
+        <mat-icon aria-hidden="true">edit</mat-icon>Edit workout
+      </a>
     }
   </div>
   @if (data.scope === 'history') { <p class="delivery-caption">Individual workouts across your plans and standalone workouts. Select a workout for sync details.</p> }
@@ -160,7 +167,6 @@
     } @empty { @if (view().loaded) { <p>No providers are available for workout delivery yet.</p> } }
     @if (canLoadMore()) { <button mat-button appHapticTap type="button" (click)="loadMore()" [disabled]="busy()">Show more workout statuses</button> }
   }
-  @if (workoutRoute() && !draft()) { <a mat-button [routerLink]="workoutRoute()" appHapticTap (click)="dialogRef.close()"><mat-icon aria-hidden="true">edit</mat-icon>Edit workout</a> }
   <div class="delivery-guidance">
     <button mat-button appHapticTap type="button" (click)="guidanceExpanded.set(!guidanceExpanded())"
       [attr.aria-expanded]="guidanceExpanded()" aria-controls="delivery-guidance-details">

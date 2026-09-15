@@ -98,6 +98,7 @@ export const disableActivitySyncRoutesOnGarminTokenRootDelete = onDocumentDelete
 export const disableActivitySyncRoutesOnSuuntoTokenRootDelete = onDocumentDeleted({
   document: `${SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  memory: '512MiB',
   retry: true,
 }, async (event) => {
   await handleServiceTokenRootDisconnected(

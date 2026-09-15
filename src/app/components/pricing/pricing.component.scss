@@ -1,6 +1,12 @@
 @use '../../../styles/breakpoints' as bp;
 
+:host {
+  display: block;
+  min-width: 0;
+}
+
 .pricing-container {
+  container: pricing / inline-size;
   padding: 28px 20px;
   min-height: 80vh;
   display: flex;
@@ -884,6 +890,7 @@
   }
 
   .product-card-shell {
+    container: pricing-card / inline-size;
     position: relative;
     display: flex;
     min-width: 0;
@@ -1002,6 +1009,7 @@
 
       .price {
         display: flex;
+        flex-wrap: wrap;
         align-items: baseline;
         justify-content: center;
         margin: 0;
@@ -1034,7 +1042,7 @@
         color: var(--mat-sys-primary);
         font: var(--mat-sys-label-medium);
         letter-spacing: 0;
-        white-space: nowrap;
+        white-space: normal;
       }
 
       .trial-offer-copy {
@@ -1128,6 +1136,33 @@
 
   .free-feature-icon {
     color: var(--mat-sys-outline);
+  }
+}
+
+// The onboarding stepper can be narrow even in a wide browser window.
+@container pricing (max-width: 959.98px) {
+  .pricing-container .products-grid {
+    grid-template-columns: minmax(0, 560px);
+    max-width: 560px;
+    gap: 16px;
+  }
+}
+
+// Billing options need to respond to the card width, independently of the viewport.
+@container pricing-card (max-width: 349.98px) {
+  .pricing-container .products-grid .product-card {
+    mat-card-content {
+      display: flex;
+    }
+
+    .plan-price-section {
+      height: auto;
+    }
+
+    .plan-price-section + .plan-price-section {
+      border-top: 1px solid var(--mat-sys-outline-variant);
+      border-left: 0;
+    }
   }
 }
 

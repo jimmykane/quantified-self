@@ -12,7 +12,7 @@ export const queryActivityHealthRange = onCall({
     region: FUNCTIONS_MANIFEST.queryActivityHealthRange.region,
     cors: true,
     timeoutSeconds: 30,
-    memory: '256MiB',
+    memory: '512MiB',
     maxInstances: 100,
 }, async (request): Promise<ActivityHealthRangeResult> => {
     if (!request.auth?.uid) {

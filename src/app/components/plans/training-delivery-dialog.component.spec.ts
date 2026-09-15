@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog } from '@angular/material/dialog';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { BehaviorSubject, of, throwError } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -77,6 +77,28 @@ describe('Training provider delivery controls', () => {
     expect(guidance.textContent).not.toMatch(/disconnect|account deletion|copies|withdraws/i);
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
   });
+  it('places one Edit workout link beside the workout context, outside sync controls and history', () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const links: NodeListOf<HTMLAnchorElement> = fixture.nativeElement.querySelectorAll('a[href="/training/plans/workout/w"]');
+    expect(links).toHaveLength(1);
+    const edit = links[0];
+    expect(edit.closest('.delivery-context')?.querySelector('.delivery-context-copy')?.textContent).toContain('Morning run');
+    expect(edit.closest('.delivery-context')?.textContent).toContain('Standalone workout');
+    expect(edit.closest('app-compact-row, .delivery-actions, .delivery-workouts, .delivery-guidance')).toBeNull();
+    expect(edit.textContent).toContain('Edit workout');
+    edit.click();
+    expect(close).toHaveBeenCalledOnce(); expect(haptics.selection).toHaveBeenCalledOnce();
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(TestBed.inject(Router).serializeUrl(navigate.mock.calls[0][0] as import('@angular/router').UrlTree)).toBe('/training/plans/workout/w');
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+  });
+  it.each(['missing', 'deleted'])('omits Edit workout for a %s source', lifecycle => {
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 }, plans: [],
+      workouts: lifecycle === 'missing' ? [] : [{ id: 'w', title: 'Deleted workout', lifecycle: 'deleted' }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-edit-workout')).toBeNull();
+  });
   it('separates plan controls from dated workout statuses and opens sync details, never the editor', async () => {
     const open = vi.fn();
     TestBed.overrideComponent(TrainingDeliveryDialogComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
@@ -104,6 +126,7 @@ describe('Training provider delivery controls', () => {
     expect(description.textContent).toContain('Dec 31, 2026');
     expect(description.textContent).toContain('Delivery uncertain');
     expect(fixture.nativeElement.querySelector('.delivery-list a')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.delivery-edit-workout')).toBeNull();
     rows[0].click();
     expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent, expect.objectContaining({ data: {
       scope: 'workout', id: 'w', title: 'Year-end run', returnTo: { scope: 'plan', id: 'p', title: 'Winter build' },
@@ -154,12 +177,14 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.querySelector('h2').textContent).toBe('Workout sync');
     expect(fixture.nativeElement.textContent).toContain('Plan: Winter build');
     expect(fixture.nativeElement.textContent).toContain('These controls affect only this workout');
-    expect(fixture.nativeElement.querySelector('a[href="/training/plans/workout/w"]').textContent).toContain('Edit workout');
+    expect(fixture.nativeElement.querySelector('.delivery-context a[href="/training/plans/workout/w"]').textContent).toContain('Edit workout');
     await fixture.componentInstance.begin('garmin', 'stop'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-edit-workout')).toBeNull();
     expect(fixture.nativeElement.querySelector('h2').textContent).toBe('Stop workout sync?');
     expect(fixture.nativeElement.textContent).toContain('Other workouts are not affected');
     expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ scope: 'workout', scopeId: 'w', action: 'stop' }), expect.any(Function));
     fixture.componentInstance.cancelReview(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-context .delivery-edit-workout')).not.toBeNull();
     Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(b => b.textContent?.includes('Back to plan sync'))!.click();
     expect(open).toHaveBeenCalledWith(TrainingDeliveryDialogComponent, expect.objectContaining({ data: returnTo }));
     expect(service.mutate).not.toHaveBeenCalled();
@@ -601,6 +626,7 @@ describe('Training provider delivery controls', () => {
         returnTo: { scope: 'history', id: 'current', title: 'All provider deliveries' } } }));
     expect(close).toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('a[href*="deleted"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.delivery-edit-workout')).toBeNull();
   });
   it('previews recovery for a missing source with revision zero and never offers Send', async () => {
     service.isReady.mockReturnValue(true);

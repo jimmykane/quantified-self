@@ -15,11 +15,11 @@ export async function reconcileTrainingDeliveryLifecycle(uid: string): Promise<v
 }
 // Existing connection and entitlement lifecycle paths remain authoritative. Events only wake current-state scans.
 export const onTrainingDeliveryConnectionChanged = onDocumentWritten({
-  document: 'users/{uid}/meta/{service}', region: 'europe-west2', retry: true,
+  document: 'users/{uid}/meta/{service}', region: 'europe-west2', memory: '512MiB', retry: true,
 }, async event => {
   if (!Object.values(DELIVERY_SERVICES).some(service => service.name === event.params.service)) return;
   await reconcileTrainingDeliveryLifecycle(event.params.uid);
 });
 export const onTrainingDeliveryEntitlementChanged = onDocumentWritten({
-  document: 'users/{uid}/system/status', region: 'europe-west2', retry: true,
+  document: 'users/{uid}/system/status', region: 'europe-west2', memory: '512MiB', retry: true,
 }, async event => { await reconcileTrainingDeliveryLifecycle(event.params.uid); });

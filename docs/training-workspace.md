@@ -448,7 +448,10 @@ marker removed without recurring scans. The pre-existing large manual-operation 
 and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
 and queue-depth helpers. Reservation precedes enqueue, so lost acknowledgements and crashes are recoverable. A finished
 scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
-changes. Tasks may be duplicated; stable per-user/provider/account/workout identities, independent desired generations,
+changes. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
+`onTrainingDeliveryQueued` each use 512 MiB for their bounded Firestore and queue work; this adds process headroom
+only and does not change queue limits, retries, or delivery semantics. Tasks may be duplicated; stable
+per-user/provider/account/workout identities, independent desired generations,
 180-second delivery leases and operation journals own idempotency. Shared retry limits/backoff and longer adapter delays
 apply. The 120-second worker timeout remains below its lease.
 
@@ -585,8 +588,10 @@ statuses** expands it; sorting does not claim all history has been loaded. Histo
 Standalone, and transferred/deleted sources remain labelled rather than silently appearing to belong to the old plan.
 Workout details name their parent plan or Standalone, clearly label **Stop workout sync** / **Resume workout sync**,
 and explain that other workouts are unaffected. **Back to plan sync** / **Back to sync history** returns to the originating
-overview without commands or new consent; **Edit workout** is a separate labelled route action and remains absent for
-deleted sources. Navigation retains account/busy guards and haptics. The lists show the current safe projection per
+overview without commands or new consent; **Edit workout** is a separate labelled route action beside the workout's
+name/date, aligned to the right of the context header rather than mixed into provider controls or attempt history.
+At phone widths it can wrap onto its own right-aligned header line without squeezing the title. It remains absent for
+deleted sources and during sync reviews. Navigation retains account/busy guards and haptics. The lists show the current safe projection per
 delivery identity, not private attempt journals or one public record per authored edit. Only workout details show a
 labelled transport timestamp, separate from the scheduled date: it is the newer of the last attempt
 and confirmation (confirmation wins a tie), falling back to the status update only when neither exists; a later failed

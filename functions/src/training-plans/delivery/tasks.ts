@@ -53,7 +53,9 @@ export const processTrainingDeliveryTask = onTaskDispatched({ region, timeoutSec
   else if (job.kind === 'delivery') await processTrainingDelivery(runtime, job.uid, job.deliveryId);
 });
 
-export const onTrainingDeliveryQueued = onDocumentWritten({ document: `${DELIVERY_QUEUE}/{jobId}`, region, retry: true }, async event => {
+export const onTrainingDeliveryQueued = onDocumentWritten({
+  document: `${DELIVERY_QUEUE}/{jobId}`, region, memory: '512MiB', retry: true,
+}, async event => {
   if (!event.data?.after.exists || event.data.after.data()?.dueAtMs > Date.now()) return;
   await dispatchTrainingDeliveryJob(productionDeliveryRuntime(), event.params.jobId);
 });

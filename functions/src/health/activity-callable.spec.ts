@@ -4,6 +4,7 @@ const hoisted = vi.hoisted(() => ({
     enforceAppCheck: vi.fn(),
     readActivityHealthRange: vi.fn(),
     loggerError: vi.fn(),
+    callableOptions: [] as unknown[],
 }));
 
 vi.mock('firebase-functions/v2/https', () => ({
@@ -12,7 +13,10 @@ vi.mock('firebase-functions/v2/https', () => ({
             super(message);
         }
     },
-    onCall: (_options: unknown, handler: unknown) => handler,
+    onCall: (options: unknown, handler: unknown) => {
+        hoisted.callableOptions.push(options);
+        return handler;
+    },
 }));
 vi.mock('firebase-functions/logger', () => ({ error: hoisted.loggerError }));
 vi.mock('../../../shared/functions-manifest', () => ({
@@ -33,6 +37,15 @@ describe('queryActivityHealthRange callable', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.readActivityHealthRange.mockResolvedValue({ observations: [], complete: true });
+    });
+
+    it('uses 512 MiB for its bounded Health-range read', () => {
+        expect(hoisted.callableOptions).toContainEqual(expect.objectContaining({
+            region: 'europe-west2',
+            memory: '512MiB',
+            timeoutSeconds: 30,
+            maxInstances: 100,
+        }));
     });
 
     it('requires authentication before App Check and storage access', async () => {
