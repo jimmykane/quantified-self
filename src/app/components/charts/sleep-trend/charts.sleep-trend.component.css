@@ -16,6 +16,11 @@
   overflow: hidden;
 }
 
+/* Embedded tiles already provide the title, controls and spacing above the stats. */
+.sleep-layout-embedded {
+  padding-top: 0;
+}
+
 .sleep-header {
   display: grid;
   gap: 4px;

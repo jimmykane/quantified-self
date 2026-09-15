@@ -18,8 +18,8 @@
         </mat-select>
         <button mat-icon-button aria-label="Show newer period" [disabled]="disabled() || !window().canNavigateNewer" (click)="navigate('newer')"><mat-icon>chevron_right</mat-icon></button>
       </div>
+      <div class="health-loading-slot"><mat-progress-bar mode="indeterminate" [style.visibility]="loading() ? 'visible' : 'hidden'" [attr.aria-label]="'Loading ' + title()" /></div>
     </div>
-    <div class="health-loading-slot"><mat-progress-bar mode="indeterminate" [style.visibility]="loading() ? 'visible' : 'hidden'" [attr.aria-label]="'Loading ' + title()" /></div>
     @if (context(); as view) {
       @if (!view.hasData && !showSleepSourcePicker() && (view.sources.length || view.missingSource)) {
         <div class="health-source-empty"><app-chart-source-picker [choices]="view.sources" [selectedKey]="view.selectedKey"
