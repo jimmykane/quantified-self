@@ -122,6 +122,41 @@ describe('independent dashboard Health views',()=>{
     expect(component.displayContext()?.hasData).toBe(false);
   });
 
+  it('immediately renders shared real evidence in a thumbnail without restarting reads or changing a full preview', () => {
+    const fixture = create('sleep'); const component = fixture.componentInstance;
+    const data = result('sleep', component.window().endDate);
+    const endTimeMs = data.window.endTimeMs - 3600000;
+    data.sessions = [{ id: 'night', userID: 'owner', sleepDate: data.window.endDate,
+      source: { provider: 'SuuntoApp', accountKey: 'account', providerUserId: 'provider', sourceSessionKey: 'night' },
+      startTimeMs: endTimeMs - 28800000, endTimeMs,
+      durationSeconds: 28800, stages: [], isNap: false, createdAtMs: 0, updatedAtMs: 0 }];
+    const context = buildDashboardHealthContext(data, { metric: 'sleep', range: '30d' });
+    fixture.componentRef.setInput('preview', true);
+    fixture.componentRef.setInput('thumbnail', true);
+    fixture.componentRef.setInput('thumbnailContext', { uid: 'owner', context }); fixture.detectChanges();
+    expect(component.displayContext()).toBe(context);
+    expect(component.showingExample()).toBe(false);
+    expect(watch).toHaveBeenCalledTimes(1);
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges();
+    expect(component.showingExample()).toBe(true);
+    fixture.componentRef.setInput('thumbnail', true);
+    fixture.componentRef.setInput('thumbnailContext', { uid: 'other-owner', context }); fixture.detectChanges();
+    expect(component.showingExample()).toBe(true);
+    fixture.componentRef.setInput('thumbnailContext', { uid: 'owner', context });
+    owner.set(false); fixture.detectChanges();
+    expect(component.showingExample()).toBe(true);
+    expect(component.displayContext()).not.toBe(context);
+    expect(streams[0].observed).toBe(false);
+  });
+
+  it('ignores unavailable source selections without haptic feedback or settings changes', () => {
+    const fixture = create(); const component = fixture.componentInstance;
+    streams[0].next(result());
+    const changed = vi.fn(); component.settingsChange.subscribe(changed);
+    component.selectSource('no-data');
+    expect(changed).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
 });
 
 

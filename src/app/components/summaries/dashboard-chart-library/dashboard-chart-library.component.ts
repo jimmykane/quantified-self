@@ -47,8 +47,8 @@ export class DashboardChartLibraryComponent {
   readonly healthGroups = DASHBOARD_HEALTH_GROUPS;
   readonly healthSettings = dashboardHealthSettings;
   private readonly healthData = inject(DashboardHealthService);
-  private readonly healthContexts = signal<Record<string, DashboardHealthContext>>({});
-  healthContext(id: string, context: DashboardHealthContext): void { this.healthContexts.update(current => ({...current, [id]:context})); }
+  private readonly healthContexts = signal<Record<string, { uid: string; context: DashboardHealthContext }>>({});
+  healthContext(id: string, context: DashboardHealthContext): void { this.healthContexts.update(current => ({...current, [id]:{uid:this.user().uid, context}})); }
   readonly seed = input<DashboardPreviewInput>({ tiles: [] });
   private readonly previewData = inject(DashboardChartPreviewService);
   private readonly discovery = inject(DashboardChartDiscoveryService);
@@ -106,7 +106,8 @@ export class DashboardChartLibraryComponent {
   readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.browseLane() === 'section:health' && !!this.search().trim() || this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group() || entry.definition.category === 'health' && entry.definition.healthGroup === this.group() || entry.definition.id === 'curated-sleep' && this.group() === 'sleep' || entry.definition.id === 'curated-hrv' && this.group() === 'cardiovascular')));
   private readonly availablePreviews = computed(() => this.available().map(entry => {
     const healthSettings = dashboardHealthSettings(entry.tile);
-    const healthContext = this.healthContexts()[entry.definition.id];
+    const cached = this.healthContexts()[entry.definition.id];
+    const healthContext = cached?.uid === this.user().uid ? cached.context : null;
     const preview = healthSettings ? {
       tile: entry.tile as import('../../../helpers/dashboard-tile-view-model.helper').DashboardTileViewModel,
       source: healthContext?.hasData ? 'user' as const : 'example' as const, loading: !healthContext, note: '', calendarEvents: [], anchorMs: Date.now(),
@@ -114,7 +115,8 @@ export class DashboardChartLibraryComponent {
     } : buildDashboardThumbnailPreview(entry.tile, this.previewSeed());
     const availabilityLabel = preview.availability?.label || dashboardPreviewSourceLabel(preview);
     return { ...entry, preview, isNew: this.sessionNewIds().has(entry.definition.id),
-      healthSettings, sourceHint: preview.availability?.reason || availabilityLabel,
+      healthSettings, healthContext: healthContext ? cached : null,
+      sourceHint: [preview.availability?.reason || availabilityLabel, healthContext?.selected?.model.ariaLabel].filter(Boolean).join(' '),
       sourceLabel: healthSettings ? healthContext?.hasData ? 'Your data' : !healthContext ? 'Example · Loading…'
         : healthContext.availability.state === 'error' ? 'Example · Unavailable' : healthContext.sampleOnly ? 'Example · Shorter range' : 'Example · No readings'
         : preview.source === 'example' ? `Example · ${availabilityLabel}` : availabilityLabel,
@@ -196,7 +198,8 @@ export class DashboardChartLibraryComponent {
           if (this.seed().tiles.some(tile => matchesDashboardPreset(tile, entry.tile))) continue;
           const settings = dashboardHealthSettings(entry.tile)!;
           healthSubscriptions.add(this.healthData.watch(user.uid, settings, undefined, 5).subscribe({
-            next: evidence => this.healthContext(entry.definition.id, buildDashboardHealthContext(evidence, settings, user.settings.unitSettings)),
+            next: evidence => this.healthContext(entry.definition.id, buildDashboardHealthContext(evidence, settings, user.settings.unitSettings,
+              user.settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability)),
             error: () => undefined,
           }));
         }

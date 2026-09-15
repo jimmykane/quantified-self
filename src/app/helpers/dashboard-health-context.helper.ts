@@ -29,7 +29,15 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
     const result = health?.result || projectHealthRange([], [], { startDate: window.startDate, endDate: window.endDate, metricIds: settings.metric === 'sleep' ? [] : [settings.metric], includeSamples: window.includeSamples });
     const observations = activities && settings.metric !== 'sleep' && isActivityHealthMetricId(settings.metric)
         ? selectActivityHealthObservations(settings.metric, result, activities.observations) : [];
-    const series = buildHealthMetricWorkspaceView(result, sessions, observations, units).series;
+    // Source records can exist without a point the selected chart can draw (for
+    // example a missing value, or a sample outside this window). Do not offer
+    // those sources, or let them win the initial selection over real readings.
+    const series = buildHealthMetricWorkspaceView(result, sessions, observations, units).series
+        .map(series => ({ ...series, points: series.points.filter(point =>
+            Number.isFinite(point.timestampMs) && point.timestampMs >= window.startTimeMs && point.timestampMs <= window.endTimeMs
+            && (typeof point.value === 'number' ? Number.isFinite(point.value)
+                : series.chartKind === 'step' && (typeof point.value === 'boolean' || typeof point.value === 'string' && point.value.trim().length > 0))) }))
+        .filter(series => series.points.length > 0);
     const historySeries = history ? buildHealthMetricWorkspaceView(history.result, evidence.sessions, [], units).series : [];
     const charts = buildHealthChartModels(series, window.startTimeMs, window.endTimeMs, units).map(model => {
         const previous = historySeries.find(item => item.id === model.series.id);
@@ -43,11 +51,13 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
         return { key: model.series.id, model, status, statusOverlay: buildHealthHrvChartStatusOverlay(status), statusDescription: healthHrvChartStatusDescription(status),
             latestValueText: latest ? formatHealthValue(model.series.metricId, latest.value, model.series.unit, model.series.nativeOnly, units) : '—' };
     });
-    const sleepSources = [...new Set(sessions.map(sleepEvidenceSourceKey))].sort().map(key => {
+    const sleepSources = [...new Set(sessions.map(sleepEvidenceSourceKey))].sort().flatMap(key => {
         const session = sessions.find(item => sleepEvidenceSourceKey(item) === key)!;
+        const context = buildDashboardSleepTrendContext(sessions.filter(item => sleepEvidenceSourceKey(item) === key));
+        if (!context.hasRealPoints) return [];
         const provider = session.source.provider as HealthProvider;
-        const label = buildDashboardSleepTrendContext([session]).latestPoint?.providerLabel || 'Sleep source';
-        return { key, provider, label };
+        const label = context.latestPoint!.providerLabel;
+        return [{ key, provider, label }];
     });
     const sources = settings.metric === 'sleep' ? sleepSources.map((source, index) => ({ ...source,
         label: sleepSources.filter(item => item.provider === source.provider).length > 1 ? `${source.label} · Account ${index + 1}` : source.label }))

@@ -27,6 +27,8 @@ export class DashboardHealthChartComponent {
     readonly settings = input.required<AppDashboardHealthMetricSettings>();
     readonly darkTheme = input(false);
     readonly thumbnail = input(false);
+    /** Reuse the browser's completed evidence while a visible row subscribes. */
+    readonly thumbnailContext = input<{ uid: string; context: DashboardHealthContext } | null>(null);
     /** Library-only illustrations; saved tiles always render account evidence. */
     readonly preview = input(false);
     readonly hideTitle = input(false);
@@ -60,10 +62,18 @@ export class DashboardHealthChartComponent {
     readonly title = computed(() => this.settings().metric === 'sleep' ? 'Sleep' : HEALTH_METRIC_CATALOG[this.settings().metric]?.label || 'Health');
     readonly effectiveSettings = computed(() => ({ ...this.settings(), ...(this.settings().sourceKey || !this.initialSource() ? {} : { sourceKey: this.initialSource()! }) }));
     readonly window = computed(() => resolveHealthWorkspaceWindow({ ...this.settings(), endDate: this.endDate() }));
-    readonly showingExample = computed(() => this.preview() && !this.context()?.hasData);
+    private readonly previewEvidence = computed(() => {
+        const shared = this.thumbnailContext(), settings = this.settings();
+        return this.thumbnail() && this.preview() && shared?.uid === this.user().uid && this.data.isOwner(this.user().uid)
+            && shared.context.window.metric === settings.metric && shared.context.window.range === settings.range
+            && shared.context.window.endDate === this.window().endDate
+            && (!settings.sourceKey || shared.context.selectedKey === settings.sourceKey)
+            ? shared.context : this.context();
+    });
+    readonly showingExample = computed(() => this.preview() && !this.previewEvidence()?.hasData);
     readonly displayContext = computed(() => this.showingExample()
         ? buildDashboardHealthExample(this.settings(), this.window(), this.user().settings.unitSettings)
-        : this.context());
+        : this.previewEvidence());
     readonly previewNotice = computed(() => this.showingExample()
         ? this.loading() ? 'Showing an example while your readings load.'
             : this.error() ? 'Your readings could not be loaded. This is an example.'
@@ -138,7 +148,7 @@ export class DashboardHealthChartComponent {
         this.destroy.onDestroy(() => this.version++);
     }
     selectSource(sourceKey: string): void {
-        if (this.disabled() || sourceKey === this.effectiveSettings().sourceKey)
+        if (this.disabled() || sourceKey === this.effectiveSettings().sourceKey || !this.context()?.sources.some(source => source.key === sourceKey))
             return;
         this.haptics.selection();
         this.settingsChange.emit({ settings: { ...this.settings(), sourceKey }, initial: false });

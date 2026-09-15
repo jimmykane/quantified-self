@@ -35,6 +35,46 @@ describe('dashboard Health semantics',()=>{
     const missing=buildDashboardHealthContext(evidence('resting_heart_rate',['first']),settings);
     expect(missing.hasData).toBe(false);expect(missing.missingSource).toBe(true);expect(missing.selectedKey).toBe(settings.sourceKey);
   });
+  it('offers only sources with drawable points, retaining a saved unavailable selection', () => {
+    const data = evidence('resting_heart_rate', ['empty', 'outside', 'real']);
+    const original = buildDashboardHealthContext(data, { metric: 'resting_heart_rate', range: '30d' });
+    const emptyKey = original.sources[0].key;
+    const observations = data.health!.result.observations;
+    const empty = observations.find(item => item.accountKey === 'empty')!;
+    if (empty.entry.kind === 'value') empty.entry.canonical!.value = Number.NaN;
+    observations.find(item => item.accountKey === 'outside')!.endTimeMs = data.window.endTimeMs + 1;
+    const view = buildDashboardHealthContext(data, { metric: 'resting_heart_rate', range: '30d' });
+    expect(view.sources).toHaveLength(1);
+    expect(view.selected?.model.displayedPointCount).toBe(1);
+    expect(view.hasData).toBe(true);
+    const saved = buildDashboardHealthContext(data, { metric: 'resting_heart_rate', range: '30d', sourceKey: emptyKey });
+    expect(saved.selectedKey).toBe(emptyKey);
+    expect(saved.missingSource).toBe(true);
+    expect(saved.hasData).toBe(false);
+    expect(saved.selected).toBeNull();
+  });
+  it('keeps valid zero readings and categorical states selectable', () => {
+    for (const metric of ['steps', 'stress_state'] as const) {
+      const data = evidence(metric);
+      const entry = data.health!.result.observations[0].entry;
+      if (entry.kind === 'value') entry.canonical!.value = metric === 'steps' ? 0 : 'rest';
+      const view = buildDashboardHealthContext(data, { metric, range: '30d' });
+      expect(view.sources).toHaveLength(1);
+      expect(view.hasData).toBe(true);
+    }
+  });
+  it('does not offer a Sleep source whose sessions cannot be rendered', () => {
+    const data = evidence('sleep_duration', []);
+    const session = { id: 'night', userID: 'owner', sleepDate: '2026-09-14',
+      source: { provider: 'SuuntoApp' as const, accountKey: 'valid', providerUserId: 'provider', sourceSessionKey: 'night' },
+      startTimeMs: Date.parse('2026-09-13T22:00:00Z'), endTimeMs: Date.parse('2026-09-14T06:00:00Z'),
+      durationSeconds: 28800, stages: [], isNap: false, createdAtMs: 0, updatedAtMs: 0 };
+    data.sessions = [session, { ...session, id: 'invalid', source: { ...session.source, accountKey: 'empty' }, endTimeMs: session.startTimeMs }];
+    const view = buildDashboardHealthContext(data, { metric: 'sleep', range: '30d' });
+    expect(view.sources).toHaveLength(1);
+    expect(view.hasData).toBe(true);
+    expect(view.sleep.latestPoint?.endTimeMs).toBe(session.endTimeMs);
+  });
   it('distinguishes long-range sample-only, empty, limited, failed, and partial results',()=>{
     const data=evidence('heart_rate',[],'1y'); const settings={metric:'heart_rate' as const,range:'1y' as const};
     expect(buildDashboardHealthContext(data,settings).availability.state).toBe('no-data');

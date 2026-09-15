@@ -44,7 +44,7 @@
             <span matListItemLine [id]="'chart-source-' + entry.definition.id" [matTooltip]="entry.sourceHint">{{ entry.format }} · {{ entry.sourceLabel }}</span>
             <span matListItemMeta class="chart-library-row-meta" aria-hidden="true">
               @if (entry.healthSettings; as settings) {
-                <app-dashboard-health-chart class="chart-library-health-thumbnail" [user]="user()" [settings]="settings" [thumbnail]="true" [preview]="true" [priority]="0" [darkTheme]="darkTheme()" (contextChange)="healthContext(entry.definition.id, $event)" />
+                <app-dashboard-health-chart class="chart-library-health-thumbnail" [user]="user()" [settings]="settings" [thumbnail]="true" [thumbnailContext]="entry.healthContext" [preview]="true" [priority]="0" [darkTheme]="darkTheme()" (contextChange)="healthContext(entry.definition.id, $event)" />
               } @else { <app-dashboard-chart-thumbnail [preview]="entry.preview" [darkTheme]="darkTheme()"></app-dashboard-chart-thumbnail> }
               <mat-icon>chevron_right</mat-icon>
             </span>

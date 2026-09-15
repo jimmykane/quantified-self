@@ -22,7 +22,7 @@
         <mat-form-field class="health-source" appearance="outline" subscriptSizing="dynamic">
           <mat-label>Source and reading</mat-label>
           <mat-select [value]="view.selectedKey" [disabled]="disabled()" (selectionChange)="selectSource($event.value)">
-            @if (view.missingSource) { <mat-option [value]="view.selectedKey">Selected reading · No data in this period</mat-option> }
+            @if (view.missingSource) { <mat-option [value]="view.selectedKey" disabled>Selected reading · No data in this period</mat-option> }
             @for (source of view.sources; track source.key) { <mat-option [value]="source.key">{{ source.label }}</mat-option> }
           </mat-select>
         </mat-form-field>
@@ -36,6 +36,7 @@
   }
   @if (displayContext(); as view) {
     @if (view.selected; as chart) {
+      @if (thumbnail()) { <span class="health-thumbnail-value">{{ chart.latestValueText }}</span> }
       @if (!thumbnail()) {
         <div class="health-tile-summary">
           <strong>{{ chart.latestValueText }}</strong>@if (!showingExample()) { <span>{{ chart.model.series.sourceLabel }}</span> }

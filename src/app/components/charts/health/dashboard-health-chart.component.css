@@ -18,6 +18,7 @@
 app-health-metric-series-chart, app-sleep-trend-chart { flex:1; min-height:120px; min-width:0; }
 .health-thumbnail { padding:0; gap:0; pointer-events:none; height:42px; }
 .health-thumbnail app-health-metric-series-chart { min-height:0; }
+.health-thumbnail-value { flex-shrink:0; font:600 12px/14px 'Barlow Condensed',sans-serif; color:var(--mat-sys-on-surface); text-align:end; }
 .health-thumbnail-empty,.health-sleep-thumbnail { margin:auto; color:var(--mat-sys-on-surface-variant); font-size:12px; }
 @media(max-width:640px) { .health-tile-controls { flex-wrap:wrap; } .health-tile-window { flex:1; min-width:120px; } }
 

@@ -382,6 +382,8 @@ The Health hub uses this reader for its selected metric, pre-window HRV context,
 
 `dashboard-health-context.helper.ts` reuses `buildHealthMetricWorkspaceView`, `buildHealthChartModels`, canonical Sports Lib formatting and the existing HRV personal-range helpers. Workout profile Weight remains explanatory fallback context, never a plotted weigh-in. Workout VO2 max, manual readings and provider readings keep separate identities. Standalone HRV can render without a personal range; only supported nightly series receive that overlay. No backend endpoint, integration, calculation or public data scope is added.
 
+Dashboard source eligibility is derived from drawable points within the selected time bounds, not merely the existence of source records. Invalid numeric values and empty categorical values do not qualify; finite zero readings do. Sleep source choices use the existing renderer's real-point validation. Initial selection, source options, thumbnails and discovery share this filtered context. A saved unavailable identity is retained without being offered as a new source choice. Completed browser contexts also feed matching thumbnails directly; this adds no reads and does not replace the shared invalidation subscriptions.
+
 ### Metric display and unit-preference boundary
 
 Every canonical Health or Sleep value shown to a user—including cards, rows, chart labels, tooltips, legends,
