@@ -23,7 +23,7 @@ describe('Training provider delivery controls', () => {
   const user$ = new BehaviorSubject<{ uid: string } | null>({ uid: 'owner' });
   let close: ReturnType<typeof vi.fn>;
   let service: { anyReady: () => boolean; isReady: ReturnType<typeof vi.fn>; watchPresence: ReturnType<typeof vi.fn>;
-    watchScope: ReturnType<typeof vi.fn>; createMutationId: ReturnType<typeof vi.fn>; preview: ReturnType<typeof vi.fn>; mutate: ReturnType<typeof vi.fn> };
+    watchScope: ReturnType<typeof vi.fn>; createMutationId: ReturnType<typeof vi.fn>; preview: ReturnType<typeof vi.fn>; mutate: ReturnType<typeof vi.fn>; check: ReturnType<typeof vi.fn> };
   let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
   const status = { schemaVersion: 1, id: 'delivery', workoutId: 'w', planId: null, provider: 'garmin',
     status: 'needs_attention', differsFromQS: true, hasRemoteCopy: true, timeZone: 'Europe/Helsinki',
@@ -36,7 +36,7 @@ describe('Training provider delivery controls', () => {
       watchScope: vi.fn(() => of({ settings: [], statuses: [status] })), createMutationId: vi.fn(() => 'mutation'),
       preview: vi.fn(async () => ({ schemaVersion: 1, available: true, connection: 'connected', hasPro: true,
         timeZone: 'Europe/Helsinki', effect: 'enable', settingsRevision: 0, eligibleCount: 1, warningCount: 0, issues: [], approvalDigest: null })),
-      mutate: vi.fn(async () => ({})) };
+      mutate: vi.fn(async () => ({})), check: vi.fn(async () => ({ schemaVersion: 1, action: 'check', result: 'queued', requestedAtMs: 1, notBeforeMs: 1 })) };
     await TestBed.configureTestingModule({ imports: [TrainingDeliveryDialogComponent, TrainingDeliveryButtonComponent], providers: [
       provideRouter([]), provideNoopAnimations(), { provide: AppUserService, useValue: { user, user$ } },
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
@@ -61,6 +61,32 @@ describe('Training provider delivery controls', () => {
     // Multiple controls belong below the status, not in the compact heading's
     // single-action slot, where they squeeze the provider name at phone widths.
     expect(fixture.nativeElement.querySelector('[compactRowAction]')).toBeNull();
+  });
+  it('checks without a preview or consent wizard and distinguishes cloud checking from device availability', async () => {
+    service.isReady.mockReturnValue(true);
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, status: 'delivered', lastAcceptedAtMs: 1000 }],
+      verifications: [{ id: status.id, canCheck: true, state: 'present', lastCheckedAtMs: 2000, missing: false }] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const button = [...fixture.nativeElement.querySelectorAll('button')] as HTMLButtonElement[];
+    expect(button.some(item => item.textContent?.trim() === 'Check Garmin')).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Last sent'); expect(fixture.nativeElement.textContent).toContain('Last checked');
+    expect(fixture.nativeElement.textContent).toContain('does not confirm a device download');
+    await fixture.componentInstance.checkProvider('garmin'); fixture.detectChanges();
+    expect(service.check).toHaveBeenCalledWith(expect.objectContaining({ action: 'check', scope: 'workout',
+      scopeId: 'w', expectedScheduleRevision: 3, expectedScopeRevision: 2, expectedSettingsRevision: 0 }), expect.any(Function));
+    expect(fixture.componentInstance.draft()).toBeNull();
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Check queued');
+  });
+  it('ignores an in-flight manual check after sign-out', async () => {
+    let resolve!: (value: unknown) => void;
+    service.check.mockImplementation(() => new Promise(done => { resolve = done; }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const pending = fixture.componentInstance.checkProvider('garmin');
+    user.set(null); user$.next(null); fixture.detectChanges();
+    resolve({ result: 'queued' }); await pending;
+    expect(fixture.componentInstance.notice()).toBeNull(); expect(haptics.success).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
   });
   it('explains stopping sync without suggesting disconnection or deleting the QS workout', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
@@ -790,5 +816,14 @@ describe('Training provider delivery controls', () => {
     });
     await TestBed.inject(ApplicationRef).whenStable(); render('delivery-history-many'); render('delivery-history-many-dark');
     expect(document.querySelectorAll('.delivery-status--summary')).toHaveLength(25); ref.close();
+    for (const state of ['present', 'checking', 'restoring', 'deferred', 'unknown', 'unsupported']) {
+      service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, status: 'delivered', lastAcceptedAtMs: status.lastAttemptAtMs }],
+        verifications: [{ id: status.id, state, canCheck: state !== 'unsupported', missing: state === 'restoring',
+          lastCheckedAtMs: status.lastAttemptAtMs + 60000, nextCheckAtMs: status.lastAttemptAtMs + 120000 }] }));
+      ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+        data: { scope: 'workout', id: 'w', title: 'Winter endurance workout' }, width: '640px', maxWidth: '95vw',
+      });
+      await TestBed.inject(ApplicationRef).whenStable(); render(`verification-${state}`); render(`verification-${state}-dark`); ref.close();
+    }
   });
 });

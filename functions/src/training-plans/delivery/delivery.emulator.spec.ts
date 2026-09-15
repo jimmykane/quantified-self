@@ -17,6 +17,9 @@ import { dispatchTrainingDeliveryJob } from './tasks';
 import { DELIVERY_SERVICES, productionDeliveryRuntime } from './runtime';
 import { deliveryIdentity } from './intent';
 import { projectDelivery } from './store';
+import { processTrainingVerification } from './verification-worker';
+import { productionRequestCapacity } from './request-capacity';
+import type { InspectionObservation } from './verification-contracts';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Firestore transactions', { timeout: 30_000 }, () => {
   // Never accept a production project or a non-loopback emulator endpoint.
@@ -71,6 +74,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     localDate: '2026-09-10', confirmPlanRangeExtension: false });
   const configurePlan = async (id = 'p') => trainingDeliveryCommand(runtime, uid,
     await currentCommand({ scope: 'plan', scopeId: id, action: 'configure' }), false);
+  const inspection = (before?: () => Promise<void>) => {
+    transport.inspection = { policy: { version: 'synthetic-proof', mode: 'retained-ids', required: ['workout', 'schedule'],
+      confirmationDelayMs: 900_000, authoritativeAbsence: true, repairReady: true },
+      inspect: vi.fn(async (request, guard): Promise<InspectionObservation> => {
+        await guard(false); await before?.();
+        return { conflict: false, artifacts: ['workout', 'schedule'].map(key => ({ key, authoritative: true,
+          state: [...transport.artifacts.values()].some(value => value.ids[key] === request.artifact.ids[key]) ? 'present' : 'absent' })) };
+      }) };
+  };
+  const checkCommand = async () => {
+    const request = await currentCommand({ action: 'check' }); delete request.timeZone;
+    return request;
+  };
+  const delivered = async () => {
+    const ledger = await send(); await processTrainingDelivery(runtime, uid, ledger.id); await drain(); return ledger;
+  };
   beforeEach(async () => {
     uid = `delivery-test-${randomUUID()}`; users.push(uid); now = Date.parse('2026-09-10T10:00:00Z');
     transport = new FakeTrainingTransport(); pro = true; account = 'account-a'; connectionState = 'connected'; connectionGeneration = 'connection-1';
@@ -96,6 +115,146 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     }
     await db.terminate();
   }, 120_000);
+  it('queues/coalesces manual checks without changing settings and replays the typed receipt', async () => {
+    inspection(); const ledger = await delivered();
+    const user = db.collection('users').doc(uid);
+    const before = (await user.collection('trainingDeliverySettings').doc('workout_w_garmin').get()).data();
+    const request = await checkCommand();
+    expect(await trainingDeliveryCommand(runtime, uid, request, false)).toMatchObject({ action: 'check', result: 'queued' });
+    expect(await trainingDeliveryCommand(runtime, uid, request, false)).toMatchObject({ action: 'check', result: 'queued' });
+    expect(await trainingDeliveryCommand(runtime, uid, await checkCommand(), false)).toMatchObject({ result: 'coalesced' });
+    expect((await user.collection('trainingDeliverySettings').doc('workout_w_garmin').get()).data()).toEqual(before);
+    await drain(); await Promise.all([processTrainingVerification(runtime, uid, ledger.id), processTrainingVerification(runtime, uid, ledger.id)]);
+    expect(transport.inspection!.inspect).toHaveBeenCalledTimes(1);
+    expect((await ledgers())[0].verification?.state).toBe('present');
+  });
+  it('restores only after two negatives, retains identity, and pauses after two successful repair cycles', async () => {
+    inspection(); const ledger = await delivered();
+    for (let i = 0; i < 3; i++) {
+      transport.artifacts.clear();
+      await processTrainingVerification(runtime, uid, ledger.id);
+      expect((await ledgers())[0].verification?.state).toBe('suspected_missing');
+      now += 900_000;
+      await processTrainingVerification(runtime, uid, ledger.id);
+      const missing = (await ledgers())[0];
+      expect(projectDelivery(missing).hasRemoteCopy).toBe(false);
+      if (i === 2) { expect(missing.verification?.state).toBe('deferred'); break; }
+      expect(missing.verification?.state).toBe('restoring');
+      await processTrainingDelivery(runtime, uid, ledger.id); await drain();
+      expect((await ledgers())[0].id).toBe(ledger.id);
+      expect((await ledgers())[0].verification?.repairTimes).toHaveLength(i + 1);
+    }
+    expect(transport.calls).toHaveLength(3); // initial delivery plus two repair cycles
+  });
+  it.each(['stop', 'pro', 'account', 'generation', 'deletion', 'edit', 'lease'] as const)(
+    'suppresses stale inspection evidence after %s during I/O', async change => {
+      let changed = false;
+      inspection(async () => {
+        if (changed) return; changed = true;
+        if (change === 'stop') { const request = await currentCommand({ action: 'stop' }); delete request.timeZone; await trainingDeliveryCommand(runtime, uid, request, false); }
+        if (change === 'pro') pro = false;
+        if (change === 'account') account = 'other-account';
+        if (change === 'generation') connectionGeneration = 'connection-2';
+        if (change === 'deletion') await db.collection('userDeletionTombstones').doc(uid).set({ uid, status: 'deleting' });
+        if (change === 'edit') await editSchedule({ kind: 'update-workout', workoutId: 'w', planId: null,
+          localDate: workout().localDate, title: 'Updated', structure: workout().structure, confirmPlanRangeExtension: false });
+        if (change === 'lease') now += 180_001;
+      });
+      const ledger = await delivered(); transport.artifacts.clear();
+      await processTrainingVerification(runtime, uid, ledger.id);
+      expect((await ledgers())[0].verification?.missing).not.toBe(true);
+      expect((await ledgers())[0].repair).toBeFalsy();
+      expect(transport.calls).toHaveLength(1);
+    });
+  it('keeps quota deferrals pending and shares account capacity between checking and delivery', async () => {
+    const capacity = productionRequestCapacity(db, uid, 'garmin', account,
+      [{ scope: 'account', limit: 1, windowMs: 60_000, bucketMs: 1000 }], () => now);
+    inspection(async () => capacity.reserve());
+    const ledger = await delivered();
+    await trainingDeliveryCommand(runtime, uid, await checkCommand(), false);
+    await drain();
+    await capacity.reserve();
+    await processTrainingVerification(runtime, uid, ledger.id);
+    const deferred = (await ledgers())[0];
+    expect(deferred.verification?.state).toBe('deferred'); expect(deferred.retries).toBe(0);
+    expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).data()?.priority).toBe('manual');
+    now = deferred.verification!.nextCheckAtMs;
+    await processTrainingVerification(runtime, uid, ledger.id);
+    expect((await ledgers())[0].verification?.state).toBe('present');
+    expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).data()?.priority).toBe('ordinary');
+  });
+  it('persists an unknown check and releases the lease for a malformed inspection response', async () => {
+    inspection(); const ledger = await delivered();
+    vi.mocked(transport.inspection!.inspect).mockResolvedValueOnce(null as never);
+    await processTrainingVerification(runtime, uid, ledger.id);
+    expect((await ledgers())[0]).toMatchObject({ lease: null, verification: { state: 'unknown', missing: false } });
+    expect(transport.calls).toHaveLength(1);
+  });
+  it('preserves consent and exposes permission repair when a remote check is denied', async () => {
+    inspection(async () => { throw new TrainingDeliveryTransportError('permission'); });
+    const ledger = await delivered();
+    await processTrainingVerification(runtime, uid, ledger.id);
+    expect((await ledgers())[0]).toMatchObject({ status: 'connection_repair', verification: { state: 'unknown', missing: false } });
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').doc('workout_w_garmin').get()).data()?.enabled).toBe(true);
+  });
+  it.each(['pause', 'transfer', 'delete-plan'] as const)('suppresses an in-flight check after plan %s', async change => {
+    await createPlan(); await moveToPlan('p'); await configurePlan();
+    inspection(async () => {
+      if (change === 'pause') await db.collection('users').doc(uid).collection('trainingPlans').doc('p').update({ lifecycle: 'paused' });
+      if (change === 'transfer') await moveToPlan(null);
+      if (change === 'delete-plan') await deleteTrainingPlanForUser(uid, { mutationId: randomUUID(), planId: 'p',
+        expectedRevisions: await revisions(), workoutDisposition: 'convert-to-standalone', confirmPlanDeletion: true }, { db, nowMs: now });
+    });
+    await drain(); const ledger = (await ledgers())[0];
+    await processTrainingDelivery(runtime, uid, ledger.id); await drain(); transport.artifacts.clear();
+    await processTrainingVerification(runtime, uid, ledger.id);
+    expect((await ledgers())[0].verification?.missing).not.toBe(true);
+    expect((await ledgers())[0].repair).toBeFalsy(); expect(transport.calls).toHaveLength(1);
+  });
+  it('returns a typed deferred receipt without bypassing shared application/account capacity', async () => {
+    inspection(); await delivered();
+    runtime.requestNotBefore = async () => now + 60_000;
+    expect(await trainingDeliveryCommand(runtime, uid, await checkCommand(), false)).toMatchObject({ result: 'deferred', notBeforeMs: now + 60_000 });
+    const other = `delivery-test-${randomUUID()}`; users.push(other);
+    await db.collection('users').doc(other).set({ test: true });
+    const windows = [{ scope: 'application' as const, limit: 2, windowMs: 123_000, bucketMs: 1000 },
+      { scope: 'account' as const, limit: 1, windowMs: 123_000, bucketMs: 1000 }];
+    const first = productionRequestCapacity(db, uid, 'wahoo', 'a', windows, () => now);
+    const second = productionRequestCapacity(db, other, 'wahoo', 'b', windows, () => now);
+    await Promise.all([first.reserve(), second.reserve()]);
+    await expect(first.reserve()).rejects.toMatchObject({ kind: 'deferred' });
+    await expect(second.reserve()).rejects.toMatchObject({ kind: 'deferred' });
+    now += 124_000;
+    await first.reserve();
+  });
+  it('rechecks an authored edit before a confirmed-missing repair instead of replaying stale content', async () => {
+    inspection(); const ledger = await delivered(); transport.artifacts.clear();
+    await processTrainingVerification(runtime, uid, ledger.id); now += 900_000;
+    await processTrainingVerification(runtime, uid, ledger.id);
+    await editSchedule({ kind: 'update-workout', workoutId: 'w', planId: null, localDate: workout().localDate,
+      title: 'Updated repair', structure: workout().structure, confirmPlanRangeExtension: false });
+    await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls).toHaveLength(1);
+    expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).data()?.kind).toBe('verification');
+    await processTrainingVerification(runtime, uid, ledger.id); now += 900_000;
+    await processTrainingVerification(runtime, uid, ledger.id);
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls.at(-1)?.workout?.title).toBe('Updated repair');
+  });
+  it('counts a proven recovered repair toward the rolling limit without repeating its create', async () => {
+    inspection(); const ledger = await delivered(); transport.artifacts.clear();
+    await processTrainingVerification(runtime, uid, ledger.id); now += 900_000;
+    await processTrainingVerification(runtime, uid, ledger.id);
+    transport.afterAccept = async () => { throw new Error('simulated lost acceptance checkpoint'); };
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    const failed = (await ledgers())[0];
+    expect(failed.status).toBe('retrying');
+    expect(failed.verification?.repairTimes).toHaveLength(0);
+    transport.afterAccept = null; now = failed.retryAtMs + 1;
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect(transport.calls).toHaveLength(2); // Initial send and one repair only.
+    expect((await ledgers())[0]).toMatchObject({ status: 'delivered', verification: { repairTimes: [now] } });
+  });
   it('rejects non-pilot opt-in at the backend even with Pro and an authoritative connection', async () => {
     runtime.transport = productionDeliveryRuntime(db).transport;
     expect(await trainingDeliveryCommand(runtime, uid, command(), true)).toMatchObject({ available: false });
@@ -479,6 +638,21 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     expect(revision).toBe(4);
     await drain();
     const current = await ledgers(); expect(current).toHaveLength(1600);
+    // Synthetic acceptance seeds allow the same bounded reconciler to schedule all
+    // 1600 remote checks without issuing 1600 provider requests in a unit fixture.
+    inspection();
+    for (let offset = 0; offset < current.length; offset += 25) {
+      const accepted = db.batch();
+      for (const row of current.slice(offset, offset + 25)) accepted.update(user.collection(DELIVERY_LEDGER).doc(row.id), {
+        status: 'delivered', acceptedDigest: row.desiredDigest, acceptedContentDigest: row.contentDigest,
+        actual: { ids: { workout: row.id, schedule: row.id }, localDate: '2026-09-10', completed: false },
+      });
+      await accepted.commit();
+    }
+    await mark(); await drain();
+    const checks = await db.collection(DELIVERY_QUEUE).where('uid', '==', uid).where('kind', '==', 'verification').get();
+    expect(checks.size).toBe(1600);
+    expect(new Set(checks.docs.map(doc => doc.data().deliveryId)).size).toBe(1600);
     const history = db.batch();
     for (let i = 0; i < 26; i++) {
       const id = deliveryIdentity(uid, 'garmin', 'account-a', `historical-${i}`);
@@ -492,5 +666,5 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     const final = await ledgers(); expect(final).toHaveLength(1626);
     expect(final.filter(record => !record.workoutId.startsWith('historical')).every(record => record.desired === 'absent')).toBe(true);
     expect(final.filter(record => record.workoutId.startsWith('historical')).every(record => record.status === 'past')).toBe(true);
-  }, 120_000);
+  }, 180_000);
 });

@@ -2,6 +2,7 @@ import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import type { PlannedWorkoutProviderId } from '../../../../shared/planned-workout-providers';
 import type { ScheduledWorkoutV1 } from '../../../../shared/training-plans';
 import type { TrainingDeliveryStatus, TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
+import type { DeliveryRepair, RemoteInspection, VerificationEvidence } from './verification-contracts';
 
 export const DELIVERY_QUEUE = 'trainingDeliveryQueue';
 export const DELIVERY_LEDGER = 'trainingDeliveryLedger';
@@ -45,6 +46,7 @@ export interface DeliveryOperation {
   /** Conflicting late acceptance is retained separately and needs operator inspection.
    * Retry must not execute from a journal that may have been overtaken by another lease. */
   recoveryBlocked?: boolean;
+  repair?: DeliveryRepair;
 }
 export interface DeliveryTransportProgress {
   version: 1;
@@ -62,6 +64,7 @@ export type DeliveryRecovery = { kind: 'accepted'; artifact: DeliveryArtifact | 
  * Final upsert acceptance requires a nonempty artifact identity; final removal requires null.
  * Recovery must inspect or prove the SAME operation id idempotent before repeating it. */
 export interface TrainingDeliveryTransport {
+  inspection?: RemoteInspection;
   mappingVersion: string;
   horizonDays: number;
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string): DeliveryAssessment;
@@ -71,7 +74,7 @@ export interface TrainingDeliveryTransport {
 }
 export class TrainingDeliveryTransportError extends Error {
   readonly diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' };
-  constructor(public readonly kind: 'retryable' | 'auth' | 'permission' | 'terminal' | 'uncertain',
+  constructor(public readonly kind: 'retryable' | 'auth' | 'permission' | 'terminal' | 'uncertain' | 'deferred',
     public readonly retryAfterMs = 0,
     diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' } = {}) {
     super(kind);
@@ -85,6 +88,7 @@ export class TrainingDeliveryTransportError extends Error {
   }
 }
 export interface DeliveryRuntime {
+  requestNotBefore?(tx: Transaction, uid: string, provider: PlannedWorkoutProviderId, destination: string): Promise<number>;
   db: Firestore;
   now(): number;
   hasPro(uid: string): Promise<boolean>;
@@ -93,6 +97,8 @@ export interface DeliveryRuntime {
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
 }
 export interface DeliveryLedgerV1 {
+  verification?: VerificationEvidence;
+  repair?: DeliveryRepair | null;
   schemaVersion: 1;
   id: string;
   workoutId: string;

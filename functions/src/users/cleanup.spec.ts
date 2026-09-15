@@ -598,7 +598,7 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingPlans' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/scheduledWorkouts' }));
         for (const collection of ['trainingDeliveryLedger', 'trainingDeliveryState', 'trainingDeliveryScopes',
-            'trainingDeliverySettings', 'trainingDeliveryStatuses']) {
+            'trainingDeliverySettings', 'trainingDeliveryStatuses', 'trainingDeliveryVerifications', 'trainingProviderCapacity']) {
             expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: `subcollection/${collection}` }));
         }
     });

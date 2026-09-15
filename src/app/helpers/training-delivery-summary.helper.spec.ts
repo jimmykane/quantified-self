@@ -50,6 +50,12 @@ describe('Training delivery service summaries', () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a', { lastAcceptedAtMs: null }), status('b', { differsFromQS: true })] });
     expect(row.label).toBe('0 of 3 workouts synced'); expect(row.detail).toContain('2 delivery unconfirmed');
   });
+  it('does not count confirmed missing remote artifacts even though earlier acceptance is retained', async () => {
+    const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [
+      status('a', { hasRemoteCopy: false, differsFromQS: true }), status('b'),
+    ] });
+    expect(row.label).toBe('1 of 3 workouts synced');
+  });
   it('does not double-count earlier accounts or let their success stand in for the new destination', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a'), status('a', { id: identity('a', 'old') }),
       status('b', { id: identity('b', 'old') }), status('removed', { id: identity('removed', 'old') })] });

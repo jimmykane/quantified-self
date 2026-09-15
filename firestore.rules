@@ -337,6 +337,11 @@ service cloud.firestore {
           allow read: if isOwner();
           allow write: if false;
         }
+        match /trainingDeliveryVerifications/{deliveryID} {
+          allow read: if isOwner();
+          allow write: if false;
+        }
+        match /trainingProviderCapacity/{document=**} { allow read, write: if false; }
         match /trainingDeliveryLedger/{document=**} { allow read, write: if false; }
         match /trainingDeliveryState/{document=**} { allow read, write: if false; }
         match /trainingDeliveryScopes/{document=**} { allow read, write: if false; }
@@ -509,6 +514,7 @@ service cloud.firestore {
       allow write: if false;
     }
     match /trainingDeliveryQueue/{document=**} { allow read, write: if false; }
+    match /trainingProviderCapacity/{document=**} { allow read, write: if false; }
 
     match /sleepSyncQueue/{queueItemID} {
       allow read: if isAdmin();

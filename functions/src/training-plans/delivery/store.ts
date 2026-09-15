@@ -9,6 +9,8 @@ import { DELIVERY_LEDGER, DELIVERY_QUEUE, DELIVERY_SCOPES, DELIVERY_STATE,
   type DeliveryContext, type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
 import { deliveryContentDigest, deliveryIdentity, resolveDeliveryIntent } from './intent';
 import { reconciliationJobId } from './marker';
+import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../../shared/training-provider-verification';
+import { readVerificationRequest, stageVerification } from './verification-queue';
 
 export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transaction, uid: string,
   workout: ScheduledWorkoutV1 | null, provider: PlannedWorkoutProviderId, hasPro: boolean,
@@ -31,10 +33,10 @@ export async function readDeliveryContext(runtime: DeliveryRuntime, tx: Transact
 
 export function projectDelivery(ledger: DeliveryLedgerV1): TrainingDeliveryStatusV1 {
   return { schemaVersion: 1, id: ledger.id, workoutId: ledger.workoutId, planId: ledger.planId, provider: ledger.provider,
-    status: ledger.status, differsFromQS: !!ledger.actual && (ledger.desired === 'absent'
+    status: ledger.status, differsFromQS: !!ledger.actual && (ledger.verification?.missing === true || ledger.desired === 'absent'
       || ledger.acceptedContentDigest !== ledger.contentDigest
       || ['unsupported', 'approval_required'].includes(ledger.status)),
-    hasRemoteCopy: !!ledger.actual, timeZone: ledger.timeZone, approvalDigest: ledger.approvalDigest,
+    hasRemoteCopy: !!ledger.actual && !ledger.verification?.missing, timeZone: ledger.timeZone, approvalDigest: ledger.approvalDigest,
     issues: ledger.issues, lastAttemptAtMs: ledger.lastAttemptAtMs, lastAcceptedAtMs: ledger.lastAcceptedAtMs,
     retryCount: ledger.retries, nextRetryAtMs: ledger.status === 'retrying' ? ledger.retryAtMs : null,
     updatedAtMs: ledger.updatedAtMs };
@@ -44,6 +46,14 @@ export function writeDelivery(runtime: DeliveryRuntime, tx: Transaction, uid: st
   const user = runtime.db.collection('users').doc(uid);
   tx.set(user.collection(DELIVERY_LEDGER).doc(ledger.id), ledger);
   tx.set(user.collection(TRAINING_DELIVERY_STATUSES).doc(ledger.id), projectDelivery(ledger));
+  const inspection = runtime.transport(ledger.provider, uid)?.inspection;
+  tx.set(user.collection(TRAINING_DELIVERY_VERIFICATIONS).doc(ledger.id), {
+    schemaVersion: 1, id: ledger.id, workoutId: ledger.workoutId, planId: ledger.planId, provider: ledger.provider,
+    state: ledger.verification?.state ?? 'unsupported', canCheck: !!inspection && inspection.policy.mode !== 'unavailable'
+      && ledger.desired === 'present' && !ledger.attempt && !!ledger.actual,
+    missing: ledger.verification?.missing ?? false, lastCheckedAtMs: ledger.verification?.checkedAtMs ?? null,
+    nextCheckAtMs: ledger.verification?.nextCheckAtMs ?? null, updatedAtMs: runtime.now(),
+  });
 }
 
 function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid: string, provider: PlannedWorkoutProviderId,
@@ -57,7 +67,9 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const settingRevision = Math.max(setting?.revision ?? 0, context.override?.revision ?? 0);
   const changed = !previous || previous.desiredDigest !== intent.digest || previous.desired !== intent.desired;
   const retried = settingRevision !== previous?.settingsRevision;
-  const record: DeliveryLedgerV1 = { schemaVersion: 1, id, workoutId, planId: context.workout ? context.workout.planId : previous?.planId ?? null,
+  const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
+    ...(previous?.repair ? { repair: previous.repair } : {}),
+    schemaVersion: 1, id, workoutId, planId: context.workout ? context.workout.planId : previous?.planId ?? null,
     provider, destinationKey,
     desiredGeneration: (previous?.desiredGeneration ?? 0) + (changed ? 1 : 0), desiredDigest: intent.digest,
     connectionEpoch: setting?.connectionEpoch ?? previous?.connectionEpoch ?? context.connection.epoch,
@@ -72,12 +84,17 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
     blockedConnectionGeneration: previous?.blockedConnectionGeneration ?? null,
     lastAttemptAtMs: previous?.lastAttemptAtMs ?? null, lastAcceptedAtMs: previous?.lastAcceptedAtMs ?? null,
     updatedAtMs: runtime.now() };
+  if (changed && record.verification?.missing && !record.attempt && record.desired === 'present') {
+    record.repair = null;
+    record.verification = { ...record.verification, binding: '', suspectedAtMs: null, state: 'pending', nextCheckAtMs: runtime.now() };
+  }
   if (record.blockedConnectionGeneration === context.connection.generation) {
     record.status = previous!.status;
     record.desired = 'preserve';
   } else record.blockedConnectionGeneration = null;
   // An uncertain create is never cleared by a new edit or a user Retry.
   if (previous?.status === 'needs_attention' && previous.attempt && !retried) record.status = 'needs_attention';
+  if (previous?.status === 'needs_attention' && previous.verification && !previous.attempt && !changed) record.status = 'needs_attention';
   if (previous?.status === 'failed' && !changed && !retried) record.status = 'failed';
   if (previous?.status === 'retrying' && !changed && !retried && previous.retryAtMs > runtime.now()) record.status = 'retrying';
   if ((record.providerNotBeforeMs ?? 0) > runtime.now() && ['pending', 'stopped', 'paused_plan'].includes(record.status)
@@ -118,7 +135,7 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
       : user.collection(DELIVERY_LEDGER).orderBy(FieldPath.documentId());
     if (cursor) query = query.startAfter(cursor);
     const page = await tx.get(query.limit(TRAINING_DELIVERY_PAGE_SIZE));
-    const records: DeliveryLedgerV1[] = [];
+    const records: { record: DeliveryLedgerV1; context: DeliveryContext; requestedAtMs: number }[] = [];
     for (const doc of page.docs) {
       if (phase === 'workouts') {
         const workout = parseScheduledWorkoutV1(doc.data());
@@ -128,7 +145,7 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
           const id = deliveryIdentity(uid, provider, context.connection.destinationKey, workout.id);
           const stored = await tx.get(user.collection(DELIVERY_LEDGER).doc(id));
           const record = reconcileRecord(runtime, context, uid, provider, workout.id, (stored.data() ?? null) as DeliveryLedgerV1 | null);
-          if (record) records.push(record);
+          if (record) records.push({ record, context, requestedAtMs: context.transport?.inspection ? await readVerificationRequest(runtime, tx, uid, record) : 0 });
         }
       } else {
         const previous = doc.data() as DeliveryLedgerV1;
@@ -136,16 +153,16 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
         const context = await readDeliveryContext(runtime, tx, uid, workoutDoc.exists ? parseScheduledWorkoutV1(workoutDoc.data()) : null,
           previous.provider, hasPro, previous.workoutId);
         const record = reconcileRecord(runtime, context, uid, previous.provider, previous.workoutId, previous);
-        if (record) records.push(record);
+        if (record) records.push({ record, context, requestedAtMs: context.transport?.inspection ? await readVerificationRequest(runtime, tx, uid, record) : 0 });
       }
     }
-    for (const record of records) {
-      writeDelivery(runtime, tx, uid, record);
-      if ((record.attempt || (record.desired === 'present' && record.status !== 'delivered')
+    for (const { record, context, requestedAtMs } of records) {
+      if ((record.attempt || (record.desired === 'present' && record.status !== 'delivered' && !(record.verification?.missing && !record.repair))
         || (record.desired === 'absent' && record.actual)) && !['failed', 'needs_attention'].includes(record.status)) {
         tx.set(db.collection(DELIVERY_QUEUE).doc(record.id), { uid, kind: 'delivery', deliveryId: record.id,
           dueAtMs: Math.max(record.retryAtMs, record.lease?.expiresAtMs ?? 0), dispatchToken: randomUUID() });
-      }
+      } else stageVerification(runtime, tx, uid, record, context, requestedAtMs);
+      writeDelivery(runtime, tx, uid, record);
     }
     const finished = page.size < TRAINING_DELIVERY_PAGE_SIZE && phase === 'ledger';
     const nextPhase = page.size < TRAINING_DELIVERY_PAGE_SIZE ? 'ledger' : phase;

@@ -11,8 +11,9 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
 import { EMPTY_TRAINING_DELIVERY_VIEW, TrainingDeliveryService, type TrainingDeliveryViewScope } from '../../services/training-delivery.service';
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
-import { TRAINING_DELIVERY_STATUS_LABELS, trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeliveryLatestEvent } from '../../helpers/training-delivery-display.helper';
+import { trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeliveryLatestEvent } from '../../helpers/training-delivery-display.helper';
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
+import { trainingVerificationLabel } from '../../helpers/training-verification-display.helper';
 
 export interface TrainingDeliveryDialogData {
   scope: TrainingDeliveryViewScope; id: string; title: string;
@@ -46,7 +47,8 @@ export class TrainingDeliveryDialogComponent {
   private readonly initialUid = this.users.user()?.uid;
   private readonly sameAccount = computed(() => !!this.initialUid && this.uid() === this.initialUid && this.users.user()?.uid === this.initialUid);
   readonly error = signal<string | null>(null);
-  readonly phase = signal<'preview' | 'saving' | null>(null);
+  readonly phase = signal<'preview' | 'saving' | 'checking' | null>(null);
+  readonly checkingProvider = signal<PlannedWorkoutProviderId | null>(null);
   readonly busy = computed(() => this.phase() !== null);
   readonly notice = signal<string | null>(null);
   readonly draft = signal<DeliveryDraft | null>(null);
@@ -139,6 +141,7 @@ export class TrainingDeliveryDialogComponent {
     const inheritedSetting = this.planBound() && setting?.associationPlanId === currentPlanId ? setting : undefined;
     const suppressed = !!inheritedSetting?.suppressed;
     const statuses = this.statuses().filter(item => item.provider === provider).map(status => {
+      const verification = this.view().verifications?.find(item => item.id === status.id);
       const workout = this.schedule()?.workouts.find(item => item.id === status.workoutId);
       const plan = this.schedule()?.plans.find(item => item.id === workout?.planId);
       return { ...status, title: workout?.title ?? (this.scheduleView().error ? 'Workout unavailable'
@@ -147,12 +150,14 @@ export class TrainingDeliveryDialogComponent {
         scopeLabel: workout?.lifecycle === 'deleted' ? 'Deleted workout'
           : workout ? workout.planId ? `Plan: ${plan?.name ?? 'Unavailable plan'}` : 'Standalone workout' : null,
         moved: !!workout && (workout.lifecycle === 'deleted' || (this.data.scope === 'plan' && workout.planId !== this.data.id)),
-        label: TRAINING_DELIVERY_STATUS_LABELS[status.status], copyMessage: trainingDeliveryCopyMessage(status),
+        verification, label: trainingVerificationLabel(status, verification), copyMessage: trainingDeliveryCopyMessage(status),
+        showLastSent: status.hasRemoteCopy || verification?.missing,
         ...trainingDeliveryLatestEvent(status),
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
     return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
+      canCheck: statuses.some(status => status.verification?.canCheck),
       needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
       // Current settings precede the asynchronously reconciled status after Resume.
       canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'
@@ -214,6 +219,24 @@ export class TrainingDeliveryDialogComponent {
       initialSettingsRevision: setting?.revision ?? 0,
       ...(approvalDigest ? { approvalDigest } : {}) });
     if (!editingSettings) await this.review();
+  }
+  async checkProvider(provider: PlannedWorkoutProviderId): Promise<void> {
+    const schedule = this.schedule();
+    if (this.busy() || !this.sameAccount() || !this.canReview() || !schedule || this.data.scope === 'history') return;
+    const version = ++this.requestVersion;
+    const current = () => !this.destroyRef.destroyed && this.sameAccount() && this.requestVersion === version;
+    this.phase.set('checking'); this.checkingProvider.set(provider); this.error.set(null); this.notice.set(null);
+    try {
+      const receipt = await this.delivery.check({ schemaVersion: 1, action: 'check', mutationId: this.delivery.createMutationId(),
+        scope: this.data.scope, scopeId: this.data.id, provider, expectedScheduleRevision: schedule.state.revision,
+        expectedScopeRevision: this.scopeRecord()?.revision ?? 0,
+        expectedSettingsRevision: this.view().settings.find(item => item.provider === provider)?.revision ?? 0 }, current);
+      if (!current()) return;
+      this.notice.set(receipt.result === 'coalesced' ? 'A recent check is already queued or complete.'
+        : receipt.result === 'deferred' ? 'Check queued. It will run when provider capacity is available.' : 'Check queued. Results will update here.');
+      this.haptics.success();
+    } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, true)); this.haptics.error(); } }
+    finally { if (current()) { this.phase.set(null); this.checkingProvider.set(null); } }
   }
   updateTimeZone(value: string): void {
     if (this.phase() === 'saving') return;

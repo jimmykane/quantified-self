@@ -4,10 +4,12 @@ import { getTokenData } from '../../../tokens';
 import { getUserDeletionGuardStateInTransaction } from '../../../shared/user-deletion-guard';
 import { readTrainingDeliveryAuthority, GARMIN_TRAINING_PERMISSION_ISSUE } from '../connection';
 import { TrainingDeliveryTransportError, type DeliveryOperation } from '../contracts';
+import { GARMIN_PRODUCTION_WINDOWS, productionRequestCapacity } from '../request-capacity';
 
 /** Reuses shared refresh leases and deletion/disconnect fencing. No cached credential
  * survives a request, and refreshed credentials must still represent the admitted account. */
-export async function authorizeGarminTrainingRequest(db: Firestore, uid: string, operation: DeliveryOperation): Promise<string> {
+export async function authorizeGarminTrainingRequest(db: Firestore, uid: string,
+  operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>): Promise<string> {
   const read = () => db.runTransaction(async tx => {
     if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) throw new TrainingDeliveryTransportError('auth');
     const authority = await readTrainingDeliveryAuthority(db, tx, uid, 'garmin');
@@ -22,8 +24,11 @@ export async function authorizeGarminTrainingRequest(db: Firestore, uid: string,
   try {
     refreshed = await getTokenData(authority.token!, ServiceNames.GarminAPI, false, {
       opaqueTelemetry: true, expectedActiveOAuthCredentialGeneration: authority.credentialGeneration,
+      beforeRefreshRequest: () => productionRequestCapacity(db, uid, 'garmin', operation.destinationKey,
+        GARMIN_PRODUCTION_WINDOWS.filter(window => window.scope === 'application')).reserve(),
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof TrainingDeliveryTransportError) throw error;
     // The shared lifecycle owns terminal-auth cleanup; refresh contention/outages must
     // not manufacture a reconnect requirement or leak provider exception contents here.
     throw new TrainingDeliveryTransportError('retryable');

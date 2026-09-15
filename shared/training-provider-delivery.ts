@@ -5,7 +5,7 @@ export const TRAINING_DELIVERY_SETTINGS = 'trainingDeliverySettings';
 export const TRAINING_DELIVERY_STATUSES = 'trainingDeliveryStatuses';
 export const TRAINING_DELIVERY_PAGE_SIZE = 25;
 export type TrainingDeliveryScope = 'plan' | 'workout';
-export type TrainingDeliveryAction = 'configure' | 'send' | 'resume' | 'stop' | 'approve' | 'retry';
+export type TrainingDeliveryAction = 'configure' | 'send' | 'resume' | 'stop' | 'approve' | 'retry' | 'check';
 export type TrainingDeliveryStatus = 'pending' | 'delivered' | 'removed' | 'stopped' | 'paused_plan'
   | 'paused_pro' | 'provider_unavailable' | 'reconnect_required' | 'connection_repair'
   | 'fresh_consent_required' | 'outside_horizon' | 'past' | 'completed' | 'unsupported'
@@ -113,7 +113,7 @@ export function parseTrainingDeliveryCommandV1(value: unknown): TrainingDelivery
   }
   if (!['plan', 'workout'].includes(input.scope as string)
     || !PLANNED_WORKOUT_PROVIDER_IDS.includes(input.provider as PlannedWorkoutProviderId)
-    || !['configure', 'send', 'resume', 'stop', 'approve', 'retry'].includes(input.action as string)) {
+    || !['configure', 'send', 'resume', 'stop', 'approve', 'retry', 'check'].includes(input.action as string)) {
     throw new TrainingDeliveryContractError('Unknown delivery action, scope, or provider.');
   }
   for (const key of ['expectedScheduleRevision', 'expectedScopeRevision', 'expectedSettingsRevision']) {
@@ -129,6 +129,7 @@ export function parseTrainingDeliveryCommandV1(value: unknown): TrainingDelivery
     }
   } else if ('approvalDigest' in input) throw new TrainingDeliveryContractError('Unexpected approval digest.');
   const command = { ...input } as unknown as TrainingDeliveryCommandV1;
+  if (command.action === 'check' && 'timeZone' in input) throw new TrainingDeliveryContractError('Checks do not change the time zone.');
   if ('timeZone' in input) command.timeZone = normalizeDeliveryTimeZone(input.timeZone);
   if (['configure', 'send'].includes(command.action) && !command.timeZone) {
     throw new TrainingDeliveryContractError('Initial consent requires a time zone.');
