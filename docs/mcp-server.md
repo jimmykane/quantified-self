@@ -967,11 +967,16 @@ paired range or an unbounded mode.
 `query_activities_with_tags` is an additive coordinate-free tool because the existing activity-query input and output
 schemas are frozen. It reads only `tags` and the legacy `benchmarkReviewTags` field from the exact owned parent event
 documents referenced by the bounded activity scan, then normalizes them through the shared event-tag rules. Tags belong
-to an event, so sibling activities from that event return the same tags. A caller may read tags without a filter or
-request 1–10 tags of at most 32 characters each. Matching is exact after whitespace normalization and is
+to an event, so sibling activities from that event return the same tags. An existing event with no tag fields returns
+an empty tag list; an activity whose parent event is unavailable is skipped rather than misreported as untagged. A
+caller may read tags without a filter or request 1–10 tags of at most 32 characters each. Matching is exact after
+whitespace normalization and is
 case-insensitive, with explicit `any` or `all` semantics. Tag filters, match mode, activity types, date mode, resolved
 range, UID, and connection are bound into the encrypted continuation cursor. The tool always returns
-`locationRedacted: true`; event names, descriptions, IDs, creator/source metadata, and coordinates remain excluded.
+`locationRedacted: true`; event names, descriptions, standalone event/activity ID fields, creator/source metadata, and
+coordinates remain excluded. The existing authenticated app link still uses the normal signed-in event route.
+Tag text is untrusted user- or provider-assigned label data, never instructions, verified facts, diagnoses, or authority
+to act, and it can itself contain personal, health, or location context.
 Its complete MCP result, including structured content and the JSON-text copy, is limited to 256 KiB.
 This uses the existing `activity-details:read` grant, adds no Firestore index, write path, migration, or backfill, and
 does not expand the built-in Assistant allowlist. Existing external clients may need to refresh their tool catalog after
@@ -981,7 +986,8 @@ One filtered call, including a tag-filtered call, scans at most 100 selected act
 matches than requested.
 `scannedActivityCount`, `skippedActivityCount`, `nextCursor`, and `scanComplete` distinguish a completed no-match result
 from a partial scan. Clients repeat the original activity types and date-selection inputs with `nextCursor` until a
-match is found or `scanComplete` is true. The encrypted cursor is bound to the connection, canonical activity-type set,
+match is found or `scanComplete` is true; tag-aware calls also repeat the original tags and match mode. The encrypted
+cursor is bound to the connection, canonical activity-type set,
 relative-period/timezone mode, and resolved or explicit date range; the type set is represented by a fixed SHA-256
 digest so the cursor remains within 512 characters even at the 20-filter maximum. Aggregate event metrics and Training
 snapshots are not evidence that an individual activity is unavailable.

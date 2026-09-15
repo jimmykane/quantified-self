@@ -6711,18 +6711,45 @@ export function createMcpDataService(
         );
       }
 
-      const scannedDocuments = documents.slice(0, scanLimit);
-      const projectedEntries = scannedDocuments.map(document => ({
-        document,
-        entry: projectActivityListEntry(document, {
+      const projectedEntries: Array<{
+        document: RawDocument;
+        entry: SafeActivityListEntry | null;
+      }> = [];
+      let cumulativeBytes = 0;
+      let eligibleActivityCount = 0;
+      for (const document of documents.slice(0, scanLimit)) {
+        cumulativeBytes += measureJsonBytes(
+          document.data,
+          'The tagged activity query contains data that cannot be processed safely.',
+        );
+        if (cumulativeBytes > MAX_ACTIVITY_LIST_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The tagged activity query exceeds the MCP processing limit.',
+          );
+        }
+        const entry = projectActivityListEntry(document, {
           uid: input.uid,
           connectionId: input.connectionId,
           appBaseUrl: input.appBaseUrl,
           includeLocation: false,
-        }),
-      }));
+        });
+        projectedEntries.push({ document, entry });
+        if (
+          entry
+          && activityTypeMatches(entry.summary.activityType, query.activityTypes)
+        ) {
+          eligibleActivityCount += 1;
+          if (requestedTags.length === 0 && eligibleActivityCount >= limit) {
+            break;
+          }
+        }
+      }
       const eventIds = [...new Set(projectedEntries.flatMap(({ entry }) => (
-        entry ? [entry.eventId] : []
+        entry
+        && activityTypeMatches(entry.summary.activityType, query.activityTypes)
+          ? [entry.eventId]
+          : []
       )))];
       let tagDocuments: McpActivityTagDocument[];
       try {
@@ -6738,7 +6765,6 @@ export function createMcpDataService(
       }
       const requestedEventIds = new Set(eventIds);
       const tagsByEventId = new Map<string, string[]>();
-      let cumulativeBytes = 0;
       for (const document of tagDocuments) {
         cumulativeBytes += measureJsonBytes(
           document.data,
@@ -6763,16 +6789,6 @@ export function createMcpDataService(
       let skippedActivityCount = 0;
       let lastScannedDocument: RawDocument | undefined;
       for (const { document, entry } of projectedEntries) {
-        cumulativeBytes += measureJsonBytes(
-          document.data,
-          'The tagged activity query contains data that cannot be processed safely.',
-        );
-        if (cumulativeBytes > MAX_ACTIVITY_LIST_BYTES) {
-          throw new McpDataError(
-            'query_too_large',
-            'The tagged activity query exceeds the MCP processing limit.',
-          );
-        }
         scannedActivityCount += 1;
         lastScannedDocument = document;
         if (
@@ -6782,7 +6798,11 @@ export function createMcpDataService(
           skippedActivityCount += 1;
           continue;
         }
-        const tags = tagsByEventId.get(entry.eventId) ?? [];
+        const tags = tagsByEventId.get(entry.eventId);
+        if (tags === undefined) {
+          skippedActivityCount += 1;
+          continue;
+        }
         if (!activityTagsMatch(tags, requestedTags, tagMatch)) {
           skippedActivityCount += 1;
           continue;

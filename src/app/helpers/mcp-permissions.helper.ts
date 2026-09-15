@@ -51,7 +51,7 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   },
   'activity-details:read': {
     title: 'Individual activity details',
-    description: 'Read non-location activity summaries and their event tags, filter workouts by exact case-insensitive tags, and read laps, swim lengths, MTB jump measurements, selected activity metrics, bounded on-demand chart series, and paginated detailed samples for selected metrics from existing original files. Activities from the same event share tags. Detailed samples include every available elapsed-second value with missing readings marked. Exact locations and breadcrumb traces require the separate activity-location permission.',
+    description: 'Read non-location activity summaries and their event tags, filter workouts by exact case-insensitive tags, and read laps, swim lengths, MTB jump measurements, selected activity metrics, bounded on-demand chart series, and paginated detailed samples for selected metrics from existing original files. Activities from the same event share tags. Tags can contain personal, health, or location context and are treated as untrusted labels. Detailed samples include every available elapsed-second value with missing readings marked. Exact locations and breadcrumb traces require the separate activity-location permission.',
   },
   'activity-location:read': {
     title: 'Activity locations',

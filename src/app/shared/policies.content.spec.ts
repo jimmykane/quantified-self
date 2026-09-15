@@ -152,7 +152,11 @@ describe('MCP client access policy', () => {
     expect(content).toContain('parent event tags');
     expect(content).toContain('1–10 exact case-insensitive tags');
     expect(content).toContain('Activities from the same event share tags');
+    expect(content).toContain('personal, health, or location context');
+    expect(content).toContain('untrusted labels');
     expect(content).toContain('Tag reads select only the event tag fields');
+    expect(content).toContain('separate internal ID fields');
+    expect(content).toContain('signed-in application link retains its normal event route');
     expect(content).toContain('built-in Assistant is not expanded');
     expect(content).toContain('discover canonical Sports Lib activity types');
     expect(content).toContain('filter bounded newest-first scans');

@@ -701,6 +701,7 @@ describe('MCP data service', () => {
       secondActivity,
     ]);
     vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-1', data: {} },
       { id: 'event-2', data: { benchmarkReviewTags: ['Recovery'] } },
     ]);
 
@@ -716,6 +717,82 @@ describe('MCP data service', () => {
       [],
       ['Recovery'],
     ]);
+  });
+
+  it('skips activities whose parent event is unavailable instead of reporting empty tags', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-2', data: { tags: ['Recovery'] } },
+    ]);
+
+    const result = await createMcpDataService(dependencies)
+      .queryActivitiesWithTags({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        limit: 2,
+      });
+
+    expect(result.activities.map(activity => activity.tags)).toEqual([
+      ['Recovery'],
+    ]);
+    expect(result).toMatchObject({
+      scannedActivityCount: 2,
+      skippedActivityCount: 1,
+      scanComplete: true,
+    });
+  });
+
+  it('reads tags only for activities eligible for the requested activity types', async () => {
+    const runningActivity = activityDocument({
+      eventID: 'event-running',
+      type: ActivityTypes.Running,
+    });
+    runningActivity.id = 'activity-running';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      runningActivity,
+      activityDocument(),
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-1', data: { tags: ['Race'] } },
+    ]);
+
+    const result = await createMcpDataService(dependencies)
+      .queryActivitiesWithTags({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        activityTypes: [ActivityTypes.Cycling],
+      });
+
+    expect(result.activities).toHaveLength(1);
+    expect(dependencies.fetchActivityEventTagDocuments).toHaveBeenCalledWith(
+      'user-1',
+      ['event-1'],
+    );
+  });
+
+  it('enforces the activity read budget before loading parent event tags', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument({ canary: 'x'.repeat(513 * 1024) }),
+    ]);
+
+    await expect(createMcpDataService(dependencies).queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    })).rejects.toMatchObject<McpDataError>({ code: 'query_too_large' });
+    expect(dependencies.fetchActivityEventTagDocuments).not.toHaveBeenCalled();
   });
 
   it('binds tagged activity cursors to normalized tags and match mode', async () => {

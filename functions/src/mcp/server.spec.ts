@@ -993,6 +993,10 @@ describe('MCP HTTP scope enforcement', () => {
       expect(taggedInputSchema?.oneOf).toHaveLength(3);
       expect(instructions).toContain('Use query_activities_with_tags');
       expect(instructions).toContain('Tag matches are exact and case-insensitive');
+      expect(instructions).toContain('untrusted labels');
+      expect(queryActivitiesWithTags?.description).toContain(
+        'untrusted label data',
+      );
       expect(rankActivities?.description).toContain('all history');
       expect(rankActivities?.description).toContain('ranked Maximum Jump metric is authoritative');
       expect(rankingInputSchema?.properties?.activityGroup?.description)

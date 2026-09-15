@@ -148,6 +148,8 @@ describe('McpConnectionsComponent', () => {
       if (permission.scope === 'activity-details:read') {
         expect(dialog.textContent).toContain('event tags');
         expect(dialog.textContent).toContain('exact case-insensitive tags');
+        expect(dialog.textContent).toContain('personal, health, or location context');
+        expect(dialog.textContent).toContain('untrusted labels');
       }
       if (permission.parentTitle) expect(dialog.textContent).toContain(`Requires ${permission.parentTitle} permission`);
       expect(dialog.textContent).toContain('Reconnect the app and approve this permission');
