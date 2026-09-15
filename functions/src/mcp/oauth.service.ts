@@ -20,6 +20,7 @@ export const MCP_OAUTH_SCOPES = {
   MetricsRead: 'metrics:read',
   HealthRead: 'health:read',
   TimelineNotesRead: 'timeline-notes:read',
+  TrainingPlansRead: 'training-plans:read',
   MeasurementsRead: 'measurements:read',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
@@ -2112,9 +2113,10 @@ export function createMcpOAuthService(
         throw new McpOAuthError('invalid_request', 'The authorization request is invalid or expired.');
       }
       // Legacy consent requests may omit the selection. Preserve their existing
-      // permissions, but never implicitly opt them into full private note text.
+      // permissions, but never implicitly opt them into authored notes, descriptions or planning data.
       const grantedScopes = normalizeOAuthScopes(input.grantedScopes
         ?? request.scopes.filter(scope => scope !== MCP_OAUTH_SCOPES.TimelineNotesRead
+          && scope !== MCP_OAUTH_SCOPES.TrainingPlansRead
           && scope !== MCP_OAUTH_SCOPES.ActivityDescriptionsRead));
       if (grantedScopes.some(scope => !request.scopes.includes(scope))) {
         throw new McpOAuthError('invalid_scope', 'A scope was not included in the original request.');

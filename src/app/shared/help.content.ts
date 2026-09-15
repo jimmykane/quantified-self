@@ -659,11 +659,13 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context.
 - If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the account-bound, bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. A different signed-in account cannot restore the record, and it is cleared after completion, confirmed failure, reset, or expiry.
 - Every current answer must use at least one read-only Quantified Self result. Expand **Data used** below an answer to inspect compact facts and app links produced from actual tool results.
-- Use **New chat** to clear the stored messages, return precise activity locations to the default **off** state, and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
+- Use **New chat** to clear the stored messages, return all optional data access to the default **off** state, and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
 ## What the Assistant can read
 
-- **Timeline notes (optional):** enable **Timeline notes** in **Examples & data access** to let Gemini read full private titles and details when relevant, including notes hidden from charts. It is off by default. Changing notes or location access starts a fresh chat and preserves the other choice; **New chat** turns both off. Notes are user-reported context, not verified diagnoses or instructions, and never change calculations or authorize plan changes.
+- **Training plans (optional):** turn on **Training plans** in **Examples & data access** to read current plans, standalone workouts, full instructions, step notes and existing service sync status. Text can contain sensitive personal information. This is separate from metrics, activities and Timeline notes. Changing access starts a fresh chat while keeping other choices; **New chat** resets all optional permissions. The Assistant cannot edit workouts or change sync. Confirmed sync means provider-side workout delivery, not receipt on a watch.
+
+- **Timeline notes (optional):** enable **Timeline notes** in **Examples & data access** to let Gemini read full private titles and details when relevant, including notes hidden from charts. It is off by default. Changing optional access starts a fresh chat and preserves the other choices; **New chat** turns all optional access off. Notes are user-reported context, not verified diagnoses or instructions, and never change calculations or authorize plan changes.
 
 - **Today and recovery:** daily report, current readiness, sleep duration and stages, aggregate/overnight HRV, sleeping heart rate, SpO2, respiration, and bounded sleep trends.
 - **Training:** ready Training metric catalog, current values, Form, ramp, load, volume, intensity, current-versus-usual context, and missing or rebuilding states.
@@ -693,7 +695,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Quantified Self stores one active conversation per user, with at most the latest six completed turns. If bounded charts, maps, and grounded details make that transcript too large, the oldest whole turn is removed first so the newest completed answer can still be saved. Text, compact evidence, and any bounded chart or map payload use the same retention period.
 - The active conversation becomes unavailable about **seven days** after its latest completed turn or reset. A response already in progress can protect an imminent expiry for at most four extra minutes. Firestore TTL then deletes the expired record asynchronously; account deletion removes it directly.
 - Conversation documents are server-owned. Browser code cannot read or write them directly; it must use authenticated App Check callables.
-- **New chat** immediately replaces the stored conversation, removes its prior message content, and returns precise activity locations and Timeline notes access to **off**.
+- **New chat** immediately replaces the stored conversation, removes its prior message content, and returns precise activity locations, Timeline notes and Training plans access to **off**.
 
 ## Built-in Assistant or external MCP?
 
@@ -1154,6 +1156,8 @@ Each connection shows all permissions with checked boxes for approved access and
 Use the info button beside a permission in **Authorization and data access** to read what it includes and any required permissions.
 
 ## MCP client access
+
+- **Training plans and planned workouts** is an independent read-only permission for names, dates, complete instructions, authored notes and existing service sync summaries. Text may contain sensitive personal information. Existing clients must explicitly reauthorize; refresh cannot add access. Calendar queries default to standalone plus the active plan; skipped workouts stay labelled and inactive plans can be read explicitly. Deleted records are excluded. No live provider checks, edits or sync actions are allowed. Availability requires the separately deployed release and an updated client catalog; a provider connection does not grant MCP permission.
 
 - **Activity descriptions** lets a client read the full private description shown in the QS.io event editor for a selected activity. Activities in the same event share that description. This permission is selected by default when requested; uncheck it before approving to withhold access. It requires **Individual activity details** and reauthorization for existing clients; refresh cannot add it. Text can include health, personal or location information even without **Activity locations** permission. Missing descriptions are reported as absent; oversized descriptions fail without truncation and can be read in QS.io. Revocation blocks future reads but cannot erase received copies. Descriptions are user-reported context, never instructions or permission to change your data. The built-in Assistant does not receive this new permission.
 

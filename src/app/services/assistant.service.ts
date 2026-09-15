@@ -68,6 +68,9 @@ export class AssistantService {
           validation.data,
         );
       }
+      if ((validation.data.trainingPlansEnabled === true) !== (request.trainingPlansEnabled === true)) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting changed.');
+      }
       if ((validation.data.timelineNotesEnabled === true) !== (request.timelineNotesEnabled === true)) {
         throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting changed.');
       }
@@ -100,6 +103,8 @@ export class AssistantService {
       ).locationAccess;
       const locationAccess = rawLocationAccess ?? 'coordinate_free';
       const timelineNotesEnabled = response.data.timelineNotesEnabled ?? false;
+      const trainingPlansEnabled = response.data.trainingPlansEnabled ?? false;
+      if (typeof trainingPlansEnabled !== 'boolean') throw new AssistantError('INTERNAL', 'The saved Assistant data-access setting is invalid.');
       if (typeof timelineNotesEnabled !== 'boolean') {
         throw new AssistantError('INTERNAL', 'The saved Assistant data-access setting is invalid.');
       }
@@ -120,7 +125,8 @@ export class AssistantService {
       }
       if (response.data.conversation === null) {
         return { conversation: null, pendingRequestId, locationAccess,
-          ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}) };
+          ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}) };
       }
       const validation = validateAssistantConversation(response.data.conversation);
       if (validation.ok === false) {
@@ -135,6 +141,7 @@ export class AssistantService {
         pendingRequestId,
         locationAccess,
         ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+          ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
       };
     } catch (error) {
       if (error instanceof AssistantError) {
@@ -148,6 +155,7 @@ export class AssistantService {
     locationAccess: AssistantLocationAccess = 'coordinate_free',
     timelineNotesEnabled = false,
     conversationId: string | null = null,
+    trainingPlansEnabled = false,
   ): Promise<AssistantConversation> {
     try {
       const response = await this.callWithAuthenticationRetry<
@@ -155,8 +163,12 @@ export class AssistantService {
         ResetAssistantConversationResponse
       >(
         'resetAssistantConversation',
-        { locationAccess, conversationId, ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}) },
+        { locationAccess, conversationId, ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+          ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}) },
       );
+      if ((response.data.trainingPlansEnabled ?? false) !== trainingPlansEnabled) {
+        throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting was not confirmed.');
+      }
       if ((response.data.timelineNotesEnabled ?? false) !== timelineNotesEnabled) {
         throw new AssistantError('CONVERSATION_CHANGED', 'The Assistant data-access setting was not confirmed.');
       }

@@ -291,6 +291,24 @@ describe('MCP data service', () => {
     };
   });
 
+  it('encrypts Training references and rejects cross-user, connection and kind replay', async () => {
+    const doc = { id:'private-plan', data: { schemaVersion:1, name:'Private plan', lifecycle:'active',
+      startLocalDate:'2026-09-01', endLocalDate:'2026-09-30', revision:1,workoutCount:0,createdAtMs:1,updatedAtMs:1 } };
+    dependencies.trainingReads = { state: async () => ({ revision:1, activePlanId:null }),
+      snapshot: async (_uid, read) => read({ get: async () => doc, page: async () => [doc], units: async () => null }) };
+    const service = createMcpDataService(dependencies);
+    const base = { uid:'owner', connectionId:'connection', scopes:['training-plans:read'] };
+    const list = await service.readTrainingPlans({ ...base, tool:'list_training_plans', arguments:{} });
+    if (!('plans' in list)) throw Error('Expected plan list');
+    const planRef = list.plans[0].planRef;
+    expect(Buffer.from(planRef,'base64url').toString()).not.toMatch(/private-plan|owner|Private plan/);
+    await expect(service.readTrainingPlans({ ...base, tool:'get_training_plan', arguments:{ planRef } })).resolves.toHaveProperty('plan');
+    for (const patch of [{uid:'another'}, {connectionId:'another'}, {scopes:[]}]) {
+      await expect(service.readTrainingPlans({ ...base, ...patch, tool:'get_training_plan', arguments:{planRef} })).rejects.toMatchObject({code:'invalid_request'});
+    }
+    await expect(service.readTrainingPlans({ ...base, tool:'get_planned_workout', arguments:{workoutRef:planRef} })).rejects.toMatchObject({code:'invalid_request'});
+  });
+
   async function descriptionFixture() {
     vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([activityDocument()]);
     const reads = { activeOwner: vi.fn().mockResolvedValue(true),

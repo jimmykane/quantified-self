@@ -1,5 +1,55 @@
 # Read-only MCP Server
 
+## Training plans and planned workouts (#690 read-only slice)
+
+This is source implementation, not deployment, provider enablement, registered-client promotion or real-profile plugin
+installation. After a separately approved release, refresh the client catalog and explicitly reauthorize the independent
+`training-plans:read` scope (**Training plans and planned workouts**). Metrics, activities, Timeline notes and provider
+permissions never grant it. Any consenting owner may use it, with no pilot UID or Pro gate; planning UI rollout is unchanged.
+Authored titles/notes may contain sensitive personal information. Legacy omitted selections and refresh exclude this new
+grant. HTTP prechecks, tool registration and data reads enforce it. Revocation cannot erase copies already received.
+
+| Tool | Current-record read |
+| --- | --- |
+| `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
+| `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
+| `query_planned_workouts` | Inclusive dates; calendar-visible (default standalone + active plan), standalone, selected plan or all |
+| `get_planned_workout` | Complete validated v1 canonical recipe, notes and owner-unit display text |
+| `get_training_sync_status` | Existing local per-service evidence for a plan/workout; never a live provider check |
+
+References bind owner, connection, entity and creation time. Structural node IDs are public recipe fields, not document
+IDs. No app links are returned while planning UI remains restricted. Lists use document-ID order (not date order), default
+25/max 100 results, 25-record scan pages and 1,000 scanned records per call. Inclusive windows permit 366 days. Skipped
+workouts are labelled, deleted excluded; historical dates read current authored records, not revisions. Explicit plan/all
+scopes include inactive plans. Cursors bind exact filters/limit, owner, connection and schedule revision; changed schedules
+require restarting. Dates remain calendar labels; no plan timezone is invented. Delivery retains its saved timezone.
+Selected input includes every fetched page entry (even unused lookahead/tail entries) and cached records are counted
+once per fetch. It is bounded to 2 MiB, an individual record to 128 KiB and complete structured-plus-JSON-text responses to
+256 KiB. Oversized records fail without truncating instructions. Canonical values remain alongside Sports Lib display;
+manual/mixed-ending recipes receive no invented duration estimate.
+
+`training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
+Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
+grant-generation checks. Settings fingerprints are read only to correlate current delivery evidence and never returned.
+No credentials, private ledgers, attempts, artifacts, approval digests, issue text, receipts or history are read. Reads do
+not import transports or write Training data; normal OAuth usage counters remain permitted infrastructure behavior.
+
+`shared/training-delivery-summary.ts` supplies machine-readable classification to MCP and unchanged presentation to the UI.
+Services appear only with existing settings/evidence. Outputs include saved timezone, copy/mismatch indicators, freshness
+timestamps and plan counts. `checkedAtMs` is local read time, not a provider check. Aggregates cover all current non-deleted
+plan workouts (max 400), never a day/page. Historical workout scans cap at 1,000; settings, overrides and retained statuses
+at 1,600 each with lookahead, all in pages of 25. Incomplete scans withhold total/synced/retained counts and mismatch certainty.
+Suppression, transfers, earlier accounts, stale confirmations, inactive plans and Pro pauses preserve UI semantics.
+Valid sync-off settings may have an empty destination before any account has been selected; this is not malformed data
+or delivery confirmation.
+Synced means confirmed provider-side workout delivery, not a native provider plan or watch receipt. Empty/missing/incomplete
+evidence is not success. Assistant consent/routing is described in [Assistant](assistant.md); planning semantics remain in
+[Training workspace](training-workspace.md). Approved writes stay in #690 with #652's approval dependency; this slice closes neither.
+
+Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
+Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
+reads never authorizes provider actions, write tools, wider consent or deployment.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
@@ -7,7 +57,7 @@ authenticated user's persisted numeric activity metrics, explicitly approved rec
 snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
 without granting browser or Firestore access.
 
-Separately authorized Timeline notes and activity descriptions can also supply full private user-reported context. They are never inferred from
+Separately authorized Training plans, Timeline notes and activity descriptions can also supply full private user-reported context. They are never inferred from
 metric or Sleep access and never become calculation inputs or write authority.
 
 The server is a Firebase Functions v2 HTTP function behind the production and beta Hosting domains. Each request uses a
@@ -160,7 +210,7 @@ The bundled skills divide ownership deliberately:
 | Skill | Responsibility | Primary permission |
 | --- | --- | --- |
 | `analyze-quantified-self` | Comparisons that need two or more data domains | Every domain used by the comparison |
-| `analyze-quantified-self-training` | Training load, volume, performance trends, and Training-derived metrics | `metrics:read` |
+| `analyze-quantified-self-training` | Current plans/planned workouts and sync summaries; recorded load, volume and Training-derived metrics | `training-plans:read` for planning; `metrics:read` for recorded metrics |
 | `analyze-quantified-self-sleep` | Sleep sessions, stages, duration, safe aggregate vitals, naps, and sleep-oriented trends | `sleep:read` |
 | `analyze-quantified-self-health` | Recorded all-day Health metrics and bounded representative sample trends | `health:read`; body composition also requires `measurements:read` |
 | `analyze-quantified-self-measurements` | Recorded body-measurement history and trends | `measurements:read` |
@@ -278,6 +328,7 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `health:read` for source-separated recorded Health summaries and bounded normalized sample trends; body composition
   additionally requires `measurements:read`, while Weight and normalized Sleep keep their existing contracts;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
+- `training-plans:read` for current authored plans/workouts, complete instructions and existing sanitized service sync summaries;
 - `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
 - `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
   selected metrics, and on-demand chart series;
@@ -484,6 +535,11 @@ The analytics and map entries follow the
 
 | Tool | Scope | Result |
 | --- | --- | --- |
+| `list_training_plans` | `training-plans:read` | Paginated current plan summaries across active, paused and archived lifecycles |
+| `get_training_plan` | `training-plans:read` | Current plan metadata and workout count without loading all workouts |
+| `query_planned_workouts` | `training-plans:read` | Bounded calendar-date summaries; standalone plus active plan by default |
+| `get_planned_workout` | `training-plans:read` | Complete validated canonical v1 instructions plus owner-unit display text |
+| `get_training_sync_status` | `training-plans:read` | Existing local delivery evidence, with whole-plan counts only for complete reads |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
 | `get_hrv_personal_range` | `health:read` + `sleep:read` | Shared rolling nightly HRV baseline, historical classifications and missing-day ranges, separated by source |
