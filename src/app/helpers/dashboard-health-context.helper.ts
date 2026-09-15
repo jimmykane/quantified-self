@@ -20,7 +20,7 @@ export interface DashboardHealthEvidence {
     errors: string[];
     staleSources?: string[];
 }
-export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, settings: AppDashboardHealthMetricSettings, units: UserUnitSettingsInterface | null = null, preferredAccount?: string, providerFilter: readonly HealthProvider[] = []) {
+export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, settings: AppDashboardHealthMetricSettings, units: UserUnitSettingsInterface | null = null, preferredAccount?: string, providerFilter: readonly HealthProvider[] = [], nowMs = Date.now()) {
     const { window, health, history, activities } = evidence;
     const sessions = evidence.sessions.filter(session => {
         const date = resolveSleepTrendDate(session);
@@ -38,7 +38,7 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
             points.set(`${point.timestampMs}:${point.calendarDate}`, point);
         // A failed/truncated baseline read must not masquerade as a complete personal range.
         const status = settings.metric === HEALTH_METRIC_IDS.HeartRateVariability && history && !history.limitReached
-            ? buildHealthHrvPersonalRangeStatus({ ...model.series, points: [...points.values()].sort((a, b) => a.timestampMs - b.timestampMs) }, window.endTimeMs, units, model.series.points.map(point => point.timestampMs), window.startTimeMs) : null;
+            ? buildHealthHrvPersonalRangeStatus({ ...model.series, points: [...points.values()].sort((a, b) => a.timestampMs - b.timestampMs) }, window.endTimeMs, units, model.series.points.map(point => point.timestampMs), window.startTimeMs, nowMs) : null;
         const latest = model.series.points.at(-1);
         return { key: model.series.id, model, status, statusOverlay: buildHealthHrvChartStatusOverlay(status), statusDescription: healthHrvChartStatusDescription(status),
             latestValueText: latest ? formatHealthValue(model.series.metricId, latest.value, model.series.unit, model.series.nativeOnly, units) : '—' };

@@ -2,7 +2,8 @@
   [errorHint]="noDataErrorHint" [errorIcon]="noDataErrorIcon" [showSkeleton]="false" height="100%" [style.height.%]="100">
   <section class="sleep-layout">
     <header class="sleep-header" [class.sleep-header-reserve-actions]="reserveTitleActionSpace">
-      <div class="title-row" [hidden]="hideTitle">
+      @if (!hideTitle) {
+      <div class="title-row">
         <div class="sleep-title-group">
           <div class="sleep-title qs-dashboard-chart-title">Sleep</div>
           @if (infoTooltip) {
@@ -13,6 +14,7 @@
           }
         </div>
       </div>
+      }
       <div class="sleep-stats">
         <div class="sleep-stat">
           <div class="sleep-stat-value">{{ latestDurationText }}</div>

@@ -69,9 +69,15 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .chart-library-new-label { color: var(--mat-sys-primary); font: var(--mat-sys-label-small); }
 
 .chart-library-health-thumbnail { width:76px; height:42px; display:block; }
-.chart-library-health-preview { display:block; height:500px; min-height:420px; }
-@media(max-width:640px) { .chart-library-health-preview { height:480px; } }
+.chart-library-health-preview { display:block; height:clamp(360px, 48vh, 430px); min-height:360px; }
+@media(max-width:640px) { .chart-library-health-preview { height:420px; } }
 
 .pin-preview { grid-template-columns:minmax(0,1fr); }
 .pin-preview .chart-library-preview-heading .chart-library-back { display:inline-flex; }
 .pin-preview .chart-library-preview-heading { justify-content:flex-start; }
+
+@media(min-width:960px) { .health-library .chart-library-layout:not(.pin-preview) { grid-template-columns:minmax(320px, 380px) minmax(0, 1fr); } }
+.health-library .chart-library-list button { min-height:72px; }
+.health-library .chart-library-list [matListItemTitle] { white-space:normal; line-height:1.3; }
+.health-library .chart-library-row-meta { margin-inline:8px 4px; gap:4px; }
+.health-library .chart-library-health-thumbnail { width:64px; }

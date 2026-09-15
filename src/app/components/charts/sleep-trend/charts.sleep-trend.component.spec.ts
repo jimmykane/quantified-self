@@ -78,6 +78,14 @@ describe('ChartsSleepTrendComponent', () => {
     }
   });
 
+  it('omits a duplicated title when the Health tile supplies its own header', () => {
+    fixture.componentRef.setInput('hideTitle', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.title-row')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.sleep-stats')).not.toBeNull();
+    fixture.componentRef.setInput('hideTitle', false); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.title-row')?.textContent).toContain('Sleep');
+  });
+
   it('keeps the plot baseline fixed with the visible legend above the plot', async () => {
     const point = buildSleepPoint();
     component.sleepTrend = {

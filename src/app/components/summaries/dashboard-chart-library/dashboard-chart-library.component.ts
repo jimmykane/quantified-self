@@ -87,12 +87,15 @@ export class DashboardChartLibraryComponent {
     const healthContext = this.healthContexts()[entry.definition.id];
     const preview = healthSettings ? {
       tile: entry.tile as import('../../../helpers/dashboard-tile-view-model.helper').DashboardTileViewModel,
-      source: 'user' as const, loading: !healthContext, note: '', calendarEvents: [], anchorMs: Date.now(),
+      source: healthContext?.hasData ? 'user' as const : 'example' as const, loading: !healthContext, note: '', calendarEvents: [], anchorMs: Date.now(),
       availability: healthContext?.availability || {state:'loading' as const, hasData:false, label:'Loading readings…', reason:'Readings load when visible.'},
     } : buildDashboardThumbnailPreview(entry.tile, this.previewSeed());
     const availabilityLabel = preview.availability?.label || dashboardPreviewSourceLabel(preview);
     return { ...entry, preview, isNew: this.sessionNewIds().has(entry.definition.id),
-      healthSettings, sourceLabel: preview.source === 'example' ? `Example · ${availabilityLabel}` : availabilityLabel,
+      healthSettings, sourceHint: preview.availability?.reason || availabilityLabel,
+      sourceLabel: healthSettings ? healthContext?.hasData ? 'Your data' : !healthContext ? 'Example · Loading…'
+        : healthContext.availability.state === 'error' ? 'Example · Unavailable' : healthContext.sampleOnly ? 'Example · Shorter range' : 'Example · No readings'
+        : preview.source === 'example' ? `Example · ${availabilityLabel}` : availabilityLabel,
       title: entry.definition.label.replace(/^KPI:\s*/, ''),
       format: resolveDashboardTilePresentation(entry.tile).label };
   }));
@@ -114,7 +117,7 @@ export class DashboardChartLibraryComponent {
     return draft ? this.catalog.find(entry => matchesDashboardPreset(draft, entry.tile))?.definition : null;
   });
   readonly previewTitle = computed(() => this.draftDefinition()?.label || (this.state.editor()?.mode === 'edit' ? this.draftPresentation().edit : this.draftPresentation().kind === 'chart' ? 'Custom chart' : this.draftPresentation().label));
-  readonly explanation = computed(() => resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.draftDefinition()?.description || 'Choose a metric, chart style, aggregation and date range.');
+  readonly explanation = computed(() => (this.state.healthSettings() ? this.draftDefinition()?.description : null) || resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.draftDefinition()?.description || 'Choose a metric, chart style, aggregation and date range.');
   readonly explanationParagraphs = computed(() => this.explanation().split('\n\n'));
   readonly dataScope = computed(() => {
     const tile = this.state.draft();

@@ -116,6 +116,8 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
       );
     if (this.thumbnail) {
       Object.assign(option, { grid:{left:2,right:2,top:3,bottom:3}, tooltip:{show:false}, legend:{show:false}, dataZoom:[] });
+      // Zero is a real reading too: a minimal bar keeps an all-zero thumbnail visible.
+      for (const series of [option.series].flat()) if (series && typeof series === 'object' && 'type' in series && series.type === 'bar') Object.assign(series, {barMinHeight:2});
       for (const axis of [option.xAxis, option.yAxis].flat()) if (axis) Object.assign(axis, {show:false});
     }
     this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);

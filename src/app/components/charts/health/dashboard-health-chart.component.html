@@ -1,8 +1,11 @@
-<section class="health-tile" [class.health-thumbnail]="thumbnail()" [attr.aria-busy]="loading()">
+<section class="health-tile" [class.health-thumbnail]="thumbnail()" [class.health-preview]="preview() && !thumbnail()" [attr.aria-busy]="loading()">
   @if (!thumbnail()) {
     @if (!hideTitle()) { <header class="health-tile-header" [class.reserve-actions]="reserveActions()">
       <div class="qs-dashboard-chart-title">{{ title() }}</div>
     </header> }
+    @if (preview()) {
+      <div class="health-preview-source" role="status"><strong>{{ showingExample() ? 'Example data' : 'Your data' }}</strong><span>{{ previewNotice() }}</span></div>
+    }
     <div class="health-tile-controls">
       <span class="health-tile-window">{{ window().label }}</span>
       <div class="health-range-controls">
@@ -24,26 +27,27 @@
           </mat-select>
         </mat-form-field>
       }
-      @if (loading()) { <p class="health-notice" role="status">Updating readings. Previous chart shown.</p> }
+      @if (loading() && !preview()) { <p class="health-notice" role="status">Updating readings. Previous chart shown.</p> }
+      @if (showingExample() && view.sampleOnly) { <button mat-button (click)="selectRange('30d')">Show 30 days</button> }
       @for (notice of view.notices; track notice) { <p class="health-notice" role="status">{{ notice }}</p> }
       @if (view.failedSources) { <button mat-button [disabled]="loading()" (click)="reload()">Retry unavailable sources</button> }
     }
     @if (error()) { <p class="health-notice" role="status">Could not load this period. <button mat-button (click)="reload()">Try again</button></p> }
   }
-  @if (context(); as view) {
+  @if (displayContext(); as view) {
     @if (view.selected; as chart) {
       @if (!thumbnail()) {
         <div class="health-tile-summary">
-          <strong>{{ chart.latestValueText }}</strong><span>{{ chart.model.series.sourceLabel }}</span>
+          <strong>{{ chart.latestValueText }}</strong>@if (!showingExample()) { <span>{{ chart.model.series.sourceLabel }}</span> }
           @if (chart.status; as status) { <span class="health-status"><span class="health-status-dot" [style.background-color]="chart.statusOverlay?.statusColor"></span>{{ status.label }}</span><span class="health-status-detail">{{ status.detailText }}</span> }
         </div>
       }
       <app-health-metric-series-chart [model]="chart.model" [startTimeMs]="view.window.startTimeMs" [endTimeMs]="view.window.endTimeMs"
         [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="true" [thumbnail]="thumbnail()"
-        [timelineNotes]="thumbnail() ? null : timelineNotes()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
+        [timelineNotes]="thumbnail() || showingExample() ? null : timelineNotes()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
     } @else if (settings().metric === 'sleep' && view.hasData) {
       @if (thumbnail()) { <app-dashboard-chart-thumbnail [preview]="sleepThumbnail()" [darkTheme]="darkTheme()" /> }
-      @else { <app-sleep-trend-chart [hideTitle]="true" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="timelineNotes()" /> }
+      @else { <app-sleep-trend-chart [hideTitle]="true" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="showingExample() ? null : timelineNotes()" /> }
     } @else if (!thumbnail()) {
       <div class="health-tile-empty" role="status"><p>{{ view.availability.reason }}</p>@if (view.sampleOnly) { <button mat-button (click)="selectRange('30d')">Show 30 days</button> }</div>
     } @else { <span class="health-thumbnail-empty">—</span> }

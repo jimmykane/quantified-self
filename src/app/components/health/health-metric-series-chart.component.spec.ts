@@ -136,6 +136,17 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(eChartsLoader.setOption.mock.calls.at(-1)![1].xAxis.show).not.toBe(false);
   });
 
+  it('keeps zero-valued bars visible only in thumbnails without changing their values', async () => {
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({ metricId: 'steps', chartKind: 'bar',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 0, qualityCode: null }] })], 0, DAY_MS)[0]);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.series[0].barMinHeight).toBe(2);
+    expect(preview.series[0].data[0][1]).toBe(0);
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    expect(eChartsLoader.setOption.mock.calls.at(-1)![1].series[0].barMinHeight).toBeUndefined();
+  });
+
   it('refreshes chart labels when the signed-in user changes display units', async () => {
     fixture.componentRef.setInput('model', buildHealthChartModels([series({
       metricId: HEALTH_METRIC_IDS.Distance,

@@ -1,4 +1,9 @@
-import { signal } from '@angular/core';
+import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { DashboardChartThumbnailComponent } from '../../summaries/dashboard-chart-library/dashboard-chart-thumbnail.component';
+import { HealthMetricSeriesChartComponent } from '../../health/health-metric-series-chart.component';
+import { ChartsSleepTrendComponent } from '../sleep-trend/charts.sleep-trend.component';
+import { buildDashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Subject } from 'rxjs';
@@ -80,4 +85,71 @@ describe('independent dashboard Health views',()=>{
     streams[0].next(result()); expect(component.loading()).toBe(false);
   });
 
+  it('replaces an example with recorded readings and retains those readings during refresh', () => {
+    const fixture = create('sleep'); const component = fixture.componentInstance;
+    fixture.componentRef.setInput('preview', true); fixture.detectChanges();
+    expect(component.showingExample()).toBe(true);
+    const evidence = result('sleep');
+    evidence.sessions = [{ id: 'recorded-sleep', userID: 'owner', sleepDate: '2026-09-14',
+      source: { provider: 'SuuntoApp', accountKey: 'real-account', providerUserId: 'provider-user', sourceSessionKey: 'recorded-night' },
+      startTimeMs: Date.parse('2026-09-13T22:00:00Z'), endTimeMs: Date.parse('2026-09-14T06:00:00Z'),
+      durationSeconds: 28800, stages: [], isNap: false, createdAtMs: 0, updatedAtMs: 0 }];
+    streams[0].next(evidence);
+    expect(component.showingExample()).toBe(false);
+    expect(component.displayContext()).toBe(component.context());
+    expect(component.displayContext()?.sleep.hasRealPoints).toBe(true);
+    expect(component.displayContext()?.sources[0].label).toBe('Suunto');
+    watch.mock.calls[0][4]();
+    expect(component.showingExample()).toBe(false);
+    expect(component.displayContext()).toBe(component.context());
+    fixture.destroy();
+  });
+
+  it('uses examples only in previews without emitting fictional availability or saved settings', () => {
+    const fixture = create(); const component = fixture.componentInstance;
+    const changed = vi.fn(), availability = vi.fn();
+    component.settingsChange.subscribe(changed); component.contextChange.subscribe(availability);
+    expect(component.displayContext()).toBeNull();
+    fixture.componentRef.setInput('preview', true); fixture.detectChanges();
+    expect(component.showingExample()).toBe(true);
+    expect(component.displayContext()?.selected?.model.displayedPointCount).toBeGreaterThan(1);
+    expect(changed).not.toHaveBeenCalled(); expect(availability).not.toHaveBeenCalled();
+    streams[0].next(result());
+    expect(availability.mock.calls[0][0].availability.hasData).toBe(false);
+    expect(changed).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('preview', false); fixture.detectChanges();
+    expect(component.showingExample()).toBe(false);
+    expect(component.displayContext()?.hasData).toBe(false);
+  });
+
+});
+
+
+describe('Health library preview states', () => {
+  it('keeps the shorter-range action available alongside an example for sample-only metrics', async () => {
+    await TestBed.configureTestingModule({ imports: [DashboardHealthChartComponent, NoopAnimationsModule], providers: [
+      { provide: DashboardHealthService, useValue: { isOwner: () => false } },
+      { provide: AppHapticsService, useValue: { selection: vi.fn() } },
+    ] }).overrideComponent(DashboardHealthChartComponent, {
+      remove: { imports: [DashboardChartThumbnailComponent, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent] },
+      add: { schemas: [NO_ERRORS_SCHEMA] },
+    }).compileComponents();
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent);
+    fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {} } });
+    fixture.componentRef.setInput('settings', { metric: 'heart_rate', range: '90d' });
+    fixture.componentRef.setInput('preview', true);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    const context = buildDashboardHealthContext({ window: component.window(), health: null, history: null, activities: null, sessions: [], errors: [] }, component.settings());
+    component.context.set({ ...context, sampleOnly: true, availability: { ...context.availability, reason: 'Detailed readings are available without a daily summary. Choose 30 days or less.' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Example data');
+    expect(fixture.nativeElement.textContent).toContain('Choose 30 days or less');
+    expect(fixture.nativeElement.querySelector('app-health-metric-series-chart')).toBeTruthy();
+    const changed = vi.fn(); component.settingsChange.subscribe(changed);
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(item => item.textContent?.includes('Show 30 days'))!;
+    button.click();
+    expect(changed).toHaveBeenCalledWith({ settings: { metric: 'heart_rate', range: '30d' }, initial: false });
+    fixture.destroy();
+  });
 });

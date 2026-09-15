@@ -5,7 +5,7 @@
   </button>
 }
 <ng-template #picker>
-<section class="chart-library bottom-sheet-container" [class.chart-library-dialog]="!usesBottomSheet()" [attr.aria-busy]="state.busy()">
+<section class="chart-library bottom-sheet-container" [class.chart-library-dialog]="!usesBottomSheet()" [class.health-library]="lane() === 'section:health'" [attr.aria-busy]="state.busy()">
   <div class="chart-library-heading">
     <h2>{{ pickerHeading() }}</h2>
     <button mat-icon-button aria-label="Close library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
@@ -34,10 +34,10 @@
           @if (index === suggested().length && suggested().length && rowPreviews().length > suggested().length) { <h3 matSubheader>More {{ sectionPresentation().plural }}</h3> }
           <button mat-list-item type="button" [attr.data-preset-id]="entry.definition.id" [attr.aria-pressed]="state.selected()?.definition?.id === entry.definition.id" [attr.aria-label]="'Preview ' + entry.definition.label" [attr.aria-describedby]="'chart-source-' + entry.definition.id" [disabled]="state.busy()" (click)="select(entry)">
             <span matListItemTitle>{{ entry.title }}@if (entry.isNew) { <span class="chart-library-new-label"> · New</span> }</span>
-            <span matListItemLine [id]="'chart-source-' + entry.definition.id" [matTooltip]="entry.sourceLabel">{{ entry.format }} · {{ entry.sourceLabel }}</span>
+            <span matListItemLine [id]="'chart-source-' + entry.definition.id" [matTooltip]="entry.sourceHint">{{ entry.format }} · {{ entry.sourceLabel }}</span>
             <span matListItemMeta class="chart-library-row-meta" aria-hidden="true">
               @if (entry.healthSettings; as settings) {
-                <app-dashboard-health-chart class="chart-library-health-thumbnail" [user]="user()" [settings]="settings" [thumbnail]="true" [priority]="0" [darkTheme]="darkTheme()" (contextChange)="healthContext(entry.definition.id, $event)" />
+                <app-dashboard-health-chart class="chart-library-health-thumbnail" [user]="user()" [settings]="settings" [thumbnail]="true" [preview]="true" [priority]="0" [darkTheme]="darkTheme()" (contextChange)="healthContext(entry.definition.id, $event)" />
               } @else { <app-dashboard-chart-thumbnail [preview]="entry.preview" [darkTheme]="darkTheme()"></app-dashboard-chart-thumbnail> }
               <mat-icon>chevron_right</mat-icon>
             </span>
@@ -68,14 +68,14 @@
           <h3>{{ state.configuring() ? 'Live preview' : previewTitle() }}</h3>
           @if (state.healthSettings(); as settings) {
             @if (state.pinnedFromHealth()) { <p class="chart-library-destination">Uses the {{ settings.range === 'today' ? '1d' : settings.range }} range, starting with the latest period.</p> }
-            <app-dashboard-health-chart class="chart-library-health-preview" [hideTitle]="true" [user]="user()" [settings]="settings" [darkTheme]="darkTheme()" [providerFilter]="providerFilter()" [priority]="100" [timelineNotes]="timelineNotes()" [disabled]="state.busy()" (settingsChange)="state.updateHealthSettings($event.settings, $event.initial)" />
+            <app-dashboard-health-chart class="chart-library-health-preview" [preview]="true" [hideTitle]="true" [user]="user()" [settings]="settings" [darkTheme]="darkTheme()" [providerFilter]="providerFilter()" [priority]="100" [timelineNotes]="timelineNotes()" [disabled]="state.busy()" (settingsChange)="state.updateHealthSettings($event.settings, $event.initial)" />
           } @else { <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="previewSeed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview> }
           @if (!creatingCustom()) {
             <div class="chart-library-explanation">
               @for (paragraph of explanationParagraphs(); track $index) { <p>{{ paragraph }}</p> }
             </div>
           }
-          <p class="chart-library-destination">{{ dataScope() }}</p>
+          @if (!state.healthSettings()) { <p class="chart-library-destination">{{ dataScope() }}</p> }
           <p class="chart-library-destination">{{ state.editor()?.mode === 'edit' ? 'Saved in' : 'Adds to' }} {{ destination() }}</p>
         </section>
       </div>

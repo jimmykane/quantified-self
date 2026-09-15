@@ -20,3 +20,12 @@ app-health-metric-series-chart, app-sleep-trend-chart { flex:1; min-height:120px
 .health-thumbnail app-health-metric-series-chart { min-height:0; }
 .health-thumbnail-empty,.health-sleep-thumbnail { margin:auto; color:var(--mat-sys-on-surface-variant); font-size:12px; }
 @media(max-width:640px) { .health-tile-controls { flex-wrap:wrap; } .health-tile-window { flex:1; min-width:120px; } }
+
+.health-preview { padding:0 8px; gap:8px; }
+.health-preview-source { display:flex; flex-direction:column; gap:4px; font:var(--mat-sys-body-small); color:var(--mat-sys-on-surface-variant); }
+.health-preview-source strong { color:var(--mat-sys-on-surface); font:var(--mat-sys-label-large); }
+.health-preview .health-tile-window, .health-preview .health-range { font-size:0.8rem; }
+.health-preview .health-source { font-size:0.8rem; }
+.health-preview .health-tile-summary { font-size:0.8rem; }
+.health-preview .health-tile-summary strong { font-size:1.65rem; }
+.health-preview .health-notice { font-size:0.8rem; }

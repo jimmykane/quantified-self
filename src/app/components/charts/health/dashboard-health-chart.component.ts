@@ -1,3 +1,4 @@
+import { buildDashboardHealthExample } from '../../../helpers/dashboard-health-preview.helper';
 import { DashboardChartThumbnailComponent } from '../../summaries/dashboard-chart-library/dashboard-chart-thumbnail.component';
 import { buildDashboardManagerPresetTile } from '../../../helpers/dashboard-manager-presets.helper';
 import type { DashboardChartPreview } from '../../../helpers/dashboard-chart-preview.helper';
@@ -26,6 +27,8 @@ export class DashboardHealthChartComponent {
     readonly settings = input.required<AppDashboardHealthMetricSettings>();
     readonly darkTheme = input(false);
     readonly thumbnail = input(false);
+    /** Library-only illustrations; saved tiles always render account evidence. */
+    readonly preview = input(false);
     readonly hideTitle = input(false);
     readonly reserveActions = input(false);
     readonly disabled = input(false);
@@ -51,12 +54,23 @@ export class DashboardHealthChartComponent {
     private version = 0;
     private identity = '';
     readonly sleepThumbnail = computed(() => ({
-        tile: { ...buildDashboardManagerPresetTile({ presetId: 'curated-sleep', order: 0, size: { columns: 1, rows: 1 } }), sleepTrend: this.context()?.sleep },
+        tile: { ...buildDashboardManagerPresetTile({ presetId: 'curated-sleep', order: 0, size: { columns: 1, rows: 1 } }), sleepTrend: this.displayContext()?.sleep },
         source: 'user', loading: false, note: '', calendarEvents: [], anchorMs: Date.now(),
     }) as DashboardChartPreview);
     readonly title = computed(() => this.settings().metric === 'sleep' ? 'Sleep' : HEALTH_METRIC_CATALOG[this.settings().metric]?.label || 'Health');
     readonly effectiveSettings = computed(() => ({ ...this.settings(), ...(this.settings().sourceKey || !this.initialSource() ? {} : { sourceKey: this.initialSource()! }) }));
     readonly window = computed(() => resolveHealthWorkspaceWindow({ ...this.settings(), endDate: this.endDate() }));
+    readonly showingExample = computed(() => this.preview() && !this.context()?.hasData);
+    readonly displayContext = computed(() => this.showingExample()
+        ? buildDashboardHealthExample(this.settings(), this.window(), this.user().settings.unitSettings)
+        : this.context());
+    readonly previewNotice = computed(() => this.showingExample()
+        ? this.loading() ? 'Showing an example while your readings load.'
+            : this.error() ? 'Your readings could not be loaded. This is an example.'
+                : this.context()?.availability.state === 'no-data' && !this.context()?.missingSource && !this.context()?.sampleOnly
+                    ? 'No readings in this period yet. This example shows how the chart will look.'
+                    : 'Illustration only. ' + (this.context()?.availability.reason || 'These are not your readings.')
+        : this.loading() ? 'Updating your readings…' : 'Recorded readings from the selected source.');
     readonly ranges: readonly {
         value: AppHealthWorkspaceRange;
         label: string;
