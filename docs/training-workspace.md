@@ -744,6 +744,9 @@ journal and provider delay on the delivery record rather than blocking a known-r
 Provider 429 responses, like local capacity exhaustion, are pending deferrals rather than failed checks and do not
 consume delivery failure retries.
 
+Verification retains Retry-After on the delivery ledger as well as shared capacity. A new manual check, edit or
+reconciliation cannot shorten that deadline, including when the shared quota-state write failed after a received 429.
+
 Private ledger evidence is separate from the owner-readable `trainingDeliveryVerifications` v1 projection. The existing
 strict `trainingDeliveryStatuses` v1 shape is unchanged. Confirmed missing artifacts do not count as synced, even while
 their retained IDs are kept for repair/removal. Plan totals still derive from workouts and do not imply native plans.
@@ -768,6 +771,18 @@ also binds the complete policy, not only its version label: disabling inspection
 invalidates in-flight results. Partial deliveries without a full acceptance show Last attempt, not an empty Last sent.
 Malformed lookup identities remain inconclusive and retryable; only valid but mismatched identities/dates require
 conflict resolution. Manual-check failures never direct users into a nonexistent settings-save review.
+
+An interrupted repair retains both accepted replacement IDs and the original artifact bundle until full delivery or
+withdrawal completes. Stop still queues withdrawal when the replacement is null, since original associations may
+survive. Adapters must remove retained original-only artifacts through ownership/date-checked, journaled operations;
+an ambiguous DELETE is inspected before retry and must not discard another retained artifact. Past/completed protection
+covers both bundles. Removal does not require repair readiness or Pro, but still requires valid delivery transport,
+the exact connection, current Stop intent and all deletion fences.
+
+When recovery proves partial acceptance and a newer edit supersedes it, a server-only repair continuation carries
+the original associations into the next operation. The worker binds it to current consent, mapping and inspection
+readiness; the adapter updates the already accepted workout and safely relinks the surviving schedule. Continuation
+never authorizes another replacement workout POST if that accepted ID disappears. Unknown acceptance remains blocked.
 
 The compact sync details offer **Check Garmin** when supported, without another consent dialog. Last sent, last checked
 and device availability are separate. Unsupported verification reads **Sent · remote checking unavailable**, not failure

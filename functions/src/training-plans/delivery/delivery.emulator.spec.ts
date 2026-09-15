@@ -215,6 +215,20 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
       now += 120_000;
     }
   });
+  it('does not bypass a received Retry-After with a manual check after quota persistence failed', async () => {
+    const capacity = { reserve: vi.fn().mockResolvedValue(undefined), defer: vi.fn().mockRejectedValue(new Error('quota write failed')) };
+    const fetcher = vi.fn(async () => new Response('', { status: 429, headers: { 'Retry-After': '7200' } }));
+    const client = createGarminTrainingClient(async () => 'synthetic-token', fetcher, () => now, capacity);
+    inspection(async () => { await client({ method: 'GET', path: '/training-api/workout/v2/1' }, async () => {}); });
+    const ledger = await delivered();
+    await processTrainingVerification(runtime, uid, ledger.id);
+    const deadline = now + 7_200_000;
+    now += 900_001;
+    await trainingDeliveryCommand(runtime, uid, await checkCommand(), false); await drain();
+    await processTrainingVerification(runtime, uid, ledger.id);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect((await ledgers())[0].verification).toMatchObject({ state: 'deferred', nextCheckAtMs: deadline });
+  });
   it('preserves consent and exposes permission repair when a remote check is denied', async () => {
     inspection(async () => { throw new TrainingDeliveryTransportError('permission'); });
     const ledger = await delivered();

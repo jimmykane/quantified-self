@@ -36,6 +36,7 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
       tx.delete(job); stageTrainingDeliveryReconciliation(tx, runtime.db, uid); return null;
     }
     const evidence = ledger.verification ?? emptyVerification(runtime.now());
+    evidence.nextCheckAtMs = Math.max(evidence.nextCheckAtMs, ledger.providerNotBeforeMs ?? 0);
     if (evidence.nextCheckAtMs > runtime.now()) {
       tx.set(job, { dueAtMs: evidence.nextCheckAtMs }, { merge: true }); return null;
     }
@@ -93,6 +94,10 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
       && (intent.status === 'delivered' || ledger.verification?.missing) && context.transport?.inspection?.policy.version === claim.inspection.policy.version
       && context.transport.inspection.policy.mode !== 'unavailable'
       && inspectionBinding(ledger, context, context.transport.inspection.policy) === claim.binding;
+    // Retain provider backoff independently of the check request/evidence. A manual
+    // check or newer intent cannot erase it if shared quota persistence failed.
+    if (failure && failure.retryAfterMs > 0) ledger.providerNotBeforeMs = Math.max(
+      ledger.providerNotBeforeMs ?? 0, runtime.now() + failure.retryAfterMs);
     ledger.lease = null;
     if (!current) {
       ledger.verification = { ...(ledger.verification ?? emptyVerification(runtime.now())), state: 'pending', nextCheckAtMs: runtime.now() };

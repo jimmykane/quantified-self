@@ -8,7 +8,8 @@ import { GarminTrainingHttpError, garminBody, garminId, type GarminTrainingClien
 import { createGarminInspection, GARMIN_INSPECTION_POLICY } from './inspection';
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 
-const STEPS = ['repair-prepare', 'workout-create', 'workout-update', 'schedule-create', 'schedule-update', 'schedule-delete', 'workout-delete', 'finished'] as const;
+const STEPS = ['repair-prepare', 'workout-create', 'workout-update', 'schedule-create', 'schedule-update', 'schedule-delete', 'workout-delete',
+  'retired-schedule-delete', 'retired-workout-delete', 'finished'] as const;
 type Step = typeof STEPS[number];
 type ObjectValue = Record<string, unknown>;
 function object(value: unknown): ObjectValue {
@@ -100,6 +101,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
   private assertFuture(operation: DeliveryOperation): void {
     const today = trainingDeliveryLocalDate(this.now(), operation.timeZone);
     if ((operation.artifact && !this.canRemove(operation.artifact, today))
+      || (operation.repair && !this.canRemove(operation.repair.original, today))
       || (operation.kind === 'upsert' && (!operation.workout || operation.workout.localDate < today))) {
       throw new TrainingDeliveryTransportError('uncertain');
     }
@@ -137,7 +139,10 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     this.assertFuture(operation);
     if (operation.progress === undefined || operation.progress?.state === 'started') throw new TrainingDeliveryTransportError('uncertain');
     if (operation.kind === 'remove') return this.remove(operation, checkpoint, guard);
-    if (operation.repair && (operation.progress === null || !operation.artifact)) {
+    if (operation.repair?.continuation && (!operation.artifact?.ids.workout || !this.inspection.policy.repairReady)) {
+      throw new TrainingDeliveryTransportError('uncertain');
+    }
+    if (operation.repair && !operation.repair.continuation && (operation.progress === null || !operation.artifact)) {
       const repair = operation.repair;
       if (!this.inspection.policy.repairReady || !this.inspection.policy.authoritativeAbsence
         || repair.policyVersion !== this.inspection.policy.version) throw new TrainingDeliveryTransportError('uncertain');
@@ -172,7 +177,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
       const owner = garminId(existing.ownerId);
       const artifact: DeliveryArtifact = { ...operation.artifact, ids: { ...operation.artifact.ids, owner } };
       await checkpoint(artifact); operation.artifact = artifact;
-      if (!operation.repair && !matches(payload, existing)) {
+      if ((!operation.repair || operation.repair.continuation) && !matches(payload, existing)) {
         await this.write(operation, 'workout-update', { method: 'PUT', path: `/training-api/workout/v2/${artifact.ids.workout}`,
           body: garminBody(payload as unknown as ObjectValue, { workoutId: artifact.ids.workout, ownerId: owner }) }, checkpoint, guard);
       }
@@ -251,7 +256,36 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     return true;
   }
 
+  private async retiredArtifactExists(operation: DeliveryOperation, step: 'retired-schedule-delete' | 'retired-workout-delete',
+    guard: DeliveryRequestGuard): Promise<boolean> {
+    if (operation.kind !== 'remove' || !operation.repair) throw new TrainingDeliveryTransportError('uncertain');
+    this.assertFuture(operation);
+    const original = operation.repair.original;
+    if (step === 'retired-workout-delete') return !!await this.ownedWorkout({ ...operation, artifact: original }, guard);
+    const raw = await this.read({ method: 'GET', path: `/training-api/schedule/${garminId(original.ids.schedule)}` }, guard);
+    if (raw === null) return false;
+    const found = schedule(raw);
+    if (found.id !== original.ids.schedule || found.workoutId !== original.ids.workout || found.date !== original.localDate) {
+      throw new TrainingDeliveryTransportError('uncertain');
+    }
+    return true;
+  }
+
   private async remove(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<null> {
+    // An interrupted repair can own both the replacement and surviving original
+    // artifacts. Withdraw the original-only IDs too, retaining them across retries.
+    if (operation.repair) {
+      for (const key of ['schedule', 'workout'] as const) {
+        const id = operation.repair.original.ids[key];
+        if (!id || id === operation.artifact?.ids[key]) continue;
+        const step = key === 'schedule' ? 'retired-schedule-delete' : 'retired-workout-delete';
+        if (await this.retiredArtifactExists(operation, step, guard)) {
+          await this.write(operation, step, { method: 'DELETE', path: key === 'schedule'
+            ? `/training-api/schedule/${garminId(id)}` : `/training-api/workout/v2/${garminId(id)}` }, checkpoint, guard);
+        }
+        await this.save(operation, checkpoint, operation.artifact, step, 'accepted');
+      }
+    }
     if (!operation.artifact) { await this.save(operation, checkpoint, null, 'finished', 'accepted'); return null; }
     if (operation.artifact.ids.schedule) {
       const existing = await this.ownedSchedule(operation, checkpoint, guard);
@@ -273,6 +307,12 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     if (progress === null) return { kind: 'not-accepted' };
     if (progress.step === 'finished' && progress.state === 'accepted') return { kind: 'accepted', artifact: operation.artifact };
     if (progress.state !== 'started') return { kind: operation.artifact ? 'resume' : 'not-accepted' };
+    if (progress.step === 'retired-schedule-delete' || progress.step === 'retired-workout-delete') {
+      // Only repeat a retained-ID DELETE after an ownership/date-checked read.
+      await this.retiredArtifactExists(operation, progress.step, guard);
+      await this.save(operation, checkpoint, operation.artifact, progress.step, 'ready');
+      return { kind: 'resume' };
+    }
     // The contract has no lookup by stable external workout key. Never search by title
     // or guess IDs, and never repeat a POST whose acceptance is unknown.
     if (progress.step === 'workout-create') return { kind: 'uncertain' };

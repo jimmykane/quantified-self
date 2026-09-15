@@ -86,7 +86,7 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
     blockedConnectionGeneration: previous?.blockedConnectionGeneration ?? null,
     lastAttemptAtMs: previous?.lastAttemptAtMs ?? null, lastAcceptedAtMs: previous?.lastAcceptedAtMs ?? null,
     updatedAtMs: runtime.now() };
-  if (changed && record.verification?.missing && !record.attempt && record.desired === 'present') {
+  if (changed && record.verification?.missing && !record.attempt && record.desired === 'present' && !record.repair?.continuation) {
     record.repair = null;
     record.verification = { ...record.verification, binding: '', suspectedAtMs: null, state: 'pending', nextCheckAtMs: runtime.now() };
   }
@@ -101,8 +101,8 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   if (previous?.status === 'retrying' && !changed && !retried && previous.retryAtMs > runtime.now()) record.status = 'retrying';
   if ((record.providerNotBeforeMs ?? 0) > runtime.now() && ['pending', 'stopped', 'paused_plan'].includes(record.status)
     && (record.attempt || (record.desired === 'present' && record.acceptedDigest !== record.desiredDigest)
-      || (record.desired === 'absent' && record.actual))) record.status = 'retrying';
-  if (record.desired === 'absent' && !record.actual && !record.attempt) record.status = 'removed';
+      || (record.desired === 'absent' && (record.actual || record.repair)))) record.status = 'retrying';
+  if (record.desired === 'absent' && !record.actual && !record.repair && !record.attempt) record.status = 'removed';
   return record;
 }
 
@@ -160,7 +160,7 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
     }
     for (const { record, context, requestedAtMs } of records) {
       if ((record.attempt || (record.desired === 'present' && record.status !== 'delivered' && !(record.verification?.missing && !record.repair))
-        || (record.desired === 'absent' && record.actual)) && !['failed', 'needs_attention'].includes(record.status)) {
+        || (record.desired === 'absent' && (record.actual || record.repair))) && !['failed', 'needs_attention'].includes(record.status)) {
         tx.set(db.collection(DELIVERY_QUEUE).doc(record.id), { uid, kind: 'delivery', deliveryId: record.id,
           dueAtMs: Math.max(record.retryAtMs, record.lease?.expiresAtMs ?? 0), dispatchToken: randomUUID() });
       } else stageVerification(runtime, tx, uid, record, context, requestedAtMs);

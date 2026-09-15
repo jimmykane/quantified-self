@@ -42,6 +42,50 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
       binding: 'synthetic-authority', missing, original } };
   };
+  const interruptReplacement = async () => {
+    const original = (await execute())!;
+    const oldWorkout = structuredClone(server.workouts.get(original.ids.workout)!);
+    server.workouts.delete(original.ids.workout); await repair(['workout']);
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || !request.path.includes('workout')) return;
+      server.afterHandle = null;
+      guard.mockRejectedValueOnce(new Error('interrupted before relinking'));
+    };
+    await expect(execute()).rejects.toThrow('interrupted before relinking');
+    expect(operation.artifact!.ids.workout).not.toBe(original.ids.workout);
+    expect(operation.artifact!.ids.schedule).toBeUndefined();
+    return { original, oldWorkout };
+  };
+  it('recovers a lost retired-schedule DELETE without losing either workout identity', async () => {
+    const { original, oldWorkout } = await interruptReplacement();
+    server.workouts.set(original.ids.workout, oldWorkout); // Original copy also reappeared.
+    operation = { ...operation, id: 'withdraw-repair', kind: 'remove', workout: null, progress: null };
+    server.afterHandle = async request => {
+      if (request.method !== 'DELETE') return;
+      server.afterHandle = null; throw new GarminTrainingHttpError('uncertain', false);
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.progress).toMatchObject({ step: 'retired-schedule-delete', state: 'started' });
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect(await execute()).toBeNull();
+    expect(server.workouts.size + server.schedules.size).toBe(0);
+    expect(writes().filter(row => row.method === 'DELETE' && row.path.endsWith(original.ids.schedule))).toHaveLength(1);
+  });
+  it('does not withdraw a retained original association that changed externally', async () => {
+    const { original } = await interruptReplacement();
+    server.schedules.get(original.ids.schedule)!.date = '2026-09-17';
+    operation = { ...operation, id: 'withdraw-repair', kind: 'remove', workout: null, progress: null };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes().filter(row => row.method === 'DELETE')).toHaveLength(0);
+  });
+  it('never repeats a root POST when a superseded partial repair loses its accepted replacement', async () => {
+    await interruptReplacement();
+    server.workouts.delete(operation.artifact!.ids.workout);
+    operation = { ...nextOperation(operation, { title: 'Latest edit' }), repair: { ...operation.repair!, continuation: true } };
+    const before = writes().length;
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes()).toHaveLength(before);
+  });
   it.each([['schedule'], ['workout'], ['workout', 'schedule']])('repairs confirmed missing %j without replacing surviving identities', async (...missing) => {
     const original = (await execute())!;
     const keys = missing.flat();

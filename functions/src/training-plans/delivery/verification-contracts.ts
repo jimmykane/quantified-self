@@ -36,6 +36,9 @@ export interface DeliveryRepair {
   binding: string;
   missing: string[];
   original: DeliveryArtifact;
+  /** A proven partial acceptance may finish against current authored intent using
+   * retained IDs. It is not permission to repeat a replacement root POST. */
+  continuation?: boolean;
 }
 export interface VerificationEvidence {
   binding: string;

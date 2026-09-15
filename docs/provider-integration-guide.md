@@ -69,6 +69,10 @@ environment, arbitrary evaluation request budget, separate runner or setup wizar
 Verification policy changes invalidate in-flight evidence. Stable inventory pages carry negative evidence only between
 complete scans, never establish absence alone. A received quota rejection remains rejected even if local deferral
 persistence fails; replacement retries re-read original artifacts so reappearance cannot create duplicate calendar entries.
+The per-delivery deadline also survives new manual checks. Interrupted repair withdrawal retains both original and
+replacement identities, including a surviving association before any replacement is accepted. A proven partial
+acceptance may continue under the latest authored intent and current readiness; it never permits repeating an
+uncertain root create. Adapters must cover interrupted cleanup and superseding edits as well as uninterrupted repair.
 
 Training planning uses a stricter launch boundary than activity or route delivery. Manual plan and standalone-workout
 authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and

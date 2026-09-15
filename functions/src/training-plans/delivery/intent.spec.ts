@@ -58,4 +58,12 @@ describe('delivery intent', () => {
     ledger.actual!.completed = true;
     expect(resolveDeliveryIntent(base, ledger).status).toBe('completed');
   });
+  it('protects original artifacts retained during a repair even when no replacement was accepted', () => {
+    const ledger = { actual: null, repair: { original: { ids: { workout: 'old', schedule: 'original' },
+      localDate: '2026-09-09', completed: false } } } as DeliveryLedgerV1;
+    const stopped = { ...base, setting: { ...base.setting!, enabled: false } };
+    expect(resolveDeliveryIntent(stopped, ledger).status).toBe('past');
+    ledger.repair!.original.completed = true;
+    expect(resolveDeliveryIntent(stopped, ledger).status).toBe('completed');
+  });
 });

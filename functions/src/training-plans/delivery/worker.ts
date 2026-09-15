@@ -68,8 +68,19 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     const recover = !!ledger.attempt;
     if (!ledger.attempt) {
       const kind = intent.desired === 'present' && ledger.acceptedDigest !== intent.digest ? 'upsert'
-        : intent.desired === 'absent' && ledger.actual ? 'remove' : null;
+        : intent.desired === 'absent' && (ledger.actual || ledger.repair) ? 'remove' : null;
       if (!kind) { writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null; }
+      if (kind === 'upsert' && ledger.repair?.continuation) {
+        const policy = transport.inspection?.policy;
+        if (!ledger.actual || !policy?.repairReady || !policy.authoritativeAbsence || policy.mode === 'unavailable') {
+          ledger.status = 'provider_unavailable';
+          writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null;
+        }
+        // Recovery proved partial acceptance, not absence. Keep the original IDs for
+        // association checks/withdrawal and bind continuation to the latest consent.
+        ledger.repair = { ...ledger.repair, policyVersion: policy.version,
+          binding: inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, policy) };
+      }
       if (kind === 'upsert' && ledger.verification?.missing && (!ledger.repair || !transport.inspection?.policy.repairReady
         || inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, transport.inspection.policy) !== ledger.repair.binding)) {
         // An edit/transfer/reconnect invalidates confirmation, not the stable remote identity.
@@ -83,8 +94,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       ledger.attempt = { id: randomUUID(), kind, deliveryId: id, generation: ledger.desiredGeneration,
         connectionGeneration: context.connection.generation, destinationKey: ledger.destinationKey,
         timeZone: intent.timeZone, digest: intent.digest, contentDigest: ledger.contentDigest,
-        workout: kind === 'upsert' ? workout : null, artifact: ledger.actual, progress: null,
-        ...(kind === 'upsert' && ledger.repair ? { repair: ledger.repair } : {}) };
+        workout: kind === 'upsert' ? workout : null, artifact: ledger.actual ?? (kind === 'remove' ? ledger.repair?.original ?? null : null), progress: null,
+        ...(ledger.repair ? { repair: ledger.repair } : {}) };
       tx.create(ledgerRef.collection('attempts').doc(ledger.attempt.id), {
         schemaVersion: 1, operation: ledger.attempt, state: 'started', startedAtMs: runtime.now(),
       });
@@ -169,12 +180,12 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         const repairTimes = (ledger.verification?.repairTimes ?? []).filter(time => time > runtime.now() - VERIFICATION_DAY_MS);
         ledger.verification = { ...emptyVerification(runtime.now()),
           requestedAtMs: ledger.verification?.requestedAtMs ?? 0,
-          repairTimes: operation.repair && operation.progress?.repairApplied !== false && (recoveredAcceptance || operation.progress?.state === 'accepted')
+          repairTimes: operation.kind === 'upsert' && operation.repair && operation.progress?.repairApplied !== false && (recoveredAcceptance || operation.progress?.state === 'accepted')
             ? [...repairTimes, runtime.now()] : repairTimes };
         ledger.repair = null;
         // A reappearing copy can finish repair without any provider write. Keep
         // Last sent truthful; the inspection projection owns Last checked.
-        if (operation.progress?.repairApplied !== false) ledger.lastAcceptedAtMs = runtime.now();
+        if (operation.progress?.repairApplied !== false || operation.repair?.continuation) ledger.lastAcceptedAtMs = runtime.now();
         ledger.acceptedDigest = operation.kind === 'upsert' ? operation.digest : null;
         ledger.acceptedContentDigest = operation.kind === 'upsert' ? operation.contentDigest : null;
         ledger.attempt = null;
@@ -207,6 +218,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       ledger.attempt = null;
       ledger.lease = null;
       ledger.status = 'pending';
+      if (partial && operation.repair && ledger.actual) {
+        ledger.repair = { ...operation.repair, continuation: true };
+      }
       tx.set(ledgerRef.collection('attempts').doc(operation.id), { state: partial ? 'superseded' : 'not-accepted' }, { merge: true });
       writeDelivery(runtime, tx, uid, ledger);
       stageTrainingDeliveryReconciliation(tx, db, uid);
@@ -235,7 +249,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         || context.connection.generation !== operation.connectionGeneration
         || ledger.blockedConnectionGeneration === context.connection.generation) return 'blocked';
       const intent = resolveDeliveryIntent(context, ledger);
-      if (operation.repair && (!context.transport?.inspection?.policy.repairReady
+      if (operation.kind === 'upsert' && operation.repair && (!context.transport?.inspection?.policy.repairReady
         || inspectionBinding({ ...ledger, actual: operation.repair.original, desiredDigest: operation.digest },
           context, context.transport.inspection.policy) !== operation.repair.binding)) return 'recover-only';
       return (operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)
