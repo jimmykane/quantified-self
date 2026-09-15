@@ -80,6 +80,8 @@ read bounded activity chart series but never their breadcrumb location stream. P
 existing location stream when an activity map is relevant.
 Detailed activity sample pagination remains an external MCP workflow. The first-party allowlist omits
 `get_activity_samples` and its routing instruction to preserve the Assistant's compact evidence and turn budgets.
+The first-party allowlist also omits the additive external tag-aware activity query, so event tags and tag filtering do
+not enter Gemini context or expand built-in Assistant access.
 External MCP clients remain the path for separately approved saved-route location and geometry access. Saved-route names
 are included in summaries and can themselves contain user- or provider-assigned place information.
 
