@@ -10,6 +10,7 @@ import { Router } from '@angular/router';
 import { By } from '@angular/platform-browser';
 
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { ASSISTANT_REQUEST_LIMITS, ROUTE_USAGE_LIMITS, USAGE_LIMITS } from '@shared/limits';
 import { UpcomingRenewalAmountResult } from '@shared/stripe-renewal';
 import { LoggerService } from '../../services/logger.service';
@@ -65,6 +66,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 describe('PricingComponent', () => {
     let component: PricingComponent;
     let fixture: ComponentFixture<PricingComponent>;
+    let haptics: { selection: ReturnType<typeof vi.fn>; success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
     const acceptedPoliciesUser = {
         uid: 'test-uid',
         acceptedPrivacyPolicy: true,
@@ -78,12 +80,14 @@ describe('PricingComponent', () => {
 
 
     beforeEach(async () => {
+        haptics = { selection: vi.fn(), success: vi.fn(), error: vi.fn() };
         authServiceMock.user$ = of(acceptedPoliciesUser as any);
         authServiceMock.currentUser = { uid: 'test-uid' };
 
         await TestBed.configureTestingModule({
             imports: [PricingComponent],
             providers: [
+                { provide: AppHapticsService, useValue: haptics },
                 { provide: AppPaymentService, useClass: MockAppPaymentService },
                 { provide: AppUserService, useClass: MockAppUserService },
                 {
@@ -127,6 +131,9 @@ describe('PricingComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+        expect(haptics.selection).not.toHaveBeenCalled();
+        expect(haptics.success).not.toHaveBeenCalled();
+        expect(haptics.error).not.toHaveBeenCalled();
     });
 
     it('should not attach a subscription listener after destruction during initialization', async () => {
@@ -791,6 +798,7 @@ describe('PricingComponent', () => {
         expect(beginCheckoutSpy).not.toHaveBeenCalled();
         expect(component.isLoading).toBe(false);
         expect(component.loadingPriceId).toBeNull();
+        expect(haptics.selection).not.toHaveBeenCalled();
     });
 
     it('should redirect to onboarding and skip free-tier selection when required legal policies are missing', async () => {
@@ -920,6 +928,10 @@ describe('PricingComponent', () => {
         expect(planSelectedSpy).not.toHaveBeenCalled();
         expect(alertSpy).toHaveBeenCalledWith('Failed to select free tier. Please try again.');
         expect(component.isLoading).toBe(false);
+        expect(component.loadingPriceId).toBeNull();
+        expect(haptics.selection).toHaveBeenCalledTimes(1);
+        expect(haptics.error).toHaveBeenCalledTimes(1);
+        expect(haptics.success).not.toHaveBeenCalled();
     });
 
     it('should log manage_subscription event on manageSubscription', async () => {
@@ -1222,7 +1234,115 @@ describe('PricingComponent', () => {
         expect(continueForFreeButtons.length).toBe(1);
     });
 
-    it('should show a spinner inside the onboarding Continue for Free CTA while loading', () => {
+    describe('plan action progress', () => {
+        const products: StripeProduct[] = (['free', 'basic', 'pro'] as const).map(role => ({
+            id: role,
+            active: true,
+            name: role === 'free' ? 'Starter' : role === 'basic' ? 'Basic' : 'Pro',
+            description: role,
+            role,
+            images: [],
+            metadata: { role },
+            prices: (role === 'free' ? ['month'] as const : ['month', 'year'] as const).map((interval): StripePrice => ({
+                id: role === 'free' ? 'free_price' : `${role}_${interval}`,
+                active: true,
+                currency: 'eur',
+                unit_amount: role === 'free' ? 0 : interval === 'month' ? 299 : 2999,
+                description: interval,
+                type: 'recurring',
+                interval,
+                interval_count: 1,
+                trial_period_days: 30,
+                recurring: { interval, interval_count: 1 }
+            }))
+        }));
+        const prices = products.flatMap(product => product.prices ?? []);
+        const getButtons = () => Array.from((fixture.nativeElement as HTMLElement)
+            .querySelectorAll<HTMLButtonElement>('.plan-price-section button'));
+
+        beforeEach(async () => {
+            await fixture.whenStable();
+            component.isOnboarding = true;
+            component.currentRole = null;
+            component.isLoadingRole = false;
+            component.products$ = of(products);
+            fixture.detectChanges();
+        });
+
+        it.each(prices)('shows progress only for $id and disables competing choices', async price => {
+            let complete!: () => void;
+            const pending = new Promise<void>(resolve => { complete = resolve; });
+            const checkout = vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession').mockReturnValue(pending);
+            const selectFree = vi.spyOn(TestBed.inject(AppUserService), 'setFreeTier').mockReturnValue(pending);
+            const buttons = getButtons();
+            const labels = buttons.map(button => button.textContent?.trim());
+            const selectedIndex = prices.findIndex(candidate => candidate.id === price.id);
+            const isFree = price.unit_amount === 0;
+            const request = isFree ? component.selectFreeTier(price.id) : component.subscribe(price);
+
+            await vi.waitFor(() => expect(isFree ? selectFree : checkout).toHaveBeenCalledTimes(1));
+            fixture.detectChanges();
+
+            expect(buttons).toHaveLength(5);
+            expect(fixture.nativeElement.querySelectorAll('.plan-price-section mat-spinner')).toHaveLength(1);
+            buttons.forEach((button, index) => {
+                expect(button.disabled).toBe(true);
+                expect(button.getAttribute('aria-busy')).toBe(String(index === selectedIndex));
+                expect(button.getAttribute('aria-label')).toContain(labels[index]);
+                if (index === selectedIndex) {
+                    expect(button.querySelector('.plan-action-content mat-spinner')).toBeTruthy();
+                } else {
+                    expect(button.textContent?.trim()).toBe(labels[index]);
+                    expect(button.querySelector('mat-spinner')).toBeNull();
+                }
+            });
+
+            await component.selectFreeTier();
+            await component.subscribe(prices[1]);
+            expect(selectFree).toHaveBeenCalledTimes(isFree ? 1 : 0);
+            expect(checkout).toHaveBeenCalledTimes(isFree ? 0 : 1);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(haptics.error).not.toHaveBeenCalled();
+
+            complete();
+            await request;
+            expect(haptics.success).toHaveBeenCalledTimes(isFree ? 1 : 0);
+            if (!isFree) {
+                // Checkout keeps its indicator until navigation or returning from Stripe.
+                expect(component.isLoading).toBe(true);
+                Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+                document.dispatchEvent(new Event('visibilitychange'));
+            }
+            fixture.detectChanges();
+            expect(component.loadingPriceId).toBeNull();
+            expect(getButtons().every(button => !button.disabled)).toBe(true);
+            expect(fixture.nativeElement.querySelectorAll('.plan-price-section mat-spinner')).toHaveLength(0);
+        });
+
+        it.each([
+            ['Checkout failed', true],
+            ['User cancelled redirection to portal.', false],
+        ] as const)('clears the selected indicator after %s', async (message, isError) => {
+            const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+            vi.spyOn(TestBed.inject(AppPaymentService), 'appendCheckoutSession').mockRejectedValue(new Error(message));
+
+            await component.subscribe(prices[3]);
+            fixture.detectChanges();
+
+            expect(component.isLoading).toBe(false);
+            expect(component.loadingPriceId).toBeNull();
+            expect(getButtons().every(button => !button.disabled && button.getAttribute('aria-busy') === 'false')).toBe(true);
+            expect(fixture.nativeElement.querySelectorAll('.plan-price-section mat-spinner')).toHaveLength(0);
+            expect(haptics.selection).toHaveBeenCalledTimes(1);
+            expect(haptics.error).toHaveBeenCalledTimes(isError ? 1 : 0);
+            expect(haptics.success).not.toHaveBeenCalled();
+            expect(alert).toHaveBeenCalledTimes(isError ? 1 : 0);
+            alert.mockRestore();
+        });
+    });
+
+    it('should show a spinner inside the onboarding Continue for Free CTA while selecting free', () => {
         const freeProduct = {
             id: 'free_tier',
             active: true,
@@ -1250,6 +1370,7 @@ describe('PricingComponent', () => {
         component.isLoadingRole = false;
         component.isLoading = true;
         component.products$ = of([freeProduct]);
+        component.loadingPriceId = 'free_price';
 
         fixture.detectChanges();
 
@@ -1303,7 +1424,7 @@ describe('PricingComponent', () => {
         continueForFreeButton?.click();
         await fixture.whenStable();
 
-        expect(selectFreeTierSpy).toHaveBeenCalled();
+        expect(selectFreeTierSpy).toHaveBeenCalledWith('free_price');
     });
 
     it('should keep showing the disabled Current Plan button outside onboarding when the role is null', async () => {
