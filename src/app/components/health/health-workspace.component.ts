@@ -38,6 +38,8 @@ import {
 } from '@shared/health';
 import { ProviderPresentation, buildProviderPresentation } from '@shared/provider-presentation';
 import { SleepSession } from '@shared/sleep';
+import { projectHealthRange } from '@shared/health-query';
+import { healthMetricUsesSleep } from '../../helpers/health-workspace.helper';
 import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manual-health';
 import { from, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -445,9 +447,16 @@ export class HealthWorkspaceComponent {
     const result = this.selectedHealthLoad()?.result;
     return result ? filterHealthRangeResultByProviders(result, this.effectiveProviderFilters()) : null;
   });
+  private readonly metricProjectionResult = computed(() => {
+    const window = this.selectedWindow();
+    return this.filteredHealthResult() || projectHealthRange([], [], {
+      startDate: window.startDate, endDate: window.endDate,
+      metricIds: window.metric === 'sleep' ? [] : [window.metric], includeSamples: window.includeSamples,
+    });
+  });
   readonly filteredActivityHealthObservations = computed<ActivityHealthObservation[]>(() => {
     const metric = this.routeState().metric;
-    const healthResult = this.filteredHealthResult();
+    const healthResult = this.metricProjectionResult();
     const activityResult = this.selectedActivityHealthResult();
     if (!isActivityHealthMetricId(metric) || !healthResult || !activityResult) {
       return [];
@@ -460,8 +469,8 @@ export class HealthWorkspaceComponent {
     );
   });
   readonly metricView = computed<HealthMetricWorkspaceView>(() => {
-    const result = this.filteredHealthResult();
-    return result
+    const result = this.metricProjectionResult();
+    return !this.selectedIsSleep()
       ? buildHealthMetricWorkspaceView(
         result,
         this.filteredSleepSessions(),
@@ -567,11 +576,10 @@ export class HealthWorkspaceComponent {
         ...(loadedResult?.observations.map(item => item.provider) || []),
         ...(loadedResult?.sampleChunks.map(item => item.provider) || []),
         ...(this.selectedActivityHealthResult()?.observations.map(item => item.provider) || []),
-        ...(selectedMetric === HEALTH_METRIC_IDS.HeartRateVariability
-          ? this.windowedSleepSessions()
-            .filter(sleepSessionHasHrv)
-            .map(session => session.source.provider as HealthProvider)
-          : []),
+        ...this.windowedSleepSessions()
+          .filter(session => selectedMetric === HEALTH_METRIC_IDS.HeartRateVariability
+            ? sleepSessionHasHrv(session) : sleepSummaryMetricIds(session).includes(selectedMetric as HealthMetricId))
+          .map(session => session.source.provider as HealthProvider),
       ];
     return [...new Set(providers)].sort((left, right) => providerLabel(left).localeCompare(providerLabel(right)));
   });
@@ -605,23 +613,26 @@ export class HealthWorkspaceComponent {
     if (this.selectedIsSleep()) {
       return this.selectedSleepStatus();
     }
-    const healthStatus = this.selectedHealthStatus();
     const metric = this.routeState().metric;
-    if (!isActivityHealthMetricId(metric)) {
-      return healthStatus;
-    }
-    const activityStatus = this.selectedActivityHealthStatus();
-    if (healthStatus === 'loading' || activityStatus === 'loading') {
-      return 'loading';
-    }
-    if (healthStatus === 'denied' || healthStatus === 'error') {
-      return healthStatus;
-    }
-    if ((activityStatus === 'denied' || activityStatus === 'error')
-      && !hasHealthResultValues(this.filteredHealthResult())) {
-      return activityStatus;
-    }
-    return healthStatus;
+    const statuses = [this.selectedHealthStatus(),
+      ...(healthMetricUsesSleep(metric) ? [this.selectedSleepStatus()] : []),
+      ...(isActivityHealthMetricId(metric) ? [this.selectedActivityHealthStatus()] : []),
+    ];
+    // One source failing or still loading must not hide another source's real readings.
+    if (this.metricView().series.length) return 'ready';
+    if (statuses.includes('loading')) return 'loading';
+    if (statuses.includes('denied')) return 'denied';
+    return statuses.includes('error') ? 'error' : 'ready';
+  });
+  readonly metricSourceNotice = computed(() => {
+    if (this.selectedIsSleep() || !this.metricView().series.length) return null;
+    const sources = [
+      { label: 'Health readings', status: this.selectedHealthStatus() },
+      ...(healthMetricUsesSleep(this.selectedMetric()) ? [{ label: 'Sleep readings', status: this.selectedSleepStatus() }] : []),
+    ];
+    const failed = sources.filter(source => source.status === 'error' || source.status === 'denied');
+    if (failed.length) return `${failed.map(source => source.label).join(' and ')} could not be loaded. The available readings are shown. Try this view again or check Connectivity.`;
+    return sources.some(source => source.status === 'loading') ? 'Loading additional readings. The available readings are shown.' : null;
   });
   readonly isLoading = computed(() => this.selectedStatus() === 'loading');
   readonly isDenied = computed(() => this.selectedStatus() === 'denied');
@@ -640,7 +651,9 @@ export class HealthWorkspaceComponent {
   readonly omittedSampleSourceNotice = computed(() => {
     if (this.selectedIsSleep() || this.selectedWindow().includeSamples
       || this.selectedStatus() !== 'ready' || !this.hasData()) return null;
-    const shownProviders = new Set(this.metricView().series.map(series => series.provider));
+    const shownProviders = new Set(this.metricView().series
+      .filter(series => !series.semanticVariant.startsWith('sleep_') && !series.semanticVariant.startsWith('nap_'))
+      .map(series => series.provider));
     const filters = this.effectiveProviderFilters();
     const omitted = (this.selectedHealthLoad()?.sampleBackedProviders || [])
       .filter(provider => (!filters.length || filters.includes(provider)) && !shownProviders.has(provider));

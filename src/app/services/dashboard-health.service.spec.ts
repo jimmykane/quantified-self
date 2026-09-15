@@ -26,6 +26,15 @@ describe('dashboard Health read adapter', () => {
     expect(queries.loadSleepRange).not.toHaveBeenCalled();
     expect(queries.loadActivityRange).not.toHaveBeenCalled();
   });
+  it.each(['sleep_duration', 'sleep_score', 'heart_rate', 'resting_heart_rate', 'blood_oxygen_saturation', 'respiration_rate'] as const)(
+    'reuses one bounded Sleep request for %s without additional history or workout reads', async metric => {
+      await firstValueFrom(TestBed.inject(DashboardHealthService).watch('owner', { metric, range: '30d' }, '2026-09-15'));
+      expect(queries.loadMetricRange).toHaveBeenCalledTimes(1);
+      expect(queries.loadSleepRange).toHaveBeenCalledTimes(1);
+      expect(queries.loadActivityRange).not.toHaveBeenCalled();
+      const [, start, end] = queries.loadSleepRange.mock.calls[0];
+      expect(end - start).toBe(30 * 86400000 - 1);
+    });
   it('loads the shared HRV context independently of the selected range', async () => {
     await firstValueFrom(TestBed.inject(DashboardHealthService).watch('owner', { metric: 'heart_rate_variability', range: '14d' }, '2026-09-15'));
     expect(queries.loadMetricRange.mock.calls.map(call => call[1])).toEqual([

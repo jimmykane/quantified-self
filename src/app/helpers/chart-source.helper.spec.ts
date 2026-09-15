@@ -12,6 +12,14 @@ describe('compact chart source attribution', () => {
     expect(choice.label).toBe(`${series.sourceLabel} · ${series.semanticLabel}`);
     expect(healthChartSourceChoice({ ...series, semanticVariant: 'sleep_overnight_hrv' }).shortLabel).toContain('Overnight average');
   });
+  it('keeps new Sleep vital labels compact without disguising minimums, maximums or naps', () => {
+    for (const [variant, label] of [['sleep_session_minimum_heart_rate', 'Sleep minimum'], ['sleep_session_maximum_spo2', 'Sleep maximum'],
+      ['sleep_session_resting_heart_rate', 'Sleep resting'], ['nap_average_respiration', 'Nap average']]) {
+      const choice = healthChartSourceChoice({ ...series, semanticVariant: variant });
+      expect(choice.shortLabel).toBe(`Suunto · Account 2 · ${label}`);
+      expect(choice.detail).toBe(series.semanticLabel);
+    }
+  });
   it('preserves daily and rolling statistics, unknown semantics and native scales', () => {
     expect(healthChartSourceChoice({ ...series, semanticVariant: 'rolling_7_day_average' }).shortLabel).toContain('7-day average');
     expect(healthChartSourceChoice({ ...series, semanticVariant: 'daily_resting', semanticLabel: 'Average · Daily resting · Provider summary · Provider calculated' }).shortLabel).toContain('Daily resting');

@@ -231,6 +231,12 @@
             <span>{{ partialCoverageNotice() }}</span>
           </div>
         }
+        @if (metricSourceNotice()) {
+          <div class="health-notice" role="status">
+            <mat-icon aria-hidden="true">info</mat-icon>
+            <span>{{ metricSourceNotice() }}</span>
+          </div>
+        }
         @if (activitySourceNotice()) {
           <div class="health-notice health-notice-warning" role="status">
             <mat-icon aria-hidden="true">warning</mat-icon>

@@ -6,6 +6,7 @@ import {
   HEALTH_PROVIDERS,
   HEALTH_QUALITY_STATUSES,
   HEALTH_RECORDING_METHODS,
+  HEALTH_SLEEP_REFERENCE_METRIC_IDS,
   HEALTH_UNITS,
   HEALTH_VALUE_ORIGINS,
   HEALTH_VALUE_TYPES,
@@ -1360,25 +1361,44 @@ function sleepHrvDatums(
 
 /** Recorded Sleep summaries do not require a separate provider Health record. */
 function isNapSleepSummary(series: HealthWorkspaceSeries): boolean {
-  return (series.metricId === HEALTH_METRIC_IDS.SleepDuration || series.metricId === HEALTH_METRIC_IDS.SleepScore)
-    && series.semanticVariant.startsWith('nap_');
+  return series.semanticVariant.startsWith('nap_');
 }
 
-export function sleepSummaryMetricIds(session: SleepSession): HealthMetricId[] {
+const SLEEP_SUMMARY_FIELDS: readonly {
+  field: HealthSleepReferenceField; metricId: HealthMetricId; aggregation: string; variant: string; label?: string; max?: number;
+}[] = [
+  { field: 'durationSeconds', metricId: HEALTH_METRIC_IDS.SleepDuration, aggregation: 'total', variant: 'duration' },
+  { field: 'score.value', metricId: HEALTH_METRIC_IDS.SleepScore, aggregation: 'score', variant: 'score', max: 100 },
+  { field: 'vitals.averageHeartRateBpm', metricId: HEALTH_METRIC_IDS.HeartRate, aggregation: 'average', variant: 'average_heart_rate', label: 'Average heart rate' },
+  { field: 'vitals.minimumHeartRateBpm', metricId: HEALTH_METRIC_IDS.HeartRate, aggregation: 'minimum', variant: 'minimum_heart_rate', label: 'Minimum heart rate' },
+  { field: 'vitals.restingHeartRateBpm', metricId: HEALTH_METRIC_IDS.RestingHeartRate, aggregation: 'average', variant: 'resting_heart_rate', label: 'Resting heart rate' },
+  { field: 'vitals.maxSpo2Percent', metricId: HEALTH_METRIC_IDS.BloodOxygenSaturation, aggregation: 'maximum', variant: 'maximum_spo2', label: 'Maximum blood oxygen', max: 100 },
+  { field: 'vitals.averageRespirationBrpm', metricId: HEALTH_METRIC_IDS.RespirationRate, aggregation: 'average', variant: 'average_respiration', label: 'Average respiration' },
+];
+
+export function healthMetricUsesSleep(metric: HealthWorkspaceMetricSelection): boolean {
+  return metric === 'sleep' || Object.values(HEALTH_SLEEP_REFERENCE_METRIC_IDS).some(metrics => metrics.includes(metric));
+}
+
+function sleepSummaryValues(session: SleepSession) {
   if (!normalizeSleepProvider(session.source?.provider)
     || !Number.isFinite(session.startTimeMs) || !Number.isFinite(session.endTimeMs)
     || session.endTimeMs <= session.startTimeMs) return [];
-  const duration = resolveSleepReferenceValue(session, 'durationSeconds');
-  const score = resolveSleepReferenceValue(session, 'score.value');
-  return [
-    ...(duration !== null && duration > 0 ? [HEALTH_METRIC_IDS.SleepDuration] : []),
-    ...(score !== null && score >= 0 && score <= 100 ? [HEALTH_METRIC_IDS.SleepScore] : []),
-  ];
+  return SLEEP_SUMMARY_FIELDS.flatMap(definition => {
+    const value = resolveSleepReferenceValue(session, definition.field);
+    if (value === null || (definition.field === 'score.value' ? value < 0 : value <= 0)
+      || (definition.max !== undefined && value > definition.max)) return [];
+    return [{ ...definition, value }];
+  });
+}
+
+export function sleepSummaryMetricIds(session: SleepSession): HealthMetricId[] {
+  return [...new Set(sleepSummaryValues(session).map(value => value.metricId))];
 }
 
 function sleepSummaryDatums(sessions: readonly HealthWorkspaceSleepSession[], result: HealthRangeResult): MetricDatum[] {
   const requested = new Set<HealthMetricId>(result.query.metricIds.filter(metric =>
-    metric === HEALTH_METRIC_IDS.SleepDuration || metric === HEALTH_METRIC_IDS.SleepScore));
+    SLEEP_SUMMARY_FIELDS.some(definition => definition.metricId === metric)));
   if (!requested.size) return [];
   const sessionsById = new Map(sessions.filter(session => session.id).map(session => [session.id!, session]));
   const represented = new Set<string>();
@@ -1393,14 +1413,12 @@ function sleepSummaryDatums(sessions: readonly HealthWorkspaceSleepSession[], re
     }
   }
   return sessions.flatMap((session, index) => {
-    const metricIds = sleepSummaryMetricIds(session).filter(metric => requested.has(metric));
-    if (!metricIds.length) return [];
+    const values = sleepSummaryValues(session).filter(value => requested.has(value.metricId));
+    if (!values.length) return [];
     const calendarDate = parseCalendarDate(session.sleepDate) === null
       ? localCalendarDate(session.endTimeMs) : session.sleepDate;
     if (calendarDate < result.query.startDate || calendarDate > result.query.endDate) return [];
-    return metricIds.flatMap(metricId => {
-      const duration = metricId === HEALTH_METRIC_IDS.SleepDuration;
-      const field = duration ? 'durationSeconds' : 'score.value';
+    return values.flatMap(({ metricId, field, aggregation, variant, label, value }) => {
       if (session.id && represented.has(JSON.stringify([session.id, field]))) return [];
       const period = session.isNap ? 'nap' : 'session';
       return [{
@@ -1408,19 +1426,19 @@ function sleepSummaryDatums(sessions: readonly HealthWorkspaceSleepSession[], re
         provider: session.source.provider,
         accountKey: session.healthAccountKey || referencedAccounts.get(accountIdentity(session.source.provider, session.source.providerUserId))
           || session.source.providerUserId || 'default',
-        aggregation: duration ? 'total' : 'score',
-        semanticVariant: `${period}_${duration ? 'duration' : 'score'}`,
+        aggregation,
+        semanticVariant: `${!session.isNap && label ? 'sleep_' : ''}${period}_${variant}`,
         origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
         recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
         unit: getHealthMetricDefinition(metricId).canonicalUnit,
         normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
         nativeOnly: false,
-        semanticLabel: `${session.isNap ? 'Nap' : 'Sleep session'} · Provider summary · Provider calculated`,
+        semanticLabel: `${label ? `${label} · ` : ''}${session.isNap ? 'Nap' : 'Sleep session'} · Provider summary · Provider calculated`,
         valueType: HEALTH_VALUE_TYPES.Number,
         timestampMs: session.endTimeMs,
         calendarDate,
         timezoneOffsetSeconds: session.timezoneOffsetSeconds ?? null,
-        value: resolveSleepReferenceValue(session, field)!,
+        value,
         deviceLabel: null,
         qualityCode: HEALTH_QUALITY_STATUSES.Valid,
         observationId: null,

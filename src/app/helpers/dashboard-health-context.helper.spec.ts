@@ -98,6 +98,21 @@ describe('dashboard Health semantics',()=>{
     expect(missing.hasData).toBe(false);
     expect(missing.sources).toHaveLength(0);
   });
+  it.each(['heart_rate', 'resting_heart_rate', 'blood_oxygen_saturation', 'respiration_rate'] as const)(
+    'uses real Sleep readings for the %s tile, source choices and preview eligibility even if Health fails', metric => {
+      const data = evidence(metric, []);
+      data.health = null; data.errors = ['Health readings'];
+      data.sessions = [{ id: 'night', userID: 'owner', sleepDate: '2026-09-14',
+        source: { provider: 'SuuntoApp', providerUserId: 'account', sourceSessionKey: 'night' },
+        startTimeMs: Date.parse('2026-09-13T22:00:00Z'), endTimeMs: Date.parse('2026-09-14T06:00:00Z'),
+        durationSeconds: 27000, stages: [], isNap: false, createdAtMs: 0, updatedAtMs: 0,
+        vitals: { averageHeartRateBpm: 57, restingHeartRateBpm: 50, maxSpo2Percent: 98, averageRespirationBrpm: 14 } }];
+      const view = buildDashboardHealthContext(data, { metric, range: '30d' });
+      expect(view.hasData).toBe(true); expect(view.availability.state).toBe('ready');
+      expect(view.sources).toHaveLength(1); expect(view.sources[0].shortLabel).toContain('Sleep');
+      expect(view.selected?.model.series.provider).toBe('SuuntoApp');
+      expect(view.notices).toContain('Health readings could not be loaded. Try again.');
+    });
   it('distinguishes long-range sample-only, empty, limited, failed, and partial results',()=>{
     const data=evidence('heart_rate',[],'1y'); const settings={metric:'heart_rate' as const,range:'1y' as const};
     expect(buildDashboardHealthContext(data,settings).availability.state).toBe('no-data');

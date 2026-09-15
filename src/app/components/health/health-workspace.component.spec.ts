@@ -1248,6 +1248,56 @@ describe('HealthWorkspaceComponent', () => {
     expect(component.availableMetricSelections()).not.toContain(HEALTH_METRIC_IDS.SleepScore);
   });
 
+  it.each([HEALTH_METRIC_IDS.SleepDuration, HEALTH_METRIC_IDS.SleepScore, HEALTH_METRIC_IDS.HeartRate,
+    HEALTH_METRIC_IDS.RestingHeartRate, HEALTH_METRIC_IDS.BloodOxygenSaturation, HEALTH_METRIC_IDS.RespirationRate])(
+    'shows and discovers %s from Sleep without Health records, respecting the provider filter', async metric => {
+      await createComponent(id => Promise.resolve(rangeLoad(id, true)), '30d', {
+        metricIds: [], hasSleep: true, sleepSessions: [sleepSession({
+          source: { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'suunto', sourceSessionKey: 'night' },
+          vitals: { averageHeartRateBpm: 58, minimumHeartRateBpm: 47, restingHeartRateBpm: 52, maxSpo2Percent: 98, averageRespirationBrpm: 14 },
+        })],
+      }, metric);
+      expect(component.selectedMetric()).toBe(metric);
+      expect(component.availableMetricSelections()).toContain(metric);
+      expect(component.hasData()).toBe(true);
+      expect(component.availableProviders()).toEqual([HEALTH_PROVIDERS.SuuntoApp]);
+      expect(component.workspaceSourceOptions().find(source => source.provider === HEALTH_PROVIDERS.SuuntoApp)?.hasDataInView).toBe(true);
+      expect(component.metricView().series.every(series => series.provider === HEALTH_PROVIDERS.SuuntoApp)).toBe(true);
+      component.selectedProviders.set([HEALTH_PROVIDERS.GarminAPI]); fixture.detectChanges();
+      expect(component.metricView().series).toEqual([]);
+    });
+
+  it('keeps sleep-backed metrics loading until Sleep settles and reports a failed Sleep read', async () => {
+    await createComponent(id => Promise.resolve(rangeLoad(id, true)), '30d', { sleepSessions: [] }, HEALTH_METRIC_IDS.HeartRate);
+    component.selectedSleepStatus.set('loading'); fixture.detectChanges();
+    expect(component.isLoading()).toBe(true); expect(component.isEmpty()).toBe(false);
+    component.selectedSleepStatus.set('error'); fixture.detectChanges();
+    expect(component.hasLoadError()).toBe(true); expect(component.isEmpty()).toBe(false);
+  });
+
+  it('keeps real Sleep readings visible when Health fails, with an explicit partial-source notice', async () => {
+    await createComponent(() => Promise.reject(Error('offline')), '30d', { sleepSessions: [sleepSession({
+      vitals: { restingHeartRateBpm: 52 },
+    })] }, HEALTH_METRIC_IDS.RestingHeartRate);
+    expect(component.hasData()).toBe(true); expect(component.hasLoadError()).toBe(false);
+    expect(component.metricSourceNotice()).toContain('Health readings could not be loaded');
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-health-metric-chart')).toBeTruthy();
+    expect(haptics.selection).not.toHaveBeenCalled();
+  });
+
+  it('keeps provider readings visible when Sleep fails and explains omitted all-day samples beside a Sleep summary', async () => {
+    await createComponent(undefined, '90d', {}, HEALTH_METRIC_IDS.HeartRate);
+    component.selectedSleepStatus.set('error'); fixture.detectChanges();
+    expect(component.selectedStatus()).toBe('ready');
+    expect(component.metricSourceNotice()).toContain('Sleep readings could not be loaded');
+    component.selectedSleepStatus.set('ready');
+    component.selectedHealthLoad.set({ ...rangeLoad(HEALTH_METRIC_IDS.HeartRate, true), hasSampleBackedMetric: true,
+      sampleBackedProviders: [HEALTH_PROVIDERS.GarminAPI] }); fixture.detectChanges();
+    expect(component.hasData()).toBe(true);
+    expect(component.sampleOnlyLongRange()).toBe(false);
+    expect(component.omittedSampleSourceNotice()).toContain('Select 30 days or less');
+  });
+
   it('keeps the complete catalog visible when availability discovery fails', async () => {
     await createComponent(undefined, undefined, {
       healthError: new Error('offline'),
@@ -1273,7 +1323,7 @@ describe('HealthWorkspaceComponent', () => {
 
     const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option')]
       .map(option => option.querySelector('.health-metric-option-content > span:last-child')?.textContent?.trim());
-    expect(labels).toEqual(['Sleep overview', 'Heart rate variability', 'Sleep duration', 'Sleep score', 'Steps', 'Body weight', 'VO2 max']);
+    expect(labels).toEqual(['Sleep overview', 'Heart rate', 'Heart rate variability', 'Sleep duration', 'Sleep score', 'Steps', 'Body weight', 'VO2 max']);
     expect(component.routeState().metric).toBe('sleep');
   });
 
@@ -2515,7 +2565,7 @@ describe('HealthWorkspaceComponent', () => {
   });
 
   it('explains sample-only metrics instead of implying an empty 90-day aggregate', async () => {
-    await createComponent();
+    await createComponent(undefined, undefined, { sleepSessions: [] });
     loadMetricRange.mockImplementation((_uid: string, request: { metricId: HealthMetricId }) => Promise.resolve({
       ...rangeLoad(request.metricId, true),
       hasMatchingSourceRecords: true,
@@ -2537,7 +2587,7 @@ describe('HealthWorkspaceComponent', () => {
   });
 
   it('keeps sample-only providers filterable and scopes the long-range explanation', async () => {
-    await createComponent();
+    await createComponent(undefined, undefined, { sleepSessions: [] });
     loadMetricRange.mockImplementation((_uid: string, request: { metricId: HealthMetricId }) => Promise.resolve({
       ...rangeLoad(request.metricId, true),
       hasMatchingSourceRecords: true,

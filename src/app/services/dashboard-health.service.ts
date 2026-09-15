@@ -1,9 +1,9 @@
 import { inject, Injectable } from '@angular/core';
 import { defer, filter, merge, Observable, of, scan, switchMap } from 'rxjs';
 import { isActivityHealthMetricId } from '@shared/activity-health';
-import { HEALTH_METRIC_IDS, HEALTH_SLEEP_REFERENCE_METRIC_IDS } from '@shared/health';
+import { HEALTH_METRIC_IDS } from '@shared/health';
 import { HealthMetricQueryService } from './health-metric-query.service';
-import { localCalendarDate, resolveHealthWorkspaceWindow } from '../helpers/health-workspace.helper';
+import { healthMetricUsesSleep, localCalendarDate, resolveHealthWorkspaceWindow } from '../helpers/health-workspace.helper';
 import type { AppDashboardHealthMetricSettings } from '../models/app-user.interface';
 import type { DashboardHealthEvidence } from '../helpers/dashboard-health-context.helper';
 @Injectable({ providedIn: 'root' })
@@ -45,7 +45,7 @@ export class DashboardHealthService {
         const previousEnd = new Date(Date.parse(window.startDate) - 86400000).toISOString().slice(0, 10);
         const sleepStart = hrv ? resolveHealthWorkspaceWindow({ metric: settings.metric, range: 'today', endDate: previousStart }).startTimeMs : window.startTimeMs;
         // Health observations may reference Sleep fields (including HR, oxygen and respiration).
-        const needsSleep = settings.metric === 'sleep' || Object.values(HEALTH_SLEEP_REFERENCE_METRIC_IDS).some(metrics => (metrics as readonly string[]).includes(settings.metric));
+        const needsSleep = healthMetricUsesSleep(settings.metric);
         const [health, history, activities, sessions] = await Promise.allSettled([
             settings.metric === 'sleep' ? Promise.resolve(null) : this.queries.loadMetricRange(uid, { metricId: settings.metric, startDate: window.startDate, endDate: window.endDate, includeSamples: window.includeSamples }, priority, signal),
             hrv ? this.queries.loadMetricRange(uid, { metricId: HEALTH_METRIC_IDS.HeartRateVariability, startDate: previousStart, endDate: previousEnd, includeSamples: false }, priority, signal) : Promise.resolve(null),
