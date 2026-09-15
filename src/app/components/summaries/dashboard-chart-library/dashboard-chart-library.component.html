@@ -1,11 +1,11 @@
 @if (showAddAction() && !hideEntryAction()) {
-  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" matBadge="New" matBadgePosition="above before" matBadgeSize="medium" [matBadgeHidden]="!unseen().length" [matBadgeDescription]="newBadgeDescription()" (click)="toggle()">
-    <span>{{ sectionPresentation().add }}</span>
+  <button #entryButton [class.dashboard-entry]="allSections()" mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" matBadge="New" matBadgePosition="above before" matBadgeSize="medium" [matBadgeHidden]="!unseen().length" [matBadgeDescription]="newBadgeDescription()" (click)="toggle()">
+    <span class="chart-library-entry-label">{{ entryActionText() }}</span>
     <mat-icon iconPositionEnd>add</mat-icon>
   </button>
 }
 <ng-template #picker>
-<section class="chart-library bottom-sheet-container" [class.chart-library-dialog]="!usesBottomSheet()" [class.health-library]="lane() === 'section:health'" [attr.aria-busy]="state.busy()">
+<section class="chart-library bottom-sheet-container" [class.chart-library-dialog]="!usesBottomSheet()" [class.health-library]="browseLane() === 'section:health'" [attr.aria-busy]="state.busy()">
   <div class="chart-library-heading">
     <h2>{{ pickerHeading() }}</h2>
     <button mat-icon-button aria-label="Close library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
@@ -13,15 +13,22 @@
   <div #scrollContent class="chart-library-layout qs-scrollbar" [class.pin-preview]="state.pinnedFromHealth()" [class.has-selection]="state.draft() && !state.configuring()" [class.is-configuring]="state.configuring()">
     @if (!state.configuring() && !state.pinnedFromHealth()) {
     <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
+      @if (allSections()) {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Dashboard section</mat-label>
+          <mat-select [value]="browseLane()" [disabled]="state.busy()" (selectionChange)="openSection($event.value, true)">
+            @for (section of sections(); track section.lane) { <mat-option [value]="section.lane">{{ section.label }}{{ section.unseen.length ? ' · New' : '' }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+      }
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [disabled]="state.busy()" [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
-      @if (lane() === 'kpi') {
+      @if (browseLane() === 'kpi') {
       <div class="chart-library-filters">
       <mat-chip-listbox aria-label="KPI group" [hideSingleSelectionIndicator]="true" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
         <mat-chip-option value="all">All</mat-chip-option><mat-chip-option value="load">Load</mat-chip-option><mat-chip-option value="readiness">Readiness</mat-chip-option><mat-chip-option value="execution">Execution</mat-chip-option>
       </mat-chip-listbox>
       </div>
       }
-      @if (lane() === 'section:health') {
+      @if (browseLane() === 'section:health') {
         <div class="chart-library-filters"><mat-chip-listbox aria-label="Health category" [hideSingleSelectionIndicator]="true" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
           <mat-chip-option value="all">All</mat-chip-option>
           @for (category of healthGroups; track category.id) { <mat-chip-option [value]="category.id">{{ category.label }}</mat-chip-option> }
@@ -44,7 +51,7 @@
           </button>
         } @empty { <p class="chart-library-empty">{{ emptyMessage() }}</p> }
       </mat-action-list>
-      @if (lane() === 'section:activityOverview') {
+      @if (browseLane() === 'section:activityOverview') {
       <button mat-button [disabled]="state.busy()" (click)="createCustom()"><mat-icon>tune</mat-icon>Create custom chart</button>
       }
     </div>
@@ -83,8 +90,8 @@
     } @else if (!state.configuring()) {
       <div class="chart-library-preview-placeholder">
         <mat-icon aria-hidden="true">query_stats</mat-icon>
-        <h3>Select a {{ sectionPresentation().singular }}</h3>
-        <p>Choose a {{ sectionPresentation().singular }} from the list to see its preview and details.</p>
+        <h3>{{ placeholderTitle() }}</h3>
+        <p>{{ placeholderDescription() }}</p>
       </div>
     }
   </div>

@@ -5,12 +5,11 @@
   <app-page-header
     class="dashboard-summary-header"
     variant="compact"
-    [title]="showTodaySummary ? 'Today' : (derivedMetricsBanner ? 'Dashboard' : null)"
+    [title]="showTodaySummary ? 'Today' : 'Dashboard'"
     [titleId]="showTodaySummary ? 'dashboard-today-title' : null"
     [headingLevel]="2"
     [subtitle]="showTodaySummary ? todayDateSubtitle : null"
-    [leadingAction]="showTodaySummary"
-    [ariaLabel]="showTodaySummary || derivedMetricsBanner ? null : 'Dashboard controls'">
+    [leadingAction]="showTodaySummary">
     @if (showTodaySummary) {
       <button pageHeaderLeading mat-icon-button type="button" class="dashboard-today-calendar-button" appHapticTap
         aria-label="Open this month's activity calendar" matTooltip="Open calendar" (click)="openDashboardCalendar()">
@@ -29,6 +28,7 @@
       </button>
       }
       @if (showActions && isOwnerDashboard) {
+      <app-dashboard-chart-library [user]="$any(user)" lane="section:activityOverview" [allSections]="true" [hideEntryAction]="user?.settings?.dashboardSettings?.tiles?.length === 0 && !tiles.length && !showTodaySummary" [seed]="previewInput" [timelineNotes]="timelineNotes()" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()" />
       <app-timeline-notes-workspace [ownerUid]="user?.uid" />
       <button mat-icon-button appHapticTap aria-label="Dashboard options" [matMenuTriggerFor]="dashboardOptions" [disabled]="library.busy()"><mat-icon>more_horiz</mat-icon></button>
       <mat-menu #dashboardOptions="matMenu" class="qs-menu-panel">
@@ -116,12 +116,22 @@
   @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }
   @if (showActions && library.error() && !library.activeLane()) { <p role="alert">{{ library.error() }}</p> }
   @if (showActions && library.undoAvailable()) { <div role="status" class="dashboard-chart-added">Dashboard updated <button mat-button (click)="undoDashboardChange()" [disabled]="library.busy()">Undo</button></div> }
-  @if (kpiLaneTiles.length || (showActions && isOwnerDashboard)) {
+  @if (showActions && isOwnerDashboard && user?.settings?.dashboardSettings?.tiles?.length === 0 && !tiles.length && !showTodaySummary) {
+    <section class="dashboard-empty" aria-labelledby="dashboard-empty-title">
+      <h2 id="dashboard-empty-title">Make this dashboard yours</h2>
+      <p>Add the charts, KPIs and maps you want to follow, or begin with the starter dashboard.</p>
+      <div class="dashboard-empty-actions">
+        <button mat-flat-button [disabled]="library.busy()" aria-haspopup="dialog" [attr.aria-expanded]="!!library.activeLane()" [attr.aria-label]="'Add tiles' + (dashboardPicker()?.newBadgeDescription() ? ', ' + dashboardPicker()!.newBadgeDescription() : '')" matBadge="New" matBadgePosition="above before" matBadgeSize="medium" [matBadgeHidden]="!dashboardPicker()?.unseen()?.length" [matBadgeDescription]="dashboardPicker()?.newBadgeDescription() || ''" (click)="dashboardPicker()?.toggle()">Add tiles<mat-icon iconPositionEnd>add</mat-icon></button>
+        <button mat-button [disabled]="library.busy()" (click)="library.bulk($any(user), 'reset')">Use starter dashboard</button>
+      </div>
+    </section>
+  }
+  @if (kpiLaneTiles.length) {
   <section class="dashboard-kpi-section" aria-label="KPIs">
     @if (showActions && isOwnerDashboard) {
     <div class="dashboard-section-header dashboard-main-section-header">
       <h2>KPIs</h2>
-      <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [timelineNotes]="timelineNotes()" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library>
+      <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'kpi' }" />
     </div>
     }
     @if (kpiLaneTiles.length) {
@@ -199,7 +209,7 @@
             <h2 [id]="'dashboard-section-' + section.id">{{ section.label }}</h2>
           </div>
         </div>
-      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [timelineNotes]="timelineNotes()" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
+      @if (showActions && isOwnerDashboard) { <ng-container [ngTemplateOutlet]="sectionAddAction" [ngTemplateOutletContext]="{ lane: 'section:' + section.id }" /> }
       </div>
       @if (section.tiles.length) {
       <app-dashboard-tile-board
@@ -299,3 +309,14 @@
   }
 </section>
 }
+
+<ng-template #sectionAddAction let-lane="lane">
+  @if (dashboardPicker(); as picker) {
+    @let action = picker.sectionActions()[lane];
+    @if (action.canAdd) {
+      <button mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="action.actionLabel" [attr.aria-expanded]="library.activeLane() === lane" [matTooltip]="action.hint" [disabled]="library.busy()" matBadge="New" matBadgePosition="above before" matBadgeSize="medium" [matBadgeHidden]="!action.unseen.length" [matBadgeDescription]="action.badgeDescription" (click)="picker.openSection(lane)">
+        {{ action.presentation.add }}<mat-icon iconPositionEnd>add</mat-icon>
+      </button>
+    }
+  }
+</ng-template>

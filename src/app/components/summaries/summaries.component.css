@@ -472,3 +472,8 @@ section {
 }
 
 .dashboard-chart-added { display: flex; align-items: center; gap: 12px; }
+
+.dashboard-empty { padding: 24px 0; max-width: 560px; }
+.dashboard-empty h2 { font: var(--mat-sys-title-large); margin: 0 0 8px; }
+.dashboard-empty p { font: var(--mat-sys-body-medium); color: var(--mat-sys-on-surface-variant); margin: 0 0 16px; }
+.dashboard-empty-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

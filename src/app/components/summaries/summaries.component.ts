@@ -8,6 +8,7 @@ import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
 import { dashboardHrvWindows, type DashboardHrvContext } from '../../helpers/dashboard-hrv-context.helper';
 import { DashboardConfigurationService, cloneDashboardSettings } from '../../services/dashboard-configuration.service';
+import { DashboardChartLibraryComponent } from './dashboard-chart-library/dashboard-chart-library.component';
 import { DashboardChartLibraryState } from './dashboard-chart-library/dashboard-chart-library-state.service';
 import type { DashboardPreviewInput } from '../../helpers/dashboard-chart-preview.helper';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
@@ -342,6 +343,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private readonly healthHaptics = inject(AppHapticsService);
   readonly healthSavingOrders = new Set<number>();
   readonly library = inject(DashboardChartLibraryState);
+  readonly dashboardPicker = viewChild(DashboardChartLibraryComponent);
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   /** One live, owner-fenced source shared by tiles and calendar sheets. */
   readonly timelineNotes = computed<TimelineNoteChartContext | null>(() => this.notesWorkspace()?.context() ?? null);
@@ -2229,7 +2231,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           trailingPlaceholders: this.buildMainGridTrailingPlaceholders(sectionCells, sectionColumns),
         };
       })
-      .filter(section => section.tiles.length > 0 || (this.showActions && this.resolveOwnDashboardUID()));
+      .filter(section => section.tiles.length > 0);
   }
 
   private refreshMainGridSectionLayout(): void {

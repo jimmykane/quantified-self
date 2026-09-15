@@ -81,3 +81,10 @@ h3 { font: var(--mat-sys-title-medium); margin-block: 8px; }
 .health-library .chart-library-list [matListItemTitle] { white-space:normal; line-height:1.3; }
 .health-library .chart-library-row-meta { margin-inline:8px 4px; gap:4px; }
 .health-library .chart-library-health-thumbnail { width:64px; }
+
+/* Keep the top-level action beside Today, notes and options on phones. */
+@media (max-width: 599px) {
+  .dashboard-entry { width: 48px; min-width: 48px; padding-inline: 0; }
+  .dashboard-entry .chart-library-entry-label { display: none; }
+  .dashboard-entry > mat-icon { margin: 0; }
+}

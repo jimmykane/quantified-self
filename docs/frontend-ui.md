@@ -196,11 +196,17 @@ do not opt into the compact height-filling class.
 
 ## Dashboard chart picker
 
-Owners add tiles from compact, right-aligned section actions: Add KPI, Add chart, or Add map. Mixed sections such as Activity Overview use Add tile. The action is hidden when
-a section has no available presets; keep the library component mounted so existing tiles can still open for editing.
-Activity Overview retains its action for custom creation and opens properties directly when no presets remain. Empty
-owner sections retain an entry point;
-shared/read-only dashboards do not instantiate the library. A dashboard-scoped `DashboardChartLibraryState` permits one
+Owners use a compact **Add to dashboard +** action in the dashboard header (an accessible **+** button on phones).
+One dashboard-scoped `DashboardChartLibraryComponent` with `allSections=true` owns the overlay and handles section
+add actions and existing-tile editing. Its Material section selector exposes every lane, including hidden ones. Opening
+from the top prioritizes unseen additions, then an available section; it avoids landing on a completed preset list.
+Empty KPI/main sections are omitted from the dashboard. Populated sections retain right-aligned Add KPI, Add chart,
+Add map, or mixed Add tile actions, delegated to the same picker. A section action is hidden when no presets remain;
+Activity Overview retains custom creation and its direct action opens properties when complete. Adding a first tile
+reveals its section, removing the last hides it, and restoring the tile restores the section. The global picker remains
+mounted through those changes, so overlay state and editing do not depend on section visibility. An entirely empty
+owner dashboard offers Add tiles and Use starter dashboard through the existing confirmation/persistence flow.
+Shared/read-only dashboards do not instantiate the picker or its actions. `DashboardChartLibraryState` still permits one
 open section and one local draft. All custom activity metric charts and presets belong in Activity Overview, which is the only
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
 there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
@@ -283,7 +289,7 @@ sections to the current revision; existing profiles without metadata use the rol
 badge considers unseen, unadded catalog entries regardless of data eligibility. It is absent from shared/public views
 and included in the add action's accessible label.
 
-Opening a section's browse list snapshots its unseen IDs for that session and acknowledges that section only. Editing
+The top action aggregates unseen additions across all lanes without reading chart data. Opening a section's browse list snapshots its unseen IDs for that session and acknowledges that section only. Switching sections keeps the same overlay, resets section search/filters, and loads only that section's evidence; session New labels survive revisiting a section. Editing
 an existing tile does not acknowledge. `DashboardChartDiscoveryService` derives badges from bundled metadata and the
 already-loaded owner settings: no polling or chart reads. It writes only advancing acknowledgements using a Firestore
 transaction that keeps the maximum revision. Full profile settings saves preserve those maxima transactionally too,
