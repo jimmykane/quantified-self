@@ -75,6 +75,8 @@ import {
 export const HEALTH_WORKSPACE_RANGES = APP_HEALTH_WORKSPACE_RANGES;
 export type HealthWorkspaceRange = AppHealthWorkspaceRange;
 export type HealthWorkspaceMetricSelection = AppHealthWorkspaceMetric;
+/** Read-time account identity shared with typed Health references; never persisted. */
+export type HealthWorkspaceSleepSession = SleepSession & { healthAccountKey?: string };
 
 export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRate;
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
@@ -491,6 +493,7 @@ export function buildHealthMetricWorkspaceView(
   if (result.query.metricIds.includes(HEALTH_METRIC_IDS.HeartRateVariability)) {
     datums.push(...sleepHrvDatums(sleepSessions, result));
   }
+  datums.push(...sleepSummaryDatums(sleepSessions, result));
   for (const observation of activityObservations) {
     datums.push(activityObservationDatum(observation));
   }
@@ -1348,6 +1351,78 @@ function sleepHrvDatums(
         sampleCount: 1,
         coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
         expectedUpdateIntervalMs: SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS,
+        manualMeasurement: null,
+      } satisfies MetricDatum];
+    });
+  });
+}
+
+/** Recorded Sleep summaries do not require a separate provider Health record. */
+export function sleepSummaryMetricIds(session: SleepSession): HealthMetricId[] {
+  if (!normalizeSleepProvider(session.source?.provider)
+    || !Number.isFinite(session.startTimeMs) || !Number.isFinite(session.endTimeMs)
+    || session.endTimeMs <= session.startTimeMs) return [];
+  const duration = resolveSleepReferenceValue(session, 'durationSeconds');
+  const score = resolveSleepReferenceValue(session, 'score.value');
+  return [
+    ...(duration !== null && duration > 0 ? [HEALTH_METRIC_IDS.SleepDuration] : []),
+    ...(score !== null && score >= 0 && score <= 100 ? [HEALTH_METRIC_IDS.SleepScore] : []),
+  ];
+}
+
+function sleepSummaryDatums(sessions: readonly HealthWorkspaceSleepSession[], result: HealthRangeResult): MetricDatum[] {
+  const requested = new Set<HealthMetricId>(result.query.metricIds.filter(metric =>
+    metric === HEALTH_METRIC_IDS.SleepDuration || metric === HEALTH_METRIC_IDS.SleepScore));
+  if (!requested.size) return [];
+  const sessionsById = new Map(sessions.filter(session => session.id).map(session => [session.id!, session]));
+  const represented = new Set<string>();
+  const referencedAccounts = new Map<string, string>();
+  for (const observation of result.observations) {
+    const entry = observation.entry;
+    if (entry.kind !== 'sleep_reference' || !requested.has(entry.metricId)) continue;
+    represented.add(JSON.stringify([entry.reference.documentId, entry.reference.field]));
+    const session = sessionsById.get(entry.reference.documentId);
+    if (session && observation.provider === session.source.provider) {
+      referencedAccounts.set(accountIdentity(session.source.provider, session.source.providerUserId), observation.accountKey);
+    }
+  }
+  return sessions.flatMap((session, index) => {
+    const metricIds = sleepSummaryMetricIds(session).filter(metric => requested.has(metric));
+    if (!metricIds.length) return [];
+    const calendarDate = parseCalendarDate(session.sleepDate) === null
+      ? localCalendarDate(session.endTimeMs) : session.sleepDate;
+    if (calendarDate < result.query.startDate || calendarDate > result.query.endDate) return [];
+    return metricIds.flatMap(metricId => {
+      const duration = metricId === HEALTH_METRIC_IDS.SleepDuration;
+      const field = duration ? 'durationSeconds' : 'score.value';
+      if (session.id && represented.has(JSON.stringify([session.id, field]))) return [];
+      const period = session.isNap ? 'nap' : 'session';
+      return [{
+        metricId,
+        provider: session.source.provider,
+        accountKey: session.healthAccountKey || referencedAccounts.get(accountIdentity(session.source.provider, session.source.providerUserId))
+          || session.source.providerUserId || 'default',
+        aggregation: duration ? 'total' : 'score',
+        semanticVariant: `${period}_${duration ? 'duration' : 'score'}`,
+        origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+        recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated,
+        unit: getHealthMetricDefinition(metricId).canonicalUnit,
+        normalizationStatus: HEALTH_NORMALIZATION_STATUSES.Canonical,
+        nativeOnly: false,
+        semanticLabel: `${session.isNap ? 'Nap' : 'Sleep session'} · Provider summary · Provider calculated`,
+        valueType: HEALTH_VALUE_TYPES.Number,
+        timestampMs: session.endTimeMs,
+        calendarDate,
+        timezoneOffsetSeconds: session.timezoneOffsetSeconds ?? null,
+        value: resolveSleepReferenceValue(session, field)!,
+        deviceLabel: null,
+        qualityCode: HEALTH_QUALITY_STATUSES.Valid,
+        observationId: null,
+        rowId: `sleep:${session.id || `loaded-${index + 1}`}:${field}`,
+        rowKind: 'sleep',
+        sampleCount: 1,
+        coverageStatus: HEALTH_COVERAGE_STATUSES.Unknown,
+        expectedUpdateIntervalMs: session.isNap ? null : SLEEP_HRV_EXPECTED_UPDATE_INTERVAL_MS,
         manualMeasurement: null,
       } satisfies MetricDatum];
     });

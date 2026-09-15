@@ -109,6 +109,7 @@ import {
   selectHealthPriorityTrendSeries,
   selectTodayHeartRateHighlightSeries,
   sleepSessionHasHrv,
+  sleepSummaryMetricIds,
 } from '../../helpers/health-workspace.helper';
 import {
   buildDashboardSleepTrendContext,
@@ -317,6 +318,7 @@ export class HealthWorkspaceComponent {
   readonly availableHealthMetricIds = signal<readonly HealthMetricId[] | null>(null);
   readonly healthMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
   readonly hasAnySleepSession = signal<boolean | null>(null);
+  private readonly observedSleepSummaryMetrics = signal<{ uid: string | null; metrics: HealthMetricId[] }>({ uid: null, metrics: [] });
   readonly sleepMetricAvailabilityStatus = signal<HealthLoadStatus>('loading');
   readonly priorityRecentSleepSessions = computed(() => this.prioritySleepSessions().filter(session =>
     session.endTimeMs >= this.priorityWindow.startTimeMs
@@ -385,6 +387,10 @@ export class HealthWorkspaceComponent {
       return this.completeMetricCatalogGroups;
     }
     const availableMetricIds = new Set(this.availableHealthMetricIds() || []);
+    const sleepMetrics = this.observedSleepSummaryMetrics();
+    if (sleepMetrics.uid === this.signedInUserID()) {
+      sleepMetrics.metrics.forEach(metric => availableMetricIds.add(metric));
+    }
     if (this.sleepHrvAvailabilityStatus() !== 'ready' || this.hasLoadedSleepHrv()) {
       availableMetricIds.add(HEALTH_METRIC_IDS.HeartRateVariability);
     }
@@ -924,6 +930,19 @@ export class HealthWorkspaceComponent {
         this.availableHealthMetricIds.set(null);
         this.healthMetricAvailabilityStatus.set(loadErrorStatus(error));
       });
+    });
+
+    effect(() => {
+      const uid = this.signedInUserID();
+      const sessions = [...this.selectedSleepSessions(), ...this.prioritySleepSessions()];
+      const previous = untracked(this.observedSleepSummaryMetrics);
+      const metrics = [...new Set([
+        ...(uid === previous.uid ? previous.metrics : []),
+        ...sessions.filter(session => session.userID === uid).flatMap(sleepSummaryMetricIds),
+      ])];
+      if (uid !== previous.uid || metrics.length !== previous.metrics.length) {
+        this.observedSleepSummaryMetrics.set({ uid, metrics });
+      }
     });
 
     effect(() => {

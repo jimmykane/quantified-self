@@ -52,6 +52,7 @@ import {
   selectActivityHealthObservations,
   selectWorkoutWeightContextFallback,
   sleepSessionHasHrv,
+  sleepSummaryMetricIds,
   type HealthWorkspaceSeries,
 } from './health-workspace.helper';
 
@@ -1162,6 +1163,62 @@ describe('Health workspace helpers', () => {
     const miles = normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles });
     const preferredUnitView = buildHealthMetricWorkspaceView(result, [sleepSession()], [], miles);
     expect(preferredUnitView.rows[0]?.valueText).toBe('62 ms');
+  });
+
+  it.each(Object.values(SLEEP_PROVIDERS))('projects %s Sleep duration and score without Health references', provider => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01', endDate: '2026-08-03',
+      metricIds: [HEALTH_METRIC_IDS.SleepDuration, HEALTH_METRIC_IDS.SleepScore],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const session = sleepSession({ source: { provider, providerUserId: 'account', sourceSessionKey: 'night' } });
+    for (const units of [normalizeUserUnitSettings(), normalizeUserUnitSettings({ distanceUnits: DistanceUnits.Miles })]) {
+      const view = buildHealthMetricWorkspaceView(result, [session], [], units);
+      expect(view.series.map(series => [series.metricId, series.points[0].value]))
+        .toEqual([[HEALTH_METRIC_IDS.SleepDuration, 28800], [HEALTH_METRIC_IDS.SleepScore, 88]]);
+      for (const [metric, value] of [[HEALTH_METRIC_IDS.SleepDuration, 28800], [HEALTH_METRIC_IDS.SleepScore, 88]] as const) {
+        const display = formatCanonicalHealthMetricSportsLibValue(metric, value, units)!;
+        expect(view.rows.map(row => row.valueText)).toContain([display.value, display.unit].filter(Boolean).join(' '));
+      }
+    }
+  });
+
+  it('keeps Sleep summary accounts and naps separate, without inventing missing or out-of-period readings', () => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-02', endDate: '2026-08-02',
+      metricIds: [HEALTH_METRIC_IDS.SleepDuration, HEALTH_METRIC_IDS.SleepScore],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const session = sleepSession();
+    const second = sleepSession({ id: 'second', source: { ...session.source, providerUserId: 'second' }, score: null });
+    const nap = sleepSession({ id: 'nap', isNap: true, durationSeconds: 1200, score: null });
+    const invalid = sleepSession({ id: 'invalid', endTimeMs: session.startTimeMs });
+    expect(sleepSummaryMetricIds(invalid)).toEqual([]);
+    expect(sleepSummaryMetricIds(sleepSession({ durationSeconds: Number.NaN, score: { value: null } }))).toEqual([]);
+    const view = buildHealthMetricWorkspaceView(result, [session, second, nap, invalid, sleepSession({ sleepDate: '2026-07-31' })]);
+    expect(view.series).toHaveLength(4);
+    expect(view.series.filter(series => series.metricId === HEALTH_METRIC_IDS.SleepDuration)).toHaveLength(3);
+    expect(view.series.find(series => series.semanticVariant === 'nap_duration')?.points[0].value).toBe(1200);
+    expect(new Set(view.series.map(series => series.sourceSelectionKey)).size).toBe(2);
+    expect(JSON.stringify(view)).not.toContain('raw-provider-user');
+  });
+
+  it('deduplicates typed Sleep duration references and fills missing nights in the same source', () => {
+    const session = sleepSession();
+    const record = sourceRecord({ id: 'duration-reference', provider: session.source.provider, accountKey: 'opaque-account', calendarDate: session.sleepDate,
+      metrics: [{ kind: 'sleep_reference', metricId: HEALTH_METRIC_IDS.SleepDuration, valueType: HEALTH_VALUE_TYPES.Number,
+        aggregation: 'total', semanticVariant: 'session_duration', origin: HEALTH_VALUE_ORIGINS.ProviderSummary,
+        recordingMethod: HEALTH_RECORDING_METHODS.ProviderCalculated, quality: { status: HEALTH_QUALITY_STATUSES.Valid },
+        reference: { domain: 'sleep', documentId: session.id!, field: 'durationSeconds' } }],
+    });
+    const result = projectLoadedHealthRange([record], [], {
+      startDate: '2026-08-01', endDate: '2026-08-03', metricIds: [HEALTH_METRIC_IDS.SleepDuration],
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const next = sleepSession({ id: 'next', sleepDate: '2026-08-03', startTimeMs: session.startTimeMs + DAY_MS, endTimeMs: session.endTimeMs + DAY_MS });
+    const view = buildHealthMetricWorkspaceView(result, [session, next]);
+    expect(view.series).toHaveLength(1);
+    expect(view.series[0].points).toHaveLength(2);
+    const empty = projectLoadedHealthRange([], [], result.query, { sourceRecordsComplete: true, samplesComplete: true });
+    const unreferenced = buildHealthMetricWorkspaceView(empty, [{ ...next, healthAccountKey: 'opaque-account' } as typeof next]);
+    expect(unreferenced.series[0].id).toBe(view.series[0].id);
   });
 
   it('keeps average and overnight Sleep HRV as distinct semantic series', () => {

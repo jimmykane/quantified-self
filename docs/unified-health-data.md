@@ -384,6 +384,10 @@ The Health hub uses this reader for its selected metric, pre-window HRV context,
 
 Dashboard source eligibility is derived from drawable points within the selected time bounds, not merely the existence of source records. Invalid numeric values and empty categorical values do not qualify; finite zero readings do. Sleep source choices use the existing renderer's real-point validation. Initial selection, source options, thumbnails and discovery share this filtered context. A saved unavailable identity is retained without being offered as a new source choice. Completed browser contexts also feed matching thumbnails directly; this adds no reads and does not replace the shared invalidation subscriptions.
 
+Sleep duration and Sleep score also project directly from already-loaded normalized Sleep sessions. A separate Health reference is not required, so Suunto and Garmin sessions qualify alongside COROS references. Typed references win for their exact session/field and are not duplicated; missing-reference nights reuse a known matching account identity. Providers/accounts and nap/main-sleep readings remain separate, and missing or invalid values never become zero. The Health picker retains observed summary metric availability for the signed-in owner across empty windows, clearing it on account change. This is a read-time frontend projection with no new requests, ingestion, storage or MCP scope changes; HRV projection and personal-range calculations are unchanged.
+
+The shared Sleep reader attaches the Health writer's existing owner/provider/account hash locally (once per account per shared read). This keeps summary source keys stable across windows with or without typed references. It adds no network reads and does not mutate normalized sessions. If Web Crypto is unavailable, the projection retains distinct Sleep account identities and reuses a known typed-reference identity where available.
+
 ### Metric display and unit-preference boundary
 
 Every canonical Health or Sleep value shown to a user—including cards, rows, chart labels, tooltips, legends,

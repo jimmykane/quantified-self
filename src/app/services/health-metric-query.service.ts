@@ -5,7 +5,8 @@ import { AppSleepService } from './app.sleep.service';
 import { AppUserService } from './app.user.service';
 import { HealthActivityQueryService } from '../components/health/health-activity-query.service';
 import type { ActivityHealthRangeRequest, ActivityHealthRangeResult } from '@shared/activity-health';
-import type { SleepSession } from '@shared/sleep';
+import { nightlyHealthAccountKey } from '@shared/nightly-hrv';
+import type { HealthWorkspaceSleepSession } from '../helpers/health-workspace.helper';
 interface ReadJob {
     generation: number;
     key: string;
@@ -57,8 +58,19 @@ export class HealthMetricQueryService {
     loadActivityRange(uid: string, request: ActivityHealthRangeRequest, priority = 10, signal?: AbortSignal): Promise<ActivityHealthRangeResult> {
         return this.read(uid, ['activity', request.metricId, request.startTimeMs, request.endTimeMs], () => this.activities.loadRange(request), priority, signal);
     }
-    loadSleepRange(uid: string, startMs: number, endMs: number, priority = 10, signal?: AbortSignal): Promise<SleepSession[]> {
-        return this.read(uid, ['sleep', startMs, endMs], () => firstValueFrom(this.sleep.watchForDashboard(uid, startMs, endMs)), priority, signal);
+    loadSleepRange(uid: string, startMs: number, endMs: number, priority = 10, signal?: AbortSignal): Promise<HealthWorkspaceSleepSession[]> {
+        return this.read(uid, ['sleep', startMs, endMs], () => firstValueFrom(this.sleep.watchForDashboard(uid, startMs, endMs)).then(sessions => {
+            const accounts = new Map<string, Promise<string | undefined>>();
+            return Promise.all(sessions.map(session => {
+                const providerAccountId = session.source?.providerUserId;
+                if (!providerAccountId) return session;
+                const key = JSON.stringify([session.source.provider, providerAccountId]);
+                if (!accounts.has(key)) accounts.set(key, nightlyHealthAccountKey(uid, session.source.provider, providerAccountId).catch(() => undefined));
+                // Keep Sleep usable on browsers without Web Crypto. Normalized
+                // provider/account identities still remain separate in that case.
+                return accounts.get(key)!.then(healthAccountKey => healthAccountKey ? { ...session, healthAccountKey } : session);
+            }));
+        }), priority, signal);
     }
     invalidate(uid: string): void {
         for (const [key, entry] of this.cache)

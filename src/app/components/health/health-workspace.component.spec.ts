@@ -51,6 +51,13 @@ import { AppSleepService } from '../../services/app.sleep.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppUserService } from '../../services/app.user.service';
+
+// Native Web Crypto completes outside Angular's test stability tracking. The
+// request-queue spec verifies real hashing; workspace tests keep it deterministic.
+vi.mock('@shared/nightly-hrv', async importOriginal => ({
+  ...await importOriginal<typeof import('@shared/nightly-hrv')>(),
+  nightlyHealthAccountKey: (uid: string, provider: string, account: string) => Promise.resolve(JSON.stringify([uid, provider, account])),
+}));
 import { AppHapticsService } from '../../services/app.haptics.service';
 import { DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS } from '../../helpers/echarts-tooltip-interaction.helper';
 import { AppHealthWorkspaceMetric, AppHealthWorkspaceRange, AppHealthHighlightSources } from '../../models/app-user.interface';
@@ -1223,6 +1230,24 @@ describe('HealthWorkspaceComponent', () => {
     resolveUnexpectedAvailabilityLoad!([]);
   });
 
+  it('discovers Suunto duration and score from loaded Sleep sessions without Health records', async () => {
+    await createComponent(metric => Promise.resolve(rangeLoad(metric, true)), undefined, {
+      metricIds: [], hasSleep: true,
+      sleepSessions: [sleepSession({ source: { provider: SLEEP_PROVIDERS.SuuntoApp, providerUserId: 'suunto-account', sourceSessionKey: 'night' } })],
+    });
+    expect(component.availableMetricSelections()).toContain(HEALTH_METRIC_IDS.SleepDuration);
+    expect(component.availableMetricSelections()).toContain(HEALTH_METRIC_IDS.SleepScore);
+    component.selectedSleepSessions.set([]);
+    component.prioritySleepSessions.set([]);
+    fixture.detectChanges();
+    expect(component.availableMetricSelections()).toContain(HEALTH_METRIC_IDS.SleepDuration);
+    expect(component.availableMetricSelections()).toContain(HEALTH_METRIC_IDS.SleepScore);
+    setCurrentUserID('another-owner');
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(component.availableMetricSelections()).not.toContain(HEALTH_METRIC_IDS.SleepDuration);
+    expect(component.availableMetricSelections()).not.toContain(HEALTH_METRIC_IDS.SleepScore);
+  });
+
   it('keeps the complete catalog visible when availability discovery fails', async () => {
     await createComponent(undefined, undefined, {
       healthError: new Error('offline'),
@@ -1248,7 +1273,7 @@ describe('HealthWorkspaceComponent', () => {
 
     const labels = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.health-metric-option')]
       .map(option => option.querySelector('.health-metric-option-content > span:last-child')?.textContent?.trim());
-    expect(labels).toEqual(['Sleep overview', 'Heart rate variability', 'Steps', 'Body weight', 'VO2 max']);
+    expect(labels).toEqual(['Sleep overview', 'Heart rate variability', 'Sleep duration', 'Sleep score', 'Steps', 'Body weight', 'VO2 max']);
     expect(component.routeState().metric).toBe('sleep');
   });
 

@@ -75,6 +75,23 @@ describe('dashboard Health semantics',()=>{
     expect(view.hasData).toBe(true);
     expect(view.sleep.latestPoint?.endTimeMs).toBe(session.endTimeMs);
   });
+  it.each(['sleep_duration', 'sleep_score'] as const)('uses real Suunto Sleep sessions for %s previews and availability', metric => {
+    const data = evidence(metric, []);
+    data.sessions = [{ id: 'night', userID: 'owner', sleepDate: '2026-09-14',
+      source: { provider: 'SuuntoApp', providerUserId: 'account', sourceSessionKey: 'night' },
+      startTimeMs: Date.parse('2026-09-13T22:00:00Z'), endTimeMs: Date.parse('2026-09-14T06:00:00Z'),
+      durationSeconds: 27000, score: { value: 82 }, stages: [], stageDurationsSeconds: {}, isNap: false, createdAtMs: 0, updatedAtMs: 0 }];
+    const view = buildDashboardHealthContext(data, { metric, range: '30d' });
+    expect(view.availability.state).toBe('ready');
+    expect(view.sources).toHaveLength(1);
+    expect(view.selected?.model.series.provider).toBe('SuuntoApp');
+    expect(view.selected?.model.series.points[0].value).toBe(metric === 'sleep_duration' ? 27000 : 82);
+    const noScore = evidence('sleep_score', []);
+    noScore.sessions = data.sessions.map(session => ({ ...session, score: null }));
+    const missing = buildDashboardHealthContext(noScore, { metric: 'sleep_score', range: '30d' });
+    expect(missing.hasData).toBe(false);
+    expect(missing.sources).toHaveLength(0);
+  });
   it('distinguishes long-range sample-only, empty, limited, failed, and partial results',()=>{
     const data=evidence('heart_rate',[],'1y'); const settings={metric:'heart_rate' as const,range:'1y' as const};
     expect(buildDashboardHealthContext(data,settings).availability.state).toBe('no-data');

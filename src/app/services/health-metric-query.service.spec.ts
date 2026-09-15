@@ -6,10 +6,14 @@ import { AppHealthService, HealthWorkspaceRangeLoad } from './app.health.service
 import { AppSleepService } from './app.sleep.service';
 import { AppUserService } from './app.user.service';
 import { HealthActivityQueryService } from '../components/health/health-activity-query.service';
+import { of } from 'rxjs';
+import type { SleepSession } from '@shared/sleep';
+import { nightlyHealthAccountKey } from '@shared/nightly-hrv';
 
 describe('shared Health request queue', () => {
   const user = signal<{uid:string}|null>({uid:'owner'});
   const health = { loadMetricRange: vi.fn() };
+  const sleep = { watchForDashboard: vi.fn() };
   const pending: Array<() => void> = [];
   const request = (day:number) => ({metricId:'steps' as const,startDate:`2026-09-${String(day).padStart(2,'0')}`,endDate:'2026-09-30',includeSamples:false});
   const flush = async () => { for(let i=0;i<12;i++) await Promise.resolve(); };
@@ -18,8 +22,26 @@ describe('shared Health request queue', () => {
     health.loadMetricRange.mockImplementation(() => new Promise(resolve => pending.push(() => resolve({} as HealthWorkspaceRangeLoad))));
     TestBed.configureTestingModule({providers:[
       {provide:AppUserService,useValue:{user}}, {provide:AppHealthService,useValue:health},
-      {provide:AppSleepService,useValue:{}}, {provide:HealthActivityQueryService,useValue:{}},
+      {provide:AppSleepService,useValue:sleep}, {provide:HealthActivityQueryService,useValue:{}},
     ]});
+  });
+  it('matches Sleep accounts to Health reference identities without extra reads or mutating sessions', async () => {
+    const session: SleepSession = { id: 'night', userID: 'owner',
+      source: { provider: 'COROSAPI', providerUserId: 'account', sourceSessionKey: 'night' },
+      sleepDate: '2026-09-01', startTimeMs: 1, endTimeMs: 2, durationSeconds: 1,
+      isNap: false, stages: [], stageDurationsSeconds: {}, createdAtMs: 1, updatedAtMs: 2 };
+    sleep.watchForDashboard.mockReturnValue(of([session, { ...session, id: 'second-night' }]));
+    const service = TestBed.inject(HealthMetricQueryService);
+    const first = service.loadSleepRange('owner', 1, 2);
+    expect(service.loadSleepRange('owner', 1, 2)).toBe(first);
+    const loaded = await first;
+    expect(loaded.map(item => item.healthAccountKey)).toEqual([
+      await nightlyHealthAccountKey('owner', 'COROSAPI', 'account'),
+      await nightlyHealthAccountKey('owner', 'COROSAPI', 'account'),
+    ]);
+    expect(session).not.toHaveProperty('healthAccountKey');
+    expect(sleep.watchForDashboard).toHaveBeenCalledTimes(1);
+    expect(health.loadMetricRange).not.toHaveBeenCalled();
   });
   it('coalesces reads, limits concurrency to three, and promotes a selected preview', async () => {
     const service=TestBed.inject(HealthMetricQueryService);
