@@ -2,7 +2,7 @@ import { buildDashboardHealthExample } from '../../../helpers/dashboard-health-p
 import { DashboardChartThumbnailComponent } from '../../summaries/dashboard-chart-library/dashboard-chart-thumbnail.component';
 import { buildDashboardManagerPresetTile } from '../../../helpers/dashboard-manager-presets.helper';
 import type { DashboardChartPreview } from '../../../helpers/dashboard-chart-preview.helper';
-import { MatFormFieldModule } from '@angular/material/form-field';
+import { ChartSourcePickerComponent } from '../../shared/chart-source-picker/chart-source-picker.component';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,7 +20,7 @@ import { HealthMetricSeriesChartComponent } from '../../health/health-metric-ser
 import { ChartsSleepTrendComponent } from '../sleep-trend/charts.sleep-trend.component';
 /** Same projection, source identity and chart renderer as Health; navigation belongs to this tile. */
 @Component({ selector: 'app-dashboard-health-chart', standalone: true,
-    imports: [DashboardChartThumbnailComponent, MatFormFieldModule, MatButtonModule, MatIconModule, MatSelectModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
+    imports: [DashboardChartThumbnailComponent, ChartSourcePickerComponent, MatButtonModule, MatIconModule, MatSelectModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
     templateUrl: './dashboard-health-chart.component.html', styleUrls: ['./dashboard-health-chart.component.css'], changeDetection: ChangeDetectionStrategy.OnPush })
 export class DashboardHealthChartComponent {
     readonly user = input.required<AppUserInterface>();
@@ -60,6 +60,8 @@ export class DashboardHealthChartComponent {
         source: 'user', loading: false, note: '', calendarEvents: [], anchorMs: Date.now(),
     }) as DashboardChartPreview);
     readonly title = computed(() => this.settings().metric === 'sleep' ? 'Sleep' : HEALTH_METRIC_CATALOG[this.settings().metric]?.label || 'Health');
+    readonly showSleepSourcePicker = computed(() => this.settings().metric === 'sleep'
+        && ((this.context()?.sources.length || 0) > 1 || !!this.context()?.missingSource));
     readonly effectiveSettings = computed(() => ({ ...this.settings(), ...(this.settings().sourceKey || !this.initialSource() ? {} : { sourceKey: this.initialSource()! }) }));
     readonly window = computed(() => resolveHealthWorkspaceWindow({ ...this.settings(), endDate: this.endDate() }));
     private readonly previewEvidence = computed(() => {

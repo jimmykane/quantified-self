@@ -11,6 +11,7 @@ import { buildHealthMetricWorkspaceView, buildHealthHrvPersonalRangeStatus, sele
 import { buildHealthChartModels, buildHealthHrvChartStatusOverlay, healthHrvChartStatusDescription } from './health-metric-chart.helper';
 import { buildDashboardSleepTrendContext, resolveSleepTrendDate } from './dashboard-sleep-chart.helper';
 import type { DashboardChartAvailability } from './dashboard-chart-availability.helper';
+import { healthChartSourceChoice } from './chart-source.helper';
 export interface DashboardHealthEvidence {
     window: HealthWorkspaceWindow;
     health: HealthWorkspaceRangeLoad | null;
@@ -59,9 +60,10 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
         const label = context.latestPoint!.providerLabel;
         return [{ key, provider, label }];
     });
-    const sources = settings.metric === 'sleep' ? sleepSources.map((source, index) => ({ ...source,
-        label: sleepSources.filter(item => item.provider === source.provider).length > 1 ? `${source.label} · Account ${index + 1}` : source.label }))
-        : charts.map(chart => ({ key: chart.key, provider: chart.model.series.provider, label: `${chart.model.series.sourceLabel} · ${chart.model.series.semanticLabel}` }));
+    const sources = settings.metric === 'sleep' ? sleepSources.map((source, index) => {
+        const label = sleepSources.filter(item => item.provider === source.provider).length > 1 ? `${source.label} · Account ${index + 1}` : source.label;
+        return { ...source, label, shortLabel: label, sourceLabel: label, detail: 'Sleep overview' };
+    }) : charts.map(chart => ({ ...healthChartSourceChoice(chart.model.series), provider: chart.model.series.provider }));
     const initial = providerFilter.length
         ? sources.find(source => providerFilter.includes(source.provider))
         : (settings.metric === HEALTH_METRIC_IDS.HeartRateVariability && preferredAccount

@@ -1,0 +1,12 @@
+:host { display:block; min-width:0; max-width:100%; }
+// Bound the projected label without reaching into Material's internal elements.
+.chart-source-trigger { display:inline-grid; grid-template-columns:minmax(0,1fr); align-items:center; max-width:100%; padding-inline:8px; font:var(--mat-sys-label-medium); }
+.chart-source-trigger-content { display:flex; align-items:center; justify-content:center; gap:4px; min-width:0; }
+.chart-source-trigger-content > span, .chart-source-caption { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.chart-source-trigger-content mat-icon { width:18px; height:18px; font-size:18px; flex-shrink:0; }
+.chart-source-caption { display:block; color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-label-medium); }
+.chart-source-menu-heading { padding:8px 16px; font:var(--mat-sys-label-large); }
+.chart-source-menu-notice { margin:0; padding:0 16px 8px; color:var(--mat-sys-on-surface-variant); font:var(--mat-sys-body-small); }
+.chart-source-option { display:flex; flex-direction:column; gap:3px; padding-block:8px; white-space:normal; overflow-wrap:anywhere; }
+.chart-source-option-label { font:var(--mat-sys-label-large); }
+.chart-source-option-detail { font:var(--mat-sys-body-small); color:var(--mat-sys-on-surface-variant); }

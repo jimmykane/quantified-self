@@ -1,4 +1,5 @@
 import { NO_ERRORS_SCHEMA, signal } from '@angular/core';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { DashboardChartThumbnailComponent } from '../../summaries/dashboard-chart-library/dashboard-chart-thumbnail.component';
 import { HealthMetricSeriesChartComponent } from '../../health/health-metric-series-chart.component';
@@ -186,5 +187,65 @@ describe('Health library preview states', () => {
     button.click();
     expect(changed).toHaveBeenCalledWith({ settings: { metric: 'heart_rate', range: '30d' }, initial: false });
     fixture.destroy();
+  });
+});
+
+describe('dashboard chart source interactions', () => {
+  const haptics = { selection: vi.fn() };
+  let readings: Subject<DashboardHealthEvidence>;
+  let watch: ReturnType<typeof vi.fn>;
+  beforeEach(async () => {
+    vi.clearAllMocks(); readings = new Subject(); watch = vi.fn(() => readings);
+    await TestBed.configureTestingModule({ imports: [DashboardHealthChartComponent, NoopAnimationsModule], providers: [
+      { provide: DashboardHealthService, useValue: { isOwner: () => true, watch } },
+      { provide: AppHapticsService, useValue: haptics },
+    ] }).overrideComponent(DashboardHealthChartComponent, {
+      remove: { imports: [DashboardChartThumbnailComponent, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent] },
+      add: { schemas: [NO_ERRORS_SCHEMA] },
+    }).compileComponents();
+  });
+  function create(metric: 'sleep_duration' | 'sleep' = 'sleep_duration', sourceKey?: string, multiple = true) {
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent);
+    fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {}, appSettings: {} } });
+    fixture.componentRef.setInput('settings', { metric, range: '30d', ...(sourceKey ? { sourceKey } : {}) });
+    fixture.componentInstance['visible'].set(true); fixture.detectChanges();
+    const window = fixture.componentInstance.window();
+    const session = { id: 'night', userID: 'owner', sleepDate: window.endDate,
+      source: { provider: 'SuuntoApp' as const, accountKey: 'suunto', providerUserId: 'suunto', sourceSessionKey: 'night' },
+      startTimeMs: window.endTimeMs - 12 * 3600000, endTimeMs: window.endTimeMs - 4 * 3600000,
+      durationSeconds: 28800, stages: [], isNap: false, createdAtMs: 0, updatedAtMs: 0 };
+    readings.next({ window, health: null, history: null, activities: null, errors: [], sessions: [session,
+      ...(multiple ? [{ ...session, id: 'other', source: { ...session.source, accountKey: 'second', providerUserId: 'second' } }] : [])] });
+    fixture.detectChanges(); return fixture;
+  }
+  it.each(['sleep_duration', 'sleep'] as const)('changes %s from a compact menu without additional reads or resetting the range', async metric => {
+    const fixture = create(metric), component = fixture.componentInstance;
+    const changed = vi.fn(); component.settingsChange.subscribe(changed);
+    const trigger = fixture.nativeElement.querySelector('.chart-source-trigger') as HTMLButtonElement;
+    expect(trigger).toBeTruthy(); expect(fixture.nativeElement.querySelector('mat-form-field')).toBeNull();
+    expect(trigger.closest(metric === 'sleep' ? '.health-tile-controls' : '.health-value-row')).toBeTruthy();
+    const watchCount = watch.mock.calls.length;
+    expect(haptics.selection).not.toHaveBeenCalled();
+    trigger.click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(watch).toHaveBeenCalledTimes(watchCount); expect(haptics.selection).toHaveBeenCalledTimes(1);
+    const options = TestBed.inject(OverlayContainer).getContainerElement().querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]');
+    expect(options).toHaveLength(2);
+    options[1].click(); fixture.detectChanges(); await fixture.whenStable();
+    expect(changed).toHaveBeenCalledExactlyOnceWith({ settings: { metric, range: '30d', sourceKey: component.context()!.sources[1].key }, initial: false });
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    expect(watch).toHaveBeenCalledTimes(watchCount);
+    fixture.destroy(); expect(readings.observed).toBe(false);
+  });
+  it('uses plain attribution for one source and keeps an unavailable saved source replaceable', () => {
+    const single = create('sleep_duration', undefined, false);
+    expect(single.nativeElement.querySelector('.chart-source-trigger')).toBeNull();
+    expect(single.nativeElement.querySelector('.chart-source-caption').textContent).toContain('Suunto · Main sleep');
+    single.destroy();
+    const missing = create('sleep_duration', 'previous-account', false);
+    expect(missing.nativeElement.querySelector('.health-source-empty .chart-source-trigger').textContent).toContain('Source unavailable');
+    expect(missing.componentInstance.context()?.selectedKey).toBe('previous-account');
+    expect(missing.componentInstance.context()?.hasData).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    missing.destroy();
   });
 });

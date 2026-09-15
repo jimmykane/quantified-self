@@ -1,0 +1,21 @@
+@if (canChoose()) {
+  <button mat-button type="button" class="chart-source-trigger" [disabled]="disabled()"
+    [matMenuTriggerFor]="sourceMenu" (menuOpened)="opened()" [attr.aria-label]="ariaLabel()" [matTooltip]="description()">
+    <span class="chart-source-trigger-content"><span>{{ label() }}</span><mat-icon aria-hidden="true">expand_more</mat-icon></span>
+  </button>
+} @else {
+  <span class="chart-source-caption" [matTooltip]="description()">{{ label() }}</span>
+}
+<mat-menu #sourceMenu="matMenu" class="qs-menu-panel" xPosition="before">
+  <div class="chart-source-menu-heading">Source and reading</div>
+  @if (selectedKey() && !choice()) {
+    <p class="chart-source-menu-notice">Your selected reading has no data in this period.</p>
+  }
+  @for (option of choices(); track option.key) {
+    <button mat-menu-item type="button" role="menuitemradio" [attr.aria-checked]="option.key === selectedKey()"
+      [disabled]="disabled()" [attr.aria-label]="option.label" (click)="choose(option.key)">
+      <mat-icon aria-hidden="true">{{ option.key === selectedKey() ? 'check' : 'radio_button_unchecked' }}</mat-icon>
+      <span class="chart-source-option"><span class="chart-source-option-label">{{ option.sourceLabel }}</span><span class="chart-source-option-detail">{{ option.detail }}</span></span>
+    </button>
+  }
+</mat-menu>
