@@ -4,7 +4,9 @@ p, li, span, a { overflow-wrap: anywhere; }
 .delivery-review { display: flex; flex-direction: column; align-items: stretch; gap: 0.75rem; }
 .delivery-review p { margin-block: 0; }
 .delivery-subtitle, .delivery-caption { color: var(--mat-sys-on-surface-variant); }
-.delivery-context { margin-block: 0.5rem 0.75rem; }
+.delivery-context { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0.25rem 0.75rem; margin-block: 0.5rem 0.75rem; }
+.delivery-context-copy { flex: 1 1 14rem; min-width: 0; }
+.delivery-edit-workout { flex: 0 0 auto; margin-inline-start: auto; }
 .delivery-subtitle { margin: 0; font: var(--mat-sys-title-medium); color: var(--mat-sys-on-surface); }
 .delivery-context .delivery-caption { margin-block: 0.25rem 0; }
 .delivery-setting-label { margin: 0 0 0.25rem; font-weight: 500; }
