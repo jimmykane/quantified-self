@@ -659,7 +659,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
 - Ask follow-up questions in the same active conversation. The latest six completed turns provide bounded context.
 - If you refresh while an answer is in progress, the page keeps the pending question visible and reconnects to the server-owned turn. While the outcome is uncertain, that browser tab temporarily keeps the account-bound, bounded question and request metadata in session storage. If the refresh cancelled the send before registration, it safely resends the same request ID; completed requests cannot be duplicated. A different signed-in account cannot restore the record, and it is cleared after completion, confirmed failure, reset, or expiry.
 - Every current answer must use at least one read-only Quantified Self result. Expand **Data used** below an answer to inspect compact facts and app links produced from actual tool results.
-- Use **New chat** to clear the stored messages, return precise activity locations to the default **off** state, and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
+- Use **New chat** to clear the stored messages, return all optional data access to the default **off** state, and start a new conversation generation. An older in-flight answer cannot restore a cleared conversation.
 
 ## What the Assistant can read
 

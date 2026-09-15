@@ -147,7 +147,8 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       return doc;
     };
     const projectWorkout = async (doc: Document) => {
-      measure(doc); const { structure: _structure, ...summary } = doc.data;
+      measure(doc); const summary = { ...doc.data };
+      delete summary.structure;
       const workout = workoutSchema.parse(summary);
       if (workout.lifecycle === 'deleted') throw unavailable();
       return { workoutRef: reference('workout', doc), planRef: workout.planId ? reference('plan', await getPlan(workout.planId)) : null,
@@ -214,7 +215,8 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
         throw new TrainingReadError('invalid_request', 'Choose at most 366 inclusive days; supply planRef only for the plan scope.');
       if (queryArgs.planRef) selectedPlan = (await resolve(queryArgs.planRef, 'plan')).id;
     }
-    const { cursor: _cursor, ...filters } = a;
+    const filters = { ...a };
+    delete filters.cursor;
     const query = JSON.stringify({ tool: input.tool, ...filters });
     let after: string | null = null;
     if (a.cursor) {
