@@ -3,7 +3,7 @@ import { Firestore } from 'firebase-admin/firestore';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import type { ExpectedTrainingScheduleRevision, ScheduledWorkoutV1, TrainingScheduleMutationOperationV1 } from '../../../../shared/training-plans';
-import type { TrainingDeliveryCommandV1, TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
+import { parseTrainingDeliveryStatusV1, type TrainingDeliveryCommandV1, type TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
 import { DELIVERY_LEDGER, DELIVERY_QUEUE, TrainingDeliveryTransportError, type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
 import { trainingDeliveryCommand } from './commands';
 import { reconcileTrainingDeliveryPage } from './store';
@@ -20,6 +20,7 @@ import { projectDelivery } from './store';
 import { processTrainingVerification } from './verification-worker';
 import { productionRequestCapacity } from './request-capacity';
 import type { InspectionObservation } from './verification-contracts';
+import { createGarminTrainingClient } from './garmin/http';
 
 describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Firestore transactions', { timeout: 30_000 }, () => {
   // Never accept a production project or a non-loopback emulator endpoint.
@@ -138,7 +139,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
       await processTrainingVerification(runtime, uid, ledger.id);
       const missing = (await ledgers())[0];
       expect(projectDelivery(missing).hasRemoteCopy).toBe(false);
-      if (i === 2) { expect(missing.verification?.state).toBe('deferred'); break; }
+      if (i === 2) {
+        expect(missing.verification?.state).toBe('deferred');
+        expect(projectDelivery(missing).issues.join(' ')).toContain('two repairs in 24 hours');
+        const fullProjection = projectDelivery({ ...missing, issues: Array.from({ length: 20 }, (_, index) => `Mapping warning ${index}`) });
+        expect(parseTrainingDeliveryStatusV1(fullProjection).issues).toHaveLength(20);
+        expect(fullProjection.issues[0]).toContain('two repairs in 24 hours');
+        break;
+      }
       expect(missing.verification?.state).toBe('restoring');
       await processTrainingDelivery(runtime, uid, ledger.id); await drain();
       expect((await ledgers())[0].id).toBe(ledger.id);
@@ -146,7 +154,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     }
     expect(transport.calls).toHaveLength(3); // initial delivery plus two repair cycles
   });
-  it.each(['stop', 'pro', 'account', 'generation', 'deletion', 'edit', 'lease'] as const)(
+  it.each(['stop', 'pro', 'account', 'generation', 'deletion', 'edit', 'lease', 'inspection-disabled', 'policy-changed'] as const)(
     'suppresses stale inspection evidence after %s during I/O', async change => {
       let changed = false;
       inspection(async () => {
@@ -159,10 +167,16 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
         if (change === 'edit') await editSchedule({ kind: 'update-workout', workoutId: 'w', planId: null,
           localDate: workout().localDate, title: 'Updated', structure: workout().structure, confirmPlanRangeExtension: false });
         if (change === 'lease') now += 180_001;
+        if (change === 'inspection-disabled') transport.inspection = { ...transport.inspection!, policy: { ...transport.inspection!.policy, mode: 'unavailable' } };
+        if (change === 'policy-changed') transport.inspection = { ...transport.inspection!, policy: { ...transport.inspection!.policy, authoritativeAbsence: false } };
       });
       const ledger = await delivered(); transport.artifacts.clear();
       await processTrainingVerification(runtime, uid, ledger.id);
       expect((await ledgers())[0].verification?.missing).not.toBe(true);
+      if (change === 'inspection-disabled' || change === 'policy-changed') {
+        expect((await ledgers())[0].verification?.state).toBe('pending');
+        expect((await db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(ledger.id).collection('inspections').get()).empty).toBe(true);
+      }
       expect((await ledgers())[0].repair).toBeFalsy();
       expect(transport.calls).toHaveLength(1);
     });
@@ -189,6 +203,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await processTrainingVerification(runtime, uid, ledger.id);
     expect((await ledgers())[0]).toMatchObject({ lease: null, verification: { state: 'unknown', missing: false } });
     expect(transport.calls).toHaveLength(1);
+  });
+  it('keeps provider HTTP 429 checks deferred without charging failure retries', async () => {
+    const client = createGarminTrainingClient(async () => 'synthetic-token',
+      vi.fn(async () => new Response('', { status: 429, headers: { 'Retry-After': '120' } })), () => now);
+    inspection(async () => { await client({ method: 'GET', path: '/training-api/workout/v2/1' }, async () => {}); });
+    const ledger = await delivered();
+    for (let i = 0; i < 3; i++) {
+      await processTrainingVerification(runtime, uid, ledger.id);
+      expect((await ledgers())[0]).toMatchObject({ retries: 0, verification: { state: 'deferred', nextCheckAtMs: now + 120_000 } });
+      now += 120_000;
+    }
   });
   it('preserves consent and exposes permission repair when a remote check is denied', async () => {
     inspection(async () => { throw new TrainingDeliveryTransportError('permission'); });
@@ -254,6 +279,22 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await processTrainingDelivery(runtime, uid, ledger.id);
     expect(transport.calls).toHaveLength(2); // Initial send and one repair only.
     expect((await ledgers())[0]).toMatchObject({ status: 'delivered', verification: { repairTimes: [now] } });
+  });
+  it('does not charge an adapter-proved no-op repair, including recovery of its acceptance', async () => {
+    inspection(); const ledger = await delivered(); transport.artifacts.clear();
+    const lastSent = (await ledgers())[0].lastAcceptedAtMs;
+    await processTrainingVerification(runtime, uid, ledger.id); now += 900_000;
+    await processTrainingVerification(runtime, uid, ledger.id);
+    vi.spyOn(transport, 'execute').mockImplementationOnce(async (operation, checkpoint) => {
+      await checkpoint(operation.repair!.original, { version: 1, step: 'finished', state: 'accepted', repairApplied: false });
+      transport.accepted.set(operation.id, operation.repair!.original);
+      throw new Error('lost final completion');
+    });
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    now = (await ledgers())[0].retryAtMs + 1;
+    await processTrainingDelivery(runtime, uid, ledger.id);
+    expect((await ledgers())[0]).toMatchObject({ status: 'delivered', lastAcceptedAtMs: lastSent,
+      verification: { repairTimes: [] } });
   });
   it('rejects non-pilot opt-in at the backend even with Pro and an authoritative connection', async () => {
     runtime.transport = productionDeliveryRuntime(db).transport;

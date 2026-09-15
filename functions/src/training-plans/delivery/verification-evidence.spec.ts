@@ -55,6 +55,29 @@ describe('provider-neutral inspection evidence', () => {
     expect(observeInspection(partial, 'a', suunto, { conflict: false,
       artifacts: [{ key: 'guide', state: 'present', authoritative: true }] }, 2)).toMatchObject({ state: 'present', cursor: null, manualPending: false });
   });
+  it('confirms absence across two complete multi-page inventories, never from a partial page', () => {
+    const inventory = { ...policy, mode: 'inventory' as const, required: ['guide'] };
+    const complete: InspectionObservation = { conflict: false, artifacts: [{ key: 'guide', state: 'absent', authoritative: true }],
+      coverage: { complete: true, stable: true, filtered: false, nextCursor: null } };
+    const first = observeInspection(undefined, 'a', inventory, complete, 1000);
+    const page = { ...complete, coverage: { complete: false, stable: true, filtered: false, nextCursor: 'page-2' } };
+    const partial = observeInspection(first, 'a', inventory, page, 901_000);
+    expect(partial).toMatchObject({ state: 'unknown', missing: false, suspectedAtMs: 1000, cursor: 'page-2' });
+    expect(observeInspection(partial, 'a', inventory, complete, 902_000).state).toBe('confirmed_missing');
+    for (const changed of [{ ...page, artifacts: [{ key: 'guide', state: 'present' as const, authoritative: true }] },
+      { ...page, coverage: { ...page.coverage, stable: false } }]) {
+      const interrupted = observeInspection(first, 'a', inventory, changed, 901_000);
+      expect(observeInspection(interrupted, 'a', inventory, complete, 902_000).state).toBe('suspected_missing');
+    }
+    expect(observeInspection(partial, 'a', inventory, page, 902_000)).toMatchObject({ cursor: null, suspectedAtMs: null });
+  });
+  it('never clears a known absence with unverified positive observations', () => {
+    const first = observeInspection(undefined, 'a', policy, missing, 0);
+    const confirmed = observeInspection(first, 'a', policy, missing, 900_000);
+    expect(observeInspection(confirmed, 'a', policy, { conflict: false,
+      artifacts: missing.artifacts.map(item => ({ ...item, state: 'present', authoritative: false })) }, 901_000))
+      .toMatchObject({ state: 'unknown', missing: true });
+  });
   it('treats malformed transport observations as unknown', () => {
     for (const value of [null, {}, { artifacts: [null], conflict: false },
       { ...missing, artifacts: [{ key: 'workout', state: 'invalid', authoritative: true }, missing.artifacts[1]] }]) {

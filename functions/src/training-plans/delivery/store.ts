@@ -37,7 +37,9 @@ export function projectDelivery(ledger: DeliveryLedgerV1): TrainingDeliveryStatu
       || ledger.acceptedContentDigest !== ledger.contentDigest
       || ['unsupported', 'approval_required'].includes(ledger.status)),
     hasRemoteCopy: !!ledger.actual && !ledger.verification?.missing, timeZone: ledger.timeZone, approvalDigest: ledger.approvalDigest,
-    issues: ledger.issues, lastAttemptAtMs: ledger.lastAttemptAtMs, lastAcceptedAtMs: ledger.lastAcceptedAtMs,
+    issues: ledger.verification?.state === 'deferred' && ledger.verification.missing && ledger.verification.repairTimes.length >= 2
+      ? ['Automatic restoration is paused after two repairs in 24 hours. It will resume at the next check.', ...ledger.issues].slice(0, 20) : ledger.issues,
+    lastAttemptAtMs: ledger.lastAttemptAtMs, lastAcceptedAtMs: ledger.lastAcceptedAtMs,
     retryCount: ledger.retries, nextRetryAtMs: ledger.status === 'retrying' ? ledger.retryAtMs : null,
     updatedAtMs: ledger.updatedAtMs };
 }

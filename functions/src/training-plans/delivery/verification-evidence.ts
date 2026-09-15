@@ -4,7 +4,7 @@ import { VERIFICATION_DAY_MS, type InspectionObservation, type InspectionPolicy,
 
 export function inspectionBinding(ledger: DeliveryLedgerV1, context: DeliveryContext, policy: InspectionPolicy): string {
   return hashTrainingScheduleRequestPayload({ destination: ledger.destinationKey, epoch: context.connection.epoch,
-    connection: context.connection.generation, artifact: ledger.actual, policy: policy.version,
+    connection: context.connection.generation, artifact: ledger.actual, policy,
     desired: ledger.desiredDigest, scopeGeneration: context.scopeGeneration,
     settings: context.setting, override: context.override });
 }
@@ -25,16 +25,20 @@ export function observeInspection(previous: VerificationEvidence | undefined, bi
   const keys = observation.artifacts.map(item => item.key);
   if (observation.conflict || keys.length !== new Set(keys).size
     || policy.required.some(key => !keys.includes(key)) || keys.some(key => !policy.required.includes(key))) return result;
-  const allPresent = observation.artifacts.length > 0 && observation.artifacts.every(item => item.state === 'present');
+  const allPresent = observation.artifacts.length > 0 && observation.artifacts.every(item => item.state === 'present' && item.authoritative);
   if (allPresent) return { ...result, state: 'present', missing: false, missingKeys: [] };
   const coverage = observation.coverage;
   if (policy.mode === 'inventory' && (coverage?.complete !== true || coverage.stable !== true || coverage.filtered !== false || coverage.nextCursor !== null)) {
-    // Cursor progress is not negative evidence. Never carry the first absence across an incomplete scan.
-    const cursor = typeof coverage?.nextCursor === 'string' && coverage.nextCursor.length <= 1024 ? coverage.nextCursor : null;
-    return { ...result, cursor, manualPending: !!cursor && (previous?.manualPending ?? false) };
+    // Pages are not independent absence observations. Preserve the first completed
+    // scan's negative through a stable second scan, but never confirm from a page.
+    const cursor = coverage?.stable === true && coverage.filtered === false && typeof coverage.nextCursor === 'string'
+      && coverage.nextCursor.length > 0 && coverage.nextCursor.length <= 1024 && coverage.nextCursor !== previous?.cursor ? coverage.nextCursor : null;
+    const positive = observation.artifacts.some(item => item.state === 'present' && previous?.missingKeys.includes(item.key));
+    return { ...result, cursor, suspectedAtMs: same && cursor && !positive ? previous.suspectedAtMs : null,
+      manualPending: !!cursor && (previous?.manualPending ?? false) };
   }
   if (!policy.authoritativeAbsence || observation.artifacts.some(item => item.state === 'unknown'
-    || item.state === 'absent' && !item.authoritative)) return result;
+    || !item.authoritative)) return result;
   const missing = observation.artifacts.filter(item => item.state === 'absent').map(item => item.key).sort();
   if (!missing.length) return result;
   const continuing = same && previous.suspectedAtMs !== null && JSON.stringify(previous.missingKeys) === JSON.stringify(missing);

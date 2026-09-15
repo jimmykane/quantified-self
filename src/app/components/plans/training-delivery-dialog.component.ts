@@ -13,7 +13,7 @@ import { EMPTY_TRAINING_DELIVERY_VIEW, TrainingDeliveryService, type TrainingDel
 import { CompactRowComponent } from '../shared/compact-row/compact-row.component';
 import { trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeliveryLatestEvent } from '../../helpers/training-delivery-display.helper';
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
-import { trainingVerificationLabel } from '../../helpers/training-verification-display.helper';
+import { trainingVerificationCommandError, trainingVerificationLabel } from '../../helpers/training-verification-display.helper';
 
 export interface TrainingDeliveryDialogData {
   scope: TrainingDeliveryViewScope; id: string; title: string;
@@ -151,7 +151,7 @@ export class TrainingDeliveryDialogComponent {
           : workout ? workout.planId ? `Plan: ${plan?.name ?? 'Unavailable plan'}` : 'Standalone workout' : null,
         moved: !!workout && (workout.lifecycle === 'deleted' || (this.data.scope === 'plan' && workout.planId !== this.data.id)),
         verification, label: trainingVerificationLabel(status, verification), copyMessage: trainingDeliveryCopyMessage(status),
-        showLastSent: status.hasRemoteCopy || verification?.missing,
+        showLastSent: status.lastAcceptedAtMs !== null && (status.hasRemoteCopy || verification?.missing),
         ...trainingDeliveryLatestEvent(status),
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
@@ -235,7 +235,7 @@ export class TrainingDeliveryDialogComponent {
       this.notice.set(receipt.result === 'coalesced' ? 'A recent check is already queued or complete.'
         : receipt.result === 'deferred' ? 'Check queued. It will run when provider capacity is available.' : 'Check queued. Results will update here.');
       this.haptics.success();
-    } catch (error) { if (current()) { this.error.set(trainingDeliveryCommandError(error, true)); this.haptics.error(); } }
+    } catch (error) { if (current()) { this.error.set(trainingVerificationCommandError(error)); this.haptics.error(); } }
     finally { if (current()) { this.phase.set(null); this.checkingProvider.set(null); } }
   }
   updateTimeZone(value: string): void {

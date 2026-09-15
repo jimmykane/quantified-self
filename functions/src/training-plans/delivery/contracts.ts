@@ -52,6 +52,8 @@ export interface DeliveryTransportProgress {
   version: 1;
   step: string;
   state: 'ready' | 'started' | 'rejected' | 'accepted';
+  /** Adapter-proved no-op repairs must not consume the successful-repair limit. */
+  repairApplied?: boolean;
 }
 export type DeliveryCheckpoint = (artifact: DeliveryArtifact | null, progress?: DeliveryTransportProgress | null) => Promise<void>;
 /** Recheck the exact attempt, lease, current intent and authority before EVERY request.

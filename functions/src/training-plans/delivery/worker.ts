@@ -109,7 +109,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     validateArtifact(artifact);
     if (progress !== undefined && progress !== null && (progress.version !== 1
       || !/^[a-z][a-z0-9-]{0,63}$/.test(progress.step)
-      || !['ready', 'started', 'rejected', 'accepted'].includes(progress.state))) {
+      || !['ready', 'started', 'rejected', 'accepted'].includes(progress.state)
+      || (progress.repairApplied !== undefined && (typeof progress.repairApplied !== 'boolean' || !operation.repair || progress.state !== 'accepted')))) {
       throw new TrainingDeliveryTransportError('uncertain');
     }
     if (complete && ((operation.kind === 'remove') !== (artifact === null))) {
@@ -168,10 +169,12 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         const repairTimes = (ledger.verification?.repairTimes ?? []).filter(time => time > runtime.now() - VERIFICATION_DAY_MS);
         ledger.verification = { ...emptyVerification(runtime.now()),
           requestedAtMs: ledger.verification?.requestedAtMs ?? 0,
-          repairTimes: operation.repair && (recoveredAcceptance || operation.progress?.state === 'accepted')
+          repairTimes: operation.repair && operation.progress?.repairApplied !== false && (recoveredAcceptance || operation.progress?.state === 'accepted')
             ? [...repairTimes, runtime.now()] : repairTimes };
         ledger.repair = null;
-        ledger.lastAcceptedAtMs = runtime.now();
+        // A reappearing copy can finish repair without any provider write. Keep
+        // Last sent truthful; the inspection projection owns Last checked.
+        if (operation.progress?.repairApplied !== false) ledger.lastAcceptedAtMs = runtime.now();
         ledger.acceptedDigest = operation.kind === 'upsert' ? operation.digest : null;
         ledger.acceptedContentDigest = operation.kind === 'upsert' ? operation.contentDigest : null;
         ledger.attempt = null;

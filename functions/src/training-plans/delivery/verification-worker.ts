@@ -61,8 +61,9 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
       if (ledger.lease?.id !== leaseId || ledger.lease.expiresAtMs <= runtime.now() || ledger.attempt
         || intent.desired !== 'present' || intent.digest !== ledger.desiredDigest
         || (intent.status !== 'delivered' && !ledger.verification?.missing) || !context.transport?.inspection
+        || context.transport.inspection.policy.mode === 'unavailable'
         || context.transport.inspection.policy.version !== claim.inspection.policy.version
-        || inspectionBinding(ledger, context, claim.inspection.policy) !== claim.binding) throw new TrainingDeliveryTransportError('deferred', 60_000);
+        || inspectionBinding(ledger, context, context.transport.inspection.policy) !== claim.binding) throw new TrainingDeliveryTransportError('deferred', 60_000);
     });
   };
   let observation: InspectionObservation = { artifacts: [], conflict: false };
@@ -90,7 +91,8 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
     const current = locks.empty && !ledger.attempt && ledger.lease.expiresAtMs > runtime.now() && intent.desired === 'present'
       && intent.digest === ledger.desiredDigest
       && (intent.status === 'delivered' || ledger.verification?.missing) && context.transport?.inspection?.policy.version === claim.inspection.policy.version
-      && inspectionBinding(ledger, context, claim.inspection.policy) === claim.binding;
+      && context.transport.inspection.policy.mode !== 'unavailable'
+      && inspectionBinding(ledger, context, context.transport.inspection.policy) === claim.binding;
     ledger.lease = null;
     if (!current) {
       ledger.verification = { ...(ledger.verification ?? emptyVerification(runtime.now())), state: 'pending', nextCheckAtMs: runtime.now() };

@@ -78,6 +78,17 @@ describe('Training provider delivery controls', () => {
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Check queued');
   });
+  it('shows the last attempt for partial delivery instead of an empty last-sent date', () => {
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.delivery-status-label + .delivery-caption').textContent).toContain('Last attempt');
+  });
+  it('describes a failed manual check without telling the user to save sync settings', async () => {
+    service.check.mockRejectedValue(new Error('not available'));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    await fixture.componentInstance.checkProvider('garmin'); fixture.detectChanges();
+    expect(fixture.componentInstance.error()).toContain('Unable to check delivery');
+    expect(fixture.componentInstance.error()).not.toContain('Saving');
+  });
   it('ignores an in-flight manual check after sign-out', async () => {
     let resolve!: (value: unknown) => void;
     service.check.mockImplementation(() => new Promise(done => { resolve = done; }));

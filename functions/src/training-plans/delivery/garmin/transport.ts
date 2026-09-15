@@ -56,8 +56,8 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     }
   }
   private async save(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, artifact: DeliveryArtifact | null,
-    step: Step, state: DeliveryTransportProgress['state']): Promise<void> {
-    const progress: DeliveryTransportProgress = { version: 1, step, state };
+    step: Step, state: DeliveryTransportProgress['state'], repairApplied?: boolean): Promise<void> {
+    const progress: DeliveryTransportProgress = { version: 1, step, state, ...(repairApplied === undefined ? {} : { repairApplied }) };
     await checkpoint(artifact, progress);
     // Mutate in-memory state only after the journal is durable. This also makes the
     // adapter usable with a checkpoint implementation that does not mutate its argument.
@@ -146,7 +146,10 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         connectionGeneration: operation.connectionGeneration, artifact: original,
         timeZone: operation.timeZone, cursor: null }, guard);
       if (observation.conflict || observation.artifacts.some(item => item.state === 'unknown')) throw new TrainingDeliveryTransportError('uncertain');
-      if (observation.artifacts.every(item => item.state === 'present')) return original;
+      if (observation.artifacts.every(item => item.state === 'present')) {
+        await this.save(operation, checkpoint, original, 'finished', 'accepted', false);
+        return original;
+      }
       const missing = observation.artifacts.filter(item => item.state === 'absent' && item.authoritative).map(item => item.key).sort();
       if (JSON.stringify(missing) !== JSON.stringify([...repair.missing].sort())) throw new TrainingDeliveryTransportError('uncertain');
       const ids = { ...original.ids };
@@ -190,16 +193,21 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     this.assertFuture(operation);
     // A surviving calendar entry can be relinked to the replacement workout only
     // after rechecking its retained identity, old association and unchanged date.
-    if (operation.repair && !operation.repair.missing.includes('schedule') && !operation.artifact!.ids.schedule) {
+    if (operation.repair && !operation.artifact!.ids.schedule) {
       const previous = operation.repair.original;
       const raw = await this.read({ method: 'GET', path: `/training-api/schedule/${garminId(previous.ids.schedule)}` }, guard);
-      if (!raw) throw new TrainingDeliveryTransportError('uncertain');
-      const found = schedule(raw);
-      if (found.id !== previous.ids.schedule || found.workoutId !== previous.ids.workout || found.date !== previous.localDate) {
-        throw new TrainingDeliveryTransportError('uncertain');
+      if (!raw) {
+        if (!operation.repair.missing.includes('schedule')) throw new TrainingDeliveryTransportError('uncertain');
+      } else {
+        const found = schedule(raw);
+        if (found.id !== previous.ids.schedule || found.workoutId !== previous.ids.workout || found.date !== previous.localDate) {
+          throw new TrainingDeliveryTransportError('uncertain');
+        }
+        // A previously missing schedule may reappear before a rejected POST is retried.
+        // Reuse that exact association instead of creating a duplicate calendar entry.
+        const relink = { ...operation.artifact!, ids: { ...operation.artifact!.ids, schedule: found.id } };
+        await checkpoint(relink); operation.artifact = relink; currentSchedule = found;
       }
-      const relink = { ...operation.artifact!, ids: { ...operation.artifact!.ids, schedule: found.id } };
-      await checkpoint(relink); operation.artifact = relink; currentSchedule = found;
     }
     const artifact = operation.artifact!;
     if (artifact.ids.schedule && !currentSchedule) throw new TrainingDeliveryTransportError('uncertain');
@@ -224,7 +232,9 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         await this.save(operation, checkpoint, { ...artifact, ids: { ...artifact.ids, schedule: saved.id }, localDate: saved.date }, step, 'accepted');
       }
     }
-    await this.save(operation, checkpoint, operation.artifact, 'finished', 'accepted');
+    const repairApplied = operation.repair ? operation.artifact!.ids.workout !== operation.repair.original.ids.workout
+      || operation.artifact!.ids.schedule !== operation.repair.original.ids.schedule : undefined;
+    await this.save(operation, checkpoint, operation.artifact, 'finished', 'accepted', repairApplied);
     return operation.artifact;
   }
 

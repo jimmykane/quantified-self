@@ -37,7 +37,7 @@ describe('Garmin Training HTTP boundary (no network)', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
   it.each([[401, 'auth', true], [403, 'permission', true], [412, 'permission', true], [400, 'terminal', true],
-    [429, 'retryable', true], [500, 'uncertain', false], [408, 'uncertain', false]])('classifies POST %s without retaining payloads', async (status, kind, rejected) => {
+    [429, 'deferred', true], [500, 'uncertain', false], [408, 'uncertain', false]])('classifies POST %s without retaining payloads', async (status, kind, rejected) => {
     const fetcher = vi.fn(async () => new Response('private-token-provider-body', { status: Number(status), headers: { 'Retry-After': '120' } }));
     const client = createGarminTrainingClient(async () => 'fixture', fetcher);
     let failure: unknown;
@@ -54,6 +54,16 @@ describe('Garmin Training HTTP boundary (no network)', () => {
       await expect(client({ method: 'GET', path: '/training-api/workout/v2/1' }, vi.fn()))
         .rejects.toMatchObject({ retryAfterMs: retry === 'invalid' ? 86_400_000 : 120_000 });
     }
+  });
+  it('retains a proven 429 rejection and its delay when shared quota persistence fails', async () => {
+    const capacity = { reserve: vi.fn().mockResolvedValue(undefined), defer: vi.fn().mockRejectedValue(new Error('local quota write failed')) };
+    const fetcher = vi.fn(async () => new Response('', { status: 429, headers: { 'Retry-After': '120' } }));
+    const client = createGarminTrainingClient(async () => 'fixture', fetcher, () => 1000, capacity);
+    await expect(client({ method: 'POST', path: '/workoutportal/workout/v2' }, vi.fn()))
+      .rejects.toMatchObject({ kind: 'deferred', rejected: true, retryAfterMs: 120_000,
+        diagnostics: { httpStatus: 429, failurePhase: 'response' } });
+    expect(capacity.defer).toHaveBeenCalledWith(121_000);
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it('does not shorten a provider retry delay longer than a day or repair malformed JSON', async () => {
     const client = createGarminTrainingClient(async () => 'fixture', vi.fn(async () =>

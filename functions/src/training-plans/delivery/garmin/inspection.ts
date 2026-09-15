@@ -1,5 +1,6 @@
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 import { garminId, type GarminTrainingClient } from './http';
+import { normalizeTrainingLocalDate } from '../../../../../shared/training-plans';
 
 /** #698 must prove missing-ID/ownership semantics before negative classification or repair is enabled.
  * This policy cannot be selected through a browser parameter or environment variable. */
@@ -26,7 +27,12 @@ export function createGarminInspection(client: GarminTrainingClient, policy = GA
       }
       const data = raw as Record<string, unknown>;
       try {
-        if (key === 'workout') garminId(data.ownerId);
+        if (key === 'workout') {
+          garminId(data.ownerId);
+          if (typeof data.workoutProvider !== 'string' || typeof data.workoutSourceId !== 'string') {
+            artifacts.push({ key, state: 'unknown', authoritative: false }); continue;
+          }
+        } else normalizeTrainingLocalDate(data.date);
         const valid = key === 'workout' ? garminId(data.workoutId) === id
           && (!request.artifact.ids.owner || garminId(data.ownerId) === request.artifact.ids.owner)
           && data.workoutProvider === 'Quantified Self' && data.workoutSourceId === 'Quantified Self'
@@ -34,7 +40,10 @@ export function createGarminInspection(client: GarminTrainingClient, policy = GA
             && data.date === request.artifact.localDate;
         conflict ||= !valid;
         artifacts.push({ key, state: valid ? 'present' : 'unknown', authoritative: valid });
-      } catch { conflict = true; artifacts.push({ key, state: 'unknown', authoritative: false }); }
+      } catch {
+        // Missing/malformed identity fields are not a proven conflicting identity.
+        artifacts.push({ key, state: 'unknown', authoritative: false });
+      }
     }
     return { artifacts, conflict };
   } };

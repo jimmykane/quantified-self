@@ -66,6 +66,10 @@ readiness, compatibility, exact connection, saved-zone date/completion eligibili
 repair. All three readiness decisions—delivery, inspection, repair—are independent. Production quotas only; no evaluation
 environment, arbitrary evaluation request budget, separate runner or setup wizard is introduced.
 
+Verification policy changes invalidate in-flight evidence. Stable inventory pages carry negative evidence only between
+complete scans, never establish absence alone. A received quota rejection remains rejected even if local deferral
+persistence fails; replacement retries re-read original artifacts so reappearance cannot create duplicate calendar entries.
+
 Training planning uses a stricter launch boundary than activity or route delivery. Manual plan and standalone-workout
 authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
 directional: a plan needs per-provider opt-in, while a standalone workout needs a user-selected Send action. A provider

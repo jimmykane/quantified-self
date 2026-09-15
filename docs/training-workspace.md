@@ -714,6 +714,11 @@ Wahoo #649 must model Plan/Workout/association separately and prove external-ID 
 `workout_token` is not a documented POST idempotency guarantee. Suunto #650 must prove owned Guide reads and externalId
 conflict lookup; unpinning or device eviction is not cloud deletion.
 
+Stable, unfiltered inventory pages may carry the previous completed scan's negative while a second scan advances;
+only its complete coverage can provide the second observation. Positive observations, unstable coverage or a stalled
+cursor break that chain. Unverified positive observations cannot clear a known absence. Actionable delivery errors
+take precedence over older check/restoration labels in the UI.
+
 `mutateTrainingProviderDelivery` accepts `check`, retaining Auth/App Check, Pro/grace, owner, deletion-lock, expected
 schedule/scope/settings revisions and mutation receipts. It returns a typed queued/coalesced/deferred receipt and stores
 a compact request under `trainingDeliveryState/current/checks`, never consent or a new settings/history revision.
@@ -734,6 +739,11 @@ application must be covered by the production quota proof under #698/#645 before
 does not claim to count unrelated Health/Course/OAuth callers. Wahoo's documented application windows are recorded for
 its future adapter; COROS scope and Suunto subscription limits must be confirmed, not invented.
 
+A failure persisting shared quota deferral must not erase a received HTTP 429 rejection: retain the rejected-operation
+journal and provider delay on the delivery record rather than blocking a known-rejected create as uncertain.
+Provider 429 responses, like local capacity exhaustion, are pending deferrals rather than failed checks and do not
+consume delivery failure retries.
+
 Private ledger evidence is separate from the owner-readable `trainingDeliveryVerifications` v1 projection. The existing
 strict `trainingDeliveryStatuses` v1 shape is unchanged. Confirmed missing artifacts do not count as synced, even while
 their retained IDs are kept for repair/removal. Plan totals still derive from workouts and do not imply native plans.
@@ -749,6 +759,15 @@ supersede repair. Pro expiry pauses it; past/provider-confirmed completed workou
 cycles are limited to two per delivery per rolling day, then deferred until capacity returns. **Production negative
 classification and automatic repair remain disabled in `GARMIN_INSPECTION_POLICY` until #698 proves real missing-ID
 semantics and repair behavior. Synthetic fixtures do not satisfy that gate.** No new webhook endpoint is introduced.
+
+Before a replacement schedule POST, re-read the original schedule ID even after an explicitly rejected attempt. Reuse
+an unchanged reappearing association, and reject a conflicting one, rather than creating a second calendar entry.
+Adapters journal a proven no-op repair separately from an applied repair, so acceptance recovery cannot charge that
+no-op toward the two-repair limit or advance Last sent. The safe status explains that limit when it pauses restoration. Inspection evidence
+also binds the complete policy, not only its version label: disabling inspection or changing its authority rules
+invalidates in-flight results. Partial deliveries without a full acceptance show Last attempt, not an empty Last sent.
+Malformed lookup identities remain inconclusive and retryable; only valid but mismatched identities/dates require
+conflict resolution. Manual-check failures never direct users into a nonexistent settings-save review.
 
 The compact sync details offer **Check Garmin** when supported, without another consent dialog. Last sent, last checked
 and device availability are separate. Unsupported verification reads **Sent · remote checking unavailable**, not failure

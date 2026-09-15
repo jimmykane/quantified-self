@@ -105,6 +105,29 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect((await inspect()).conflict).toBe(true);
     expect(transport.inspection.policy.repairReady).toBe(false);
   });
+  it('reuses a reappearing original schedule after a rejected replacement POST', async () => {
+    const original = (await execute())!;
+    const oldSchedule = server.schedules.get(original.ids.schedule)!;
+    server.schedules.delete(original.ids.schedule); await repair(['schedule']);
+    server.beforeHandle = async request => { if (request.method === 'POST') throw new GarminTrainingHttpError('retryable', true); };
+    await expect(execute()).rejects.toMatchObject({ kind: 'retryable' });
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'rejected' });
+    server.beforeHandle = null; server.schedules.set(original.ids.schedule, oldSchedule);
+    expect(await recover()).toEqual({ kind: 'resume' });
+    const count = writes().length;
+    expect((await execute())?.ids).toEqual(original.ids);
+    expect(operation.progress).toMatchObject({ state: 'accepted', repairApplied: false });
+    expect(writes()).toHaveLength(count);
+    expect(server.schedules.size).toBe(1);
+  });
+  it('keeps malformed lookup identities inconclusive instead of requiring conflict resolution', async () => {
+    const artifact = (await execute())!;
+    const malformed = new GarminTrainingTransport(async () => ({ status: 200, body: {} }), () => now);
+    expect(await malformed.inspection.inspect({ artifact, destinationKey: 'opaque-account', connectionGeneration: 'connection-1',
+      timeZone: 'Europe/Helsinki', cursor: null }, guard)).toEqual({ conflict: false, artifacts: [
+      { key: 'workout', state: 'unknown', authoritative: false }, { key: 'schedule', state: 'unknown', authoritative: false },
+    ] });
+  });
 
   it('creates two artifacts with durable checkpoints and reuses both identities through edits, reschedule and removal', async () => {
     const first = await execute();
