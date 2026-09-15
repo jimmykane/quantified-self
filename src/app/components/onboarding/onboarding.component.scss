@@ -16,7 +16,8 @@
 }
 
 .onboarding-card {
-    max-width: 800px;
+    // Leave room for the three-plan comparison; legal copy keeps its 600px limit.
+    max-width: 1240px;
     width: 100%;
     margin-bottom: 2rem;
     --mat-stepper-header-hover-state-layer-color: transparent;
