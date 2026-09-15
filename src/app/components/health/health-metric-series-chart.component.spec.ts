@@ -121,6 +121,21 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(option.series[0].type).toBe('line');
   });
 
+  it('keeps thumbnail readings and colors while hiding axes and interaction chrome', async () => {
+    const full = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    fixture.componentRef.setInput('thumbnail', true);
+    fixture.detectChanges(); await fixture.whenStable();
+    const thumbnail = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(thumbnail.tooltip.show).toBe(false);
+    expect(thumbnail.xAxis.show).toBe(false);
+    expect(thumbnail.yAxis.show).toBe(false);
+    expect(thumbnail.series[0].data).toEqual(full.series[0].data);
+    expect(thumbnail.series[0].lineStyle.color).toEqual(full.series[0].lineStyle.color);
+    fixture.componentRef.setInput('thumbnail', false);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(eChartsLoader.setOption.mock.calls.at(-1)![1].xAxis.show).not.toBe(false);
+  });
+
   it('refreshes chart labels when the signed-in user changes display units', async () => {
     fixture.componentRef.setInput('model', buildHealthChartModels([series({
       metricId: HEALTH_METRIC_IDS.Distance,

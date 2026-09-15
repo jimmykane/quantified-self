@@ -1,5 +1,5 @@
-@if (showAddAction()) {
-  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" matBadge="New" matBadgeSize="medium" [matBadgeHidden]="!unseen().length" [matBadgeDescription]="newBadgeDescription()" (click)="toggle()">
+@if (showAddAction() && !hideEntryAction()) {
+  <button #entryButton mat-button type="button" aria-haspopup="dialog" [attr.aria-label]="addActionLabel()" [matTooltip]="addActionHint()" [attr.aria-expanded]="expanded()" [disabled]="state.busy()" matBadge="New" matBadgePosition="above before" matBadgeSize="medium" [matBadgeHidden]="!unseen().length" [matBadgeDescription]="newBadgeDescription()" (click)="toggle()">
     <span>{{ sectionPresentation().add }}</span>
     <mat-icon iconPositionEnd>add</mat-icon>
   </button>
@@ -10,8 +10,8 @@
     <h2>{{ pickerHeading() }}</h2>
     <button mat-icon-button aria-label="Close library" [disabled]="state.busy()" (click)="close()"><mat-icon>close</mat-icon></button>
   </div>
-  <div #scrollContent class="chart-library-layout qs-scrollbar" [class.has-selection]="state.draft() && !state.configuring()" [class.is-configuring]="state.configuring()">
-    @if (!state.configuring()) {
+  <div #scrollContent class="chart-library-layout qs-scrollbar" [class.pin-preview]="state.pinnedFromHealth()" [class.has-selection]="state.draft() && !state.configuring()" [class.is-configuring]="state.configuring()">
+    @if (!state.configuring() && !state.pinnedFromHealth()) {
     <div #browser class="chart-library-browser qs-scrollbar" tabindex="-1">
       <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search this section</mat-label><mat-icon matPrefix>search</mat-icon><input matInput [disabled]="state.busy()" [value]="search()" (input)="filter($any($event.target).value)"></mat-form-field>
       @if (lane() === 'kpi') {
@@ -20,6 +20,12 @@
         <mat-chip-option value="all">All</mat-chip-option><mat-chip-option value="load">Load</mat-chip-option><mat-chip-option value="readiness">Readiness</mat-chip-option><mat-chip-option value="execution">Execution</mat-chip-option>
       </mat-chip-listbox>
       </div>
+      }
+      @if (lane() === 'section:health') {
+        <div class="chart-library-filters"><mat-chip-listbox aria-label="Health category" [hideSingleSelectionIndicator]="true" [disabled]="state.busy()" [value]="group()" (change)="selectGroup($event.value)">
+          <mat-chip-option value="all">All</mat-chip-option>
+          @for (category of healthGroups; track category.id) { <mat-chip-option [value]="category.id">{{ category.label }}</mat-chip-option> }
+        </mat-chip-listbox></div>
       }
       <p class="chart-library-count" aria-live="polite">{{ availableCountLabel() }}</p>
       <mat-action-list class="chart-library-list qs-scrollbar" [attr.aria-label]="'Available ' + sectionPresentation().plural">
@@ -30,7 +36,9 @@
             <span matListItemTitle>{{ entry.title }}@if (entry.isNew) { <span class="chart-library-new-label"> · New</span> }</span>
             <span matListItemLine [id]="'chart-source-' + entry.definition.id" [matTooltip]="entry.sourceLabel">{{ entry.format }} · {{ entry.sourceLabel }}</span>
             <span matListItemMeta class="chart-library-row-meta" aria-hidden="true">
-              <app-dashboard-chart-thumbnail [preview]="entry.preview" [darkTheme]="darkTheme()"></app-dashboard-chart-thumbnail>
+              @if (entry.healthSettings; as settings) {
+                <app-dashboard-health-chart class="chart-library-health-thumbnail" [user]="user()" [settings]="settings" [thumbnail]="true" [priority]="0" [darkTheme]="darkTheme()" (contextChange)="healthContext(entry.definition.id, $event)" />
+              } @else { <app-dashboard-chart-thumbnail [preview]="entry.preview" [darkTheme]="darkTheme()"></app-dashboard-chart-thumbnail> }
               <mat-icon>chevron_right</mat-icon>
             </span>
           </button>
@@ -45,7 +53,7 @@
     <div #detail class="chart-library-detail qs-scrollbar" [class.is-configuring]="state.configuring()" tabindex="-1">
       <div class="chart-library-detail-heading" [class.chart-library-preview-heading]="!state.configuring()">
         <button class="chart-library-back" mat-button [disabled]="state.busy()" (click)="back()"><mat-icon>arrow_back</mat-icon>{{ backLabel() }}</button>
-        @if (!state.configuring() && state.canConfigure()) {
+        @if (!state.configuring() && state.canConfigure() && !state.healthSettings()) {
           <button class="chart-library-settings" mat-stroked-button (click)="configure()" [disabled]="state.busy()"><mat-icon>tune</mat-icon>{{ draftPresentation().settings }}</button>
         }
       </div>
@@ -58,7 +66,10 @@
         }
         <section class="chart-library-preview qs-scrollbar" [attr.aria-label]="draftPresentation().preview">
           <h3>{{ state.configuring() ? 'Live preview' : previewTitle() }}</h3>
-          <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="previewSeed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview>
+          @if (state.healthSettings(); as settings) {
+            @if (state.pinnedFromHealth()) { <p class="chart-library-destination">Uses the {{ settings.range === 'today' ? '1d' : settings.range }} range, starting with the latest period.</p> }
+            <app-dashboard-health-chart class="chart-library-health-preview" [hideTitle]="true" [user]="user()" [settings]="settings" [darkTheme]="darkTheme()" [providerFilter]="providerFilter()" [priority]="100" [timelineNotes]="timelineNotes()" [disabled]="state.busy()" (settingsChange)="state.updateHealthSettings($event.settings, $event.initial)" />
+          } @else { <app-dashboard-chart-preview [user]="user()" [tile]="draft" [seed]="previewSeed()" [darkTheme]="darkTheme()"></app-dashboard-chart-preview> }
           @if (!creatingCustom()) {
             <div class="chart-library-explanation">
               @for (paragraph of explanationParagraphs(); track $index) { <p>{{ paragraph }}</p> }

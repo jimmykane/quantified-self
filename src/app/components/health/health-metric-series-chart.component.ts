@@ -47,6 +47,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() compact = false;
+  @Input() thumbnail = false;
   @Input() fillHeight = false;
   @Input() statusOverlay: HealthChartStatusOverlay | null = null;
   @Input() statusDescription: string | null = null;
@@ -73,7 +74,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   ngOnChanges(changes: SimpleChanges): void {
     if (this.viewInitialized && (
       changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
-      || changes.compact || changes.statusOverlay || changes.timelineNotes
+      || changes.compact || changes.thumbnail || changes.statusOverlay || changes.timelineNotes
     )) {
       void this.refresh();
     }
@@ -103,19 +104,21 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
     this.chartHost.setTimelineNotes(this.timelineNotes, {
       offsetSeconds: timestamp => nearestTimezoneOffsetSeconds(this.model.displayedPoints, timestamp) ?? 0,
     });
-    this.chartHost.setOption(
-      buildHealthMetricEChartsOption(
+    const option = buildHealthMetricEChartsOption(
         this.model,
         this.startTimeMs,
         this.endTimeMs,
         style,
         isEChartsMobileTooltipViewport(),
         this.unitSettings,
-        this.compact,
+        this.compact || this.thumbnail,
         this.statusOverlay,
-      ),
-      ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
-    );
+      );
+    if (this.thumbnail) {
+      Object.assign(option, { grid:{left:2,right:2,top:3,bottom:3}, tooltip:{show:false}, legend:{show:false}, dataZoom:[] });
+      for (const axis of [option.xAxis, option.yAxis].flat()) if (axis) Object.assign(axis, {show:false});
+    }
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 }

@@ -31,6 +31,7 @@ import {
 } from './dashboard-special-chart-types';
 
 const DASHBOARD_CHART_INFO_COPY: Record<DashboardSpecialChartType, string> = {
+  HealthMetric: 'Recorded Health history, with each source and reading kept separate. Choose a source and date range to explore its readings.',
   [DASHBOARD_RECOVERY_NOW_CHART_TYPE]: 'Shows how much of your recorded recovery time remains. The remaining portion counts down as time passes; the elapsed portion shows how much has already passed.\n\nThis chart follows active recovery estimates and is independent of activity filters.',
   [DASHBOARD_ACTIVITY_CALENDAR_CHART_TYPE]: 'Shows your recorded activity time by day and sport group for the displayed month. Larger circles mean more time; compact layouts nest the circles.\n\nThe calendar has its own month selection, independent of the activity list and other charts.',
   [DASHBOARD_FORM_CHART_TYPE]: 'Shows how training load affects fitness (CTL), fatigue (ATL), and form (TSB). Form is the same-day difference between fitness and fatigue: positive values indicate more freshness; negative values indicate more accumulated fatigue.\n\nDaily Training Stress Score (TSS) feeds a 42-day fitness average and a 7-day fatigue average. Each day, fitness changes by (today’s TSS minus previous CTL) / 42; fatigue uses the same calculation with / 7. Days without recorded training count as zero load.\n\nForm is training-load only. Today Readiness separately includes available sleep and recovery signals.',

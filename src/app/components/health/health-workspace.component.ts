@@ -1,3 +1,10 @@
+import { DashboardLibraryModule } from '../../modules/dashboard-library.module';
+import { DashboardChartLibraryState } from '../summaries/dashboard-chart-library/dashboard-chart-library-state.service';
+import { dashboardHealthMetric, dashboardHealthSettings, dashboardHealthPresetId } from '../../helpers/dashboard-health-tile.helper';
+import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
+import { HealthMetricQueryService } from '../../services/health-metric-query.service';
+import { AppUserInterface } from '../../models/app-user.interface';
+import { Router } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -32,7 +39,7 @@ import {
 import { ProviderPresentation, buildProviderPresentation } from '@shared/provider-presentation';
 import { SleepSession } from '@shared/sleep';
 import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manual-health';
-import { Subscription } from 'rxjs';
+import { from, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import { AppHapticsService } from '../../services/app.haptics.service';
@@ -50,7 +57,6 @@ import { normalizeHealthHighlightSources } from '../../helpers/health-highlight-
 import { AppChartsModule } from '../../modules/app-charts.module';
 import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { HealthMetricChartComponent } from './health-metric-chart.component';
-import { HealthActivityQueryService } from './health-activity-query.service';
 import {
   HealthPriorityChartWindow,
   HealthPriorityCardView,
@@ -157,6 +163,7 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
 
 @Component({
   selector: 'app-health-workspace',
+  providers: [DashboardChartLibraryState],
   standalone: true,
   imports: [
     RouterLink,
@@ -170,6 +177,7 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
     AppChartsModule,
     PageHeaderComponent,
     TimelineNotesWorkspaceComponent,
+    DashboardLibraryModule,
     HealthMetricChartComponent,
     HealthPrioritySummaryComponent,
     HealthSourceObservationTableComponent,
@@ -179,12 +187,33 @@ const SELECTED_HRV_CONTEXT_DAYS = 60;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HealthWorkspaceComponent {
+  private readonly healthQueries = inject(HealthMetricQueryService);
+  readonly dashboardLibrary = inject(DashboardChartLibraryState);
+  private readonly dashboardRouter = inject(Router);
+  readonly dashboardUser = computed(() => this.userService.user() as AppUserInterface | null);
+  private readonly dashboardRevision = signal(0);
+  readonly dashboardSeed = computed(() => { this.dashboardRevision(); return {tiles:this.dashboardUser()?.settings?.dashboardSettings?.tiles || []}; });
+  readonly metricOnDashboard = computed(() => this.dashboardSeed().tiles.some(tile=>dashboardHealthMetric(tile)===this.routeState().metric));
+  async addToDashboard(): Promise<void> {
+    const user=this.dashboardUser(); if(!user?.settings?.dashboardSettings) return;
+    const metric=this.routeState().metric;
+    if(user.settings.dashboardSettings.tiles.some(tile=>dashboardHealthMetric(tile)===metric)) {
+      this.haptics.selection(); await this.dashboardRouter.navigate(['/dashboard'],{queryParams:{healthMetric:metric}}); return;
+    }
+    const entry=getDashboardChartCatalog().find(item=>item.definition.id===dashboardHealthPresetId(metric));
+    if(!entry) return;
+    const selected = await this.dashboardLibrary.select(user,entry);
+    if (!selected || this.dashboardUser()?.uid !== user.uid) return;
+    this.dashboardLibrary.updateHealthSettings({...dashboardHealthSettings(entry.tile)!,range:this.routeState().range},true);
+    this.dashboardLibrary.pinnedFromHealth.set(true);
+    this.dashboardLibrary.activeLane.set('section:health');
+  }
+
   protected readonly haptics = inject(AppHapticsService);
   readonly mobileTapFeedbackOptions = DASHBOARD_ECHARTS_MOBILE_TAP_FEEDBACK_OPTIONS;
   private readonly userService = inject(AppUserService);
   private readonly userSettingsService = inject(AppUserSettingsQueryService);
   private readonly healthService = inject(AppHealthService);
-  private readonly activityHealthService = inject(HealthActivityQueryService);
   private readonly sleepService = inject(AppSleepService);
   private readonly themeService = inject(AppThemeService);
   private readonly dialog = inject(MatDialog);
@@ -238,6 +267,13 @@ export class HealthWorkspaceComponent {
   readonly preferencesSaveFailed = signal(false);
   readonly preferredHighlightSources = signal<AppHealthHighlightSources>({});
   readonly selectedWindow = computed(() => resolveHealthWorkspaceWindow(this.routeState(), this.todayDate));
+  private readonly selectedSleepReadKey = computed(() => {
+    const window=this.selectedWindow();
+    const start=this.routeState().metric === HEALTH_METRIC_IDS.HeartRateVariability
+      ? resolveHealthWorkspaceWindow({metric:'heart_rate_variability',range:'today',endDate:this.selectedHrvContextWindow().startDate},this.todayDate).startTimeMs
+      : window.startTimeMs;
+    return JSON.stringify([this.signedInUserID(),start,window.endTimeMs,this.refreshRevision()]);
+  });
   readonly priorityWindow = resolveHealthWorkspaceWindow({
     metric: HEALTH_METRIC_IDS.HeartRate,
     range: '30d',
@@ -765,6 +801,19 @@ export class HealthWorkspaceComponent {
     .sort((left, right) => left.label.localeCompare(right.label)));
 
   constructor() {
+    this.dashboardLibrary.changed$.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.dashboardRevision.update(value => value + 1);
+      if (!this.dashboardLibrary.undoAvailable()) return;
+      this.snackBar.open('Chart added to dashboard', 'Undo', { duration: 7000 }).onAction()
+        .pipe(takeUntilDestroyed(this.destroyRef)).subscribe(async () => {
+          const user = this.dashboardUser();
+          if (!user) return;
+          await this.dashboardLibrary.undo(user);
+          if (this.dashboardLibrary.error()) {
+            this.snackBar.open(this.dashboardLibrary.error(), 'Dismiss', { duration: 6000 });
+          }
+        });
+    });
     effect(onCleanup => {
       this.signedInUserID();
       this.routeState();
@@ -783,6 +832,7 @@ export class HealthWorkspaceComponent {
       this.signedInUserID();
       onCleanup(() => {
         // Auth changes and component teardown invalidate dialogs and pending UI work.
+        this.dashboardLibrary.resetContext();
         this.manualAccountGeneration += 1;
         this.manualDialogRef?.close();
         this.manualDialogRef = null;
@@ -897,33 +947,25 @@ export class HealthWorkspaceComponent {
     });
 
     effect(onCleanup => {
-      const uid = this.signedInUserID();
-      const window = this.selectedWindow();
-      const metric = this.routeState().metric;
-      let subscription: Subscription | null = null;
-      this.selectedSleepSessions.set([]);
-      this.selectedSleepStatus.set('loading');
-      if (uid) {
-        const historyStartTimeMs = metric === HEALTH_METRIC_IDS.HeartRateVariability
-          ? resolveHealthWorkspaceWindow({
-            metric,
-            range: 'today',
-            endDate: this.selectedHrvContextWindow().startDate,
-          }, this.todayDate).startTimeMs
-          : window.startTimeMs;
-        subscription = this.sleepService.watchForDashboard(uid, historyStartTimeMs, window.endTimeMs).subscribe({
-          next: sessions => {
-            this.rememberProviders(uid, sessions.map(session => session.source.provider as HealthProvider));
-            this.selectedSleepSessions.set(sessions);
-            this.selectedSleepStatus.set('ready');
-          },
-          error: error => this.selectedSleepStatus.set(loadErrorStatus(error)),
+      const [uid,startTimeMs,endTimeMs] = JSON.parse(this.selectedSleepReadKey()) as [string|null,number,number];
+      untracked(() => {
+        const controller = new AbortController();
+        let subscription: Subscription | null = null;
+        this.selectedSleepSessions.set([]);
+        this.selectedSleepStatus.set('loading');
+        if (uid) subscription = from(this.healthQueries.loadSleepRange(uid,startTimeMs,endTimeMs,100,controller.signal)).subscribe({
+          next:sessions => {
+            this.rememberProviders(uid,sessions.map(session=>session.source.provider as HealthProvider));
+            this.selectedSleepSessions.set(sessions);this.selectedSleepStatus.set('ready');
+          },error:error=>this.selectedSleepStatus.set(loadErrorStatus(error)),
         });
-      }
-      onCleanup(() => subscription?.unsubscribe());
+        onCleanup(() => { subscription?.unsubscribe(); controller.abort(); });
+      });
     });
 
-    effect(() => {
+    effect(onCleanup => {
+      const controller = new AbortController();
+      onCleanup(() => controller.abort());
       const uid = this.signedInUserID();
       const metric = this.routeState().metric;
       const contextWindow = this.selectedHrvContextWindow();
@@ -933,12 +975,12 @@ export class HealthWorkspaceComponent {
       if (!uid || metric !== HEALTH_METRIC_IDS.HeartRateVariability) {
         return;
       }
-      void this.healthService.loadMetricRange(uid, {
+      void this.healthQueries.loadMetricRange(uid, {
         ...contextWindow,
         metricId: HEALTH_METRIC_IDS.HeartRateVariability,
         includeSamples: false,
-      }).then(load => {
-        if (generation === this.selectedHrvContextLoadGeneration) {
+      }, 100, controller.signal).then(load => {
+        if (!controller.signal.aborted && generation === this.selectedHrvContextLoadGeneration) {
           this.selectedHrvContextHealthLoad.set(load);
         }
       }).catch(() => {
@@ -947,7 +989,9 @@ export class HealthWorkspaceComponent {
       });
     });
 
-    effect(() => {
+    effect(onCleanup => {
+      const controller = new AbortController();
+      onCleanup(() => controller.abort());
       const uid = this.signedInUserID();
       const window = this.selectedWindow();
       const metric = this.routeState().metric;
@@ -961,22 +1005,22 @@ export class HealthWorkspaceComponent {
         return;
       }
       this.selectedHealthStatus.set('loading');
-      const healthLoad = this.healthService.loadMetricRange(uid, {
+      const healthLoad = this.healthQueries.loadMetricRange(uid, {
         startDate: window.startDate,
         endDate: window.endDate,
         metricId: metric,
         includeSamples: window.includeSamples,
-      });
+      }, 100, controller.signal);
       const activityLoad = isActivityHealthMetricId(metric)
-        ? this.activityHealthService.loadRange({
+        ? this.healthQueries.loadActivityRange(uid, {
           metricId: metric,
           startTimeMs: window.startTimeMs,
           endTimeMs: window.endTimeMs,
-        })
+        }, 100, controller.signal)
         : Promise.resolve(null);
       this.selectedActivityHealthStatus.set(isActivityHealthMetricId(metric) ? 'loading' : 'ready');
       void Promise.allSettled([healthLoad, activityLoad]).then(([healthOutcome, activityOutcome]) => {
-        if (generation !== this.selectedLoadGeneration) {
+        if (controller.signal.aborted || generation !== this.selectedLoadGeneration) {
           return;
         }
         if (healthOutcome.status === 'fulfilled') {
@@ -1072,6 +1116,7 @@ export class HealthWorkspaceComponent {
             const providerAdvanced = states.some(state =>
               syncStateAdvanced(state, this.latestSyncStates.get(state.provider)));
             if (this.hasSeenSyncStateSnapshot && providerAdvanced) {
+              this.healthQueries.invalidate(this.signedInUserID() || '');
               this.refreshRevision.update(value => value + 1);
             }
             this.latestSyncStates = new Map(states.map(state => [state.provider, { ...state }]));
@@ -1280,6 +1325,7 @@ export class HealthWorkspaceComponent {
         if (this.isCurrentManualAccount(requestedForUserID, generation)) {
           this.haptics.error();
           this.snackBar.open('Measurement changed or could not be loaded. Refresh and try again.', 'Dismiss', { duration: 5000 });
+          this.healthQueries.invalidate(this.signedInUserID() || '');
           this.refreshRevision.update(current => current + 1);
         }
         return;
@@ -1348,7 +1394,7 @@ export class HealthWorkspaceComponent {
     endDate = this.todayDate,
   ): Promise<void> {
     try {
-      const result = await this.healthService.loadMetricRange(uid, {
+      const result = await this.healthQueries.loadMetricRange(uid, {
         startDate,
         endDate,
         metricId,
@@ -1470,6 +1516,7 @@ export class HealthWorkspaceComponent {
         expectedRevisionOrder: measurement.expectedRevisionOrder,
       }, requestedForUserID);
       if (!this.isCurrentManualAccount(requestedForUserID, generation)) return;
+      this.healthQueries.invalidate(this.signedInUserID() || '');
       this.refreshRevision.update(current => current + 1);
       void this.refreshAvailableHealthMetrics();
       this.haptics.success();
@@ -1499,7 +1546,8 @@ export class HealthWorkspaceComponent {
     if (date < window.startDate || date > window.endDate) this.selectedEndDate.set(date);
     this.selectedProviders.set([]);
     this.selectAndSaveMetric(metricId);
-    this.refreshRevision.update(current => current + 1);
+    this.healthQueries.invalidate(this.signedInUserID() || '');
+      this.refreshRevision.update(current => current + 1);
   }
 
   private async refreshAvailableHealthMetrics(): Promise<void> {

@@ -1,3 +1,8 @@
+@if (dashboardUser()?.settings?.dashboardSettings) {
+@if (dashboardUser(); as user) {
+  <app-dashboard-chart-library [user]="user" lane="section:health" [seed]="dashboardSeed()" [hideEntryAction]="true" [darkTheme]="isDarkTheme()" [providerFilter]="selectedProviders()" [timelineNotes]="timelineNotes.context()" />
+}
+}
 <main class="health-workspace qs-workspace-page" aria-labelledby="health-title">
   <app-page-header
     variant="route"
@@ -121,6 +126,7 @@
             }
           </div>
           <div class="health-detail-controls">
+          <button mat-button type="button" [disabled]="dashboardLibrary.busy()" (click)="addToDashboard()"><span>{{ metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard' }}</span><mat-icon iconPositionEnd>{{ metricOnDashboard() ? 'dashboard' : 'add' }}</mat-icon></button>
           <div class="health-window-navigation" aria-label="Health data window">
             <button
               mat-icon-button

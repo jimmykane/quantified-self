@@ -1,3 +1,4 @@
+import { dashboardHealthMetric, dashboardHealthSettings, dashboardHealthPresetId } from '../../../helpers/dashboard-health-tile.helper';
 import { dismissAllDashboardChartSuggestions, syncDashboardChartSuggestionStates } from '../../../helpers/dashboard-chart-discovery.helper';
 import { DashboardConfigurationConflict } from '../../../services/dashboard-configuration.service';
 import { matchesDashboardPreset } from '../../../helpers/dashboard-chart-catalog.helper';
@@ -47,6 +48,7 @@ import * as SpeedMax from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import type {
+  AppDashboardHealthMetricSettings,
   AppDashboardAutoTileState,
   AppDashboardChartTileDisplaySettingsInterface,
   AppDashboardChartTileSettingsInterface,
@@ -528,6 +530,9 @@ export class DashboardTileConfiguration {
     return this.getPresetDisabledReason(selectedPreset);
   }
 
+  public healthMetric: AppDashboardHealthMetricSettings | null = null;
+  public healthSection: 'health' | 'trainingState' | undefined;
+
   get isSaveDisabled(): boolean {
     if (this.isSaving) {
       return true;
@@ -538,6 +543,7 @@ export class DashboardTileConfiguration {
     if (this.activeWorkflowTab === 'presets') {
       return this.selectedPresetDisabledReason !== null;
     }
+    if (this.healthMetric && this.dashboardTiles.some(tile => tile.order !== this.editTileOrder && dashboardHealthMetric(tile) === this.healthMetric.metric)) return true;
     if (this.category === 'curated' && this.isCuratedOptionDisabled(this.curatedChartType)) {
       return true;
     }
@@ -1065,6 +1071,12 @@ export class DashboardTileConfiguration {
   }
 
   public syncFormStateFromTile(tile: TileSettingsInterface): void {
+    this.healthMetric = dashboardHealthSettings(tile, this.data.user.settings.dashboardSettings);
+    this.healthSection = (tile as AppDashboardChartTileSettingsInterface).healthSection;
+    if (this.healthMetric) {
+      this.category = 'health';
+      return;
+    }
     if (tile.type === TileTypes.Map) {
       const mapTile = tile as DashboardMapTileSettings;
       this.category = 'map';
@@ -1135,6 +1147,8 @@ export class DashboardTileConfiguration {
           delete clonedTile.displaySettings;
         }
       }
+      const healthMetric = (tile as AppDashboardChartTileSettingsInterface).healthMetric;
+      if (healthMetric) (clonedTile as AppDashboardChartTileSettingsInterface).healthMetric = { ...healthMetric };
       return clonedTile as TileSettingsInterface;
     });
   }
@@ -1337,6 +1351,16 @@ export class DashboardTileConfiguration {
     size: { columns: number; rows: number },
     existingTile: TileSettingsInterface | null,
   ): TileSettingsInterface {
+    if (this.category === 'health' && this.healthMetric) {
+      const tile = {
+        ...(existingTile || buildDashboardManagerPresetTile({ presetId: dashboardHealthPresetId(this.healthMetric.metric), order, size })),
+        order, size,
+      } as AppDashboardChartTileSettingsInterface;
+      tile.healthMetric = { ...this.healthMetric };
+      if (this.healthSection) tile.healthSection = this.healthSection;
+      else delete tile.healthSection;
+      return tile;
+    }
     if (this.category === 'map') return this.buildMapTile(order, size, existingTile);
     if (this.category === 'curated') return this.buildCuratedTile(this.curatedChartType, order, size, existingTile);
     if (this.category === 'kpi') return this.buildKpiTile(this.kpiChartType, order, size);
@@ -1699,6 +1723,8 @@ export class DashboardTileConfiguration {
   }
 
   private getSpecialTileUniquenessKey(tile: TileChartSettingsInterface): string | null {
+    const metric = dashboardHealthMetric(tile);
+    if (metric) return `health:${metric}`;
     const descriptor = getDashboardAutoTileDescriptorForTile(tile);
     if (descriptor) {
       return descriptor.id;

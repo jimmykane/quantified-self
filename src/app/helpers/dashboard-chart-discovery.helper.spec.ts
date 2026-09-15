@@ -9,7 +9,7 @@ const settings = () => ({ tiles: [] } as AppDashboardSettingsInterface);
 
 describe('chart discovery', () => {
   it('suggests only eligible, missing charts, in product priority order with a limit of two', () => {
-    const result = dashboardChartSuggestions(catalog, 'section:trainingState', settings(), entry => entry.definition.label !== 'Form (TSS)');
+    const result = dashboardChartSuggestions(catalog, 'section:health', settings(), () => true);
     expect(result.map(entry => entry.definition.label)).toEqual(['Sleep', 'HRV']);
     expect(dashboardChartSuggestions(catalog, 'section:trainingState', settings(), () => false)).toEqual([]);
     const saved = { tiles: result.map(entry => entry.tile) } as AppDashboardSettingsInterface;
@@ -29,7 +29,7 @@ describe('chart discovery', () => {
   it('honors legacy dismissal and suppresses every suggestion after Remove all', () => {
     const state = settings();
     state.autoTiles = { sleepTrend: { state: 'dismissed' } };
-    expect(dashboardChartSuggestions(catalog, 'section:trainingState', state, () => true).map(entry => entry.definition.label)).toEqual(['Form (TSS)', 'HRV']);
+    expect(dashboardChartSuggestions(catalog, 'section:health', state, () => true).map(entry => entry.definition.label)).toEqual(['HRV', 'Resting heart rate']);
     dismissAllDashboardChartSuggestions(state, 1);
     expect(catalog.every(entry => isDashboardChartSuggestionDismissed(entry, state))).toBe(true);
   });

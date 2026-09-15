@@ -1,3 +1,8 @@
+import { AppHapticsService } from '../../services/app.haptics.service';
+import { ActivatedRoute, Router } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../../helpers/dashboard-health-tile.helper';
+import type { AppDashboardHealthMetricSettings } from '../../models/app-user.interface';
 import { buildReadinessHrvDisplay } from '../../helpers/readiness-hrv-display.helper';
 import { localCalendarDate } from '../../helpers/health-workspace.helper';
 import { DashboardHrvService } from '../../services/dashboard-hrv.service';
@@ -318,6 +323,24 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public tileTypes = TileTypes;
   public desktopTileDragEnabled = false;
   private readonly configuration = inject(DashboardConfigurationService);
+  private readonly healthSnack = inject(MatSnackBar);
+  private readonly healthRoute = inject(ActivatedRoute);
+  private readonly healthRouter = inject(Router);
+  private healthTileRevealed = false;
+  private revealRequestedHealthTile(): void {
+    const metric=this.healthRoute.snapshot.queryParamMap.get('healthMetric');
+    if(this.healthTileRevealed || !metric || !this.isOwnerDashboard) return;
+    const tile=this.tiles.find(item=>dashboardHealthMetric(item)===metric);
+    if(!tile) return;
+    this.healthTileRevealed=true;
+    requestAnimationFrame(()=>{
+      const target=this.documentRef.querySelector<HTMLElement>(`[data-dashboard-tile-order="${tile.order}"]`);
+      target?.focus({preventScroll:true});target?.scrollIntoView({block:'center'});
+      void this.healthRouter.navigate([], {relativeTo:this.healthRoute,queryParams:{healthMetric:null},queryParamsHandling:'merge',replaceUrl:true});
+    });
+  }
+  private readonly healthHaptics = inject(AppHapticsService);
+  readonly healthSavingOrders = new Set<number>();
   readonly library = inject(DashboardChartLibraryState);
   private readonly notesWorkspace = viewChild(TimelineNotesWorkspaceComponent);
   /** One live, owner-fenced source shared by tiles and calendar sheets. */
@@ -671,7 +694,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.refreshDashboardTodaySignals();
     this.refreshDerivedMetricsBannerState();
     this.previewInput = {
-      tiles: this.user?.settings?.dashboardSettings?.tiles ?? [],
+      tiles: (this.user?.settings?.dashboardSettings?.tiles ?? []).filter(tile => this.isOwnerDashboard || !isPrivateDashboardHealthTile(tile)),
       events: [],
       tileEventsByOrder: this.tileEventsByOrder,
       tileEventAnchorsByOrder: Object.fromEntries(this.tileEventAnchorEndMsByOrder),
@@ -722,6 +745,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     };
     this.library.invalidateUndo(this.user?.settings?.dashboardSettings);
     const newTiles = buildDashboardTileViewModels(this.previewInput);
+    if (this.isOwnerDashboard) for (const tile of newTiles) {
+      const settings = dashboardHealthSettings(tile, this.user.settings.dashboardSettings);
+      if (settings) (tile as AppDashboardChartTileSettingsInterface).healthMetric = settings;
+    }
     this.dashboardTileSettingsSnapshot = this.getDashboardTileSettingsSnapshot();
     this.logger.log('[perf] summaries_build_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
@@ -734,6 +761,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.refreshTileLanes();
       this.updateDesktopTileDragCapability();
       this.loaded();
+      this.revealRequestedHealthTile();
       this.logger.log('[perf] summaries_commit_tiles', {
         durationMs: Number((performance.now() - buildStart).toFixed(2)),
         finalTiles: this.tiles.length,
@@ -755,6 +783,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.refreshTileLanes();
     this.updateDesktopTileDragCapability();
     this.loaded();
+    this.revealRequestedHealthTile();
     this.logger.log('[perf] summaries_commit_tiles', {
       durationMs: Number((performance.now() - buildStart).toFixed(2)),
       finalTiles: this.tiles.length,
@@ -989,6 +1018,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private syncHrvSubscription(): void {
+    if (this.isOwnerDashboard) { this.unsubscribeHrv(); return; }
     const uid = `${this.user?.uid || ''}`.trim();
     const range = normalizeDashboardSleepTrendRange((this.user as AppUserInterface)?.settings?.dashboardSettings?.hrvTrend?.range);
     if (this.hrvOwnerUID !== uid || range !== this.hrvTrendRange) this.hrvTrendAnchorEndMs = null;
@@ -1139,6 +1169,53 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
     if (!this.resolveOwnDashboardUID()) return Promise.resolve();
     return this.configuration.save(this.user.uid, expected, dashboardSettings);
+  }
+
+  public async onHealthMetricChange(order: number, change: { settings: AppDashboardHealthMetricSettings; initial: boolean }): Promise<void> {
+    const uid = this.resolveOwnDashboardUID();
+    if (change.initial || !uid || this.healthSavingOrders.has(order)) return;
+    const baseline = cloneDashboardSettings(this.user.settings.dashboardSettings);
+    const tiles = cloneDashboardSettings(baseline).tiles;
+    const tile = tiles.find(item => item.order === order) as AppDashboardChartTileSettingsInterface;
+    if (!tile || dashboardHealthMetric(tile) !== change.settings.metric) return;
+    tile.healthMetric = { ...change.settings };
+    this.healthSavingOrders.add(order);
+    const previousViews = this.tiles;
+    // Reflect controlled selects immediately, then restore them if persistence fails.
+    this.tiles = this.tiles.map(view => view.order === order ? { ...view, healthMetric: tile.healthMetric } : view);
+    this.refreshTileLanes();
+    try {
+      await this.configuration.save(uid, baseline, { tiles });
+      if (this.resolveOwnDashboardUID() !== uid) return;
+      this.user.settings.dashboardSettings = { ...this.user.settings.dashboardSettings, tiles };
+      await this.rebuildTilesFromCurrentState();
+      this.healthHaptics.success();
+    } catch (error) {
+      if (this.resolveOwnDashboardUID() !== uid) return;
+      this.tiles = this.tiles.map(view => view.order === order ? previousViews.find(previous => previous.order === order) || view : view);
+      this.refreshTileLanes();
+      this.healthHaptics.error();
+      this.healthSnack.open(error instanceof Error ? error.message : 'Could not save chart settings.', 'Dismiss', { duration: 6000 });
+    } finally {
+      this.healthSavingOrders.delete(order);
+      this.changeDetector.markForCheck();
+    }
+  }
+
+  public async undoDashboardChange(): Promise<void> {
+    if (!this.resolveOwnDashboardUID()) return;
+    await this.library.undo(this.user as AppUserInterface);
+    if (this.library.error()) this.healthSnack.open(this.library.error(), 'Dismiss', { duration: 6000 });
+  }
+
+  public async moveHealthTile(order:number, destination:'health'|'trainingState'): Promise<void> {
+    if (!this.resolveOwnDashboardUID()) return;
+    await this.library.moveHealthTile(this.user as AppUserInterface, order, destination);
+    if (this.library.error()) this.healthSnack.open(this.library.error(), 'Dismiss', {duration:6000});
+    else if (this.library.undoAvailable()) {
+      this.healthSnack.open(`Chart moved to ${destination === 'health' ? 'Health' : 'Training State'}.`, 'Undo', {duration:7000}).onAction().subscribe(() => this.undoDashboardChange());
+      await this.onChartPickerClosed();
+    }
   }
 
   public async onSleepTrendRangeChange(range: AppDashboardSleepTrendRange): Promise<void> {

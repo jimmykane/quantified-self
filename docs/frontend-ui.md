@@ -201,10 +201,10 @@ a section has no available presets; keep the library component mounted so existi
 Activity Overview retains its action for custom creation and opens properties directly when no presets remain. Empty
 owner sections retain an entry point;
 shared/read-only dashboards do not instantiate the library. A dashboard-scoped `DashboardChartLibraryState` permits one
-open section and one local draft. All custom metric charts and presets belong in Activity Overview, which is the only
+open section and one local draft. All custom activity metric charts and presets belong in Activity Overview, which is the only
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
 there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
-existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
+existing destinations. The browser shows all available entries in a scrollable Material action list with section search, KPI group filters, and Health categories. Health search spans categories; KPI search retains its group filter.
 KPI filters use one horizontally scrollable row with Material's single-selection indicator hidden, retaining the selected
 color and accessible state. Their height stays stable during opening and selection; the rail reserves touch/focus space
 and permits narrow-screen overflow without overriding Material internals.
@@ -365,3 +365,13 @@ Visual verification uses synthetic data with the real Angular components and Mat
 and [mobile preview](images/dashboard-chart-library/mobile-preview.png).
 These captures contain no account data; the “Your data” label reflects synthetic input injected as loaded dashboard state.
 Physical haptics require a supported device; browser emulation only verifies interaction wiring and layout.
+
+### Dashboard Health tiles
+
+`DashboardLibraryModule` owns the reusable picker and tile UI without dashboard routing; Dashboard and Health import it. Health provides its own scoped `DashboardChartLibraryState`. Its pin shortcut opens a selected preview, copies range length (latest period), seeds the provider filter, and does not acknowledge the section. Back enters the browse list and acknowledges normally. Already-added metrics route to `/dashboard?healthMetric=…`; Summaries focuses that metric's tile and removes the query parameter.
+
+The Health lane follows Training State and uses Health's existing catalog groups and hidden-metric exclusions. Generic `HealthMetric` presets identify one `healthMetric.metric`; source and range are independent tile settings. Duplicate matching uses metric identity across all sections. Sleep/HRV keep their old renderer IDs and introduction revision; the 33 new presets use revision 2. Legacy tiles without `healthSection` stay in Training State; new Sleep/HRV presets set Health. Move changes only placement, preserves configuration, uses the transaction boundary, and supports guarded Undo. Starter and empty layouts are unchanged.
+
+`DashboardHealthChartComponent` adapts the shared Health projection to one chosen source/reading. List thumbnails, selected previews, and owner tiles use the same model and colors. Full-series opaque IDs preserve provider accounts, aggregation, semantic variants and reading methods; an explicit missing ID remains selected. Source defaults are deterministic, with the HRV Highlight preference used only as an initial account hint. Date length persists independently, while older/newer anchors are local. A thumbnail is inert; its row owns activation feedback. Preview initialization and hydration are silent.
+
+Health category chips retain the existing single-row overflow rail. Source controls stay inside the preview on desktop and mobile. Both renderers receive the workspace's shared Timeline notes context. New metric tiles are removed from public view models before rendering; private Health loading additionally requires a matching signed-in owner. Existing Sleep/HRV public renderers and deterministic homepage examples remain separate from these owner reads.

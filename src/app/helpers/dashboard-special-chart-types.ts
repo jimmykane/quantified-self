@@ -1,3 +1,4 @@
+export const DASHBOARD_HEALTH_METRIC_CHART_TYPE = 'HealthMetric' as const;
 import { ChartTypes } from '@sports-alliance/sports-lib';
 
 export const DASHBOARD_RECOVERY_NOW_CHART_TYPE = 'RecoveryNowPie' as const;
@@ -91,9 +92,9 @@ export type DashboardKpiChartType =
   | DashboardKpiAerobicCapacityChartType
   | DashboardKpiAerobicDurabilityChartType;
 
-export type DashboardSpecialChartType = DashboardCuratedChartType | DashboardKpiChartType;
+export type DashboardSpecialChartType = DashboardCuratedChartType | DashboardKpiChartType | typeof DASHBOARD_HEALTH_METRIC_CHART_TYPE;
 export type DashboardChartType = ChartTypes | DashboardSpecialChartType;
-export type DashboardChartCategory = 'curated' | 'kpi' | 'custom';
+export type DashboardChartCategory = 'curated' | 'kpi' | 'custom' | 'health';
 export type DashboardKpiGroup = 'load' | 'readiness' | 'execution';
 
 export interface DashboardCuratedChartDefinition {
@@ -401,10 +402,11 @@ export function isDashboardKpiChartType(chartType: unknown): chartType is Dashbo
 }
 
 export function isDashboardSpecialChartType(chartType: unknown): chartType is DashboardSpecialChartType {
-  return isDashboardCuratedChartType(chartType) || isDashboardKpiChartType(chartType);
+  return chartType === DASHBOARD_HEALTH_METRIC_CHART_TYPE || isDashboardCuratedChartType(chartType) || isDashboardKpiChartType(chartType);
 }
 
 export function resolveDashboardChartCategory(chartType: unknown): DashboardChartCategory {
+  if (chartType === DASHBOARD_HEALTH_METRIC_CHART_TYPE) return 'health';
   if (isDashboardCuratedChartType(chartType)) {
     return 'curated';
   }

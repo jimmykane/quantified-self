@@ -1,3 +1,7 @@
+import { DASHBOARD_HEALTH_GROUPS, dashboardHealthSettings } from '../../../helpers/dashboard-health-tile.helper';
+import { DashboardHealthService } from '../../../services/dashboard-health.service';
+import { buildDashboardHealthContext, DashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
+import type { HealthProvider } from '@shared/health';
 import { DashboardChartDiscoveryService } from '../../../services/dashboard-chart-discovery.service';
 import { dashboardChartSuggestions, unseenDashboardCharts } from '../../../helpers/dashboard-chart-discovery.helper';
 import { resolveDashboardTileCollectionPresentation, resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
@@ -34,6 +38,14 @@ export class DashboardChartLibraryComponent {
   readonly state = inject(DashboardChartLibraryState);
   readonly user = input.required<AppUserInterface>();
   readonly lane = input.required<DashboardTileLaneKey>();
+  readonly hideEntryAction = input(false);
+  readonly providerFilter = input<readonly HealthProvider[]>([]);
+  readonly timelineNotes = input<import('../../../helpers/timeline-notes-chart.helper').TimelineNoteChartContext | null>(null);
+  readonly healthGroups = DASHBOARD_HEALTH_GROUPS;
+  readonly healthSettings = dashboardHealthSettings;
+  private readonly healthData = inject(DashboardHealthService);
+  private readonly healthContexts = signal<Record<string, DashboardHealthContext>>({});
+  healthContext(id: string, context: DashboardHealthContext): void { this.healthContexts.update(current => ({...current, [id]:context})); }
   readonly seed = input<DashboardPreviewInput>({ tiles: [] });
   private readonly previewData = inject(DashboardChartPreviewService);
   private readonly discovery = inject(DashboardChartDiscoveryService);
@@ -69,12 +81,18 @@ export class DashboardChartLibraryComponent {
   readonly emptyMessage = computed(() => this.available().length ? `No ${this.sectionPresentation().plural} match your search.` : 'All presets in this section are on your dashboard.');
   readonly backLabel = computed(() => this.state.configuring() ? this.draftPresentation().back : `Back to ${this.sectionPresentation().plural}`);
   readonly addActionHint = computed(() => this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
-  readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group())));
+  readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.lane() === 'section:health' && !!this.search().trim() || this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group() || entry.definition.category === 'health' && entry.definition.healthGroup === this.group() || entry.definition.id === 'curated-sleep' && this.group() === 'sleep' || entry.definition.id === 'curated-hrv' && this.group() === 'cardiovascular')));
   private readonly availablePreviews = computed(() => this.available().map(entry => {
-    const preview = buildDashboardThumbnailPreview(entry.tile, this.previewSeed());
+    const healthSettings = dashboardHealthSettings(entry.tile);
+    const healthContext = this.healthContexts()[entry.definition.id];
+    const preview = healthSettings ? {
+      tile: entry.tile as import('../../../helpers/dashboard-tile-view-model.helper').DashboardTileViewModel,
+      source: 'user' as const, loading: !healthContext, note: '', calendarEvents: [], anchorMs: Date.now(),
+      availability: healthContext?.availability || {state:'loading' as const, hasData:false, label:'Loading readings…', reason:'Readings load when visible.'},
+    } : buildDashboardThumbnailPreview(entry.tile, this.previewSeed());
     const availabilityLabel = preview.availability?.label || dashboardPreviewSourceLabel(preview);
     return { ...entry, preview, isNew: this.sessionNewIds().has(entry.definition.id),
-      sourceLabel: preview.source === 'example' ? `Example · ${availabilityLabel}` : availabilityLabel,
+      healthSettings, sourceLabel: preview.source === 'example' ? `Example · ${availabilityLabel}` : availabilityLabel,
       title: entry.definition.label.replace(/^KPI:\s*/, ''),
       format: resolveDashboardTilePresentation(entry.tile).label };
   }));
@@ -101,6 +119,7 @@ export class DashboardChartLibraryComponent {
   readonly dataScope = computed(() => {
     const tile = this.state.draft();
     if (!tile) return '';
+    if (dashboardHealthSettings(tile)) return 'Recorded Health history · Sources and readings kept separate';
     const type = `${tile['chartType'] || ''}`;
     if (isDashboardHrvTrendChartType(type)) return 'Recorded HRV summaries · Sources kept separate';
     if (isDashboardSleepBackedChartType(type)) return 'Recorded sleep · Stages and readings depend on your source';
@@ -133,15 +152,30 @@ export class DashboardChartLibraryComponent {
       this.previewOwnerKey();
       const open = this.expanded();
       const lane = this.lane();
+      const pinned = this.state.pinnedFromHealth();
       untracked(() => {
         const user = this.user();
         this.previewContexts.set(null);
+        this.healthContexts.set({});
         if (!open) {
           this.sessionNewIds.set(new Set());
           this.browseAcknowledgedThisSession = false;
           return;
         }
-        const tiles = this.catalog.filter(entry => entry.lane === lane).map(entry => entry.tile);
+        if (pinned) return;
+        const entries = this.catalog.filter(entry => entry.lane === lane);
+        const tiles = entries.map(entry => entry.tile).filter(tile => !dashboardHealthSettings(tile));
+        const candidates = ['curated-sleep','curated-hrv','health:resting_heart_rate','health:steps','health:body_weight'];
+        const healthSubscriptions = new Subscription();
+        for (const entry of entries.filter(entry => candidates.includes(entry.definition.id))) {
+          if (this.seed().tiles.some(tile => matchesDashboardPreset(tile, entry.tile))) continue;
+          const settings = dashboardHealthSettings(entry.tile)!;
+          healthSubscriptions.add(this.healthData.watch(user.uid, settings, undefined, 5).subscribe({
+            next: evidence => this.healthContext(entry.definition.id, buildDashboardHealthContext(evidence, settings, user.settings.unitSettings)),
+            error: () => undefined,
+          }));
+        }
+        onCleanup(() => healthSubscriptions.unsubscribe());
         const subscription = this.previewData.watchLibraryContexts(user, tiles, this.seed()).subscribe({
           next: data => this.previewContexts.set({ uid: user.uid, lane, data }),
         });
@@ -191,8 +225,8 @@ export class DashboardChartLibraryComponent {
     this.overlay = overlay;
     overlay.subscriptions.add(opened$.subscribe(() => {
       const mobileDetail = this.state.draft() && this.breakpoints.isMatched('(max-width: 959.98px)');
-      if (!this.state.configuring() && !mobileDetail && this.state.editor()?.mode !== 'edit') this.acknowledgeBrowseSession();
-      if (this.state.configuring() || mobileDetail) this.focusDetail();
+      if (!this.state.pinnedFromHealth() && !this.state.configuring() && !mobileDetail && this.state.editor()?.mode !== 'edit') this.acknowledgeBrowseSession();
+      if (this.state.pinnedFromHealth() || this.state.configuring() || mobileDetail) this.focusDetail();
       else this.focusBrowser();
     }));
     overlay.subscriptions.add(backdrop$.subscribe(() => this.close()));

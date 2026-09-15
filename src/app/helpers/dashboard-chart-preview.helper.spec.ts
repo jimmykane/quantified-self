@@ -1,3 +1,4 @@
+import { isPrivateDashboardHealthTile } from './dashboard-health-tile.helper';
 import { dashboardHrvWindows } from './dashboard-hrv-context.helper';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getDashboardChartCatalog } from './dashboard-chart-catalog.helper';
@@ -38,8 +39,8 @@ describe('dashboard example previews', () => {
     });
     expect(preview.startOfWeek).toBe(DaysOfTheWeek.Sunday);
   });
-  it('provides renderable, explicitly synthetic data for every catalog entry', () => {
-    for (const entry of getDashboardChartCatalog()) {
+  it('provides renderable, explicitly synthetic data for the public-compatible catalog', () => {
+    for (const entry of getDashboardChartCatalog().filter(entry => !isPrivateDashboardHealthTile(entry.tile))) {
       const preview = buildDashboardExamplePreview(entry.tile);
       vi.useFakeTimers(); vi.setSystemTime(preview.anchorMs);
       expect(preview.source).toBe('example');

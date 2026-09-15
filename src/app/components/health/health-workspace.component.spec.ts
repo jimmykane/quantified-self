@@ -1,3 +1,7 @@
+import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
+import { HealthMetricQueryService } from '../../services/health-metric-query.service';
+import { DashboardLibraryModule } from '../../modules/dashboard-library.module';
+import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
 import { Component, Input, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
@@ -64,6 +68,19 @@ import { HealthActivityQueryService } from './health-activity-query.service';
 import { HealthSourcesBottomSheetComponent, type HealthSourcesResult } from './health-sources-bottom-sheet.component';
 import { HealthMetricsBottomSheetComponent } from './health-metrics-bottom-sheet.component';
 import type { HealthWorkspaceMetricSelection } from '../../helpers/health-workspace.helper';
+
+// The library's overlay/navigation has its own integration suite. Keep this
+// workspace suite's input bindings real without initializing dashboard readers.
+@Component({ selector: 'app-dashboard-chart-library', standalone: true, template: '' })
+class DashboardChartLibraryStubComponent {
+  @Input() darkTheme = false;
+  @Input() user: unknown;
+  @Input() lane: unknown;
+  @Input() hideEntryAction = false;
+  @Input() seed: unknown;
+  @Input() providerFilter: readonly HealthProvider[] = [];
+  @Input() timelineNotes: unknown;
+}
 
 @Component({
   selector: 'app-sleep-trend-chart',
@@ -458,6 +475,7 @@ describe('HealthWorkspaceComponent', () => {
       imports: [HealthWorkspaceComponent],
       providers: [
         provideRouter([]),
+        {provide:DashboardConfigurationService,useValue:{save:vi.fn().mockResolvedValue(undefined)}},
         { provide: AppHapticsService, useValue: haptics },
         { provide: MatBottomSheet, useValue: { open: openBottomSheet } },
         { provide: AppEventService, useValue: { getEventMetaDataKeys: () => of([]) } },
@@ -516,8 +534,8 @@ describe('HealthWorkspaceComponent', () => {
       ],
     })
       .overrideComponent(HealthWorkspaceComponent, {
-        remove: { imports: [AppChartsModule, ServiceSourceIconComponent, HealthMetricChartComponent, TimelineNotesWorkspaceComponent] },
-        add: { imports: [SleepTrendStubComponent, ServiceSourceIconStubComponent, HealthMetricChartStubComponent, TimelineNotesWorkspaceStubComponent] },
+        remove: { imports: [DashboardLibraryModule, AppChartsModule, ServiceSourceIconComponent, HealthMetricChartComponent, TimelineNotesWorkspaceComponent] },
+        add: { imports: [DashboardChartLibraryStubComponent, SleepTrendStubComponent, ServiceSourceIconStubComponent, HealthMetricChartStubComponent, TimelineNotesWorkspaceStubComponent] },
       })
       .overrideComponent(ServiceSourceIconComponent, {
         set: { template: '<span class="source-icon-stub" aria-hidden="true"></span>' },
@@ -530,7 +548,73 @@ describe('HealthWorkspaceComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
   }
+
+  it('pins the selected metric with its range length and views existing tiles without changing them', async () => {
+    await createComponent(undefined, '90d', {}, 'steps');
+    const user = component.dashboardUser()!;
+    user.settings.dashboardSettings = { tiles: [] } as never;
+    await component.addToDashboard();
+    expect(component.dashboardLibrary.healthSettings()).toMatchObject({ metric: 'steps', range: '90d' });
+    expect(component.dashboardLibrary.pinnedFromHealth()).toBe(true);
+    expect(component.dashboardLibrary.activeLane()).toBe('section:health');
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    const existing = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    existing['healthMetric'] = { metric: 'steps', range: '14d', sourceKey: 'explicit-source' };
+    user.settings.dashboardSettings.tiles = [existing];
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    await component.addToDashboard();
+    expect(navigate).toHaveBeenCalledWith(['/dashboard'], { queryParams: { healthMetric: 'steps' } });
+    expect(existing['healthMetric']).toEqual({ metric: 'steps', range: '14d', sourceKey: 'explicit-source' });
+  });
+
+  it('does not reseed a retained draft when switching previews is cancelled', async () => {
+    await createComponent(undefined, '90d', {}, 'steps');
+    const user = component.dashboardUser()!;
+    user.settings.dashboardSettings = { tiles: [] } as never;
+    const entry = getDashboardChartCatalog().find(item => item.definition.id === 'health:resting_heart_rate')!;
+    await component.dashboardLibrary.select(user, entry);
+    component.dashboardLibrary.updateHealthSettings({ metric: 'resting_heart_rate', range: '14d', sourceKey: 'chosen-reading' });
+    const before = component.dashboardLibrary.draft();
+    vi.spyOn(component.dashboardLibrary, 'select').mockResolvedValue(false);
+    await component.addToDashboard();
+    expect(component.dashboardLibrary.draft()).toBe(before);
+    expect(component.dashboardLibrary.pinnedFromHealth()).toBe(false);
+  });
+
+  it('clears dashboard drafts and ignores late pinning when the Health owner changes', async () => {
+    await createComponent(undefined, '90d', {}, 'steps');
+    const user = component.dashboardUser()!;
+    user.settings.dashboardSettings = { tiles: [] } as never;
+    await component.addToDashboard();
+    expect(component.dashboardLibrary.draft()).not.toBeNull();
+    let finish!: (selected: boolean) => void;
+    vi.spyOn(component.dashboardLibrary, 'select').mockImplementation(() => new Promise(resolve => finish = resolve));
+    const pending = component.addToDashboard();
+    setCurrentUserID('user-2'); fixture.detectChanges(); await fixture.whenStable();
+    expect(component.dashboardLibrary.draft()).toBeNull();
+    expect(component.dashboardLibrary.activeLane()).toBeNull();
+    finish(true); await pending;
+    expect(component.dashboardLibrary.pinnedFromHealth()).toBe(false);
+    expect(component.dashboardLibrary.activeLane()).toBeNull();
+  });
+
+  it('offers Undo after a Health pin and updates the dashboard state without changing Health preferences', async () => {
+    await createComponent();
+    const user = component.dashboardUser()!;
+    user.settings.dashboardSettings = { tiles: [] } as never;
+    const action = new Subject<void>();
+    const snack = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue({ onAction: () => action } as never);
+    const undo = vi.spyOn(component.dashboardLibrary, 'undo').mockResolvedValue(undefined);
+    component.dashboardLibrary.undoAvailable.set(true);
+    component.dashboardLibrary.changed$.next(0);
+    expect(snack).toHaveBeenCalledWith('Chart added to dashboard', 'Undo', { duration: 7000 });
+    action.next(); await Promise.resolve();
+    expect(undo).toHaveBeenCalledWith(user);
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+  });
 
   it('keeps initialization, saved-view hydration, and sync refreshes silent', async () => {
     await createComponent();
@@ -1755,6 +1839,7 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).textContent)
       .not.toContain('Workout-backed observations could not be loaded');
 
+    TestBed.inject(HealthMetricQueryService).invalidate('user-1');
     loadActivityHealthRange.mockRejectedValueOnce(new Error('private provider failure'));
     component.selectMetric(HEALTH_METRIC_IDS.Vo2Max);
     fixture.detectChanges();

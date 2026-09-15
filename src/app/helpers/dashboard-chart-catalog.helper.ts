@@ -1,3 +1,4 @@
+import { dashboardHealthMetric } from './dashboard-health-tile.helper';
 import { TileChartSettingsInterface, TileSettingsInterface, TileTypes } from '@sports-alliance/sports-lib';
 import { buildDashboardManagerPresetTile, getDashboardManagerPresetDefinitions, DashboardManagerPresetDefinition } from './dashboard-manager-presets.helper';
 import { DashboardTileLaneKey, resolveDashboardTileLaneKey } from './dashboard-tile-section.helper';
@@ -13,6 +14,8 @@ export interface DashboardChartCatalogEntry {
 /** The same identity is used by discovery counts and bulk add. Layout and filters
  * do not turn an existing template into another available preset. */
 export function matchesDashboardPreset(tile: TileSettingsInterface, preset: TileSettingsInterface): boolean {
+  const healthMetric = dashboardHealthMetric(preset);
+  if (healthMetric) return dashboardHealthMetric(tile) === healthMetric;
   if (preset.type === TileTypes.Map) {
     return tile.type === TileTypes.Map && (tile['mapSource'] || 'events') === (preset['mapSource'] || 'events');
   }

@@ -1,0 +1,22 @@
+:host { display:block; width:100%; height:100%; min-width:0; }
+.health-tile { display:flex; flex-direction:column; height:100%; min-height:0; box-sizing:border-box; padding:8px 10px; gap:6px; }
+.health-tile-header { min-height:30px; display:flex; align-items:center; color:var(--mat-sys-on-surface-variant); }
+.reserve-actions { padding-inline-end:70px; }
+.health-tile-controls { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+.health-tile-window { font-size:0.65rem; color:var(--mat-sys-on-surface-variant); }
+.health-range-controls { display:flex; align-items:center; flex-shrink:0; }
+.health-range { width:58px; font-size:0.75rem; }
+.health-range-controls button { --mdc-icon-button-state-layer-size:32px; padding:4px; width:32px; height:32px; }
+.health-source { width:100%; --mat-form-field-container-height:40px; --mat-form-field-container-vertical-padding:8px; font-size:0.7rem; }
+.health-loading-slot { height:4px; flex-shrink:0; }
+.health-tile-summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; font-size:0.7rem; }
+.health-tile-summary strong { font:700 1.15rem/1 'Barlow Condensed',sans-serif; margin-inline-end:auto; }
+.health-status,.health-status-detail { flex-basis:100%; color:var(--mat-sys-on-surface-variant); }
+.health-status-dot { display:inline-block; width:6px; height:6px; margin-inline-end:6px; border-radius:50%; }
+.health-notice { margin:0; font-size:0.7rem; color:var(--mat-sys-on-surface-variant); }
+.health-tile-empty { flex:1; display:grid; place-content:center; text-align:center; color:var(--mat-sys-on-surface-variant); font-size:0.75rem; padding:12px; }
+app-health-metric-series-chart, app-sleep-trend-chart { flex:1; min-height:120px; min-width:0; }
+.health-thumbnail { padding:0; gap:0; pointer-events:none; height:42px; }
+.health-thumbnail app-health-metric-series-chart { min-height:0; }
+.health-thumbnail-empty,.health-sleep-thumbnail { margin:auto; color:var(--mat-sys-on-surface-variant); font-size:12px; }
+@media(max-width:640px) { .health-tile-controls { flex-wrap:wrap; } .health-tile-window { flex:1; min-width:120px; } }

@@ -1,3 +1,4 @@
+import { isPrivateDashboardHealthTile } from './dashboard-health-tile.helper';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { AppColors } from '../services/color/app.colors';
 import { resolveActivityTypeColor } from '../services/color/app.activity-type-group.colors';
@@ -13,7 +14,8 @@ import { buildDashboardExamplePreview, buildDashboardThumbnailPreview } from './
 import { buildDashboardChartThumbnailOption } from './dashboard-chart-thumbnail.helper';
 
 describe('chart list thumbnail shapes', () => {
-  const catalog = getDashboardChartCatalog();
+  // New Health metrics use the Health renderer and real readings (covered by dashboard-health-context specs).
+  const catalog = getDashboardChartCatalog().filter(entry => !isPrivateDashboardHealthTile(entry.tile));
   it.each(catalog.map(entry => [entry.definition.id, entry] as const))('renders a bounded, non-interactive example for %s', (_id, entry) => {
     const preview = buildDashboardThumbnailPreview(entry.tile, { tiles: [] });
     expect(preview.source).toBe('example');

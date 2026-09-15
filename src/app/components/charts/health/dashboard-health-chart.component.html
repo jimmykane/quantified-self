@@ -1,0 +1,51 @@
+<section class="health-tile" [class.health-thumbnail]="thumbnail()" [attr.aria-busy]="loading()">
+  @if (!thumbnail()) {
+    @if (!hideTitle()) { <header class="health-tile-header" [class.reserve-actions]="reserveActions()">
+      <div class="qs-dashboard-chart-title">{{ title() }}</div>
+    </header> }
+    <div class="health-tile-controls">
+      <span class="health-tile-window">{{ window().label }}</span>
+      <div class="health-range-controls">
+        <button mat-icon-button aria-label="Show older period" [disabled]="disabled()" (click)="navigate('older')"><mat-icon>chevron_left</mat-icon></button>
+        <mat-select class="health-range" [aria-label]="title() + ' date range'" [value]="settings().range" [disabled]="disabled()" (selectionChange)="selectRange($event.value)">
+          @for (range of ranges; track range.value) { <mat-option [value]="range.value">{{ range.label }}</mat-option> }
+        </mat-select>
+        <button mat-icon-button aria-label="Show newer period" [disabled]="disabled() || !window().canNavigateNewer" (click)="navigate('newer')"><mat-icon>chevron_right</mat-icon></button>
+      </div>
+    </div>
+    <div class="health-loading-slot"><mat-progress-bar mode="indeterminate" [style.visibility]="loading() ? 'visible' : 'hidden'" [attr.aria-label]="'Loading ' + title()" /></div>
+    @if (context(); as view) {
+      @if (view.sources.length || view.missingSource) {
+        <mat-form-field class="health-source" appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Source and reading</mat-label>
+          <mat-select [value]="view.selectedKey" [disabled]="disabled()" (selectionChange)="selectSource($event.value)">
+            @if (view.missingSource) { <mat-option [value]="view.selectedKey">Selected reading · No data in this period</mat-option> }
+            @for (source of view.sources; track source.key) { <mat-option [value]="source.key">{{ source.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+      }
+      @if (loading()) { <p class="health-notice" role="status">Updating readings. Previous chart shown.</p> }
+      @for (notice of view.notices; track notice) { <p class="health-notice" role="status">{{ notice }}</p> }
+      @if (view.failedSources) { <button mat-button [disabled]="loading()" (click)="reload()">Retry unavailable sources</button> }
+    }
+    @if (error()) { <p class="health-notice" role="status">Could not load this period. <button mat-button (click)="reload()">Try again</button></p> }
+  }
+  @if (context(); as view) {
+    @if (view.selected; as chart) {
+      @if (!thumbnail()) {
+        <div class="health-tile-summary">
+          <strong>{{ chart.latestValueText }}</strong><span>{{ chart.model.series.sourceLabel }}</span>
+          @if (chart.status; as status) { <span class="health-status"><span class="health-status-dot" [style.background-color]="chart.statusOverlay?.statusColor"></span>{{ status.label }}</span><span class="health-status-detail">{{ status.detailText }}</span> }
+        </div>
+      }
+      <app-health-metric-series-chart [model]="chart.model" [startTimeMs]="view.window.startTimeMs" [endTimeMs]="view.window.endTimeMs"
+        [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [fillHeight]="true" [thumbnail]="thumbnail()"
+        [timelineNotes]="thumbnail() ? null : timelineNotes()" [statusOverlay]="chart.statusOverlay" [statusDescription]="chart.statusDescription" />
+    } @else if (settings().metric === 'sleep' && view.hasData) {
+      @if (thumbnail()) { <app-dashboard-chart-thumbnail [preview]="sleepThumbnail()" [darkTheme]="darkTheme()" /> }
+      @else { <app-sleep-trend-chart [hideTitle]="true" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="timelineNotes()" /> }
+    } @else if (!thumbnail()) {
+      <div class="health-tile-empty" role="status"><p>{{ view.availability.reason }}</p>@if (view.sampleOnly) { <button mat-button (click)="selectRange('30d')">Show 30 days</button> }</div>
+    } @else { <span class="health-thumbnail-empty">—</span> }
+  } @else { <div class="health-tile-empty" role="status">{{ thumbnail() ? '…' : loading() ? 'Loading readings…' : error() ? 'Readings unavailable' : 'Chart loads when visible' }}</div> }
+</section>
