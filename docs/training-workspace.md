@@ -448,7 +448,10 @@ marker removed without recurring scans. The pre-existing large manual-operation 
 and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
 and queue-depth helpers. Reservation precedes enqueue, so lost acknowledgements and crashes are recoverable. A finished
 scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
-changes. Tasks may be duplicated; stable per-user/provider/account/workout identities, independent desired generations,
+changes. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
+`onTrainingDeliveryQueued` each use 512 MiB for their bounded Firestore and queue work; this adds process headroom
+only and does not change queue limits, retries, or delivery semantics. Tasks may be duplicated; stable
+per-user/provider/account/workout identities, independent desired generations,
 180-second delivery leases and operation journals own idempotency. Shared retry limits/backoff and longer adapter delays
 apply. The 120-second worker timeout remains below its lease.
 

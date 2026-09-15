@@ -255,6 +255,12 @@ describe('activity-sync/disconnect-routes', () => {
     expect(mockUpdateHealthSyncState).toHaveBeenCalledOnce();
     expect(mockSupersedePendingHealthLifecycleProjectionForTokenRootDelete)
       .toHaveBeenCalledWith('user-1', ServiceNames.SuuntoApp);
+    expect(capturedOnDocumentDeletedOptions).toContainEqual(expect.objectContaining({
+      document: 'suuntoAppAccessTokens/{uid}',
+      region: 'europe-west2',
+      memory: '512MiB',
+      retry: true,
+    }));
   });
 
   it('projects Suunto Health as disconnected for every user whose token root is deleted', async () => {

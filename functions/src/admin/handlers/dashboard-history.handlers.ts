@@ -369,7 +369,7 @@ export const scheduleAdminDashboardSnapshot = onSchedule({
 
 export const getAdminDashboardHistory = onAdminCall<GetAdminDashboardHistoryRequest, AdminDashboardHistoryResponse>({
     region: FUNCTIONS_MANIFEST.getAdminDashboardHistory.region,
-    memory: '256MiB',
+    memory: '512MiB',
 }, async (request) => {
     const days = resolveHistoryDays(request.data?.days);
     const endDateValue = new Date();

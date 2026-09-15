@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     loggerInfo: vi.fn(),
     loggerWarn: vi.fn(),
     loggerError: vi.fn(),
+    adminCallOptions: [] as unknown[],
     scheduleOptions: null as Record<string, unknown> | null,
     onSchedule: vi.fn((options: Record<string, unknown>, handler: unknown) => {
         mocks.scheduleOptions = options;
@@ -51,7 +52,10 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
 }));
 
 vi.mock('../shared/auth', () => ({
-    onAdminCall: vi.fn((_options: unknown, handler: unknown) => handler),
+    onAdminCall: vi.fn((options: unknown, handler: unknown) => {
+        mocks.adminCallOptions.push(options);
+        return handler;
+    }),
 }));
 
 vi.mock('./shared/user-metrics', () => ({
@@ -165,6 +169,13 @@ describe('admin dashboard history', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+    });
+
+    it('uses 512 MiB for the bounded dashboard-history read', () => {
+        expect(mocks.adminCallOptions).toContainEqual(expect.objectContaining({
+            region: 'europe-west2',
+            memory: '512MiB',
+        }));
     });
 
     it('pins the daily UTC schedule and bounded retry policy', () => {
