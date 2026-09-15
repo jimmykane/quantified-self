@@ -110,6 +110,8 @@ describe('McpAuthorizationComponent', () => {
     expect(content).toContain('available aggregate HRV');
     expect(content).toContain('Individual activity details');
     expect(content).toContain('bounded on-demand chart series');
+    expect(content).toContain('event tags');
+    expect(content).toContain('exact case-insensitive tags');
     expect(content).toContain('Activity locations');
     expect(content).toContain('exact activity start, end, MTB jump');
     expect(content).toContain('Saved-route summaries');

@@ -145,6 +145,10 @@ describe('McpConnectionsComponent', () => {
       fixture.detectChanges();
       const dialog = document.querySelector('mat-dialog-container')!;
       expect(dialog.textContent).toContain(permission.description);
+      if (permission.scope === 'activity-details:read') {
+        expect(dialog.textContent).toContain('event tags');
+        expect(dialog.textContent).toContain('exact case-insensitive tags');
+      }
       if (permission.parentTitle) expect(dialog.textContent).toContain(`Requires ${permission.parentTitle} permission`);
       expect(dialog.textContent).toContain('Reconnect the app and approve this permission');
       (dialog.querySelector('button') as HTMLButtonElement).click();

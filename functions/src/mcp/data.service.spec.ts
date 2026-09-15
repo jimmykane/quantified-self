@@ -259,6 +259,7 @@ describe('MCP data service', () => {
       fetchSleepDocuments: vi.fn().mockResolvedValue([]),
       fetchReadinessSleepDocuments: vi.fn().mockResolvedValue([]),
       fetchActivityDocuments: vi.fn().mockResolvedValue([]),
+      fetchActivityEventTagDocuments: vi.fn().mockResolvedValue([]),
       fetchNearbyActivityDocuments: vi.fn().mockResolvedValue([]),
       fetchActivityDetailDocument: vi.fn().mockResolvedValue(null),
       fetchActivityMetricDocument: vi.fn().mockResolvedValue(null),
@@ -600,6 +601,214 @@ describe('MCP data service', () => {
       'jumps',
       true,
     );
+  });
+
+  it('reads normalized event tags and filters tagged activities without exposing event fields', async () => {
+    const raceActivity = activityDocument({ eventID: 'event-race' });
+    raceActivity.id = 'activity-race';
+    const recoveryActivity = activityDocument({
+      eventID: 'event-recovery',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    recoveryActivity.id = 'activity-recovery';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      raceActivity,
+      recoveryActivity,
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      {
+        id: 'event-race',
+        data: {
+          tags: [' Race ', 'Long   Run', 'race'],
+          name: 'Private race name',
+          description: 'Private event description',
+          creator: { name: 'Private source' },
+        },
+      },
+      {
+        id: 'event-recovery',
+        data: { benchmarkReviewTags: ['Recovery'] },
+      },
+      {
+        id: 'unrequested-event',
+        data: { tags: ['Race'] },
+      },
+    ]);
+
+    const service = createMcpDataService(dependencies);
+    const result = await service.queryActivitiesWithTags({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        startTimeMs: Date.parse('2026-07-01T00:00:00.000Z'),
+        endTimeMs: Date.parse('2026-07-02T00:00:00.000Z'),
+        tags: ['race', ' LONG RUN '],
+        tagMatch: 'all',
+      });
+
+    expect(result.activities).toHaveLength(1);
+    expect(result.activities[0]).toMatchObject({
+      activityType: ActivityTypes.Cycling,
+      tags: ['Race', 'Long Run'],
+      locationRedacted: true,
+    });
+    expect(result).toMatchObject({
+      scannedActivityCount: 2,
+      skippedActivityCount: 1,
+      scanComplete: true,
+      nextCursor: null,
+    });
+    expect(JSON.stringify(result)).not.toContain('Private race name');
+    expect(JSON.stringify(result)).not.toContain('Private event description');
+    expect(JSON.stringify(result)).not.toContain('Private source');
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledWith(
+      'user-1',
+      Date.parse('2026-07-01T00:00:00.000Z'),
+      Date.parse('2026-07-02T00:00:00.000Z'),
+      101,
+      undefined,
+      false,
+    );
+    expect(dependencies.fetchActivityEventTagDocuments).toHaveBeenCalledWith(
+      'user-1',
+      ['event-race', 'event-recovery'],
+    );
+
+    const anyResult = await service.queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      tags: ['RACE', 'recovery'],
+    });
+    expect(anyResult.activities.map(activity => activity.tags)).toEqual([
+      ['Race', 'Long Run'],
+      ['Recovery'],
+    ]);
+  });
+
+  it('returns empty and legacy event tags when no tag filter is supplied', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-2', data: { benchmarkReviewTags: ['Recovery'] } },
+    ]);
+
+    const result = await createMcpDataService(dependencies)
+      .queryActivitiesWithTags({
+        uid: 'user-1',
+        connectionId: 'connection-1',
+        appBaseUrl: 'https://quantified-self.io',
+        limit: 2,
+      });
+
+    expect(result.activities.map(activity => activity.tags)).toEqual([
+      [],
+      ['Recovery'],
+    ]);
+  });
+
+  it('binds tagged activity cursors to normalized tags and match mode', async () => {
+    const secondActivity = activityDocument({
+      eventID: 'event-2',
+      eventStartDate: new Date('2026-07-01T07:00:00.000Z'),
+      startDate: Date.parse('2026-07-01T07:00:00.000Z'),
+      endDate: Date.parse('2026-07-01T08:00:00.000Z'),
+    });
+    secondActivity.id = 'activity-2';
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+      secondActivity,
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-1', data: { tags: ['Race'] } },
+      { id: 'event-2', data: { tags: ['Race'] } },
+    ]);
+    const service = createMcpDataService(dependencies);
+    const input = {
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      tags: [' Race ', 'race'] as string[],
+      tagMatch: 'any' as const,
+      limit: 1,
+    };
+    const first = await service.queryActivitiesWithTags(input);
+
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(first.nextCursor!.length).toBeLessThanOrEqual(512);
+    await expect(service.queryActivitiesWithTags({
+      ...input,
+      tags: ['Recovery'],
+      cursor: first.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({ code: 'invalid_request' });
+    await expect(service.queryActivitiesWithTags({
+      ...input,
+      tagMatch: 'all',
+      cursor: first.nextCursor!,
+    })).rejects.toMatchObject<McpDataError>({ code: 'invalid_request' });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledTimes(1);
+
+    await service.queryActivitiesWithTags({
+      ...input,
+      tags: ['RACE'],
+      cursor: first.nextCursor!,
+    });
+    expect(dependencies.fetchActivityDocuments).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { tags: [] },
+    { tags: Array.from({ length: 11 }, (_, index) => `tag-${index}`) },
+    { tags: ['x'.repeat(33)] },
+    { tags: [1] as unknown as string[] },
+    { tags: ['Race'], tagMatch: 'none' as 'any' },
+  ])('rejects invalid tagged activity filters before data reads: %o', async input => {
+    await expect(createMcpDataService(dependencies).queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+      ...input,
+    })).rejects.toMatchObject<McpDataError>({ code: 'invalid_request' });
+    expect(dependencies.fetchActivityDocuments).not.toHaveBeenCalled();
+    expect(dependencies.fetchActivityEventTagDocuments).not.toHaveBeenCalled();
+  });
+
+  it('redacts tagged activity backend failures and rejects oversized tag reads', async () => {
+    vi.mocked(dependencies.fetchActivityDocuments).mockResolvedValue([
+      activityDocument(),
+    ]);
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockRejectedValue(
+      new Error('secret backend detail'),
+    );
+    const service = createMcpDataService(dependencies);
+    await expect(service.queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    })).rejects.toMatchObject<McpDataError>({
+      code: 'temporarily_unavailable',
+      message: expect.not.stringContaining('secret backend detail'),
+    });
+
+    vi.mocked(dependencies.fetchActivityEventTagDocuments).mockResolvedValue([
+      { id: 'event-1', data: { tags: ['Race'], canary: 'x'.repeat(513 * 1024) } },
+    ]);
+    await expect(service.queryActivitiesWithTags({
+      uid: 'user-1',
+      connectionId: 'connection-1',
+      appBaseUrl: 'https://quantified-self.io',
+    })).rejects.toMatchObject<McpDataError>({ code: 'query_too_large' });
   });
 
   it('normalizes historical absolute jump timestamps to elapsed milliseconds', async () => {

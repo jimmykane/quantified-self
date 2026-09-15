@@ -258,6 +258,10 @@ describe('MCP HTTP scope enforcement', () => {
   it('authorizes detailed samples with the existing Activity details grant', () => {
     expect(requiredScopesForRequest({method: 'tools/call', params: {name: 'get_activity_samples'}}))
       .toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
+    expect(requiredScopesForRequest({
+      method: 'tools/call',
+      params: { name: 'query_activities_with_tags' },
+    })).toEqual([MCP_OAUTH_SCOPES.ActivityDetailsRead]);
   });
 
   it('requires sleep scope for sleep tools', () => {
@@ -545,6 +549,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_swim_lengths',
       'list_activity_types',
       'query_activities',
+      'query_activities_with_tags',
     ]);
     await expect(listToolNames([
       MCP_OAUTH_SCOPES.MetricsRead,
@@ -564,6 +569,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_metrics',
       'list_training_metrics',
       'query_activities',
+      'query_activities_with_tags',
       'query_metric',
       'query_metrics',
       'rank_activities_by_metric',
@@ -597,6 +603,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_swim_lengths',
       'list_activity_types',
       'query_activities',
+      'query_activities_with_tags',
       'search_activities_near_location',
     ]);
     await expect(listToolNames([
@@ -615,6 +622,7 @@ describe('MCP HTTP scope enforcement', () => {
       'list_activity_types',
       'list_routes',
       'query_activities',
+      'query_activities_with_tags',
       'search_activities_near_location',
     ]);
   }, 15_000);
@@ -864,6 +872,8 @@ describe('MCP HTTP scope enforcement', () => {
       const tools = (await client.listTools()).tools;
       const queryActivities = tools
         .find(tool => tool.name === 'query_activities');
+      const queryActivitiesWithTags = tools
+        .find(tool => tool.name === 'query_activities_with_tags');
       const rankActivities = tools
         .find(tool => tool.name === 'rank_activities_by_metric');
       const listActivityTypes = tools
@@ -876,6 +886,15 @@ describe('MCP HTTP scope enforcement', () => {
           not?: unknown;
         }>;
         required?: string[];
+      } | undefined;
+      const taggedInputSchema = queryActivitiesWithTags?.inputSchema as {
+        properties?: Record<string, {
+          description?: string;
+          maxItems?: number;
+          minItems?: number;
+          enum?: string[];
+        }>;
+        oneOf?: Array<{ title?: string }>;
       } | undefined;
       const rankingInputSchema = rankActivities?.inputSchema as {
         properties?: Record<string, {
@@ -951,6 +970,29 @@ describe('MCP HTTP scope enforcement', () => {
         'timeZone',
       ]);
       expect(inputSchema?.oneOf?.[2]?.not).toBeDefined();
+      expect(queryActivitiesWithTags?.description).toContain(
+        'exact case-insensitive tag matches',
+      );
+      expect(queryActivitiesWithTags?.description).toContain(
+        'sibling activities',
+      );
+      expect(queryActivitiesWithTags?.description).toContain(
+        'location fields are always redacted',
+      );
+      expect(JSON.stringify(queryActivitiesWithTags?.inputSchema)).toContain(
+        'Repeat the original activityTypes, tags, tagMatch',
+      );
+      expect(taggedInputSchema?.properties?.tags).toMatchObject({
+        minItems: 1,
+        maxItems: 10,
+      });
+      expect(taggedInputSchema?.properties?.tagMatch?.enum).toEqual([
+        'any',
+        'all',
+      ]);
+      expect(taggedInputSchema?.oneOf).toHaveLength(3);
+      expect(instructions).toContain('Use query_activities_with_tags');
+      expect(instructions).toContain('Tag matches are exact and case-insensitive');
       expect(rankActivities?.description).toContain('all history');
       expect(rankActivities?.description).toContain('ranked Maximum Jump metric is authoritative');
       expect(rankingInputSchema?.properties?.activityGroup?.description)

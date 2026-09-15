@@ -316,6 +316,10 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('same live UTC-day Readiness used by Dashboard Today');
     expect(dataAndPrivacySection?.content).toContain('seven-day HRV average and same-source 60-day personal range');
     expect(dataAndPrivacySection?.content).toContain('processing-bounded all-history scan');
+    expect(dataAndPrivacySection?.content).toContain('parent event tags');
+    expect(dataAndPrivacySection?.content).toContain('exact case-insensitive tag matches');
+    expect(dataAndPrivacySection?.content).toContain('existing clients do not reauthorize');
+    expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is not expanded');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-history states');

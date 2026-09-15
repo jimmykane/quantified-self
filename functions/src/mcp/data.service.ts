@@ -96,6 +96,11 @@ import {
   isValidIanaTimeZone,
   resolveDateAggregationBucketStart,
 } from '../../../shared/event-stat-aggregation';
+import {
+  EVENT_TAG_LIMIT,
+  EVENT_TAG_MAX_LENGTH,
+  getEventTags,
+} from '../../../shared/event-tags';
 import { isBenchmarkEventForTrainingMetrics } from '../../../shared/event-classification';
 import {
   canonicalizePersistedSportsLibStats,
@@ -188,6 +193,10 @@ import {
   McpActivityChartRateLimitError,
 } from './activity-chart-rate-limit';
 import {
+  firestoreActivityTagReads,
+  McpActivityTagDocument,
+} from './activity-tags.service';
+import {
   MCP_DERIVED_PAYLOAD_SCHEMAS,
   MCP_TRAINING_METRIC_SCHEMA_VERSION,
   MCP_TRAINING_RECOVERY_VERSION,
@@ -232,6 +241,7 @@ const OPAQUE_VALUE_VERSION = 1;
 const OPAQUE_VALUE_NONCE_BYTES = 12;
 const OPAQUE_VALUE_AUTH_TAG_BYTES = 16;
 const MAX_ACTIVITY_LIST_BYTES = 512 * 1024;
+const MAX_ACTIVITY_TAG_RESPONSE_BYTES = 256 * 1024;
 const MAX_ACTIVITY_PAGE_SIZE = 100;
 const MAX_ACTIVITY_LIST_SCAN_DOCUMENTS = 100;
 const RELATIVE_DAY_FORWARD_PROBE_MS = 36 * 60 * 60 * 1000;
@@ -338,6 +348,7 @@ interface ActivityListCursor extends OrderedDocumentCursor {
   activityTypesHash?: string;
   relativePeriod?: McpActivityRelativePeriod | null;
   timeZone?: string | null;
+  tagQueryHash?: string;
 }
 
 interface RouteListCursor extends OrderedDocumentCursor {
@@ -366,6 +377,7 @@ type OpaqueValueKind =
   | 'activity_ref'
   | 'route_ref'
   | 'activity_cursor'
+  | 'activity_tags_cursor'
   | 'route_cursor'
   | 'activity_samples_cursor'
   | 'activity_detail_cursor'
@@ -536,6 +548,10 @@ export interface McpDataServiceDependencies {
     cursor?: OrderedDocumentCursor,
     includeLocation?: boolean,
   ) => Promise<RawDocument[]>;
+  fetchActivityEventTagDocuments: (
+    uid: string,
+    eventIds: readonly string[],
+  ) => Promise<McpActivityTagDocument[]>;
   fetchNearbyActivityDocuments: (
     uid: string,
     startTimeMs: number | undefined,
@@ -915,6 +931,7 @@ const defaultDependencies: McpDataServiceDependencies = {
       data: doc.data() as Record<string, unknown>,
     }));
   },
+  fetchActivityEventTagDocuments: firestoreActivityTagReads.fetchEvents,
   fetchNearbyActivityDocuments: async (
     uid,
     startTimeMs,
@@ -1327,6 +1344,9 @@ export const MCP_ACTIVITY_RELATIVE_PERIODS = [
 export type McpActivityRelativePeriod =
   typeof MCP_ACTIVITY_RELATIVE_PERIODS[number];
 
+export const MCP_ACTIVITY_TAG_MATCHES = ['any', 'all'] as const;
+export type McpActivityTagMatch = typeof MCP_ACTIVITY_TAG_MATCHES[number];
+
 function requireTimeZone(timeZone: string): string {
   const normalized = `${timeZone || ''}`.trim();
   if (!isValidIanaTimeZone(normalized)) {
@@ -1581,6 +1601,85 @@ function buildActivityTypesHash(activityTypes: readonly string[]): string {
     .digest('base64url');
 }
 
+interface ActivityListCursorBinding {
+  kind: 'activity_cursor' | 'activity_tags_cursor';
+  tagQueryHash?: string;
+}
+
+const DEFAULT_ACTIVITY_LIST_CURSOR_BINDING: ActivityListCursorBinding = {
+  kind: 'activity_cursor',
+};
+
+function resolveActivityTagFilters(
+  requestedTags: readonly string[] | undefined,
+): string[] {
+  if (requestedTags === undefined) {
+    return [];
+  }
+  if (
+    !Array.isArray(requestedTags)
+    || requestedTags.length === 0
+    || requestedTags.length > EVENT_TAG_LIMIT
+  ) {
+    throw new McpDataError(
+      'invalid_request',
+      `Choose between 1 and ${EVENT_TAG_LIMIT} event tags when filtering activities.`,
+    );
+  }
+  const normalizedTags = requestedTags.map((requestedTag) => {
+    if (typeof requestedTag !== 'string') {
+      throw new McpDataError('invalid_request', 'Each event tag must be text.');
+    }
+    const normalizedTag = requestedTag.trim().replace(/\s+/g, ' ');
+    if (
+      normalizedTag.length === 0
+      || normalizedTag.length > EVENT_TAG_MAX_LENGTH
+    ) {
+      throw new McpDataError(
+        'invalid_request',
+        `Each event tag must contain between 1 and ${EVENT_TAG_MAX_LENGTH} characters.`,
+      );
+    }
+    return normalizedTag;
+  });
+  return [...new Map(normalizedTags.map(tag => [tag.toLowerCase(), tag])).values()];
+}
+
+function resolveActivityTagMatch(
+  requestedMatch: McpActivityTagMatch | undefined,
+): McpActivityTagMatch {
+  const match = requestedMatch ?? 'any';
+  if (!MCP_ACTIVITY_TAG_MATCHES.includes(match)) {
+    throw new McpDataError('invalid_request', 'Tag matching must be any or all.');
+  }
+  return match;
+}
+
+function buildActivityTagQueryHash(
+  tags: readonly string[],
+  match: McpActivityTagMatch,
+): string {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      tags: tags.map(tag => tag.toLowerCase()).sort(),
+      match,
+    }), 'utf8')
+    .digest('base64url');
+}
+
+function activityTagsMatch(
+  activityTags: readonly string[],
+  requestedTags: readonly string[],
+  match: McpActivityTagMatch,
+): boolean {
+  if (requestedTags.length === 0) {
+    return true;
+  }
+  const available = new Set(activityTags.map(tag => tag.toLowerCase()));
+  const matches = requestedTags.map(tag => available.has(tag.toLowerCase()));
+  return match === 'all' ? matches.every(Boolean) : matches.some(Boolean);
+}
+
 function buildRouteSearchHash(search: string | null): string {
   return createHash('sha256')
     .update(search ?? '', 'utf8')
@@ -1599,6 +1698,7 @@ function decodeActivityListCursor(
     | 'timeZone'
   >,
   activityTypes: readonly string[],
+  binding: ActivityListCursorBinding = DEFAULT_ACTIVITY_LIST_CURSOR_BINDING,
 ): {
   cursor: OrderedDocumentCursor;
   query: ResolvedActivityListQuery;
@@ -1607,7 +1707,7 @@ function decodeActivityListCursor(
     return undefined;
   }
   const parsed = decodeOpaqueValue(
-    'activity_cursor',
+    binding.kind,
     cursor,
     input.uid,
     input.connectionId,
@@ -1636,6 +1736,7 @@ function decodeActivityListCursor(
     || cursorActivityTypesHash !== buildActivityTypesHash(activityTypes)
     || cursorRelativePeriod !== requestedRelativePeriod
     || cursorTimeZone !== requestedTimeZone
+    || parsed.tagQueryHash !== binding.tagQueryHash
     || (
       relativeCursor
       && (
@@ -1674,14 +1775,18 @@ function encodeActivityListCursor(
   cursor: OrderedDocumentCursor,
   input: Pick<ListActivitiesInput, 'uid' | 'connectionId'>,
   query: ResolvedActivityListQuery,
+  binding: ActivityListCursorBinding = DEFAULT_ACTIVITY_LIST_CURSOR_BINDING,
 ): string {
-  return encodeOpaqueValue('activity_cursor', {
+  return encodeOpaqueValue(binding.kind, {
     ...cursor,
     startTimeMs: query.startTimeMs ?? null,
     endTimeMs: query.endTimeMs ?? null,
     activityTypesHash: buildActivityTypesHash(query.activityTypes),
     relativePeriod: query.relativePeriod,
     timeZone: query.timeZone,
+    ...(binding.tagQueryHash === undefined
+      ? {}
+      : { tagQueryHash: binding.tagQueryHash }),
   }, input.uid, input.connectionId);
 }
 
@@ -2595,6 +2700,7 @@ function resolveActivityListQuery(
     ListActivitiesInput,
     'appBaseUrl' | 'includeLocation' | 'limit'
   >,
+  cursorBinding: ActivityListCursorBinding = DEFAULT_ACTIVITY_LIST_CURSOR_BINDING,
 ): {
   cursor?: OrderedDocumentCursor;
   query: ResolvedActivityListQuery;
@@ -2640,6 +2746,7 @@ function resolveActivityListQuery(
       timeZone: timeZone ?? undefined,
     },
     activityTypes,
+    cursorBinding,
   );
   if (decoded) {
     return decoded;
@@ -4620,6 +4727,14 @@ export interface ListActivitiesInput {
   limit?: number;
 }
 
+export interface QueryActivitiesWithTagsInput extends Omit<
+  ListActivitiesInput,
+  'includeLocation'
+> {
+  tags?: readonly string[];
+  tagMatch?: McpActivityTagMatch;
+}
+
 export type McpNearbyLocation =
   | {
     query: string;
@@ -4832,6 +4947,7 @@ function buildSleepSummaryResult(
 
 interface SafeActivityListEntry {
   id: string;
+  eventId: string;
   sortTimeMs: number;
   summary: {
     activityRef: string;
@@ -4849,6 +4965,10 @@ interface SafeActivityListEntry {
     stats: SafeActivityStats;
   };
 }
+
+type SafeTaggedActivitySummary = SafeActivityListEntry['summary'] & {
+  tags: string[];
+};
 
 interface SafeRouteListEntry {
   id: string;
@@ -5059,6 +5179,7 @@ function projectActivityListEntry(
     : {};
   return {
     id: document.id,
+    eventId,
     sortTimeMs,
     summary: {
       activityRef: encodeOpaqueValue('activity_ref', {
@@ -6555,6 +6676,161 @@ export function createMcpDataService(
         nextCursor,
         scanComplete: nextCursor === null,
       };
+    },
+
+    async queryActivitiesWithTags(input: QueryActivitiesWithTagsInput) {
+      const requestedTags = resolveActivityTagFilters(input.tags);
+      const tagMatch = resolveActivityTagMatch(input.tagMatch);
+      const cursorBinding: ActivityListCursorBinding = {
+        kind: 'activity_tags_cursor',
+        tagQueryHash: buildActivityTagQueryHash(requestedTags, tagMatch),
+      };
+      const {
+        cursor,
+        query,
+      } = resolveActivityListQuery(dependencies, input, cursorBinding);
+      const limit = Math.min(
+        MAX_ACTIVITY_PAGE_SIZE,
+        Math.max(1, Math.floor(input.limit || 25)),
+      );
+      const scanLimit = query.activityTypes.length || requestedTags.length
+        ? MAX_ACTIVITY_LIST_SCAN_DOCUMENTS
+        : limit;
+      const documents = await dependencies.fetchActivityDocuments(
+        input.uid,
+        query.startTimeMs,
+        query.endTimeMs,
+        scanLimit + 1,
+        cursor,
+        false,
+      );
+      if (documents.length > scanLimit + 1) {
+        throw new McpDataError(
+          'query_too_large',
+          'The tagged activity query returned more data than requested.',
+        );
+      }
+
+      const scannedDocuments = documents.slice(0, scanLimit);
+      const projectedEntries = scannedDocuments.map(document => ({
+        document,
+        entry: projectActivityListEntry(document, {
+          uid: input.uid,
+          connectionId: input.connectionId,
+          appBaseUrl: input.appBaseUrl,
+          includeLocation: false,
+        }),
+      }));
+      const eventIds = [...new Set(projectedEntries.flatMap(({ entry }) => (
+        entry ? [entry.eventId] : []
+      )))];
+      let tagDocuments: McpActivityTagDocument[];
+      try {
+        tagDocuments = await dependencies.fetchActivityEventTagDocuments(
+          input.uid,
+          eventIds,
+        );
+      } catch {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'Activity tags could not be read safely. Try again later.',
+        );
+      }
+      const requestedEventIds = new Set(eventIds);
+      const tagsByEventId = new Map<string, string[]>();
+      let cumulativeBytes = 0;
+      for (const document of tagDocuments) {
+        cumulativeBytes += measureJsonBytes(
+          document.data,
+          'The tagged activity query contains data that cannot be processed safely.',
+        );
+        if (cumulativeBytes > MAX_ACTIVITY_LIST_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The tagged activity query exceeds the MCP processing limit.',
+          );
+        }
+        if (
+          requestedEventIds.has(document.id)
+          && isValidFirestoreDocumentId(document.id)
+        ) {
+          tagsByEventId.set(document.id, getEventTags(document.data));
+        }
+      }
+
+      const activities: SafeTaggedActivitySummary[] = [];
+      let scannedActivityCount = 0;
+      let skippedActivityCount = 0;
+      let lastScannedDocument: RawDocument | undefined;
+      for (const { document, entry } of projectedEntries) {
+        cumulativeBytes += measureJsonBytes(
+          document.data,
+          'The tagged activity query contains data that cannot be processed safely.',
+        );
+        if (cumulativeBytes > MAX_ACTIVITY_LIST_BYTES) {
+          throw new McpDataError(
+            'query_too_large',
+            'The tagged activity query exceeds the MCP processing limit.',
+          );
+        }
+        scannedActivityCount += 1;
+        lastScannedDocument = document;
+        if (
+          !entry
+          || !activityTypeMatches(entry.summary.activityType, query.activityTypes)
+        ) {
+          skippedActivityCount += 1;
+          continue;
+        }
+        const tags = tagsByEventId.get(entry.eventId) ?? [];
+        if (!activityTagsMatch(tags, requestedTags, tagMatch)) {
+          skippedActivityCount += 1;
+          continue;
+        }
+        activities.push({
+          ...entry.summary,
+          tags,
+        });
+        if (activities.length >= limit) {
+          break;
+        }
+      }
+      const hasMore = scannedActivityCount < documents.length;
+      const lastScannedTimeMs = asTimestampMs(
+        lastScannedDocument?.data.eventStartDate,
+      );
+      if (
+        hasMore
+        && (
+          !lastScannedDocument
+          || lastScannedTimeMs === null
+          || !isValidFirestoreDocumentId(lastScannedDocument.id)
+        )
+      ) {
+        throw new McpDataError(
+          'temporarily_unavailable',
+          'The tagged activity query could not be paginated safely.',
+        );
+      }
+      const nextCursor = hasMore && lastScannedDocument && lastScannedTimeMs !== null
+        ? encodeActivityListCursor({
+            timeMs: lastScannedTimeMs,
+            id: lastScannedDocument.id,
+          }, input, query, cursorBinding)
+        : null;
+      const result = {
+        scannedActivityCount,
+        skippedActivityCount,
+        activities,
+        nextCursor,
+        scanComplete: nextCursor === null,
+      };
+      requireJsonBudget(
+        result,
+        MAX_ACTIVITY_TAG_RESPONSE_BYTES,
+        'The tagged activity results exceed the MCP response limit.',
+      );
+      return result;
     },
 
     async findActivitiesNearLocation(input: FindNearbyActivitiesInput) {
