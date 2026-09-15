@@ -52,10 +52,39 @@ describe('explicit Timeline note chart adapters', () => {
   });
   it('opts in through explicit workspace inputs and keeps public/library defaults private-data-free', () => {
     const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
-    expect(source('src/app/components/health/health-workspace.component.html').match(/\[timelineNotes\]/g)).toHaveLength(3);
-    expect(source('src/app/components/training/training-workspace.component.html').match(/\[timelineNotes\]/g)).toHaveLength(7);
+    const expectNoteBindings = (path: string, selectors: string[], expression: string) => {
+      const template = document.createElement('template');
+      template.innerHTML = source(path);
+      for (const selector of selectors) {
+        const elements = template.content.querySelectorAll(selector);
+        expect(elements.length, `${path}: missing ${selector}`).toBeGreaterThan(0);
+        for (const element of elements) {
+          expect(element.getAttribute('[timelineNotes]'), `${path}: ${selector}`).toBe(expression);
+        }
+      }
+    };
+    // Check each consumer's opt-in, rather than the number of charts in a workspace.
+    expectNoteBindings('src/app/components/health/health-workspace.component.html', [
+      'app-dashboard-chart-library', 'app-health-priority-summary', 'app-sleep-trend-chart', 'app-health-metric-chart',
+    ], 'timelineNotes.context()');
+    expectNoteBindings('src/app/components/training/training-workspace.component.html', [
+      'app-training-readiness-trend-chart', 'app-form-chart', 'app-freshness-forecast-chart',
+      'app-training-power-systems-trend-chart', 'app-training-swim-performance-chart',
+      'app-training-durability-trajectory-chart', 'app-training-body-weight-trend-chart',
+    ], 'timelineNotes.context()');
     expect(source('src/app/components/health/health-priority-summary.component.html')).toContain('[timelineNotes]="timelineNotes()"');
-    expect(source('src/app/components/tile/chart/tile.chart.component.html').match(/previewMode \? null : notesContext\(\)/g)).toHaveLength(4);
+    expectNoteBindings('src/app/components/tile/chart/tile.chart.component.html', [
+      'app-dashboard-health-chart', 'app-form-chart', 'app-freshness-forecast-chart', 'app-sleep-trend-chart', 'app-hrv-chart',
+    ], 'previewMode ? null : notesContext()');
+    expectNoteBindings('src/app/components/tile/chart/tile.chart.component.html', [
+      'app-activity-calendar-tile',
+    ], 'previewMode ? null : timelineNotes()');
+    expectNoteBindings('src/app/components/charts/health/dashboard-health-chart.component.html', [
+      'app-health-metric-series-chart',
+    ], 'thumbnail() || showingExample() ? null : timelineNotes()');
+    expectNoteBindings('src/app/components/charts/health/dashboard-health-chart.component.html', [
+      'app-sleep-trend-chart',
+    ], 'showingExample() ? null : timelineNotes()');
     expect(source('src/app/components/summaries/summaries.component.html')).toContain('<app-timeline-notes-workspace [ownerUid]="user?.uid"');
     const cleanup = source('extensions/delete-user-data.env');
     expect(cleanup).toContain('FIRESTORE_DELETE_MODE=recursive'); expect(cleanup).toContain('FIRESTORE_PATHS=users/{UID}');
