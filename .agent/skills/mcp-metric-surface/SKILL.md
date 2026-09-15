@@ -1,6 +1,6 @@
 ---
 name: mcp-metric-surface
-description: Keep Quantified Self MCP tools, scopes, consent, projections, contracts, and bundled plugin workflows aligned when exposed data or authorization changes.
+description: Keep Quantified Self MCP tools, scopes, consent, projections, contracts, and bundled plugin workflows aligned when exposed data or authorization changes. Also use for every Training planning feature change, including frontend- or backend-only changes.
 ---
 
 # MCP Metric Surface
@@ -33,6 +33,18 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
 - **Training-derived kind:** register it in `shared/derived-metrics.ts`, preserve the normal snapshot build lifecycle, and
   expose only a ready server-side snapshot. Add its exact identity-free payload schema to
   `functions/src/mcp/derived-output-schemas.ts`; the exhaustive map must fail compilation until the new kind is covered.
+- **Training plans and planned workouts:** distinct from Training-derived metrics and completed activities. Review every
+  planning change for MCP impact. Relevant plan/workout capabilities, lifecycle semantics, recipe fields and safe
+  delivery-status changes must extend the plan-specific read surface in the same feature PR. Coordinate explicit
+  Firestore projections, strict schemas, independent `training-plans:read` consent, owner/connection-bound references,
+  revision-bound pagination and byte limits, Sports Lib unit formatting, Assistant routing/evidence, bundled Training,
+  Activity and cross-domain guidance, tests and documentation. Keep detailed behavior in `docs/mcp-server.md` and
+  `docs/training-workspace.md`; distinguish implementation from deployed/registered-client availability.
+  Never forward whole records or automatically expose new stored fields. Preserve registered schemas using the
+  compatible additive-tool lifecycle when a shape cannot safely change. Keep private delivery fields private.
+  Record a genuine no-impact rationale in verification notes. If relevant read coverage must be deferred, create or
+  reuse a focused #583 subissue, add/verify it in Project 2, and reference it before declaring completion.
+  Maintaining read coverage does not authorize writes, provider actions, wider consent or deployment.
 - **Sleep field or provider:** update the normalized contract in `shared/sleep.ts`, then deliberately decide whether it
   belongs in the MCP safe projection. Never forward provider user/session identifiers, provider payloads, raw stage
   intervals, or raw HRV, SpO2, or respiration samples.
@@ -128,6 +140,11 @@ Add or update focused tests for:
   range/work/response limits, missing history, and explicit identity/provenance exclusion;
 - persistence availability and any reparse expectation;
 - Training ready-state handling and identity redaction;
+- planned-workout scope isolation, complete recipe/Unicode validation, field-mask leakage rejection, reference replay,
+  revision/deletion/consent fences, calendar scopes, bounded pagination and complete/incomplete delivery aggregates;
+- Assistant optional Training consent reset/retry generation, planned-versus-completed routing and compact untrusted-text
+  evidence. Review three cases: a new workout target needs explicit MCP schema/format tests; presentation-only spacing
+  needs a documented no-wire-impact rationale; provider-internal artifact metadata must stay excluded;
 - exhaustive tool/output-schema registration, Ajv validation of every successful `structuredContent` result, JSON-text
   equivalence, exact Training payload-kind pairing, and generic text-only contract-mismatch errors;
 - sleep safe projection and explicit raw/provider-field exclusion;

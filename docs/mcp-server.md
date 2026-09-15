@@ -1,5 +1,52 @@
 # Read-only MCP Server
 
+## Training plans and planned workouts (#690 read-only slice)
+
+This is source implementation, not deployment, provider enablement, registered-client promotion or real-profile plugin
+installation. After a separately approved release, refresh the client catalog and explicitly reauthorize the independent
+`training-plans:read` scope (**Training plans and planned workouts**). Metrics, activities, Timeline notes and provider
+permissions never grant it. Any consenting owner may use it, with no pilot UID or Pro gate; planning UI rollout is unchanged.
+Authored titles/notes may contain sensitive personal information. Legacy omitted selections and refresh exclude this new
+grant. HTTP prechecks, tool registration and data reads enforce it. Revocation cannot erase copies already received.
+
+| Tool | Current-record read |
+| --- | --- |
+| `list_training_plans` | Optional name/lifecycle filters; active, paused and archived metadata |
+| `get_training_plan` | Metadata, range, revision and current workout count, without loading workouts |
+| `query_planned_workouts` | Inclusive dates; calendar-visible (default standalone + active plan), standalone, selected plan or all |
+| `get_planned_workout` | Complete validated v1 canonical recipe, notes and owner-unit display text |
+| `get_training_sync_status` | Existing local per-service evidence for a plan/workout; never a live provider check |
+
+References bind owner, connection, entity and creation time. Structural node IDs are public recipe fields, not document
+IDs. No app links are returned while planning UI remains restricted. Lists use document-ID order (not date order), default
+25/max 100 results, 25-record scan pages and 1,000 scanned records per call. Inclusive windows permit 366 days. Skipped
+workouts are labelled, deleted excluded; historical dates read current authored records, not revisions. Explicit plan/all
+scopes include inactive plans. Cursors bind exact filters/limit, owner, connection and schedule revision; changed schedules
+require restarting. Dates remain calendar labels; no plan timezone is invented. Delivery retains its saved timezone.
+Selected input is bounded to 2 MiB, an individual record to 128 KiB and complete structured-plus-JSON-text responses to
+256 KiB. Oversized records fail without truncating instructions. Canonical values remain alongside Sports Lib display;
+manual/mixed-ending recipes receive no invented duration estimate.
+
+`training-plans.service.ts` owns explicit field masks and read-only Firestore snapshot transactions, not new persistence.
+Fresh schedule/account-deletion/plan-deletion fences run before and after results, as do external connection consent and
+grant-generation checks. Settings fingerprints are read only to correlate current delivery evidence and never returned.
+No credentials, private ledgers, attempts, artifacts, approval digests, issue text, receipts or history are read. Reads do
+not import transports or write Training data; normal OAuth usage counters remain permitted infrastructure behavior.
+
+`shared/training-delivery-summary.ts` supplies machine-readable classification to MCP and unchanged presentation to the UI.
+Services appear only with existing settings/evidence. Outputs include saved timezone, copy/mismatch indicators, freshness
+timestamps and plan counts. `checkedAtMs` is local read time, not a provider check. Aggregates cover all current non-deleted
+plan workouts (max 400), never a day/page. Historical workout scans cap at 1,000; settings, overrides and retained statuses
+at 1,600 each with lookahead, all in pages of 25. Incomplete scans withhold total/synced/retained counts and mismatch certainty.
+Suppression, transfers, earlier accounts, stale confirmations, inactive plans and Pro pauses preserve UI semantics.
+Synced means confirmed provider-side workout delivery, not a native provider plan or watch receipt. Empty/missing/incomplete
+evidence is not success. Assistant consent/routing is described in [Assistant](assistant.md); planning semantics remain in
+[Training workspace](training-workspace.md). Approved writes stay in #690 with #652's approval dependency; this slice closes neither.
+
+Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
+Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
+reads never authorizes provider actions, write tools, wider consent or deployment.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the

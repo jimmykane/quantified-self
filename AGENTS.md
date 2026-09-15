@@ -33,6 +33,10 @@ Always-on rules:
   single detailed Training source of truth instead of creating a competing Training architecture document.
 - For any MCP tool, response, scope, consent, exposed metric or data contract, instruction, plugin metadata, branding,
   or bundled-skill change, follow `.agent/skills/mcp-metric-surface/SKILL.md`.
+- Every Training planning feature change requires an MCP impact review, including frontend/backend-only work. Extend
+  relevant plan/workout read coverage in the same PR using `.agent/skills/mcp-metric-surface/SKILL.md`; record a no-impact
+  rationale in verification notes, or track a genuine deferral in a focused #583 subissue in Project 2 before completion.
+  Read coverage never authorizes write tools, provider actions, wider consent, or deployment.
 - For any provider or service integration addition or material change, follow
   `.agent/skills/connected-provider-integration/SKILL.md`.
 - For read-only Sentry queries in this repository, source `$HOME/.config/sentry/personal.env` only for the Sentry API command. Infer the organization and project from the `sentry:upload-sourcemaps` script in `package.json`; never print the token or profile contents.

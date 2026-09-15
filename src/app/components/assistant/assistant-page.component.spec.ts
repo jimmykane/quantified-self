@@ -1113,7 +1113,7 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
 
     expect(openSpy).toHaveBeenCalledWith(AssistantExploreBottomSheetComponent, {
-      data: { locationAccess: 'coordinate_free', timelineNotesEnabled: false },
+      data: { locationAccess: 'coordinate_free', timelineNotesEnabled: false, trainingPlansEnabled: false },
     });
     expect(component.promptControl.value).toBe(routeExample.prompt);
     openSpy.mockRestore();
@@ -1136,8 +1136,7 @@ describe('AssistantPageComponent', () => {
       expect(assistantService.resetConversation).toHaveBeenCalledWith(
         'precise_activity',
         false,
-        null,
-      );
+        null, false);
     });
     fixture.detectChanges();
 
@@ -1260,13 +1259,29 @@ describe('AssistantPageComponent', () => {
     component.conversation.set(chatResponse.conversation);
     component.locationAccess.set('precise_activity');
     component.timelineNotesEnabled.set(true);
+    component.trainingPlansEnabled.set(true);
 
     await component.resetConversation();
 
-    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free', false, 'conversation-1');
+    expect(assistantService.resetConversation).toHaveBeenCalledWith('coordinate_free', false, 'conversation-1', false);
     expect(component.messages()).toEqual([]);
     expect(component.locationAccess()).toBe('coordinate_free');
     expect(component.timelineNotesEnabled()).toBe(false);
+    expect(component.trainingPlansEnabled()).toBe(false);
+  });
+
+  it('changes Training consent independently, preserving notes, locations, drafts and single-owner haptics', async () => {
+    component.locationAccess.set('precise_activity'); component.timelineNotesEnabled.set(true);
+    component.promptControl.setValue('What is planned next week?');
+    const sheet = (component as unknown as { bottomSheet: MatBottomSheet }).bottomSheet;
+    const open = vi.spyOn(sheet, 'open').mockReturnValue({ afterDismissed: () => of({ kind: 'training_plans', enabled: true }) } as never);
+    component.openExploreSheet(); await vi.waitFor(() => expect(component.trainingPlansEnabled()).toBe(true));
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('precise_activity', true, null, true);
+    expect(component.timelineNotesEnabled()).toBe(true); expect(component.locationAccess()).toBe('precise_activity');
+    expect(component.promptControl.value).toBe('What is planned next week?');
+    expect(hapticsService.selection).toHaveBeenCalledTimes(1); expect(hapticsService.success).toHaveBeenCalledTimes(1);
+    component.openExploreSheet(); expect(assistantService.resetConversation).toHaveBeenCalledTimes(1);
+    open.mockRestore();
   });
 
   it('changes notes in a fresh chat without changing locations, preserves drafts and owns haptics once', async () => {
@@ -1278,7 +1293,7 @@ describe('AssistantPageComponent', () => {
     } as never);
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.timelineNotesEnabled()).toBe(true));
-    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('precise_activity', true, null);
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('precise_activity', true, null, false);
     expect(component.locationAccess()).toBe('precise_activity');
     expect(component.promptControl.value).toBe('Compare sleep and my notes.');
     expect(hapticsService.selection).toHaveBeenCalledTimes(1);
@@ -1290,7 +1305,7 @@ describe('AssistantPageComponent', () => {
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.locationAccess()).toBe('coordinate_free'));
     expect(component.timelineNotesEnabled()).toBe(true);
-    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true, 'conversation-1');
+    expect(assistantService.resetConversation).toHaveBeenLastCalledWith('coordinate_free', true, 'conversation-1', false);
     open.mockRestore();
   });
 
@@ -1323,7 +1338,7 @@ describe('AssistantPageComponent', () => {
     } as never);
     component.openExploreSheet();
     await vi.waitFor(() => expect(component.resetting()).toBe(false));
-    expect(assistantService.resetConversation).toHaveBeenCalledExactlyOnceWith('precise_activity', true, 'conversation-1');
+    expect(assistantService.resetConversation).toHaveBeenCalledExactlyOnceWith('precise_activity', true, 'conversation-1', false);
     expect(component.timelineNotesEnabled()).toBe(false);
     expect(component.locationAccess()).toBe('coordinate_free');
     expect(component.conversation()?.conversationId).toBe('new-chat');

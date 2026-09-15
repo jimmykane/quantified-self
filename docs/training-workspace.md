@@ -1,5 +1,31 @@
 # Training Workspace Architecture and Maintenance Guide
 
+## Planning reads through MCP and the Assistant
+
+The #690 read-only slice exposes current plans, standalone/associated workouts, complete v1 instructions and existing
+delivery summaries. It does not introduce new storage or modify `WorkoutStructureV1`. Five tools and their strict scope,
+projection and bounds are documented in [MCP server](mcp-server.md#training-plans-and-planned-workouts-690-read-only-slice).
+Source support is not a deployed or registered-client promise. No provider certification, #652 approval flow, sync
+enablement, deployment or plugin installation is implied. Writes remain tracked in #690 with #652.
+
+Independent `training-plans:read` consent is available without a UID or Pro gate; the planning UI pilot remains unchanged.
+The Assistant's default-off Training plans choice is conversation-owned, not a UI gate. Current calendar reads default to
+standalone plus active-plan workouts, include skipped, exclude deleted, and allow explicit inactive-plan/all scopes.
+Historical dates still read current records, not history. Calendar dates are not instants or delivery timezones.
+Full structures preserve canonical primitives, ordered node IDs, notes, repeat limits and Sports Lib owner-unit formatting.
+There are no new `Data*` classes, completed-event metrics, inferred duration estimates, provider calls or writes.
+
+The shared delivery-summary helper provides UI wording and MCP machine outcomes from the same current evidence. Whole-plan
+counts include every current non-deleted workout, with no success claim for incomplete scans, empty plans, stale evidence
+or old-account copies. Confirmation is provider-side workout delivery, never receipt on a watch or native provider plan.
+Read-only Firestore snapshots and fresh revision/deletion/consent fences prevent releasing obsolete schedules.
+
+Every planning feature PR must assess MCP impact using the root instructions and MCP skill. New recipe targets require
+explicit public schemas, formatters and tests in the same PR; presentation-only spacing can document no wire impact;
+private provider artifact metadata must remain excluded. Review safe projections, lifecycle semantics, scope isolation,
+pagination/bytes, unit formatting, Assistant evidence/routing and bundled skills together. A real deferral needs a focused
+#583 subissue in Project 2 before completion. Read coverage never authorizes wider consent, writes or deployment.
+
 This document is the implementation guide for the authenticated `/training` workspace. It is intended for product
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
 metric payload, the sports-lib durability protocol, or the refresh pipeline changes.
