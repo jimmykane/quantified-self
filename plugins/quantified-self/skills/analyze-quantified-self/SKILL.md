@@ -15,7 +15,7 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
    user requests separate summaries without a comparison.
    For an unqualified recovery or readiness question, clarify whether the user means Training, sleep, or a comparison
    between them before choosing a workflow.
-2. Discover the relevant measurement, Health, metric, sleep, activity, or route capabilities before concluding that data are
+2. Discover the relevant planning, measurement, Health, metric, sleep, activity, or route capabilities before concluding that data are
    unavailable. For a sleep-vital comparison, prefer the one-call sleep trend capability so coverage and grouped values
    share one bounded read rather than searching activity metrics or inferring from Training readiness. Preserve that an
    individual blood-oxygen value is a session maximum while a grouped trend averages session maxima, and that grouped
@@ -60,7 +60,8 @@ rules, permissions, and coverage distinct until they are aligned for comparison.
 
 - Treat a missing permission, unavailable source, processing budget, incomplete page, and genuinely absent data as
   different outcomes. Name the permission that must be granted through reconnection.
-- Map each domain to its grant: Training and aggregate metrics use `metrics:read`, body measurements use
+- Map each domain to its grant: authored plans/workouts use `training-plans:read`; Training-derived and aggregate
+  metrics use `metrics:read`; body measurements use
   `measurements:read`, sleep uses `sleep:read`, individual activities use `activity-details:read`, and saved routes use
   `routes:read`. Selected per-activity metrics also need `metrics:read`.
 - All-day Health uses `health:read`, with an additional `measurements:read` grant for identity-free body composition.

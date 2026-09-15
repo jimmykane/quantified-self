@@ -5,7 +5,8 @@ description: Analyze one or more authorized Quantified Self activities through i
 
 # Analyze Activity Performance
 
-Resolve activities through opaque public references and request only the detail needed for the question.
+For planned/upcoming workouts, route to the Training skill's planning workflow before activity discovery. For completed
+activities, resolve opaque public references and request only the detail needed for the question.
 
 ## Workflow
 

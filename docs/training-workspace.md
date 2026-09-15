@@ -19,6 +19,9 @@ The shared delivery-summary helper provides UI wording and MCP machine outcomes 
 counts include every current non-deleted workout, with no success claim for incomplete scans, empty plans, stale evidence
 or old-account copies. Confirmation is provider-side workout delivery, never receipt on a watch or native provider plan.
 Read-only Firestore snapshots and fresh revision/deletion/consent fences prevent releasing obsolete schedules.
+MCP input accounting covers complete fetched pages, including unused tail records, without double-counting cached
+projections. Valid sync-off settings without a destination remain readable. Planning-only plugin questions must route
+directly to planning reads without asking for metric permission or catalog access.
 
 Every planning feature PR must assess MCP impact using the root instructions and MCP skill. New recipe targets require
 explicit public schemas, formatters and tests in the same PR; presentation-only spacing can document no wire impact;

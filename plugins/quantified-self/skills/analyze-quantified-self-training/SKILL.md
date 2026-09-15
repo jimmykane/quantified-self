@@ -5,9 +5,11 @@ description: Analyze the user's authorized Quantified Self training data through
 
 # Analyze Training
 
-Use the live metric catalog instead of assuming that a metric or Training-derived kind exists for the account.
+First distinguish authored plans/upcoming workouts from recorded Training metrics. For planning-only questions, follow
+**Planned versus completed workouts** below; do not require metric discovery or `metrics:read`. For recorded trends,
+use the live metric catalog instead of assuming that a metric or Training-derived kind exists for the account.
 
-## Workflow
+## Recorded-metric workflow
 
 1. Establish the requested period, IANA timezone, activity-type filters, and comparison baseline.
 2. Discover available persisted metrics and use the Training capability catalog to distinguish a supported kind from
@@ -37,7 +39,8 @@ Use the live metric catalog instead of assuming that a metric or Training-derive
 
 ## Limits
 
-- If `metrics:read` is missing, explain that Activity and Training metrics access must be granted through reconnection.
+- If a requested metric analysis needs missing `metrics:read`, explain that Activity and Training metrics access must
+  be granted through reauthorization. This grant is not needed for planning-only reads.
 - The live-readiness and daily-report tools additionally need `sleep:read`; do not reconstruct either from raw sleep
   or turn the result into a workout prescription.
 - Treat an unsupported metric, a supported but not-ready Training snapshot, missing permission, and incomplete page as

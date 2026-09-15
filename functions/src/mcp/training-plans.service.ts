@@ -21,7 +21,7 @@ const workoutSchema = z.strictObject({ schemaVersion: z.literal(1), planId: id.n
   createdAtMs: count, updatedAtMs: count });
 const settingSchema = z.strictObject({ scope: z.enum(['plan', 'workout']), scopeId: id,
   provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS), enabled: z.boolean(), suppressed: z.boolean(),
-  timeZone: z.string().max(100), destinationKey: z.string().min(1).max(256), associationPlanId: id.nullable(), updatedAtMs: count });
+  timeZone: z.string().max(100), destinationKey: z.string().max(256), associationPlanId: id.nullable(), updatedAtMs: count });
 const statusSchema = z.strictObject({ workoutId: id, planId: id.nullable(), provider: z.enum(PLANNED_WORKOUT_PROVIDER_IDS),
   status: z.enum(['pending', 'delivered', 'removed', 'stopped', 'paused_plan', 'paused_pro', 'provider_unavailable',
     'reconnect_required', 'connection_repair', 'fresh_consent_required', 'outside_horizon', 'past', 'completed',
@@ -125,13 +125,32 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
   };
   const reference = (kind: 'plan' | 'workout', doc: Document) => encode({ kind, id: id.parse(doc.id), createdAtMs: count.parse(doc.data.createdAtMs) });
   const projectPlan = (doc: Document) => {
-    measure(doc); const plan = planSchema.parse(doc.data);
+    const plan = planSchema.parse(doc.data);
     if (plan.endLocalDate < plan.startLocalDate || Date.parse(plan.endLocalDate) - Date.parse(plan.startLocalDate) > 365 * 86400000) throw unavailable();
     return { planRef: reference('plan', doc), name: plan.name, lifecycle: plan.lifecycle,
       startDate: plan.startLocalDate, endDate: plan.endLocalDate, revision: plan.revision, currentWorkoutCount: plan.workoutCount,
       color: plan.color ?? null, createdAtMs: plan.createdAtMs, updatedAtMs: plan.updatedAtMs };
   };
-  const result = await reads.snapshot(input.uid, async view => {
+  const result = await reads.snapshot(input.uid, async source => {
+    // Account for every selected document once, including the unused tail of a fetched page.
+    // Measuring only projected results misses lookahead records and double-counts cached plans.
+    const view: TrainingReadView = {
+      async get(collection, id, structure) {
+        const doc = await source.get(collection, id, structure);
+        if (doc) measure(doc);
+        return doc;
+      },
+      async page(collection, after, limit, filter) {
+        const page = await source.page(collection, after, limit, filter);
+        page.forEach(measure);
+        return page;
+      },
+      async units() {
+        const units = await source.units();
+        measure({ id: 'units', data: { units } });
+        return units;
+      },
+    };
     const plans = new Map<string, Document>();
     const getPlan = async (planId: string) => {
       let doc = plans.get(planId);
@@ -147,7 +166,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       return doc;
     };
     const projectWorkout = async (doc: Document) => {
-      measure(doc); const summary = { ...doc.data };
+      const summary = { ...doc.data };
       delete summary.structure;
       const workout = workoutSchema.parse(summary);
       if (workout.lifecycle === 'deleted') throw unavailable();
@@ -165,7 +184,6 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
       const summary = await projectWorkout(doc);
       const structure = TRAINING_RECIPE_SCHEMA.parse(parseWorkoutStructureV1(doc.data.structure));
       const units = await view.units();
-      measure({ id: 'units', data: { units } });
       const displaySteps = structure.nodes.flatMap(node => node.kind === 'step'
         ? [{ nodeId: node.id, text: formatWorkoutStepV1(node, units) }]
         : [{ nodeId: node.id, text: `Repeat ${node.count} times` }, ...node.steps.map(step => ({ nodeId: step.id, text: formatWorkoutStepV1(step, units) }))]);
@@ -173,14 +191,14 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     }
     if (input.tool === 'get_training_sync_status') {
       const a = TRAINING_READ_INPUTS.get_training_sync_status.parse(args.data);
-      const doc = await resolve(a.reference, a.scope); measure(doc);
+      const doc = await resolve(a.reference, a.scope);
       let complete = true;
       const collect = async (collection: Collection, filter: Filter, cap: number) => {
         const documents: Document[] = []; let after: string | null = null;
         while (documents.length <= cap) {
           const size = Math.min(25, cap + 1 - documents.length);
           const page = await view.page(collection, after, size, filter);
-          page.forEach(measure); documents.push(...page);
+          documents.push(...page);
           if (page.length < size) break;
           after = page[page.length - 1].id;
         }
@@ -230,7 +248,7 @@ export async function readTrainingPlans(input: TrainingReadInput, reads: Trainin
     outer: while (scanned < TRAINING_READ_LIMITS.scan) {
       const page = await view.page(isPlans ? 'trainingPlans' : 'scheduledWorkouts', after, 25);
       for (const doc of page) {
-        measure(doc); scanned++;
+        scanned++;
         let match = false;
         if (isPlans) {
           const p = planSchema.parse(doc.data); const f = TRAINING_READ_INPUTS.list_training_plans.parse(a);

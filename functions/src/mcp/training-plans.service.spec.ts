@@ -111,6 +111,23 @@ describe('Training plan MCP reads', () => {
     await expect(f.run('get_planned_workout', { workoutRef: list.workouts[0].workoutRef }))
       .rejects.toThrow('safe response size');
   });
+  it('accounts for the entire selected page, including records after a result-limit lookahead', async () => {
+    const f = fixture();
+    f.collections.trainingPlans.p3.name = 'x'.repeat(TRAINING_READ_LIMITS.singleRecordBytes);
+    const error = await f.run('list_training_plans', { limit: 1 }).then(() => null, error => error);
+    expect(error).toMatchObject({ code: 'query_too_large' });
+  });
+  it('reads sync-off settings that validly have no destination account yet', async () => {
+    const f = fixture(); f.collections.trainingPlans.p1.workoutCount = 2;
+    f.collections.trainingDeliverySettings.garmin = { scope: 'plan', scopeId: 'p1', provider: 'garmin',
+      enabled: false, suppressed: false, destinationKey: '', associationPlanId: null, timeZone: 'Europe/Helsinki', updatedAtMs: 1 };
+    const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+    const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', {
+      scope: 'plan', reference: plans.plans[0].planRef,
+    }));
+    expect(result.services[0]).toMatchObject({ state: 'off', syncedWorkouts: 0, hasRemoteCopy: false });
+    expect(JSON.stringify(result)).not.toContain('destinationKey');
+  });
   it('rechecks connection grant generation after the read', async () => {
     const f = fixture(); let generation = 0;
     f.reads.state = async () => ({ revision: 1, activePlanId: 'p1', accessGeneration: String(generation++) });
