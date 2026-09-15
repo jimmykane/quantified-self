@@ -1,3 +1,4 @@
+import { DASHBOARD_HEALTH_METRIC_CHART_TYPE } from './dashboard-special-chart-types';
 import type { DashboardHrvContext } from './dashboard-hrv-context.helper';
 import type { EventInterface } from '@sports-alliance/sports-lib';
 import {
@@ -347,6 +348,10 @@ export function buildDashboardTileViewModels(
     // Readiness is a fixed part of Dashboard Today. Ignore stale saved copies so
     // users never see the same signal twice while settings are cleaned on save.
     if (isRetiredDashboardReadinessConfidenceKpiChartType(chartTile.chartType)) {
+      return viewModels;
+    }
+    if (`${chartTile.chartType}` === DASHBOARD_HEALTH_METRIC_CHART_TYPE) {
+      viewModels.push({ ...chartTile, timeInterval: TimeIntervals.Daily, data: [] });
       return viewModels;
     }
     const requestedTimeInterval = resolveDashboardCustomChartRequestedTimeInterval(chartTile);

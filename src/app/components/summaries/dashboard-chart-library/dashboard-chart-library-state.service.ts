@@ -1,3 +1,5 @@
+import { dashboardHealthSettings } from '../../../helpers/dashboard-health-tile.helper';
+import type { AppDashboardHealthMetricSettings } from '../../../models/app-user.interface';
 import { hasDashboardTileSettings, resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
 import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
@@ -22,7 +24,9 @@ export class DashboardChartLibraryState implements OnDestroy {
   readonly draft = signal<TileSettingsInterface | null>(null);
   readonly editor = signal<DashboardTileConfiguration | null>(null);
   readonly configuring = signal(false);
-  readonly canConfigure = computed(() => hasDashboardTileSettings(this.draft()));
+  readonly healthSettings = computed(() => dashboardHealthSettings(this.draft()));
+  readonly canConfigure = computed(() => !!this.healthSettings() || hasDashboardTileSettings(this.draft()));
+  readonly pinnedFromHealth = signal(false);
   readonly busy = signal(false);
   readonly error = signal('');
   readonly undoAvailable = signal(false);
@@ -85,11 +89,11 @@ export class DashboardChartLibraryState implements OnDestroy {
     this.clearSelection();
     this.activeLane.set(resolveDashboardTileLaneKey(tile));
     this.createEditor(user, tile, true);
-    this.configuring.set(this.canConfigure());
+    this.configuring.set(this.canConfigure() && !this.healthSettings());
   }
 
   configure(): void {
-    if (this.busy() || this.configuring() || !this.canConfigure()) return;
+    if (this.busy() || this.configuring() || this.healthSettings() || !this.canConfigure()) return;
     this.haptics.selection(); this.configuring.set(true);
   }
 
@@ -103,6 +107,14 @@ export class DashboardChartLibraryState implements OnDestroy {
     if (this.busy() || !(await this.canDiscard())) return;
     this.haptics.selection();
     this.clearSelection();
+  }
+
+  updateHealthSettings(settings: AppDashboardHealthMetricSettings, initial = false): void {
+    const editor = this.editor();
+    if (!editor || this.busy()) return;
+    editor.healthMetric = { ...settings };
+    this.refreshDraft();
+    if (initial) this.initialDraft = JSON.stringify(this.draft());
   }
 
   refreshDraft(): void {
@@ -136,6 +148,28 @@ export class DashboardChartLibraryState implements OnDestroy {
       this.error.set(editor.saveError);
       if (mutationVersion !== this.mutationVersion) { this.clearSelection(); this.activeLane.set(null); }
     } finally { editor.destroy(); this.busy.set(false); }
+  }
+
+  async moveHealthTile(user: AppUserInterface, order:number, destination:'health'|'trainingState'): Promise<void> {
+    if (this.busy()) return;
+    const before=cloneDashboardSettings(user.settings.dashboardSettings);
+    const after=cloneDashboardSettings(before);
+    const tile=after.tiles.find(item=>item.order===order);
+    const metric=dashboardHealthSettings(tile)?.metric;
+    if (!tile || (metric!=='sleep' && metric!=='heart_rate_variability')) return;
+    const previous=resolveDashboardTileLaneKey(tile);
+    if(previous===`section:${destination}`) return;
+    tile['healthSection']=destination;
+    this.haptics.selection(); this.busy.set(true); this.error.set('');
+    const version=this.contextVersion;
+    try {
+      await this.persistence.save(user.uid,before,{tiles:after.tiles});
+      if(version!==this.contextVersion) return;
+      user.settings.dashboardSettings={...user.settings.dashboardSettings,tiles:after.tiles};
+      this.undoState={uid:user.uid,before:cloneDashboardSettings({tiles:before.tiles}),after:cloneDashboardSettings({tiles:after.tiles})};
+      this.undoAvailable.set(true);this.changed$.next(order);this.haptics.success();
+    } catch(error) { if(version===this.contextVersion) {this.error.set(error instanceof Error ? error.message : 'Could not move chart.');this.haptics.error();} }
+    finally {this.busy.set(false);}
   }
 
   async undo(user: AppUserInterface): Promise<void> {
@@ -206,7 +240,7 @@ export class DashboardChartLibraryState implements OnDestroy {
   }
 
   private clearSelection(): void {
-    this.editor()?.destroy(); this.editor.set(null); this.draft.set(null); this.selected.set(null); this.configuring.set(false); this.error.set(''); this.initialDraft = ''; this.originalTile = null;
+    this.editor()?.destroy(); this.editor.set(null); this.draft.set(null); this.selected.set(null); this.configuring.set(false); this.error.set(''); this.initialDraft = ''; this.originalTile = null; this.pinnedFromHealth.set(false);
   }
 
   private hasChanges(): boolean {

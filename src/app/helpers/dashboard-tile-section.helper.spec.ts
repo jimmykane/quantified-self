@@ -38,6 +38,7 @@ describe('dashboard tile section metadata', () => {
   it('keeps the fixed section order aligned with section definitions', () => {
     expect(DASHBOARD_TILE_SECTION_ORDER).toEqual([
       'trainingState',
+      'health',
       'performancePower',
       'activityOverview',
       'routesMaps',

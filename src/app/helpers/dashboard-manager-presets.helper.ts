@@ -1,3 +1,7 @@
+import { DASHBOARD_HEALTH_GROUPS } from './dashboard-health-tile.helper';
+import { healthMetricIcon } from './health-metric-icon.helper';
+import { DASHBOARD_HEALTH_METRIC_CHART_TYPE } from './dashboard-special-chart-types';
+import { type HealthMetricId, type HealthMetricDefinition, HEALTH_METRIC_IDS } from '@shared/health';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -103,7 +107,7 @@ export const DASHBOARD_MANAGER_PRESET_IDS = {
 } as const;
 
 export type DashboardManagerPresetId =
-  typeof DASHBOARD_MANAGER_PRESET_IDS[keyof typeof DASHBOARD_MANAGER_PRESET_IDS];
+  typeof DASHBOARD_MANAGER_PRESET_IDS[keyof typeof DASHBOARD_MANAGER_PRESET_IDS] | `health:${string}`;
 
 export type DashboardManagerPresetCategory = DashboardChartCategory | 'map';
 
@@ -151,7 +155,14 @@ export interface DashboardManagerMapPresetDefinition extends DashboardManagerPre
   showRouteEndpointMarkers?: boolean;
 }
 
+export interface DashboardManagerHealthPresetDefinition extends DashboardManagerPresetBaseDefinition {
+  category: 'health';
+  metricId: HealthMetricId;
+  healthGroup: HealthMetricDefinition['category'];
+}
+
 export type DashboardManagerPresetDefinition =
+  | DashboardManagerHealthPresetDefinition
   | DashboardManagerCuratedPresetDefinition
   | DashboardManagerKpiPresetDefinition
   | DashboardManagerCustomPresetDefinition
@@ -595,13 +606,17 @@ const DASHBOARD_MANAGER_PRESET_DEFINITIONS: DashboardManagerPresetDefinition[] =
 ];
 
 export function getDashboardManagerPresetDefinitions(): DashboardManagerPresetDefinition[] {
-  return [...DASHBOARD_MANAGER_PRESET_DEFINITIONS];
+  return [...DASHBOARD_MANAGER_PRESET_DEFINITIONS, ...DASHBOARD_HEALTH_GROUPS.flatMap(group => group.metrics.filter(metric => metric.id !== HEALTH_METRIC_IDS.HeartRateVariability).map(metric => ({
+    id: `health:${metric.id}` as const, category: 'health' as const, introducedIn: 2, metricId: metric.id, healthGroup: group.id,
+    label: metric.label, tileName: metric.label, icon: healthMetricIcon(metric.id),
+    description: `${metric.label} from your Health history. Choose a source and reading; each keeps its original meaning.`,
+  })))];
 }
 
 export function getDashboardManagerPresetDefinition(
   presetId: DashboardManagerPresetId,
 ): DashboardManagerPresetDefinition | null {
-  return DASHBOARD_MANAGER_PRESET_DEFINITIONS.find(definition => definition.id === presetId) || null;
+  return getDashboardManagerPresetDefinitions().find(definition => definition.id === presetId) || null;
 }
 
 export function buildDashboardManagerPresetTile(
@@ -610,6 +625,14 @@ export function buildDashboardManagerPresetTile(
   const definition = getDashboardManagerPresetDefinition(input.presetId);
   if (!definition) {
     throw new Error(`Unknown dashboard manager preset id: ${input.presetId}`);
+  }
+
+  if (definition.category === 'health') {
+    return { name: definition.tileName, type: TileTypes.Chart, order: input.order, size: input.size,
+      chartType: DASHBOARD_HEALTH_METRIC_CHART_TYPE as unknown as ChartTypes, dataType: definition.metricId,
+      dataValueType: ChartDataValueTypes.Average, dataCategoryType: ChartDataCategoryTypes.DateType, dataTimeInterval: TimeIntervals.Daily,
+      healthMetric: { metric: definition.metricId, range: '30d' },
+    } as AppDashboardChartTileSettingsInterface;
   }
 
   if (definition.category === 'map') {
@@ -666,7 +689,9 @@ export function buildDashboardManagerPresetTile(
         dataCategoryType: ChartDataCategoryTypes.DateType,
         dataTimeInterval: TimeIntervals.Daily,
       };
-      return sleepTile;
+      return { ...sleepTile, healthSection: 'health', healthMetric: {
+        metric: definition.curatedChartType === DASHBOARD_HRV_TREND_CHART_TYPE ? HEALTH_METRIC_IDS.HeartRateVariability : 'sleep', range: '14d',
+      } } as AppDashboardChartTileSettingsInterface;
     }
 
     if (definition.curatedChartType === DASHBOARD_POWER_CURVE_CHART_TYPE) {

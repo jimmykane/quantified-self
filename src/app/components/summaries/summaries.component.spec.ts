@@ -1,3 +1,5 @@
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
@@ -176,7 +178,7 @@ describe('SummariesComponent', () => {
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
       imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule],
       schemas: [NO_ERRORS_SCHEMA],
-      providers: [
+      providers: [provideRouter([]),
         { provide: AppTimelineNotesService, useValue: {
           uid: signal('owner-user'), showOnCharts: signal(true), changes$: new Subject<void>(),
           loadRange: vi.fn().mockResolvedValue({ notes: [], incomplete: null }), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => uid === 'owner-user',
@@ -210,6 +212,58 @@ describe('SummariesComponent', () => {
       writable: true,
       value: originalMatchMedia,
     });
+  });
+
+  it('shows an Undo conflict after moving or adding a chart without hiding the saved layout', async () => {
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const message = 'Your dashboard changed. Close the editor and try again with the current layout.';
+    vi.spyOn(component.library, 'undo').mockImplementation(async () => { component.library.error.set(message); });
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    await component.undoDashboardChange();
+    expect(notice).toHaveBeenCalledWith(message, 'Dismiss', { duration: 6000 });
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+  });
+
+  it('restores Health selectors after a failed save and keeps other tiles unchanged', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const previous = { ...tile } as never;
+    component.tiles = [previous];
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save');
+    let reject!: (error: Error) => void;
+    save.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const change = { settings: { metric: 'steps' as const, range: '14d' as const, sourceKey: 'reading' }, initial: false };
+    const pending = component.onHealthMetricChange(0, change);
+    expect(component.tiles[0]['healthMetric']).toEqual(change.settings);
+    expect(component.mainGridSections.find(section => section.id === 'health')?.cells[0].tile['healthMetric']).toEqual(change.settings);
+    expect(component.healthSavingOrders.has(0)).toBe(true);
+    await component.onHealthMetricChange(0, change);
+    expect(save).toHaveBeenCalledTimes(1);
+    reject(new Error('offline')); await pending;
+    expect(component.tiles[0]).toBe(previous);
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([tile]);
+    expect(component.healthSavingOrders.size).toBe(0);
+    expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledTimes(1);
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+  });
+
+  it('ignores initial Health source hydration and saves explicit settings only to that tile', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue(undefined);
+    vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
+    const settings = { metric: 'steps' as const, range: '14d' as const, sourceKey: 'reading' };
+    await component.onHealthMetricChange(0, { settings, initial: true });
+    expect(save).not.toHaveBeenCalled();
+    await component.onHealthMetricChange(0, { settings, initial: false });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(component.user.settings.dashboardSettings.tiles[0]['healthMetric']).toEqual(settings);
+    expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledTimes(1);
   });
 
   it('cancels obsolete HRV windows and clears prior account data before loading another owner', () => {
@@ -789,11 +843,11 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
-    expect(sectionHeadings).toEqual(['Training State', 'Performance & Power', 'Activity Overview', 'Routes & Maps']);
+    expect(sectionHeadings).toEqual(['Training State', 'Health', 'Performance & Power', 'Activity Overview', 'Routes & Maps']);
     const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
-    expect(sectionTitleBlocks).toHaveLength(4);
+    expect(sectionTitleBlocks).toHaveLength(5);
     expect(kpiSection?.querySelector('.dashboard-section-header app-dashboard-chart-library')).not.toBeNull();
-    expect(nativeElement.querySelectorAll('.dashboard-main-section-header app-dashboard-chart-library')).toHaveLength(5);
+    expect(nativeElement.querySelectorAll('.dashboard-main-section-header app-dashboard-chart-library')).toHaveLength(6);
     expect(nativeElement.querySelectorAll('.dashboard-main-section > app-dashboard-chart-library')).toHaveLength(0);
     sectionTitleBlocks.forEach(block => {
       expect(block.querySelector(':scope > mat-icon')?.getAttribute('aria-hidden')).toBe('true');
@@ -1192,7 +1246,7 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
-    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(5);
+    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(6);
   });
 
   it('hides the Today summary while preserving dashboard options on an editable dashboard', () => {

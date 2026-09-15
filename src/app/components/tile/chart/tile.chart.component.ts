@@ -1,3 +1,4 @@
+import type { AppDashboardHealthMetricSettings } from '../../../models/app-user.interface';
 import type { DashboardHrvContext } from '../../../helpers/dashboard-hrv-context.helper';
 import { ChangeDetectionStrategy, Component, computed, EventEmitter, input, Input, Output, type Signal } from '@angular/core';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
@@ -117,6 +118,10 @@ type DashboardRecoveryNowSnapshotStatus = DerivedMetricSnapshotStatus | 'missing
 export class TileChartComponent extends TileAbstractDirective {
   /** Explicit workspace source; shared and library previews default to no private notes. */
   readonly timelineNotes = input<Signal<TimelineNoteChartContext | null> | null>(null);
+  @Input() healthMetric: AppDashboardHealthMetricSettings | null = null;
+  @Input() healthSettingsSaving = false;
+  @Output() healthMetricChange = new EventEmitter<{settings:AppDashboardHealthMetricSettings; initial:boolean}>();
+  @Output() healthSectionChange = new EventEmitter<'health'|'trainingState'>();
   readonly notesContext = computed(() => this.timelineNotes()?.() ?? null);
 
   @Input() tileName = '';
@@ -291,7 +296,7 @@ export class TileChartComponent extends TileAbstractDirective {
   }
 
   get showSleepRangeControls(): boolean {
-    return this.chartType === this.sleepTrendChartType || this.chartType === this.hrvTrendChartType;
+    return !this.healthMetric && (this.chartType === this.sleepTrendChartType || this.chartType === this.hrvTrendChartType);
   }
 
   get showPowerCurveCompareSelector(): boolean {

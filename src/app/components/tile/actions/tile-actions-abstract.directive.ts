@@ -1,3 +1,4 @@
+import { dashboardHealthMetric } from '../../../helpers/dashboard-health-tile.helper';
 import { DASHBOARD_TILE_PRESENTATIONS, DashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
 import { syncDashboardChartSuggestionStates } from '../../../helpers/dashboard-chart-discovery.helper';
 import { MatMenuTrigger } from '@angular/material/menu';
@@ -22,6 +23,13 @@ import {
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
+  @Output() healthSectionChange = new EventEmitter<'health'|'trainingState'>();
+  get healthMoveDestination(): 'health'|'trainingState'|null {
+    const tile=this.user?.settings?.dashboardSettings?.tiles?.find(item=>item.order===this.order);
+    const metric=dashboardHealthMetric(tile);
+    return metric==='sleep' || metric==='heart_rate_variability' ? (tile['healthSection']==='health' ? 'trainingState' : 'health') : null;
+  }
+
   protected configurationService = inject(DashboardConfigurationService);
   private readonly snackBar = inject(MatSnackBar);
   protected pendingBaseline: AppDashboardSettingsInterface | null = null;

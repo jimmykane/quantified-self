@@ -68,11 +68,15 @@
       [chartTimeInterval]="dataTimeInterval" [chartDataValueType]="dataValueType"
       [showLayoutControls]="!compactKpiRow"
       (savingChange)="onTileActionSaving($event)"
+      (healthSectionChange)="healthSectionChange.emit($event)"
       (editTile)="onEditTile($event)">
     </app-tile-chart-actions>
     </div>
     }
   </div>
+  }
+  @if (healthMetric) {
+    <app-dashboard-health-chart [disabled]="healthSettingsSaving || isTileActionSaving" [user]="$any(user)" [settings]="healthMetric" [darkTheme]="darkTheme" [reserveActions]="showActions" [timelineNotes]="previewMode ? null : notesContext()" (settingsChange)="healthMetricChange.emit($event)" />
   }
   @if (chartType === activityCalendarChartType) {
   <app-activity-calendar-tile [user]="user" [timelineNotes]="previewMode ? null : timelineNotes()"></app-activity-calendar-tile>
@@ -156,7 +160,7 @@
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-efficiency-trend-chart>
   }
-  @if (chartType === sleepTrendChartType) {
+  @if (chartType === sleepTrendChartType && !healthMetric) {
   <app-sleep-trend-chart [timelineNotes]="previewMode ? null : notesContext()" [unitSettings]="user?.settings?.unitSettings" [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [sleepTrend]="sleepTrend" [sleepRange]="sleepTrendRange" [sleepWindowLabel]="sleepTrendWindowLabel"
     [canNavigateOlder]="sleepTrendCanNavigateOlder" [canNavigateNewer]="sleepTrendCanNavigateNewer"
@@ -164,7 +168,7 @@
     [mobileTapFeedbackOptions]="dashboardMobileTapFeedbackOptions">
   </app-sleep-trend-chart>
   }
-  @if (chartType === hrvTrendChartType) {
+  @if (chartType === hrvTrendChartType && !healthMetric) {
   <app-hrv-chart [timelineNotes]="previewMode ? null : notesContext()" [infoTooltip]="chartInfoTooltip" [context]="hrvTrend" [isLoading]="isLoading || isTileActionSaving" [darkTheme]="darkTheme"
     [unitSettings]="user?.settings?.unitSettings" [reserveTitleActionSpace]="showHeaderControls"
     [preferredSource]="$any(user)?.settings?.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability" />

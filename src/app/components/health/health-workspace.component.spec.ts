@@ -1,3 +1,7 @@
+import { getDashboardChartCatalog } from '../../helpers/dashboard-chart-catalog.helper';
+import { HealthMetricQueryService } from '../../services/health-metric-query.service';
+import { DashboardLibraryModule } from '../../modules/dashboard-library.module';
+import { DashboardConfigurationService } from '../../services/dashboard-configuration.service';
 import { Component, Input, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { readFileSync } from 'node:fs';
@@ -458,6 +462,7 @@ describe('HealthWorkspaceComponent', () => {
       imports: [HealthWorkspaceComponent],
       providers: [
         provideRouter([]),
+        {provide:DashboardConfigurationService,useValue:{save:vi.fn().mockResolvedValue(undefined)}},
         { provide: AppHapticsService, useValue: haptics },
         { provide: MatBottomSheet, useValue: { open: openBottomSheet } },
         { provide: AppEventService, useValue: { getEventMetaDataKeys: () => of([]) } },
@@ -516,7 +521,7 @@ describe('HealthWorkspaceComponent', () => {
       ],
     })
       .overrideComponent(HealthWorkspaceComponent, {
-        remove: { imports: [AppChartsModule, ServiceSourceIconComponent, HealthMetricChartComponent, TimelineNotesWorkspaceComponent] },
+        remove: { imports: [DashboardLibraryModule, AppChartsModule, ServiceSourceIconComponent, HealthMetricChartComponent, TimelineNotesWorkspaceComponent] },
         add: { imports: [SleepTrendStubComponent, ServiceSourceIconStubComponent, HealthMetricChartStubComponent, TimelineNotesWorkspaceStubComponent] },
       })
       .overrideComponent(ServiceSourceIconComponent, {
@@ -530,7 +535,42 @@ describe('HealthWorkspaceComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
   }
+
+  it('pins the selected metric with its range length and views existing tiles without changing them', async () => {
+    await createComponent(undefined, '90d', {}, 'steps');
+    const user = component.dashboardUser()!;
+    user.settings.dashboardSettings = { tiles: [] } as never;
+    await component.addToDashboard();
+    expect(component.dashboardLibrary.healthSettings()).toMatchObject({ metric: 'steps', range: '90d' });
+    expect(component.dashboardLibrary.pinnedFromHealth()).toBe(true);
+    expect(component.dashboardLibrary.activeLane()).toBe('section:health');
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+    const existing = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    existing['healthMetric'] = { metric: 'steps', range: '14d', sourceKey: 'explicit-source' };
+    user.settings.dashboardSettings.tiles = [existing];
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    await component.addToDashboard();
+    expect(navigate).toHaveBeenCalledWith(['/dashboard'], { queryParams: { healthMetric: 'steps' } });
+    expect(existing['healthMetric']).toEqual({ metric: 'steps', range: '14d', sourceKey: 'explicit-source' });
+  });
+
+  it('offers Undo after a Health pin and updates the dashboard state without changing Health preferences', async () => {
+    await createComponent();
+    const user = component.dashboardUser()!;
+    user.settings.dashboardSettings = { tiles: [] } as never;
+    const action = new Subject<void>();
+    const snack = vi.spyOn(TestBed.inject(MatSnackBar), 'open').mockReturnValue({ onAction: () => action } as never);
+    const undo = vi.spyOn(component.dashboardLibrary, 'undo').mockResolvedValue(undefined);
+    component.dashboardLibrary.undoAvailable.set(true);
+    component.dashboardLibrary.changed$.next(0);
+    expect(snack).toHaveBeenCalledWith('Chart added to dashboard', 'Undo', { duration: 7000 });
+    action.next(); await Promise.resolve();
+    expect(undo).toHaveBeenCalledWith(user);
+    expect(updateHealthWorkspacePreferences).not.toHaveBeenCalled();
+  });
 
   it('keeps initialization, saved-view hydration, and sync refreshes silent', async () => {
     await createComponent();
@@ -1755,6 +1795,7 @@ describe('HealthWorkspaceComponent', () => {
     expect((fixture.nativeElement as HTMLElement).textContent)
       .not.toContain('Workout-backed observations could not be loaded');
 
+    TestBed.inject(HealthMetricQueryService).invalidate('user-1');
     loadActivityHealthRange.mockRejectedValueOnce(new Error('private provider failure'));
     component.selectMetric(HEALTH_METRIC_IDS.Vo2Max);
     fixture.detectChanges();

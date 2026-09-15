@@ -115,13 +115,13 @@
   }
   @if (showActions && library.busy()) { <mat-progress-bar mode="indeterminate" aria-label="Saving dashboard"></mat-progress-bar> }
   @if (showActions && library.error() && !library.activeLane()) { <p role="alert">{{ library.error() }}</p> }
-  @if (showActions && library.undoAvailable()) { <div role="status" class="dashboard-chart-added">Chart added <button mat-button (click)="library.undo($any(user))" [disabled]="library.busy()">Undo</button></div> }
+  @if (showActions && library.undoAvailable()) { <div role="status" class="dashboard-chart-added">Dashboard updated <button mat-button (click)="undoDashboardChange()" [disabled]="library.busy()">Undo</button></div> }
   @if (kpiLaneTiles.length || (showActions && isOwnerDashboard)) {
   <section class="dashboard-kpi-section" aria-label="KPIs">
     @if (showActions && isOwnerDashboard) {
     <div class="dashboard-section-header dashboard-main-section-header">
       <h2>KPIs</h2>
-      <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library>
+      <app-dashboard-chart-library [user]="$any(user)" lane="kpi" [seed]="previewInput" [timelineNotes]="timelineNotes()" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library>
     </div>
     }
     @if (kpiLaneTiles.length) {
@@ -140,7 +140,7 @@
         [cdkDragPreviewContainer]="'parent'"
         [cdkDragDisabled]="!desktopTileDragEnabled || kpiLaneTiles.length < 2"
         [class.desktop-draggable-tile]="desktopTileDragEnabled && kpiLaneTiles.length > 1">
-        <app-tile-chart [timelineNotes]="timelineNotes" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
+        <app-tile-chart [healthSettingsSaving]="healthSavingOrders.has(tile.order)" [healthMetric]="isOwnerDashboard ? $any(getChartTile(tile)).healthMetric : null" (healthMetricChange)="onHealthMetricChange(tile.order, $event)" (healthSectionChange)="moveHealthTile(tile.order, $event)" [timelineNotes]="timelineNotes" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
           [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
           [compactKpiRow]="true"
           [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
@@ -199,7 +199,7 @@
             <h2 [id]="'dashboard-section-' + section.id">{{ section.label }}</h2>
           </div>
         </div>
-      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
+      @if (showActions && isOwnerDashboard) { <app-dashboard-chart-library [user]="$any(user)" [lane]="$any('section:' + section.id)" [seed]="previewInput" [timelineNotes]="timelineNotes()" [darkTheme]="darkTheme" (pickerClosed)="onChartPickerClosed()"></app-dashboard-chart-library> }
       </div>
       @if (section.tiles.length) {
       <app-dashboard-tile-board
@@ -223,7 +223,7 @@
           [rows]="tile.size.rows"
           [maxColumns]="section.columns">
           @if (tile.type === tileTypes.Chart) {
-          <app-tile-chart [timelineNotes]="timelineNotes" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
+          <app-tile-chart [healthSettingsSaving]="healthSavingOrders.has(tile.order)" [healthMetric]="isOwnerDashboard ? $any(getChartTile(tile)).healthMetric : null" (healthMetricChange)="onHealthMetricChange(tile.order, $event)" (healthSectionChange)="moveHealthTile(tile.order, $event)" [timelineNotes]="timelineNotes" [user]="user" [type]="tile.type" [tileName]="getChartTile(tile).name || ''" [chartType]="getChartTile(tile).chartType"
             [isLoading]="isTileLoading(tile)" [data]="getChartTile(tile).data" [showActions]="showActions" [darkTheme]="darkTheme"
             [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
             [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
