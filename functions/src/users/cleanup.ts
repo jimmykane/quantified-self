@@ -15,6 +15,8 @@ import { ACTIVITY_SYNC_QUEUE_COLLECTION_NAME } from '../activity-sync/constants'
 import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-sync/constants';
 import { DELIVERY_LEDGER, DELIVERY_QUEUE, DELIVERY_SCOPES, DELIVERY_STATE } from '../training-plans/delivery/contracts';
 import { TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES } from '../../../shared/training-provider-delivery';
+import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../shared/training-provider-verification';
+import { TRAINING_PROVIDER_CAPACITY } from '../training-plans/delivery/request-capacity';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import {
     SLEEP_SYNC_QUEUE_COLLECTION_NAME,
@@ -323,7 +325,8 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
         { label: 'training plan state', ref: userRef.collection(TRAINING_PLAN_STATE_COLLECTION_ID) },
         { label: 'training plans', ref: userRef.collection(TRAINING_PLANS_COLLECTION_ID) },
         { label: 'scheduled workouts', ref: userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID) },
-        ...[DELIVERY_LEDGER, DELIVERY_STATE, DELIVERY_SCOPES, TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES]
+        ...[DELIVERY_LEDGER, DELIVERY_STATE, DELIVERY_SCOPES, TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES,
+            TRAINING_DELIVERY_VERIFICATIONS, TRAINING_PROVIDER_CAPACITY]
             .map(id => ({ label: id, ref: userRef.collection(id) })),
     ];
 

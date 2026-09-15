@@ -4,8 +4,8 @@ import { getDashboardChartCatalog, getAvailableDashboardCharts, matchesDashboard
 describe('dashboard chart catalog', () => {
   it('gives every existing preset one destination, default size and stable identity', () => {
     const entries = getDashboardChartCatalog();
-    expect(entries).toHaveLength(37);
-    expect(new Set(entries.map(entry => entry.definition.id)).size).toBe(37);
+    expect(entries).toHaveLength(70);
+    expect(new Set(entries.map(entry => entry.definition.id)).size).toBe(70);
     for (const entry of entries) {
       expect(entry.tile.size.columns).toBeGreaterThan(0);
       expect(matchesDashboardPreset(entry.tile, entry.tile)).toBe(true);
@@ -18,7 +18,7 @@ describe('dashboard chart catalog', () => {
     const hrv = catalog.find(entry => entry.definition.id === 'curated-hrv')!;
     const sleep = catalog.find(entry => entry.definition.id === 'curated-sleep')!;
     expect(hrv.lane).toBe(sleep.lane);
-    expect(hrv.lane).toBe('section:trainingState');
+    expect(hrv.lane).toBe('section:health');
     expect(matchesDashboardPreset(sleep.tile, hrv.tile)).toBe(false);
     expect(getAvailableDashboardCharts(hrv.lane, [sleep.tile]).some(entry => entry.definition.id === hrv.definition.id)).toBe(true);
   });

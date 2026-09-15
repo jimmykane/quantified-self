@@ -31,7 +31,7 @@ describe('help.content', () => {
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('not enabled yet');
-    expect(content).toContain('private evaluation pilot, not a public launch');
+    expect(content).toContain('private production pilot, not a public launch');
     expect(content).toContain('Older connections may need this even when activity imports work');
     expect(content).toContain('Stopping workout sync keeps your provider account connected');
     expect(content).toContain('If you separately choose to disconnect a provider or delete your Quantified Self account');
@@ -73,11 +73,18 @@ describe('help.content', () => {
     expect(content).toContain('**Timeline notes** is an independent read-only permission');
     expect(content).toContain('It is selected by default when requested; uncheck it before approving to withhold access.');
     expect(content).toContain('Every requested permission starts checked, including permissions added later');
-    expect(content).toContain('It is off by default. Changing notes or location access starts a fresh chat');
+    expect(content).toContain('It is off by default. Changing optional access starts a fresh chat');
     expect(content).toContain('full private');
     expect(content).toContain('hidden from charts');
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
       .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
+  });
+  it('explains independent read-only Training access without promoting the private planning UI', () => {
+    const content = getHelpSectionsForUser('ordinary-user').map(section => section.content).join(' ');
+    expect(content).toContain('**Training plans (optional):**');
+    expect(content).toContain('The Assistant cannot edit workouts or change sync');
+    expect(content).toContain('resets all optional permissions');
+    expect(content).toContain('provider-side workout delivery, not receipt on a watch');
   });
   it('explains private notes in both workspaces and makes their context searchable', () => {
     for (const id of ['health', 'training-analysis']) {
@@ -447,7 +454,7 @@ describe('help.content', () => {
     expect(gettingStartedSection?.content).toContain('**Aerobic Durability**');
     expect(gettingStartedSection?.content).toContain('current **Readiness**');
     expect(gettingStartedSection?.content).toContain('groups chart and map tiles by intent');
-    expect(gettingStartedSection?.content).toContain('**Training State**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
+    expect(gettingStartedSection?.content).toContain('**Training State**, **Health**, **Performance & Power**, **Activity Overview**, and **Routes & Maps**');
     expect(gettingStartedSection?.content).toContain('All custom charts belong in **Activity Overview**');
     expect(gettingStartedSection?.content).toContain('chart-aware default sizes');
     expect(gettingStartedSection?.content).toContain('Empty editable dashboards show lightweight section guidance');
@@ -520,7 +527,7 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Garmin workout delivery is available only to the private evaluation pilot');
+    expect(planningSection?.content).toContain('Garmin workout delivery is available only to the private production pilot');
     expect(planningSection?.content).toContain('COROS, Wahoo and Suunto delivery are not enabled yet');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');

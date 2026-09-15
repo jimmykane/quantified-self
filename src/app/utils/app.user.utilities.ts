@@ -1,3 +1,4 @@
+import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../helpers/dashboard-health-tile.helper';
 import {
     ActivityTypes,
     AppThemes,
@@ -566,6 +567,7 @@ export class AppUserUtilities {
         settings.dashboardSettings.autoTiles = AppUserUtilities.normalizeDashboardAutoTiles(settings.dashboardSettings.autoTiles);
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         let hasNormalizedRecoveryDashboardTile = false;
+        const normalizedHealthMetrics = new Set<string>();
         const normalizedMapDashboardSources = new Set<AppDashboardMapTileSource>();
         const legacyTileEventFilterRange = resolveLegacyDashboardTileEventFilterRange(
             settings.dashboardSettings.dateRange,
@@ -579,6 +581,15 @@ export class AppUserUtilities {
             .map((tile: TileSettingsInterface) => {
             if (tile.type === TileTypes.Chart) {
                 const chartTile = tile as AppDashboardChartTileSettingsInterface;
+                const healthMetric = dashboardHealthMetric(chartTile);
+                if (isPrivateDashboardHealthTile(chartTile) && !healthMetric) return null;
+                if (!healthMetric) { delete chartTile.healthMetric; delete chartTile.healthSection; }
+                if (healthMetric) {
+                    if (normalizedHealthMetrics.has(healthMetric)) return null;
+                    normalizedHealthMetrics.add(healthMetric);
+                    chartTile.healthMetric = dashboardHealthSettings(chartTile, settings.dashboardSettings);
+                    if (chartTile.healthSection !== 'health' && chartTile.healthSection !== 'trainingState') delete chartTile.healthSection;
+                }
                 if (chartTile.chartType === ChartTypes.Spiral) {
                     chartTile.chartType = ChartTypes.LinesVertical;
                 }

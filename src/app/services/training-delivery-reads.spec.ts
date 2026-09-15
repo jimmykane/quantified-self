@@ -29,13 +29,22 @@ describe('Training summary read bounds and ownership', () => {
   });
   it('uses one full-plan bounded query independently from the dialog page size', async () => {
     const service = TestBed.inject(TrainingDeliveryService);
-    expect(await firstValueFrom(service.watchSummaryScope('owner', 'plan', 'p', null))).toEqual({ settings: [], statuses: [], summaryComplete: true });
+    expect(await firstValueFrom(service.watchSummaryScope('owner', 'plan', 'p', null)))
+      .toEqual({ settings: [], statuses: [], verifications: [], summaryComplete: true });
     expect(TRAINING_DELIVERY_SUMMARY_LIMIT).toBe(1601);
     expect(limit).toHaveBeenCalledWith(1601); expect(where).toHaveBeenCalledWith('planId', '==', 'p');
     expect(collectionData).toHaveBeenCalledTimes(2);
     expect(where).toHaveBeenCalledWith('associationPlanId', '==', 'p');
     expect(query).toHaveBeenCalledWith('users/owner/trainingDeliveryStatuses', expect.anything(), expect.anything(), expect.anything());
     expect(docData).toHaveBeenCalledTimes(4); expect(call).not.toHaveBeenCalled();
+  });
+  it('reads verification only for the bounded details page, without invoking a provider check', async () => {
+    const view = await firstValueFrom(TestBed.inject(TrainingDeliveryService).watchScope('owner', 'plan', 'p', 25));
+    expect(view.verifications).toEqual([]);
+    expect(query).toHaveBeenCalledWith('users/owner/trainingDeliveryVerifications',
+      { where: ['planId', '==', 'p'] }, { orderBy: '__name__' }, { limit: 25 });
+    expect(collectionData).toHaveBeenCalledTimes(2);
+    expect(call).not.toHaveBeenCalled();
   });
   it('reads only parent settings alongside a plan-bound workout, not all of its siblings', async () => {
     await firstValueFrom(TestBed.inject(TrainingDeliveryService).watchSummaryScope('owner', 'workout', 'w', 'p'));

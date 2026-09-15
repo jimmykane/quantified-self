@@ -34,6 +34,9 @@
       <span>{{ canConfigure ? presentation.edit : presentation.details }}</span>
     </button>
 
+    @if (healthMoveDestination; as destination) {
+      <button mat-menu-item type="button" [disabled]="isSaving" (click)="healthSectionChange.emit(destination)"><mat-icon>drive_file_move</mat-icon><span>Move to {{ destination === 'health' ? 'Health' : 'Training State' }}</span></button>
+    }
     @if (user.settings.dashboardSettings.tiles.length > 0) {
     <!-- Keep menu items in this view so MatMenu includes them in keyboard navigation. -->
     <div class="tile-actions-divider" role="separator"></div>

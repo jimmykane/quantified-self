@@ -35,6 +35,8 @@ describe('Training delivery service summaries', () => {
     const [row] = await buildTrainingDeliverySummaries(data);
     expect(row.label).toBe('2 of 3 workouts synced'); expect(row.detail).toContain('1 waiting to sync');
     expect(row.icon).not.toBe('check_circle'); expect(row.presentation.displayLabel).toBe('Garmin Connect');
+    expect(row.projection).toMatchObject({ totalWorkouts: 3, syncedWorkouts: 2, state: 'current',
+      outcomes: [{ status: 'waiting', count: 1 }, { status: 'delivered', count: 2 }] });
   });
   it('never claims native plan or device delivery, even when all workouts are confirmed', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: ['a', 'b', 'c'].map(id => status(id)) });
@@ -49,6 +51,12 @@ describe('Training delivery service summaries', () => {
   it('does not count a partial first delivery or an older accepted version', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a', { lastAcceptedAtMs: null }), status('b', { differsFromQS: true })] });
     expect(row.label).toBe('0 of 3 workouts synced'); expect(row.detail).toContain('2 delivery unconfirmed');
+  });
+  it('does not count confirmed missing remote artifacts even though earlier acceptance is retained', async () => {
+    const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [
+      status('a', { hasRemoteCopy: false, differsFromQS: true }), status('b'),
+    ] });
+    expect(row.label).toBe('1 of 3 workouts synced');
   });
   it('does not double-count earlier accounts or let their success stand in for the new destination', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a'), status('a', { id: identity('a', 'old') }),
@@ -65,6 +73,8 @@ describe('Training delivery service summaries', () => {
     for (const data of cases) {
       const [row] = await buildTrainingDeliverySummaries(data);
       expect(row.label).toBe('0 of 1 workout synced'); expect(row.detail).toContain('awaiting latest check');
+      expect(row.projection).toMatchObject({ syncedWorkouts: 0, differsFromQS: null,
+        outcomes: [{ status: 'awaiting_latest_check', count: 1 }] });
     }
   });
   it('distinguishes stopped, skipped, inactive, Pro-paused, horizon and removed states', async () => {
@@ -91,6 +101,8 @@ describe('Training delivery service summaries', () => {
   it('withholds totals when the bounded projection read is incomplete', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), complete: false });
     expect(row.label).toBe('Status incomplete'); expect(row.detail).toContain('not a complete plan total');
+    expect(row.projection).toMatchObject({ state: 'incomplete', syncedWorkouts: null, totalWorkouts: null,
+      retainedCopies: null, differsFromQS: null, outcomes: [] });
   });
   it('supports 400 current workouts across four providers without turning record count into workout count', async () => {
     const providers = ['garmin', 'coros', 'wahoo', 'suunto'] as const;

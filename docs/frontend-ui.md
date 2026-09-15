@@ -196,15 +196,21 @@ do not opt into the compact height-filling class.
 
 ## Dashboard chart picker
 
-Owners add tiles from compact, right-aligned section actions: Add KPI, Add chart, or Add map. Mixed sections such as Activity Overview use Add tile. The action is hidden when
-a section has no available presets; keep the library component mounted so existing tiles can still open for editing.
-Activity Overview retains its action for custom creation and opens properties directly when no presets remain. Empty
-owner sections retain an entry point;
-shared/read-only dashboards do not instantiate the library. A dashboard-scoped `DashboardChartLibraryState` permits one
-open section and one local draft. All custom metric charts and presets belong in Activity Overview, which is the only
+Owners use a compact **Add to dashboard +** action in the dashboard header (an accessible **+** button on phones).
+One dashboard-scoped `DashboardChartLibraryComponent` with `allSections=true` owns the overlay and handles section
+add actions and existing-tile editing. Its Material section selector exposes every lane, including hidden ones. Opening
+from the top prioritizes unseen additions, then an available section; it avoids landing on a completed preset list.
+Empty KPI/main sections are omitted from the dashboard. Populated sections retain right-aligned Add KPI, Add chart,
+Add map, or mixed Add tile actions, delegated to the same picker. A section action is hidden when no presets remain;
+Activity Overview retains custom creation and its direct action opens properties when complete. Adding a first tile
+reveals its section, removing the last hides it, and restoring the tile restores the section. The global picker remains
+mounted through those changes, so overlay state and editing do not depend on section visibility. An entirely empty
+owner dashboard offers Add tiles and Use starter dashboard through the existing confirmation/persistence flow.
+Shared/read-only dashboards do not instantiate the picker or its actions. `DashboardChartLibraryState` still permits one
+open section and one local draft. All custom activity metric charts and presets belong in Activity Overview, which is the only
 section offering Create custom chart. This grouping is computed for existing tiles too, including shared dashboards;
 there is no separate Custom Charts section or persisted section migration. Curated charts, KPIs, and maps retain their
-existing destinations. The browser shows all available entries in a scrollable Material action list with section search and KPI group filters.
+existing destinations. The browser shows all available entries in a scrollable Material action list with section search, KPI group filters, and Health categories. Health search spans categories; KPI search retains its group filter.
 KPI filters use one horizontally scrollable row with Material's single-selection indicator hidden, retaining the selected
 color and accessible state. Their height stays stable during opening and selection; the rail reserves touch/focus space
 and permits narrow-screen overflow without overriding Material internals.
@@ -283,7 +289,7 @@ sections to the current revision; existing profiles without metadata use the rol
 badge considers unseen, unadded catalog entries regardless of data eligibility. It is absent from shared/public views
 and included in the add action's accessible label.
 
-Opening a section's browse list snapshots its unseen IDs for that session and acknowledges that section only. Editing
+The top action aggregates unseen additions across all lanes without reading chart data. Opening a section's browse list snapshots its unseen IDs for that session and acknowledges that section only. Switching sections keeps the same overlay, resets section search/filters, and loads only that section's evidence; session New labels survive revisiting a section. Editing
 an existing tile does not acknowledge. `DashboardChartDiscoveryService` derives badges from bundled metadata and the
 already-loaded owner settings: no polling or chart reads. It writes only advancing acknowledgements using a Firestore
 transaction that keeps the maximum revision. Full profile settings saves preserve those maxima transactionally too,
@@ -365,3 +371,19 @@ Visual verification uses synthetic data with the real Angular components and Mat
 and [mobile preview](images/dashboard-chart-library/mobile-preview.png).
 These captures contain no account data; the “Your data” label reflects synthetic input injected as loaded dashboard state.
 Physical haptics require a supported device; browser emulation only verifies interaction wiring and layout.
+
+### Dashboard Health tiles
+
+`DashboardLibraryModule` owns the reusable picker and tile UI without dashboard routing; Dashboard and Health import it. Health provides its own scoped `DashboardChartLibraryState`. Its pin shortcut opens a selected preview, copies range length (latest period), seeds the provider filter, and does not acknowledge the section. Back enters the browse list and acknowledges normally. Already-added metrics route to `/dashboard?healthMetric=…`; Summaries focuses that metric's tile and removes the query parameter.
+
+The Health lane follows Training State and uses Health's existing catalog groups and hidden-metric exclusions. Generic `HealthMetric` presets identify one `healthMetric.metric`; source and range are independent tile settings. Duplicate matching uses metric identity across all sections. Sleep/HRV keep their old renderer IDs and introduction revision; the 33 new presets use revision 2. Legacy tiles without `healthSection` stay in Training State; new Sleep/HRV presets set Health. Move changes only placement, preserves configuration, uses the transaction boundary, and supports guarded Undo. Starter and empty layouts are unchanged.
+
+`DashboardHealthChartComponent` adapts the shared Health projection to one chosen source/reading. List thumbnails, selected previews, and owner tiles use the same model and colors. Full-series opaque IDs preserve provider accounts, aggregation, semantic variants and reading methods; an explicit missing ID remains selected. Source defaults are deterministic, with the HRV Highlight preference used only as an initial account hint. Date length persists independently, while older/newer anchors are local. A thumbnail is inert; its row owns activation feedback. Preview initialization and hydration are silent.
+
+The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
+
+Health category chips retain the existing single-row overflow rail. `ChartSourcePickerComponent` keeps source attribution beside the latest value in owner Health/HRV tiles and their previews. Sleep overview places the picker in its date-control row when there are alternatives; its renderer already includes provider attribution. A sole selected source is plain text. Alternatives open a shared `qs-menu-panel` Material menu with wrapped full provider/account and reading details, checked state, keyboard navigation and focus restoration. This nested menu keeps the mobile add-chart sheet open. `chart-source.helper.ts` shortens only the visible label; identities and full provenance remain unchanged. Opening owns one selection haptic and makes no data request; the chart owns feedback for an accepted source change. Both renderers receive the workspace's shared Timeline notes context. New metric tiles are removed from public view models before rendering; private Health loading additionally requires a matching signed-in owner. Existing Sleep/HRV public renderers and deterministic homepage examples remain separate from these owner reads.
+
+Health thumbnails reuse completed browser evidence for the same owner, metric, range and source while their visible subscription hydrates. Their latest value uses the existing canonical display string. The inert ECharts sparkline fits the span of recorded points, preserving values, gaps and colors; single readings and zero-valued bars remain visible. Full charts retain their selected date axis. Source options require drawable points in the selected window (or renderable Sleep sessions). A saved missing source retains its identity and displays `Source unavailable` with an explanation. The menu offers available replacements without silently substituting one; with no replacements it remains plain attribution.
+
+The shared Health projection includes recorded Sleep duration/score, average/minimum sleep heart rate, resting heart rate, maximum sleep oxygen and average sleep respiration even without separate Health reference records. Compact labels retain distinctions such as Sleep minimum, Sleep maximum and Nap average; the menu retains the full reading description. Health's provider filters count these readings too. A failed or pending companion source does not hide available readings, and an empty state waits for the relevant bounded reads. See `docs/unified-health-data.md` for the projection and source-separation contract.

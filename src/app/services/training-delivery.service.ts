@@ -10,8 +10,11 @@ import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppUserService } from './app.user.service';
 import { TRAINING_PLAN_MAX_CURRENT_WORKOUTS } from '@shared/training-plans';
+import { TRAINING_DELIVERY_VERIFICATIONS, parseTrainingVerificationV1,
+  type TrainingVerificationReceiptV1, type TrainingVerificationV1 } from '@shared/training-provider-verification';
 
 export interface TrainingDeliveryView {
+  verifications?: TrainingVerificationV1[];
   settings: TrainingDeliverySettingsV1[];
   statuses: TrainingDeliveryStatusV1[];
   /** Summary-only look-ahead for plan workout overrides; ordinary dialog pagination is unchanged. */
@@ -50,7 +53,7 @@ export class TrainingDeliveryService {
     ]).pipe(map(values => values.some(rows => rows.length > 0)));
   }
   watchScope(uid: string, scope: TrainingDeliveryViewScope, id: string,
-    statusLimit = TRAINING_DELIVERY_PAGE_SIZE): Observable<TrainingDeliveryView> {
+    statusLimit = TRAINING_DELIVERY_PAGE_SIZE, includeVerification = true): Observable<TrainingDeliveryView> {
     if (!uid) return of(EMPTY_TRAINING_DELIVERY_VIEW);
     const settings$ = scope === 'history' ? of([] as TrainingDeliverySettingsV1[]) : combineLatest(PLANNED_WORKOUT_PROVIDER_IDS.map(provider => docData(doc(this.firestore,
       'users', uid, TRAINING_DELIVERY_SETTINGS, deliverySettingsId(scope, id, provider))))).pipe(
@@ -59,10 +62,13 @@ export class TrainingDeliveryService {
       ...(scope === 'history' ? [] : [where(scope === 'plan' ? 'planId' : 'workoutId', '==', id)]),
       orderBy('__name__'), limit(statusLimit))).pipe(
       map(values => values.map(parseTrainingDeliveryStatusV1)));
-    return combineLatest([settings$, statuses$]).pipe(map(([settings, statuses]) => ({ settings, statuses })));
+    const verifications$ = includeVerification ? collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_VERIFICATIONS),
+      ...(scope === 'history' ? [] : [where(scope === 'plan' ? 'planId' : 'workoutId', '==', id)]),
+      orderBy('__name__'), limit(statusLimit))).pipe(map(values => values.map(parseTrainingVerificationV1))) : of([]);
+    return combineLatest([settings$, statuses$, verifications$]).pipe(map(([settings, statuses, verifications]) => ({ settings, statuses, verifications })));
   }
   watchSummaryScope(uid: string, scope: 'plan' | 'workout', id: string, parentPlanId: string | null): Observable<TrainingDeliveryView> {
-    const view$ = this.watchScope(uid, scope, id, TRAINING_DELIVERY_SUMMARY_LIMIT);
+    const view$ = this.watchScope(uid, scope, id, TRAINING_DELIVERY_SUMMARY_LIMIT, false);
     if (!uid) return view$;
     if (scope === 'plan') {
       const overrides$ = collectionData(query(collection(this.firestore, 'users', uid, TRAINING_DELIVERY_SETTINGS),
@@ -82,6 +88,9 @@ export class TrainingDeliveryService {
   }
   async mutate(command: TrainingDeliveryCommandV1, canExecute: () => boolean = () => true): Promise<TrainingDeliverySettingsV1> {
     return this.invoke<TrainingDeliverySettingsV1>('mutateTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_SAVE_TIMEOUT_MS);
+  }
+  async check(command: TrainingDeliveryCommandV1 & { action: 'check' }, canExecute: () => boolean = () => true): Promise<TrainingVerificationReceiptV1> {
+    return this.invoke<TrainingVerificationReceiptV1>('mutateTrainingProviderDelivery', command, canExecute, TRAINING_DELIVERY_SAVE_TIMEOUT_MS);
   }
   private async invoke<T>(name: 'previewTrainingProviderDelivery' | 'mutateTrainingProviderDelivery',
     command: TrainingDeliveryCommandV1, canExecute: () => boolean, timeoutMs: number): Promise<T> {

@@ -1,3 +1,5 @@
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
 import { TimelineNotesWorkspaceComponent } from '../timeline-notes/timeline-notes-workspace.component';
 import { AppTimelineNotesService } from '../../services/app.timeline-notes.service';
 import { By } from '@angular/platform-browser';
@@ -176,7 +178,7 @@ describe('SummariesComponent', () => {
       declarations: [SummariesComponent, DashboardTileBoardComponent, DashboardTileCellComponent],
       imports: [AppChartSharedModule, TimelineNotesWorkspaceComponent, PageHeaderComponent, MetricIndicatorComponent, MatMenuModule, MatProgressSpinnerModule, NoopAnimationsModule],
       schemas: [NO_ERRORS_SCHEMA],
-      providers: [
+      providers: [provideRouter([]),
         { provide: AppTimelineNotesService, useValue: {
           uid: signal('owner-user'), showOnCharts: signal(true), changes$: new Subject<void>(),
           loadRange: vi.fn().mockResolvedValue({ notes: [], incomplete: null }), cachedRange: vi.fn(() => null), invalidate: vi.fn(), isOwner: (uid: string) => uid === 'owner-user',
@@ -210,6 +212,58 @@ describe('SummariesComponent', () => {
       writable: true,
       value: originalMatchMedia,
     });
+  });
+
+  it('shows an Undo conflict after moving or adding a chart without hiding the saved layout', async () => {
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const message = 'Your dashboard changed. Close the editor and try again with the current layout.';
+    vi.spyOn(component.library, 'undo').mockImplementation(async () => { component.library.error.set(message); });
+    const notice = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    await component.undoDashboardChange();
+    expect(notice).toHaveBeenCalledWith(message, 'Dismiss', { duration: 6000 });
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([]);
+  });
+
+  it('restores Health selectors after a failed save and keeps other tiles unchanged', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const previous = { ...tile } as never;
+    component.tiles = [previous];
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save');
+    let reject!: (error: Error) => void;
+    save.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const change = { settings: { metric: 'steps' as const, range: '14d' as const, sourceKey: 'reading' }, initial: false };
+    const pending = component.onHealthMetricChange(0, change);
+    expect(component.tiles[0]['healthMetric']).toEqual(change.settings);
+    expect(component.mainGridSections.find(section => section.id === 'health')?.cells[0].tile['healthMetric']).toEqual(change.settings);
+    expect(component.healthSavingOrders.has(0)).toBe(true);
+    await component.onHealthMetricChange(0, change);
+    expect(save).toHaveBeenCalledTimes(1);
+    reject(new Error('offline')); await pending;
+    expect(component.tiles[0]).toBe(previous);
+    expect(component.user.settings.dashboardSettings.tiles).toEqual([tile]);
+    expect(component.healthSavingOrders.size).toBe(0);
+    expect(TestBed.inject(AppHapticsService).error).toHaveBeenCalledTimes(1);
+    expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+  });
+
+  it('ignores initial Health source hydration and saves explicit settings only to that tile', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile);
+    tile.order = 0;
+    component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [tile] } } } as SummariesComponent['user'];
+    component.eventUser = component.user;
+    const save = vi.spyOn(TestBed.inject(DashboardConfigurationService), 'save').mockResolvedValue(undefined);
+    vi.spyOn(component, 'rebuildTilesFromCurrentState' as never).mockResolvedValue(undefined as never);
+    const settings = { metric: 'steps' as const, range: '14d' as const, sourceKey: 'reading' };
+    await component.onHealthMetricChange(0, { settings, initial: true });
+    expect(save).not.toHaveBeenCalled();
+    await component.onHealthMetricChange(0, { settings, initial: false });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(component.user.settings.dashboardSettings.tiles[0]['healthMetric']).toEqual(settings);
+    expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledTimes(1);
   });
 
   it('cancels obsolete HRV windows and clears prior account data before loading another owner', () => {
@@ -789,11 +843,11 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
     const sectionHeadings = Array.from(nativeElement.querySelectorAll('.dashboard-main-section h2'))
       .map(heading => heading.textContent?.trim());
-    expect(sectionHeadings).toEqual(['Training State', 'Performance & Power', 'Activity Overview', 'Routes & Maps']);
+    expect(sectionHeadings).toEqual(['Activity Overview', 'Routes & Maps']);
     const sectionTitleBlocks = nativeElement.querySelectorAll('.dashboard-section-title-block');
-    expect(sectionTitleBlocks).toHaveLength(4);
-    expect(kpiSection?.querySelector('.dashboard-section-header app-dashboard-chart-library')).not.toBeNull();
-    expect(nativeElement.querySelectorAll('.dashboard-main-section-header app-dashboard-chart-library')).toHaveLength(5);
+    expect(sectionTitleBlocks).toHaveLength(2);
+    expect(dashboardHeader?.querySelector('app-dashboard-chart-library')).not.toBeNull();
+    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(1);
     expect(nativeElement.querySelectorAll('.dashboard-main-section > app-dashboard-chart-library')).toHaveLength(0);
     sectionTitleBlocks.forEach(block => {
       expect(block.querySelector(':scope > mat-icon')?.getAttribute('aria-hidden')).toBe('true');
@@ -1168,14 +1222,14 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('.dashboard-kpi-section')).not.toBeNull();
+    expect(nativeElement.querySelector('.dashboard-kpi-section')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-kpi-tile')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
   });
 
-  it('renders the dashboard header and section add entries for an editable empty dashboard', () => {
+  it('keeps one global picker and hides all empty sections on an editable dashboard', () => {
     component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
     component.showActions = true;
     component.tiles = [];
@@ -1187,12 +1241,14 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('.dashboard-kpi-section')).not.toBeNull();
+    expect(nativeElement.querySelector('.dashboard-kpi-section')).toBeNull();
     expect(nativeElement.querySelector('app-dashboard-tile-board')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('#dashboard-today-title')?.textContent?.trim()).toBe('Today');
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
-    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(5);
+    expect(nativeElement.querySelectorAll('app-dashboard-chart-library')).toHaveLength(1);
+    expect(component.mainGridSections).toEqual([]);
+    expect(nativeElement.querySelector('.dashboard-main-section')).toBeNull();
   });
 
   it('hides the Today summary while preserving dashboard options on an editable dashboard', () => {
@@ -1217,11 +1273,47 @@ describe('SummariesComponent', () => {
     expect(component.showTodaySummary).toBe(false);
     expect(dashboardHeader).not.toBeNull();
     const sharedHeader = dashboardHeader?.querySelector('.qs-page-header');
-    expect(sharedHeader?.classList.contains('qs-page-header--actions-only')).toBe(true);
-    expect(sharedHeader?.getAttribute('aria-label')).toBe('Dashboard controls');
+    expect(sharedHeader?.classList.contains('qs-page-header--actions-only')).toBe(false);
+    expect(sharedHeader?.querySelector('h2')?.textContent).toContain('Dashboard');
+    expect(nativeElement.querySelector('#dashboard-empty-title')?.textContent).toContain('Make this dashboard yours');
+    expect(nativeElement.textContent).toContain('Use starter dashboard');
+    const reset = vi.spyOn(component.library, 'bulk').mockResolvedValue(undefined);
+    const starter = Array.from(nativeElement.querySelectorAll('button')).find(button => button.textContent?.includes('Use starter dashboard'))!;
+    starter.click();
+    expect(reset).toHaveBeenCalledWith(component.user, 'reset');
+    component.library.busy.set(true); fixture.detectChanges();
+    expect(starter.disabled).toBe(true);
     expect(nativeElement.querySelector('#dashboard-today-title')).toBeNull();
     expect(nativeElement.querySelector('.dashboard-current-state-row')).toBeNull();
     expect(nativeElement.querySelector('[aria-label="Dashboard options"]')).not.toBeNull();
+  });
+
+  it('does not call a saved dashboard empty while its tiles are still being prepared', () => {
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile;
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [tile], showTodaySummary: false } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true; component.tiles = [];
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.dashboard-empty')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).not.toBeNull();
+  });
+
+  it('reveals a section for its first tile, hides it after removal, and restores it with the tile', () => {
+    component.user = { uid: 'owner', settings: { dashboardSettings: { tiles: [] } } } as any;
+    component.showActions = true; component.isOwnerDashboard = true;
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile as DashboardChartTileViewModel;
+    component.tiles = [tile]; component.mainGridTiles = [tile]; component.kpiLaneTiles = [];
+    component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(component.mainGridSections.map(section => section.id)).toEqual(['health']);
+    const picker = fixture.nativeElement.querySelector('app-dashboard-chart-library');
+    component.tiles = []; component.mainGridTiles = [];
+    component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(component.mainGridSections).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.dashboard-main-section')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).toBe(picker);
+    component.tiles = [tile]; component.mainGridTiles = [tile];
+    component['refreshMainGridSections'](); component['changeDetector'].markForCheck(); fixture.detectChanges();
+    expect(component.mainGridSections.map(section => section.id)).toEqual(['health']);
+    expect(fixture.nativeElement.querySelector('app-dashboard-chart-library')).toBe(picker);
   });
 
   it('renders the fixed Today summary on an otherwise empty read-only dashboard', () => {
@@ -1238,6 +1330,8 @@ describe('SummariesComponent', () => {
     expect(nativeElement.querySelector('.dashboard-summary-header')).not.toBeNull();
     expect(nativeElement.querySelector('.dashboard-current-state-row')).not.toBeNull();
     expect(nativeElement.querySelector('.dashboard-empty-section-guidance')).toBeNull();
+    expect(nativeElement.querySelector('.dashboard-empty')).toBeNull();
+    expect(nativeElement.querySelector('app-dashboard-chart-library')).toBeNull();
   });
 
   it('shows shared readiness drivers in Today and treats lower overnight heart rate as supportive', () => {

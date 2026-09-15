@@ -5,6 +5,7 @@ import { GarminTrainingTransport } from './transport';
 import { GarminTrainingHttpError } from './http';
 import { GarminHttpFixture } from '../test-support/garmin-http-fixture';
 import type { DeliveryArtifact, DeliveryCheckpoint, DeliveryOperation, DeliveryTransportProgress } from '../contracts';
+import { GARMIN_INSPECTION_POLICY } from './inspection';
 
 describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   let server: GarminHttpFixture;
@@ -34,6 +35,143 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   const execute = () => transport.execute(operation, checkpoint, guard);
   const recover = () => transport.recover(operation, checkpoint, guard);
   const writes = () => server.calls.filter(call => call.method !== 'GET');
+  const repair = async (missing: string[]) => {
+    const original = structuredClone(operation.artifact!);
+    transport = new GarminTrainingTransport(server.request, () => now,
+      { ...GARMIN_INSPECTION_POLICY, authoritativeAbsence: true, repairReady: true });
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'synthetic-authority', missing, original } };
+  };
+  const interruptReplacement = async () => {
+    const original = (await execute())!;
+    const oldWorkout = structuredClone(server.workouts.get(original.ids.workout)!);
+    server.workouts.delete(original.ids.workout); await repair(['workout']);
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || !request.path.includes('workout')) return;
+      server.afterHandle = null;
+      guard.mockRejectedValueOnce(new Error('interrupted before relinking'));
+    };
+    await expect(execute()).rejects.toThrow('interrupted before relinking');
+    expect(operation.artifact!.ids.workout).not.toBe(original.ids.workout);
+    expect(operation.artifact!.ids.schedule).toBeUndefined();
+    return { original, oldWorkout };
+  };
+  it('recovers a lost retired-schedule DELETE without losing either workout identity', async () => {
+    const { original, oldWorkout } = await interruptReplacement();
+    server.workouts.set(original.ids.workout, oldWorkout); // Original copy also reappeared.
+    operation = { ...operation, id: 'withdraw-repair', kind: 'remove', workout: null, progress: null };
+    server.afterHandle = async request => {
+      if (request.method !== 'DELETE') return;
+      server.afterHandle = null; throw new GarminTrainingHttpError('uncertain', false);
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.progress).toMatchObject({ step: 'retired-schedule-delete', state: 'started' });
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect(await execute()).toBeNull();
+    expect(server.workouts.size + server.schedules.size).toBe(0);
+    expect(writes().filter(row => row.method === 'DELETE' && row.path.endsWith(original.ids.schedule))).toHaveLength(1);
+  });
+  it('does not withdraw a retained original association that changed externally', async () => {
+    const { original } = await interruptReplacement();
+    server.schedules.get(original.ids.schedule)!.date = '2026-09-17';
+    operation = { ...operation, id: 'withdraw-repair', kind: 'remove', workout: null, progress: null };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes().filter(row => row.method === 'DELETE')).toHaveLength(0);
+  });
+  it('never repeats a root POST when a superseded partial repair loses its accepted replacement', async () => {
+    await interruptReplacement();
+    server.workouts.delete(operation.artifact!.ids.workout);
+    operation = { ...nextOperation(operation, { title: 'Latest edit' }), repair: { ...operation.repair!, continuation: true } };
+    const before = writes().length;
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes()).toHaveLength(before);
+  });
+  it.each([['schedule'], ['workout'], ['workout', 'schedule']])('repairs confirmed missing %j without replacing surviving identities', async (...missing) => {
+    const original = (await execute())!;
+    const keys = missing.flat();
+    if (keys.includes('workout')) server.workouts.delete(original.ids.workout);
+    if (keys.includes('schedule')) server.schedules.delete(original.ids.schedule);
+    await repair(keys);
+    const result = (await execute())!;
+    expect(result.ids.workout === original.ids.workout).toBe(!keys.includes('workout'));
+    expect(result.ids.schedule === original.ids.schedule).toBe(!keys.includes('schedule'));
+    expect(server.schedules.get(result.ids.schedule)?.workoutId).toBe(result.ids.workout);
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+  });
+  it('does not overwrite a provider-side workout edit while repairing only its calendar entry', async () => {
+    const original = (await execute())!;
+    server.workouts.get(original.ids.workout)!.workoutName = 'Edited in Garmin';
+    server.schedules.delete(original.ids.schedule);
+    await repair(['schedule']); await execute();
+    expect(writes().filter(request => request.method === 'PUT' && request.path.includes('workout'))).toHaveLength(0);
+    expect(server.workouts.get(original.ids.workout)!.workoutName).toBe('Edited in Garmin');
+  });
+  it('blocks unknown replacement POST acceptance, including explicit repeated recovery', async () => {
+    const original = (await execute())!; server.workouts.delete(original.ids.workout);
+    await repair(['workout']);
+    server.afterHandle = async request => { if (request.method === 'POST') throw new GarminTrainingHttpError('uncertain', false); };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(await recover()).toEqual({ kind: 'uncertain' }); expect(await recover()).toEqual({ kind: 'uncertain' });
+    expect(server.workouts.size).toBe(1);
+    expect(writes().filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(2);
+  });
+  it('does not repair a surviving calendar entry moved externally', async () => {
+    const original = (await execute())!; server.workouts.delete(original.ids.workout);
+    server.schedules.get(original.ids.schedule)!.date = '2026-09-16';
+    await repair(['workout']);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes()).toHaveLength(2);
+  });
+  it('rechecks the original identity before retrying a rejected replacement create', async () => {
+    const original = (await execute())!;
+    const oldWorkout = server.workouts.get(original.ids.workout)!; server.workouts.delete(original.ids.workout);
+    await repair(['workout']);
+    server.beforeHandle = async request => { if (request.method === 'POST') throw new GarminTrainingHttpError('retryable', true, 9000); };
+    await expect(execute()).rejects.toMatchObject({ kind: 'retryable' });
+    expect(operation.progress?.state).toBe('rejected');
+    server.beforeHandle = null; server.workouts.set(original.ids.workout, oldWorkout);
+    expect(await recover()).toEqual({ kind: 'not-accepted' });
+    const before = writes().length;
+    expect(await execute()).toEqual(original); expect(writes()).toHaveLength(before);
+    expect(server.workouts.size).toBe(1);
+  });
+  it('keeps unproved production 404s non-authoritative and reports ownership conflicts separately', async () => {
+    const artifact = (await execute())!;
+    const inspect = () => transport.inspection.inspect({ artifact, destinationKey: 'opaque-account',
+      connectionGeneration: 'connection-1', timeZone: 'Europe/Helsinki', cursor: null }, guard);
+    expect((await inspect()).artifacts.every(item => item.state === 'present')).toBe(true);
+    const noOwner = { ...artifact, ids: { workout: artifact.ids.workout, schedule: artifact.ids.schedule } };
+    expect((await transport.inspection.inspect({ artifact: noOwner, destinationKey: 'opaque-account',
+      connectionGeneration: 'connection-1', timeZone: 'Europe/Helsinki', cursor: null }, guard)).conflict).toBe(false);
+    server.schedules.delete(artifact.ids.schedule);
+    expect((await inspect()).artifacts.find(item => item.key === 'schedule')).toEqual({ key: 'schedule', state: 'absent', authoritative: false });
+    server.workouts.get(artifact.ids.workout)!.ownerId = '1234';
+    expect((await inspect()).conflict).toBe(true);
+    expect(transport.inspection.policy.repairReady).toBe(false);
+  });
+  it('reuses a reappearing original schedule after a rejected replacement POST', async () => {
+    const original = (await execute())!;
+    const oldSchedule = server.schedules.get(original.ids.schedule)!;
+    server.schedules.delete(original.ids.schedule); await repair(['schedule']);
+    server.beforeHandle = async request => { if (request.method === 'POST') throw new GarminTrainingHttpError('retryable', true); };
+    await expect(execute()).rejects.toMatchObject({ kind: 'retryable' });
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'rejected' });
+    server.beforeHandle = null; server.schedules.set(original.ids.schedule, oldSchedule);
+    expect(await recover()).toEqual({ kind: 'resume' });
+    const count = writes().length;
+    expect((await execute())?.ids).toEqual(original.ids);
+    expect(operation.progress).toMatchObject({ state: 'accepted', repairApplied: false });
+    expect(writes()).toHaveLength(count);
+    expect(server.schedules.size).toBe(1);
+  });
+  it('keeps malformed lookup identities inconclusive instead of requiring conflict resolution', async () => {
+    const artifact = (await execute())!;
+    const malformed = new GarminTrainingTransport(async () => ({ status: 200, body: {} }), () => now);
+    expect(await malformed.inspection.inspect({ artifact, destinationKey: 'opaque-account', connectionGeneration: 'connection-1',
+      timeZone: 'Europe/Helsinki', cursor: null }, guard)).toEqual({ conflict: false, artifacts: [
+      { key: 'workout', state: 'unknown', authoritative: false }, { key: 'schedule', state: 'unknown', authoritative: false },
+    ] });
+  });
 
   it('creates two artifacts with durable checkpoints and reuses both identities through edits, reschedule and removal', async () => {
     const first = await execute();

@@ -99,6 +99,11 @@
           @if (data.scope !== 'history') {
             <div class="delivery-actions">
               @if (row.ready) {
+                @if (row.canCheck && canSend()) {
+                  <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="checkProvider(row.provider)">
+                    {{ checkingProvider() === row.provider ? 'Queuing check…' : 'Check ' + row.label }}
+                  </button>
+                }
                 @if (canSend() && (!planBound() || row.canResume)) {
                   <button mat-button type="button" appHapticTap [disabled]="busy() || !canReview()" (click)="begin(row.provider, data.scope === 'plan' ? 'configure' : planBound() ? 'resume' : 'send')">
                     {{ planBound() ? 'Resume workout sync' : row.setting?.enabled ? data.scope === 'plan' ? 'Plan sync settings' : 'Workout sync settings' : data.scope === 'plan' ? 'Sync plan with ' + row.label : 'Send to ' + row.label }}
@@ -142,7 +147,14 @@
                   </button>
                 } @else {
                   <p class="delivery-status-label">{{ status.label }}</p>
-                  <p class="delivery-caption">{{ status.timestampLabel }}: <time>{{ status.timestamp | date:'medium' }}</time></p>
+                  <p class="delivery-caption">{{ status.showLastSent ? 'Last sent' : status.timestampLabel }}: <time>{{ status.showLastSent ? (status.lastAcceptedAtMs | date:'medium') : (status.timestamp | date:'medium') }}</time></p>
+                  @if (status.verification?.lastCheckedAtMs !== null && status.verification?.lastCheckedAtMs !== undefined) {
+                    <p class="delivery-caption">Last checked: {{ status.verification.lastCheckedAtMs | date:'medium' }}</p>
+                  }
+                  @if (status.verification?.state === 'deferred' && status.verification?.nextCheckAtMs) {
+                    <p class="delivery-caption">Next check: {{ status.verification.nextCheckAtMs | date:'medium' }}</p>
+                  }
+                  @if (status.hasRemoteCopy) { <p class="delivery-caption">Device availability is managed by {{ row.label }}. A cloud check does not confirm a device download.</p> }
                   @if (status.copyMessage) { <p>{{ status.copyMessage }}</p> }
                   @if (status.nextRetryAtMs !== null) { <p class="delivery-caption">Next automatic check: {{ status.nextRetryAtMs | date:'medium' }}</p> }
                   @if (status.status === 'needs_attention') { <p>Retry inspects the earlier operation first. It will not blindly create another copy.</p> }
@@ -177,6 +189,7 @@
       <p>Stop sync turns off updates and asks the connected app to remove upcoming synced workouts. Your plans and workouts stay in Quantified Self. Your provider account stays connected.</p>
       <p>Plan workouts sync only while their plan is active. Pausing a plan also requests removal of upcoming synced workouts. Past and completed workouts stay unchanged.</p>
       <p>If your Pro subscription ends, sync pauses. Workouts already sent stay in the connected app.</p>
+      <p>Where remote checking and repair are supported, active sync checks upcoming workouts daily and restores workouts confirmed missing from the connected app. Provider limits can delay checks. Stop sync prevents restoration.</p>
     </div>
   </div>
 </mat-dialog-content>

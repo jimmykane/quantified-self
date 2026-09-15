@@ -65,6 +65,12 @@ export const APP_HEALTH_HIGHLIGHT_IDS = ['sleep', 'heart_rate', 'heart_rate_vari
 export type AppHealthHighlightId = typeof APP_HEALTH_HIGHLIGHT_IDS[number];
 export type AppHealthHighlightSources = Partial<Record<AppHealthHighlightId, string>>;
 
+export interface AppDashboardHealthMetricSettings {
+    metric: AppHealthWorkspaceMetric;
+    range: AppHealthWorkspaceRange;
+    sourceKey?: string;
+}
+
 export interface AppDashboardSleepTrendSettingsInterface {
     range?: AppDashboardSleepTrendRange;
 }
@@ -167,6 +173,8 @@ export interface AppDashboardChartTileDisplaySettingsInterface {
 
 export interface AppDashboardChartTileSettingsInterface extends TileChartSettingsInterface {
     eventFilters?: AppDashboardTileEventFiltersInterface;
+    healthMetric?: AppDashboardHealthMetricSettings;
+    healthSection?: 'health' | 'trainingState';
     displaySettings?: AppDashboardChartTileDisplaySettingsInterface;
 }
 

@@ -1,3 +1,4 @@
+import { dashboardHealthMetric } from './dashboard-health-tile.helper';
 import {
   TileChartSettingsInterface,
   TileSettingsInterface,
@@ -17,6 +18,7 @@ import {
 } from './dashboard-special-chart-types';
 
 export type DashboardTileSectionId =
+  | 'health'
   | 'trainingState'
   | 'performancePower'
   | 'activityOverview'
@@ -32,6 +34,7 @@ export type DashboardTileLaneKey = 'kpi' | `section:${DashboardTileSectionId}`;
 
 export const DASHBOARD_TILE_SECTION_DEFINITIONS: DashboardTileSectionDefinition[] = [
   { id: 'trainingState', label: 'Training State', icon: 'fitness_center' },
+  { id: 'health', label: 'Health', icon: 'cardiology' },
   { id: 'performancePower', label: 'Performance & Power', icon: 'speed' },
   { id: 'activityOverview', label: 'Activity Overview', icon: 'insights' },
   { id: 'routesMaps', label: 'Routes & Maps', icon: 'map' },
@@ -73,6 +76,12 @@ export function resolveDashboardTileSection(tile: TileSettingsInterface | null |
   }
 
   const chartTile = tile as TileChartSettingsInterface;
+  const healthMetric = dashboardHealthMetric(tile);
+  if (healthMetric) {
+    return ['sleep', 'heart_rate_variability'].includes(healthMetric)
+      ? tile['healthSection'] === 'health' ? 'health' : 'trainingState'
+      : 'health';
+  }
   const specialChartSection = SPECIAL_CHART_SECTION_BY_TYPE[`${chartTile.chartType}`];
   if (specialChartSection) {
     return specialChartSection;

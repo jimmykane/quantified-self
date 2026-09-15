@@ -1,3 +1,4 @@
+import { TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { TimeIntervals } from '@sports-alliance/sports-lib';
 import { z } from 'zod';
@@ -66,6 +67,25 @@ function createTestServer(options: {
 }
 
 describe('Assistant MCP session', () => {
+  it('adds only Training plan reads after independent consent, without notes, Health or location grants', async () => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, 'coordinate_free', false, true);
+    try {
+      expect(session.tools.map(tool => tool.name)).toEqual([...ASSISTANT_BASE_MCP_TOOL_NAMES, ...TRAINING_READ_TOOLS]);
+      expect(capturedAuth!.scopes).toContain(MCP_OAUTH_SCOPES.TrainingPlansRead);
+      for (const scope of [MCP_OAUTH_SCOPES.TimelineNotesRead, MCP_OAUTH_SCOPES.HealthRead,
+        MCP_OAUTH_SCOPES.ActivityLocationRead, MCP_OAUTH_SCOPES.RouteLocationRead]) {
+        expect(capturedAuth!.scopes).not.toContain(scope);
+      }
+      await expect(session.callTool('list_training_plans', {})).resolves.toMatchObject({
+        structuredContent: { source: 'list_training_plans' },
+      });
+      await expect(session.callTool('query_timeline_notes', {})).rejects.toThrow('not available');
+    } finally { await session.close(); }
+  });
+
   it('resolves the complete curated boundary from the production MCP server', async () => {
     const session = await createAssistantMcpSession(
       'user-1',
@@ -177,7 +197,7 @@ describe('Assistant MCP session', () => {
     );
 
     try {
-      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes'));
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes' && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));
       expect(session.tools.map(tool => tool.name)).toContain(
         'search_activities_near_location',
       );

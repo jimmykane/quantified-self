@@ -1,3 +1,4 @@
+import { DashboardHealthService } from '../../../services/dashboard-health.service';
 import { DashboardChartDiscoveryService } from '../../../services/dashboard-chart-discovery.service';
 import { CommonModule } from '@angular/common';
 import { DashboardTileEditorComponent } from './dashboard-tile-editor.component';
@@ -9,7 +10,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { of, Subject } from 'rxjs';
+import { EMPTY, of, Subject } from 'rxjs';
 import { DashboardHrvService } from '../../../services/dashboard-hrv.service';
 import { createDashboardDerivedMetricsMissingState } from '../../../services/dashboard-derived-metrics.service';
 import { MaterialModule } from '../../../modules/material.module';
@@ -49,7 +50,7 @@ describe('responsive chart picker interactions', () => {
     derived.watch.mockReturnValue(of(createDashboardDerivedMetricsMissingState()));
     events.getEventsBy.mockReturnValue(of([]));
     await TestBed.configureTestingModule({ declarations: [DashboardChartLibraryComponent, DashboardTileEditorComponent], imports: [CommonModule, MaterialModule, NoopAnimationsModule], schemas: [NO_ERRORS_SCHEMA], providers: [
-      DashboardChartLibraryState, { provide: DashboardChartDiscoveryService, useValue: discovery }, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
+      {provide:DashboardHealthService,useValue:{watch:()=>EMPTY}}, DashboardChartLibraryState, { provide: DashboardChartDiscoveryService, useValue: discovery }, { provide: DashboardConfigurationService, useValue: { save } }, { provide: AppHapticsService, useValue: haptics },
       { provide: BreakpointObserver, useValue: { isMatched: () => mobile, observe: () => of({ matches: false, breakpoints: {} }) } },
       { provide: AppEventService, useValue: events }, { provide: AppSleepService, useValue: { watchForDashboard: () => of([]) } }, { provide: AppRouteService, useValue: { watchRecentRoutePreviews: () => of([]) } }, { provide: DashboardDerivedMetricsService, useValue: derived }, { provide: DashboardHrvService, useValue: { watch: () => of(null) } },
     ] }).compileComponents();
@@ -61,6 +62,98 @@ describe('responsive chart picker interactions', () => {
     fixture = TestBed.createComponent(DashboardChartLibraryComponent); component = fixture.componentInstance;
     fixture.componentRef.setInput('user', user); fixture.componentRef.setInput('lane', 'kpi'); fixture.componentRef.setInput('seed', { tiles: [] }); fixture.detectChanges();
   });
+  it('aggregates new types without reads and switches sections inside one dashboard picker', async () => {
+    fixture.componentRef.setInput('allSections', true);
+    fixture.componentRef.setInput('lane', 'section:activityOverview'); await settle();
+    expect(component.addActionLabel()).toContain('Add to dashboard');
+    expect(component.unseen().length).toBeGreaterThan(0);
+    expect(component.sections()).toHaveLength(6);
+    expect(derived.watch).not.toHaveBeenCalled(); expect(events.getEventsBy).not.toHaveBeenCalled();
+    expect(discovery.acknowledge).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
+    await component.toggle(); await settle();
+    expect(component.browseLane()).toBe('section:health');
+    await vi.waitFor(() => expect(document.activeElement).toBe(document.querySelector('mat-select[aria-labelledby]')));
+    const overlay = document.querySelector('[role="dialog"]');
+    expect(discovery.acknowledge).toHaveBeenCalledWith(user, 'section:health', 2);
+    await component.openSection('kpi', true); await settle();
+    expect(component.browseLane()).toBe('kpi');
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.querySelector('[role="dialog"]')).toBe(overlay);
+    const refreshed = { ...user, settings: { ...user.settings, appSettings: { dashboardChartLibrarySeen: { 'section:health': 2 } } } };
+    fixture.componentRef.setInput('user', refreshed); await settle();
+    await component.openSection('section:health', true); await settle();
+    expect(component.unseen()).toHaveLength(0);
+    expect(component.rowPreviews().some(entry => entry.isNew)).toBe(true);
+    expect(discovery.acknowledge).toHaveBeenCalledTimes(1);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+    expect(user.settings.dashboardSettings.tiles).toEqual([]);
+    await component.openSection('section:health', true);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
+  });
+
+  it('starts global browsing in an available section when the preferred section is complete', async () => {
+    fixture.componentRef.setInput('allSections', true); fixture.componentRef.setInput('lane', 'section:activityOverview');
+    const catalog = getDashboardChartCatalog();
+    const tiles = catalog.filter(entry => entry.lane !== 'section:health').map(entry => entry.tile);
+    user.settings.dashboardSettings.tiles = tiles;
+    user.settings.appSettings = { dashboardChartLibrarySeen: { 'section:health': 2 } } as never;
+    fixture.componentRef.setInput('seed', { tiles }); await settle();
+    await component.toggle(); await settle();
+    expect(component.browseLane()).toBe('section:health');
+    await component.openSection('section:activityOverview', true); await settle();
+    expect(component.filtered()).toEqual([]);
+    expect(component.placeholderTitle()).toBe('Create your own chart');
+    expect(button('Create custom chart')).toBeTruthy();
+  });
+
+  it('keeps a dirty Health selection when a dashboard section switch is declined', async () => {
+    fixture.componentRef.setInput('allSections', true); await settle();
+    await component.openSection('section:health', true); await settle();
+    component.state.updateHealthSettings({ ...component.state.healthSettings()!, range: '90d' }, false);
+    component.search.set('oxygen');
+    await component.openSection('kpi', true); await settle();
+    expect(component.browseLane()).toBe('section:health'); expect(component.search()).toBe('oxygen');
+    expect(component.state.healthSettings()?.range).toBe('90d');
+    discard = true;
+    await component.openSection('kpi', true); await settle();
+    expect(component.browseLane()).toBe('kpi'); expect(component.search()).toBe('');
+  });
+
+  it('uses the dashboard picker for editing a tile outside its default section without acknowledging new types', async () => {
+    fixture.componentRef.setInput('allSections', true);
+    fixture.componentRef.setInput('lane', 'section:activityOverview');
+    const tile = getDashboardChartCatalog().find(entry => entry.definition.id === 'health:steps')!.tile;
+    user.settings.dashboardSettings.tiles = [tile]; fixture.componentRef.setInput('seed', { tiles: [tile] }); await settle();
+    await component.state.edit(user, tile.order); await settle();
+    expect(component.expanded()).toBe(true); expect(component.browseLane()).toBe('section:health');
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(discovery.acknowledge).not.toHaveBeenCalled();
+  });
+
+  it('opens a Health pin preview without acknowledging the catalog or loading suggestions', async () => {
+    const watch = vi.spyOn(TestBed.inject(DashboardHealthService), 'watch');
+    fixture.componentRef.setInput('lane', 'section:health');
+    const entry = getDashboardChartCatalog().find(item => item.definition.id === 'health:steps')!;
+    await component.state.select(user, entry);
+    component.state.pinnedFromHealth.set(true);
+    component.state.activeLane.set('section:health');
+    await settle();
+    expect(discovery.acknowledge).not.toHaveBeenCalled();
+    expect(watch).not.toHaveBeenCalled();
+    expect(button('Back to charts')).toBeTruthy();
+    await component.back(); await settle();
+    expect(discovery.acknowledge).toHaveBeenCalledWith(user, 'section:health', 2);
+    expect(watch).toHaveBeenCalledTimes(5);
+  });
+
+  it('searches across Health categories and keeps the badge inside the section edge', async () => {
+    fixture.componentRef.setInput('lane', 'section:health');
+    component.group.set('sleep'); component.search.set('weight'); fixture.detectChanges();
+    expect(component.filtered().map(entry => entry.definition.id)).toEqual(['health:body_weight']);
+    const trigger = fixture.nativeElement.querySelector('button');
+    expect(trigger.getAttribute('matBadgePosition')).toBe('above before');
+  });
+
   it('shows new types without fetching chart data and acknowledges only an opened browse list', async () => {
     const entry = component['catalog'].find(entry => entry.definition.id === 'kpi-acwr')!;
     entry.definition = { ...entry.definition, introducedIn: 2 };

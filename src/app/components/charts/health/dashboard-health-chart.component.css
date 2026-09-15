@@ -1,0 +1,36 @@
+:host { display:block; width:100%; height:100%; min-width:0; }
+.health-tile { display:flex; flex-direction:column; height:100%; min-height:0; box-sizing:border-box; padding:8px 10px; gap:6px; }
+.health-tile-header { min-height:30px; display:flex; align-items:center; color:var(--mat-sys-on-surface-variant); }
+.reserve-actions { padding-inline-end:70px; }
+.health-tile-controls { position:relative; display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+.health-tile-window { font-size:0.65rem; color:var(--mat-sys-on-surface-variant); }
+.health-range-controls { display:flex; align-items:center; flex-shrink:0; }
+.health-range { width:58px; font-size:0.75rem; }
+.health-range-controls button { --mdc-icon-button-state-layer-size:32px; padding:4px; width:32px; height:32px; }
+.health-sleep-source { flex:1; min-width:0; }
+.health-source-empty { display:flex; justify-content:flex-end; min-width:0; }
+/* Progress shares the toolbar edge, so idle and loading states reserve no extra row. */
+.health-loading-slot { position:absolute; inset-inline:0; bottom:0; height:4px; pointer-events:none; }
+.health-tile-summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; font-size:0.7rem; }
+.health-tile-summary strong { font:700 1.15rem/1 'Barlow Condensed',sans-serif; margin-inline-end:auto; }
+.health-value-row { display:flex; align-items:center; gap:8px; min-width:0; width:100%; }
+.health-value-row strong { white-space:nowrap; }
+.health-value-row app-chart-source-picker { flex:0 1 auto; max-width:75%; min-width:0; }
+.health-status,.health-status-detail { flex-basis:100%; color:var(--mat-sys-on-surface-variant); }
+.health-status-dot { display:inline-block; width:6px; height:6px; margin-inline-end:6px; border-radius:50%; }
+.health-notice { margin:0; font-size:0.7rem; color:var(--mat-sys-on-surface-variant); }
+.health-tile-empty { flex:1; display:grid; place-content:center; text-align:center; color:var(--mat-sys-on-surface-variant); font-size:0.75rem; padding:12px; }
+app-health-metric-series-chart, app-sleep-trend-chart { flex:1; min-height:120px; min-width:0; }
+.health-thumbnail { padding:0; gap:0; pointer-events:none; height:42px; }
+.health-thumbnail app-health-metric-series-chart { min-height:0; }
+.health-thumbnail-value { flex-shrink:0; font:600 12px/14px 'Barlow Condensed',sans-serif; color:var(--mat-sys-on-surface); text-align:end; }
+.health-thumbnail-empty,.health-sleep-thumbnail { margin:auto; color:var(--mat-sys-on-surface-variant); font-size:12px; }
+@media(max-width:640px) { .health-tile-controls { flex-wrap:wrap; } .health-tile-window { flex:1; min-width:120px; } }
+
+.health-preview { padding:0 8px; gap:8px; }
+.health-preview-source { display:flex; flex-direction:column; gap:4px; font:var(--mat-sys-body-small); color:var(--mat-sys-on-surface-variant); }
+.health-preview-source strong { color:var(--mat-sys-on-surface); font:var(--mat-sys-label-large); }
+.health-preview .health-tile-window, .health-preview .health-range { font-size:0.8rem; }
+.health-preview .health-tile-summary { font-size:0.8rem; }
+.health-preview .health-tile-summary strong { font-size:1.65rem; }
+.health-preview .health-notice { font-size:0.8rem; }

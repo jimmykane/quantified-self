@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import type { DeliveryArtifact, DeliveryAssessment, DeliveryOperation, DeliveryRecovery, TrainingDeliveryTransport } from '../contracts';
+import type { DeliveryArtifact, DeliveryAssessment, DeliveryCheckpoint, DeliveryOperation, DeliveryRecovery, TrainingDeliveryTransport } from '../contracts';
+import type { RemoteInspection } from '../verification-contracts';
 
 /** Test-only deterministic transport. Explicitly excluded from the Functions build. */
 export class FakeTrainingTransport implements TrainingDeliveryTransport {
+  inspection?: RemoteInspection;
   mappingVersion = 'test-v1';
   horizonDays = 365;
   level: DeliveryAssessment['level'] = 'exact';
@@ -18,7 +20,7 @@ export class FakeTrainingTransport implements TrainingDeliveryTransport {
       digest: createHash('sha256').update(JSON.stringify([workout.title, workout.localDate, workout.structure, destinationKey, timeZone, this.mappingVersion])).digest('hex') };
   }
   canRemove(artifact: DeliveryArtifact, today: string): boolean { return !artifact.completed && artifact.localDate >= today; }
-  async execute(operation: DeliveryOperation, checkpoint: (artifact: DeliveryArtifact | null) => Promise<void>): Promise<DeliveryArtifact | null> {
+  async execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint): Promise<DeliveryArtifact | null> {
     this.calls.push(operation);
     await this.beforeAccept?.();
     if (this.accepted.has(operation.id)) return this.accepted.get(operation.id)!;
@@ -30,7 +32,7 @@ export class FakeTrainingTransport implements TrainingDeliveryTransport {
     if (artifact) this.artifacts.set(operation.deliveryId, artifact);
     else this.artifacts.delete(operation.deliveryId);
     await this.afterAccept?.();
-    await checkpoint(artifact);
+    await checkpoint(artifact, { version: 1, step: 'fake-apply', state: 'accepted' });
     return artifact;
   }
   async recover(operation: DeliveryOperation): Promise<DeliveryRecovery> {

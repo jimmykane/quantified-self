@@ -5,6 +5,17 @@
   min-width: 0;
 }
 
+.plan-action-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+
+  mat-spinner {
+    flex: 0 0 20px;
+  }
+}
+
 .pricing-container {
   container: pricing / inline-size;
   padding: 28px 20px;

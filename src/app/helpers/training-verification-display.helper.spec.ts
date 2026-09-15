@@ -1,0 +1,20 @@
+import { describe, expect, it } from 'vitest';
+import type { TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
+import type { TrainingVerificationV1 } from '@shared/training-provider-verification';
+import { TRAINING_DELIVERY_STATUS_LABELS } from './training-delivery-display.helper';
+import { trainingVerificationCommandError, trainingVerificationLabel } from './training-verification-display.helper';
+
+describe('Training remote check labels', () => {
+  it('offers another check, not a nonexistent Cancel/Save review, after a revision conflict', () => {
+    expect(trainingVerificationCommandError({ code: 'functions/aborted' })).toContain('Check again');
+    expect(trainingVerificationCommandError({ code: 'aborted' })).not.toContain('Cancel');
+    expect(trainingVerificationCommandError(new Error('failure'))).toContain('Unable to check delivery');
+  });
+  it.each(['failed', 'needs_attention', 'unsupported', 'approval_required', 'outside_horizon'] as const)(
+    'does not hide %s behind an earlier check or restoration state', status => {
+      for (const state of ['present', 'unknown', 'restoring', 'deferred'] as const) {
+        expect(trainingVerificationLabel({ status } as TrainingDeliveryStatusV1, { state } as TrainingVerificationV1))
+          .toBe(TRAINING_DELIVERY_STATUS_LABELS[status]);
+      }
+    });
+});

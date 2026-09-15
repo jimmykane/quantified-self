@@ -1,3 +1,5 @@
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { TRAINING_READ_TOOLS, type TrainingReadTool } from './training-plans.schemas';
 import { calculateReadinessScore as calculateCurrentReadinessScore, resolveReadinessConfidence } from '../../../shared/readiness';
 import { Client, InMemoryTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import {
@@ -437,6 +439,15 @@ const derivedPayloadFixtures = {
   },
 } as const satisfies Record<DerivedMetricKind, unknown>;
 
+
+const trainingReadFixtures = {
+ list_training_plans: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, plans: [{ planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 }] },
+ get_training_plan: { scheduleRevision: 1, plan: { planRef: 'opaque-plan-reference', name: 'Autumn', lifecycle: 'active', startDate: '2026-07-01', endDate: '2026-07-02', revision: 1, currentWorkoutCount: 1, color: null, createdAtMs: 1, updatedAtMs: 1 } },
+ query_planned_workouts: { scheduleRevision: 1, scanComplete: true, recordsScanned: 1, limitsReached: [], nextCursor: null, startDate: '2026-07-01', endDate: '2026-07-02', scope: 'calendar', workouts: [{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }] },
+ get_planned_workout: { scheduleRevision: 1, workout: { ...{ workoutRef: 'opaque-workout-reference', planRef: null, title: 'Easy run', localDate: '2026-07-01', lifecycle: 'planned', revision: 1, createdAtMs: 1, updatedAtMs: 1 }, structure: { version: 1, sport: ActivityTypes.Running, nodes: [{kind:'step', id:'step',purpose:'work',ending:{kind:'manual'},targets:[], note:'Untrusted text'}] }, displaySteps: [{nodeId:'step',text:'Work · Manual transition'}] } },
+ get_training_sync_status: { scheduleRevision: 1, scope: 'plan', reference:'opaque-plan-reference',scanComplete:true,checkedAtMs:1,services:[] },
+};
+
 function createFixtureDataService(
   options: {
     activityLocation?: boolean;
@@ -455,6 +466,7 @@ function createFixtureDataService(
         readings: [{ date: '1970-01-01', value: 42, display: { value: '42', unit: 'ms' }, status: 'building_baseline', normalRange: null }],
         rangePoints: [{ timeMs: 0, normalRange: null }, { timeMs: DAY_MS, normalRange: { min: 30, max: 50 } }],
       }] }),
+    readTrainingPlans: vi.fn(async (input: { tool: TrainingReadTool }) => trainingReadFixtures[input.tool]),
     getActivityDescription: vi.fn().mockResolvedValue({ activityRef: 'opaque-activity-ref', description: 'Easy run. Felt tired.\nKeep this as reported context.' }),
     queryTimelineNotes: vi.fn().mockResolvedValue({
       startDate: '2026-07-01', endDate: '2026-07-02',
@@ -1204,6 +1216,11 @@ const successfulToolArguments: Record<
   PublicMcpToolName,
   Record<string, unknown>
 > = {
+  list_training_plans: {},
+  get_training_plan: { planRef: 'opaque-plan-reference' },
+  query_planned_workouts: { startDate: '2026-07-01', endDate: '2026-07-02' },
+  get_planned_workout: { workoutRef: 'opaque-workout-reference' },
+  get_training_sync_status: { scope: 'plan', reference: 'opaque-plan-reference' },
   get_activity_description: { activityRef: 'opaque-activity-ref' },
   query_timeline_notes: { startDate: '2026-07-01', endDate: '2026-07-02' },
   list_health_metrics: {},
@@ -1785,12 +1802,14 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     const noteTools = tools.filter(tool => ['query_timeline_notes', 'get_activity_description'].includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(noteTools), 'utf8')).toBeLessThan(8 * 1024);
     // Keep the frozen surface's budget; each additive family has its own explicit bound.
+    const planTools = tools.filter(tool => (TRAINING_READ_TOOLS as readonly string[]).includes(tool.name));
+    expect(Buffer.byteLength(JSON.stringify(planTools), 'utf8')).toBeLessThan(32 * 1024);
     const sampleTools = tools.filter(tool => tool.name === 'get_activity_samples');
     const readinessTools = tools.filter(tool => ['get_current_readiness', 'get_readiness_history', 'get_daily_report'].includes(tool.name));
     expect(Buffer.byteLength(JSON.stringify(readinessTools), 'utf8')).toBeLessThan(32 * 1024);
     expect(Buffer.byteLength(JSON.stringify(sampleTools), 'utf8')).toBeLessThan(12 * 1024);
     expect(Buffer.byteLength(JSON.stringify(healthTools), 'utf8')).toBeLessThan(24 * 1024);
-    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool) && !readinessTools.includes(tool))), 'utf8'))
+    expect(Buffer.byteLength(JSON.stringify(tools.filter(tool => !planTools.includes(tool) && !healthTools.includes(tool) && !noteTools.includes(tool) && !sampleTools.includes(tool) && !readinessTools.includes(tool))), 'utf8'))
       .toBeLessThan(256 * 1024);
     collectObjectSchemas(tools.map(tool => tool.outputSchema))
       .forEach(schema => expect(schema.additionalProperties).toBe(false));
@@ -2099,6 +2118,24 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       service.getActivitySamples = vi.fn().mockResolvedValue(projection);
       const result = await connection.client.callTool({name: 'get_activity_samples', arguments: args});
       expect(result.isError).not.toBe(true); expect(result.structuredContent).toEqual(projection);
+    }
+  });
+
+  it('isolates Training permission and rejects injected identity or private output on every transport', async () => {
+    const service = createFixtureDataService();
+    const denied = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.MetricsRead, MCP_OAUTH_SCOPES.TimelineNotesRead]); connections.push(denied);
+    expect((await denied.client.listTools()).tools.map(tool => tool.name).filter(name => (TRAINING_READ_TOOLS as readonly string[]).includes(name))).toEqual([]);
+    const connection = await connectFixtureServer(service, [MCP_OAUTH_SCOPES.TrainingPlansRead]); connections.push(connection);
+    for (const tool of TRAINING_READ_TOOLS) {
+      vi.mocked(service.readTrainingPlans).mockClear();
+      const injected = await connection.client.callTool({ name: tool, arguments: { ...successfulToolArguments[tool], uid:'attacker' } });
+      expect(injected.isError).toBe(true); expect(service.readTrainingPlans).not.toHaveBeenCalled();
+      for (const field of ['id','owner','destinationKey','approvalDigest','issues','remoteWorkoutId','receipt']) {
+        service.readTrainingPlans = vi.fn().mockResolvedValue({ ...trainingReadFixtures[tool], [field]: 'PRIVATE-TRAINING-CANARY' });
+        const result = await connection.client.callTool({ name: tool, arguments: successfulToolArguments[tool] });
+        expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE-TRAINING-CANARY');
+      }
     }
   });
 

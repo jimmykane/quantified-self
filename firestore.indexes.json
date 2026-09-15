@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "trainingDeliveryQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "dueAtMs", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "trainingDeliveryQueue", "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "priority", "order": "ASCENDING" }, { "fieldPath": "dueAtMs", "order": "ASCENDING" }]
+    },
+    {
       "collectionGroup": "trainingDeliverySettings",
       "queryScope": "COLLECTION",
       "fields": [

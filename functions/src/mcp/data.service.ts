@@ -361,6 +361,7 @@ interface ResolvedRouteListQuery {
 type ActivityDetailKind = 'laps' | 'jumps' | 'swim_lengths';
 type RouteDocumentKind = 'geometry' | 'source';
 type OpaqueValueKind =
+  | 'training_read'
   | 'timeline_notes_cursor'
   | 'activity_ref'
   | 'route_ref'
@@ -481,6 +482,7 @@ export interface McpDataServiceDependencies {
   activitySamplesReads?: Pick<ActivitySamplesDependencies, 'activeOwner' | 'sourceVersions' | 'cache' | 'parseSource'>;
   activityDescriptionReads?: McpActivityDescriptionReads;
   timelineNotesReads?: McpTimelineNotesReads;
+  trainingReads?: import('./training-plans.service').TrainingReads;
   healthReads?: McpHealthReadDependencies;
   now: () => number;
   fetchMetricDiscoveryDocuments: (
@@ -6100,6 +6102,21 @@ export function createMcpDataService(
       } catch (error) {
         if (error instanceof McpDataError) throw error;
         throw new McpDataError('temporarily_unavailable', 'The activity description could not be read safely. Try again later.');
+      }
+    },
+
+    async readTrainingPlans(input: import('./training-plans.service').TrainingReadInput) {
+      const { readTrainingPlans, firestoreTrainingReads, TrainingReadError } = await import('./training-plans.service');
+      const reads = dependencies.trainingReads ?? (dependencies === defaultDependencies ? firestoreTrainingReads : null);
+      if (!reads) throw new McpDataError('temporarily_unavailable', 'Training reads are unavailable.');
+      try {
+        return await readTrainingPlans(input, reads, {
+          encode: (value, uid, connectionId) => encodeOpaqueValue('training_read', value, uid, connectionId),
+          decode: (value, uid, connectionId) => decodeOpaqueValue('training_read', value, uid, connectionId, 'Training reference'),
+        }, dependencies.now());
+      } catch (error) {
+        if (error instanceof TrainingReadError) throw new McpDataError(error.code, error.message);
+        throw new McpDataError('temporarily_unavailable', 'Training records could not be read safely. Try again later.');
       }
     },
 

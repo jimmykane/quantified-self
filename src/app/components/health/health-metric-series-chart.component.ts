@@ -47,6 +47,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   @Input() timelineNotes: TimelineNoteChartContext | null = null;
   @Input() unitSettings: UserUnitSettingsInterface | null = null;
   @Input() compact = false;
+  @Input() thumbnail = false;
   @Input() fillHeight = false;
   @Input() statusOverlay: HealthChartStatusOverlay | null = null;
   @Input() statusDescription: string | null = null;
@@ -73,7 +74,7 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   ngOnChanges(changes: SimpleChanges): void {
     if (this.viewInitialized && (
       changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
-      || changes.compact || changes.statusOverlay || changes.timelineNotes
+      || changes.compact || changes.thumbnail || changes.statusOverlay || changes.timelineNotes
     )) {
       void this.refresh();
     }
@@ -103,19 +104,35 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
     this.chartHost.setTimelineNotes(this.timelineNotes, {
       offsetSeconds: timestamp => nearestTimezoneOffsetSeconds(this.model.displayedPoints, timestamp) ?? 0,
     });
-    this.chartHost.setOption(
-      buildHealthMetricEChartsOption(
+    const option = buildHealthMetricEChartsOption(
         this.model,
         this.startTimeMs,
         this.endTimeMs,
         style,
         isEChartsMobileTooltipViewport(),
         this.unitSettings,
-        this.compact,
+        this.compact || this.thumbnail,
         this.statusOverlay,
-      ),
-      ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS,
-    );
+      );
+    if (this.thumbnail) {
+      Object.assign(option, { grid:{left:2,right:2,top:3,bottom:3}, tooltip:{show:false}, legend:{show:false}, dataZoom:[] });
+      // A sparkline has no date axis: fit the recorded span so sparse history is
+      // still legible, preserving every value and the gaps between readings.
+      const points = this.model.displayedPoints;
+      if (points.length) {
+        const first = points[0].timestampMs, last = points.at(-1)!.timestampMs;
+        const padding = Math.max((last - first) * 0.05, 1);
+        for (const axis of [option.xAxis].flat()) if (axis) Object.assign(axis, { min:first - padding, max:last + padding });
+      }
+      // Zero is a real reading too: a minimal bar keeps an all-zero thumbnail visible.
+      for (const series of [option.series].flat()) if (series && typeof series === 'object' && 'type' in series) {
+        if (series.type === 'bar') Object.assign(series, {barMinHeight:2});
+        if (series.type === 'line' && 'lineStyle' in series) Object.assign(series.lineStyle, {width:1.5});
+        if (points.length === 1 && (series.type === 'scatter' || series.type === 'line')) Object.assign(series, {symbolSize:6});
+      }
+      for (const axis of [option.xAxis, option.yAxis].flat()) if (axis) Object.assign(axis, {show:false});
+    }
+    this.chartHost.setOption(option, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
     this.chartHost.scheduleResize();
   }
 }

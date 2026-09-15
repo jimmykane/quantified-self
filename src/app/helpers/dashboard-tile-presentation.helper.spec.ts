@@ -7,7 +7,7 @@ import { hasDashboardTileSettings, resolveDashboardTileCollectionPresentation, r
 describe('dashboard tile presentation', () => {
   it('offers settings only for charts and maps that have editable properties', () => {
     for (const entry of getDashboardChartCatalog()) {
-      expect(hasDashboardTileSettings(entry.tile), entry.definition.id).toBe(['custom', 'map'].includes(entry.definition.category));
+      expect(hasDashboardTileSettings(entry.tile), entry.definition.id).toBe((['custom', 'map', 'health'].includes(entry.definition.category) || ['curated-sleep','curated-hrv'].includes(entry.definition.id)));
     }
     expect(hasDashboardTileSettings(null)).toBe(false);
     expect(hasDashboardTileSettings({ type: TileTypes.Chart, chartType: 'FutureRenderer' })).toBe(false);

@@ -191,6 +191,7 @@
         <div *ngFor="let price of product.prices; let isFirst = first" class="price-section plan-price-section">
           @let trialDays = getEligibleTrialDays(product, price);
           @let yearlySavingsLabel = getYearlySavingsLabel(product, price);
+          @let isPriceLoading = isLoading && loadingPriceId === price.id;
           <h3 class="price">
             @if (price.unit_amount === 0) {
             $0
@@ -232,28 +233,41 @@
           <!-- Paid user looking at free -->
           <button mat-stroked-button disabled>Included</button>
           } @else if (shouldShowOnboardingFreeContinue(product) && isFirst) {
-          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier()" [disabled]="isLoading">
-            @if (isLoading) {
-            <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-            Continue for Free
-            }
+          <button mat-stroked-button type="button" class="continue-free-button" (click)="selectFreeTier(price.id)" [disabled]="isLoading"
+            aria-label="Continue for Free" [attr.aria-busy]="isPriceLoading">
+            <span class="plan-action-content">
+              @if (isPriceLoading) {
+              <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
+              } @else {
+              Continue for Free
+              }
+            </span>
           </button>
           } @else if (!shouldShowOnboardingFreeContinue(product)) {
           <!-- New User (Role is null) choosing Free -->
-          <button mat-stroked-button (click)="selectFreeTier()" [disabled]="isLoading">
-            Start Free
+          <button mat-stroked-button type="button" (click)="selectFreeTier(price.id)" [disabled]="isLoading"
+            aria-label="Start Free" [attr.aria-busy]="isPriceLoading">
+            <span class="plan-action-content">
+              @if (isPriceLoading) {
+              <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
+              } @else {
+              Start Free
+              }
+            </span>
           </button>
           }
           } @else {
           <!-- Subscribe for new users or free users upgrading to paid plans -->
-          <button mat-flat-button class="subscribe-btn qs-mat-primary" (click)="subscribe(price)" [disabled]="isLoading"
-            >
-            @if (loadingPriceId === price.id) {
-            <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-            {{ getSubscribeButtonLabel(price) }}
-            }
+          @let subscribeButtonLabel = getSubscribeButtonLabel(price);
+          <button mat-flat-button type="button" class="subscribe-btn qs-mat-primary" (click)="subscribe(price)" [disabled]="isLoading"
+            [attr.aria-label]="product.name + ': ' + subscribeButtonLabel" [attr.aria-busy]="isPriceLoading">
+            <span class="plan-action-content">
+              @if (isPriceLoading) {
+              <mat-spinner diameter="20" aria-hidden="true"></mat-spinner>
+              } @else {
+              {{ subscribeButtonLabel }}
+              }
+            </span>
           </button>
           @if (shouldShowYearlySwitchHint(product, price)) {
           <p class="trial-cta-note">

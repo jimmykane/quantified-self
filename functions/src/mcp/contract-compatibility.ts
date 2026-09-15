@@ -36,6 +36,9 @@ const MCP_CONTRACT_PROFILE_DEFINITIONS: ReadonlyArray<{
   id: 'health',
   scopes: [MCP_OAUTH_SCOPES.HealthRead],
 }, {
+  id: 'training-plans',
+  scopes: [MCP_OAUTH_SCOPES.TrainingPlansRead],
+}, {
   id: 'timeline-notes',
   scopes: [MCP_OAUTH_SCOPES.TimelineNotesRead],
 }, {

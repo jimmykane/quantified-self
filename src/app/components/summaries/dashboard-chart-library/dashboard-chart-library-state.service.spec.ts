@@ -31,6 +31,22 @@ describe('inline chart library state', () => {
     user = { uid: 'test-owner', settings: { unitSettings: { speedUnits: [], startOfTheWeek: 1 }, dashboardSettings: { tiles: [] } } } as unknown as AppUserInterface;
     state = TestBed.inject(DashboardChartLibraryState);
   });
+  it('preserves legacy Sleep presentation and placement when changing its source or range', async () => {
+    const tile = structuredClone(getDashboardChartCatalog().find(entry => entry.definition.id === 'curated-sleep')!.tile);
+    tile.order = 0; tile.name = 'My sleep';
+    delete tile['healthMetric']; delete tile['healthSection'];
+    tile.size = { columns: 2, rows: 2 };
+    user.settings.dashboardSettings.tiles = [tile];
+    await state.edit(user, 0);
+    state.updateHealthSettings({ metric: 'sleep', range: '90d', sourceKey: 'saved-source' });
+    await state.save();
+    expect(user.settings.dashboardSettings.tiles[0]).toMatchObject({
+      name: 'My sleep', order: 0, size: tile.size,
+      healthMetric: { metric: 'sleep', range: '90d', sourceKey: 'saved-source' },
+    });
+    expect(user.settings.dashboardSettings.tiles[0]['healthSection']).toBeUndefined();
+  });
+
   it('initializes silently and opens only one section without querying or saving', async () => {
     expect(haptics.selection).not.toHaveBeenCalled();
     await state.open('kpi'); await state.open('section:activityOverview');
@@ -205,4 +221,30 @@ describe('inline chart library state', () => {
     expect(state.busy()).toBe(true); expect(persistence.save).toHaveBeenCalledTimes(1);
     resolve(); await saving; expect(state.busy()).toBe(false);
   });
+  it('saves independent Health settings and prevents duplicates across placements', async () => {
+    const entry=getDashboardChartCatalog().find(item=>item.definition.id==='health:steps')!;
+    await state.open(entry.lane);await state.select(user,entry);
+    state.updateHealthSettings({metric:'steps',range:'90d',sourceKey:'reading-one'});
+    await state.save();
+    expect(user.settings.dashboardSettings.tiles[0]['healthMetric']).toEqual({metric:'steps',range:'90d',sourceKey:'reading-one'});
+    await state.open(entry.lane);await state.select(user,entry);
+    expect(state.editor()?.isSaveDisabled).toBe(true);
+  });
+  it('moves legacy HRV without changing its configuration and restores it with Undo', async () => {
+    const tile=JSON.parse(JSON.stringify(getDashboardChartCatalog().find(item=>item.definition.id==='curated-hrv')!.tile));
+    delete tile.healthSection;tile.healthMetric={metric:'heart_rate_variability',range:'1y',sourceKey:'sleep-reading'};tile.size={columns:2,rows:2};
+    user.settings.dashboardSettings.tiles=[tile];
+    const previous=JSON.parse(JSON.stringify(tile));
+    await state.moveHealthTile(user,tile.order,'health');
+    expect(user.settings.dashboardSettings.tiles[0]).toEqual({...previous,healthSection:'health'});
+    expect(state.undoAvailable()).toBe(true);
+    await state.undo(user);expect(user.settings.dashboardSettings.tiles[0]).toEqual(previous);
+  });
+  it('leaves a failed move unchanged and reports the persistence error', async () => {
+    const tile=JSON.parse(JSON.stringify(getDashboardChartCatalog().find(item=>item.definition.id==='curated-sleep')!.tile));
+    user.settings.dashboardSettings.tiles=[tile];persistence.save.mockRejectedValueOnce(new Error('offline'));
+    await state.moveHealthTile(user,tile.order,'trainingState');
+    expect(user.settings.dashboardSettings.tiles[0].healthSection).toBe('health');expect(state.error()).toBe('offline');expect(state.undoAvailable()).toBe(false);
+  });
+
 });

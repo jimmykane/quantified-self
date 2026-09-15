@@ -121,6 +121,58 @@ describe('HealthMetricSeriesChartComponent', () => {
     expect(option.series[0].type).toBe('line');
   });
 
+  it('keeps thumbnail readings and colors while hiding axes and interaction chrome', async () => {
+    const full = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    fixture.componentRef.setInput('thumbnail', true);
+    fixture.detectChanges(); await fixture.whenStable();
+    const thumbnail = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(thumbnail.tooltip.show).toBe(false);
+    expect(thumbnail.xAxis.show).toBe(false);
+    expect(thumbnail.yAxis.show).toBe(false);
+    expect(thumbnail.series[0].data).toEqual(full.series[0].data);
+    expect(thumbnail.series[0].lineStyle.color).toEqual(full.series[0].lineStyle.color);
+    fixture.componentRef.setInput('thumbnail', false);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(eChartsLoader.setOption.mock.calls.at(-1)![1].xAxis.show).not.toBe(false);
+  });
+
+  it('keeps zero-valued bars visible only in thumbnails without changing their values', async () => {
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({ metricId: 'steps', chartKind: 'bar',
+      points: [{ timestampMs: 0, calendarDate: '1970-01-01', value: 0, qualityCode: null }] })], 0, DAY_MS)[0]);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.series[0].barMinHeight).toBe(2);
+    expect(preview.series[0].data[0][1]).toBe(0);
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    expect(eChartsLoader.setOption.mock.calls.at(-1)![1].series[0].barMinHeight).toBeUndefined();
+  });
+
+  it('fits sparse thumbnail history to its recorded span and restores the full chart window', async () => {
+    fixture.componentRef.setInput('endTimeMs', DAY_MS * 30);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.xAxis.min).toBeLessThan(0);
+    expect(preview.xAxis.max).toBeGreaterThan(DAY_MS);
+    expect(preview.xAxis.max).toBeLessThan(2 * DAY_MS);
+    expect(preview.series[0].lineStyle.width).toBe(1.5);
+    expect(preview.series[0].data).toEqual([[0, 50], [DAY_MS, 52]]);
+    fixture.componentRef.setInput('thumbnail', false); fixture.detectChanges(); await fixture.whenStable();
+    const full = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(full.xAxis.max).toBe(DAY_MS * 30);
+    expect(full.series[0].lineStyle.width).toBe(1);
+  });
+
+  it('centers a visible marker for a single recorded measurement', async () => {
+    const timestampMs = Date.parse('2026-09-14T08:00:00Z');
+    fixture.componentRef.setInput('model', buildHealthChartModels([series({ metricId: 'body_weight', chartKind: 'point',
+      points: [{ timestampMs, calendarDate: '2026-09-14', value: 72, qualityCode: null }] })], timestampMs - DAY_MS * 30, timestampMs + DAY_MS)[0]);
+    fixture.componentRef.setInput('thumbnail', true); fixture.detectChanges(); await fixture.whenStable();
+    const preview = eChartsLoader.setOption.mock.calls.at(-1)![1];
+    expect(preview.xAxis.min).toBeLessThan(timestampMs);
+    expect(preview.xAxis.max).toBeGreaterThan(timestampMs);
+    expect(preview.series[0]).toMatchObject({ type: 'scatter', symbolSize: 6, data: [[timestampMs, 72]] });
+  });
+
   it('refreshes chart labels when the signed-in user changes display units', async () => {
     fixture.componentRef.setInput('model', buildHealthChartModels([series({
       metricId: HEALTH_METRIC_IDS.Distance,

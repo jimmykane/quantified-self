@@ -1,4 +1,5 @@
 export type McpScope =
+  | 'training-plans:read'
   | 'timeline-notes:read'
   | 'health:read'
   | 'metrics:read'
@@ -20,6 +21,10 @@ export const MCP_SCOPE_CONTENT: Record<McpScope, {
   title: string;
   description: string;
 }> = {
+  'training-plans:read': {
+    title: 'Training plans and planned workouts',
+    description: 'Read your current plans and standalone planned workouts, including names, dates, complete workout instructions, step notes and existing service sync summaries. Authored text may contain sensitive health or personal information. Selected when requested; uncheck it to keep this data private. Existing connections must reauthorize. This does not grant activity or Timeline notes access. No edits, provider checks or sync actions are allowed. Revoking access cannot erase copies already received.',
+  },
   'activity-descriptions:read': {
     title: 'Activity descriptions',
     description: 'Read the full private event description shown in the QS.io event editor for a selected activity. Activities within the same event share this text. Requires Individual activity details. Selected by default when requested; uncheck it before approving to keep descriptions private from this client. Existing connections must reauthorize. Text may include sensitive health, personal or location information, even without Activity locations permission. Revoking access cannot erase copies already received. No descriptions can be changed.',

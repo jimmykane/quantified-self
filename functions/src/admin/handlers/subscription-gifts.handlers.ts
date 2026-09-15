@@ -1240,7 +1240,7 @@ export const previewAdminSubscriptionGift = onAdminCall<
     PreviewAdminSubscriptionGiftResponse
 >({
     region: FUNCTIONS_MANIFEST.previewAdminSubscriptionGift.region,
-    memory: '256MiB',
+    memory: '512MiB',
     secrets: FUNCTION_SECRET_BINDINGS.previewAdminSubscriptionGift,
 }, async request => {
     const input = validatePreviewRequest(request.data);
@@ -1299,7 +1299,7 @@ export const grantAdminSubscriptionGift = onAdminCall<
     GrantAdminSubscriptionGiftResponse
 >({
     region: FUNCTIONS_MANIFEST.grantAdminSubscriptionGift.region,
-    memory: '256MiB',
+    memory: '512MiB',
     timeoutSeconds: 60,
     secrets: FUNCTION_SECRET_BINDINGS.grantAdminSubscriptionGift,
 }, async request => {

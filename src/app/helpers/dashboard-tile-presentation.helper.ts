@@ -47,5 +47,5 @@ export function resolveDashboardTileCollectionPresentation(tiles: readonly TileP
 /** Settings exist for metric charts and maps; curated tiles use their inline controls. */
 export function hasDashboardTileSettings(tile: TilePresentationInput | null | undefined): boolean {
   return tile?.type === TileTypes.Map || tile?.type === TileTypes.Chart
-    && Object.values(ChartTypes).some(chartType => chartType === tile.chartType);
+    && (['HealthMetric','SleepTrend','HrvTrend'].includes(tile.chartType) || Object.values(ChartTypes).some(chartType => chartType === tile.chartType));
 }

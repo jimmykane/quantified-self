@@ -1,3 +1,7 @@
+import { DASHBOARD_HEALTH_GROUPS, dashboardHealthSettings } from '../../../helpers/dashboard-health-tile.helper';
+import { DashboardHealthService } from '../../../services/dashboard-health.service';
+import { buildDashboardHealthContext, DashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
+import type { HealthProvider } from '@shared/health';
 import { DashboardChartDiscoveryService } from '../../../services/dashboard-chart-discovery.service';
 import { dashboardChartSuggestions, unseenDashboardCharts } from '../../../helpers/dashboard-chart-discovery.helper';
 import { resolveDashboardTileCollectionPresentation, resolveDashboardTilePresentation } from '../../../helpers/dashboard-tile-presentation.helper';
@@ -12,7 +16,7 @@ import { DASHBOARD_TILE_EVENT_RANGE_OPTIONS, normalizeDashboardTileEventFilters 
 import { Component, computed, inject, input, signal, ElementRef, effect, untracked, viewChild, TemplateRef, ViewContainerRef, DestroyRef, output } from '@angular/core';
 import { AppUserInterface } from '../../../models/app-user.interface';
 import { getAvailableDashboardCharts, getDashboardChartCatalog, matchesDashboardPreset } from '../../../helpers/dashboard-chart-catalog.helper';
-import { DashboardTileLaneKey, getDashboardTileSectionDefinition, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
+import { DASHBOARD_TILE_SECTION_DEFINITIONS, DashboardTileLaneKey, getDashboardTileSectionDefinition, resolveDashboardTileLaneKey } from '../../../helpers/dashboard-tile-section.helper';
 import { DashboardPreviewInput, buildDashboardThumbnailPreview, dashboardPreviewSourceLabel } from '../../../helpers/dashboard-chart-preview.helper';
 import { DashboardChartLibraryState } from './dashboard-chart-library-state.service';
 import { DashboardChartPreviewService } from '../../../services/dashboard-chart-preview.service';
@@ -34,22 +38,46 @@ export class DashboardChartLibraryComponent {
   readonly state = inject(DashboardChartLibraryState);
   readonly user = input.required<AppUserInterface>();
   readonly lane = input.required<DashboardTileLaneKey>();
+  readonly hideEntryAction = input(false);
+  /** Dashboard mounts one picker for every section; Health pinning stays section-scoped. */
+  readonly allSections = input(false);
+  readonly browseLane = computed(() => this.allSections() ? this.state.activeLane() || this.lane() : this.lane());
+  readonly providerFilter = input<readonly HealthProvider[]>([]);
+  readonly timelineNotes = input<import('../../../helpers/timeline-notes-chart.helper').TimelineNoteChartContext | null>(null);
+  readonly healthGroups = DASHBOARD_HEALTH_GROUPS;
+  readonly healthSettings = dashboardHealthSettings;
+  private readonly healthData = inject(DashboardHealthService);
+  private readonly healthContexts = signal<Record<string, { uid: string; context: DashboardHealthContext }>>({});
+  healthContext(id: string, context: DashboardHealthContext): void { this.healthContexts.update(current => ({...current, [id]:{uid:this.user().uid, context}})); }
   readonly seed = input<DashboardPreviewInput>({ tiles: [] });
   private readonly previewData = inject(DashboardChartPreviewService);
   private readonly discovery = inject(DashboardChartDiscoveryService);
   private readonly sessionNewIds = signal<ReadonlySet<string>>(new Set());
-  private browseAcknowledgedThisSession = false;
+  private readonly acknowledgedLanes = new Set<DashboardTileLaneKey>();
   // A seen-badge settings update must not tear down the section's chart subscriptions.
   private readonly previewOwnerKey = computed(() => JSON.stringify([this.user().uid, this.user().settings.unitSettings,
     this.user().settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability]));
-  readonly unseen = computed(() => unseenDashboardCharts(this.catalog, this.lane(),
-    this.discovery.seenRevision(this.user(), this.lane()), this.seed().tiles));
-  readonly newBadgeDescription = computed(() => this.unseen().length ? `${this.unseen().length} new ${this.sectionPresentation().plural} to explore` : '');
+  readonly sections = computed(() => [{ lane: 'kpi' as DashboardTileLaneKey, label: 'KPIs' },
+    ...DASHBOARD_TILE_SECTION_DEFINITIONS.map(section => ({ lane: `section:${section.id}` as DashboardTileLaneKey, label: section.label }))]
+    .map(section => {
+      const entries = this.catalog.filter(entry => entry.lane === section.lane);
+      const presentation = resolveDashboardTileCollectionPresentation(entries.map(entry => entry.tile));
+      const unseen = unseenDashboardCharts(this.catalog, section.lane, this.discovery.seenRevision(this.user(), section.lane), this.seed().tiles);
+      const available = getAvailableDashboardCharts(section.lane, this.seed().tiles).length;
+      const badgeDescription = unseen.length ? `${unseen.length} new ${presentation.plural} to explore` : '';
+      return { ...section, presentation, unseen, badgeDescription, available,
+        canAdd: available > 0 || section.lane === 'section:activityOverview',
+        hint: available ? `${available} presets available` : 'Create a custom chart',
+        actionLabel: `${presentation.add} to ${section.label}${badgeDescription ? ', ' + badgeDescription : ''}` };
+    }));
+  readonly sectionActions = computed(() => Object.fromEntries(this.sections().map(section => [section.lane, section])));
+  readonly unseen = computed(() => this.allSections() ? this.sections().flatMap(section => section.unseen) : this.sectionActions()[this.browseLane()].unseen);
+  readonly newBadgeDescription = computed(() => this.unseen().length ? `${this.unseen().length} new ${this.allSections() ? 'tiles' : this.sectionPresentation().plural} to explore` : '');
   private readonly previewContexts = signal<{ uid: string; lane: DashboardTileLaneKey; data: Partial<DashboardPreviewInput> } | null>(null);
   readonly previewSeed = computed((): DashboardPreviewInput => {
     const context = this.previewContexts();
     const seed = this.seed();
-    return this.expanded() && context?.lane === this.lane() && context.uid === this.user().uid
+    return this.expanded() && context?.lane === this.browseLane() && context.uid === this.user().uid
       ? { ...seed, ...context.data, derivedMetrics: { ...seed.derivedMetrics, ...context.data.derivedMetrics },
         previewMetricStatuses: { ...seed.previewMetricStatuses, ...context.data.previewMetricStatuses } }
       : seed;
@@ -58,30 +86,47 @@ export class DashboardChartLibraryComponent {
   readonly search = signal('');
   readonly usesBottomSheet = signal(false);
   readonly group = signal('all');
-  readonly sectionLabel = computed(() => this.lane() === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(this.lane().slice(8) as never).label);
-  readonly available = computed(() => getAvailableDashboardCharts(this.lane(), this.seed().tiles));
-  readonly canCreateCustom = computed(() => this.lane() === 'section:activityOverview');
-  readonly showAddAction = computed(() => this.available().length > 0 || this.canCreateCustom());
-  readonly sectionPresentation = computed(() => resolveDashboardTileCollectionPresentation(this.catalog.filter(entry => entry.lane === this.lane()).map(entry => entry.tile)));
+  readonly sectionLabel = computed(() => this.browseLane() === 'kpi' ? 'KPIs' : getDashboardTileSectionDefinition(this.browseLane().slice(8) as never).label);
+  readonly available = computed(() => getAvailableDashboardCharts(this.browseLane(), this.seed().tiles));
+  readonly canCreateCustom = computed(() => this.browseLane() === 'section:activityOverview');
+  readonly showAddAction = computed(() => this.allSections() || this.available().length > 0 || this.canCreateCustom());
+  readonly sectionPresentation = computed(() => resolveDashboardTileCollectionPresentation(this.catalog.filter(entry => entry.lane === this.browseLane()).map(entry => entry.tile)));
   readonly draftPresentation = computed(() => resolveDashboardTilePresentation(this.state.draft()));
-  readonly addActionLabel = computed(() => `${this.sectionPresentation().add} to ${this.sectionLabel()}${this.newBadgeDescription() ? ", " + this.newBadgeDescription() : ""}`);
+  readonly entryActionText = computed(() => this.allSections() ? 'Add to dashboard' : this.sectionPresentation().add);
+  readonly addActionLabel = computed(() => `${this.allSections() ? 'Add to dashboard' : this.sectionPresentation().add + ' to ' + this.sectionLabel()}${this.newBadgeDescription() ? ', ' + this.newBadgeDescription() : ''}`);
   readonly availableCountLabel = computed(() => `${this.filtered().length} ${this.filtered().length === 1 ? this.sectionPresentation().singular : this.sectionPresentation().plural} available`);
   readonly emptyMessage = computed(() => this.available().length ? `No ${this.sectionPresentation().plural} match your search.` : 'All presets in this section are on your dashboard.');
+  readonly placeholderTitle = computed(() => !this.available().length ? this.canCreateCustom() ? 'Create your own chart' : 'This section is complete' : `Select a ${this.sectionPresentation().singular}`);
+  readonly placeholderDescription = computed(() => !this.available().length ? this.canCreateCustom()
+    ? 'Choose Create custom chart to select your metrics and chart style.'
+    : this.allSections() ? 'Choose another dashboard section to explore more tiles.' : 'All presets in this section are already on your dashboard.'
+    : `Choose a ${this.sectionPresentation().singular} from the list to see its preview and details.`);
   readonly backLabel = computed(() => this.state.configuring() ? this.draftPresentation().back : `Back to ${this.sectionPresentation().plural}`);
-  readonly addActionHint = computed(() => this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
-  readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group())));
+  readonly addActionHint = computed(() => this.allSections() ? 'Browse charts, KPIs, maps and more' : this.available().length ? `${this.available().length} presets available` : 'Create a custom chart');
+  readonly filtered = computed(() => this.available().filter(entry => `${entry.definition.label} ${entry.definition.description}`.toLowerCase().includes(this.search().toLowerCase()) && (this.browseLane() === 'section:health' && !!this.search().trim() || this.group() === 'all' || entry.definition.category === 'kpi' && entry.definition.kpiGroup === this.group() || entry.definition.category === 'health' && entry.definition.healthGroup === this.group() || entry.definition.id === 'curated-sleep' && this.group() === 'sleep' || entry.definition.id === 'curated-hrv' && this.group() === 'cardiovascular')));
   private readonly availablePreviews = computed(() => this.available().map(entry => {
-    const preview = buildDashboardThumbnailPreview(entry.tile, this.previewSeed());
+    const healthSettings = dashboardHealthSettings(entry.tile);
+    const cached = this.healthContexts()[entry.definition.id];
+    const healthContext = cached?.uid === this.user().uid ? cached.context : null;
+    const preview = healthSettings ? {
+      tile: entry.tile as import('../../../helpers/dashboard-tile-view-model.helper').DashboardTileViewModel,
+      source: healthContext?.hasData ? 'user' as const : 'example' as const, loading: !healthContext, note: '', calendarEvents: [], anchorMs: Date.now(),
+      availability: healthContext?.availability || {state:'loading' as const, hasData:false, label:'Loading readings…', reason:'Readings load when visible.'},
+    } : buildDashboardThumbnailPreview(entry.tile, this.previewSeed());
     const availabilityLabel = preview.availability?.label || dashboardPreviewSourceLabel(preview);
     return { ...entry, preview, isNew: this.sessionNewIds().has(entry.definition.id),
-      sourceLabel: preview.source === 'example' ? `Example · ${availabilityLabel}` : availabilityLabel,
+      healthSettings, healthContext: healthContext ? cached : null,
+      sourceHint: [preview.availability?.reason || availabilityLabel, healthContext?.selected?.model.ariaLabel].filter(Boolean).join(' '),
+      sourceLabel: healthSettings ? healthContext?.hasData ? 'Your data' : !healthContext ? 'Example · Loading…'
+        : healthContext.availability.state === 'error' ? 'Example · Unavailable' : healthContext.sampleOnly ? 'Example · Shorter range' : 'Example · No readings'
+        : preview.source === 'example' ? `Example · ${availabilityLabel}` : availabilityLabel,
       title: entry.definition.label.replace(/^KPI:\s*/, ''),
       format: resolveDashboardTilePresentation(entry.tile).label };
   }));
   readonly suggested = computed(() => {
     const visible = new Set(this.filtered().map(entry => entry.definition.id));
     return dashboardChartSuggestions(this.availablePreviews().filter(entry => visible.has(entry.definition.id)),
-      this.lane(), this.user().settings.dashboardSettings, entry => entry.preview.availability?.state === 'ready');
+      this.browseLane(), this.user().settings.dashboardSettings, entry => entry.preview.availability?.state === 'ready');
   });
   readonly rowPreviews = computed(() => {
     const visible = new Set(this.filtered().map(entry => entry.definition.id));
@@ -96,11 +141,12 @@ export class DashboardChartLibraryComponent {
     return draft ? this.catalog.find(entry => matchesDashboardPreset(draft, entry.tile))?.definition : null;
   });
   readonly previewTitle = computed(() => this.draftDefinition()?.label || (this.state.editor()?.mode === 'edit' ? this.draftPresentation().edit : this.draftPresentation().kind === 'chart' ? 'Custom chart' : this.draftPresentation().label));
-  readonly explanation = computed(() => resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.draftDefinition()?.description || 'Choose a metric, chart style, aggregation and date range.');
+  readonly explanation = computed(() => (this.state.healthSettings() ? this.draftDefinition()?.description : null) || resolveDashboardChartInfoTooltip(this.state.draft()?.['chartType']) || this.draftDefinition()?.description || 'Choose a metric, chart style, aggregation and date range.');
   readonly explanationParagraphs = computed(() => this.explanation().split('\n\n'));
   readonly dataScope = computed(() => {
     const tile = this.state.draft();
     if (!tile) return '';
+    if (dashboardHealthSettings(tile)) return 'Recorded Health history · Sources and readings kept separate';
     const type = `${tile['chartType'] || ''}`;
     if (isDashboardHrvTrendChartType(type)) return 'Recorded HRV summaries · Sources kept separate';
     if (isDashboardSleepBackedChartType(type)) return 'Recorded sleep · Stages and readings depend on your source';
@@ -121,8 +167,8 @@ export class DashboardChartLibraryComponent {
   });
   readonly creatingCustom = computed(() => this.state.editor()?.mode === 'add' && !this.state.selected());
   readonly pickerTitle = computed(() => this.state.editor()?.mode === 'edit' ? (this.state.canConfigure() ? this.draftPresentation().edit : this.draftPresentation().details) : this.creatingCustom() ? 'Create custom chart' : this.state.configuring() ? this.draftPresentation().settings : `Add ${this.sectionPresentation().plural}`);
-  readonly pickerHeading = computed(() => this.sectionLabel().toLowerCase() === this.sectionPresentation().plural.toLowerCase() ? this.pickerTitle() : `${this.pickerTitle()} · ${this.sectionLabel()}`);
-  readonly expanded = computed(() => this.state.activeLane() === this.lane());
+  readonly pickerHeading = computed(() => this.allSections() && this.state.editor()?.mode !== 'edit' && !this.state.configuring() ? 'Add to dashboard' : this.sectionLabel().toLowerCase() === this.sectionPresentation().plural.toLowerCase() ? this.pickerTitle() : `${this.pickerTitle()} · ${this.sectionLabel()}`);
+  readonly expanded = computed(() => this.allSections() ? !!this.state.activeLane() : this.state.activeLane() === this.browseLane());
   readonly destination = computed(() => {
     const tile = this.state.draft(); if (!tile) return '';
     const lane = resolveDashboardTileLaneKey(tile);
@@ -132,16 +178,32 @@ export class DashboardChartLibraryComponent {
     effect(onCleanup => {
       this.previewOwnerKey();
       const open = this.expanded();
-      const lane = this.lane();
+      const lane = this.browseLane();
+      const pinned = this.state.pinnedFromHealth();
       untracked(() => {
         const user = this.user();
         this.previewContexts.set(null);
+        this.healthContexts.set({});
         if (!open) {
           this.sessionNewIds.set(new Set());
-          this.browseAcknowledgedThisSession = false;
+          this.acknowledgedLanes.clear();
           return;
         }
-        const tiles = this.catalog.filter(entry => entry.lane === lane).map(entry => entry.tile);
+        if (pinned) return;
+        const entries = this.catalog.filter(entry => entry.lane === lane);
+        const tiles = entries.map(entry => entry.tile).filter(tile => !dashboardHealthSettings(tile));
+        const candidates = ['curated-sleep','curated-hrv','health:resting_heart_rate','health:steps','health:body_weight'];
+        const healthSubscriptions = new Subscription();
+        for (const entry of entries.filter(entry => candidates.includes(entry.definition.id))) {
+          if (this.seed().tiles.some(tile => matchesDashboardPreset(tile, entry.tile))) continue;
+          const settings = dashboardHealthSettings(entry.tile)!;
+          healthSubscriptions.add(this.healthData.watch(user.uid, settings, undefined, 5).subscribe({
+            next: evidence => this.healthContext(entry.definition.id, buildDashboardHealthContext(evidence, settings, user.settings.unitSettings,
+              user.settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability)),
+            error: () => undefined,
+          }));
+        }
+        onCleanup(() => healthSubscriptions.unsubscribe());
         const subscription = this.previewData.watchLibraryContexts(user, tiles, this.seed()).subscribe({
           next: data => this.previewContexts.set({ uid: user.uid, lane, data }),
         });
@@ -172,7 +234,7 @@ export class DashboardChartLibraryComponent {
       disableClose: true, // Route every dismissal through the existing dirty-draft/pending-save guard.
       restoreFocus: false, // Restore here, then let the dashboard reveal a successfully saved tile.
       autoFocus: 'dialog',
-      ariaLabel: `${this.sectionPresentation().label} library · ${this.sectionLabel()}`,
+      ariaLabel: this.allSections() ? 'Dashboard tile library' : `${this.sectionPresentation().label} library · ${this.sectionLabel()}`,
     };
     let close: () => void;
     let closed$: Observable<unknown>;
@@ -191,8 +253,8 @@ export class DashboardChartLibraryComponent {
     this.overlay = overlay;
     overlay.subscriptions.add(opened$.subscribe(() => {
       const mobileDetail = this.state.draft() && this.breakpoints.isMatched('(max-width: 959.98px)');
-      if (!this.state.configuring() && !mobileDetail && this.state.editor()?.mode !== 'edit') this.acknowledgeBrowseSession();
-      if (this.state.configuring() || mobileDetail) this.focusDetail();
+      if (!this.state.pinnedFromHealth() && !this.state.configuring() && !mobileDetail && this.state.editor()?.mode !== 'edit') this.acknowledgeBrowseSession();
+      if (this.state.pinnedFromHealth() || this.state.configuring() || mobileDetail) this.focusDetail();
       else this.focusBrowser();
     }));
     overlay.subscriptions.add(backdrop$.subscribe(() => this.close()));
@@ -205,7 +267,7 @@ export class DashboardChartLibraryComponent {
       if (this.overlay !== overlay) return;
       this.overlay = null;
       this.sessionNewIds.set(new Set());
-      this.browseAcknowledgedThisSession = false;
+      this.acknowledgedLanes.clear();
       if (this.destroyRef.destroyed) return;
       if (this.expanded()) this.state.resetContext();
       const target = returnFocus?.isConnected && returnFocus !== this.document.body ? returnFocus : this.entryButton()?.nativeElement;
@@ -215,28 +277,39 @@ export class DashboardChartLibraryComponent {
   }
 
   private acknowledgeBrowseSession(): void {
-    if (this.browseAcknowledgedThisSession) return;
-    this.browseAcknowledgedThisSession = true;
-    const entries = this.unseen();
-    this.sessionNewIds.set(new Set(entries.map(entry => entry.definition.id)));
+    const lane = this.browseLane();
+    if (this.acknowledgedLanes.has(lane)) return;
+    this.acknowledgedLanes.add(lane);
+    const entries = this.sectionActions()[lane].unseen;
+    this.sessionNewIds.update(current => new Set([...current, ...entries.map(entry => entry.definition.id)]));
     if (!entries.length) return;
     const revision = Math.max(...entries.map(entry => entry.definition.introducedIn));
     // Passive acknowledgement is silent and never blocks chart navigation. A failed
     // write leaves the badge unread so a later opening can retry, with no polling.
-    void this.discovery.acknowledge(this.user(), this.lane(), revision).catch(() => undefined);
+    void this.discovery.acknowledge(this.user(), this.browseLane(), revision).catch(() => undefined);
   }
 
   async toggle(): Promise<void> {
-    if (!this.expanded() && this.canCreateCustom() && !this.available().length) {
-      await this.createCustom();
-      return;
+    if (this.expanded()) { await this.close(); return; }
+    const preferred = this.sectionActions()[this.lane()];
+    const lane = this.allSections() ? this.sections().find(section => section.unseen.length)?.lane
+      || (preferred.available ? preferred.lane : this.sections().find(section => section.available)?.lane || preferred.lane) : this.lane();
+    await this.openSection(lane, this.allSections());
+  }
+  async openSection(lane: DashboardTileLaneKey, browseAll = false): Promise<void> {
+    if (this.state.busy() || this.expanded() && this.browseLane() === lane) return;
+    if (!browseAll && lane === 'section:activityOverview' && !getAvailableDashboardCharts(lane, this.seed().tiles).length) {
+      await this.createCustom(); return;
     }
     const wasExpanded = this.expanded();
-    if (!wasExpanded) { this.search.set(''); this.group.set('all'); }
-    await this.state.open(this.lane());
-    if (!wasExpanded && this.expanded() && !this.breakpoints.isMatched('(max-width: 959.98px)') && this.filtered().length) {
+    await this.state.open(lane);
+    if (!this.expanded() || this.browseLane() !== lane) return; // Busy or discard declined.
+    this.search.set(''); this.group.set('all');
+    if (wasExpanded) this.acknowledgeBrowseSession();
+    if (!this.breakpoints.isMatched('(max-width: 959.98px)') && this.filtered().length) {
       await this.state.select(this.user(), this.rowPreviews()[0], false);
     }
+    if (wasExpanded) this.focusBrowser();
   }
   async select(entry: ReturnType<typeof getAvailableDashboardCharts>[number]): Promise<void> {
     if (!(await this.state.select(this.user(), entry))) return;
@@ -256,7 +329,14 @@ export class DashboardChartLibraryComponent {
   async close(): Promise<void> { await this.state.close(); }
   private focusDetail(): void { this.focusContent(() => this.detail()?.nativeElement); }
   private focusBrowser(selectedId?: string): void {
-    if (!selectedId) { this.focusContent(() => this.browser()?.nativeElement); return; }
+    if (!selectedId) {
+      this.focusContent(() => {
+        const browser = this.browser()?.nativeElement;
+        // Focus the section selector without outlining the entire list or opening a phone keyboard.
+        return this.allSections() ? browser?.querySelector<HTMLElement>('mat-select') || browser : browser;
+      });
+      return;
+    }
     requestAnimationFrame(() => {
       const browser = this.browser()?.nativeElement;
       const row = Array.from(browser?.querySelectorAll<HTMLButtonElement>('[data-preset-id]') || [])

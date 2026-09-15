@@ -12,6 +12,7 @@ import { AppPaymentService, StripeProduct, StripeSubscription, StripePrice } fro
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppHapticsService } from '../../services/app.haptics.service';
 import { Auth } from 'app/firebase/auth';
 import { LoggerService } from '../../services/logger.service';
 import { BehaviorSubject, Observable, Subscription, firstValueFrom, map, take } from 'rxjs';
@@ -26,6 +27,8 @@ import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { POLICY_CONTENT } from '../../shared/policies.content';
 import { getAssistantRequestLimitForRole, getRouteUsageLimitForRole, getUsageLimitForRole } from '@shared/limits';
+
+const FREE_PRICE_ID = 'free_price';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -80,6 +83,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     private auth = inject(Auth);
     private userService = inject(AppUserService);
     private analyticsService = inject(AppAnalyticsService);
+    private readonly haptics = inject(AppHapticsService);
     private logger = inject(LoggerService);
     private router = inject(Router);
 
@@ -112,7 +116,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             role: 'free',
             metadata: { role: 'free' },
             prices: [{
-                id: 'free_price',
+                id: FREE_PRICE_ID,
                 active: true,
                 currency: 'USD',
                 unit_amount: 0,
@@ -210,12 +214,14 @@ export class PricingComponent implements OnInit, OnDestroy {
         if (isPlatformBrowser(this.platformId) && !document.hidden) {
             this.logger.log('Page became visible, resetting loading state');
             this.setLoadingState(false);
-            this.loadingPriceId = null;
         }
     };
 
     private setLoadingState(isLoading: boolean): void {
         this.isLoading = isLoading;
+        if (!isLoading) {
+            this.loadingPriceId = null;
+        }
         this.loadingStateChange.emit(isLoading);
     }
 
@@ -483,18 +489,23 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     async subscribe(price: any) {
+        if (this.isLoading) {
+            return;
+        }
+
         if (!this.authService.currentUser) {
             this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
             return;
         }
 
         const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
-        if (!userWithRequiredPolicies) {
+        if (!userWithRequiredPolicies || this.isLoading) {
             return;
         }
 
         // Handle both price object and legacy string ID for backward compatibility
         const priceId = typeof price === 'string' ? price : price.id;
+        this.haptics.selection();
 
         // Double-Billing Protection:
         // If user already has a Paid Role (Basic/Pro), they CANNOT checkout again.
@@ -526,11 +537,11 @@ export class PricingComponent implements OnInit, OnDestroy {
                 const role = errorMessage.split(':')[1];
                 this.showSubscriptionRestoredDialog(role);
             } else {
+                this.haptics.error();
                 this.logger.error('Error starting checkout:', error);
                 alert('Failed to start checkout. Please try again.');
             }
             this.setLoadingState(false);
-            this.loadingPriceId = null;
         }
     }
 
@@ -604,24 +615,32 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
     }
 
-    async selectFreeTier() {
+    async selectFreeTier(priceId: string = FREE_PRICE_ID) {
+        if (this.isLoading) {
+            return;
+        }
+
         if (!this.authService.currentUser) {
             this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
             return;
         }
 
         const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
-        if (!userWithRequiredPolicies) {
+        if (!userWithRequiredPolicies || this.isLoading) {
             return;
         }
 
+        this.loadingPriceId = priceId;
         this.setLoadingState(true);
+        this.haptics.selection();
         try {
             this.analyticsService.logSelectFreeTier();
             await this.userService.setFreeTier(userWithRequiredPolicies);
+            this.haptics.success();
             this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
             this.planSelected.emit();
         } catch (error) {
+            this.haptics.error();
             this.logger.error('Error selecting free tier:', error);
             alert('Failed to select free tier. Please try again.');
         } finally {

@@ -1,5 +1,34 @@
 # Training Workspace Architecture and Maintenance Guide
 
+## Planning reads through MCP and the Assistant
+
+The #690 read-only slice exposes current plans, standalone/associated workouts, complete v1 instructions and existing
+delivery summaries. It does not introduce new storage or modify `WorkoutStructureV1`. Five tools and their strict scope,
+projection and bounds are documented in [MCP server](mcp-server.md#training-plans-and-planned-workouts-690-read-only-slice).
+Source support is not a deployed or registered-client promise. No provider certification, #652 approval flow, sync
+enablement, deployment or plugin installation is implied. Writes remain tracked in #690 with #652.
+
+Independent `training-plans:read` consent is available without a UID or Pro gate; the planning UI pilot remains unchanged.
+The Assistant's default-off Training plans choice is conversation-owned, not a UI gate. Current calendar reads default to
+standalone plus active-plan workouts, include skipped, exclude deleted, and allow explicit inactive-plan/all scopes.
+Historical dates still read current records, not history. Calendar dates are not instants or delivery timezones.
+Full structures preserve canonical primitives, ordered node IDs, notes, repeat limits and Sports Lib owner-unit formatting.
+There are no new `Data*` classes, completed-event metrics, inferred duration estimates, provider calls or writes.
+
+The shared delivery-summary helper provides UI wording and MCP machine outcomes from the same current evidence. Whole-plan
+counts include every current non-deleted workout, with no success claim for incomplete scans, empty plans, stale evidence
+or old-account copies. Confirmation is provider-side workout delivery, never receipt on a watch or native provider plan.
+Read-only Firestore snapshots and fresh revision/deletion/consent fences prevent releasing obsolete schedules.
+MCP input accounting covers complete fetched pages, including unused tail records, without double-counting cached
+projections. Valid sync-off settings without a destination remain readable. Planning-only plugin questions must route
+directly to planning reads without asking for metric permission or catalog access.
+
+Every planning feature PR must assess MCP impact using the root instructions and MCP skill. New recipe targets require
+explicit public schemas, formatters and tests in the same PR; presentation-only spacing can document no wire impact;
+private provider artifact metadata must remain excluded. Review safe projections, lifecycle semantics, scope isolation,
+pagination/bytes, unit formatting, Assistant evidence/routing and bundled skills together. A real deferral needs a focused
+#583 subissue in Project 2 before completion. Read coverage never authorizes wider consent, writes or deployment.
+
 This document is the implementation guide for the authenticated `/training` workspace. It is intended for product
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
 metric payload, the sports-lib durability protocol, or the refresh pipeline changes.
@@ -416,7 +445,7 @@ readiness flags and delivery entitlement enforcement are unchanged. Broader roll
 The common delivery implementation lives in `functions/src/training-plans/delivery/`, with browser-safe v1 contracts in
 `shared/training-provider-delivery.ts`. It is independent of schedule history and leaves the exact `WorkoutStructureV1`
 JSON and Sports Lib conversion/formatting boundary unchanged. Public provider switches remain disabled; a separate
-backend-enforced private Garmin evaluation pilot is described below. The Garmin adapter is implemented and tested offline under #647; deterministic fakes
+backend-enforced private Garmin production pilot is described below. The Garmin adapter is implemented and tested offline under #647; deterministic fakes
 exist only in `delivery/test-support/`, are excluded from the Functions build, and have no browser/configuration switch.
 
 `previewTrainingProviderDelivery` and `mutateTrainingProviderDelivery` are focused, authenticated, App Check-enforced
@@ -641,14 +670,14 @@ delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptanc
 For HTTP failures, group by `jsonPayload.httpStatus` and `jsonPayload.failurePhase` to distinguish rejected responses
 from network uncertainty and response decoding. Legacy failure records lack these fields and cannot prove a specific
 provider response status after the fact.
-Production dashboards, alerts and broader rollout remain #655; Garmin evaluation evidence remains #698.
+Production dashboards, alerts and broader rollout remain #655; Garmin provider evidence remains #698.
 
 ### Provider proof status
 
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four public delivery switches remain
 false. Garmin, COROS, Wahoo, and Suunto remain `fixture-only`: serializers prove documented mapping, and Garmin now
 also has an offline-tested HTTP adapter. Offline verification does not constitute a real provider request or device result.
-The UID-restricted evaluation exception below enables that evidence to be collected without public launch.
+The UID-restricted production pilot below enables that evidence to be collected without public launch.
 COROS, Wahoo and Suunto have no production transport binding yet. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
@@ -664,7 +693,7 @@ real provider HTTP, callbacks and sandbox certification remain #645 and #647–#
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
 
-#### Private Garmin evaluation pilot
+#### Private Garmin production pilot
 
 `shared/training-delivery-rollout.ts` contains a separate, exact-match Garmin pilot allowlist. It is not derived from
 the presentation-only Training UI gate. An empty pilot list disables the exception; it never means everyone. The
@@ -683,7 +712,7 @@ for connection recovery; an explicit disconnect is not needed for permission cha
 An unknown snapshot is not a denied grant, and
 the display never authorizes delivery or changes consent. This permission-management UI is available to all connected
 Garmin users; the separate Training UI and backend pilot UID restrictions are unchanged.
-Start evaluation with one explicitly sent future standalone workout, not an opted-in multi-workout plan.
+Start approved provider testing with one explicitly sent future standalone workout, not an opted-in multi-workout plan.
 
 Deployment requires separate explicit approval. Before activation, inspect only the pilot account's existing settings,
 ledger and queued work so previously recorded opt-ins cannot unexpectedly resume. Deploy the two delivery callables
@@ -692,8 +721,118 @@ production frontend. Existing queue dispatchers and schedule/connection/entitlem
 transports and need no change for this gate; no Rules/index/secret changes are introduced. To disable the pilot, clear
 the list and redeploy those backend functions and frontend. That blocks transport, including withdrawals, but preserves
 consent and evidence; use Stop while access is valid first if eligible provider copies must be removed. Deployment alone
-neither creates consent nor sends a workout. This evaluation exception does not satisfy #698's sandbox/device proof or
+neither creates consent nor sends a workout. This production pilot does not satisfy #698's sandbox/device proof or
 #655's public rollout gates, and does not change #651 completion matching or #654 Sports Lib extraction.
+
+### Remote verification and repair (#703)
+
+Remote verification extends the existing delivery pipeline, not the authored workout schema or revision history.
+QS remains authoritative for consent and authored dates. Inspection checks cloud artifacts and required associations;
+it does not import provider-side edits, compare/rewrite recipe content routinely, or confirm watch downloads.
+Garmin's retained workout and schedule IDs are inspected separately. COROS, Wahoo and Suunto have no live inspection
+binding in this slice. Delivery readiness alone never grants repair readiness.
+
+`verification-contracts.ts` declares adapter-owned inspection policies and normalized observations. The shared evidence
+reducer binds observations to the exact destination, connection generation/epoch, IDs, saved zone, settings/association
+and policy version. A missing resource needs two authoritative observations at least 15 minutes apart. An intervening
+positive or inconclusive observation resets confirmation. Unknown/malformed responses, ownership failures and duplicate
+identities never establish absence. Inventory adapters provide bounded cursors and explicit complete/stable/unfiltered
+coverage; a partial or changing offset listing cannot prove deletion. COROS remains unsupported until #648 establishes
+a documented planned-resource inspection mechanism, not recorded-activity polling or blind schedule republishing.
+Wahoo #649 must model Plan/Workout/association separately and prove external-ID and uncertain-create recovery;
+`workout_token` is not a documented POST idempotency guarantee. Suunto #650 must prove owned Guide reads and externalId
+conflict lookup; unpinning or device eviction is not cloud deletion.
+
+Stable, unfiltered inventory pages may carry the previous completed scan's negative while a second scan advances;
+only its complete coverage can provide the second observation. Positive observations, unstable coverage or a stalled
+cursor break that chain. Unverified positive observations cannot clear a known absence. Actionable delivery errors
+take precedence over older check/restoration labels in the UI.
+
+`mutateTrainingProviderDelivery` accepts `check`, retaining Auth/App Check, Pro/grace, owner, deletion-lock, expected
+schedule/scope/settings revisions and mutation receipts. It returns a typed queued/coalesced/deferred receipt and stores
+a compact request under `trainingDeliveryState/current/checks`, never consent or a new settings/history revision.
+Manual requests coalesce for 15 minutes and join the same resumable 25-workout/25-ledger scan as periodic work. The
+dispatcher admits delivery/reconciliation before manual verification before ordinary verification. Checks target 24
+hours, but production capacity can extend the cycle. There is no evaluation environment, runner, request cap or setup
+wizard. Verification uses the existing delivery lease; every request and post-I/O persistence rechecks authority,
+current intent, Pro, readiness, saved-zone date eligibility, completion, plan locks and account deletion. Stale evidence
+cannot authorize repair. A repair invalidated by a new edit/settings change is rechecked, not blindly replayed.
+
+Garmin's production request admission shares application (3000/rolling minute including Training-triggered OAuth)
+and account (1000/rolling day excluding OAuth) windows across Training delivery, recovery and inspection. Counters use
+bounded conservative sliding buckets: requests may wait up to one bucket beyond the exact rolling boundary, never
+burst through it. Admission occurs before the transport start journal; quota exhaustion is pending, not an uncertain
+POST or failed attempt. Retry-After updates shared not-before state. The application aggregates contain no account/user
+IDs; account counters live below `users/{uid}/trainingProviderCapacity`. Other Garmin consumers using the same provider
+application must be covered by the production quota proof under #698/#645 before broad enablement; this implementation
+does not claim to count unrelated Health/Course/OAuth callers. Wahoo's documented application windows are recorded for
+its future adapter; COROS scope and Suunto subscription limits must be confirmed, not invented.
+
+A failure persisting shared quota deferral must not erase a received HTTP 429 rejection: retain the rejected-operation
+journal and provider delay on the delivery record rather than blocking a known-rejected create as uncertain.
+Provider 429 responses, like local capacity exhaustion, are pending deferrals rather than failed checks and do not
+consume delivery failure retries.
+
+Verification retains Retry-After on the delivery ledger as well as shared capacity. A new manual check, edit or
+reconciliation cannot shorten that deadline, including when the shared quota-state write failed after a received 429.
+
+Private ledger evidence is separate from the owner-readable `trainingDeliveryVerifications` v1 projection. The existing
+strict `trainingDeliveryStatuses` v1 shape is unchanged. Confirmed missing artifacts do not count as synced, even while
+their retained IDs are kept for repair/removal. Plan totals still derive from workouts and do not imply native plans.
+Ledger `inspections` and attempt `acceptances` are immutable private evidence; each operation retains its original
+artifact, including retired IDs. Rules deny evidence, receipts, jobs and budgets. Account cleanup recursively removes
+the new user collections and all existing delivery queue jobs; late workers cannot recreate a missing/deleting user.
+Application counters are non-personal aggregate capacity and deliberately survive individual account deletion.
+
+The Garmin adapter can repair only the missing schedule, or recreate a missing workout and safely relink an unchanged
+surviving schedule. Changed dates/owners/associations require attention. Repairs reuse the operation journal and stable
+QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and deletion
+supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Successful repair
+cycles are limited to two per delivery per rolling day, then deferred until capacity returns. **Production negative
+classification and automatic repair remain disabled in `GARMIN_INSPECTION_POLICY` until #698 proves real missing-ID
+semantics and repair behavior. Synthetic fixtures do not satisfy that gate.** No new webhook endpoint is introduced.
+
+Before a replacement schedule POST, re-read the original schedule ID even after an explicitly rejected attempt. Reuse
+an unchanged reappearing association, and reject a conflicting one, rather than creating a second calendar entry.
+Adapters journal a proven no-op repair separately from an applied repair, so acceptance recovery cannot charge that
+no-op toward the two-repair limit or advance Last sent. The safe status explains that limit when it pauses restoration. Inspection evidence
+also binds the complete policy, not only its version label: disabling inspection or changing its authority rules
+invalidates in-flight results. Partial deliveries without a full acceptance show Last attempt, not an empty Last sent.
+Malformed lookup identities remain inconclusive and retryable; only valid but mismatched identities/dates require
+conflict resolution. Manual-check failures never direct users into a nonexistent settings-save review.
+
+An interrupted repair retains both accepted replacement IDs and the original artifact bundle until full delivery or
+withdrawal completes. Stop still queues withdrawal when the replacement is null, since original associations may
+survive. Adapters must remove retained original-only artifacts through ownership/date-checked, journaled operations;
+an ambiguous DELETE is inspected before retry and must not discard another retained artifact. Past/completed protection
+covers both bundles. Removal does not require repair readiness or Pro, but still requires valid delivery transport,
+the exact connection, current Stop intent and all deletion fences.
+
+When recovery proves partial acceptance and a newer edit supersedes it, a server-only repair continuation carries
+the original associations into the next operation. The worker binds it to current consent, mapping and inspection
+readiness; the adapter updates the already accepted workout and safely relinks the surviving schedule. Continuation
+never authorizes another replacement workout POST if that accepted ID disappears. Unknown acceptance remains blocked.
+
+The compact sync details offer **Check Garmin** when supported, without another consent dialog. Last sent, last checked
+and device availability are separate. Unsupported verification reads **Sent · remote checking unavailable**, not failure
+or verified presence. Checking/restoring/deferred/inconclusive states remain concise, with thin global scrollbars,
+surface-free details, keyboard access and sign-out guards. The existing UID restrictions are unchanged.
+
+Diagnostics use `[TrainingVerification]` with allowlisted event/provider/category/coverage/latency fields and
+`[TrainingDelivery]` acceptance/recovery events. Example Cloud Logging filters:
+`jsonPayload.message="[TrainingVerification]"` plus `jsonPayload.event="checked"` for latency/coverage;
+`jsonPayload.event="check_deferred_or_failed"` plus `jsonPayload.category="deferred"` for capacity pressure;
+`jsonPayload.message="[TrainingDelivery]"` plus `jsonPayload.event="recovered_acceptance"` for recovery.
+No provider responses, IDs, credentials, titles or user data belong in diagnostics. Dashboards/alerts remain #655.
+
+Verification uses `npm run test:training-delivery` with a demo Firestore project and test-only transports, Rules suites,
+focused frontend tests, both builds and secret/registration checks. If the emulator CLI's npm child fails, invoke
+`node functions/node_modules/vitest/vitest.mjs run --config functions/vitest.config.ts src/training-plans/delivery`
+inside `firebase emulators:exec --project demo-training-delivery --only firestore`. Rules tests use their configured
+8081/9199 ports. Never run bulk/destructive tests against a Functions-only emulator connected to live Firestore.
+Deploying this change, if separately approved, requires Rules/indexes and the delivery callables, worker and dispatchers
+before the frontend. It neither authorizes a deployment nor changes any public provider switch. Provider/device proof
+remains #698, adoption #648–#650, completion matching #651, Sports Lib extraction #654 and rollout #655.
 
 ### Garmin workout/calendar adapter (#647)
 
@@ -713,8 +852,9 @@ The HTTP client admits only exact Garmin paths/host, rejects redirects, times ou
 at 2 MiB. It never persists/logs raw response bodies, credentials or provider errors. HTTP 401 blocks for reconnect;
 403/412 block for permission repair; 429 honors Retry-After, defaulting conservatively to 24 hours when quota is unknown.
 The private ledger retains the adapter's not-before deadline independently of ordinary retry counters, so an edit,
-Stop/resume, or explicit Retry cannot shorten it. This is per-delivery backoff, not account/partner quota pacing; the
-latter remains part of #698's certification gate. There is no nested HTTP retry loop.
+Stop/resume, or explicit Retry cannot shorten it. Remote verification (#703) additionally shares production request
+admission and Retry-After across Training delivery/recovery/inspection; cross-product application accounting and exact
+provider quota semantics remain part of #698's certification gate. There is no nested HTTP retry loop.
 Only documented synchronous success codes confirm completion. Unexpected successful statuses (including 202) remain
 unconfirmed; an empty/null successful GET never means the artifact is absent. Only an explicit 404 enters the missing
 artifact path, with actual provider 404 semantics still subject to certification. Schedule PUT accepts an empty 204;
@@ -739,12 +879,12 @@ transport unit tests and real Firestore worker transactions through the excluded
 workers, edits/Stop/expiry/lease expiry between artifacts, edit-then-revert after remote acceptance, Retry-After across
 edits and manual Retry, malformed/empty/asynchronous success responses, lost responses and persistence, same-account permission repair,
 changed-account reconnect, disconnect and account deletion. Run `npm run test:training-delivery` plus the existing Rules,
-secret registration and frontend suites. Sandbox/device certification remains a separate gate: confirm the documented
-create path in the evaluation tenant, actual response/404 semantics and schedule-list wrapper/pagination, quota/horizon,
+secret registration and frontend suites. Provider/device certification remains a separate gate: confirm the documented
+create path for the designated production account, actual response/404 semantics and schedule-list wrapper/pagination, quota/horizon,
 Training permission approval, all CRUD/recovery scenarios and representative device rendering before public Garmin enablement.
-The focused epic subissue #698 owns this remaining sandbox/device evidence, request-pacing validation and operator
+The focused epic subissue #698 owns this remaining provider/device evidence, request-pacing validation and operator
 recovery procedure. Keep #647 open until its certification acceptance is evidenced; #645 owns access/contract questions
-and #655 owns production rollout. None of these tests constitutes a real Garmin sandbox or watch result.
+and #655 owns production rollout. None of these tests constitutes a real Garmin account or watch result.
 
 ### Product analytics
 

@@ -13,6 +13,7 @@ import { DELIVERY_QUEUE, type DeliveryRuntime } from './contracts';
 import { productionDeliveryRuntime } from './runtime';
 import { reconcileTrainingDeliveryPage } from './store';
 import { processTrainingDelivery } from './worker';
+import { processTrainingVerification } from './verification-worker';
 
 const region = FUNCTIONS_MANIFEST.processTrainingDeliveryTask.region;
 
@@ -51,12 +52,15 @@ export const processTrainingDeliveryTask = onTaskDispatched({ region, timeoutSec
   const job = doc.data()!;
   if (job.kind === 'reconcile') await reconcileTrainingDeliveryPage(runtime, job.uid);
   else if (job.kind === 'delivery') await processTrainingDelivery(runtime, job.uid, job.deliveryId);
+  else if (job.kind === 'verification') await processTrainingVerification(runtime, job.uid, job.deliveryId);
 });
 
 export const onTrainingDeliveryQueued = onDocumentWritten({
   document: `${DELIVERY_QUEUE}/{jobId}`, region, memory: '512MiB', retry: true,
 }, async event => {
   if (!event.data?.after.exists || event.data.after.data()?.dueAtMs > Date.now()) return;
+  // Verification is dispatched by the prioritized recovery scan, never ahead of writes.
+  if (event.data.after.data()?.kind === 'verification') return;
   await dispatchTrainingDeliveryJob(productionDeliveryRuntime(), event.params.jobId);
 });
 
@@ -64,12 +68,22 @@ export const dispatchTrainingDelivery = onSchedule({ schedule: '* * * * *', regi
   const runtime = productionDeliveryRuntime();
   const pending = await getCloudTaskQueueDepthForQueue(config.cloudtasks.trainingDeliveryQueue, true);
   if (pending >= MAX_PENDING_TASKS) return;
-  const page = await runtime.db.collection(DELIVERY_QUEUE).where('dueAtMs', '<=', runtime.now())
-    .orderBy('dueAtMs').limit(Math.min(25, MAX_PENDING_TASKS - pending)).get();
+  const capacity = Math.min(25, MAX_PENDING_TASKS - pending);
+  const queries = [
+    runtime.db.collection(DELIVERY_QUEUE).where('kind', 'in', ['delivery', 'reconcile']),
+    runtime.db.collection(DELIVERY_QUEUE).where('kind', '==', 'verification').where('priority', '==', 'manual'),
+    runtime.db.collection(DELIVERY_QUEUE).where('kind', '==', 'verification').where('priority', '==', 'ordinary'),
+  ];
   let dispatched = 0;
-  for (const job of page.docs) {
-    try { if (await dispatchTrainingDeliveryJob(runtime, job.id)) dispatched++; }
-    catch { logger.warn('[TrainingDelivery]', { event: 'dispatch_failure' }); }
+  let inspected = 0;
+  for (const query of queries) {
+    if (inspected >= capacity) break;
+    const page = await query.where('dueAtMs', '<=', runtime.now()).orderBy('dueAtMs').limit(capacity - inspected).get();
+    inspected += page.size;
+    for (const job of page.docs) {
+      try { if (await dispatchTrainingDeliveryJob(runtime, job.id)) dispatched++; }
+      catch { logger.warn('[TrainingDelivery]', { event: 'dispatch_failure' }); }
+    }
   }
-  logger.info('[TrainingDelivery]', { event: 'recovery_dispatch', inspected: page.size, dispatched });
+  logger.info('[TrainingDelivery]', { event: 'recovery_dispatch', inspected, dispatched });
 });

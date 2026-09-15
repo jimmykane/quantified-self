@@ -1,73 +1,18 @@
-import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
-import { ActivityCalendarGridComponent } from '../components/calendar/activity-calendar-grid/activity-calendar-grid.component';
-import { DashboardChartPreviewComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-preview.component';
-import { DashboardChartThumbnailComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-thumbnail.component';
-import { DashboardTileEditorComponent } from '../components/summaries/dashboard-chart-library/dashboard-tile-editor.component';
-import { DashboardChartLibraryComponent } from '../components/summaries/dashboard-chart-library/dashboard-chart-library.component';
-import { NgModule } from '@angular/core';
-import { MaterialModule } from './material.module';
-import { SharedModule } from './shared.module';
-import { CommonModule } from '@angular/common';
-import { DashboardRoutingModule } from '../dashboard.routing.module';
-import { DashboardComponent } from '../components/dashboard/dashboard.component';
-import { SummariesComponent } from '../components/summaries/summaries.component';
-import { EventsMapComponent } from '../components/events-map/events-map.component';
-import { TileChartComponent } from '../components/tile/chart/tile.chart.component';
-import { TileMapComponent } from '../components/tile/map/tile.map.component';
-import { TileChartActionsComponent } from '../components/tile/actions/chart/tile.chart.actions.component';
-import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
-import { TileActionsHeaderComponent } from '../components/tile/actions/header/tile.actions.header.component';
-import { BenchmarkModule } from './benchmark.module';
-import { AppChartsModule } from './app-charts.module';
-import { DragDropModule } from '@angular/cdk/drag-drop';
-import { DashboardTileEventFiltersComponent } from '../components/tile/event-filters/dashboard-tile-event-filters.component';
-import { DashboardTileBoardComponent } from '../components/summaries/dashboard-tile-board/dashboard-tile-board.component';
-import { DashboardTileCellComponent } from '../components/summaries/dashboard-tile-cell/dashboard-tile-cell.component';
 import { DashboardActionPromptsComponent } from '../components/dashboard/dashboard-action-prompts/dashboard-action-prompts.component';
-import { RoutePreviewMapComponent } from '../components/routes/route-preview-map/route-preview-map.component';
-import { ActivityCalendarTileComponent } from '../components/calendar/activity-calendar-tile/activity-calendar-tile.component';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 import { EventTableModule } from './event-table.module';
-
+import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { SharedModule } from './shared.module';
+import { MaterialModule } from './material.module';
+import { DashboardLibraryModule } from './dashboard-library.module';
+import { DashboardRoutingModule } from '../dashboard.routing.module';
+import { DashboardComponent } from '../components/dashboard/dashboard.component';
 @NgModule({
-    imports: [
-        CommonModule,
-        DashboardChartThumbnailComponent,
-        SharedModule,
-        MaterialModule,
-        AppChartsModule,
-        BenchmarkModule,
-        DragDropModule,
-        DashboardRoutingModule,
-        EventsMapComponent,
-        RoutePreviewMapComponent,
-        ActivityCalendarTileComponent,
-        ActivityCalendarGridComponent,
-        TimelineNotesWorkspaceComponent,
-        UploadActivitiesComponent,
-        EventTableModule,
-    ],
-    exports: [],
-    declarations: [
-        DashboardComponent,
-        SummariesComponent,
-        DashboardChartPreviewComponent,
-        DashboardTileEditorComponent,
-        DashboardChartLibraryComponent,
-        TileChartActionsComponent,
-        TileMapActionsComponent,
-        TileActionsHeaderComponent,
-        TileChartComponent,
-        TileMapComponent,
-        DashboardTileEventFiltersComponent,
-        DashboardTileBoardComponent,
-        DashboardTileCellComponent,
-        DashboardActionPromptsComponent,
-
-    ],
-    providers: []
+  imports: [
+    CommonModule, SharedModule, MaterialModule, DashboardLibraryModule,
+    DashboardRoutingModule, UploadActivitiesComponent, EventTableModule,
+  ],
+  declarations: [DashboardComponent, DashboardActionPromptsComponent],
 })
-
-
-
-export class DashboardModule { }
+export class DashboardModule {}

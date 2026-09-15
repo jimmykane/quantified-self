@@ -1,3 +1,4 @@
+import { TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
@@ -50,6 +51,7 @@ export const ASSISTANT_MCP_TOOL_NAMES = [
   ...ASSISTANT_BASE_MCP_TOOL_NAMES,
   ...ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES,
   'query_timeline_notes',
+  ...TRAINING_READ_TOOLS,
 ] as const;
 
 export type AssistantMcpToolName = typeof ASSISTANT_MCP_TOOL_NAMES[number];
@@ -268,12 +270,14 @@ export async function createAssistantMcpSession(
   dependencies: AssistantMcpSessionDependencies = defaultDependencies,
   locationAccess: AssistantLocationAccess = 'coordinate_free',
   timelineNotesEnabled = false,
+  trainingPlansEnabled = false,
 ): Promise<AssistantMcpSession> {
   const activityLocationEnabled = locationAccess === 'precise_activity';
   const expectedToolNames: readonly AssistantMcpToolName[] = [
     ...ASSISTANT_BASE_MCP_TOOL_NAMES,
     ...(activityLocationEnabled ? ASSISTANT_ACTIVITY_LOCATION_MCP_TOOL_NAMES : []),
     ...(timelineNotesEnabled ? ['query_timeline_notes' as const] : []),
+    ...(trainingPlansEnabled ? TRAINING_READ_TOOLS : []),
   ];
   const auth: AuthenticatedMcpRequest = {
     uid,
@@ -289,6 +293,7 @@ export async function createAssistantMcpSession(
         : []),
       MCP_OAUTH_SCOPES.RoutesRead,
       ...(timelineNotesEnabled ? [MCP_OAUTH_SCOPES.TimelineNotesRead] : []),
+      ...(trainingPlansEnabled ? [MCP_OAUTH_SCOPES.TrainingPlansRead] : []),
     ],
   };
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();

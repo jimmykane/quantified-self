@@ -90,11 +90,11 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Single-sport workouts allow at most 100 total steps.',
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
       'A secondary target is documented only for cycling and depends on device support.',
-      'Evaluation access is limited to 100 partner requests per minute and 200 requests per user per rolling day.',
+      'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
     ],
     completionCorrelation: 'Training API V2 does not document a completed-activity workout identifier.',
     unresolvedGates: [
-      'Confirm evaluation credentials, app entitlement, and representative test-device access.',
+      'Prove retained-ID missing/ownership response semantics and representative device behavior with the designated production account.',
       'Confirm completion-correlation behavior outside the Training API contract.',
       'Pass sandbox create, update, reschedule, delete, reconnect, and duplicate tests.',
     ],
