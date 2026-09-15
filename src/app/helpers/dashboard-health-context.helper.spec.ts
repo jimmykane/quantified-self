@@ -86,6 +86,12 @@ describe('dashboard Health semantics',()=>{
     expect(view.sources).toHaveLength(1);
     expect(view.selected?.model.series.provider).toBe('SuuntoApp');
     expect(view.selected?.model.series.points[0].value).toBe(metric === 'sleep_duration' ? 27000 : 82);
+    data.sessions.push({ ...data.sessions[0], id: 'nap', isNap: true, durationSeconds: 1800, score: { value: 70 } });
+    const withNap = buildDashboardHealthContext(data, { metric, range: '30d' });
+    expect(withNap.sources).toHaveLength(2);
+    expect(withNap.selected?.model.series.semanticVariant).toBe(metric === 'sleep_duration' ? 'session_duration' : 'session_score');
+    const nap = buildDashboardHealthContext(data, { metric, range: '30d', sourceKey: withNap.sources[1].key });
+    expect(nap.selected?.model.series.semanticVariant).toBe(metric === 'sleep_duration' ? 'nap_duration' : 'nap_score');
     const noScore = evidence('sleep_score', []);
     noScore.sessions = data.sessions.map(session => ({ ...session, score: null }));
     const missing = buildDashboardHealthContext(noScore, { metric: 'sleep_score', range: '30d' });

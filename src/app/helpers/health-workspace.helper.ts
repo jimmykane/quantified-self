@@ -553,7 +553,8 @@ export function buildHealthMetricWorkspaceView(
       freshnessText: freshness.text,
       hasConflict: items.some(item => !!item.observationId && conflictingObservationIds.has(item.observationId)),
     };
-  }).sort((left, right) => compareText(left.providerLabel, right.providerLabel)
+  }).sort((left, right) => Number(isNapSleepSummary(left)) - Number(isNapSleepSummary(right))
+    || compareText(left.providerLabel, right.providerLabel)
     || Number(left.nativeOnly) - Number(right.nativeOnly)
     || compareText(left.semanticLabel, right.semanticLabel)
     || compareText(left.unit, right.unit));
@@ -1358,6 +1359,11 @@ function sleepHrvDatums(
 }
 
 /** Recorded Sleep summaries do not require a separate provider Health record. */
+function isNapSleepSummary(series: HealthWorkspaceSeries): boolean {
+  return (series.metricId === HEALTH_METRIC_IDS.SleepDuration || series.metricId === HEALTH_METRIC_IDS.SleepScore)
+    && series.semanticVariant.startsWith('nap_');
+}
+
 export function sleepSummaryMetricIds(session: SleepSession): HealthMetricId[] {
   if (!normalizeSleepProvider(session.source?.provider)
     || !Number.isFinite(session.startTimeMs) || !Number.isFinite(session.endTimeMs)
