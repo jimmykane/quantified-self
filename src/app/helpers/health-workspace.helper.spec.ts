@@ -58,6 +58,33 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+describe('dense Health chart projections', () => {
+  it('preserves every sample and separate account series while bounding table rows', () => {
+    const result = projectLoadedHealthRange([], [], {
+      startDate: '2026-08-01', endDate: '2026-08-30',
+      metricIds: [HEALTH_METRIC_IDS.HeartRate], includeSamples: true,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    result.sampleChunks = Array.from({ length: 300 }, (_, index) => {
+      const startTimeMs = Date.parse('2026-08-01T00:00:00Z') + index * 3600000;
+      return {
+        ...sampleChunk({ id: `chunk-${index}`, metricId: HEALTH_METRIC_IDS.HeartRate,
+          accountKey: index % 2 ? 'one' : 'two', values: Array.from({ length: 60 }, (_, sample) => 50 + sample) }),
+        startTimeMs, endTimeMs: startTimeMs + 59 * 60000,
+        calendarDate: new Date(startTimeMs).toISOString().slice(0, 10),
+      };
+    });
+    const view = buildHealthMetricWorkspaceView(result);
+    expect(view.series).toHaveLength(2);
+    expect(view.series.map(series => series.points.length)).toEqual([9000, 9000]);
+    expect(view.series.every(series => series.points[0].value === 50 && series.points.at(-1)?.value === 109)).toBe(true);
+    expect(view.totalRowCount).toBe(300);
+    expect(view.rows).toHaveLength(250);
+    expect(view.rows[0].id).toBe('chunk:chunk-299');
+    expect(view.rows.at(-1)?.id).toBe('chunk:chunk-50');
+    expect(result.sampleChunks[0].canonicalValues).toHaveLength(60);
+  });
+});
+
 function valueEntry(overrides: Partial<HealthMetricValue> = {}): HealthMetricValue {
   return {
     kind: 'value',

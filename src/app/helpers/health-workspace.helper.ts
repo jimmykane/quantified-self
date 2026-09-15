@@ -508,7 +508,9 @@ export function buildHealthMetricWorkspaceView(
   const grouped = new Map<string, MetricDatum[]>();
   for (const datum of datums) {
     const key = metricDatumSeriesIdentity(datum);
-    grouped.set(key, [...(grouped.get(key) || []), datum]);
+    const items = grouped.get(key);
+    if (items) items.push(datum);
+    else grouped.set(key, [datum]);
   }
 
   const projectionNowMs = resolveProjectionNowMs(result);
@@ -570,8 +572,9 @@ export function buildHealthMetricWorkspaceView(
   const allRows = [...latestByRow.values()]
     .sort((left, right) => right.timestampMs - left.timestampMs
       || compareText(left.provider, right.provider)
-      || compareText(left.rowId, right.rowId))
-    .map((datum): HealthObservationTableRow => {
+      || compareText(left.rowId, right.rowId));
+  // Only format the bounded table page. All readings remain available to charts.
+  const rows = allRows.slice(0, TABLE_ROW_LIMIT).map((datum): HealthObservationTableRow => {
     const sourceLabel = accountLabels.get(accountIdentity(datum.provider, datum.accountKey)) || providerLabel(datum.provider);
     return {
       id: datum.rowId,
@@ -598,7 +601,7 @@ export function buildHealthMetricWorkspaceView(
 
   return {
     series,
-    rows: allRows.slice(0, TABLE_ROW_LIMIT),
+    rows,
     totalRowCount: allRows.length,
     hasCanonicalSeries: series.some(item => !item.nativeOnly),
     hasNativeOnlySeries: series.some(item => item.nativeOnly),

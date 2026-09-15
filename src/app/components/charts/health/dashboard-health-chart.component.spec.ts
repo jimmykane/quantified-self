@@ -248,4 +248,31 @@ describe('dashboard chart source interactions', () => {
     expect(haptics.selection).not.toHaveBeenCalled();
     missing.destroy();
   });
+  it('reuses loaded evidence after source persistence, source changes and unit updates', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    const initial = component.context()!;
+    fixture.componentRef.setInput('settings', { ...component.settings(), sourceKey: initial.selectedKey });
+    fixture.detectChanges();
+    expect(component.context()).toBe(initial);
+    const secondKey = initial.sources[1].key;
+    fixture.componentRef.setInput('settings', { ...component.settings(), sourceKey: secondKey });
+    fixture.detectChanges();
+    expect(component.context()?.selectedKey).toBe(secondKey);
+    expect(component.context()?.hasData).toBe(true);
+    fixture.componentRef.setInput('user', { ...component.user(), settings: {
+      ...component.user().settings, unitSettings: { distanceUnits: ['Miles'] },
+    } });
+    fixture.detectChanges();
+    expect(component.context()?.selectedKey).toBe(secondKey);
+    expect(watch).toHaveBeenCalledTimes(1);
+    expect(component.loading()).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('settings', { ...component.settings(), sourceKey: 'missing-account' });
+    fixture.detectChanges();
+    expect(component.context()?.missingSource).toBe(true);
+    expect(component.context()?.hasData).toBe(false);
+    expect(watch).toHaveBeenCalledTimes(1);
+    fixture.destroy();
+    expect(readings.observed).toBe(false);
+  });
 });

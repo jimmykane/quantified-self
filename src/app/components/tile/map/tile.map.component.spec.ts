@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, NO_ERRORS_SCHEMA, Output } from '@angular/core';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -51,6 +51,7 @@ describe('TileMapComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
+      deferBlockBehavior: DeferBlockBehavior.Manual,
       declarations: [
         TileMapComponent,
         MockTileMapActionsComponent,
@@ -112,7 +113,8 @@ describe('TileMapComponent', () => {
     expect(directions).toEqual(['newer']);
   });
 
-  it('should render map controls in a header and keep the map inside the body', () => {
+  it('should render map controls in a header and keep the map inside the body', async () => {
+    await (await fixture.getDeferBlocks())[0].render(DeferBlockState.Complete);
     const section = fixture.nativeElement.querySelector('section') as HTMLElement;
     const header = fixture.nativeElement.querySelector('.tile-map-header') as HTMLElement;
     const body = fixture.nativeElement.querySelector('.tile-map-body') as HTMLElement;
@@ -124,13 +126,14 @@ describe('TileMapComponent', () => {
     expect(body.querySelector('app-events-map')).toBeTruthy();
   });
 
-  it('should hide event filters and render the route preview map for routes source tiles', () => {
+  it('should hide event filters and render the route preview map for routes source tiles', async () => {
     fixture.componentRef.setInput('tileName', 'Routes');
     fixture.componentRef.setInput('mapSource', 'routes');
     fixture.componentRef.setInput('showRouteEndpointMarkers', false);
     fixture.componentRef.setInput('routePreviews', [{ id: 'route-1' }]);
 
     fixture.detectChanges();
+    await (await fixture.getDeferBlocks())[0].render(DeferBlockState.Complete);
 
     const header = fixture.nativeElement.querySelector('.tile-map-header') as HTMLElement;
     const body = fixture.nativeElement.querySelector('.tile-map-body') as HTMLElement;
@@ -143,6 +146,27 @@ describe('TileMapComponent', () => {
       .componentInstance as MockRoutePreviewMapComponent;
     expect(routeMap.routes).toEqual([{ id: 'route-1' }]);
     expect(routeMap.showEndpointMarkers).toBe(false);
+  });
+
+  it.each(['events', 'routes'] as const)('defers the %s renderer while keeping header actions available', async mapSource => {
+    fixture.componentRef.setInput('mapSource', mapSource);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.tile-map-placeholder')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('app-events-map, app-route-preview-map')).toBeNull();
+    expect(fixture.debugElement.query(By.directive(MockTileMapActionsComponent))).toBeTruthy();
+    fixture.componentRef.setInput('routePreviews', [{ id: 'latest-route' }]);
+    fixture.detectChanges();
+    await (await fixture.getDeferBlocks())[0].render(DeferBlockState.Complete);
+    expect(fixture.nativeElement.querySelector('.tile-map-placeholder')).toBeNull();
+    expect(fixture.nativeElement.querySelector(mapSource === 'routes' ? 'app-route-preview-map' : 'app-events-map')).toBeTruthy();
+    if (mapSource === 'routes') {
+      const map = fixture.debugElement.query(By.directive(MockRoutePreviewMapComponent)).componentInstance;
+      expect(map.routes).toEqual([{ id: 'latest-route' }]);
+      fixture.componentRef.setInput('routePreviews', [{ id: 'updated-route' }]);
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.directive(MockRoutePreviewMapComponent)).componentInstance).toBe(map);
+      expect(map.routes).toEqual([{ id: 'updated-route' }]);
+    }
   });
 
   it('should align the map body to the shared chart control band height', () => {

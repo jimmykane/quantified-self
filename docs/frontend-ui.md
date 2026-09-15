@@ -149,6 +149,9 @@ import cannot release multiple queued plots into the same render frame. Non-scro
 wrappers are skipped when choosing that root, so their offscreen charts still wait for the page viewport.
 Only plot initialization is deferred: Angular titles,
 values, accessible descriptions, and controls remain present. Initialized plots stay mounted when scrolled away.
+Dashboard map tiles similarly defer their renderer with Angular's viewport trigger. Their fixed-height body keeps
+a placeholder until visible; titles, filters, drag handles and menus remain available. Once created, the map stays
+mounted during scrolling and receives the latest inputs, avoiding WebGL/map-worker startup on the first screen.
 Destroyed or replaced plot hosts cancel their pending work, including waits for a previous theme. A chart that
 leaves the preload area while the library loads stays deferred until it returns. When data changes before first visibility, only the latest waiting
 refresh may apply its data. Browsers without viewport observation use ordinary immediate initialization.
@@ -379,6 +382,10 @@ Physical haptics require a supported device; browser emulation only verifies int
 The Health lane follows Training State and uses Health's existing catalog groups and hidden-metric exclusions. Generic `HealthMetric` presets identify one `healthMetric.metric`; source and range are independent tile settings. Duplicate matching uses metric identity across all sections. Sleep/HRV keep their old renderer IDs and introduction revision; the 33 new presets use revision 2. Legacy tiles without `healthSection` stay in Training State; new Sleep/HRV presets set Health. Move changes only placement, preserves configuration, uses the transaction boundary, and supports guarded Undo. Starter and empty layouts are unchanged.
 
 `DashboardHealthChartComponent` adapts the shared Health projection to one chosen source/reading. List thumbnails, selected previews, and owner tiles use the same model and colors. Full-series opaque IDs preserve provider accounts, aggregation, semantic variants and reading methods; an explicit missing ID remains selected. Source defaults are deterministic, with the HRV Highlight preference used only as an initial account hint. Date length persists independently, while older/newer anchors are local. A thumbnail is inert; its row owns activation feedback. Preview initialization and hydration are silent.
+
+Health tile reads depend on owner, metric and window, independently of source selection and unit formatting.
+Changing those display choices reprojects retained evidence without resubscribing or resetting loading state.
+Persisting an automatically selected source preserves the existing chart model instead of building it twice.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 
