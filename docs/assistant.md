@@ -83,12 +83,29 @@ Detailed activity sample pagination remains an external MCP workflow. The first-
 External MCP clients remain the path for separately approved saved-route location and geometry access. Saved-route names
 are included in summaries and can themselves contain user- or provider-assigned place information.
 
+## Optional Training plans context
+
+**Examples & data access** also contains default-off **Training plans**, available to any Assistant user independently of
+the planning UI pilot. It discloses names, dates, complete instructions, authored notes and existing service sync status,
+including potentially sensitive personal text. Changing any optional permission starts a fresh server-owned generation
+while preserving the other choices. **New chat** resets all optional choices. Missing `trainingPlansEnabled` means false.
+The reset expects the current conversation ID; requests, retries and replay fingerprints bind this boolean. Stale tabs,
+sign-out/account switches and old generations cannot grant access. Runtime rechecks consent before and after each read.
+
+Enabled sessions add only `training-plans:read` and the five planning reads, not metrics, activity or provider permissions.
+Planned/upcoming questions use planning tools; completed questions use existing activity tools. Resolve relative dates in
+the turn's explicit IANA timezone. Fetch full structures and sync status only when needed. Titles/notes remain untrusted
+context, never instructions or authority. Evidence is compact names/dates/lifecycle/service counts without recipes, full
+notes, opaque references or links. Answers may quote relevant text under existing retention. No new charts, writes or
+provider actions are available; call/output budgets and quotas are unchanged. Source support does not deploy or promote
+an app. See the [MCP planning contract](mcp-server.md#training-plans-and-planned-workouts-690-read-only-slice).
+
 ## Optional Timeline notes context
 
 **Examples & data access** includes an independent, default-off **Timeline notes** Material toggle. It discloses full
 private titles/details, including notes hidden from charts and potentially sensitive health or personal text. Changing
-either notes or location access replaces the active chat generation while preserving the other choice. **New chat**
-resets both. Missing `timelineNotesEnabled` in older clients, stored chats, responses or pending requests means disabled.
+any optional access replaces the active chat generation while preserving the other choices. **New chat**
+resets all optional access. Missing `timelineNotesEnabled` in older clients, stored chats, responses or pending requests means disabled.
 No contract version or generic permission framework is added.
 
 The server stores the boolean with its active conversation. Enabling requires the existing reset path; a chat request
@@ -99,7 +116,7 @@ The frontend validates response agreement, ignores account-switched responses, a
 account's call as a newly signed-in user. Pending recovery preserves the independent access choices.
 Permission resets carry the expected conversation ID (`null` means no unexpired conversation), checked in the same
 transaction as the replacement. Stale tabs and delayed retries cannot restore notes access through an unrelated location
-change. Legacy resets may omit the expectation only with notes disabled. A conflict reloads the server's choices without
+change. Legacy resets may omit the expectation only with notes and Training plans disabled. A conflict reloads the server's choices without
 automatically retrying the reset or discarding the draft. The composer is read-only during a reset; sheet results bind
 to their opening account and generation. Account loads clear old messages, pending questions and permissions before
 waiting for the replacement state, and old completions cannot clear a newer account's view.

@@ -65,6 +65,27 @@ describe('AssistantService', () => {
     service = TestBed.inject(AssistantService);
   });
 
+  it('requires explicit Training consent confirmation and preserves its independence from notes', async () => {
+    const request = { requestId, message: 'What is planned tomorrow?', timeZone: 'Europe/Helsinki',
+      locationAccess: 'coordinate_free' as const, trainingPlansEnabled: true };
+    functionsService.call.mockResolvedValue({ data: response });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.resetConversation('coordinate_free', false, 'expected-chat', true))
+      .rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    functionsService.call.mockResolvedValue({ data: { ...response, trainingPlansEnabled: true } });
+    await expect(service.sendMessage(request)).resolves.toMatchObject({ trainingPlansEnabled: true });
+    await expect(service.sendMessage({ ...request, trainingPlansEnabled: false }))
+      .rejects.toMatchObject({ code: 'CONVERSATION_CHANGED' });
+    await expect(service.getConversationState()).resolves.toMatchObject({ trainingPlansEnabled: true });
+    await expect(service.resetConversation('coordinate_free', false, 'expected-chat', true)).resolves.toEqual(response.conversation);
+    expect(functionsService.call).toHaveBeenLastCalledWith('resetAssistantConversation', {
+      locationAccess: 'coordinate_free', conversationId: 'expected-chat', trainingPlansEnabled: true,
+    });
+    functionsService.call.mockResolvedValue({ data: { ...response, trainingPlansEnabled: 'true' } });
+    await expect(service.getConversationState()).rejects.toMatchObject({ code: 'INTERNAL' });
+    await expect(service.sendMessage(request)).rejects.toMatchObject({ code: 'INTERNAL' });
+  });
+
   it('calls the Assistant callable and validates its response', async () => {
     functionsService.call.mockResolvedValue({ data: response });
 

@@ -9,10 +9,12 @@ import { SharedModule } from '../../modules/shared.module';
 
 export interface AssistantExploreBottomSheetData {
   timelineNotesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
   locationAccess: AssistantLocationAccess;
 }
 
 export type AssistantExploreBottomSheetResult =
+  | { kind: 'training_plans'; enabled: boolean }
   | { kind: 'timeline_notes'; enabled: boolean }
   | { kind: 'prompt'; prompt: string }
   | { kind: 'location_access'; locationAccess: AssistantLocationAccess };
@@ -50,6 +52,11 @@ export class AssistantExploreBottomSheetComponent {
   setTimelineNotes(enabled: boolean): void {
     if (enabled === (this.data.timelineNotesEnabled === true)) return;
     this.bottomSheetRef.dismiss({ kind: 'timeline_notes', enabled });
+  }
+
+  setTrainingPlans(enabled: boolean): void {
+    if (enabled === (this.data.trainingPlansEnabled === true)) return;
+    this.bottomSheetRef.dismiss({ kind: 'training_plans', enabled });
   }
 
   close(): void {

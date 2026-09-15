@@ -315,9 +315,10 @@ export function validateAssistantChatResponse(
   if (!isRecord(value)) {
     return { ok: false, reason: 'response_not_object' };
   }
-  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled'])) {
+  if (!hasOnlyKeys(value, ['conversation', 'quota', 'pendingRequestId', 'timelineNotesEnabled', 'trainingPlansEnabled'])) {
     return { ok: false, reason: 'unexpected_response_fields' };
   }
+  if (value.trainingPlansEnabled !== undefined && typeof value.trainingPlansEnabled !== 'boolean') return { ok: false, reason: 'invalid_training_plans_access' };
   if (value.timelineNotesEnabled !== undefined && typeof value.timelineNotesEnabled !== 'boolean') {
     return { ok: false, reason: 'invalid_timeline_notes_access' };
   }

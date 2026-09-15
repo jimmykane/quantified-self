@@ -54,11 +54,21 @@
     <section class="assistant-notes-access" aria-labelledby="assistant-timeline-notes-access">
       <h3 id="assistant-timeline-notes-access">Timeline notes</h3>
       <p id="assistant-timeline-notes-disclosure">Allow Gemini to read full private note titles and details when relevant, including notes hidden from charts. Notes may contain sensitive health or personal information.</p>
-      <p>Off by default. Changing access starts a new chat and keeps your location choice. New chat turns both off. Answers may quote relevant details in your saved conversation.</p>
+      <p>Off by default. Changing access starts a new chat and keeps your other data-access choices. New chat turns all optional access off. Answers may quote relevant details in your saved conversation.</p>
       <mat-slide-toggle [checked]="data.timelineNotesEnabled === true"
         aria-label="Timeline notes access — changing this starts a new chat"
         aria-describedby="assistant-timeline-notes-disclosure"
         (change)="setTimelineNotes($event.checked)">Timeline notes</mat-slide-toggle>
+    </section>
+
+    <section class="assistant-notes-access" aria-labelledby="assistant-training-plans-access">
+      <h3 id="assistant-training-plans-access">Training plans</h3>
+      <p id="assistant-training-plans-disclosure">Allow Gemini to read your plans and planned workouts when relevant, including names, dates, workout instructions, step notes and existing service sync status. Authored text may contain sensitive health or personal information.</p>
+      <p>Off by default. Changing access starts a new chat and keeps your other choices. New chat turns all optional access off. Answers may quote relevant details. The Assistant cannot edit workouts or change sync.</p>
+      <mat-slide-toggle [checked]="data.trainingPlansEnabled === true"
+        aria-label="Training plans access — changing this starts a new chat"
+        aria-describedby="assistant-training-plans-disclosure"
+        (change)="setTrainingPlans($event.checked)">Training plans</mat-slide-toggle>
     </section>
 
     <section class="assistant-mcp-link" aria-labelledby="assistant-mcp-link">

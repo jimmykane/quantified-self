@@ -12,6 +12,7 @@ import type {
   AssistantMcpToolName,
 } from './mcp-session';
 import { isFunctionsEmulator } from '../utils';
+import { TRAINING_READ_TOOLS } from '../mcp/training-plans.schemas';
 
 const MAX_FACTS = 6;
 const MAX_LINKS = 3;
@@ -314,6 +315,19 @@ export function buildAssistantEvidence(
   tool: Pick<AssistantMcpToolDefinition, 'name' | 'title'>,
   structuredContent: Record<string, unknown>,
 ): AssistantEvidence {
+  if ((TRAINING_READ_TOOLS as readonly string[]).includes(tool.name)) {
+    const raw = structuredContent.plans ?? structuredContent.workouts ?? structuredContent.services
+      ?? [structuredContent.plan ?? structuredContent.workout];
+    const rows = Array.isArray(raw) ? raw.filter(isRecord) : [];
+    return { toolName: tool.name, title: truncate(tool.title, 160),
+      summary: `${rows.length} ${tool.name === 'get_training_sync_status' ? 'service summaries from existing delivery evidence' : 'current authored records'}.${structuredContent.scanComplete === false ? ' Incomplete read; more records may remain.' : ''}`,
+      facts: rows.slice(0, MAX_FACTS).map(row => ({
+        label: truncate(String(row.name ?? row.title ?? row.provider ?? 'Training'), 80),
+        value: truncate(row.provider ? `${row.state}; ${row.syncedWorkouts ?? 'unknown'} of ${row.totalWorkouts ?? 'unknown'} workouts confirmed; not watch receipt`
+          : `${row.lifecycle}: ${row.localDate ?? `${row.startDate} – ${row.endDate}`}`, 160),
+      })), links: [],
+    };
+  }
   if (tool.name === 'query_timeline_notes') {
     const notes = Array.isArray(structuredContent.notes) ? structuredContent.notes.filter(isRecord) : [];
     // Persist compact context and dates, never raw tool results or the full private details field.

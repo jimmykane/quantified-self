@@ -158,6 +158,7 @@ export interface AssistantConversation {
 export interface AssistantChatRequest {
   /** Missing on older clients means disabled. Enabling requires a fresh server-owned chat. */
   timelineNotesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
   requestId: string;
   message: string;
   timeZone: string;
@@ -167,6 +168,7 @@ export interface AssistantChatRequest {
 
 export interface AssistantChatResponse {
   timelineNotesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
   conversation: AssistantConversation;
   quota: AssistantQuotaStatus;
   pendingRequestId: string | null;
@@ -176,6 +178,7 @@ export type GetAssistantConversationRequest = Record<string, never>;
 
 export interface GetAssistantConversationResponse {
   timelineNotesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
   conversation: AssistantConversation | null;
   pendingRequestId: string | null;
   locationAccess: AssistantLocationAccess;
@@ -185,10 +188,12 @@ export interface ResetAssistantConversationRequest {
   /** Expected active generation; null asserts there is no unexpired conversation. Missing is legacy, notes-off only. */
   conversationId?: string | null;
   timelineNotesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
   locationAccess: AssistantLocationAccess;
 }
 
 export interface ResetAssistantConversationResponse {
   timelineNotesEnabled?: boolean;
+  trainingPlansEnabled?: boolean;
   conversation: AssistantConversation;
 }

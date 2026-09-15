@@ -644,6 +644,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         answer: 'Only with separate Timeline notes permission, which is selected by default when requested. Uncheck it before approving to withhold access. Existing clients must reauthorize. It includes full note titles and details, including notes hidden from charts, and may contain sensitive health or personal information. Revocation cannot erase copies already received. Notes cannot grant permission to change a Training plan.',
       },
       {
+        question: 'Can an MCP client read my Training plans and planned workouts?',
+        answer: 'With separately approved Training plans and planned workouts permission, supported clients can read current plans, standalone workouts, complete instructions, step notes and existing service sync summaries. This may include sensitive personal text. Existing clients must reauthorize and refresh their tool catalog after the supporting release. Metrics, activity and provider permissions do not grant this access. No edits, live provider checks or sync actions are allowed. Synced means provider-side workout delivery, not receipt on a watch. Revocation cannot erase copies already received.',
+      },
+      {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
         answer: 'No. The MCP server is read-only. It cannot write dashboard settings, activities, routes, Training state, or sleep records.',
       },

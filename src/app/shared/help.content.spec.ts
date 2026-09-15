@@ -73,11 +73,18 @@ describe('help.content', () => {
     expect(content).toContain('**Timeline notes** is an independent read-only permission');
     expect(content).toContain('It is selected by default when requested; uncheck it before approving to withhold access.');
     expect(content).toContain('Every requested permission starts checked, including permissions added later');
-    expect(content).toContain('It is off by default. Changing notes or location access starts a fresh chat');
+    expect(content).toContain('It is off by default. Changing optional access starts a fresh chat');
     expect(content).toContain('full private');
     expect(content).toContain('hidden from charts');
     expect(searchHelpSections(HELP_SECTIONS, 'Timeline notes').map(section => section.id))
       .toEqual(expect.arrayContaining(['ai-insights', 'data-and-privacy']));
+  });
+  it('explains independent read-only Training access without promoting the private planning UI', () => {
+    const content = getHelpSectionsForUser('ordinary-user').map(section => section.content).join(' ');
+    expect(content).toContain('**Training plans (optional):**');
+    expect(content).toContain('The Assistant cannot edit workouts or change sync');
+    expect(content).toContain('resets all optional permissions');
+    expect(content).toContain('provider-side workout delivery, not receipt on a watch');
   });
   it('explains private notes in both workspaces and makes their context searchable', () => {
     for (const id of ['health', 'training-analysis']) {

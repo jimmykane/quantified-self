@@ -75,6 +75,8 @@ export interface AssistantCallableDependencies {
     timeZone: string;
     locationAccess: AssistantLocationAccess;
     timelineNotesEnabled?: boolean;
+    trainingPlansEnabled?: boolean;
+    assertTrainingPlansAccess?: () => Promise<void>;
     assertTimelineNotesAccess?: () => Promise<void>;
     history: AssistantMessage[];
     onBillableAttempt: () => Promise<void>;
@@ -209,9 +211,9 @@ function parseAssistantLocationAccess(value: unknown): AssistantLocationAccess {
   return value;
 }
 
-function parseTimelineNotesEnabled(value: unknown): boolean {
+function parseOptionalDataAccess(value: unknown, name: string): boolean {
   if (value === undefined) return false;
-  if (typeof value !== 'boolean') throw new HttpsError('invalid-argument', 'timelineNotesEnabled must be a boolean.');
+  if (typeof value !== 'boolean') throw new HttpsError('invalid-argument', `${name} must be a boolean.`);
   return value;
 }
 
@@ -266,7 +268,8 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
     message,
     timeZone,
     locationAccess: parseAssistantLocationAccess(data.locationAccess),
-    timelineNotesEnabled: parseTimelineNotesEnabled(data.timelineNotesEnabled),
+    timelineNotesEnabled: parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled'),
+    trainingPlansEnabled: parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled'),
     ...(conversationId
       ? { conversationId }
       : {}),
@@ -312,6 +315,7 @@ function assertRequestFingerprintMatchesInput(
     input.message,
     input.locationAccess,
     input.timelineNotesEnabled,
+    input.trainingPlansEnabled,
   )) {
     throw new HttpsError(
       'invalid-argument',
@@ -393,6 +397,7 @@ async function buildExistingRequestResponse(
   return {
     conversation: requestState.conversation,
     ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+    ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
     quota,
     pendingRequestId: requestState.kind === 'pending'
       ? input.requestId
@@ -437,6 +442,7 @@ export async function runAssistantChat(
       input.message,
       input.locationAccess,
       input.timelineNotesEnabled,
+      input.trainingPlansEnabled,
     );
     const existingRequest = await dependencies.conversationStore.findRequestState(
       uid,
@@ -486,6 +492,7 @@ export async function runAssistantChat(
       requestFingerprint,
       input.locationAccess,
       input.timelineNotesEnabled,
+      input.trainingPlansEnabled,
     );
     if (turnStart.kind === 'replayed') {
       assertRequestFingerprintMatchesInput(turnStart, input);
@@ -494,6 +501,7 @@ export async function runAssistantChat(
       return {
         conversation: turnStart.conversation,
         ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         quota,
         pendingRequestId: null,
       };
@@ -505,6 +513,7 @@ export async function runAssistantChat(
       return {
         conversation: turnStart.conversation,
         ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+        ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
         quota,
         pendingRequestId: input.requestId,
       };
@@ -512,6 +521,10 @@ export async function runAssistantChat(
     begunTurn = turnStart;
     const notesConversationId = begunTurn.conversationId;
     const timelineNotesEnabled = begunTurn.timelineNotesEnabled === true;
+    const trainingPlansEnabled = begunTurn.trainingPlansEnabled === true;
+    if (trainingPlansEnabled !== (input.trainingPlansEnabled === true)) {
+      throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    }
     if (timelineNotesEnabled !== (input.timelineNotesEnabled === true)) {
       throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
     }
@@ -522,6 +535,13 @@ export async function runAssistantChat(
       timeZone: input.timeZone,
       locationAccess: input.locationAccess,
       timelineNotesEnabled,
+      trainingPlansEnabled,
+      ...(trainingPlansEnabled ? { assertTrainingPlansAccess: async () => {
+        const current = await dependencies.conversationStore.getActiveConversationState(uid);
+        if (current.conversation?.conversationId !== notesConversationId || current.trainingPlansEnabled !== true) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+        }
+      } } : {}),
       ...(timelineNotesEnabled ? { assertTimelineNotesAccess: async () => {
         const current = await dependencies.conversationStore.getActiveConversationState(uid);
         if (current.conversation?.conversationId !== notesConversationId || current.timelineNotesEnabled !== true) {
@@ -564,6 +584,7 @@ export async function runAssistantChat(
       conversation,
       quota: finalizedQuota,
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+      ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
       pendingRequestId: null,
     };
   } catch (error) {
@@ -629,17 +650,19 @@ export async function runResetAssistantConversation(
   const uid = requireAuthenticatedUid(context);
   const data = asRecord(value) as Partial<ResetAssistantConversationRequest>;
   const locationAccess = parseAssistantLocationAccess(data.locationAccess);
-  const timelineNotesEnabled = parseTimelineNotesEnabled(data.timelineNotesEnabled);
+  const timelineNotesEnabled = parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled');
+  const trainingPlansEnabled = parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled');
   const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : data.conversationId;
   if ((conversationId !== undefined && conversationId !== null
     && (typeof conversationId !== 'string' || !conversationId || conversationId.length > 120))
-    || (timelineNotesEnabled && conversationId === undefined)) {
-    throw new HttpsError('invalid-argument', 'Provide the current conversationId or null before enabling Timeline notes.');
+    || ((timelineNotesEnabled || trainingPlansEnabled) && conversationId === undefined)) {
+    throw new HttpsError('invalid-argument', 'Provide the current conversationId or null before enabling optional data access.');
   }
   try {
     return {
-      conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled, conversationId),
+      conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled, conversationId, trainingPlansEnabled),
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
+      ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
     };
   } catch (error) {
     throw mapAssistantError(error);

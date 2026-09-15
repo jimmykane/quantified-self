@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "fa6112802dd22bf801c1592ded83f15e2a02a786638135deb09630fc6876493f",
+  "candidateSha256": "0e40f997adada32b1c55a31e36f1ee6bc5ee1dbc51a73df311b6484df8e6ff60",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add current formula-4 readiness/history (history requires Health) and shared rolling HRV ranges; preserve registered formula-3 projections. Retain pending activity samples/parse reuse, opt-in descriptions, Timeline notes/comparisons, Health provider/stress semantics, daily reports, nearby activity/route search, multi-metric queries, Training discovery, activity overviews, ISO rankings, jump/sleep-vital routing, RS256 private_key_jwt and public PKCE.",
+  "summary": "Add opt-in Training plan/workout reads and sync summaries (#690). Retain pending formula-4 readiness/history (Health required for history), shared rolling HRV; frozen formula-3; activity samples/parse reuse, opt-in descriptions, Timeline notes/comparisons, Health provider/stress semantics, daily reports, nearby activity/route search, multi-metric queries, Training discovery, activity overviews, ISO rankings, jump/sleep-vital routing, RS256 private_key_jwt, public PKCE.",
   "rescanRequired": true
 }

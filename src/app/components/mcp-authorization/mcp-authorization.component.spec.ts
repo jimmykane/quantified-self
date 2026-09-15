@@ -70,6 +70,25 @@ describe('McpAuthorizationComponent', () => {
     }).compileComponents();
   });
 
+  it('discloses Training-only consent and allows withholding it without granting activity or notes access', async () => {
+    functions.call.mockResolvedValueOnce({ data: { requestId: 'training-request', scopes: ['training-plans:read', 'metrics:read'],
+      clientName: 'Training client', redirectUri: 'https://client.example/callback' } });
+    const fixture = TestBed.createComponent(McpAuthorizationComponent);
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    const component = fixture.componentInstance;
+    expect(component.selectedScopes()).toEqual(['training-plans:read', 'metrics:read']);
+    expect(component.scopeOptions()[0]).toMatchObject({
+      title: 'Training plans and planned workouts', selected: true, disabled: false,
+    });
+    expect(fixture.nativeElement.textContent).toContain('sensitive health or personal information');
+    expect(functions.call).toHaveBeenCalledTimes(1);
+    component.toggleScope('training-plans:read', { checked: false } as never);
+    await component.approve();
+    expect(functions.call).toHaveBeenLastCalledWith('decideMcpAuthorization', {
+      requestId: 'training-request', approved: true, grantedScopes: ['metrics:read'],
+    });
+  });
+
   it('shows the requesting client, redirect, and only the requested scopes', async () => {
     const fixture = TestBed.createComponent(McpAuthorizationComponent);
     fixture.detectChanges();

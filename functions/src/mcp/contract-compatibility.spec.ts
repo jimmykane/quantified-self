@@ -165,7 +165,7 @@ describe('MCP registered-contract compatibility', () => {
         pending,
       );
 
-      expect(evaluation.errors).toEqual([]);
+      expect(evaluation.errors, `Candidate ${evaluation.candidateSha256}`).toEqual([]);
       expect(evaluation.comparison.breaking).toEqual([]);
       if (pending) {
         expect(evaluation.pendingActionRequired).toBe(true);

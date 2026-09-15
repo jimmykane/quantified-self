@@ -231,8 +231,7 @@ describe('Assistant callable', () => {
       REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, 'How am I today?'),
       'coordinate_free',
-      false,
-    );
+      false, false);
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       uid: 'user-1',
@@ -283,8 +282,7 @@ describe('Assistant callable', () => {
         'precise_activity',
       ),
       'precise_activity',
-      false,
-    );
+      false, false);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Where was my biggest jump?',
       locationAccess: 'precise_activity',
@@ -307,7 +305,7 @@ describe('Assistant callable', () => {
       locationAccess: 'coordinate_free', timelineNotesEnabled: true, conversationId: 'conversation-1' };
     expect(await runAssistantChat(request, context, dependencies)).toMatchObject({ timelineNotesEnabled: true });
     expect(store.beginTurn).toHaveBeenCalledWith('user-1', 'conversation-1', REQUEST_ID,
-      createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true);
+      createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true, false);
     vi.mocked(store.getActiveConversationState).mockResolvedValue({ conversation: { ...conversation, conversationId: 'new-chat' },
       pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: false });
     await expect(runAssistantChat(request, context, dependencies)).rejects.toMatchObject({ code: 'aborted' });
@@ -325,7 +323,7 @@ describe('Assistant callable', () => {
     expect(dependencies.reserveQuota).not.toHaveBeenCalled();
     await expect(runResetAssistantConversation({ locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: null }, context, store))
       .resolves.toMatchObject({ timelineNotesEnabled: true });
-    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null);
+    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null, false);
   });
 
   it.each([undefined, '', ' ', 42, 'x'.repeat(121)])('rejects an unbound or malformed notes reset generation: %j', async conversationId => {
@@ -340,7 +338,7 @@ describe('Assistant callable', () => {
     vi.mocked(store.resetConversation).mockRejectedValue(new AssistantConversationStoreError('conversation_changed', 'Changed'));
     await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId: 'old-chat' }, context, store))
       .rejects.toMatchObject({ code: 'aborted' });
-    expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat');
+    expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat', false);
   });
 
   it('persists bounded server-owned visuals with the assistant message', async () => {
@@ -991,8 +989,7 @@ describe('Assistant callable', () => {
       'user-1',
       'precise_activity',
       false,
-      undefined,
-    );
+      undefined, false);
   });
 
   it('rejects an unknown reset location boundary without replacing the conversation', async () => {
