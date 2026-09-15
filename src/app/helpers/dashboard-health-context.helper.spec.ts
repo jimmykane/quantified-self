@@ -62,4 +62,13 @@ describe('dashboard Health semantics',()=>{
     const view=buildDashboardHealthContext(evidence('heart_rate_variability'),{metric:'heart_rate_variability',range:'30d'});
     expect(view.availability.state).toBe('ready');expect(view.selected?.status).toBeNull();
   });
+  it('labels retained readings as stale after a source refresh fails', () => {
+    const data = evidence('resting_heart_rate');
+    data.errors = ['Health readings']; data.staleSources = ['Health readings'];
+    const view = buildDashboardHealthContext(data, { metric: 'resting_heart_rate', range: '30d' });
+    expect(view.hasData).toBe(true);
+    expect(view.notices).toEqual(['Health readings could not be refreshed. Previous readings are shown. Try again.']);
+    expect(view.failedSources).toBe(1);
+  });
+
 });

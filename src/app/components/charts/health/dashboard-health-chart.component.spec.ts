@@ -58,4 +58,26 @@ describe('independent dashboard Health views',()=>{
     expect(fixture.componentInstance.context()).toBeNull();expect(streams[0].observed).toBe(false);
     expect(watch).toHaveBeenCalledTimes(1);
   });
+  it('restarts a failed subscription when retrying and keeps loading retries silent', () => {
+    const fixture = create(); const component = fixture.componentInstance;
+    component.reload(); expect(haptics.selection).not.toHaveBeenCalled();
+    streams[0].error(Error('offline')); expect(component.error()).toBe(true);
+    component.reload(); fixture.detectChanges();
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    streams[1].next(result()); expect(component.error()).toBe(false);
+    expect(component.context()).not.toBeNull();
+  });
+
+  it('shows progress without clearing the chart during an invalidation refresh', () => {
+    const fixture = create(); const component = fixture.componentInstance;
+    streams[0].next(result()); const previous = component.context();
+    // The shared adapter calls this for each refresh, including Retry/manual edits.
+    watch.mock.calls[0][4]();
+    expect(component.loading()).toBe(true);
+    expect(component.context()).toBe(previous);
+    component.reload(); expect(haptics.selection).not.toHaveBeenCalled();
+    streams[0].next(result()); expect(component.loading()).toBe(false);
+  });
+
 });

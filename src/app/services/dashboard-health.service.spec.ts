@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DashboardHealthEvidence } from '../helpers/dashboard-health-context.helper';
 import { DashboardHealthService } from './dashboard-health.service';
 import { HealthMetricQueryService } from './health-metric-query.service';
 
@@ -60,4 +61,37 @@ describe('dashboard Health read adapter', () => {
     subscription.unsubscribe();
     expect(queries.loadMetricRange.mock.calls.every(call => call[3].aborted)).toBe(true);
   });
+  it('retains successful sources on refresh failures and accepts a later empty result', async () => {
+    const health = { result: { observations: ['reading'] } };
+    const sessions = [{ id: 'sleep-reading' }];
+    queries.loadMetricRange.mockResolvedValue(health);
+    queries.loadSleepRange.mockResolvedValue(sessions);
+    const values: DashboardHealthEvidence[] = [];
+    const loading = vi.fn();
+    const subscription = TestBed.inject(DashboardHealthService).watch('owner', { metric: 'heart_rate_variability', range: '14d' }, undefined, 10, loading).subscribe(value => values.push(value));
+    expect(loading).toHaveBeenCalledTimes(1);
+    const flush = async () => { for (let index = 0; index < 12; index++) await Promise.resolve(); };
+    await flush();
+    queries.loadMetricRange.mockRejectedValue(Error('offline'));
+    queries.loadSleepRange.mockRejectedValue(Error('offline'));
+    queries.invalidated$.next('owner');
+    expect(loading).toHaveBeenCalledTimes(2);
+    await flush();
+    expect(values.at(-1)?.health).toBe(health);
+    expect(values.at(-1)?.history).toBe(health);
+    expect(values.at(-1)?.sessions).toBe(sessions);
+    expect(values.at(-1)?.staleSources).toEqual(['Health readings', 'Personal range history', 'Sleep readings']);
+    queries.invalidated$.next('owner'); await flush();
+    expect(values.at(-1)?.health).toBe(health);
+    const empty = { result: { observations: [] } };
+    queries.loadMetricRange.mockResolvedValue(empty);
+    queries.loadSleepRange.mockResolvedValue([]);
+    queries.invalidated$.next('owner'); await flush();
+    expect(values.at(-1)?.health).toBe(empty);
+    expect(values.at(-1)?.sessions).toEqual([]);
+    expect(values.at(-1)?.staleSources).toEqual([]);
+    expect(values.at(-1)?.errors).toEqual([]);
+    subscription.unsubscribe();
+  });
+
 });

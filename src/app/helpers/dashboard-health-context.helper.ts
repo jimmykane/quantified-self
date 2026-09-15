@@ -18,6 +18,7 @@ export interface DashboardHealthEvidence {
     activities: ActivityHealthRangeResult | null;
     sessions: SleepSession[];
     errors: string[];
+    staleSources?: string[];
 }
 export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, settings: AppDashboardHealthMetricSettings, units: UserUnitSettingsInterface | null = null, preferredAccount?: string, providerFilter: readonly HealthProvider[] = []) {
     const { window, health, history, activities } = evidence;
@@ -65,7 +66,9 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
     const missingSource = !!settings.sourceKey && !sources.some(source => source.key === settings.sourceKey);
     const sampleOnly = !window.includeSamples && !!health?.hasSampleBackedMetric && !hasData;
     const limited = !!health?.limitReached || activities?.complete === false;
-    const notices = [...evidence.errors.map(source => `${source} could not be loaded. Try again.`),
+    const notices = [...evidence.errors.map(source => evidence.staleSources?.includes(source)
+        ? `${source} could not be refreshed. Previous readings are shown. Try again.`
+        : `${source} could not be loaded. Try again.`),
         ...(limited ? ['Some readings could not fit in this view. Choose a shorter period to see more detail.'] : []),
         ...(health?.result.pageInfo.sampleRevisionMismatchCount ? ['Some readings are updating at their source. The available readings are shown.'] : [])];
     if (settings.metric === HEALTH_METRIC_IDS.BodyWeight && health && activities) {

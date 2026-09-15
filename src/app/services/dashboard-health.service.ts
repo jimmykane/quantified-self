@@ -1,5 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { defer, filter, merge, Observable, of, switchMap } from 'rxjs';
+import { defer, filter, merge, Observable, of, scan, switchMap } from 'rxjs';
 import { isActivityHealthMetricId } from '@shared/activity-health';
 import { HEALTH_METRIC_IDS, HEALTH_SLEEP_REFERENCE_METRIC_IDS } from '@shared/health';
 import { HealthMetricQueryService } from './health-metric-query.service';
@@ -11,12 +11,30 @@ export class DashboardHealthService {
     private readonly queries = inject(HealthMetricQueryService);
     isOwner(uid: string): boolean { return this.queries.isOwner(uid); }
     invalidate(uid: string): void { this.queries.invalidate(uid); }
-    watch(uid: string, settings: AppDashboardHealthMetricSettings, endDate = localCalendarDate(Date.now()), priority = 10) {
+    watch(uid: string, settings: AppDashboardHealthMetricSettings, endDate = localCalendarDate(Date.now()), priority = 10, onLoading?: () => void) {
         return defer(() => merge(of(uid), this.queries.invalidated$.pipe(filter(owner => owner === uid))).pipe(switchMap(() => new Observable<DashboardHealthEvidence>(subscriber => {
+            onLoading?.();
             const controller = new AbortController();
             void this.load(uid, settings, endDate, priority, controller.signal).then(value => { subscriber.next(value); subscriber.complete(); }, error => subscriber.error(error));
             return () => controller.abort();
-        }))));
+        })), scan((previous: DashboardHealthEvidence | null, current: DashboardHealthEvidence) => {
+            if (!previous) return current;
+            // A failed refresh is not an empty period. Retain only the failed source's
+            // last completed result; this subscription owns one metric and window.
+            const retained: DashboardHealthEvidence = { ...current, staleSources: [] };
+            const keep = <K extends 'health' | 'history' | 'activities' | 'sessions'>(key: K, label: string): void => {
+                if (current.errors.includes(label) && previous[key] != null
+                    && (!previous.errors.includes(label) || previous.staleSources?.includes(label))) {
+                    retained[key] = previous[key];
+                    retained.staleSources.push(label);
+                }
+            };
+            keep('health', 'Health readings');
+            keep('history', 'Personal range history');
+            keep('activities', 'Workout readings');
+            keep('sessions', 'Sleep readings');
+            return retained;
+        }, null)));
     }
     private async load(uid: string, settings: AppDashboardHealthMetricSettings, endDate: string, priority: number, signal: AbortSignal): Promise<DashboardHealthEvidence> {
         if (!this.queries.isOwner(uid))

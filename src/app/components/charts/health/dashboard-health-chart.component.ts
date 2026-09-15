@@ -94,7 +94,12 @@ export class DashboardHealthChartComponent {
                 }
                 this.loading.set(true);
                 this.error.set(false);
-                const subscription = this.data.watch(user.uid, settings, endDate, priority).subscribe({
+                const subscription = this.data.watch(user.uid, settings, endDate, priority, () => {
+                    if (version === this.version) {
+                        this.loading.set(true);
+                        this.error.set(false);
+                    }
+                }).subscribe({
                     next: evidence => {
                         if (version !== this.version)
                             return;
@@ -137,5 +142,11 @@ export class DashboardHealthChartComponent {
         this.haptics.selection();
         this.endDate.set(navigateHealthWorkspaceWindow(this.window(), direction).endDate);
     }
-    reload(): void { this.haptics.selection(); this.data.invalidate(this.user().uid); }
+    reload(): void {
+        if (this.loading() || this.disabled()) return;
+        this.haptics.selection();
+        this.data.invalidate(this.user().uid);
+        // An errored observable is closed, so invalidation alone cannot restart it.
+        if (this.error()) this.retry.update(value => value + 1);
+    }
 }

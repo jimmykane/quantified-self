@@ -202,7 +202,8 @@ export class HealthWorkspaceComponent {
     }
     const entry=getDashboardChartCatalog().find(item=>item.definition.id===dashboardHealthPresetId(metric));
     if(!entry) return;
-    await this.dashboardLibrary.select(user,entry);
+    const selected = await this.dashboardLibrary.select(user,entry);
+    if (!selected || this.dashboardUser()?.uid !== user.uid) return;
     this.dashboardLibrary.updateHealthSettings({...dashboardHealthSettings(entry.tile)!,range:this.routeState().range},true);
     this.dashboardLibrary.pinnedFromHealth.set(true);
     this.dashboardLibrary.activeLane.set('section:health');
@@ -831,6 +832,7 @@ export class HealthWorkspaceComponent {
       this.signedInUserID();
       onCleanup(() => {
         // Auth changes and component teardown invalidate dialogs and pending UI work.
+        this.dashboardLibrary.resetContext();
         this.manualAccountGeneration += 1;
         this.manualDialogRef?.close();
         this.manualDialogRef = null;
