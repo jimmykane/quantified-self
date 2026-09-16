@@ -40,6 +40,7 @@ import { MCP_ACTIVITY_DESCRIPTION_MAX_LENGTH } from './activity-description.serv
 import { MCP_TIMELINE_NOTES_SCHEMA } from './timeline-notes.service';
 import { TRAINING_READ_TOOLS, TRAINING_READ_OUTPUTS } from './training-plans.schemas';
 import { MCP_SLEEP_VITAL_TYPES } from './sleep-vitals';
+import { EVENT_TAG_LIMIT, EVENT_TAG_MAX_LENGTH } from '../../../shared/event-tags';
 import {
   MCP_TRAINING_METRIC_CATEGORIES,
 } from './training-metric-catalog';
@@ -70,6 +71,7 @@ export const PUBLIC_MCP_TOOL_NAMES = [
   'list_activity_types',
   'list_activities',
   'query_activities',
+  'query_activities_with_tags',
   'find_activities_near_location',
   'search_activities_near_location',
   'list_activity_laps',
@@ -992,6 +994,11 @@ const activitySummaryWithLocation = z.strictObject({
   endPosition: MCP_COORDINATE_OUTPUT_SCHEMA.nullable(),
   locationRedacted: z.literal(false),
 }).meta({ title: 'McpActivitySummaryWithLocation' });
+const taggedActivitySummary = z.strictObject({
+  ...activitySummaryBaseShape,
+  tags: z.array(z.string().min(1).max(EVENT_TAG_MAX_LENGTH)).max(EVENT_TAG_LIMIT),
+  locationRedacted: z.literal(true),
+}).meta({ title: 'McpTaggedActivitySummaryRedacted' });
 
 const nearbyLocationResult = z.strictObject({
   source: z.enum(['coordinates', 'mapbox']),
@@ -1538,6 +1545,13 @@ export function createMcpOutputSchemaRegistry(scope: McpOutputSchemaScope) {
           ? activitySummaryWithLocation
           : activitySummaryWithoutLocation,
       ),
+      ...MCP_PAGINATION_OUTPUT_SHAPE,
+      scanComplete: z.boolean(),
+    }),
+    query_activities_with_tags: z.strictObject({
+      scannedActivityCount: count,
+      skippedActivityCount: count,
+      activities: z.array(taggedActivitySummary).max(100),
       ...MCP_PAGINATION_OUTPUT_SHAPE,
       scanComplete: z.boolean(),
     }),

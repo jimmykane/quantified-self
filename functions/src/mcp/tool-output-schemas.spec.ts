@@ -939,6 +939,16 @@ function createFixtureDataService(
       nextCursor: NEXT_CURSOR,
       scanComplete: false,
     }),
+    queryActivitiesWithTags: vi.fn().mockResolvedValue({
+      scannedActivityCount: 1,
+      skippedActivityCount: 0,
+      activities: [{
+        ...activitySummaryRedacted,
+        tags: ['Race', 'Long Run'],
+      }],
+      nextCursor: NEXT_CURSOR,
+      scanComplete: false,
+    }),
     findActivitiesNearLocation: vi.fn().mockResolvedValue({
       location: {
         source: 'coordinates',
@@ -1289,6 +1299,12 @@ const successfulToolArguments: Record<
   },
   query_activities: {
     activityTypes: ['Running'],
+    limit: 1,
+  },
+  query_activities_with_tags: {
+    activityTypes: ['Running'],
+    tags: ['Race'],
+    tagMatch: 'all',
     limit: 1,
   },
   find_activities_near_location: {
@@ -1889,6 +1905,16 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
         limit: 1,
       }),
     );
+    expect(dataService.queryActivitiesWithTags).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startTimeMs: undefined,
+        endTimeMs: undefined,
+        activityTypes: ['Running'],
+        tags: ['Race'],
+        tagMatch: 'all',
+        limit: 1,
+      }),
+    );
     await connection.client.callTool({
       name: 'list_activities',
       arguments: {
@@ -2074,6 +2100,41 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     expect(result.isError).toBe(true); expect(result).not.toHaveProperty('structuredContent');
     expect(JSON.parse((result.content[0] as {text: string}).text).error).toBe('query_too_large');
     expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(256 * 1024);
+  });
+
+  it('bounds both serialized copies of tagged activity results', async () => {
+    const service = createFixtureDataService();
+    const connection = await connectFixtureServer(service, [
+      MCP_OAUTH_SCOPES.ActivityDetailsRead,
+    ]);
+    connections.push(connection);
+    const activity = {
+      ...activitySummaryRedacted,
+      activityRef: 'r'.repeat(512),
+      appUrl: `https://example.com/${'x'.repeat(2_000)}`,
+      tags: Array.from({ length: 10 }, (_, index) => (
+        `${index}`.padEnd(32, 't')
+      )),
+    };
+    service.queryActivitiesWithTags = vi.fn().mockResolvedValue({
+      scannedActivityCount: 100,
+      skippedActivityCount: 0,
+      activities: Array.from({ length: 100 }, () => activity),
+      nextCursor: null,
+      scanComplete: true,
+    });
+
+    const result = await connection.client.callTool({
+      name: 'query_activities_with_tags',
+      arguments: successfulToolArguments.query_activities_with_tags,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result).not.toHaveProperty('structuredContent');
+    expect(JSON.parse((result.content[0] as { text: string }).text))
+      .toMatchObject({ error: 'query_too_large' });
+    expect(Buffer.byteLength(JSON.stringify(result), 'utf8'))
+      .toBeLessThan(256 * 1024);
   });
 
   it('uses Activity details alone for samples and rejects private or inconsistent pages on every transport', async () => {
@@ -2349,6 +2410,8 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       .not.toContain('startPosition');
     expect(JSON.stringify(advertised.query_activities))
       .not.toContain('startPosition');
+    expect(JSON.stringify(advertised.query_activities_with_tags))
+      .not.toContain('startPosition');
     expect(JSON.stringify(advertised.list_activity_jumps))
       .not.toContain('latitudeDegrees');
     expect(JSON.stringify(advertised.list_routes)).not.toContain('bounds');
@@ -2358,6 +2421,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     for (const toolName of [
       'list_activities',
       'query_activities',
+      'query_activities_with_tags',
       'list_activity_jumps',
       'get_activity_chart_data',
       'list_routes',
@@ -3088,6 +3152,11 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       nextCursor: null,
       activityId: 'activity-secret',
     });
+    mismatchService.queryActivitiesWithTags = vi.fn().mockResolvedValue({
+      activities: [],
+      nextCursor: null,
+      eventName: 'event-secret',
+    });
     mismatchService.findActivitiesNearLocation = vi.fn().mockResolvedValue({
       activities: [],
       nextCursor: null,
@@ -3117,6 +3186,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       'get_daily_briefing',
       'list_activities',
       'query_activities',
+      'query_activities_with_tags',
       'find_activities_near_location',
       'search_activities_near_location',
       'list_routes',
@@ -3162,6 +3232,11 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
     errorService.listActivities = vi.fn().mockImplementation(async () => {
       throw expectedError();
     });
+    errorService.queryActivitiesWithTags = vi.fn().mockImplementation(
+      async () => {
+        throw expectedError();
+      },
+    );
     errorService.findActivitiesNearLocation = vi.fn().mockImplementation(
       async () => {
         throw expectedError();
@@ -3188,6 +3263,7 @@ describe.each<FixtureTransport>(['in-memory', 'legacy-http', 'modern-http'])('MC
       'get_daily_briefing',
       'list_activities',
       'query_activities',
+      'query_activities_with_tags',
       'find_activities_near_location',
       'search_activities_near_location',
       'list_routes',
