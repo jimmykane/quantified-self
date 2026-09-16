@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const hoisted = vi.hoisted(() => ({
   enforceAppCheck: vi.fn(),
   isEnabled: vi.fn(),
+  callableOptions: [] as unknown[],
 }));
 
 vi.mock('firebase-functions/v2/https', () => ({
@@ -11,7 +12,10 @@ vi.mock('firebase-functions/v2/https', () => ({
       super(message);
     }
   },
-  onCall: (_options: unknown, handler: unknown) => handler,
+  onCall: (options: unknown, handler: unknown) => {
+    hoisted.callableOptions.push(options);
+    return handler;
+  },
 }));
 vi.mock('../../../shared/functions-manifest', () => ({
   FUNCTIONS_MANIFEST: { getGarminHealthSyncAvailability: { region: 'europe-west2' } },
@@ -32,6 +36,13 @@ describe('getGarminHealthSyncAvailability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hoisted.isEnabled.mockReturnValue(true);
+  });
+
+  it('uses 512 MiB for the availability read', () => {
+    expect(hoisted.callableOptions).toContainEqual(expect.objectContaining({
+      region: 'europe-west2',
+      memory: '512MiB',
+    }));
   });
 
   it('requires authentication', async () => {

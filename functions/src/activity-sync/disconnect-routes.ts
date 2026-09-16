@@ -111,6 +111,7 @@ export const disableActivitySyncRoutesOnSuuntoTokenRootDelete = onDocumentDelete
 export const disableActivitySyncRoutesOnCOROSTokenRootDelete = onDocumentDeleted({
   document: `${COROSAPI_ACCESS_TOKENS_COLLECTION_NAME}/{uid}`,
   region: REGION,
+  memory: '512MiB',
   retry: true,
 }, async (event) => {
   await handleServiceTokenRootDisconnected(

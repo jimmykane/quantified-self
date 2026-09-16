@@ -349,6 +349,7 @@ describe('activity-sync/disconnect-routes', () => {
     expect(capturedOnDocumentDeletedOptions).toContainEqual(expect.objectContaining({
       document: 'COROSAPIAccessTokens/{uid}',
       region: 'europe-west2',
+      memory: '512MiB',
       retry: true,
     }));
   });

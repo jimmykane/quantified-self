@@ -35,16 +35,8 @@ describe('service connection account projection', () => {
     });
   });
 
-  it('allocates additional memory to the Suunto and Garmin token projection triggers', () => {
-    expect(serviceConnectionAccountProjectionTestInternals.projectionMemoryForService(
-      ServiceNames.SuuntoApp,
-    )).toBe('512MiB');
-    expect(serviceConnectionAccountProjectionTestInternals.projectionMemoryForService(
-      ServiceNames.GarminAPI,
-    )).toBe('512MiB');
-    expect(serviceConnectionAccountProjectionTestInternals.projectionMemoryForService(
-      ServiceNames.COROSAPI,
-    )).toBe('256MiB');
+  it('allocates 512 MiB to every provider token projection trigger', () => {
+    expect(serviceConnectionAccountProjectionTestInternals.tokenProjectionMemory).toBe('512MiB');
   });
 
   it('projects only browser-safe Garmin account fields', () => {

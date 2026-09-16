@@ -15,6 +15,7 @@ const MAX_PROJECTED_ACCOUNTS = 32;
 const MAX_PROVIDER_USER_ID_LENGTH = 512;
 const MAX_PROJECTED_PERMISSIONS = 64;
 const MAX_PERMISSION_LENGTH = 128;
+const TOKEN_PROJECTION_MEMORY = '512MiB';
 
 export type ProjectedServiceName =
   | ServiceNames.GarminAPI
@@ -233,12 +234,6 @@ export function projectionRevisionKeyFromEventTime(eventTime: string | undefined
   return `${`${seconds}`.padStart(12, '0')}:${nanos}`;
 }
 
-function projectionMemoryForService(serviceName: ProjectedServiceName): '256MiB' | '512MiB' {
-  return serviceName === ServiceNames.SuuntoApp || serviceName === ServiceNames.GarminAPI
-    ? '512MiB'
-    : '256MiB';
-}
-
 function tokenProjectionTrigger(
   serviceName: ProjectedServiceName,
   document: string,
@@ -246,7 +241,7 @@ function tokenProjectionTrigger(
   return onDocumentWritten({
     document,
     region: 'europe-west2',
-    memory: projectionMemoryForService(serviceName),
+    memory: TOKEN_PROJECTION_MEMORY,
     maxInstances: 20,
     concurrency: 10,
     retry: true,
@@ -275,5 +270,5 @@ export const projectCOROSConnectionOnTokenWrite = tokenProjectionTrigger(
 );
 
 export const serviceConnectionAccountProjectionTestInternals = {
-  projectionMemoryForService,
+  tokenProjectionMemory: TOKEN_PROJECTION_MEMORY,
 };
