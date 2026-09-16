@@ -1560,6 +1560,53 @@ describe('SummariesComponent', () => {
       expect(component.dashboardTodayReadiness.score).toBe(67);
     });
 
+    it('keeps the Today layout reservations and score slot through hydration, recovery expiry and errors', () => {
+      const host = render();
+      // The unit runner does not attach external component CSS. Check its stable
+      // sizing contract here; real viewport geometry is verified in the browser.
+      const stylesheet = document.createElement('style');
+      stylesheet.textContent = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'), 'utf8');
+      host.appendChild(stylesheet);
+      const readiness = host.querySelector<HTMLElement>('.dashboard-readiness-primary')!;
+      const scoreSlot = readiness.querySelector('.dashboard-readiness-score')!;
+      const training = host.querySelector<HTMLElement>('.dashboard-training-state-primary')!;
+      const drivers = [...host.querySelectorAll<HTMLElement>('.dashboard-current-state-row dl > div')];
+      const reservations = () => [training, readiness, ...drivers].map(element => ({
+        minimum: getComputedStyle(element).minBlockSize,
+        sizing: getComputedStyle(element).boxSizing,
+      }));
+      const pendingLayout = reservations();
+      expect(pendingLayout.every(({ minimum, sizing }) => parseFloat(minimum) > 0 && sizing === 'border-box')).toBe(true);
+      expect(getComputedStyle(readiness).alignContent).toBe('start');
+      expect(scoreSlot.querySelector('[aria-label="Loading readiness"]')).not.toBeNull();
+
+      load$.next({ ...loadState, recoveryNow: { totalSeconds: 7_200, endTimeMs: nowMs }, recoveryNowStatus: 'ready' });
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(readiness.getAttribute('aria-busy')).toBe('false');
+      expect(readiness.querySelector('.dashboard-readiness-score')).toBe(scoreSlot);
+      expect(scoreSlot.querySelector('[label="Readiness"]')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night');
+      expect(reservations()).toEqual(pendingLayout);
+
+      sleep$.error(new Error('refresh failed'));
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(readiness.querySelector('.dashboard-readiness-method[role="status"]')?.textContent).toContain('Sleep could not be refreshed');
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
+      expect(reservations()).toEqual(pendingLayout);
+
+      load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
+      expect(reservations()).toEqual(pendingLayout);
+      expect(readiness.querySelector('.dashboard-readiness-score')).toBe(scoreSlot);
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
+    });
+
     it('settles an unchanged missing load result instead of remaining on loading', () => {
       sleep$.next([]);
       vi.advanceTimersToNextFrame();

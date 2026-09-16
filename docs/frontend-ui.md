@@ -37,6 +37,15 @@ and its calendar action remain mounted through preparation, refresh, failure, an
 shows pending work; failures keep the accessible Retry action. The status row keeps its height when it clears, including
 when Today or the owner greeting is hidden. Do not replace the page title with changing loading messages.
 
+Today's summary also reserves space for the completed readiness/confidence/recovery content and the HRV personal-range
+details before the initial reads settle. Its primary cells align content to the top, and the loading progress bar and
+completed score share one slot. Load warnings replace the explanation in its existing slot, retaining an accessible
+status rather than adding a row. Keep these minimum block sizes independent of loading, missing-data and recovery states;
+removing a reservation when a read finishes reintroduces scroll jumps. Small phones reserve extra wrapped-text space,
+and tablets place the four drivers below the primary summaries instead of squeezing them into narrow columns. These are
+minimums, not clipped or fixed heights: enlarged text and longer messages may still expand. Check loading-to-complete
+geometry around responsive breakpoints as well as ordinary desktop/phone screenshots when changing Today copy or layout.
+
 ## Workspace Shells
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It

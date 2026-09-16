@@ -59,13 +59,22 @@
 }
 
 .dashboard-current-state-primary {
+  align-content: start;
+  box-sizing: border-box;
   display: grid;
   gap: 0.15rem;
   padding: 0.9rem 1rem;
 }
 
+/* Reserve the completed summary, including confidence and active recovery, even
+   before either data source answers. Minimums allow zoomed/long copy to grow. */
+.dashboard-readiness-primary {
+  min-block-size: 15rem;
+}
+
 .dashboard-training-state-primary {
   border-right: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  min-block-size: 5.75rem;
 }
 
 .dashboard-training-state-caption {
@@ -116,7 +125,13 @@
   max-width: 240px;
 }
 
-.dashboard-readiness-score-indicator { margin: 0.45rem 0 0.35rem; max-width: 240px; }
+.dashboard-readiness-score {
+  align-items: center;
+  display: grid;
+  margin: 0.45rem 0 0.35rem;
+  min-block-size: 8px;
+  max-width: 240px;
+}
 .dashboard-current-state-row dl app-metric-indicator { margin: 0.35rem 0; }
 
 .dashboard-current-state-row dl {
@@ -127,8 +142,15 @@
 
 .dashboard-current-state-row dl > div {
   border-left: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  box-sizing: border-box;
+  min-block-size: 6.25rem;
   min-width: 0;
   padding: 0.9rem 0.75rem;
+}
+
+.dashboard-current-state-row dl > .dashboard-readiness-hrv {
+  /* Personal-range status, bounds and latest-night copy arrive with Sleep. */
+  min-block-size: 8rem;
 }
 
 .dashboard-current-state-row dd {
@@ -159,6 +181,21 @@
   margin-right: 0.5rem;
 }
 
+@media (min-width: 721px) and (max-width: 1100px) {
+  .dashboard-current-state-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .dashboard-current-state-row dl {
+    border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+    grid-column: 1 / -1;
+  }
+
+  .dashboard-current-state-row dl > div:first-child {
+    border-left: 0;
+  }
+}
+
 @media (max-width: 720px) {
   .dashboard-current-state-row {
     grid-template-columns: 1fr;
@@ -176,6 +213,21 @@
 
   .dashboard-current-state-row dl > div:nth-child(odd) {
     border-left: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  /* Keep the same reservations when descriptions wrap on a small phone. */
+  .dashboard-training-state-primary {
+    min-block-size: 6.75rem;
+  }
+
+  .dashboard-readiness-primary {
+    min-block-size: 15.5rem;
+  }
+
+  .dashboard-current-state-row dl > .dashboard-readiness-hrv {
+    min-block-size: 9rem;
   }
 }
 
