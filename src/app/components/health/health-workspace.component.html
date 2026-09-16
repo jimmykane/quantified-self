@@ -126,7 +126,11 @@
             }
           </div>
           <div class="health-detail-controls">
-          <button mat-button type="button" [disabled]="dashboardLibrary.busy()" (click)="addToDashboard()"><span>{{ metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard' }}</span><mat-icon iconPositionEnd>{{ metricOnDashboard() ? 'dashboard' : 'add' }}</mat-icon></button>
+          <button mat-button type="button" class="health-dashboard-action"
+            [disabled]="dashboardLibrary.busy()" (click)="addToDashboard()">
+            <span>{{ metricOnDashboard() ? 'View on dashboard' : 'Add to dashboard' }}</span>
+            <mat-icon iconPositionEnd>{{ metricOnDashboard() ? 'dashboard' : 'add' }}</mat-icon>
+          </button>
           <div class="health-window-navigation" aria-label="Health data window">
             <button
               mat-icon-button
