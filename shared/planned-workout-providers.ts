@@ -52,11 +52,43 @@ export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
   ActivityTypes.Handcycle,
 ] as const;
 
+/**
+ * Garmin Training API V2 accepts only broad RUNNING/CYCLING workout sports.
+ * Keep the exact authored QS sport, then fold these profiles at serialization.
+ */
+export const GARMIN_RUNNING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Running,
+  ActivityTypes.TrailRunning,
+  ActivityTypes.Treadmill,
+] as const;
+
+export const GARMIN_CYCLING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Cycling,
+  ActivityTypes.MountainBiking,
+  ActivityTypes.IndoorCycling,
+  ActivityTypes.EBiking,
+  ActivityTypes.Handcycle,
+] as const;
+
+export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [
+  ...GARMIN_RUNNING_WORKOUT_SPORTS_V1,
+  ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
+] as const;
+
+export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
+
+export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
+  if ((GARMIN_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'RUNNING';
+  if ((GARMIN_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'CYCLING';
+  return null;
+}
+
 export interface PlannedWorkoutProviderMappingIssueV1 {
   severity: Exclude<PlannedWorkoutProviderMappingLevel, 'exact'>;
   code:
     | 'provider_contract_unavailable'
     | 'unsupported_sport'
+    | 'sport_profile_degraded'
     | 'unsupported_ending'
     | 'unsupported_target'
     | 'purpose_degraded'
@@ -84,12 +116,12 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   garmin: {
     id: 'garmin',
     label: 'Garmin',
-    implementationState: 'fixture-only',
+    implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'native-workout-and-schedule',
     requiredScopes: ['WORKOUT_IMPORT'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      sports: GARMIN_PLANNED_WORKOUT_SPORTS_V1,
       endingKinds: ['time', 'distance', 'manual'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -102,14 +134,16 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'Single-sport workouts allow at most 100 total steps.',
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
+      'Training API V2 accepts RUNNING or CYCLING but has no sub-sport field; exact QS profiles are delivered through their broad family.',
       'A secondary target is documented only for cycling and depends on device support.',
       'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
     ],
     completionCorrelation: 'Training API V2 does not document a completed-activity workout identifier.',
     unresolvedGates: [
       'Prove retained-ID missing/ownership response semantics and representative device behavior with the designated production account.',
+      'Verify broad-family workouts from each authored subtype on representative compatible activity profiles before claiming profile-level device support.',
       'Confirm completion-correlation behavior outside the Training API contract.',
-      'Pass sandbox create, update, reschedule, delete, reconnect, and duplicate tests.',
+      'Complete bounded production-account create, update, reschedule, delete, reconnect, and duplicate evidence before broader rollout.',
     ],
     evidence: [
       'Garmin Connect Developer Program Training API V2, version 1.0 (private partner document, May 2025)',
@@ -272,6 +306,21 @@ export function assessPlannedWorkoutProviderMappingV1(
       path: '$.sport',
       message: `${structure.sport} cannot be represented by the ${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} fixture mapper.`,
     });
+  } else if (
+    provider === 'garmin'
+    && structure.sport !== ActivityTypes.Running
+    && structure.sport !== ActivityTypes.Cycling
+  ) {
+    const family = garminWorkoutSportFamilyV1(structure.sport);
+    if (family) {
+      const familyLabel = family === 'RUNNING' ? 'Running' : 'Cycling';
+      issues.push({
+        severity: 'degraded',
+        code: 'sport_profile_degraded',
+        path: '$.sport',
+        message: `Garmin receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
+      });
+    }
   }
 
   const referenceSnapshots = new Map<string, number>();
@@ -321,7 +370,7 @@ export function assessPlannedWorkoutProviderMappingV1(
     }
 
     if (provider === 'garmin' && step.targets.length > 1) {
-      if (structure.sport !== ActivityTypes.Cycling) {
+      if (garminWorkoutSportFamilyV1(structure.sport) !== 'CYCLING') {
         issues.push({
           severity: 'unsupported',
           code: 'unsupported_target',

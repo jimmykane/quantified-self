@@ -1,6 +1,7 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+    GARMIN_PLANNED_WORKOUT_SPORTS_V1,
     PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
     assessPlannedWorkoutProviderMappingV1,
     isPlannedWorkoutProviderDeliveryEnabled,
@@ -52,12 +53,15 @@ describe('planned-workout provider proof fixtures', () => {
         ))).toBe(true);
         expect(isPlannedWorkoutProviderDeliveryEnabled('garmin')).toBe(false);
         expect(isPlannedWorkoutProviderDeliveryEnabled('coros')).toBe(false);
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.implementationState).toBe('fixture-only');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.implementationState).toBe('private-rollout');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.implementationState).toBe('fixture-only');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('fixture-only');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('private-rollout');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
             .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
+        expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
+            .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
     });
 
     it('matches the redacted Garmin workout and separate schedule contracts exactly', () => {
@@ -156,10 +160,40 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.artifact.activities).toEqual(activities);
     });
 
-    it('does not silently send Suunto-specific sport profiles through unproved provider mappings', () => {
+    it.each([
+        [ActivityTypes.Running, 'RUNNING', 'exact'],
+        [ActivityTypes.TrailRunning, 'RUNNING', 'degraded'],
+        [ActivityTypes.Treadmill, 'RUNNING', 'degraded'],
+        [ActivityTypes.Cycling, 'CYCLING', 'exact'],
+        [ActivityTypes.MountainBiking, 'CYCLING', 'degraded'],
+        [ActivityTypes.IndoorCycling, 'CYCLING', 'degraded'],
+        [ActivityTypes.EBiking, 'CYCLING', 'degraded'],
+        [ActivityTypes.Handcycle, 'CYCLING', 'degraded'],
+    ] as const)('maps canonical %s to Garmin %s with truthful fidelity', (sport, garminSport, level) => {
+        const structure = { ...oneStepStructure(), sport };
+        const result = serializeGarminWorkoutV1(structure, {
+            name: `${sport} workout`,
+            allowDegraded: true,
+        });
+
+        expect(result.level).toBe(level);
+        expect(result.artifact.sport).toBe(garminSport);
+        expect(result.artifact.segments[0].sport).toBe(garminSport);
+        expect(result.issues.some(issue => issue.code === 'sport_profile_degraded')).toBe(level === 'degraded');
+    });
+
+    it('requires approval for a Garmin family fold while keeping other unproved mappings unsupported', () => {
         const mountainBike = { ...oneStepStructure(), sport: ActivityTypes.MountainBiking };
         expect(assessPlannedWorkoutProviderMappingV1('suunto', mountainBike).level).toBe('exact');
-        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', mountainBike)).toMatchObject({
+            level: 'degraded',
+            issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
+        });
+        expect(() => serializeGarminWorkoutV1(mountainBike, {
+            name: 'MTB workout',
+            allowDegraded: false,
+        })).toThrow(expect.objectContaining({ code: 'degradation-confirmation-required' }));
+        for (const provider of ['coros', 'wahoo'] as const) {
             expect(assessPlannedWorkoutProviderMappingV1(provider, mountainBike)).toMatchObject({
                 level: 'unsupported',
                 issues: [expect.objectContaining({ code: 'unsupported_sport' })],
@@ -422,6 +456,16 @@ describe('planned-workout provider proof fixtures', () => {
         expect(assessPlannedWorkoutProviderMappingV1('garmin', runningWithTwoTargets)).toMatchObject({
             level: 'unsupported',
             issues: [expect.objectContaining({ code: 'unsupported_target' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', {
+            ...runningWithTwoTargets,
+            sport: ActivityTypes.MountainBiking,
+        })).toMatchObject({
+            level: 'degraded',
+            issues: expect.arrayContaining([
+                expect.objectContaining({ code: 'sport_profile_degraded' }),
+                expect.objectContaining({ code: 'multiple_targets_degraded' }),
+            ]),
         });
         expect(assessPlannedWorkoutProviderMappingV1('coros', cyclingCadence)).toMatchObject({
             level: 'unsupported',

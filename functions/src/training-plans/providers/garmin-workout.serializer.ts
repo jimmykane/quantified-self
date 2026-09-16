@@ -9,12 +9,16 @@ import {
 } from '../../../../shared/planned-workout';
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
 import {
+    garminWorkoutSportFamilyV1,
+    type GarminWorkoutSportFamilyV1,
+} from '../../../../shared/planned-workout-providers';
+import {
     resolveProviderSerializationIssuesV1,
     type ProviderSerializationIssueV1,
     type ProviderSerializationResultV1,
 } from './provider-mapping';
 
-export type GarminWorkoutSportV1 = 'RUNNING' | 'CYCLING';
+export type GarminWorkoutSportV1 = GarminWorkoutSportFamilyV1;
 export type GarminWorkoutIntensityV1 = 'REST' | 'WARMUP' | 'COOLDOWN' | 'RECOVERY' | 'ACTIVE';
 export type GarminWorkoutDurationTypeV1 = 'TIME' | 'DISTANCE' | 'OPEN' | 'FIXED_REST';
 export type GarminWorkoutTargetTypeV1 = 'SPEED' | 'PACE' | 'HEART_RATE' | 'CADENCE' | 'POWER' | 'OPEN';
@@ -108,8 +112,8 @@ function optionalPositiveSafeInteger(value: number | undefined, label: string): 
 }
 
 function sportToGarmin(sport: ActivityTypes): GarminWorkoutSportV1 {
-    if (sport === ActivityTypes.Running) return 'RUNNING';
-    if (sport === ActivityTypes.Cycling) return 'CYCLING';
+    const family = garminWorkoutSportFamilyV1(sport);
+    if (family) return family;
     throw new Error(`Unsupported Garmin sport reached after compatibility validation: ${sport}.`);
 }
 

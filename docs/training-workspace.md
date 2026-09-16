@@ -734,8 +734,9 @@ without production transport bindings. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
-examples include Garmin relative targets frozen from their stored reference snapshots, Garmin cycling-secondary-target
-device limits, COROS recovery-to-rest and first-target-only behavior, COROS integer rounding, Wahoo's first-target-only
+examples include Garmin exact-profile folding to its broad Running/Cycling workout categories, Garmin relative targets
+frozen from their stored reference snapshots, Garmin cycling-secondary-target device limits, COROS recovery-to-rest
+and first-target-only behavior, COROS integer rounding, Wahoo's first-target-only
 ELEMNT behavior, unsupported Wahoo relative references frozen to their stored absolute snapshot, integer rounding for
 Wahoo FTP/heart-rate header references, Suunto relative targets frozen to absolute values, Wahoo relative HR/speed
 target support limited to treadmill workouts in its app, cadence converted from rpm to hertz, Unicode-safe text
@@ -745,6 +746,25 @@ combinations fail instead of being approximated. The common lifecycle is proved 
 ordinary provider integration tests remain #647–#650, with contract questions in #645. Rollout, AI, templates, completion
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
+
+#### Garmin workout sport profiles (#647)
+
+Garmin Training API V2 exposes `RUNNING` and `CYCLING` for this editor's supported endurance workouts and no sub-sport
+field. QS therefore preserves the authored canonical sport while the Garmin adapter maps Running to `RUNNING` and
+Cycling to `CYCLING` exactly; Trail Running and Treadmill fold to `RUNNING`; Mountain Biking, Indoor Cycling, E-Biking
+and Hand Cycle fold to `CYCLING`. A fold is `degraded`, names the exact loss, and requires the normal destination- and
+payload-bound approval. It is not presented as Garmin receiving an MTB, trail, treadmill, indoor, e-bike or hand-cycle
+profile. Generic Cycling is still not changed into Mountain Biking in QS.
+
+Garmin receives the same broad family at the workout and segment levels. Cycling-family folds may use the API's
+cycling-only secondary-target field subject to its existing device-support warning; running-family folds may not.
+Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
+and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
+
+MCP impact: no wire-contract change. `get_planned_workout` already returns the exact authored Sports Lib activity type,
+while `get_training_sync_status` exposes only the existing sanitized approval/status result and never the Garmin
+payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope, tool, registered
+schema, Assistant route or plugin update is needed.
 
 #### SuuntoPlus Guide delivery (#650)
 
@@ -762,7 +782,8 @@ recommendations: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`, M
 one canonical E-Biking type while Suunto splits road and mountain e-biking. A generic Cycling workout is not guessed
 to be Mountain Biking; edit the workout sport when the Guide should appear for the MTB profile. These provider IDs stay
 inside the Suunto adapter and never enter `WorkoutStructureV1`, schedule history, Sports Lib, or MCP output. Other
-providers keep their separately proved sport lists and must not inherit Suunto's mappings.
+providers keep independently proved mappings; Garmin uses only its documented broad families and never inherits
+Suunto activity IDs.
 
 Existing cosmetic-only blocked deliveries are reassessed by ordinary reconciliation after the mapping is deployed;
 no manual approval or data migration is needed. Current consent, plan lifecycle, Pro, account, scheduling-window and

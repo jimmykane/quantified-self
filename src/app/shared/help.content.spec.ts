@@ -542,6 +542,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('COROS and Wahoo delivery are not enabled yet');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('Sent is not a watch receipt');
+    expect(planningSection?.content).toContain('Garmin supports the same choices');
+    expect(planningSection?.content).toContain('only the broad Running or Cycling family');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
     expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');

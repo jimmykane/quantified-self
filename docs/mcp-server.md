@@ -56,7 +56,8 @@ counts, and strict rejection of private evidence injected into a public status. 
 evidence, watch receipts, live checks or write actions are exposed; consent and bundled skill routing remain unchanged.
 The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
 recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
-Biking sport survives the read projection. Suunto numeric activity recommendations remain private adapter payload.
+Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
+`RUNNING`/`CYCLING` payload fold remain private adapter behavior; the MCP recipe keeps the authored exact sport.
 
 ## Purpose and boundary
 

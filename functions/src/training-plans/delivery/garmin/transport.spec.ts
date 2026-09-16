@@ -189,6 +189,22 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(server.workouts.size + server.schedules.size).toBe(0);
     expect(await recover()).toEqual({ kind: 'accepted', artifact: null });
   });
+  it('delivers an approved mountain-bike recipe through Garmin cycling without rewriting the authored sport', async () => {
+    operation = nextOperation(operation, {
+      structure: { ...operation.workout!.structure, sport: ActivityTypes.MountainBiking },
+    });
+    expect(transport.assess(operation.workout!, operation.destinationKey, operation.timeZone)).toMatchObject({
+      level: 'degraded',
+      issues: [expect.stringContaining('receives Mountain Biking as a Cycling workout')],
+    });
+
+    const artifact = (await execute())!;
+    expect(operation.workout!.structure.sport).toBe(ActivityTypes.MountainBiking);
+    expect(server.workouts.get(artifact.ids.workout)).toMatchObject({
+      sport: 'CYCLING',
+      segments: [{ sport: 'CYCLING' }],
+    });
+  });
   it('reschedules without rewriting unchanged content; duplicate completion has no duplicate POST', async () => {
     await execute();
     operation = nextOperation(operation, { localDate: '2026-10-25' });
