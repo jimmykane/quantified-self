@@ -102,7 +102,8 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   if ((record.providerNotBeforeMs ?? 0) > runtime.now() && ['pending', 'stopped', 'paused_plan'].includes(record.status)
     && (record.attempt || (record.desired === 'present' && record.acceptedDigest !== record.desiredDigest)
       || (record.desired === 'absent' && (record.actual || record.repair)))) record.status = 'retrying';
-  if (record.desired === 'absent' && !record.actual && !record.repair && !record.attempt) record.status = 'removed';
+  if (record.desired === 'absent' && !record.actual && !record.repair && !record.attempt
+    && record.status !== 'outside_horizon') record.status = 'removed';
   return record;
 }
 

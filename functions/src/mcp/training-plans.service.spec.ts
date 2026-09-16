@@ -40,6 +40,21 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
+  it.each(['delivered', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+    f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
+      suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-account', associationPlanId: null, updatedAtMs: 1 };
+    const id = await trainingDeliverySummaryIdentity('owner', 'suunto', 'private-account', 'w1');
+    f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: 'p1', provider: 'suunto', status,
+      differsFromQS: status === 'needs_attention', hasRemoteCopy: status === 'delivered', timeZone: 'Europe/Helsinki',
+      lastAttemptAtMs: 1, lastAcceptedAtMs: status === 'delivered' ? 1 : null, updatedAtMs: 1 };
+    const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+    const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', { scope: 'plan', reference: plans.plans[0].planRef }));
+    expect(result.services[0].syncedWorkouts).toBe(status === 'delivered' ? 1 : 0);
+    expect(JSON.stringify(result)).not.toMatch(/private-account|private-guide|private-key|must-not-leak|watch/);
+    Object.assign(f.collections.trainingDeliveryStatuses[id], { privateEvidence: 'must-not-leak', externalId: 'private-guide', subscriptionKey: 'private-key' });
+    await expect(f.run('get_training_sync_status', { scope: 'plan', reference: plans.plans[0].planRef })).rejects.toThrow();
+  });
   it('requires independent permission at the data boundary before reading', async () => {
     const f = fixture();
     await expect(f.run('list_training_plans', {}, ['metrics:read', 'timeline-notes:read'])).rejects.toThrow('permission');

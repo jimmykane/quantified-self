@@ -7,6 +7,15 @@ const policy: InspectionPolicy = { version: 'proof-v1', mode: 'retained-ids', re
 const missing: InspectionObservation = { conflict: false, artifacts: [
   { key: 'workout', state: 'present', authoritative: true }, { key: 'schedule', state: 'absent', authoritative: true }] };
 describe('provider-neutral inspection evidence', () => {
+  it('resumes positive discovery in an unstable Suunto inventory without carrying negative proof', () => {
+    const suunto = { ...policy, required: ['guide'], authoritativeAbsence: false, repairReady: false };
+    const page: InspectionObservation = { conflict: false, artifacts: [{ key: 'guide', state: 'unknown', authoritative: false }],
+      coverage: { complete: false, stable: false, filtered: false, nextCursor: '50' } };
+    const first = observeInspection(undefined, 'a', suunto, page, 0);
+    expect(first).toMatchObject({ cursor: '50', missing: false, suspectedAtMs: null });
+    expect(observeInspection(first, 'a', suunto, { conflict: false, artifacts: [{ key: 'guide', state: 'present', authoritative: true }] }, 1))
+      .toMatchObject({ cursor: null, missing: false, state: 'present' });
+  });
   it('requires two spaced negatives bound to the exact authority', () => {
     const first = observeInspection(undefined, 'authority', policy, missing, 1000);
     expect(first.state).toBe('suspected_missing');

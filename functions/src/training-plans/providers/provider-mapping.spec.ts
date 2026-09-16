@@ -52,7 +52,7 @@ describe('planned-workout provider proof fixtures', () => {
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.implementationState).toBe('fixture-only');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.implementationState).toBe('fixture-only');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('fixture-only');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('fixture-only');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('private-rollout');
     });
 
     it('matches the redacted Garmin workout and separate schedule contracts exactly', () => {
