@@ -3,7 +3,7 @@ import { DashboardChartThumbnailComponent } from '../../summaries/dashboard-char
 import { buildDashboardManagerPresetTile } from '../../../helpers/dashboard-manager-presets.helper';
 import type { DashboardChartPreview } from '../../../helpers/dashboard-chart-preview.helper';
 import { ChartSourcePickerComponent } from '../../shared/chart-source-picker/chart-source-picker.component';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
@@ -97,16 +97,9 @@ export class DashboardHealthChartComponent {
     private readonly requestKey = computed(() => JSON.stringify([this.user().uid, this.data.isOwner(this.user().uid),
         this.settings().metric, this.settings().range, this.endDate(), this.visible(), this.priority(), this.retry()]));
     constructor() {
-        if (typeof IntersectionObserver === 'undefined' || shouldPreloadChartInBackground(this.element.nativeElement))
-            this.visible.set(true);
-        else {
-            const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) {
-                this.visible.set(true);
-                observer.disconnect();
-            } }, chartViewportObserverOptions(this.element.nativeElement));
-            observer.observe(this.element.nativeElement);
-            this.destroy.onDestroy(() => observer.disconnect());
-        }
+        // Embedded views are detached during construction. Resolve their dashboard
+        // scope and scroll root only after Angular has attached the completed view.
+        afterNextRender(() => this.startLoading());
         effect(onCleanup => {
             this.requestKey();
             untracked(() => {
@@ -153,6 +146,18 @@ export class DashboardHealthChartComponent {
             untracked(() => this.updateContext());
         });
         this.destroy.onDestroy(() => this.version++);
+    }
+    private startLoading(): void {
+        if (typeof IntersectionObserver === 'undefined' || shouldPreloadChartInBackground(this.element.nativeElement)) {
+            this.visible.set(true);
+            return;
+        }
+        const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) {
+            this.visible.set(true);
+            observer.disconnect();
+        } }, chartViewportObserverOptions(this.element.nativeElement));
+        observer.observe(this.element.nativeElement);
+        this.destroy.onDestroy(() => observer.disconnect());
     }
     private updateContext(newEvidence = false): void {
         if (!this.evidence || !this.data.isOwner(this.user().uid)

@@ -35,6 +35,29 @@ describe('independent dashboard Health views',()=>{
   function result(metric='steps',endDate='2026-09-15'):DashboardHealthEvidence {
     return {window:resolveHealthWorkspaceWindow({metric:metric as never,range:'30d',endDate},endDate),health:null,history:null,activities:null,sessions:[],errors:[]};
   }
+  it('starts a saved dashboard chart after its host is attached, without waiting for scrolling', () => {
+    const observer = { observe: vi.fn(), disconnect: vi.fn() };
+    vi.stubGlobal('IntersectionObserver', vi.fn(function () { return observer; }));
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent);
+    const dashboard = document.createElement('section');
+    dashboard.dataset['chartPreload'] = 'background';
+    document.body.append(dashboard);
+    // Angular constructs embedded children before attaching their containing view.
+    dashboard.append(fixture.nativeElement);
+    fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {}, appSettings: {} } });
+    fixture.componentRef.setInput('settings', { metric: 'steps', range: '30d' });
+    fixture.detectChanges();
+    fixture.detectChanges();
+    expect(watch).toHaveBeenCalledOnce();
+    expect(observer.observe).not.toHaveBeenCalled();
+    streams[0].next(result());
+    fixture.detectChanges();
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(watch).toHaveBeenCalledOnce();
+    fixture.destroy();
+    expect(streams[0].observed).toBe(false);
+    dashboard.remove();
+  });
   it('uses the shared chart preload window before starting an offscreen read', () => {
     let callback!: IntersectionObserverCallback;
     const observer = { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn() };
