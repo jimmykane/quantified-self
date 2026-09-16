@@ -167,6 +167,26 @@ the ECharts instance. The host remains reusable and resizable without `ResizeObs
 fallback. Dashboard section layout is recalculated only when its column count
 or row-height mode changes, so browser toolbar height changes do not rebuild an unchanged layout.
 
+Background dashboard evidence (derived metrics, Sleep/readiness, legacy HRV, activities and routes) updates its
+current state immediately and requests one `CoalescedFrameTask` tile rebuild before the next paint. The callback
+reads the latest state, so a burst across sources is combined without dropping values. Initial rendering and explicit
+layout/range changes still rebuild immediately and cancel a queued background rebuild. Destroying the dashboard
+cancels the frame and subscriptions. Owner Health metric tiles retain their existing independent shared adapter;
+this scheduling neither adds reads nor changes metric calculations.
+
+Notes-only input changes use `EChartsHostController.updateTimelineNotes`. Its shared binding retains the last base
+option and axis hints, projects marker/shading series, then merges only those stable IDs. Removed overlays receive
+empty markLine/markArea data; metric series, zoom and legend state are not resent. Full data/theme/range changes
+continue through ordinary rendering. Range registrations remain deduplicated, and disposal releases the retained
+option and registration. Explicit time bounds avoid traversing samples during overlay projection. Health, Sleep,
+Form, Forecast and the five Training trend adapters share this path, without chart-local fetches or haptics.
+
+`date-time-format.helper.ts` reuses at most 64 Intl date formatters for explicit timezone/locale/option combinations,
+with least-recently-used eviction. Health chart labels and workspace dates, Training readiness/body-weight dates,
+and dashboard calendar grouping use it. Formatted readings are never cached. Calls that omit a timezone remain
+uncached so a device timezone change does not retain an old local-time formatter. Recorded offsets, locale options,
+canonical metric value/unit formatting and range semantics are unchanged.
+
 An open chart picker keeps its original Material shell when the viewport crosses a breakpoint. Its mobile sheet
 can widen to accommodate the desktop list and preview, while a desktop dialog retains content insets when narrowed.
 

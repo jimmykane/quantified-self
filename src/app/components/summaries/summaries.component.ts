@@ -1,4 +1,5 @@
 import { AppHapticsService } from '../../services/app.haptics.service';
+import { CoalescedFrameTask } from '../../helpers/coalesced-frame-task';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { dashboardHealthMetric, dashboardHealthSettings, isPrivateDashboardHealthTile } from '../../helpers/dashboard-health-tile.helper';
@@ -392,6 +393,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public darkTheme = false;
   private logger: LoggerService;
   private dashboardTileSettingsSnapshot: TileSettingsInterface[] = [];
+  private readonly tileRebuild = new CoalescedFrameTask(() => {
+    void this.rebuildTilesFromCurrentState();
+    this.changeDetector.markForCheck();
+  });
   private sleepSessions: SleepSession[] = [];
   private readinessSleepSessions: SleepSession[] = [];
   private readinessSleepStatus: 'loading' | 'ready' | 'error' = 'loading';
@@ -531,6 +536,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   ngOnDestroy(): void {
+    this.tileRebuild.dispose();
     this.librarySubscription?.unsubscribe();
     this.documentRef.removeEventListener('visibilitychange', this.onDocumentVisibilityChange);
     this.clearTodayHeaderRefreshTimer();
@@ -692,6 +698,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private async rebuildTilesFromCurrentState(): Promise<void> {
+    this.tileRebuild.cancel();
     const buildStart = performance.now();
     this.refreshDashboardTodaySignals();
     this.refreshDerivedMetricsBannerState();
@@ -933,15 +940,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       this.derivedPowerCurveStatus = state.powerCurveStatus;
       this.derivedTrainingCapacityStatus = state.trainingCapacityStatus;
       this.derivedTrainingDurabilityStatus = state.trainingDurabilityStatus;
-      this.refreshDashboardTodaySignals();
       this.updateRecoveryRefreshTimer();
-      this.refreshDerivedMetricsBannerState();
 
       if (hasTileDataChanged) {
-        void this.rebuildTilesFromCurrentState();
+        // The shared rebuild also refreshes Today and the banner once with the latest evidence.
+        this.tileRebuild.request();
         return;
       }
 
+      this.refreshDashboardTodaySignals();
+      this.refreshDerivedMetricsBannerState();
       this.changeDetector.markForCheck();
     });
   }
@@ -1015,7 +1023,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           this.sleepSessions = sessions;
         }
         shouldRebuildForWindowChange = false;
-        void this.rebuildTilesFromCurrentState();
+        this.tileRebuild.request();
       });
   }
 
@@ -1042,14 +1050,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       ? { ...previous, requestedWindow: visible, loading: true, error: false }
       : { window: visible, charts: [], loading: true, error: false };
     this.hrvSubscription = this.hrvService.watch(uid, this.hrvTrendRange, endMs, units).subscribe({
-      next: context => { this.hrvTrend = context; void this.rebuildTilesFromCurrentState(); },
+      next: context => { this.hrvTrend = context; this.tileRebuild.request(); },
       error: () => {
         this.hrvListenerKey = null;
         const retained = this.hrvTrend?.charts.length ? this.hrvTrend : previous;
         this.hrvTrend = retained
           ? { ...retained, requestedWindow: visible, loading: false, error: true }
           : { window: visible, charts: [], loading: false, error: true };
-        void this.rebuildTilesFromCurrentState();
+        this.tileRebuild.request();
       },
     });
   }
@@ -1090,14 +1098,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         }
         this.readinessSleepSessions = sessions;
         this.updateReadinessSleepRefreshTimer();
-        void this.rebuildTilesFromCurrentState();
+        this.tileRebuild.request();
       },
       error: () => {
         // Keep previously loaded nights subject to the normal age/baseline rules.
         // A failed first read must also settle loading, even with no sessions.
         this.readinessSleepStatus = 'error';
         this.updateReadinessSleepRefreshTimer();
-        void this.rebuildTilesFromCurrentState();
+        this.tileRebuild.request();
       },
     });
   }
@@ -1130,7 +1138,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.readinessSleepRefreshTimeoutHandle = setTimeout(() => {
       this.readinessSleepRefreshTimeoutHandle = null;
       this.updateReadinessSleepRefreshTimer();
-      void this.rebuildTilesFromCurrentState();
+      this.tileRebuild.request();
     }, delayMs);
   }
 
@@ -1477,16 +1485,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
             const currentOrder = subscriptionState.order;
             this.tileEventsByOrder[currentOrder] = (events || []).filter(event => !event.isMerge);
             this.tileEventLoadingByOrder[currentOrder] = false;
-            void this.rebuildTilesFromCurrentState();
-            this.changeDetector.markForCheck();
+            this.tileRebuild.request();
           },
           error: (error) => {
             const currentOrder = subscriptionState.order;
             this.tileEventsByOrder[currentOrder] = [];
             this.tileEventLoadingByOrder[currentOrder] = false;
             this.logger.error('[SummariesComponent] Failed to load dashboard tile events', error);
-            void this.rebuildTilesFromCurrentState();
-            this.changeDetector.markForCheck();
+            this.tileRebuild.request();
           },
         }));
     });
@@ -1513,15 +1519,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       next: (routes) => {
         this.routePreviewRoutes = routes || [];
         this.routePreviewLoading = false;
-        void this.rebuildTilesFromCurrentState();
-        this.changeDetector.markForCheck();
+        this.tileRebuild.request();
       },
       error: (error) => {
         this.routePreviewRoutes = [];
         this.routePreviewLoading = false;
         this.logger.error('[SummariesComponent] Failed to load dashboard route previews', error);
-        void this.rebuildTilesFromCurrentState();
-        this.changeDetector.markForCheck();
+        this.tileRebuild.request();
       },
     });
   }

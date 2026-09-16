@@ -68,6 +68,10 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (this.viewInitialized && (changes.points || changes.darkTheme || changes.timelineNotes)) {
       void this.refresh();
     }

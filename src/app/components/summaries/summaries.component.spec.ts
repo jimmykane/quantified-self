@@ -83,6 +83,11 @@ describe('SummariesComponent', () => {
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
   let originalMatchMedia: typeof window.matchMedia | undefined;
 
+  const flushDashboardFrame = async () => {
+    if (vi.isFakeTimers()) vi.advanceTimersToNextFrame();
+    else await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  };
+
   const expectDashboardSettingsWrite = (user: any, dashboardSettingsPatch: Record<string, unknown>): void => {
     expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
       settings: {
@@ -214,6 +219,55 @@ describe('SummariesComponent', () => {
     });
   });
 
+  it('batches mixed metric, Sleep, activity and route updates, and cancels obsolete renders', async () => {
+    vi.useFakeTimers();
+    const metrics = new Subject<DashboardDerivedMetricsState>();
+    const sleep = new Subject<SleepSession[]>();
+    const events = new Subject<never[]>();
+    const routes = new Subject<never[]>();
+    mockDashboardDerivedMetricsService.watch.mockReturnValue(metrics);
+    mockSleepService.watchForDashboard.mockReturnValue(sleep);
+    mockEventService.getEventsBy.mockReturnValue(events);
+    mockRouteService.watchRecentRoutePreviews.mockReturnValue(routes);
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = { uid: 'batch-owner', settings: { dashboardSettings: { tiles: [
+      { type: TileTypes.Chart, order: 0, chartType: ChartTypes.ColumnsVertical,
+        dataType: DataDuration.type, dataCategoryType: ChartDataCategoryTypes.ActivityType,
+        dataValueType: ChartDataValueTypes.Total, timeInterval: TimeIntervals.Weekly, size: { columns: 1, rows: 1 } },
+      { type: TileTypes.Map, order: 1, mapSource: 'routes', size: { columns: 1, rows: 1 } },
+    ] } } } as SummariesComponent['user'];
+    await component['unsubscribeAndCreateCharts']();
+    expect(metrics.observed && sleep.observed && events.observed && routes.observed).toBe(true);
+    buildDashboardTileViewModelsSpy.mockClear();
+    const refreshToday = vi.spyOn(component as any, 'refreshDashboardTodaySignals');
+
+    metrics.next({ ...createDashboardDerivedMetricsMissingState(), formPoints: [], formStatus: 'ready' });
+    sleep.next([]); events.next([]); routes.next([]);
+    expect(refreshToday).not.toHaveBeenCalled();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
+    vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledOnce();
+    expect(refreshToday).toHaveBeenCalledOnce();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      previewMetricStatuses: expect.objectContaining({ form: 'ready' }),
+      sleepSessions: [], tileEventsByOrder: { 0: [] }, routePreviews: [],
+    }));
+
+    // An immediate settings/layout update absorbs the queued background work.
+    buildDashboardTileViewModelsSpy.mockClear();
+    events.next([]);
+    await component['rebuildTilesFromCurrentState']();
+    vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledOnce();
+
+    // Nothing can render after leaving the dashboard.
+    buildDashboardTileViewModelsSpy.mockClear();
+    events.next([]); routes.error(new Error('offline'));
+    fixture.destroy(); vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
+    expect(metrics.observed || sleep.observed || events.observed || routes.observed).toBe(false);
+  });
+
   it('shows an Undo conflict after moving or adding a chart without hiding the saved layout', async () => {
     component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
     component.eventUser = component.user;
@@ -266,7 +320,7 @@ describe('SummariesComponent', () => {
     expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledTimes(1);
   });
 
-  it('cancels obsolete HRV windows and clears prior account data before loading another owner', () => {
+  it('cancels obsolete HRV windows and clears prior account data before loading another owner', async () => {
     const first = new Subject<DashboardHrvContext>();
     const second = new Subject<DashboardHrvContext>();
     const service = TestBed.inject(DashboardHrvService);
@@ -288,6 +342,7 @@ describe('SummariesComponent', () => {
     expect(component['hrvTrend']).toMatchObject({ charts: [], loading: false, error: true });
     component['unsubscribeHrv']();
     expect(component['hrvTrend']).toBeNull();
+    await flushDashboardFrame();
     expect(rebuild).toHaveBeenCalled();
   });
 
@@ -1471,6 +1526,7 @@ describe('SummariesComponent', () => {
     it.each(['load', 'sleep'])('waits for both reads when %s arrives first', (first) => {
       if (first === 'load') load$.next(loadState);
       else sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
 
       expect(component.dashboardTodayReadiness.loading).toBe(true);
       expect(component.dashboardTodayReadiness.score).toBeNull();
@@ -1482,6 +1538,7 @@ describe('SummariesComponent', () => {
 
       if (first === 'load') sleep$.next(nights);
       else load$.next(loadState);
+      vi.advanceTimersToNextFrame();
 
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
       expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('67/100');
@@ -1492,24 +1549,31 @@ describe('SummariesComponent', () => {
 
     it('shows load-only readiness after an empty first sleep result', () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.next([]);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, warningText: '' });
       expect(render().querySelector('.dashboard-current-state-row')?.textContent).toContain('No eligible night');
       // Newly imported sleep continues updating the open dashboard.
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness.score).toBe(67);
     });
 
     it('settles an unchanged missing load result instead of remaining on loading', () => {
       sleep$.next([]);
+      vi.advanceTimersToNextFrame();
       load$.next(createDashboardDerivedMetricsMissingState());
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Awaiting data' });
       expect(render().querySelector('[aria-label="Loading readiness"]')).toBeNull();
     });
 
     it('settles a failed first sleep read with explicit unavailable copy and available load', () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.error(new Error('read failed'));
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, sleepContextText: 'Sleep unavailable' });
       expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be loaded');
       expect(fixture.nativeElement.textContent).not.toContain('No eligible night');
@@ -1517,17 +1581,23 @@ describe('SummariesComponent', () => {
 
     it('keeps eligible sleep after a refresh failure, then expires it normally', async () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       sleep$.error(new Error('refresh failed'));
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
       expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be refreshed');
       await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
     });
 
     it('clears prior evidence when Today is reopened and ignores the old listener', () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       component.showTodaySummary = false;
       component['syncReadinessSleepSubscription']();
       expect(sleep$.observed).toBe(false);
@@ -1537,14 +1607,18 @@ describe('SummariesComponent', () => {
       component['syncReadinessSleepSubscription']();
       component['refreshDashboardTodaySignals']();
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
       reopened$.next([]);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75 });
     });
 
     it('does not combine a new owner’s load with the previous owner’s sleep', () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       const nextLoad$ = new Subject<DashboardDerivedMetricsState>();
       const nextSleep$ = new Subject<SleepSession[]>();
       mockDashboardDerivedMetricsService.watch.mockReturnValue(nextLoad$);
@@ -1552,10 +1626,12 @@ describe('SummariesComponent', () => {
       component.user = { ...component.user, uid: 'next-owner' };
       component['syncDerivedMetricsSubscription']();
       nextLoad$.next(loadState);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
       component['syncReadinessSleepSubscription']();
       expect(sleep$.observed).toBe(false);
       nextSleep$.next([]);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1 });
     });
   });
@@ -1912,7 +1988,7 @@ describe('SummariesComponent', () => {
     expect(component.tileEventLoadingByOrder[1]).toBe(true);
 
     customEventsSubject.next([customEvent, mergedEvent]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.tileEventLoadingByOrder[0]).toBe(false);
     expect(component.tileEventLoadingByOrder[1]).toBe(true);
@@ -1923,7 +1999,7 @@ describe('SummariesComponent', () => {
     }));
 
     mapEventsSubject.next([mapEvent]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.tileEventLoadingByOrder[1]).toBe(false);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -1998,7 +2074,7 @@ describe('SummariesComponent', () => {
     } as any)).toBe(true);
 
     routePreviewsSubject.next([previewRoute]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.routePreviewLoading).toBe(false);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -2576,7 +2652,7 @@ describe('SummariesComponent', () => {
 
     component.onSleepTrendNavigate('older');
     sleepStreams[2].next([]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -2639,7 +2715,7 @@ describe('SummariesComponent', () => {
     component.onSleepTrendNavigate('older');
     const historicalStream = sleepStreams.at(-1);
     historicalStream?.stream.next([{ id: 'historical-sleep' }]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(3);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({

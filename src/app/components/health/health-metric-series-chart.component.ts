@@ -72,6 +72,10 @@ export class HealthMetricSeriesChartComponent implements AfterViewInit, OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (this.viewInitialized && (
       changes.model || changes.startTimeMs || changes.endTimeMs || changes.darkTheme || changes.unitSettings
       || changes.compact || changes.thumbnail || changes.statusOverlay || changes.timelineNotes

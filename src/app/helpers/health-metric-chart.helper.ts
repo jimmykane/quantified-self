@@ -1,3 +1,4 @@
+import { getDateTimeFormatter } from './date-time-format.helper';
 import type { EChartsType } from 'echarts/core';
 import {
   DashboardEChartsStyleTokens,
@@ -745,19 +746,19 @@ function categoryValueLabel(value: number | string | boolean): string {
 
 function formatAxisDate(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
   const localTimestampMs = timestampInFixedOffset(timestampMs, timezoneOffsetSeconds);
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return getDateTimeFormatter(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
     .format(new Date(localTimestampMs));
 }
 
 function formatAxisTime(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
   const localTimestampMs = timestampInFixedOffset(timestampMs, timezoneOffsetSeconds);
-  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+  return getDateTimeFormatter(undefined, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
     .format(new Date(localTimestampMs));
 }
 
 function formatTooltipDate(timestampMs: number, timezoneOffsetSeconds?: number | null): string {
   const normalizedOffsetSeconds = normalizeTimezoneOffsetSeconds(timezoneOffsetSeconds);
-  const dateTime = new Intl.DateTimeFormat(undefined, {
+  const dateTime = getDateTimeFormatter(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

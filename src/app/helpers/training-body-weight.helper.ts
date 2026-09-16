@@ -1,3 +1,4 @@
+import { getDateTimeFormatter } from './date-time-format.helper';
 import { DataWeight, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import type {
   DerivedBodyWeightTrendMetricPayload,
@@ -385,7 +386,7 @@ function formatUtcDate(value: number | null | undefined, locale?: string): strin
   if (!Number.isFinite(value)) {
     return '';
   }
-  return new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(value as number));
+  return getDateTimeFormatter(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(value as number));
 }
 
 function formatNumber(value: number, fractionDigits: number, locale?: string): string {

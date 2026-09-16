@@ -25,6 +25,7 @@ export interface TimelineNoteAxisHints {
 }
 interface Axis { type?: string; min?: unknown; max?: unknown; data?: unknown[]; gridIndex?: number; axisLabel?: { color?: string } }
 interface Series { name?: string; xAxisIndex?: number; yAxisIndex?: number; data?: unknown[] }
+interface NoteOverlaySeries { id: string; [key: string]: unknown }
 interface NoteGroup { startDate: string; endDate: string; notes: TimelineNote[] }
 interface Projection { range: TimelineNoteRange; x: (date: string, end: boolean) => number | null }
 const DAY = 86_400_000;
@@ -45,7 +46,9 @@ function projection(axis: Axis, series: Series[], hints: TimelineNoteAxisHints):
       } };
   }
   if (axis.type !== 'time') return null;
-  const values = series.flatMap(item => item.data ?? []).map(value => Array.isArray(value) ? Number(value[0]) : NaN).filter(Number.isFinite);
+  // Most chart models already bound their time axis; note edits need not traverse their readings.
+  const values = typeof axis.min === 'number' && typeof axis.max === 'number' ? []
+    : series.flatMap(item => item.data ?? []).map(value => Array.isArray(value) ? Number(value[0]) : NaN).filter(Number.isFinite);
   const min = typeof axis.min === 'number' ? axis.min : values.length ? values.reduce((a, b) => Math.min(a, b), Infinity) : NaN;
   const max = typeof axis.max === 'number' ? axis.max : values.length ? values.reduce((a, b) => Math.max(a, b), -Infinity) : NaN;
   if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return null;
@@ -77,12 +80,12 @@ export function groupTimelineNotes(notes: readonly TimelineNote[], range: Timeli
 /** Appends empty marker series; metric data, axes, reference bands and formulas are untouched. */
 export function addTimelineNotesToChart(option: Option, notes: readonly TimelineNote[], hints: TimelineNoteAxisHints = {}, nowMs = Date.now(),
   style: DashboardEChartsStyleTokens = buildDashboardEChartsStyleTokens(false, 0)): {
-  option: Option; range: TimelineNoteRange | null; groups: Map<string, readonly TimelineNote[]>;
+  option: Option; range: TimelineNoteRange | null; groups: Map<string, readonly TimelineNote[]>; overlays: NoteOverlaySeries[];
 } {
   const axes: Axis[] = option.xAxis ? (Array.isArray(option.xAxis) ? option.xAxis : [option.xAxis]) as Axis[] : [];
   const originalSeries = (Array.isArray(option.series) ? option.series : option.series ? [option.series] : []) as Series[];
   const groups = new Map<string, readonly TimelineNote[]>();
-  const overlays: unknown[] = [];
+  const overlays: NoteOverlaySeries[] = [];
   let range: TimelineNoteRange | null = null;
   axes.forEach((axis, axisIndex) => {
     const matchingSeries = originalSeries.filter(series => (series.xAxisIndex ?? 0) === axisIndex);
@@ -152,7 +155,7 @@ export function addTimelineNotesToChart(option: Option, notes: readonly Timeline
       // Note tooltips remain on the title and boundary markers.
       markArea: { silent: true, tooltip: { show: false }, emphasis: { disabled: true }, label: { show: false }, data: area } });
   });
-  return { option: overlays.length ? { ...option, series: [...originalSeries, ...overlays] } as Option : option, range, groups };
+  return { option: overlays.length ? { ...option, series: [...originalSeries, ...overlays] } as Option : option, range, groups, overlays };
 }
 
 /** No fetching or navigation here. The owning workspace supplies notes for tooltips. */
@@ -160,17 +163,41 @@ export class TimelineNotesChartBinding {
   private context: TimelineNoteChartContext | null = null;
   private hints: TimelineNoteAxisHints = {};
   private rangeKey = '';
-  set(context: TimelineNoteChartContext | null, hints: TimelineNoteAxisHints = {}): void {
+  private baseOption: Option | null = null;
+  private overlayIds: string[] = [];
+  set(context: TimelineNoteChartContext | null, hints: TimelineNoteAxisHints = this.hints): void {
     if (this.context?.reportRange !== context?.reportRange) { this.context?.reportRange(this, null); this.rangeKey = ''; }
     this.context = context; this.hints = hints;
   }
   apply(chart: EChartsType, option: Option, darkTheme = false): Option {
+    this.baseOption = option;
+    this.overlayIds = [];
     if (!this.context) return option;
-    const style = buildDashboardEChartsStyleTokens(darkTheme, chart.getWidth());
-    const result = addTimelineNotesToChart(option, this.context.notes, this.hints, Date.now(), style);
-    const key = JSON.stringify(result.range);
-    if (key !== this.rangeKey) { this.rangeKey = key; this.context.reportRange(this, result.range); }
+    const result = this.project(chart, option, darkTheme);
+    this.overlayIds = result.overlays.map(overlay => overlay.id);
     return result.option;
   }
-  dispose(): void { this.context?.reportRange(this, null); this.context = null; this.rangeKey = ''; }
+  /** Merge only our marker series; never resend metric data, axes, zoom or legends. */
+  update(chart: EChartsType, darkTheme = false): Option | null {
+    if (!this.baseOption) return null;
+    const overlays = this.context ? this.project(chart, this.baseOption, darkTheme).overlays : [];
+    const ids = new Set(overlays.map(overlay => overlay.id));
+    const cleared = this.overlayIds.filter(id => !ids.has(id)).map(id => ({
+      id, markLine: { data: [] }, markArea: { data: [] },
+    }));
+    this.overlayIds = [...ids];
+    return overlays.length || cleared.length ? { series: [...overlays, ...cleared] } as Option : null;
+  }
+  private project(chart: EChartsType, option: Option, darkTheme: boolean): ReturnType<typeof addTimelineNotesToChart> {
+    const style = buildDashboardEChartsStyleTokens(darkTheme, chart.getWidth());
+    const result = addTimelineNotesToChart(option, this.context!.notes, this.hints, Date.now(), style);
+    const key = JSON.stringify(result.range);
+    if (key !== this.rangeKey) { this.rangeKey = key; this.context.reportRange(this, result.range); }
+    return result;
+  }
+  dispose(): void {
+    this.context?.reportRange(this, null);
+    this.context = null; this.hints = {}; this.rangeKey = '';
+    this.baseOption = null; this.overlayIds = [];
+  }
 }

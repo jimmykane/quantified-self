@@ -1,3 +1,4 @@
+import { getDateTimeFormatter } from './date-time-format.helper';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { buildReadinessHrvDisplay } from './readiness-hrv-display.helper';
 import type { DerivedTrainingReadinessMetricPayload } from '@shared/derived-metrics';
@@ -341,7 +342,7 @@ function formatNumber(value: number, locale?: string, maximumFractionDigits = 1)
 }
 
 function formatDateTime(value: number, locale?: string): string {
-  return new Intl.DateTimeFormat(locale, {
+  return getDateTimeFormatter(locale, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -353,7 +354,7 @@ function formatUtcDate(value: number | null | undefined, locale?: string): strin
   if (!Number.isFinite(value)) {
     return '';
   }
-  return new Intl.DateTimeFormat(locale, {
+  return getDateTimeFormatter(locale, {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',

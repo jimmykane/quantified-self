@@ -40,6 +40,12 @@ chart's existing calendar convention; weekly tooltips retain actual dates. They 
 readiness, forecasts, persisted snapshots or sport filters. The manager owns editing and account-scoped settings; charts
 never fetch private notes. The owner’s Dashboard reuses these adapters for Form and Freshness Forecast alongside HRV,
 Sleep, and its calendars through one shared notes workspace. Public/library previews and non-calendar charts are not opted in.
+Note-only changes merge marker/shading series through the shared ECharts host; they do not rebuild Training options
+or reset metric series, zoom or legends. Normal data/theme changes still render the complete chart, retaining the
+weekly/date-offset adapters. Explicit time bounds bypass sample scans when projecting notes, and range registrations
+remain deduplicated until disposal. Readiness and body-weight date labels use the bounded shared Intl formatter cache;
+local-time formatting remains uncached. These are presentation-only optimizations with no Training calculation,
+planning or MCP contract impact.
 
 Current compatibility baseline:
 

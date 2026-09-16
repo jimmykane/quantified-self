@@ -167,6 +167,10 @@ export class ChartsFormComponent implements AfterViewInit, OnChanges, OnDestroy 
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     this.updateNoDataOverlayState();
     if (!this.chartDiv?.nativeElement) {
       return;

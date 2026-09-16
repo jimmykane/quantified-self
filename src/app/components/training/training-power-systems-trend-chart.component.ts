@@ -100,6 +100,10 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (this.viewInitialized && (changes.trend || changes.darkTheme || changes.timelineNotes)) {
       void this.refresh();
     }

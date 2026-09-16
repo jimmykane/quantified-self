@@ -245,12 +245,10 @@ describe('HealthMetricSeriesChartComponent', () => {
     fixture.detectChanges(); await fixture.whenStable();
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(3));
     const annotated = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
-    expect(annotated.series).toHaveLength(before.series.length + 1);
-    expect(annotated.series[0]).toMatchObject({ ...before.series[0], itemStyle: { color: expect.any(Function) } });
-    expect(annotated.series.find(item => item.id === 'hrv-personal-range-band'))
-      .toEqual(before.series.find(item => item.id === 'hrv-personal-range-band'));
-    expect(annotated.xAxis).toMatchObject({ type: 'time', min: 0, max: DAY_MS, show: true });
-    expect(annotated.yAxis).toMatchObject({ min: before.yAxis.min, max: before.yAxis.max, show: true });
+    // A normal merge containing only markers leaves metric colors, personal range and axes untouched.
+    expect(Object.keys(annotated)).toEqual(['series']);
+    expect(annotated.series).toHaveLength(1);
+    expect(eChartsLoader.setOption.mock.calls.at(-1)?.[2]).toEqual({ notMerge: false, lazyUpdate: false });
     expect(context.reportRange).toHaveBeenCalledWith(expect.anything(), { startDate: '1970-01-01', endDate: '1970-01-02' });
     const overlay = annotated.series.at(-1)!;
     expect(overlay.id).toBe('timeline-note-overlay-0');
@@ -264,11 +262,8 @@ describe('HealthMetricSeriesChartComponent', () => {
     fixture.detectChanges(); await fixture.whenStable();
     await vi.waitFor(() => expect(eChartsLoader.setOption).toHaveBeenCalledTimes(4));
     const hidden = eChartsLoader.setOption.mock.calls.at(-1)?.[1] as Option;
-    expect(hidden.xAxis).toMatchObject({ type: 'time', min: 0, max: DAY_MS, show: true });
-    expect(hidden.yAxis).toMatchObject({ min: before.yAxis.min, max: before.yAxis.max, show: true });
-    expect(hidden.series).toHaveLength(before.series.length);
-    expect(hidden.series[0]).toMatchObject({ ...before.series[0], itemStyle: { color: expect.any(Function) } });
-    expect(hidden.series.slice(1)).toEqual(before.series.slice(1));
+    expect(hidden).toEqual({ series: [{ id: 'timeline-note-overlay-0', markLine: { data: [] }, markArea: { data: [] } }] });
+    expect(context.reportRange).toHaveBeenCalledOnce();
     expect(context.select).not.toHaveBeenCalled();
     fixture.destroy();
     expect(chart.off).not.toHaveBeenCalled();

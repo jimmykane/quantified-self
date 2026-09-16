@@ -98,6 +98,10 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (changes.trajectory || changes.status || changes.darkTheme || changes.timelineNotes) {
       void this.refresh();
     }

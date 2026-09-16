@@ -1,3 +1,4 @@
+import { getDateTimeFormatter } from './date-time-format.helper';
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
@@ -1702,7 +1703,7 @@ function humanize(value: string): string {
 }
 
 function formatWindowLabel(startMs: number, endMs: number): string {
-  const rangeFormatter = new Intl.DateTimeFormat(undefined, {
+  const rangeFormatter = getDateTimeFormatter(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -1713,7 +1714,7 @@ function formatWindowLabel(startMs: number, endMs: number): string {
   if (startLabel !== endLabel) {
     return `${startLabel} – ${endLabel}`;
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
@@ -1723,7 +1724,7 @@ function formatWindowLabel(startMs: number, endMs: number): string {
 }
 
 function formatRelativeDayDate(timestampMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
@@ -1734,7 +1735,7 @@ function formatCalendarDate(calendarDate: string): string {
   const timestampMs = parseCalendarDate(calendarDate);
   return timestampMs === null
     ? 'Unknown date'
-    : new Intl.DateTimeFormat(undefined, {
+    : getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1743,7 +1744,7 @@ function formatCalendarDate(calendarDate: string): string {
 }
 
 function formatDateTime(timestampMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

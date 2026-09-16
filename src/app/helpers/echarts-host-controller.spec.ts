@@ -425,6 +425,43 @@ describe('EChartsHostController', () => {
     controller.dispose();
   });
 
+  it('keeps note-only updates local to the current chart and preserves category hints', async () => {
+    const loader = buildLoaderMock();
+    const chart = { ...chartMock, getWidth: () => 320 };
+    loader.init.mockResolvedValue(chart);
+    const controller = new EChartsHostController({ eChartsLoader: loader as any });
+    const context = { notes: [{ id: 'sample', category: 'travel' as const, title: 'Trip', startDate: '2026-09-02',
+      endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 }],
+      select: vi.fn(), reportRange: vi.fn() };
+    controller.setTimelineNotes({ ...context, notes: [] }, { categoryDates: ['2026-09-02', '2026-09-04'] });
+    controller.updateTimelineNotes(context);
+    expect(loader.init).not.toHaveBeenCalled();
+    expect(loader.setOption).not.toHaveBeenCalled();
+    expect(context.reportRange).not.toHaveBeenCalled();
+    await controller.init(document.createElement('div'), 'dark');
+    controller.setOption({ xAxis: { type: 'category', data: ['Tue', 'Thu'] }, series: [{ type: 'line', data: [7, 8] }] });
+    const initial = loader.setOption.mock.calls.at(-1)![1] as any;
+    expect(initial.series[1].markArea.data[0].map((edge: any) => edge.xAxis)).toEqual([0, 1]);
+    loader.setOption.mockClear(); loader.resize.mockClear(); chart.dispatchAction.mockClear();
+    controller.updateTimelineNotes({ ...context, notes: [{ ...context.notes[0], title: 'Updated' }] });
+    const patch = loader.setOption.mock.calls[0][1] as any;
+    expect(Object.keys(patch)).toEqual(['series']);
+    expect(patch.series).toHaveLength(1);
+    expect(patch.series[0].markLine.data[0].tooltip.formatter()).toContain('Updated');
+    expect(patch.series[0].markLine.data[0].tooltip).toMatchObject(
+      buildDashboardEChartsTooltipChrome(buildDashboardEChartsStyleTokens(true, 320)));
+    expect(loader.setOption.mock.calls[0][2]).toEqual({ notMerge: false, lazyUpdate: false });
+    expect(loader.init).toHaveBeenCalledOnce();
+    expect(loader.resize).not.toHaveBeenCalled();
+    expect(chart.dispatchAction).not.toHaveBeenCalled();
+    expect(context.reportRange).toHaveBeenCalledOnce();
+    controller.dispose();
+    loader.setOption.mockClear();
+    controller.updateTimelineNotes(null);
+    expect(loader.setOption).not.toHaveBeenCalled();
+    expect(context.reportRange).toHaveBeenLastCalledWith(expect.anything(), null);
+  });
+
   it('should resize from resize observer callback using raf throttling', async () => {
     const loader = buildLoaderMock();
     const controller = new EChartsHostController({

@@ -23,7 +23,7 @@ describe('explicit Timeline note chart adapters', () => {
     [ChartsFreshnessForecastComponent, 'refreshChart', false],
     [ChartsSleepTrendComponent, 'refreshChart', false],
     [HealthMetricSeriesChartComponent, 'refresh', false],
-  ] as const)('%s opts in explicitly, refreshes on note changes, and never fetches notes', async (Type, method, weekly) => {
+  ] as const)('%s updates only overlays for notes and retains full refresh for other inputs', async (Type, method, weekly) => {
     const chart = { isDisposed: () => false, on: vi.fn(), off: vi.fn(), dispatchAction: vi.fn(), getWidth: () => 320 };
     const loader = { init: vi.fn().mockResolvedValue(chart), setOption: vi.fn(), resize: vi.fn(), dispose: vi.fn(),
       subscribeToViewportResize: () => () => {}, attachMobileSeriesTapFeedback: () => () => {} };
@@ -39,16 +39,24 @@ describe('explicit Timeline note chart adapters', () => {
     if (component.buildOption) vi.spyOn(component, 'buildOption').mockReturnValue(axis);
     if (Type === HealthMetricSeriesChartComponent) {
       component.model = { displayedPoints: [], series: { chartKind: 'line', metricId: 'body_weight' }, displayUnit: '', data: [], ariaLabel: '' };
-      // Health's real option helper is tested in its own suite; just check change-driven lifecycle here.
-      const refresh = vi.spyOn(component, method).mockResolvedValue(undefined);
-      component.ngOnChanges({ timelineNotes: new SimpleChange(null, component.timelineNotes, false) });
-      expect(refresh).toHaveBeenCalledOnce(); component.ngOnDestroy(); return;
+    } else {
+      await component[method]();
+      expect(reportRange).toHaveBeenCalledWith(expect.anything(), {
+        startDate: '2026-09-01', endDate: weekly ? '2026-09-13' : '2026-09-07',
+      });
     }
-    await component[method]();
-    expect(reportRange).toHaveBeenCalledWith(expect.anything(), { startDate: '2026-09-01', endDate: weekly ? '2026-09-13' : '2026-09-07' });
     const refresh = vi.spyOn(component, method).mockResolvedValue(undefined);
+    const updateNotes = vi.spyOn(component.chartHost, 'updateTimelineNotes');
     component.ngOnChanges({ timelineNotes: new SimpleChange(null, component.timelineNotes, false) });
-    expect(refresh).toHaveBeenCalledOnce(); component.ngOnDestroy();
+    expect(updateNotes).toHaveBeenCalledExactlyOnceWith(component.timelineNotes);
+    expect(refresh).not.toHaveBeenCalled();
+    component.ngOnChanges({
+      timelineNotes: new SimpleChange(null, component.timelineNotes, false),
+      darkTheme: new SimpleChange(false, true, false),
+    });
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(updateNotes).toHaveBeenCalledOnce();
+    component.ngOnDestroy();
   });
   it('opts in through explicit workspace inputs and keeps public/library defaults private-data-free', () => {
     const source = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8');
