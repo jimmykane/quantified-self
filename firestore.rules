@@ -203,6 +203,9 @@ service cloud.firestore {
 
 
             // Restoring metaData inside events
+            match /trainingCompletionEvidence/{document=**} {
+              allow read, write: if false;
+            }
             match /metaData/processing {
               allow read: if request.auth.uid == userID;
               // Processing metadata is server-owned (Cloud Functions/Admin SDK only).

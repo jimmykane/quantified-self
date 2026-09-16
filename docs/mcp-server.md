@@ -50,6 +50,11 @@ Every future planning feature must review MCP impact in the same PR: explicit pr
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
 reads never authorizes provider actions, write tools, wider consent or deployment.
 
+Suunto Guide delivery (#650) uses these existing local sync projections without changing any registered tool or wire
+schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
+counts, and strict rejection of private evidence injected into a public status. No Guide/account IDs, FIT completion
+evidence, watch receipts, live checks or write actions are exposed; consent and bundled skill routing remain unchanged.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the

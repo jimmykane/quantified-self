@@ -836,5 +836,18 @@ describe('Training provider delivery controls', () => {
       });
       await TestBed.inject(ApplicationRef).whenStable(); render(`verification-${state}`); render(`verification-${state}-dark`); ref.close();
     }
+    service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', status: 'delivered',
+      differsFromQS: false, lastAcceptedAtMs: status.lastAttemptAtMs }], verifications: [{ id: status.id, state: 'present',
+      canCheck: true, missing: false, lastCheckedAtMs: status.lastAttemptAtMs + 60_000 }] }));
+    ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'workout', id: 'w', title: 'Winter endurance workout' }, width: '640px', maxWidth: '95vw',
+    });
+    await TestBed.inject(ApplicationRef).whenStable(); render('suunto-guide'); render('suunto-guide-dark');
+    expect(document.body.textContent).toContain('Check Suunto');
+    expect(document.body.textContent).toContain('today and the next six days');
+    expect(document.body.textContent).toContain('not confirmed on your watch');
+    expect(document.body.textContent).toContain('Pinning stays under your control');
+    ref.close();
   });
 });

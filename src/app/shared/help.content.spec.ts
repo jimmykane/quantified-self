@@ -527,8 +527,10 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Garmin workout delivery is available only to the private production pilot');
-    expect(planningSection?.content).toContain('COROS, Wahoo and Suunto delivery are not enabled yet');
+    expect(planningSection?.content).toContain('Garmin and Suunto workout delivery are restricted to the private rollout');
+    expect(planningSection?.content).toContain('COROS and Wahoo delivery are not enabled yet');
+    expect(planningSection?.content).toContain('Scheduled for later');
+    expect(planningSection?.content).toContain('Sent is not a watch receipt');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
     expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');

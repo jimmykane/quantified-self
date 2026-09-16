@@ -42,7 +42,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   if (!context.hasPro) return result('preserve', 'paused_pro');
   if (!transport) return result('preserve', 'provider_unavailable');
   const days = (Date.parse(`${workout!.localDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
-  if (days > transport.horizonDays) return result('preserve', 'outside_horizon');
+  if (days > transport.horizonDays) return result(transport.withdrawOutsideHorizon ? 'absent' : 'preserve', 'outside_horizon');
   const assessment = transport.assess(workout!, connection.destinationKey, timeZone);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;

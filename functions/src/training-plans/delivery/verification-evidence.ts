@@ -28,13 +28,15 @@ export function observeInspection(previous: VerificationEvidence | undefined, bi
   const allPresent = observation.artifacts.length > 0 && observation.artifacts.every(item => item.state === 'present' && item.authoritative);
   if (allPresent) return { ...result, state: 'present', missing: false, missingKeys: [] };
   const coverage = observation.coverage;
-  if (policy.mode === 'inventory' && (coverage?.complete !== true || coverage.stable !== true || coverage.filtered !== false || coverage.nextCursor !== null)) {
+  if ((policy.mode === 'inventory' || coverage) && (coverage?.complete !== true || coverage.stable !== true || coverage.filtered !== false || coverage.nextCursor !== null)) {
     // Pages are not independent absence observations. Preserve the first completed
     // scan's negative through a stable second scan, but never confirm from a page.
-    const cursor = coverage?.stable === true && coverage.filtered === false && typeof coverage.nextCursor === 'string'
+    // Unstable inventories may discover positive presence on later pages. They
+    // still cannot carry a negative observation across pages or prove absence.
+    const cursor = coverage?.filtered === false && typeof coverage.nextCursor === 'string'
       && coverage.nextCursor.length > 0 && coverage.nextCursor.length <= 1024 && coverage.nextCursor !== previous?.cursor ? coverage.nextCursor : null;
     const positive = observation.artifacts.some(item => item.state === 'present' && previous?.missingKeys.includes(item.key));
-    return { ...result, cursor, suspectedAtMs: same && cursor && !positive ? previous.suspectedAtMs : null,
+    return { ...result, cursor, suspectedAtMs: same && cursor && coverage?.stable === true && !positive ? previous.suspectedAtMs : null,
       manualPending: !!cursor && (previous?.manualPending ?? false) };
   }
   if (!policy.authoritativeAbsence || observation.artifacts.some(item => item.state === 'unknown'

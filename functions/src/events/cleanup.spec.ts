@@ -235,8 +235,8 @@ describe('cleanupEventFile', () => {
             filters: [{ field: 'eventID', operator: '==', value: 'testEvent' }],
         });
 
-        // Expect transaction delete to be called 2 times (once per doc) for activities
-        expect(mocks.transactionDelete).toHaveBeenCalledTimes(2);
+        // Two activities and the fixed private completion-evidence leaf.
+        expect(mocks.transactionDelete).toHaveBeenCalledTimes(3);
         expect(mocks.transactionDelete).toHaveBeenCalledWith('docRef1');
         expect(mocks.transactionDelete).toHaveBeenCalledWith('docRef2');
 
@@ -392,7 +392,7 @@ describe('cleanupEventFile', () => {
 
         // Check flat activity delete query called
         expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
-        expect(mocks.transactionDelete).not.toHaveBeenCalled();
+        expect(mocks.transactionDelete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/suunto' }));
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.fileDelete).not.toHaveBeenCalled();
     });
@@ -424,7 +424,7 @@ describe('cleanupEventFile', () => {
         await wrapped(event);
 
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
-        expect(mocks.transactionDelete).toHaveBeenCalledTimes(2);
+        expect(mocks.transactionDelete).toHaveBeenCalledTimes(3);
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef1');
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef2');
     });
@@ -505,7 +505,7 @@ describe('cleanupEventFile', () => {
 
         await wrapped(event);
 
-        expect(mocks.transactionDelete).not.toHaveBeenCalled();
+        expect(mocks.transactionDelete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/suunto' }));
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.fileDelete).not.toHaveBeenCalled();

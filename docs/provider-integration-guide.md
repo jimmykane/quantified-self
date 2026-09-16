@@ -56,10 +56,10 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 
 | Provider | Inspection foundation | Repair gate |
 | --- | --- | --- |
-| Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. | Negative classification and repair disabled until #698 proves missing-ID semantics and replacement recovery; two spaced negatives and at most two successful repairs/rolling day. |
+| Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. | Negative classification and repair disabled until actual missing-ID semantics and replacement recovery are established in #647/#703; contract questions #645. |
 | COROS | Unavailable; no documented planned-resource read established. | #648 must establish evidence, not activity polling or blind republishing. |
 | Wahoo | Contract supports independent Plan/Workout/association observations; no live transport here. | #649 must prove external-ID lookup, full inventory coverage and uncertain POST recovery; workout_token is not assumed idempotency. |
-| Suunto | Contract supports owned Guide inspection and bounded inventory; no live transport here. | #650 must prove owner-aware 404/externalId conflict recovery; unpinning/watch eviction never causes cloud recreation. |
+| Suunto | Private #650 adapter supports positive owned Guide reads and resumable inventory. | 404/unstable inventory cannot prove deletion; safe absence/repair tracked by #710. Unpinning/watch eviction never causes cloud recreation. |
 
 Inspection never claims device receipt or routinely overwrites provider edits. Stop sync prevents restoration. Pro,
 readiness, compatibility, exact connection, saved-zone date/completion eligibility and deletion are rechecked before
@@ -114,14 +114,14 @@ exact-UID Garmin production pilot in `shared/training-delivery-rollout.ts` is en
 and reactive frontend controls; it does not depend on the presentation-only allowlist. It retains Pro, explicit consent,
 connection authority and `WORKOUT_IMPORT` checks. Legacy connections must reconnect rather than have permission inferred.
 See the [private pilot operational boundary](training-workspace.md#private-garmin-production-pilot) for deployment,
-preflight and rollback. This is a controlled production pilot, not sandbox certification or public rollout:
+preflight and rollback. This is a controlled production pilot, not public rollout:
 
 | Provider | Proof state | Truthful model and current gate |
 | --- | --- | --- |
 | Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested HTTP adapter cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Real delivery is restricted to the explicit private pilot. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Actual production response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
 | COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
 | Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
-| Suunto | `fixture-only` | A scheduled workout maps to one dated SuuntoPlus Guide, not a native training-plan calendar. Time, distance, manual transition, repeats, and absolute HR/power/speed/pace/cadence targets map to Guide JSON; cadence converts from rpm to hertz. Guide entitlement, ZIP/icon transport, watch storage/pinning, supported-device behavior, CRUD, and FIT correlation need sandbox proof. |
+| Suunto | `private-rollout` | One workout maps to a dated SuuntoPlus Guide, not a native plan. ZIP/icon CRUD and exact external-ID recovery use existing OAuth plus a separate Guides subscription key; today through today + 6 is a QS product window. Synthetic HTTP/FIT and real Firestore tests cover lifecycle and private completion evidence. Actual app/watch operations remain ordinary #650 integration tests, not claimed from fixtures. Safe absence/repair remains #710. |
 
 Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
 not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
@@ -156,18 +156,23 @@ Suunto mapping follows the official [Guide API workflow](https://apizone.suunto.
 opaque, and at most 64 characters. Relative targets are frozen from the canonical reference snapshot only after explicit
 degradation approval. Text and metadata limits are never truncated silently, truncation counts Unicode code points, and
 text outside Suunto's guaranteed minimum watch character set requires explicit degradation approval because rendering
-remains device-dependent. The serializer produces `guide.json`
-fixtures only; it must not be described as a completed Guide upload adapter because the API requires a ZIP containing
-that JSON and a valid 300 x 300 PNG.
+remains device-dependent. The #650 transport packages that JSON with a valid 300 × 300 PNG, preserves Guide identity
+and pin state through PUT, and retains completed FIT correlation metadata privately for #651. The existing OAuth
+application/client credentials/user tokens are reused, with a **separate `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY`** and the
+exact application-name `SUUNTOAPP_GUIDE_OWNER` configuration. The general Suunto subscription key is never replaced or
+used as fallback. See [Suunto delivery](training-workspace.md#suuntoplus-guide-delivery-650) for lifecycle, credentials,
+seven-day window, absence limitations, FIT retention and deployment boundaries. No assumed Suunto quotas, evaluation
+budgets, new project or setup wizard are added.
 
-Fixture compatibility is not delivery readiness. Before any adapter flag changes, record sandbox evidence for create,
-update, reschedule, delete, exact duplicate, ambiguous retry, reconnect, and provider-specific horizon behavior. The
+Fixture compatibility is not delivery readiness. Ordinary adapter tests cover create, update, reschedule, delete,
+exact duplicate, ambiguous retry, reconnect and provider-specific horizon behavior. Record actual live results only
+when separately authorized; do not introduce a separate certification process. The
 shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved only with an excluded
 test transport. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
 source of truth for its contracts, operations, evidence and maintenance. Garmin's #647 adapter additionally runs through
-synthetic HTTP fixtures and real Firestore transactions; real transport remains unavailable outside the private Garmin pilot.
+synthetic HTTP fixtures and real Firestore transactions; real transport remains unavailable outside the private allowlists.
 The [Garmin adapter boundary](training-workspace.md#garmin-workoutcalendar-adapter-647) documents the per-request authority
-guard, step journal, exact endpoints, request bounds, permission flow and remaining certification checklist. In particular,
+guard, step journal, exact endpoints, request bounds, permission flow and remaining integration checks. In particular,
 Garmin's documented first workout POST has no external idempotency/lookup key: unknown acceptance remains blocked for
 attention, never retried blindly. Do not turn an empty schedule lookup into proof that a POST failed. HTTP response
 handling includes documented empty schedule-create success: a POST 204 is followed by an exact workout/date lookup,
@@ -177,11 +182,10 @@ Functions-only emulation can still write live Firestore and trigger deployed del
 tests with the demo Firestore suite and synthetic transport, not just a localhost callable URL. HTTP response
 tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from
 completed mutation. Interrupted edits invalidate the old fully accepted payload digest, and provider-imposed retry
-deadlines survive authored changes and manual Retry; these are tested locally, not certified provider semantics. Focused Garmin
-sandbox/device evidence, quota/pacing validation and operator recovery are tracked in epic subissue #698; #647 stays open
-until its original certification acceptance is satisfied.
-Provider certification, production observability and kill switches remain tracked under epic #583. Do not hide an unmet gate in a code comment or silently
-narrow the epic acceptance criteria.
+deadlines survive authored changes and manual Retry; these are tested locally, not inferred live provider results.
+Garmin integration checks remain #647/#703; #645 owns contract questions and #655 production observability/rollout.
+The separate #698 certification/evaluation issue is retired. Track deferred functionality in an epic subissue, not a
+code-only TODO, and do not silently narrow the epic's product scope.
 
 Training is a distinct consent lifecycle: plans opt in per provider, standalone Send means ongoing sync, inactive plans
 withdraw eligible future copies, and Stop can suppress an individual plan workout. Pro expiry keeps preferences and copies

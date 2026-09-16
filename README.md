@@ -136,6 +136,7 @@ Operational scripts that intentionally access managed Google Cloud or Firebase r
 | --- | --- |
 | Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
+| Suunto Training Guides | Dedicated `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY`; non-secret `SUUNTOAPP_GUIDE_OWNER` (exact existing OAuth application name). See [Training delivery](docs/training-workspace.md#suuntoplus-guide-delivery-650). |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |

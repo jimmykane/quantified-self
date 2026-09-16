@@ -5,6 +5,8 @@ import { getMissingGarminPermissionsForTokenLike } from '../../../../shared/garm
 import { isServiceDisconnectPendingData } from '../../service-disconnect-pending-state';
 import { deliveryIdentity } from './intent';
 import { DELIVERY_STATE, type DeliveryConnection } from './contracts';
+import { doesSuuntoHealthWebhookBindingMatch, getSuuntoHealthWebhookAccountBindingRef,
+  parseSuuntoHealthWebhookAccountBinding } from '../../suunto/health-webhook-binding';
 
 export const GARMIN_TRAINING_PERMISSION_ISSUE = 'Garmin Training permission is required. Reconnect Garmin and allow training workouts.';
 export const DELIVERY_SERVICES = {
@@ -39,6 +41,29 @@ export async function readTrainingDeliveryAuthority(db: Firestore, tx: Transacti
     token: null, account: '', credentialGeneration };
   if (!rootDoc.exists || meta.connectionState !== 'connected' || root.disconnectOperationGeneration
     || isServiceDisconnectPendingData(root) || tokens.empty) return unavailable;
+  if (provider === 'suunto') {
+    const repair = { ...unavailable, connection: { ...unavailable.connection, state: 'connection_repair' as const } };
+    if (!credentialGeneration || typeof meta.connectionStateGeneration !== 'string' || !meta.connectionStateGeneration
+      || tokens.size > 32 || (meta.providerUserId !== undefined
+        && (typeof meta.providerUserId !== 'string' || !meta.providerUserId || meta.providerUserId !== meta.providerUserId.trim()))) return repair;
+    // Suunto retains multiple accounts. The latest root OAuth revision fences all
+    // requests; an older account's own token generation must NOT equal that root.
+    const candidates = tokens.docs.filter(doc => {
+      const data = doc.data();
+      return typeof data.userName === 'string' && data.userName === data.userName.trim() && data.userName.length > 0
+        && data.userName.length <= 512 && doc.id === data.userName && data.serviceName === service.name
+        && typeof data.tokenCredentialGeneration === 'string' && data.tokenCredentialGeneration.length > 0;
+    });
+    const pinned = typeof meta.providerUserId === 'string' ? meta.providerUserId : '';
+    const selected = pinned ? candidates.filter(doc => doc.data().userName === pinned) : candidates;
+    if (selected.length !== 1) return repair;
+    const token = selected[0]; const account = token.data().userName as string;
+    const binding = parseSuuntoHealthWebhookAccountBinding((await tx.get(getSuuntoHealthWebhookAccountBindingRef(db, account, uid))).data());
+    if (!doesSuuntoHealthWebhookBindingMatch(binding, uid, account, token.data().tokenCredentialGeneration)) return repair;
+    return { account, token, credentialGeneration, connection: { state: 'connected', epoch,
+      generation: `${generation}:${token.data().tokenCredentialGeneration}`,
+      destinationKey: deliveryIdentity(uid, provider, account, 'account') } };
+  }
   const active = credentialGeneration ? tokens.docs.filter(doc => doc.data().tokenCredentialGeneration === credentialGeneration) : [];
   // Garmin adds strict identity validation; do not change another provider's existing
   // scalar normalization while extracting the common authority reader for this adapter.

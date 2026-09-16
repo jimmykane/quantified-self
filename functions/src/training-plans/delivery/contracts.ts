@@ -69,6 +69,8 @@ export interface TrainingDeliveryTransport {
   inspection?: RemoteInspection;
   mappingVersion: string;
   horizonDays: number;
+  /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
+  withdrawOutsideHorizon?: boolean;
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
