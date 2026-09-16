@@ -4,7 +4,7 @@ import { TrainingMetricTextComponent } from './training-metric-text.component';
 
 describe('TrainingMetricTextComponent', () => {
   it('renders numeric units separately without changing the accessible text order', async () => {
-    await TestBed.configureTestingModule({ declarations: [TrainingMetricTextComponent] }).compileComponents();
+    await TestBed.configureTestingModule({ imports: [TrainingMetricTextComponent] }).compileComponents();
     const fixture = TestBed.createComponent(TrainingMetricTextComponent);
     fixture.componentRef.setInput('text', '15% higher than usual');
     fixture.detectChanges();

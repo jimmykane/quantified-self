@@ -6,7 +6,7 @@ import { segmentTrainingMetricText } from '../../helpers/training-metric-text.he
   templateUrl: './training-metric-text.component.html',
   styleUrls: ['./training-metric-text.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
 })
 export class TrainingMetricTextComponent {
   readonly text = input<string | null | undefined>('');

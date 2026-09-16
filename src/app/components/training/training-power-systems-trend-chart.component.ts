@@ -44,7 +44,7 @@ interface TrendTooltipParam {
   templateUrl: './training-power-systems-trend-chart.component.html',
   styleUrls: ['./training-power-systems-trend-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
 })
 export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input()

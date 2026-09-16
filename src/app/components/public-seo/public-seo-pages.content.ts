@@ -364,8 +364,16 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         preview: 'training-snapshot',
       },
       {
+        eyebrow: 'Readiness History',
+        title: 'Follow readiness beyond a single day',
+        copy: 'Explore fourteen days of readiness alongside recorded load and recovery evidence. Each point keeps its score, signal coverage, and confidence; this is context, not a workout prescription.',
+        items: [],
+        preview: 'training-readiness',
+      },
+      {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
+        preview: 'training-explorer',
         copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, paddling, or recorded fitness and other training. Multisport legs stay attributed to their recorded disciplines.',
         items: [
           {

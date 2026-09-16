@@ -41,7 +41,7 @@ interface TrendTooltipParam {
   templateUrl: './training-readiness-trend-chart.component.html',
   styleUrls: ['./training-readiness-trend-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
 })
 export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() points: readonly TrainingReadinessTrendPointViewModel[] = [];

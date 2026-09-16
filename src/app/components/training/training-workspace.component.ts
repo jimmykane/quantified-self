@@ -1,3 +1,5 @@
+import type { TrainingBuildMetricRowViewModel } from '../shared/training-summary/training-build-metrics.component';
+import type { TrainingMixDetailsViewModel, TrainingMixZoneViewModel, TrainingContextMetricViewModel, TrainingContextMetricsViewModel } from '../shared/training-summary/training-mix-details.component';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Inject, InjectionToken, LOCALE_ID, NgZone, OnDestroy, OnInit, Optional, QueryList, Signal, TemplateRef, ViewChild, ViewChildren, computed, signal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -172,20 +174,11 @@ import {
 } from '../../services/dashboard-derived-metrics.service';
 import { environment } from '../../../environments/environment';
 
-interface TrainingMixDisciplineViewModel {
+interface TrainingMixDisciplineViewModel extends TrainingMixDetailsViewModel {
   summary: DashboardTrainingDisciplineSummary;
-  label: string;
   iconActivityType: TrainingSportDefinition['iconActivityType'];
-  activityCountText: string;
-  baselineActivityCountText: string;
-  durationText: string;
-  baselineDurationText: string;
   tssText: string;
   baselineTssText: string;
-  zones: TrainingMixZoneViewModel[];
-  intensityEvidenceText: string | null;
-  contexts: TrainingContextMetricsViewModel[];
-  guidance: TrainingCardGuidanceViewModel;
 }
 
 interface TrainingDestinationOptionViewModel {
@@ -209,27 +202,6 @@ export interface TrainingWorkspacePreferenceWriter {
 export const TRAINING_WORKSPACE_PREFERENCE_WRITER = new InjectionToken<TrainingWorkspacePreferenceWriter>(
   'TRAINING_WORKSPACE_PREFERENCE_WRITER',
 );
-
-interface TrainingContextMetricViewModel {
-  metric: TrainingProfileMetricId;
-  label: string;
-  currentText: string;
-  referenceText: string;
-}
-
-interface TrainingContextMetricsViewModel {
-  context: TrainingSportContextId;
-  label: string;
-  metrics: TrainingContextMetricViewModel[];
-}
-
-interface TrainingMixZoneViewModel {
-  label: 'Easy' | 'Moderate' | 'Hard';
-  currentText: string;
-  baselineText: string;
-  currentPercent: number | null;
-  baselinePercent: number | null;
-}
 
 interface TrainingStatusViewModel {
   stateLabel: string;
@@ -280,15 +252,6 @@ interface TrainingBuildCardViewModel {
 }
 
 const TRAINING_DAY_MS = 24 * 60 * 60 * 1000;
-
-interface TrainingBuildMetricRowViewModel {
-  label: string;
-  currentText: string;
-  benchmarkText: string;
-  deltaText: string;
-  deltaTone?: TrainingComparisonDeltaTone;
-  isIntensity: boolean;
-}
 
 type TrainingRecoveryState = 'updating' | 'unavailable' | 'empty' | 'limited' | 'ready';
 type TrainingComparisonDeltaTone = 'positive' | 'negative' | 'neutral';

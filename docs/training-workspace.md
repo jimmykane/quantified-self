@@ -239,6 +239,19 @@ indicator placement, and responsive layout, but they never subscribe to data, ca
 or access browser-only APIs. Training remains the source of truth for calculations and athlete-specific wording, while
 the homepage remains safe to render during SSR and prerendering.
 
+The homepage and `/features/training-analysis` also share `TrainingExplorerPreviewComponent`: a 14-day readiness
+example and a compact tabbed explorer for sport mix, Best Build metrics, power-system history, and durability.
+The readiness, power-system, and durability charts are the same standalone components used by Training, including
+their tooltip, haptic, theme, resize, and disposal behavior. Training and the explorer both use
+`TrainingMixDetailsComponent` and `TrainingBuildMetricsComponent` under `shared/training-summary/`; keep their
+markup and responsive styles there rather than copying them into a public page.
+The explorer supplies deterministic synthetic view models from `training-explorer-preview.data.ts`, visibly labeled
+as example data and wrapped in native `data-nosnippet`. It does not load account data, trigger snapshot refreshes, or
+import the Training workspace/module. Public SSR retains descriptive copy and placeholders; the explorer is deferred
+until visible and chart tabs mount only when selected. Public example distances and durations use the canonical
+unit-aware formatter. This is presentation reuse only: no Training formula, planning workflow, MCP contract, consent,
+or read scope changes.
+
 The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
 overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and
 non-prescriptive treatment of readiness and sleep without exposing account-specific data. Keep that public page, the

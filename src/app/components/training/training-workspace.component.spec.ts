@@ -1,3 +1,5 @@
+import { TrainingBuildMetricsComponent } from '../shared/training-summary/training-build-metrics.component';
+import { TrainingMixDetailsComponent } from '../shared/training-summary/training-mix-details.component';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Component, LOCALE_ID, NO_ERRORS_SCHEMA } from '@angular/core';
 import { MatMenuModule } from '@angular/material/menu';
@@ -128,6 +130,9 @@ describe('TrainingWorkspaceComponent', () => {
     analyticsService = { logEvent: vi.fn() };
     TestBed.configureTestingModule({
       imports: [
+        TrainingMetricTextComponent,
+        TrainingBuildMetricsComponent,
+        TrainingMixDetailsComponent,
         TimelineNotesWorkspaceStubComponent,
         MatMenuModule,
         MatTooltipModule,
@@ -163,7 +168,7 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -280,7 +285,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -387,7 +393,7 @@ describe('TrainingWorkspaceComponent', () => {
   });
 
   it('separates adjacent Training Mix sport contexts with matching dividers', () => {
-    const stylePath = resolve(process.cwd(), 'src/app/components/training/training-workspace.component.scss');
+    const stylePath = resolve(process.cwd(), 'src/app/components/shared/training-summary/training-mix-details.component.scss');
     const styles = readFileSync(stylePath, 'utf8');
     const adjacentContextRule = styles.match(/\.training-mix-contexts section \+ section \{([^}]*)\}/)?.[1];
 
@@ -514,7 +520,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -607,8 +614,8 @@ describe('TrainingWorkspaceComponent', () => {
 
     try {
       await TestBed.configureTestingModule({
-        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
-        imports: [MetricIndicatorComponent],
+        declarations: [TrainingWorkspaceComponent],
+        imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent, MetricIndicatorComponent],
         providers: [
           { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
           { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -725,7 +732,8 @@ describe('TrainingWorkspaceComponent', () => {
 
     try {
       await TestBed.configureTestingModule({
-        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+        imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+        declarations: [TrainingWorkspaceComponent],
         providers: [
           { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
           { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -784,7 +792,8 @@ describe('TrainingWorkspaceComponent', () => {
       score: { value: 80 }, createdAtMs: nowMs, updatedAtMs: nowMs,
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$ } },
         { provide: DashboardDerivedMetricsService, useValue: { watch: () => load$, ensureForDashboard: vi.fn() } },
@@ -839,7 +848,8 @@ describe('TrainingWorkspaceComponent', () => {
       watchForDashboard: vi.fn(() => throwError(() => new Error('sleep read failed'))),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -895,7 +905,8 @@ describe('TrainingWorkspaceComponent', () => {
       )),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -923,7 +934,8 @@ describe('TrainingWorkspaceComponent', () => {
     };
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -956,7 +968,8 @@ describe('TrainingWorkspaceComponent', () => {
 
     try {
       await TestBed.configureTestingModule({
-        declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+        imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+        declarations: [TrainingWorkspaceComponent],
         providers: [
           { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
           { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -996,7 +1009,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => NEVER), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },
@@ -1054,7 +1068,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1205,7 +1220,8 @@ describe('TrainingWorkspaceComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1315,7 +1331,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1370,7 +1387,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -1420,7 +1438,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => derivedState.asObservable()), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({
           uid: 'user-1',
@@ -1471,7 +1490,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => of(derivedState)), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         {
           provide: AppAuthService,
@@ -2532,7 +2552,8 @@ describe('TrainingWorkspaceComponent', () => {
     const selection = { mode: 'event' as const, durationWeeks: 12 as const, eventId };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({
           uid: 'user-1',
@@ -2690,7 +2711,8 @@ describe('TrainingWorkspaceComponent', () => {
     const derivedMetrics = { watch: vi.fn(() => derivedState$), ensureForDashboard: vi.fn() };
 
     await TestBed.configureTestingModule({
-      declarations: [TrainingWorkspaceComponent, TrainingMetricTextComponent],
+      imports: [TrainingMetricTextComponent, TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
+      declarations: [TrainingWorkspaceComponent],
       providers: [
         { provide: AppAuthService, useValue: { user$: of({ uid: 'user-1' }) } },
         { provide: DashboardDerivedMetricsService, useValue: derivedMetrics },

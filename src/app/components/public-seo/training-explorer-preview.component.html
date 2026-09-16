@@ -1,0 +1,57 @@
+<div class="training-explorer" data-nosnippet>
+  @if (kind() === 'readiness') {
+    <header><h4>Readiness over 14 days</h4><small>Example data</small></header>
+    <p>Follow changes in load and recorded recovery signals—not a workout prescription.</p>
+    <app-training-readiness-trend-chart [points]="readiness" [darkTheme]="darkTheme()"
+      ariaLabel="Example readiness history over fourteen days; the final score is 78 out of 100."></app-training-readiness-trend-chart>
+    <div class="range"><span>18 Aug</span><span>31 Aug</span></div>
+  } @else {
+    <p class="example-note">Example data · Explore the same views used in Training</p>
+    <mat-tab-group [selectedIndex]="selectedTab()" (selectedIndexChange)="selectTab($event)" animationDuration="0ms"
+      [mat-stretch-tabs]="false" aria-label="Training examples">
+      <mat-tab label="By sport">
+        <ng-template matTabContent>
+          <div class="example-panel">
+            <mat-button-toggle-group [value]="selectedSport()" (change)="selectSport($event.value)" aria-label="Example sport">
+              @for (sport of sports; track sport) { <mat-button-toggle [value]="sport">{{ sport }}</mat-button-toggle> }
+            </mat-button-toggle-group>
+            <app-training-mix-details [view]="mix()"></app-training-mix-details>
+          </div>
+        </ng-template>
+      </mat-tab>
+      <mat-tab label="Best build">
+        <ng-template matTabContent>
+          <div class="example-panel">
+            <header><h4>Cycling · Best build vs now</h4><span>Matching 8-week blocks</span></header>
+            <p>Compare workload and consistency with a historical build you choose.</p>
+            <app-training-build-metrics [rows]="buildRows()"></app-training-build-metrics>
+            <small>Intensity mix: easy / moderate / hard. A larger total is not automatically better.</small>
+          </div>
+        </ng-template>
+      </mat-tab>
+      <mat-tab label="Power">
+        <ng-template matTabContent>
+          <div class="example-panel">
+            <header><h4>Cycling · Power systems</h4><span>42-day rolling capacity</span></header>
+            <p>Follow critical power, work capacity above it, and maximum power. Estimates stay separate for each activity type.</p>
+            <div class="power-trends">
+              @for (trend of power; track trend.key) {
+                <section><h5>{{ trend.label }} <small>({{ trend.unit }})</small></h5>
+                  <app-training-power-systems-trend-chart [trend]="trend" [darkTheme]="darkTheme()"></app-training-power-systems-trend-chart>
+                </section>
+              }
+            </div>
+            <small>Gaps mean the estimate lacked sufficient evidence. Capacity is not FTP, TSS or readiness.</small>
+          </div>
+        </ng-template>
+      </mat-tab>
+      <mat-tab label="Durability">
+        <ng-template matTabContent>
+          <div class="example-panel">
+            <app-training-durability-trajectory-chart [trajectory]="durability" status="ready" [darkTheme]="darkTheme()"></app-training-durability-trajectory-chart>
+          </div>
+        </ng-template>
+      </mat-tab>
+    </mat-tab-group>
+  }
+</div>

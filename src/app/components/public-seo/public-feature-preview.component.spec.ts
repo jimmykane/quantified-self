@@ -28,6 +28,8 @@ describe('PublicFeaturePreviewComponent', () => {
     ['health-weight', 'health'],
     ['training-snapshot', 'training'],
     ['training-signals', 'signals'],
+    ['training-readiness', 'readiness'],
+    ['training-explorer', 'explorer'],
     ['dashboard', 'dashboard'],
     ['workout-analysis', 'workout'],
     ['activity-map', 'map'],
@@ -43,6 +45,7 @@ describe('PublicFeaturePreviewComponent', () => {
     expect(placeholder?.getAttribute('aria-hidden')).toBe('true');
     expect(placeholder?.closest('div[data-nosnippet]')).toBeTruthy();
     expect(element.querySelector('app-health-preview')).toBeNull();
+    expect(element.querySelector('app-training-explorer-preview')).toBeNull();
   });
 
   it('keeps hydrated previews inside the same native snippet exclusion', async () => {

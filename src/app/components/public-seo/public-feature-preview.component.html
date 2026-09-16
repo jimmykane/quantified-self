@@ -1,5 +1,14 @@
 <!-- Google supports data-nosnippet on native div/span/section, not Angular custom elements. -->
 <div class="preview-content" data-nosnippet>
+@if (previewKey() === 'training-readiness' || previewKey() === 'training-explorer') {
+  @defer (on viewport) {
+    <app-training-explorer-preview [kind]="previewKey() === 'training-readiness' ? 'readiness' : 'explorer'"></app-training-explorer-preview>
+  } @placeholder {
+    <div class="preview-placeholder" [class.preview-placeholder--readiness]="previewKey() === 'training-readiness'"
+      [class.preview-placeholder--explorer]="previewKey() === 'training-explorer'" aria-hidden="true"></div>
+  }
+}
+
 @if (previewKey() === 'health-sleep' || previewKey() === 'health-hrv' || previewKey() === 'health-weight') {
   @defer (on viewport) {
     <app-health-preview [kind]="previewKey() === 'health-sleep' ? 'sleep' : previewKey() === 'health-hrv' ? 'hrv' : 'weight'"></app-health-preview>

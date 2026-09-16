@@ -263,7 +263,7 @@ describe('HomeComponent', () => {
         const publicPreviews = fixture.debugElement.queryAll(By.directive(PublicFeaturePreviewComponent));
         const previewKeys = publicPreviews.map(preview => preview.componentInstance.previewKey());
 
-        expect(performanceCards.length).toBe(3);
+        expect(performanceCards.length).toBe(4);
         expect(trainingPreview).toBeTruthy();
         expect(trainingPreview.classList).toContain('compact-row-host--without-divider');
         expect(performanceCards[0].classList).not.toContain('compact-row-host--without-divider');
@@ -322,7 +322,7 @@ describe('HomeComponent', () => {
     it('uses the shared compact row primitive for every top-level homepage card', () => {
         const compactRows = fixture.nativeElement.querySelectorAll('app-compact-row');
 
-        expect(compactRows.length).toBe(14);
+        expect(compactRows.length).toBe(15);
         expect(fixture.nativeElement.querySelector('mat-card')).toBeNull();
         expect(fixture.nativeElement.querySelectorAll('.compact-row-stack').length).toBe(6);
         expect(Array.from(compactRows).every((row: Element) => row.querySelector('article.compact-row'))).toBe(true);
@@ -335,7 +335,9 @@ describe('HomeComponent', () => {
 
         expect(previewKeys).toEqual([
             'training-snapshot',
+            'training-readiness',
             'training-signals',
+            'training-explorer',
             'dashboard',
             'workout-analysis',
             'health-sleep',

@@ -53,7 +53,7 @@ describe('TrainingPowerSystemsTrendChartComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => undefined),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingPowerSystemsTrendChartComponent],
+      imports: [TrainingPowerSystemsTrendChartComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn() } },

@@ -476,17 +476,7 @@
               @if (card.emptyMessage) {
                 <p class="training-build-empty">{{ card.emptyMessage }}</p>
               }
-              <dl class="training-build-table">
-                <div class="training-build-table-heading"><dt>Metric</dt><dd>Now</dd><dd>Benchmark</dd><dd>Change</dd></div>
-                @for (row of card.metricRows; track row.label) {
-                  <div [class.training-build-intensity-row]="row.isIntensity">
-                    <dt>{{ row.label }}</dt>
-                    <dd><app-training-metric-text [text]="row.currentText"></app-training-metric-text></dd>
-                    <dd><app-training-metric-text [text]="row.benchmarkText"></app-training-metric-text></dd>
-                    <dd class="training-build-delta" [attr.data-tone]="row.deltaTone"><app-training-metric-text [text]="row.deltaText"></app-training-metric-text></dd>
-                  </div>
-                }
-              </dl>
+              <app-training-build-metrics [rows]="card.metricRows"></app-training-build-metrics>
               @if (card.recovery; as recovery) {
                 <section class="training-build-recovery" [attr.aria-label]="card.label + ' sleep comparison'">
                   <div class="training-build-recovery-summary">
@@ -687,59 +677,7 @@
               </article>
             } @else {
             <article class="training-mix-panel qs-glass-card-panel" [class.training-mix-panel--single]="trainingMixDisciplines.length === 1">
-              <header><h3 class="qs-dashboard-chart-title">{{ discipline.label }}</h3><span>28d / normalized 84d</span></header>
-              <div class="training-mix-summary"><strong><app-training-metric-text [text]="discipline.activityCountText"></app-training-metric-text></strong><span>workouts · usual {{ discipline.baselineActivityCountText }}</span><strong><app-training-metric-text [text]="discipline.durationText"></app-training-metric-text></strong><span>time · usual {{ discipline.baselineDurationText }}</span></div>
-              <div class="training-card-guidance training-card-guidance--compact">
-                <p><strong>What this means:</strong>&nbsp;{{ discipline.guidance.conclusionText }}</p>
-                <small>{{ discipline.guidance.evidenceText }}</small>
-                @if (discipline.guidance.nextStepText) {
-                  <p class="training-card-guidance-next"><strong>What to look at next:</strong>&nbsp;{{ discipline.guidance.nextStepText }}</p>
-                }
-              </div>
-              @if (discipline.zones.length) {
-                @if (trainingMixDisciplines.length === 1) {
-                  <div class="training-mix-zone-comparison">
-                    <div class="training-mix-zone-heading"><span>Intensity balance</span><span>Now / usual</span></div>
-                    <dl>
-                      @for (zone of discipline.zones; track zone.label) {
-                        <div class="training-mix-zone-row">
-                          <div class="training-mix-zone-row-heading"><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
-                          <div class="training-mix-zone-track" aria-hidden="true">
-                            @if (zone.currentPercent !== null) {
-                              <span class="training-mix-zone-current" [style.width.%]="zone.currentPercent"></span>
-                            }
-                            @if (zone.baselinePercent !== null) {
-                              <span class="training-mix-zone-baseline" [style.left.%]="zone.baselinePercent"></span>
-                            }
-                          </div>
-                        </div>
-                      }
-                    </dl>
-                  </div>
-                } @else {
-                  <dl class="training-mix-compact-zones">
-                    @for (zone of discipline.zones; track zone.label) {
-                      <div><dt>{{ zone.label }}</dt><dd><app-training-metric-text [text]="zone.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="zone.baselineText"></app-training-metric-text></span></dd></div>
-                    }
-                  </dl>
-                }
-              } @else if (discipline.intensityEvidenceText) {
-                <p class="training-mix-intensity-note">{{ discipline.intensityEvidenceText }}</p>
-              }
-              @if (discipline.contexts.length) {
-                <div class="training-mix-contexts">
-                  @for (context of discipline.contexts; track context.context) {
-                    <section>
-                      <header><strong>{{ context.label }}</strong><span>Now / usual</span></header>
-                      <dl>
-                        @for (metric of context.metrics; track metric.metric) {
-                          <div><dt>{{ metric.label }}</dt><dd><app-training-metric-text [text]="metric.currentText"></app-training-metric-text> <span>/ <app-training-metric-text [text]="metric.referenceText"></app-training-metric-text></span></dd></div>
-                        }
-                      </dl>
-                    </section>
-                  }
-                </div>
-              }
+              <app-training-mix-details [view]="discipline" [single]="trainingMixDisciplines.length === 1"></app-training-mix-details>
             </article>
             }
           } @empty {
