@@ -47,6 +47,8 @@ export interface SuuntoGuideRepeatStepV1 {
 
 export type SuuntoGuideStepV1 = SuuntoGuideFieldsStepV1 | SuuntoGuideRepeatStepV1;
 
+export type SuuntoGuideActivityIdV1 = 1 | 2 | 10 | 22 | 52 | 53 | 105 | 106 | 109;
+
 export interface SuuntoGuideJsonV1 {
     type: 'sequence';
     name: string;
@@ -54,7 +56,7 @@ export interface SuuntoGuideJsonV1 {
     shortDescription: string;
     owner: string;
     url: string;
-    activities: [1 | 2];
+    activities: SuuntoGuideActivityIdV1[];
     usage: 'workout';
     localDate: string;
     externalId: string;
@@ -76,6 +78,30 @@ export interface SerializeSuuntoGuideOptionsV1 {
 const SUUNTO_MINIMUM_SUPPORTED_CHARACTERS = new Set(Array.from(
     "\n !\"#$%&'()*+,-./0123456789:;<=>?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|°",
 ));
+
+const SUUNTO_GUIDE_ACTIVITY_IDS_BY_SPORT: ReadonlyMap<
+    ActivityTypes,
+    readonly SuuntoGuideActivityIdV1[]
+> = new Map([
+    [ActivityTypes.Running, [1]],
+    [ActivityTypes.TrailRunning, [22]],
+    [ActivityTypes.Treadmill, [53]],
+    [ActivityTypes.Cycling, [2]],
+    [ActivityTypes.MountainBiking, [10]],
+    [ActivityTypes.IndoorCycling, [52]],
+    // Sports Lib has one canonical E-Biking type while Suunto separates road
+    // and mountain e-biking profiles. Recommend the Guide for both.
+    [ActivityTypes.EBiking, [105, 106]],
+    [ActivityTypes.Handcycle, [109]],
+]);
+
+export function suuntoGuideActivityIdsForSport(
+    sport: ActivityTypes,
+): SuuntoGuideActivityIdV1[] {
+    const activities = SUUNTO_GUIDE_ACTIVITY_IDS_BY_SPORT.get(sport);
+    if (!activities) throw new Error(`Unsupported Suunto Guide sport: ${sport}.`);
+    return [...activities];
+}
 
 function codePointLength(value: string): number {
     return Array.from(value).length;
@@ -379,7 +405,6 @@ export function serializeSuuntoGuideJsonV1(
         additionalIssues,
         allowDegraded: options.allowDegraded,
     });
-    const activity: 1 | 2 = structure.sport === ActivityTypes.Running ? 1 : 2;
     const artifact: SuuntoGuideJsonV1 = {
         type: 'sequence',
         name: truncateCodePoints(name, 60),
@@ -387,7 +412,7 @@ export function serializeSuuntoGuideJsonV1(
         shortDescription: truncateCodePoints(shortDescription, 23),
         owner: truncateCodePoints(rawOwner, 64),
         url,
-        activities: [activity],
+        activities: suuntoGuideActivityIdsForSport(structure.sport),
         usage: 'workout',
         localDate,
         externalId,

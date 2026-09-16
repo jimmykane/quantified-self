@@ -83,6 +83,27 @@ describe('Training plan MCP reads', () => {
     expect(JSON.stringify(result)).not.toContain('estimated');
     expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...structure, providerId: 'private' }).success).toBe(false);
   });
+  it('preserves an exact mountain-biking sport through the existing planned-workout read contract', async () => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
+      startDate: '2026-09-01', endDate: '2027-01-01',
+    }));
+    const original = f.reads.snapshot;
+    f.reads.snapshot = (uid, read) => original(uid, view => read({ ...view,
+      get: async (collection, id, detail) => {
+        const doc = await view.get(collection, id, detail);
+        return doc && detail ? {
+          ...doc,
+          data: { ...doc.data, structure: { ...structure, sport: ActivityTypes.MountainBiking } },
+        } : doc;
+      },
+    }));
+
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', {
+      workoutRef: list.workouts[0].workoutRef,
+    }));
+    expect(result.workout.structure.sport).toBe(ActivityTypes.MountainBiking);
+  });
   it('binds continuations to filters and revisions and does not skip matching records', async () => {
     const f = fixture(); const first = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans', { limit: 1 }));
     const next = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans', { limit: 1, cursor: first.nextCursor }));

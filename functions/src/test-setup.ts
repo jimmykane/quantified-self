@@ -153,6 +153,8 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         Cycling: 'Cycling',
         Biking: 'Cycling',
         EBiking: 'E-Biking',
+        Handcycle: 'Hand Cycle',
+        'Hand Cycle': 'Hand Cycle',
         EnduroMTB: 'Enduro MTB',
         'Enduro MTB': 'Enduro MTB',
         MountainBiking: 'Mountain Biking',

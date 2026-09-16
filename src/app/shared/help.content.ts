@@ -183,7 +183,7 @@ const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 - Suunto watch text uses simple punctuation and a short subtitle generated from your workout title. Your original QS title and instructions stay unchanged. These cosmetic adjustments happen automatically; shortened instructions or other meaningful differences still need your review before sending.
 - **Sent is not a watch receipt.** Sync your compatible watch through the Suunto app and select the Guide for the exercise. QS does not change your pinning choices. **Check Suunto** checks cloud presence, not watch storage. If a Guide cannot be found, QS does not automatically recreate it unless deletion can be reliably confirmed; unpinning or watch eviction never counts as cloud deletion.
 - Completed Suunto FIT files may carry identifiers for QS Guides used during a session. QS retains that evidence privately with the imported activity for future completion matching; it does not yet mark a planned workout complete automatically. Deleting the activity or your QS account removes this local evidence.
-- The first editor supports Running and Cycling, date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Unsupported recipe features remain unavailable instead of being approximated.
+- Choose the workout's exact profile: Running, Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, or Hand Cycle. Suunto uses that choice to recommend the Guide for the matching exercise profile; generic Cycling is not guessed to mean Mountain Biking. The editor supports date-only scheduling, time or distance steps, fixed repeats, and one absolute heart-rate, power, or pace target per step. Other services keep their own supported sport list, and unsupported combinations remain unavailable instead of being approximated.
 
 ## Remote workout checks
 
@@ -624,7 +624,7 @@ HRV and Sleep each have their own date range and older/newer navigation. While a
     id: 'training-plans',
     icon: 'event_note',
     title: 'Training plans',
-    summary: 'Create standalone workouts or organize dated Running and Cycling workouts into plans.',
+    summary: 'Create standalone running and cycling workouts or organize them into dated plans.',
     content: TRAINING_PLANS_HELP_CONTENT,
     links: [
       { label: 'Open Plans', icon: 'event_note', kind: 'route', target: '/training/plans' },

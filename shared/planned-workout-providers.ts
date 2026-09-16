@@ -40,6 +40,18 @@ export interface PlannedWorkoutProviderCapabilityV1 {
 
 export type PlannedWorkoutProviderMappingLevel = 'exact' | 'degraded' | 'unsupported';
 
+/** Suunto Guide sport support proved against the provider activity catalog. */
+export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Running,
+  ActivityTypes.TrailRunning,
+  ActivityTypes.Treadmill,
+  ActivityTypes.Cycling,
+  ActivityTypes.MountainBiking,
+  ActivityTypes.IndoorCycling,
+  ActivityTypes.EBiking,
+  ActivityTypes.Handcycle,
+] as const;
+
 export interface PlannedWorkoutProviderMappingIssueV1 {
   severity: Exclude<PlannedWorkoutProviderMappingLevel, 'exact'>;
   code:
@@ -170,7 +182,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     deliveryModel: 'dated-guide',
     requiredScopes: ['SuuntoPlus Guides entitlement', 'Existing Suunto API subscription key with Guides access', 'Existing Suunto OAuth authorization'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      sports: SUUNTO_PLANNED_WORKOUT_SPORTS_V1,
       endingKinds: ['time', 'distance', 'manual'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -244,8 +256,16 @@ export function assessPlannedWorkoutProviderMappingV1(
 ): PlannedWorkoutProviderMappingAssessmentV1 {
   const structure = parseWorkoutStructureV1(value);
   const issues: PlannedWorkoutProviderMappingIssueV1[] = [];
+  const profile = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].profile;
 
-  if (![ActivityTypes.Running, ActivityTypes.Cycling].includes(structure.sport)) {
+  if (!profile) {
+    issues.push({
+      severity: 'unsupported',
+      code: 'provider_contract_unavailable',
+      path: '$',
+      message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} does not have a workout mapping contract.`,
+    });
+  } else if (profile.sports && !profile.sports.includes(structure.sport)) {
     issues.push({
       severity: 'unsupported',
       code: 'unsupported_sport',

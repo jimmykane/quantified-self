@@ -120,6 +120,31 @@ describe('manual planned-workout editor conversion', () => {
     expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
   });
 
+  it.each([
+    ActivityTypes.TrailRunning,
+    ActivityTypes.Treadmill,
+    ActivityTypes.MountainBiking,
+    ActivityTypes.IndoorCycling,
+    ActivityTypes.EBiking,
+    ActivityTypes.Handcycle,
+  ])('round-trips the manual sport %s without changing canonical JSON', sport => {
+    const structure: WorkoutStructureV1 = {
+      version: 1,
+      sport,
+      nodes: [{
+        kind: 'step',
+        id: 'work',
+        purpose: 'work',
+        ending: { kind: 'time', seconds: 600 },
+        targets: [],
+      }],
+    };
+
+    const editor = workoutStructureToManualEditor('Sport-specific workout', '2026-09-03', structure);
+    expect(editor.sport).toBe(sport);
+    expect(manualWorkoutEditorToStructure(editor)).toEqual(structure);
+  });
+
   it('rejects targets the first editor cannot represent instead of silently dropping them', () => {
     const base: WorkoutStructureV1 = {
       version: 1,

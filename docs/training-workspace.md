@@ -281,9 +281,10 @@ and localized UI language.
 strict codec rejects unknown fields and discriminants, unsupported versions or sports, duplicate IDs, non-finite or
 negative values, non-positive endings/reference snapshots, inverted ranges, more than 100 nodes, repeat counts above
 100, nested repeats, and more than two targets per step. Its JSON output must remain Firestore-safe and must round-trip through stringify/parse without changing
-the persisted v1 value. The initial manual editor intentionally exposes the smaller Running/Cycling, date-only,
-time/distance, fixed-repeat, single absolute HR/power/pace subset. The shared contract is broader so saved v1 data does
-not need a redesign when later UI slices are enabled.
+the persisted v1 value. The manual editor exposes canonical Running, Trail Running, Treadmill, Cycling, Mountain Biking,
+Indoor Cycling, E-Biking, and Hand Cycle sports plus date-only, time/distance, fixed-repeat, and single absolute
+HR/power/pace inputs. These are Sports Lib activity-type strings, not provider profile IDs. The shared contract remains
+broader so saved v1 data does not need a redesign when later UI slices are enabled.
 
 Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
 recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
@@ -755,6 +756,14 @@ characters still require review. Identity fields and the configured Guide owner 
 warnings identify the affected field; the derived subtitle does not repeat the title's warning, and app-only description
 text is not tested against watch fonts. This is a formatting policy, not a claim that Suunto rejects Unicode.
 
+The same mapping keeps the authored canonical sport and translates it to Suunto's documented Guide `activities`
+recommendations: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`, Mountain Biking `10`, Indoor Cycling
+`52`, E-Biking `105` plus E-MTB `106`, and Hand Cycle `109`. E-Biking uses both Suunto profiles because Sports Lib has
+one canonical E-Biking type while Suunto splits road and mountain e-biking. A generic Cycling workout is not guessed
+to be Mountain Biking; edit the workout sport when the Guide should appear for the MTB profile. These provider IDs stay
+inside the Suunto adapter and never enter `WorkoutStructureV1`, schedule history, Sports Lib, or MCP output. Other
+providers keep their separately proved sport lists and must not inherit Suunto's mappings.
+
 Existing cosmetic-only blocked deliveries are reassessed by ordinary reconciliation after the mapping is deployed;
 no manual approval or data migration is needed. Current consent, plan lifecycle, Pro, account, scheduling-window and
 deletion guards still apply. Known Guide IDs update in place. Unknown create acceptance remains blocked if exact recovery
@@ -763,6 +772,9 @@ delivery, Stop, pause, Pro expiry, retained IDs/pinning, uncertain creates and m
 MCP impact: no wire-contract change. Authored recipes, unit formatting and safe status enums are unchanged. Existing
 read-only projections already distinguish approval-required from delivered and exclude provider payloads/approval
 digests; the Suunto projection fixture covers both states. No new scopes, tools, plugin rebuild or activity-total change.
+The existing planned-workout recipe schema already enumerates every canonical Sports Lib activity type; focused read
+coverage now proves Mountain Biking remains exact. No registered schema, permission, Assistant route or plugin guidance
+changes.
 
 One eligible scheduled workout becomes one dated SuuntoPlus Guide, not a native Suunto plan. The existing ledger,
 Cloud Task worker, consent controls and compact statuses are reused. `delivery/suunto/` packages the existing serializer

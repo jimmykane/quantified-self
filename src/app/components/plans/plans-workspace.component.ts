@@ -20,7 +20,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+  MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
+} from '@shared/planned-workout';
 import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
@@ -161,10 +164,18 @@ export class PlansWorkspaceComponent {
   private historyRequestSequence = 0;
   private nodeSequence = 1;
 
-  readonly activityTypes = ActivityTypes;
-  readonly sportOptions: ReadonlyArray<{ value: ManualWorkoutSport; label: string }> = [
-    { value: ActivityTypes.Running, label: 'Running' },
-    { value: ActivityTypes.Cycling, label: 'Cycling' },
+  readonly sportOptionGroups: ReadonlyArray<{
+    label: string;
+    options: ReadonlyArray<{ value: ManualWorkoutSport; label: string }>;
+  }> = [
+    {
+      label: 'Running',
+      options: MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
+    {
+      label: 'Cycling',
+      options: MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
   ];
   readonly purposeOptions = ['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const;
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [

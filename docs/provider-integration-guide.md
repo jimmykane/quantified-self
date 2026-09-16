@@ -121,7 +121,7 @@ preflight and rollback. This is a controlled production pilot, not public rollou
 | Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested HTTP adapter cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Real delivery is restricted to the explicit private pilot. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Actual production response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
 | COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
 | Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
-| Suunto | `private-rollout` | One workout maps to a dated SuuntoPlus Guide, not a native plan. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Synthetic HTTP/FIT and real Firestore tests cover lifecycle and private completion evidence. Actual app/watch operations remain ordinary #650 integration tests, not claimed from fixtures. Safe absence/repair remains #710. |
+| Suunto | `private-rollout` | One workout maps to a dated SuuntoPlus Guide, not a native plan. The Guide recommends the exact canonical running/cycling profile selected in QS, including Trail Running, Treadmill, Mountain Biking, Indoor Cycling, E-Biking/E-MTB, and Hand Cycle where the documented Suunto activity catalog provides an ID. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Synthetic HTTP/FIT and real Firestore tests cover lifecycle and private completion evidence. Actual app/watch operations remain ordinary #650 integration tests, not claimed from fixtures. Safe absence/repair remains #710. |
 
 Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
 not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
@@ -131,6 +131,13 @@ the canonical reference snapshot, so relative targets are frozen to their stored
 degradation approval. Secondary targets are rejected outside cycling, must differ from the primary target, and remain
 an explicit device-support degradation even for cycling. The private contract does not document a completed-activity
 workout identifier.
+
+Suunto is the first adapter to support the editor's exact running/cycling profiles. Its documented Guide `activities`
+array receives provider IDs only at serialization time: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`,
+Mountain Biking `10`, Indoor Cycling `52`, E-Biking `105` and E-MTB `106`, and Hand Cycle `109`. Generic Cycling does
+not automatically include Mountain Biking. Garmin, COROS, and Wahoo remain limited to their proved Running/Cycling
+baseline; an exact subtype is unsupported there until that provider's own contract and device behavior establish a
+truthful mapping.
 
 COROS mapping follows the local ignored COROS API Reference V2.0.6 (February 2026); the confidential PDF is likewise
 kept out of Git. Partner athlete/workout IDs in fixtures are redacted or deterministic opaque safe integers. The mapper

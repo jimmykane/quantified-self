@@ -686,6 +686,30 @@ describe('PlansWorkspaceComponent', () => {
     expect(haptics.selection).toHaveBeenCalledTimes(2);
   });
 
+  it('offers exact running and cycling profiles in two compact sport groups', async () => {
+    const fixture = await renderPlans();
+    expect(fixture.componentInstance.sportOptionGroups).toEqual([
+      {
+        label: 'Running',
+        options: [
+          { value: ActivityTypes.Running, label: 'Running' },
+          { value: ActivityTypes.TrailRunning, label: 'Trail Running' },
+          { value: ActivityTypes.Treadmill, label: 'Treadmill' },
+        ],
+      },
+      {
+        label: 'Cycling',
+        options: [
+          { value: ActivityTypes.Cycling, label: 'Cycling' },
+          { value: ActivityTypes.MountainBiking, label: 'Mountain Biking' },
+          { value: ActivityTypes.IndoorCycling, label: 'Indoor Cycling' },
+          { value: ActivityTypes.EBiking, label: 'E-Biking' },
+          { value: ActivityTypes.Handcycle, label: 'Hand Cycle' },
+        ],
+      },
+    ]);
+  });
+
   it('defaults a calendar add request to the active plan', async () => {
     setRouteState({ mode: 'create', date: '2026-09-10' });
     const fixture = await renderPlans();

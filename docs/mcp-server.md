@@ -54,6 +54,9 @@ Suunto Guide delivery (#650) uses these existing local sync projections without 
 schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
 counts, and strict rejection of private evidence injected into a public status. No Guide/account IDs, FIT completion
 evidence, watch receipts, live checks or write actions are exposed; consent and bundled skill routing remain unchanged.
+The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
+recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
+Biking sport survives the read projection. Suunto numeric activity recommendations remain private adapter payload.
 
 ## Purpose and boundary
 

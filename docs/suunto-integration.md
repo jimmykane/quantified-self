@@ -101,6 +101,13 @@ Guide window, app/watch messaging, positive checks and uncertain-create recovery
 or cloud deletion from unpinning, eviction, an ownership-related 404 or an unstable inventory scan. Safe missing-Guide
 repair is tracked by #710. No assumed subscription quota or separate certification process is introduced.
 
+Each authored workout keeps its canonical Sports Lib sport. The Guide serializer maps the manual editor's Running,
+Trail Running, Treadmill, Cycling, Mountain Biking, Indoor Cycling, E-Biking, and Hand Cycle choices to Suunto's
+documented activity recommendations. E-Biking recommends both Suunto E-biking and E-MTB because the canonical source
+type does not split them. Cycling is not silently widened to Mountain Biking; the user selects Mountain Biking on the
+workout when the Guide should be offered for that exercise profile. This changes neither recorded FIT ingestion nor
+the Health/Sleep paths in this document.
+
 Imported FIT files can retain QS-owned Guide/session correlations in the private event child
 `trainingCompletionEvidence/suunto`. Browsers and MCP cannot read it; event/account deletion removes it. It is evidence
 for future #651 matching, not an automatic completion decision. Original FITs and existing recorded activity totals

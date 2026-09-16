@@ -315,8 +315,12 @@
               <mat-label>Sport</mat-label>
               <mat-select [value]="session.value.sport" [disabled]="busyAction() !== null"
                 (selectionChange)="updateEditorField('sport', $event.value)">
-                @for (sport of sportOptions; track sport.value) {
-                  <mat-option [value]="sport.value">{{ sport.label }}</mat-option>
+                @for (group of sportOptionGroups; track group.label) {
+                  <mat-optgroup [label]="group.label">
+                    @for (sport of group.options; track sport.value) {
+                      <mat-option [value]="sport.value">{{ sport.label }}</mat-option>
+                    }
+                  </mat-optgroup>
                 }
               </mat-select>
             </mat-form-field>

@@ -1,7 +1,9 @@
 import { ActivityTypes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   formatWorkoutStepV1,
+  MANUAL_WORKOUT_EDITOR_SPORTS_V1,
   parseWorkoutStructureV1,
+  type ManualWorkoutEditorSportV1,
   type WorkoutEndingV1,
   type WorkoutNodeV1,
   type WorkoutStepPurposeV1,
@@ -10,7 +12,7 @@ import {
   type WorkoutTargetV1,
 } from '@shared/planned-workout';
 
-export type ManualWorkoutSport = typeof ActivityTypes.Running | typeof ActivityTypes.Cycling;
+export type ManualWorkoutSport = ManualWorkoutEditorSportV1;
 export type ManualWorkoutEnding = 'time' | 'distance';
 export type ManualWorkoutTarget = 'none' | 'heart-rate' | 'power' | 'pace';
 
@@ -199,13 +201,13 @@ export function workoutStructureToManualEditor(
   localDate: string,
   structure: WorkoutStructureV1,
 ): ManualWorkoutEditorValue {
-  if (structure.sport !== ActivityTypes.Running && structure.sport !== ActivityTypes.Cycling) {
-    throw new Error('The first manual editor supports running and cycling workouts.');
+  if (!MANUAL_WORKOUT_EDITOR_SPORTS_V1.includes(structure.sport as ManualWorkoutEditorSportV1)) {
+    throw new Error('This workout sport is not supported by the manual editor.');
   }
   return {
     title,
     localDate,
-    sport: structure.sport,
+    sport: structure.sport as ManualWorkoutEditorSportV1,
     nodes: structure.nodes.map(node => node.kind === 'step'
       ? editorStep(node)
       : { kind: 'repeat', id: node.id, count: node.count, steps: node.steps.map(editorStep) }),

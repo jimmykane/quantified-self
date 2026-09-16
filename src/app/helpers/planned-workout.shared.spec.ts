@@ -301,10 +301,34 @@ describe('planned workout compatibility', () => {
     });
   });
 
+  it.each([
+    ActivityTypes.TrailRunning,
+    ActivityTypes.Treadmill,
+    ActivityTypes.MountainBiking,
+    ActivityTypes.IndoorCycling,
+    ActivityTypes.EBiking,
+    ActivityTypes.Handcycle,
+  ])('accepts the manual editor sport %s', sport => {
+    const workout: WorkoutStructureV1 = {
+      version: 1,
+      sport,
+      nodes: [{
+        kind: 'step',
+        id: 'work',
+        purpose: 'work',
+        ending: { kind: 'time', seconds: 1800 },
+        targets: [],
+      }],
+    };
+
+    expect(evaluateWorkoutCompatibilityV1(workout, INITIAL_MANUAL_WORKOUT_EDITOR_PROFILE_V1))
+      .toEqual({ compatible: true, issues: [] });
+  });
+
   it('reports every unsupported feature instead of degrading the recipe silently', () => {
     const result = evaluateWorkoutCompatibilityV1({
       version: 1,
-      sport: ActivityTypes.TrailRunning,
+      sport: ActivityTypes.Swimming,
       nodes: [{
         kind: 'step',
         id: 'trail',

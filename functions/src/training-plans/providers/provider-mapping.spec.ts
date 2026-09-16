@@ -5,7 +5,10 @@ import {
     assessPlannedWorkoutProviderMappingV1,
     isPlannedWorkoutProviderDeliveryEnabled,
 } from '../../../../shared/planned-workout-providers';
-import type { WorkoutStructureV1 } from '../../../../shared/planned-workout';
+import {
+    MANUAL_WORKOUT_EDITOR_SPORTS_V1,
+    type WorkoutStructureV1,
+} from '../../../../shared/planned-workout';
 import canonicalRunningFixture from './fixtures/canonical-running-v1.json';
 import expectedCorosFixture from './fixtures/coros-running-v1.json';
 import expectedGarminFixture from './fixtures/garmin-running-v1.json';
@@ -53,6 +56,8 @@ describe('planned-workout provider proof fixtures', () => {
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.implementationState).toBe('fixture-only');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('fixture-only');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('private-rollout');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
+            .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
     });
 
     it('matches the redacted Garmin workout and separate schedule contracts exactly', () => {
@@ -126,6 +131,40 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.level).toBe('exact');
         expect(result.issues).toEqual([]);
         expect(result.artifact).toEqual(expectedSuuntoFixture);
+    });
+
+    it.each([
+        [ActivityTypes.Running, [1]],
+        [ActivityTypes.TrailRunning, [22]],
+        [ActivityTypes.Treadmill, [53]],
+        [ActivityTypes.Cycling, [2]],
+        [ActivityTypes.MountainBiking, [10]],
+        [ActivityTypes.IndoorCycling, [52]],
+        [ActivityTypes.EBiking, [105, 106]],
+        [ActivityTypes.Handcycle, [109]],
+    ] as const)('maps canonical %s to Suunto activity recommendations', (sport, activities) => {
+        const result = serializeSuuntoGuideJsonV1({ ...oneStepStructure(), sport }, {
+            name: `${sport} workout`,
+            owner: 'Quantified Self',
+            url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03',
+            sourceWorkoutId: `suunto-${sport}`,
+            allowDegraded: false,
+        });
+
+        expect(result.level).toBe('exact');
+        expect(result.artifact.activities).toEqual(activities);
+    });
+
+    it('does not silently send Suunto-specific sport profiles through unproved provider mappings', () => {
+        const mountainBike = { ...oneStepStructure(), sport: ActivityTypes.MountainBiking };
+        expect(assessPlannedWorkoutProviderMappingV1('suunto', mountainBike).level).toBe('exact');
+        for (const provider of ['garmin', 'coros', 'wahoo'] as const) {
+            expect(assessPlannedWorkoutProviderMappingV1(provider, mountainBike)).toMatchObject({
+                level: 'unsupported',
+                issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+            });
+        }
     });
 
     it('maps Wahoo native relative FTP targets through the header', () => {
