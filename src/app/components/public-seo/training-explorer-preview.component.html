@@ -4,7 +4,10 @@
     <p>Follow changes in load and recorded recovery signals—not a workout prescription.</p>
     <app-training-readiness-trend-chart [points]="readiness" [darkTheme]="darkTheme()"
       ariaLabel="Example readiness history over fourteen days; the final score is 78 out of 100."></app-training-readiness-trend-chart>
-    <div class="range"><span>18 Aug</span><span>31 Aug</span></div>
+    <div class="range">
+      <span>{{ readiness[0].dayMs | date:'d MMM':'UTC' }}</span>
+      <span>{{ readiness[readiness.length - 1].dayMs | date:'d MMM':'UTC' }}</span>
+    </div>
   } @else {
     <p class="example-note">Example data · Explore the same views used in Training</p>
     <mat-tab-group [selectedIndex]="selectedTab()" (selectedIndexChange)="selectTab($event)" animationDuration="0ms"

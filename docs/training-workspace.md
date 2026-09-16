@@ -251,6 +251,10 @@ import the Training workspace/module. Public SSR retains descriptive copy and pl
 until visible and chart tabs mount only when selected. Public example distances and durations use the canonical
 unit-aware formatter. This is presentation reuse only: no Training formula, planning workflow, MCP contract, consent,
 or read scope changes.
+These explorer examples share a fixed UTC cutoff. Power spans the same 84-day bound as Training, and durability uses
+twelve completed Monday–Sunday weeks before that cutoff. Readiness endpoints are derived from its points. The shared
+power trend renders its actual dated endpoints (also in accessible text), never an unconditional `Today` label, so both
+public fixtures and retained/stale Training snapshots identify the period they really describe.
 
 The authenticated `/training` route is deliberately `noindex`. Its public, prerendered `/features/training-analysis`
 overview is the indexable search entry point: it describes the curated workspace, sports, derived-data boundaries, and

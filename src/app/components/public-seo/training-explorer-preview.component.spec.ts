@@ -82,5 +82,45 @@ describe('TrainingExplorerPreviewComponent', () => {
     expect(chart.darkTheme).toBe(true);
     expect(haptics.selection).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('mat-tab-group')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.range').textContent).toContain('18 Aug');
+    expect(fixture.nativeElement.querySelector('.range').textContent).toContain('31 Aug');
+  });
+
+  it('wires Material sport and tab selections to one haptic and disposes charts when leaving their tab', async () => {
+    const fixture = TestBed.createComponent(TrainingExplorerPreviewComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const running = fixture.nativeElement.querySelector('button[role="radio"]') as HTMLButtonElement;
+    running.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.selectedSport()).toBe('Running');
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    running.click();
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    const tabs = fixture.nativeElement.querySelectorAll('[role="tab"]');
+    tabs[2].click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    // Flush the selectedIndexChange signal back into the input binding before
+    // the next simulated click (the browser runs this render automatically).
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.selectedTab()).toBe(2);
+    expect(fixture.debugElement.queryAll(By.directive(TrainingPowerSystemsTrendChartComponent))).toHaveLength(3);
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    // Query again after Material updates its header rather than retaining a
+    // DOM reference from the previous selected view.
+    fixture.nativeElement.querySelectorAll('[role="tab"]')[0].click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    // Material emits selectedIndexChange in a microtask; render that updated
+    // signal before its afterNextRender callback detaches the previous portal.
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.selectedTab()).toBe(0);
+    expect(fixture.debugElement.queryAll(By.directive(TrainingPowerSystemsTrendChartComponent))).toHaveLength(0);
+    expect(loader.dispose).toHaveBeenCalledTimes(3);
+    expect(haptics.selection).toHaveBeenCalledTimes(3);
   });
 });

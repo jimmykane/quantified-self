@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatTabsModule } from '@angular/material/tabs';
 import { AppThemes, type UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
@@ -14,7 +15,7 @@ import { buildTrainingPreviewBuildRows, buildTrainingPreviewMix, TRAINING_PREVIE
 /** Presentation only. No auth, Firestore, snapshot refreshes or provider dependencies. */
 @Component({
   selector: 'app-training-explorer-preview', standalone: true,
-  imports: [MatTabsModule, MatButtonToggleModule, TrainingReadinessTrendChartComponent,
+  imports: [DatePipe, MatTabsModule, MatButtonToggleModule, TrainingReadinessTrendChartComponent,
     TrainingPowerSystemsTrendChartComponent, TrainingDurabilityTrajectoryChartComponent,
     TrainingBuildMetricsComponent, TrainingMixDetailsComponent],
   templateUrl: './training-explorer-preview.component.html',

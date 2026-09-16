@@ -31,6 +31,24 @@ describe('Training public example fixtures', () => {
     expect(TRAINING_PREVIEW_DURABILITY.points.reduce((sum, p) => sum + p.eligibleSampleCount, 0)).toBe(20);
   });
 
+  it('uses an exact 84-day power range and completed UTC durability weeks before the example cutoff', () => {
+    const day = 86400000;
+    const cutoff = TRAINING_PREVIEW_READINESS.at(-1)!.dayMs;
+    for (const trend of TRAINING_PREVIEW_POWER) {
+      expect(trend.rangeEndDayMs).toBe(cutoff);
+      expect(trend.rangeEndDayMs - trend.rangeStartDayMs).toBe(84 * day);
+    }
+    const weeks = TRAINING_PREVIEW_DURABILITY.points;
+    expect(weeks).toHaveLength(12);
+    weeks.forEach((week, i) => {
+      expect(new Date(week.weekStartDayMs).getUTCDay()).toBe(1);
+      expect(new Date(week.weekEndDayMs).getUTCDay()).toBe(0);
+      expect(week.weekEndDayMs - week.weekStartDayMs).toBe(6 * day);
+      expect(week.weekEndDayMs).toBeLessThan(cutoff);
+      if (i) expect(week.weekStartDayMs - weeks[i - 1].weekStartDayMs).toBe(7 * day);
+    });
+  });
+
   it('keeps each sport separate and its displayed zone shares consistent', () => {
     for (const sport of TRAINING_PREVIEW_SPORTS) {
       const view = buildTrainingPreviewMix(sport);

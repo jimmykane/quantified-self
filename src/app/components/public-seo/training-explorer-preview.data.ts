@@ -10,6 +10,8 @@ import type { TrainingMixDetailsViewModel } from '../shared/training-summary/tra
 // Inspired by mixed running/cycling/open-water training. No user, event, route or source IDs.
 const DAY = 86_400_000;
 const END = Date.UTC(2026, 7, 31);
+// Only complete Monday–Sunday UTC weeks precede the shared example cutoff.
+const CURRENT_WEEK_START = END - ((new Date(END).getUTCDay() + 6) % 7) * DAY;
 export const TRAINING_PREVIEW_SPORTS = ['Running', 'Cycling', 'Swimming'] as const;
 export type TrainingPreviewSport = typeof TRAINING_PREVIEW_SPORTS[number];
 
@@ -73,7 +75,7 @@ export const TRAINING_PREVIEW_POWER: readonly TrainingPowerSystemsTrendViewModel
 ].map(({ key, label, unit, values }) => ({
   key: key as TrainingPowerSystemsTrendViewModel['key'],
   label, unit: unit as TrainingPowerSystemsTrendViewModel['unit'],
-  rangeStartDayMs: END - 83 * DAY, rangeEndDayMs: END,
+  rangeStartDayMs: END - 84 * DAY, rangeEndDayMs: END,
   points: values.map((value, i) => ({
     dayMs: END - (11 - i) * 7 * DAY, value, isCurrent: i === 11,
     statusText: value === null ? 'Not enough evidence' : 'Ready',
@@ -91,8 +93,8 @@ export const TRAINING_PREVIEW_DURABILITY: TrainingDurabilityTrajectoryViewModel 
   exclusionSummary: '16 rides excluded for variable effort.',
   unitLabel: '%', noEligibleWeekCount: 2, unavailableMetricWeekCount: 0,
   points: [7.8, 9.4, 6.2, null, 7.1, 5.8, 6.5, 4.9, null, 5.4, 4.6, 4.8].map((value, i) => ({
-    weekStartDayMs: END - (11 - i) * 7 * DAY,
-    weekEndDayMs: END - (11 - i) * 7 * DAY + 6 * DAY,
+    weekStartDayMs: CURRENT_WEEK_START - (12 - i) * 7 * DAY,
+    weekEndDayMs: CURRENT_WEEK_START - (12 - i) * 7 * DAY + 6 * DAY,
     value, candidateActivityCount: 3, sourceActivityCount: 3, missingEvidenceActivityCount: 0,
     eligibleSampleCount: value === null ? 0 : 2, hasEligibleSamples: value !== null,
     exclusionReasons: [{ reason: 'too-variable', label: 'Too variable', activityCount: value === null ? 3 : 1 }],
