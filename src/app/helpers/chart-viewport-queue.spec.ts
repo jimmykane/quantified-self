@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChartViewportQueue } from './chart-viewport-queue';
+import { ChartViewportQueue, chartViewportObserverOptions, shouldPreloadChartInBackground } from './chart-viewport-queue';
 
 describe('chart viewport queue', () => {
   let callback: IntersectionObserverCallback;
@@ -93,6 +93,25 @@ describe('chart viewport queue', () => {
     await expect(second.ready).resolves.toBe(true);
   });
 
+  it('warms dashboard charts without waiting for a viewport intersection', async () => {
+    const queue = new ChartViewportQueue();
+    const dashboard = document.createElement('section');
+    dashboard.dataset['chartPreload'] = 'background';
+    const element = document.createElement('div');
+    dashboard.append(element); document.body.append(dashboard);
+    const prepare = vi.fn(() => Promise.resolve());
+
+    const wait = queue.wait(element, prepare);
+
+    expect(shouldPreloadChartInBackground(element)).toBe(true);
+    expect(IntersectionObserver).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(frames).toHaveLength(1));
+    frames.shift()!(0);
+    await expect(wait.ready).resolves.toBe(true);
+    dashboard.remove();
+  });
+
   it('keeps a chart deferred if it leaves the preload area while the library loads', async () => {
     const queue = new ChartViewportQueue();
     let loaded: () => void;
@@ -150,6 +169,7 @@ describe('chart viewport queue', () => {
     const chart = document.createElement('div'); shell.append(clippedTile); clippedTile.append(chart);
     document.body.append(shell);
     const wait = queue.wait(chart);
+    expect(chartViewportObserverOptions(chart)).toEqual({ root: shell, rootMargin: '600px 0px' });
     expect(IntersectionObserver).toHaveBeenCalledWith(expect.any(Function), { root: shell, rootMargin: '600px 0px' });
     wait.cancel(); shell.remove();
   });

@@ -2685,6 +2685,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     if (refreshPhase === 'refreshing' || refreshPhase === 'building') {
+      // Once Today has settled, unfinished tiles report their own loading state.
+      // Keeping their work in this page-level status hides the greeting and makes
+      // a mostly rendered dashboard look blocked by its slowest chart.
+      if (this.showTodaySummary && !this.dashboardTodayReadiness.loading) {
+        this.derivedMetricsBanner = null;
+        return;
+      }
       this.derivedMetricsBanner = {
         type: 'pending',
         title: refreshPhase === 'refreshing' ? 'Updating your dashboard…' : 'Preparing your dashboard…',

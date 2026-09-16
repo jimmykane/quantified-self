@@ -1,5 +1,5 @@
 @if (tiles.length || showActions || showTodaySummary || derivedMetricsBanner) {
-<section class="pie">
+<section class="pie" [attr.data-chart-preload]="isOwnerDashboard ? 'background' : null">
   @if (showTodaySummary || showActions || derivedMetricsBanner) {
   <div class="dashboard-summary-heading">
   <app-page-header

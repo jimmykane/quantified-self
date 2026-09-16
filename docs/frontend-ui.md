@@ -161,6 +161,11 @@ swimming-performance, and durability plots opt into `EChartsHostController.defer
 preload margin and admits one plot per animation frame after the shared ECharts library is ready, so a cold
 import cannot release multiple queued plots into the same render frame. Non-scrolling tab bodies and horizontal-only
 wrappers are skipped when choosing that root, so their offscreen charts still wait for the page viewport.
+The owner dashboard marks its chart surface for background preloading: all saved plots join the same one-per-frame queue
+after the dashboard mounts, and Health tile reads use the existing three-request limit. This prepares lower tiles
+before scrolling without turning chart creation or Health reads into one main-thread/network burst. Other workspaces
+remain viewport-aware. The shared observer options also gate Health tile evidence, avoiding a second, shorter preload
+threshold before ECharts can start.
 Only plot initialization is deferred: Angular titles,
 values, accessible descriptions, and controls remain present. Initialized plots stay mounted when scrolled away.
 Dashboard map tiles similarly defer their renderer with Angular's viewport trigger. Their fixed-height body keeps

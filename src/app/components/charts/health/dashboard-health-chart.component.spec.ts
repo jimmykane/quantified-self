@@ -6,7 +6,7 @@ import { HealthMetricSeriesChartComponent } from '../../health/health-metric-ser
 import { ChartsSleepTrendComponent } from '../sleep-trend/charts.sleep-trend.component';
 import { buildDashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Subject } from 'rxjs';
 import { DashboardHealthChartComponent } from './dashboard-health-chart.component';
 import { DashboardHealthService } from '../../../services/dashboard-health.service';
@@ -25,6 +25,7 @@ describe('independent dashboard Health views',()=>{
       {provide:AppHapticsService,useValue:haptics},
     ]}).overrideComponent(DashboardHealthChartComponent,{set:{template:'',imports:[]}}).compileComponents();
   });
+  afterEach(() => vi.unstubAllGlobals());
   function create(metric='steps') {
     const fixture=TestBed.createComponent(DashboardHealthChartComponent);
     fixture.componentRef.setInput('user',{uid:'owner',settings:{unitSettings:{},appSettings:{}}});
@@ -34,6 +35,28 @@ describe('independent dashboard Health views',()=>{
   function result(metric='steps',endDate='2026-09-15'):DashboardHealthEvidence {
     return {window:resolveHealthWorkspaceWindow({metric:metric as never,range:'30d',endDate},endDate),health:null,history:null,activities:null,sessions:[],errors:[]};
   }
+  it('uses the shared chart preload window before starting an offscreen read', () => {
+    let callback!: IntersectionObserverCallback;
+    const observer = { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn() };
+    vi.stubGlobal('IntersectionObserver', vi.fn(function (handler: IntersectionObserverCallback) {
+      callback = handler; return observer;
+    }));
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent);
+    fixture.componentRef.setInput('user',{uid:'owner',settings:{unitSettings:{},appSettings:{}}});
+    fixture.componentRef.setInput('settings',{metric:'steps',range:'30d'});
+    fixture.detectChanges();
+
+    expect(IntersectionObserver).toHaveBeenCalledWith(expect.any(Function), { root: null, rootMargin: '600px 0px' });
+    expect(observer.observe).toHaveBeenCalledWith(fixture.nativeElement);
+    expect(watch).not.toHaveBeenCalled();
+
+    callback([{ target: fixture.nativeElement, isIntersecting: true } as IntersectionObserverEntry], observer as never);
+    fixture.detectChanges();
+
+    expect(watch).toHaveBeenCalledOnce();
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
   it('does not restart reads for structurally identical row inputs',()=>{
     const fixture=create();expect(watch).toHaveBeenCalledTimes(1);
     fixture.componentRef.setInput('settings',{metric:'steps',range:'30d'});fixture.detectChanges();

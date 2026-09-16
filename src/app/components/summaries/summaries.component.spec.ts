@@ -533,6 +533,8 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     expect(component.isOwnerDashboard).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.pie')?.getAttribute('data-chart-preload'))
+      .toBe('background');
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')?.textContent?.trim())
       .toBe('Good morning, Dimitrios');
   });
@@ -613,16 +615,19 @@ describe('SummariesComponent', () => {
     ] as const) {
       updates$.next({ ...createDashboardDerivedMetricsMissingState(), formStatus, formNowStatus: 'ready', rampRateStatus: 'ready' });
       fixture.detectChanges();
+      const effectiveBanner = banner?.type === 'pending' && showToday && !component.dashboardTodayReadiness.loading
+        ? null
+        : banner;
       expect(host.querySelector('.dashboard-summary-header')).toBe(header);
       expect(host.querySelector('.dashboard-summary-status')).toBe(status);
       expect(host.querySelector('.qs-page-header__subtitle')?.textContent).toBe(date);
-      expect(status?.getAttribute('role')).toBe(banner?.type === 'warning' ? 'alert' : 'status');
-      expect(!!status?.querySelector('mat-spinner')).toBe(banner?.type === 'pending');
+      expect(status?.getAttribute('role')).toBe(effectiveBanner?.type === 'warning' ? 'alert' : 'status');
+      expect(!!status?.querySelector('mat-spinner')).toBe(effectiveBanner?.type === 'pending');
       if (showToday) {
         expect(host.querySelector('#dashboard-today-title')?.textContent).toBe('Today');
         expect(host.querySelector(`[aria-label="Open this month's activity calendar"]`)).toBe(calendar);
       }
-      if (banner) expect(status?.textContent).toContain(banner.title);
+      if (effectiveBanner) expect(status?.textContent).toContain(effectiveBanner.title);
       if (banner?.type === 'pending' && showToday) (calendar as HTMLButtonElement).click();
       if (banner?.showRetry) host.querySelector<HTMLButtonElement>('[aria-label="Retry dashboard update"]')!.click();
     }
@@ -805,9 +810,12 @@ describe('SummariesComponent', () => {
       uid: 'user-1',
       settings: { dashboardSettings: { tiles: [] } },
     } as any;
+    component.eventUser = { uid: 'shared-user' } as any;
     component.showActions = false;
     fixture.detectChanges();
 
+    expect(component.isOwnerDashboard).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.pie')?.hasAttribute('data-chart-preload')).toBe(false);
     expect((fixture.nativeElement as HTMLElement).querySelector('app-dashboard-chart-library')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Dashboard options"]')).toBeNull();
   });
@@ -3073,6 +3081,39 @@ describe('SummariesComponent', () => {
 
     expect(component.derivedMetricsBanner?.type).toBe('pending');
     expect(component.derivedMetricsBanner?.title).toBe('Preparing your dashboard…');
+  });
+
+  it('leaves unfinished chart loading on the tile once Today is ready', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: 'Form',
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+          }],
+          showTodaySummary: true,
+        },
+      },
+    } as any;
+    component.showTodaySummary = true;
+    component.dashboardTodayReadiness = {
+      ...component.dashboardTodayReadiness,
+      loading: false,
+      label: 'Ready',
+      scoreText: '75/100',
+    };
+    (component as any).derivedFormStatus = 'stale';
+    (component as any).derivedFormNowStatus = 'ready';
+    (component as any).derivedRampRateStatus = 'ready';
+
+    (component as any).refreshDerivedMetricsBannerState();
+
+    expect(component.derivedMetricsBanner).toBeNull();
   });
 
   it('ignores the optional recovery status unless Today is showing an active estimate', () => {

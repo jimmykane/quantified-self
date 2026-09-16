@@ -18,6 +18,7 @@ import { DashboardHealthService } from '../../../services/dashboard-health.servi
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HealthMetricSeriesChartComponent } from '../../health/health-metric-series-chart.component';
 import { ChartsSleepTrendComponent } from '../sleep-trend/charts.sleep-trend.component';
+import { chartViewportObserverOptions, shouldPreloadChartInBackground } from '../../../helpers/chart-viewport-queue';
 /** Same projection, source identity and chart renderer as Health; navigation belongs to this tile. */
 @Component({ selector: 'app-dashboard-health-chart', standalone: true,
     imports: [DashboardChartThumbnailComponent, ChartSourcePickerComponent, MatButtonModule, MatIconModule, MatSelectModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
@@ -96,13 +97,13 @@ export class DashboardHealthChartComponent {
     private readonly requestKey = computed(() => JSON.stringify([this.user().uid, this.data.isOwner(this.user().uid),
         this.settings().metric, this.settings().range, this.endDate(), this.visible(), this.priority(), this.retry()]));
     constructor() {
-        if (typeof IntersectionObserver === 'undefined')
+        if (typeof IntersectionObserver === 'undefined' || shouldPreloadChartInBackground(this.element.nativeElement))
             this.visible.set(true);
         else {
             const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) {
                 this.visible.set(true);
                 observer.disconnect();
-            } }, { rootMargin: '160px' });
+            } }, chartViewportObserverOptions(this.element.nativeElement));
             observer.observe(this.element.nativeElement);
             this.destroy.onDestroy(() => observer.disconnect());
         }

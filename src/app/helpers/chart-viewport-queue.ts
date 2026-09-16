@@ -3,11 +3,25 @@ import { BrowserCompatibilityService } from '../services/browser.compatibility.s
 interface PendingChart {
   element: HTMLElement;
   root: HTMLElement | null;
+  observed: boolean;
   resolve: (render: boolean) => void;
   reject: (error: unknown) => void;
   prepare?: () => Promise<unknown>;
   preparing: boolean;
   prepared: boolean;
+}
+
+const CHART_PRELOAD_MARGIN = '600px 0px';
+const BACKGROUND_CHART_PRELOAD_SELECTOR = '[data-chart-preload="background"]';
+
+/** Dashboard charts warm in the background while other workspaces stay viewport-aware. */
+export function shouldPreloadChartInBackground(element: HTMLElement): boolean {
+  return element.closest(BACKGROUND_CHART_PRELOAD_SELECTOR) !== null;
+}
+
+/** Keep every viewport-aware chart aligned to the same scroll root and preload distance. */
+export function chartViewportObserverOptions(element: HTMLElement): { root: HTMLElement | null; rootMargin: string } {
+  return { root: chartScrollRoot(element), rootMargin: CHART_PRELOAD_MARGIN };
 }
 
 /** Prepare nearby plots one frame at a time, without hiding their Angular headers or controls. */
@@ -21,7 +35,23 @@ export class ChartViewportQueue {
     if (!BrowserCompatibilityService.checkIntersectionObserverSupport()) {
       return { ready: Promise.resolve(true), cancel: () => undefined };
     }
-    const root = scrollRoot(element);
+    const { root, rootMargin } = chartViewportObserverOptions(element);
+    let resolve: PendingChart['resolve'];
+    let reject: PendingChart['reject'];
+    const ready = new Promise<boolean>((done, fail) => { resolve = done; reject = fail; });
+    const job: PendingChart = {
+      element, root, observed: false,
+      resolve: resolve!, reject: reject!, prepare, preparing: false, prepared: !prepare,
+    };
+    this.pending.add(job);
+
+    if (shouldPreloadChartInBackground(element)) {
+      this.nearby.add(job);
+      this.prepare(job);
+      this.schedule();
+      return { ready, cancel: () => this.finish(job, false) };
+    }
+
     let observer = this.observers.get(root);
     try {
       if (!observer) observer = new IntersectionObserver(entries => {
@@ -36,18 +66,13 @@ export class ChartViewportQueue {
           }
         }
         this.schedule();
-      }, { root, rootMargin: '600px 0px' });
+      }, { root, rootMargin });
     } catch {
+      this.pending.delete(job);
       return { ready: Promise.resolve(true), cancel: () => undefined };
     }
     this.observers.set(root, observer);
-    let resolve: PendingChart['resolve'];
-    let reject: PendingChart['reject'];
-    const ready = new Promise<boolean>((done, fail) => { resolve = done; reject = fail; });
-    const job: PendingChart = {
-      element, root, resolve: resolve!, reject: reject!, prepare, preparing: false, prepared: !prepare,
-    };
-    this.pending.add(job);
+    job.observed = true;
     try { observer.observe(element); } catch { this.finish(job, true); }
     return { ready, cancel: () => this.finish(job, false) };
   }
@@ -85,11 +110,13 @@ export class ChartViewportQueue {
   private finish(job: PendingChart, render: boolean): void {
     if (!this.pending.delete(job)) return;
     this.nearby.delete(job);
-    const observer = this.observers.get(job.root);
-    if (![...this.pending].some(other => other.element === job.element)) observer?.unobserve(job.element);
-    if (![...this.pending].some(other => other.root === job.root)) {
-      observer?.disconnect();
-      this.observers.delete(job.root);
+    if (job.observed) {
+      const observer = this.observers.get(job.root);
+      if (![...this.pending].some(other => other.observed && other.element === job.element)) observer?.unobserve(job.element);
+      if (![...this.pending].some(other => other.observed && other.root === job.root)) {
+        observer?.disconnect();
+        this.observers.delete(job.root);
+      }
     }
     job.resolve(render);
     if (this.pending.size) return;
@@ -98,7 +125,7 @@ export class ChartViewportQueue {
   }
 }
 
-function scrollRoot(element: HTMLElement): HTMLElement | null {
+function chartScrollRoot(element: HTMLElement): HTMLElement | null {
   // The app shell and bottom sheets scroll independently of the document. Using
   // their scrollport lets the preload margin reach beyond the currently visible plots.
   // Tabs and horizontal chart wrappers also compute overflow-y: auto, but must
