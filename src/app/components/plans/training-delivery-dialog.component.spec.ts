@@ -1,10 +1,11 @@
-import { ApplicationRef, signal } from '@angular/core';
+import { ApplicationRef, ErrorHandler, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog } from '@angular/material/dialog';
-import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
+import { MAT_ICON_DEFAULT_OPTIONS, MatIconRegistry } from '@angular/material/icon';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { provideRouter, Router } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { By, DomSanitizer } from '@angular/platform-browser';
 import { BehaviorSubject, of, throwError } from 'rxjs';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -15,6 +16,8 @@ import { AppHapticsService } from '../../services/app.haptics.service';
 import { TrainingPlansService } from '../../services/training-plans.service';
 import { TrainingDeliveryService } from '../../services/training-delivery.service';
 import { TrainingDeliveryDialogComponent } from './training-delivery-dialog.component';
+import { ServiceSourceIconComponent } from '../event-summary/service-source-icon/service-source-icon.component';
+import { AppEventService } from '../../services/app.event.service';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
 
@@ -40,8 +43,17 @@ describe('Training provider delivery controls', () => {
     await TestBed.configureTestingModule({ imports: [TrainingDeliveryDialogComponent, TrainingDeliveryButtonComponent], providers: [
       provideRouter([]), provideNoopAnimations(), { provide: AppUserService, useValue: { user, user$ } },
       { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+      { provide: MatIconRegistry, useFactory: () => {
+        const sanitizer = inject(DomSanitizer);
+        const registry = new MatIconRegistry(null, sanitizer, document, inject(ErrorHandler));
+        for (const provider of ['garmin', 'coros', 'wahoo', 'suunto']) {
+          registry.addSvgIconLiteral(provider, sanitizer.bypassSecurityTrustHtml(readFileSync(`src/assets/logos/${provider}.svg`, 'utf8')));
+        }
+        return registry;
+      } },
       { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
       { provide: AppHapticsService, useValue: haptics }, { provide: TrainingDeliveryService, useValue: service },
+      { provide: AppEventService, useValue: { getEventMetaDataKeys: vi.fn() } },
       { provide: MAT_DIALOG_DATA, useValue: { scope: 'workout', id: 'w', title: 'Morning run' } },
       { provide: MatDialogRef, useValue: { close } }, { provide: MatDialog, useValue: { open: vi.fn() } },
       { provide: TrainingPlansService, useValue: { watchSchedule: () => of({ state: { revision: 3 }, plans: [], workouts: [{
@@ -49,6 +61,27 @@ describe('Training provider delivery controls', () => {
         createdAtMs: 1, updatedAtMs: 1, structure: { version: 1, sport: ActivityTypes.Running, nodes: [] },
       }] }) } },
     ] }).compileComponents();
+  });
+  it.each(['plan', 'workout', 'history'])('renders all provider logos beside named headings in %s sync without extra reads or actions', scope => {
+    TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope, id: 'w', title: 'Example' } });
+    const providers = ['garmin', 'coros', 'wahoo', 'suunto'];
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: providers.map(provider => ({ ...status, provider, id: provider })) }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const icons = fixture.debugElement.queryAll(By.directive(ServiceSourceIconComponent));
+    expect(icons).toHaveLength(4);
+    icons.forEach((icon, index) => {
+      const component = icon.componentInstance as ServiceSourceIconComponent;
+      expect(component.presentation?.mode).toBe('destination');
+      expect(component.serviceLogo).toBe(providers[index]);
+      expect(icon.nativeElement.closest('h3')?.textContent.trim()).toBe(fixture.componentInstance.rows()[index].label);
+      expect(icon.nativeElement.getAttribute('aria-hidden')).toBe('true');
+      expect(icon.nativeElement.querySelector('svg')).not.toBeNull();
+      expect(component.showTooltip).toBe(false);
+      expect(component.iconWidth).toBe(64); expect(component.iconHeight).toBe(20);
+    });
+    expect(TestBed.inject(AppEventService).getEventMetaDataKeys).not.toHaveBeenCalled();
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
   });
   it('hides unavailable send controls but preserves problem details and Stop sync', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
@@ -725,6 +758,7 @@ describe('Training provider delivery controls', () => {
     const qaCss = process.env.TRAINING_DELIVERY_QA_DIR ? [
       ['app-training-delivery-dialog', 'src/app/components/plans/training-delivery-dialog.component.scss'],
       ['app-compact-row', 'src/app/components/shared/compact-row/compact-row.component.scss'],
+      ['app-service-source-icon', 'src/app/components/event-summary/service-source-icon/service-source-icon.component.css'],
     ].map(([host, file]) => {
       const sass = createRequire(createRequire(import.meta.url).resolve('@angular/build/package.json'))('sass');
       return sass.compileString(`${host} { ${readFileSync(file, 'utf8').replace(/:host\(([^)]+)\)/g, '&$1').replace(/:host/g, '&')} }`).css;
@@ -789,6 +823,7 @@ describe('Training provider delivery controls', () => {
     ref.componentInstance.toggleTimeZone(); render('plan-time-zone'); ref.close();
     const planStatuses = [{ ...status, planId: 'p', status: 'delivered', differsFromQS: false, lastAcceptedAtMs: status.lastAttemptAtMs },
       { ...status, id: 'second', workoutId: 'second', planId: 'p', status: 'pending', differsFromQS: false, lastAcceptedAtMs: null }];
+    service.isReady.mockImplementation(provider => provider === 'garmin' || provider === 'suunto');
     service.watchScope.mockImplementation((_uid, scope, id) => of({
       settings: scope === 'plan' ? [{ provider: 'garmin', enabled: true, timeZone: 'Europe/Helsinki' }] : [],
       statuses: scope === 'workout' ? planStatuses.filter(item => item.workoutId === id) : planStatuses,

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 
 export type CompactRowTone =
@@ -7,7 +8,7 @@ export type CompactRowTone =
 @Component({
   selector: 'app-compact-row',
   standalone: true,
-  imports: [MatIconModule],
+  imports: [MatIconModule, NgTemplateOutlet],
   templateUrl: './compact-row.component.html',
   styleUrl: './compact-row.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

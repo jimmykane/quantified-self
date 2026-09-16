@@ -16,10 +16,14 @@
     </div>
   }
 
+  <ng-template #rowTitle>
+    <ng-content select="[compactRowTitlePrefix]"></ng-content>
+    <span>{{ title() }}</span>
+  </ng-template>
   @switch (headingLevel()) {
-    @case (2) { <h2 class="compact-row__title" [attr.id]="titleId()">{{ title() }}</h2> }
-    @case (4) { <h4 class="compact-row__title" [attr.id]="titleId()">{{ title() }}</h4> }
-    @default { <h3 class="compact-row__title" [attr.id]="titleId()">{{ title() }}</h3> }
+    @case (2) { <h2 class="compact-row__title" [attr.id]="titleId()"><ng-container [ngTemplateOutlet]="rowTitle"></ng-container></h2> }
+    @case (4) { <h4 class="compact-row__title" [attr.id]="titleId()"><ng-container [ngTemplateOutlet]="rowTitle"></ng-container></h4> }
+    @default { <h3 class="compact-row__title" [attr.id]="titleId()"><ng-container [ngTemplateOutlet]="rowTitle"></ng-container></h3> }
   }
 
   <div class="compact-row__body">

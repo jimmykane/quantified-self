@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, injec
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { normalizeDeliveryTimeZone, TRAINING_DELIVERY_PAGE_SIZE, type TrainingDeliveryAction, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
@@ -14,6 +15,14 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 import { trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeliveryLatestEvent } from '../../helpers/training-delivery-display.helper';
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
 import { trainingVerificationCommandError, trainingVerificationLabel } from '../../helpers/training-verification-display.helper';
+import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
+
+const PROVIDER_PRESENTATIONS = {
+  garmin: buildDestinationProviderPresentation(ServiceNames.GarminAPI),
+  coros: buildDestinationProviderPresentation(ServiceNames.COROSAPI),
+  wahoo: buildDestinationProviderPresentation(ServiceNames.WahooAPI),
+  suunto: buildDestinationProviderPresentation(ServiceNames.SuuntoApp),
+} satisfies Record<PlannedWorkoutProviderId, ReturnType<typeof buildDestinationProviderPresentation>>;
 
 export interface TrainingDeliveryDialogData {
   scope: TrainingDeliveryViewScope; id: string; title: string;
@@ -156,7 +165,8 @@ export class TrainingDeliveryDialogComponent {
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
-    return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
+    return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
+      presentation: PROVIDER_PRESENTATIONS[provider], ready, setting, statuses,
       canCheck: statuses.some(status => status.verification?.canCheck),
       needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
       // Current settings precede the asynchronously reconciled status after Resume.

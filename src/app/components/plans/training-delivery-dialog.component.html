@@ -86,6 +86,8 @@
   } @else {
     @for (row of rows(); track row.provider; let last = $last) {
       <app-compact-row [title]="row.label" layout="stacked" density="compact" [showDivider]="!last">
+        <app-service-source-icon compactRowTitlePrefix class="delivery-provider-logo" [presentation]="row.presentation"
+          [showTooltip]="false" [iconWidth]="64" [iconHeight]="20" aria-hidden="true"></app-service-source-icon>
         <div class="delivery-provider-settings">
           @if (data.scope !== 'history') {
             <p class="delivery-setting-label">{{ row.settingLabel }}</p>

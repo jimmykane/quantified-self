@@ -650,6 +650,12 @@ After Resume, current-scope settings take precedence over an older stopped statu
 Account changes clear drafts/results and close the dialog. The planning UI rollout described
 above also hides these entry points from non-allowlisted accounts; it is not a delivery authorization boundary.
 Completed activity totals are unchanged.
+Provider section headings in Plan sync, Workout sync and sync history pair the visible name with the existing
+`app-service-source-icon` destination logo in a compact 64 × 20px box. The compact-row title-prefix slot keeps the
+logo and name aligned without adding a card or reserving a body column; names can wrap at phone widths. Logos are
+decorative, have no tooltip or action, and never trigger activity metadata lookups. The shared thin scrollbar and
+footer controls remain unchanged. MCP impact: presentation only, with no change to reads, counts, safe projections,
+consent, provider calls or wire schemas. Help was reviewed; existing provider/sync explanations need no logo-specific copy.
 The sync dialog's **How sync works** guidance explains stopping updates and requesting removal of upcoming synced
 workouts in plain language. It explicitly preserves the QS plan/workout and provider connection, distinguishes plan
 pause from Pro expiry, and protects past/completed workouts. Do not suggest disconnecting or introduce account-deletion

@@ -10,6 +10,7 @@ p, li, span, a { overflow-wrap: anywhere; }
 .delivery-subtitle { margin: 0; font: var(--mat-sys-title-medium); color: var(--mat-sys-on-surface); }
 .delivery-context .delivery-caption { margin-block: 0.25rem 0; }
 .delivery-setting-label { margin: 0 0 0.25rem; font-weight: 500; }
+.delivery-provider-logo { display: flex; flex: 0 0 auto; }
 .delivery-provider-settings { display: grid; gap: 0.25rem; }
 .delivery-workouts h4 { margin: 0 0 0.25rem; font: var(--mat-sys-title-small); }
 app-compact-row p.delivery-caption { margin: 0; }

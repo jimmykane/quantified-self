@@ -71,6 +71,8 @@
 
 .compact-row__title {
   display: flex;
+  min-width: 0;
+  gap: 0.5rem;
   min-height: 48px;
   align-self: start;
   align-items: center;
@@ -79,6 +81,8 @@
   font-size: 1.25rem;
   font-weight: 600;
   line-height: 1.2;
+
+  > span { min-width: 0; overflow-wrap: anywhere; }
 }
 
 .compact-row__body {
