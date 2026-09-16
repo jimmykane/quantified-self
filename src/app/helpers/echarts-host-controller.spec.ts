@@ -453,7 +453,7 @@ describe('EChartsHostController', () => {
     expect(loader.setOption.mock.calls[0][2]).toEqual({ notMerge: false, lazyUpdate: false });
     expect(loader.init).toHaveBeenCalledOnce();
     expect(loader.resize).not.toHaveBeenCalled();
-    expect(chart.dispatchAction).not.toHaveBeenCalled();
+    expect(chart.dispatchAction).toHaveBeenCalledExactlyOnceWith({ type: 'hideTip' });
     expect(context.reportRange).toHaveBeenCalledOnce();
     controller.dispose();
     loader.setOption.mockClear();

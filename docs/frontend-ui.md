@@ -176,7 +176,9 @@ this scheduling neither adds reads nor changes metric calculations.
 
 Notes-only input changes use `EChartsHostController.updateTimelineNotes`. Its shared binding retains the last base
 option and axis hints, projects marker/shading series, then merges only those stable IDs. Removed overlays receive
-empty markLine/markArea data; metric series, zoom and legend state are not resent. Full data/theme/range changes
+empty markLine/markArea data; metric series, zoom and legend state are not resent. Before applying an overlay patch,
+the host dismisses the active tooltip through ECharts: mobile click-triggered tooltips otherwise retain outdated
+private text after an edit, hide/remove or owner change. No chart recreation or resize is required. Full data/theme/range changes
 continue through ordinary rendering. Range registrations remain deduplicated, and disposal releases the retained
 option and registration. Explicit time bounds avoid traversing samples during overlay projection. Health, Sleep,
 Form, Forecast and the five Training trend adapters share this path, without chart-local fetches or haptics.

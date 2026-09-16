@@ -59,7 +59,11 @@ export class EChartsHostController {
     this.timelineNotes.set(context);
     if (!this.chart || this.chart.isDisposed()) return;
     const option = this.timelineNotes.update(this.chart, this.currentTheme === 'dark');
-    if (option) this.config.eChartsLoader.setOption(this.chart, option, { notMerge: false, lazyUpdate: false });
+    if (!option) return;
+    // Click-triggered tooltips stay open across setOption. Dismiss stale note content,
+    // including edits, visibility changes and an owner switch, before updating overlays.
+    this.hideTooltip();
+    this.config.eChartsLoader.setOption(this.chart, option, { notMerge: false, lazyUpdate: false });
   }
   private chart: EChartsType | null = null;
   private resizeObserver: ResizeObserver | null = null;

@@ -5,7 +5,7 @@ import { DataZoomComponent, LegendComponent, GridComponent, MarkAreaComponent, M
 import { SVGRenderer } from 'echarts/renderers';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { TimelineNotesChartBinding } from './timeline-notes-chart.helper';
-import { ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS } from './echarts-host-controller';
+import { EChartsHostController, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS } from './echarts-host-controller';
 
 use([LineChart, DataZoomComponent, LegendComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
@@ -61,6 +61,49 @@ describe('Timeline note tooltips with the real ECharts renderer', () => {
     expect((chart.getOption() as any).series).toHaveLength(2);
     binding.dispose();
     expect(binding.update(chart)).toBeNull();
+  });
+
+  it.each(['edit', 'remove', 'owner change'])('dismisses a visible mobile note tooltip after %s', async change => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      measureText: (text: string) => ({ width: text.length * 6 }),
+    } as never);
+    host = document.createElement('div'); document.body.append(host);
+    chart = init(host, null, { renderer: 'svg', width: 400, height: 300 });
+    const controller = new EChartsHostController({ eChartsLoader: {
+      init: async () => chart,
+      setOption: (target, option, settings) => target.setOption(option, settings),
+      dispose: () => {}, subscribeToViewportResize: () => () => {}, attachMobileSeriesTapFeedback: () => () => {},
+    } as never });
+    await controller.init(host);
+    const note: TimelineNote = { id: 'sample', category: 'travel', title: 'Private trip', startDate: '2026-09-02',
+      endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    const context = { ownerUid: 'first-owner', notes: [note], select: vi.fn(), reportRange: vi.fn() };
+    controller.setTimelineNotes(context);
+    controller.setOption({ animation: false,
+      grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: { type: 'time', min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 10) }, yAxis: { min: 0, max: 100 },
+      tooltip: { trigger: 'axis', triggerOn: 'click', renderMode: 'html', transitionDuration: 0, hideDelay: 0,
+        formatter: () => 'Metric reading' },
+      series: [{ type: 'line', data: [[Date.UTC(2026, 8, 1), 50], [Date.UTC(2026, 8, 10), 50]] }],
+    }, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+    const [x, y] = chart.convertToPixel({ gridIndex: 0 }, [Date.UTC(2026, 8, 2), 25]);
+    chart.getZr().trigger('click', { offsetX: x, offsetY: y, target: chart.getZr().findHover(x, y).target,
+      event: new MouseEvent('click') });
+    const tooltip = host.querySelector('.qs-dashboard-echarts-tooltip-card')!.parentElement!;
+    expect(tooltip.textContent).toContain('Private trip');
+    expect(tooltip.style.display).not.toBe('none');
+    controller.updateTimelineNotes({ ...context,
+      ownerUid: change === 'owner change' ? 'second-owner' : context.ownerUid,
+      notes: change === 'edit' ? [{ ...note, title: 'Changed trip', revision: 2 }] : [],
+    });
+    try {
+      await vi.waitFor(() => expect(tooltip.style.display).toBe('none'), { timeout: 100 });
+      chart.getZr().trigger('click', { offsetX: x, offsetY: y, target: chart.getZr().findHover(x, y).target,
+        event: new MouseEvent('click') });
+      expect(tooltip.style.display).not.toBe('none');
+      expect(tooltip.textContent).toContain(change === 'edit' ? 'Changed trip' : 'Metric reading');
+      expect(tooltip.textContent).not.toContain('Private trip');
+    } finally { controller.dispose(); }
   });
 
   it.each(['mousemove', 'click'])('keeps metric tooltips inside note ranges and note tooltips on boundaries (%s)', trigger => {
