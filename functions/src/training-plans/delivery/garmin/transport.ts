@@ -7,7 +7,7 @@ import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryChe
 import { GarminTrainingHttpError, garminBody, garminId, type GarminTrainingClient, type GarminTrainingRequest, type GarminTrainingResponse } from './http';
 import { createGarminInspection, GARMIN_INSPECTION_POLICY } from './inspection';
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
-import { garminContractFailure, logGarminScheduleLookup, logGarminTrainingRequestFailure, logGarminTrainingResponse } from './diagnostics';
+import { garminContractFailure, logGarminScheduleConfirmation, logGarminScheduleLookup, logGarminTrainingRequestFailure, logGarminTrainingResponse } from './diagnostics';
 
 const STEPS = ['repair-prepare', 'workout-create', 'workout-update', 'schedule-create', 'schedule-update', 'schedule-delete', 'workout-delete',
   'retired-schedule-delete', 'retired-workout-delete', 'finished'] as const;
@@ -142,6 +142,17 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     return value;
   }
 
+  private async confirmRetainedSchedule(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint,
+    guard: DeliveryRequestGuard): Promise<ReturnType<typeof schedule>> {
+    const found = await this.ownedSchedule(operation, checkpoint, guard);
+    if (!found) throw garminContractFailure('empty_lookup');
+    if (found.workoutId !== operation.artifact!.ids.workout || found.date !== operation.workout?.localDate) {
+      throw garminContractFailure('schedule_identity_mismatch');
+    }
+    logGarminScheduleConfirmation('verified');
+    return found;
+  }
+
   async execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null> {
     this.validate(operation);
     this.assertFuture(operation);
@@ -234,7 +245,20 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         body: garminBody({ date: workout.localDate }, { workoutId: artifact.ids.workout,
           ...(artifact.ids.schedule ? { scheduleId: artifact.ids.schedule } : {}) }),
       }, checkpoint, guard);
-      if (result.status === 204 && !artifact.ids.schedule) {
+      if (result.status === 200 && (typeof result.body === 'number' || typeof result.body === 'string')) {
+        // Production Garmin also returns the schedule ID alone. Retain this receipt
+        // before inspecting its association, without advancing the started journal.
+        // An interrupted GET must never cause another POST or lose the accepted ID.
+        let id: string;
+        try { id = garminId(result.body); }
+        catch { throw garminContractFailure('invalid_schedule'); }
+        if (artifact.ids.schedule && id !== artifact.ids.schedule) throw garminContractFailure('schedule_identity_mismatch');
+        const retained = { ...artifact, ids: { ...artifact.ids, schedule: id } };
+        await checkpoint(retained); operation.artifact = retained;
+        logGarminScheduleConfirmation('id_retained');
+        const found = await this.confirmRetainedSchedule(operation, checkpoint, guard);
+        await this.save(operation, checkpoint, { ...retained, localDate: found.date }, step, 'accepted');
+      } else if (result.status === 204 && !artifact.ids.schedule) {
         // Garmin documents empty successful schedule creates. Inspect immediately,
         // never repeat this POST or mark delivery complete without an exact identity.
         if (!await this.recoverCreatedSchedule(operation, checkpoint, guard)) throw new TrainingDeliveryTransportError('uncertain');
@@ -256,6 +280,13 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
   private async recoverCreatedSchedule(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint,
     guard: DeliveryRequestGuard): Promise<boolean> {
     if (!operation.workout || !operation.artifact) return false;
+    if (operation.artifact.ids.schedule) {
+      // A scalar acknowledgement already supplied the identity. Never replace it
+      // with an inventory candidate when its exact lookup is missing or conflicting.
+      const found = await this.confirmRetainedSchedule(operation, checkpoint, guard);
+      await this.save(operation, checkpoint, { ...operation.artifact, localDate: found.date }, 'schedule-create', 'accepted');
+      return true;
+    }
     const date = normalizeTrainingLocalDate(operation.workout.localDate);
     const rows = await this.read({ method: 'GET', path: `/training-api/schedule?startDate=${date}&endDate=${date}` }, guard);
     if (!Array.isArray(rows) || rows.length > 1000) {

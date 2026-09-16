@@ -709,11 +709,14 @@ For object responses, only the types of the fixed `workoutId`, `scheduleId`, `ow
 `garmin_request_incomplete` retains safe HTTP failure context; it does not assert that a request reached Garmin.
 `garmin_contract_failure` gives a fixed validation `reason`; `garmin_schedule_lookup` distinguishes `matched`,
 `no_match`, `multiple_matches`, `invalid_response` and `too_many_results`. A matched lookup is not durable acceptance.
+`garmin_schedule_confirmation` records `id_retained` after a scalar schedule acknowledgement is durably saved and
+`verified` after its exact retained-ID read matches the workout and date. Neither event alone means the full worker
+completed; correlate with `accepted` or a subsequent `checkpoint_failed`/`failure` in the same execution.
 `checkpoint_failed` records a failed journal transaction independently of the later retry-state write, with
 `complete`, allowlisted `checkpointState`, and `persistenceCode` (known Firestore error categories or `unknown`).
 Filter the same Cloud Logging execution ID alongside these events and `failure` to distinguish provider response,
-validation, schedule discovery and local persistence. No extra provider requests, retry-policy changes or persisted
-diagnostic records are introduced, and older incidents cannot gain missing response evidence retroactively.
+validation, schedule discovery and local persistence. The diagnostics themselves introduce no provider requests,
+retry-policy changes or persisted diagnostic records; older incidents cannot gain missing response evidence retroactively.
 
 Counted plan summaries use explicit singular/plural noun and verb forms (for example, `1 retry scheduled`,
 `2 retries scheduled`, `1 needs approval`, `2 need approval`); single-workout labels stay singular. Preview warnings
@@ -1043,12 +1046,24 @@ admission and Retry-After across Training delivery/recovery/inspection; it does 
 consumers. There is no separate certification requirement or nested HTTP retry loop.
 Only documented synchronous success codes confirm completion. Unexpected successful statuses (including 202) remain
 unconfirmed; an empty/null successful GET never means the artifact is absent. Only an explicit 404 enters the missing
-artifact path, with actual provider 404 semantics still requiring ordinary integration checks. Schedule PUT accepts an empty 204;
-a 200 response must supply the validated schedule record before QS records the new date.
+artifact path, with actual provider 404 semantics still requiring ordinary integration checks. Schedule PUT accepts an empty 204.
+Schedule POST/PUT 200 accepts a validated schedule record or a scalar positive Long ID (including decimal strings from
+the lossless JSON decoder). Production response-shape logs established that Garmin returns a numeric schedule ID on
+create. QS first durably retains that ID without advancing the started journal, then GETs the exact schedule and
+validates its ID, workout association and authored date before confirming delivery. PUT cannot replace a retained ID.
+Missing, malformed or conflicting reads remain unconfirmed; recovery reuses the retained ID rather than switching to
+an inventory candidate or repeating the POST. If the ID checkpoint itself fails, the existing exact-date recovery
+remains available. No provider IDs or payload values enter diagnostics.
 The documented schedule POST 204 path immediately inspects the exact retained workout/date to obtain a unique schedule
 ID, rather than waiting for ordinary retry backoff solely because the response was empty. Empty/ambiguous inspection
 remains unconfirmed and retains the started journal; it never authorizes a second POST. A first workout POST without an
-ID still cannot be recovered this way. Synthetic tests cover immediate recovery and empty/duplicate lookup results.
+ID still cannot be recovered this way. Synthetic tests cover immediate recovery, scalar numeric/Long responses,
+empty/duplicate/conflicting reads, failed checkpoints and Stop/edit races in real Firestore transactions.
+
+MCP impact of scalar-acknowledgement handling: none. Only private transport parsing, acceptance evidence and recovery
+change; the authored recipe, safe delivery-status v1, existing read projections, consent and scopes remain unchanged.
+Focused plan/status schema tests and the registered-contract check cover that boundary. Existing app Help remains
+accurate: successful delivery means Garmin accepted the workout and calendar entry, not confirmation on a device.
 
 Every accepted artifact is journaled before another write. An interrupted schedule create can recover through one exact
 workout/date match in the date-range lookup; empty or ambiguous results are not proof of nonacceptance. Retained-ID

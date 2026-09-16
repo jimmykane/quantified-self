@@ -168,11 +168,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(2);
   });
 
-  it('confirms an empty successful schedule create in one worker attempt, retaining one identity under duplicate dispatch', async () => {
+  it.each(['empty', 'numeric', 'long'] as const)('confirms a %s successful schedule create in one worker attempt, retaining one identity under duplicate dispatch', async response => {
+    if (response === 'numeric') server.nextId = 1000n;
     const request = server.request;
     server.request = async (...args) => {
       const result = await request(...args);
-      return args[0].method === 'POST' && args[0].path === '/training-api/schedule/' ? { status: 204, body: null } : result;
+      if (args[0].method !== 'POST' || args[0].path !== '/training-api/schedule/') return result;
+      const id = (result.body as { scheduleId: string }).scheduleId;
+      return response === 'empty' ? { status: 204, body: null } : { status: 200, body: response === 'numeric' ? Number(id) : id };
     };
     const id = await send();
     await Promise.all([processTrainingDelivery(runtime, uid, id), processTrainingDelivery(runtime, uid, id)]);
@@ -207,6 +210,42 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.schedules.size).toBe(change === 'stop' ? 0 : 1);
     expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
   }, 30_000);
+
+  it.each(['lookup', 'checkpoint', 'edit', 'stop'] as const)('retains scalar schedule acceptance across a %s interruption without duplicate creates', async fault => {
+    const request = server.request;
+    let persistence: ReturnType<typeof vi.spyOn> | undefined;
+    server.request = async (...args) => {
+      const result = await request(...args);
+      if (args[0].method !== 'POST' || args[0].path !== '/training-api/schedule/') return result;
+      if (fault === 'checkpoint') persistence = vi.spyOn(db, 'runTransaction').mockRejectedValueOnce(new Error('Synthetic persistence failure'));
+      if (fault === 'edit') await edit();
+      if (fault === 'stop') { await command('stop'); await drain(); }
+      if (fault === 'lookup') server.beforeHandle = async candidate => {
+        if (candidate.method === 'GET' && candidate.path.includes('/schedule/')) throw new GarminTrainingHttpError('retryable', false);
+      };
+      return { status: 200, body: (result.body as { scheduleId: string }).scheduleId };
+    };
+    const id = await send();
+    await processTrainingDelivery(runtime, uid, id); persistence?.mockRestore();
+    const interrupted = await ledger();
+    expect(interrupted.status).not.toBe('delivered');
+    if (fault === 'lookup' || fault === 'checkpoint') {
+      expect(interrupted.attempt?.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    } else {
+      // The already accepted old version can finish its read-only confirmation;
+      // current intent stays pending and must be applied before claiming delivery.
+      expect(interrupted.attempt).toBeNull(); expect(interrupted.status).toBe('pending');
+    }
+    expect(interrupted.actual?.ids.schedule).toBe(fault === 'checkpoint' ? undefined : [...server.schedules.keys()][0]);
+    server.beforeHandle = null;
+    for (let pass = 0; pass < 4; pass++) { await retry(id); await drain(); }
+    expect((await ledger()).status).toBe(fault === 'stop' ? 'removed' : 'delivered');
+    expect(server.workouts.size).toBe(fault === 'stop' ? 0 : 1);
+    expect(server.schedules.size).toBe(fault === 'stop' ? 0 : 1);
+    expect(server.calls.filter(candidate => candidate.method === 'POST')).toHaveLength(2);
+    if (fault === 'lookup') expect(server.calls.some(candidate => candidate.path.includes('?'))).toBe(false);
+    if (fault === 'edit') expect([...server.schedules.values()][0].date).toBe('2026-09-21');
+  });
 
   it.each(['lost-response', 'lost-checkpoint'] as const)('never repeats an ambiguous first POST after %s, even on explicit Retry', async fault => {
     const id = await send(); let persistence: ReturnType<typeof vi.spyOn> | undefined;

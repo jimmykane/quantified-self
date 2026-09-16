@@ -256,6 +256,103 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'garmin_response', resource: 'schedule', httpStatus: 204, responseShape: 'null' }));
     expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_lookup', provider: 'garmin', outcome: 'matched' });
   });
+  const scalarScheduleResponses = (numeric = false) => {
+    if (numeric) server.nextId = 1000n;
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      const result = await server.request(request, beforeSend);
+      if (request.path.startsWith('/training-api/schedule/') && ['POST', 'PUT'].includes(request.method)) {
+        const id = request.method === 'POST' ? (result.body as { scheduleId: string }).scheduleId : request.path.split('/').pop()!;
+        return { status: 200, body: numeric ? Number(id) : id };
+      }
+      return result;
+    }, () => now);
+  };
+  it.each([true, false])('confirms scalar schedule acknowledgements on create and update (numeric=%s)', async numeric => {
+    scalarScheduleResponses(numeric);
+    const first = (await execute())!;
+    expect(server.calls.at(-1)?.path).toBe(`/training-api/schedule/${first.ids.schedule}`);
+    expect(journal.some(entry => entry.artifact?.ids.schedule === first.ids.schedule && entry.progress === undefined)).toBe(true);
+    expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted' });
+    operation = nextOperation(operation, { localDate: '2026-10-25' });
+    expect(await execute()).toEqual({ ...first, localDate: '2026-10-25' });
+    expect(writes().map(call => call.method)).toEqual(['POST', 'POST', 'PUT']);
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_confirmation', provider: 'garmin', phase: 'id_retained' });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_confirmation', provider: 'garmin', phase: 'verified' });
+  });
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '01', '9223372036854775808', 'private-invalid-id'])(
+    'rejects an invalid scalar schedule acknowledgement (%s)', async body => {
+      transport = new GarminTrainingTransport(async (request, beforeSend) => {
+        const result = await server.request(request, beforeSend);
+        return request.path === '/training-api/schedule/' ? { status: 200, body } : result;
+      }, () => now);
+      await expect(execute()).rejects.toMatchObject({ kind: 'uncertain', diagnostics: { failurePhase: 'contract' } });
+      expect(operation.artifact?.ids.schedule).toBeUndefined();
+      expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+      expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private');
+      expect(writes()).toHaveLength(2);
+    });
+  it.each(['missing', 'workout', 'date', 'identity'] as const)('never confirms or replaces a retained scalar ID when inspection has a %s conflict', async fault => {
+    scalarScheduleResponses();
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || request.path !== '/training-api/schedule/') return;
+      const [id, row] = [...server.schedules.entries()][0];
+      if (fault === 'missing') server.schedules.delete(id);
+      if (fault === 'workout') row.workoutId = '42';
+      if (fault === 'date') row.date = '2026-09-16';
+      if (fault === 'identity') row.scheduleId = '42';
+      // A different inventory match must not supersede the acknowledged identity.
+      server.schedules.set('777', { scheduleId: '777', workoutId: operation.artifact!.ids.workout, date: operation.workout!.localDate });
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const retained = operation.artifact!.ids.schedule;
+    expect(retained).toBeDefined(); expect(retained).not.toBe('777');
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    await expect(recover()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.artifact!.ids.schedule).toBe(retained);
+    expect(server.calls.some(request => request.path.includes('?'))).toBe(false);
+    expect(writes()).toHaveLength(2);
+  });
+  it('recovers a retained scalar ID after confirmation is interrupted without repeating either POST', async () => {
+    scalarScheduleResponses();
+    server.beforeHandle = async request => {
+      if (request.method === 'GET' && request.path.includes('/schedule/')) throw new GarminTrainingHttpError('retryable', false);
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'retryable' });
+    const retained = operation.artifact!.ids.schedule;
+    expect(retained).toBeDefined();
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    server.beforeHandle = null;
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect((await execute())!.ids.schedule).toBe(retained);
+    expect(writes()).toHaveLength(2);
+  });
+  it('does not inspect or advance when the scalar ID checkpoint fails; recovery uses the existing exact-date lookup', async () => {
+    scalarScheduleResponses();
+    const persist = checkpoint;
+    checkpoint = async (artifact, progress) => {
+      if (artifact?.ids.schedule && progress === undefined) throw new Error('persistence unavailable');
+      await persist(artifact, progress);
+    };
+    await expect(execute()).rejects.toThrow('persistence unavailable');
+    expect(operation.artifact!.ids.schedule).toBeUndefined();
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    expect(server.calls.at(-1)?.method).toBe('POST');
+    checkpoint = persist;
+    expect(await recover()).toEqual({ kind: 'resume' }); await execute();
+    expect(writes()).toHaveLength(2);
+  });
+  it('does not switch a retained ID when a schedule update returns another scalar ID', async () => {
+    await execute(); operation = nextOperation(operation, { localDate: '2026-10-25' });
+    const id = operation.artifact!.ids.schedule;
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      const result = await server.request(request, beforeSend);
+      return request.method === 'PUT' ? { status: 200, body: 42 } : result;
+    }, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.artifact!.ids.schedule).toBe(id);
+    expect(operation.progress).toMatchObject({ step: 'schedule-update', state: 'started' });
+  });
   it.each(['empty', 'duplicate'] as const)('retains an empty-success POST journal when immediate inspection is %s, never repeating create', async mode => {
     transport = new GarminTrainingTransport(async (request, beforeSend) => {
       const result = await server.request(request, beforeSend);

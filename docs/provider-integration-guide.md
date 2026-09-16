@@ -194,10 +194,17 @@ Garmin's documented first workout POST has no external idempotency/lookup key: u
 attention, never retried blindly. Do not turn an empty schedule lookup into proof that a POST failed. HTTP response
 handling includes documented empty schedule-create success: a POST 204 is followed by an exact workout/date lookup,
 and only one matching schedule ID confirms that artifact. No match or multiple matches keep the journal uncertain.
+Production schedule POST responses also return HTTP 200 with a numeric ID alone. The adapter persists that ID before
+an exact schedule GET, then validates the workout/date association; decimal Long strings are preserved without numeric
+rounding. A scalar PUT acknowledgement must keep the existing ID. Failed or conflicting verification retains the
+started journal and known ID for recovery, never a blind replacement POST. Tests cover first-attempt confirmation,
+lost checkpoints/reads, duplicate dispatch and concurrent Stop/edits using real Firestore transactions.
 Allowlisted HTTP status and failure-phase diagnostics distinguish transport failures without logging raw provider data.
 Garmin delivery logs fixed resource/method categories, response/identity-field types, contract-validation reasons and
 schedule-lookup outcomes; the shared worker separately logs journal persistence failures before attempting to save
-retry state. Correlate the `[TrainingDelivery]` events by Cloud Logging execution ID, not user/provider identifiers.
+retry state. Scalar acknowledgements additionally log `garmin_schedule_confirmation` phases `id_retained` and
+`verified`; final worker `accepted` remains the completion signal. Correlate the `[TrainingDelivery]` events by Cloud
+Logging execution ID, not user/provider identifiers.
 See [Training diagnostics](training-workspace.md#provider-delivery-foundation-646) for event names and filters.
 Never add response bodies, arbitrary field names, dates, workout contents, credentials, IDs or raw error text to these logs.
 Functions-only emulation can still write live Firestore and trigger deployed delivery workers; isolate bulk/failure

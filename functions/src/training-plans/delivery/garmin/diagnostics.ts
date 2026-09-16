@@ -43,3 +43,7 @@ export function garminContractFailure(reason: 'expected_object' | 'invalid_sched
 export function logGarminScheduleLookup(outcome: 'invalid_response' | 'too_many_results' | 'no_match' | 'multiple_matches' | 'matched'): void {
   logger.info('[TrainingDelivery]', { event: 'garmin_schedule_lookup', provider: 'garmin', outcome });
 }
+
+export function logGarminScheduleConfirmation(phase: 'id_retained' | 'verified'): void {
+  logger.info('[TrainingDelivery]', { event: 'garmin_schedule_confirmation', provider: 'garmin', phase });
+}
