@@ -159,7 +159,9 @@ text outside Suunto's guaranteed minimum watch character set requires explicit d
 remains device-dependent. The #650 transport packages that JSON with a valid 300 × 300 PNG, preserves Guide identity
 and pin state through PUT, and retains completed FIT correlation metadata privately for #651. The existing OAuth
 application/client credentials/user tokens and `SUUNTOAPP_SUBSCRIPTION_KEY` are reused, with the
-exact application-name `SUUNTOAPP_GUIDE_OWNER` configuration. Guides uses the documented normal Cloud API authentication;
+exact OAuth application name supplied through the `SUUNTOAPP_GUIDE_OWNER` Secret Manager setting (`.secret.local`
+for emulators). The name is not hardcoded; only the two Training delivery callables and worker bind it. Guides uses the
+documented normal Cloud API authentication;
 the existing subscription must include Guides access, but no separate key is required by QS. Do not replace credentials
 or infer entitlement from reuse. See [Suunto delivery](training-workspace.md#suuntoplus-guide-delivery-650) for lifecycle, credentials,
 seven-day window, absence limitations, FIT retention and deployment boundaries. No assumed Suunto quotas, evaluation

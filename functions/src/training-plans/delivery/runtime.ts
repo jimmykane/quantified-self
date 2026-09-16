@@ -51,11 +51,9 @@ export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRunti
     transport: (provider, uid) => {
       if (!isTrainingProviderDeliveryEnabled(provider, uid)) return null;
       if (provider === 'garmin') return garminTransport(db, uid);
-      // Non-secret, exact OAuth application name. Missing configuration does not
-      // invent ownership or prevent another provider's worker from running.
-      const owner = process.env.SUUNTOAPP_GUIDE_OWNER;
-      if (provider === 'suunto' && owner) {
-        try { validateGuideOwner(owner); } catch { return null; }
+      if (provider === 'suunto') {
+        let owner: string;
+        try { owner = validateGuideOwner(config.suuntoapp.application_name); } catch { return null; }
         return suuntoTransport(db, uid, owner);
       }
       return null;

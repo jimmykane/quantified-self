@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 import { FUNCTIONS_MANIFEST, SPORTS_LIB_REPARSE_HEAVY_TASK_FUNCTION_NAME } from '../../shared/functions-manifest';
 
 interface SuuntoAppConfig {
+    readonly application_name: string;
     client_id: string;
     client_secret: string;
     subscription_key: string;
@@ -67,6 +68,9 @@ export const config: AppConfig = {
 
     get suuntoapp() {
         return {
+            get application_name() {
+                return getEnvVar('SUUNTOAPP_GUIDE_OWNER');
+            },
             get client_id() {
                 return getEnvVar('SUUNTOAPP_CLIENT_ID');
             },

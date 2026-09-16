@@ -14,6 +14,7 @@ deployment and public enablement require separate approval.
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
 | Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
 | Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
+| Suunto Training Guide application name | `SUUNTOAPP_GUIDE_OWNER` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |
 | Built-in Assistant | `GEMINI_API_KEY` |
@@ -22,8 +23,9 @@ deployment and public enablement require separate approval.
 Training Guide delivery reuses `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, the connected user's OAuth token,
 and `SUUNTOAPP_SUBSCRIPTION_KEY`. The [official Guides authentication instructions](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api)
 refer to the normal Cloud API setup; they do not require a separate OAuth application or Guides-only subscription key.
-`processTrainingDeliveryTask` binds the existing Suunto API credential set. No new secret provisioning or reconnect is
-required solely for this change. The existing subscription must grant Guides access; reuse does not establish that
+`processTrainingDeliveryTask` binds the existing Suunto API credential set. Reusing these credentials needs no new
+OAuth or subscription-key provisioning or reconnect; the owner-name setting is configured separately below.
+The existing subscription must grant Guides access; reuse does not establish that
 entitlement or prove a live request. Activity, route, Sleep and Health credential bindings remain unchanged.
 The earlier `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY` registration is removed and any leftover local value is ignored. If it
 was provisioned in Secret Manager, this source change does not delete it or alter a deployed worker. Deploy the updated
@@ -32,11 +34,20 @@ Suunto's API gateway can return HTTP 401 for an invalid subscription key indepen
 The worker recognizes the [documented APIM key-error signature](https://learn.microsoft.com/en-us/troubleshoot/azure/api-mgmt/availability/unauthorized-errors-invoke-apis)
 and fails the delivery without invalidating the user's connection. Correct the application key through the approved
 secret workflow, then Retry; do not ask the user to reconnect to fix an application key. Error bodies are not logged.
-`SUUNTOAPP_GUIDE_OWNER` is a non-secret runtime environment value containing the **exact existing OAuth application name**,
-not the client ID or an invented QS label. Configure the same value on every Training callable/worker/dispatcher that
-constructs the delivery runtime. Missing/invalid configuration leaves Suunto unavailable without affecting Garmin.
-Keep deployment settings outside repository dotenv files, following the preflight rules below. No setting or secret is
-provisioned by adding these source registrations.
+`SUUNTOAPP_GUIDE_OWNER` holds the **exact existing OAuth application name** from Suunto API Zone's profile → OAuth
+application settings → App name. It is public application metadata, but is managed through the same Secret Manager
+workflow as the other Suunto settings, not hardcoded. `config.suuntoapp.application_name` reads it lazily. Only
+`previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`, and `processTrainingDeliveryTask` bind this setting;
+preview/mutation do not gain access to OAuth credentials or subscription keys. Dispatch and lifecycle triggers do not
+read the owner. A missing or invalid value leaves Suunto unavailable without blocking Garmin.
+
+For local Functions emulation, add `SUUNTOAPP_GUIDE_OWNER=<exact application name>` to the ignored
+`functions/.secret.local` and restart the Functions emulator. The value-free `.secret.local.example` lists the key.
+For deployment, an authorized operator sets it interactively with
+`firebase functions:secrets:set SUUNTOAPP_GUIDE_OWNER --project <firebase-project-id>` and then redeploys those three
+Training endpoints together under separate deployment approval. No frontend release, OAuth reconnect or source-code
+change is needed to configure the name. This implementation does not set a local/cloud value, provision a secret,
+deploy, or change existing rollout/consent gates.
 
 Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
 

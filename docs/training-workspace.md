@@ -732,12 +732,22 @@ requests. The [official Guides authentication workflow](https://apizone.suunto.c
 uses the normal Cloud API setup; it does not require a separate Guides key. The existing subscription must include
 Guides access, which credential reuse alone does not prove. The Training worker binds the existing API credential set;
 activity/route/Health/Sleep bindings and ingestion paths remain unchanged.
-The non-secret `SUUNTOAPP_GUIDE_OWNER` runtime value must equal the exact OAuth application name. Missing/invalid owner
-configuration disables the binding; reusing the existing credentials requires no new OAuth connection. See
+Guide ownership uses the exact OAuth application name from the configurable `SUUNTOAPP_GUIDE_OWNER` secret,
+read lazily through `config.suuntoapp.application_name`. Although the name is public application metadata, it is managed
+through Secret Manager in deployed Functions and `functions/.secret.local` in emulators, not hardcoded. The two delivery
+callables (`previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`) and `processTrainingDeliveryTask` bind
+it; callables receive no OAuth credentials or subscription key. Dispatch/lifecycle triggers do not read it. Missing or
+invalid owner configuration disables only the Suunto transport. The transport validates the exact configured name and
+preserves it in Guide JSON and private acceptance evidence. Reusing existing credentials requires no new OAuth connection.
+Existing readiness, Pro, consent and per-request authority guards remain unchanged. MCP impact: provider-internal
+configuration only; no authored recipe, safe read projection, consent, tool or wire-schema changes. Help was reviewed
+and needs no operator configuration instructions. Regression tests cover different configured names, generated ZIPs,
+retained ownership, missing/invalid configuration, credential laziness and non-pilot denial with mocked HTTP only. See
 [secret management](function-secret-management.md) before a separately approved deployment. No credentials or cloud
 configuration are created by this implementation.
-The former Guides-only key is no longer read or required; any existing cloud secret is left untouched. This correction
-requires a separately approved Training worker deployment, not a new secret or a frontend release.
+The former Guides-only subscription key is no longer read or required; any existing cloud secret is left untouched.
+The operator-managed owner setting must be provisioned before a separately approved deployment of the two delivery
+callables and Training worker. No frontend release is required. This implementation does not set secret values or deploy.
 Documented APIM subscription-key rejection signatures are application configuration failures, not revoked user OAuth
 consent: they do not block the connection generation or request reconnect. After correcting the key, Retry uses the
 same connection and consent. Other 401 responses retain the OAuth reconnect behavior; raw error bodies are never exposed.
