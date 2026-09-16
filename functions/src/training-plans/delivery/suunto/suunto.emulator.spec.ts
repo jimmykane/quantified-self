@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { trainingDeliveryCommand } from '../commands';
 import { reconcileTrainingDeliveryPage } from '../store';
@@ -89,6 +89,48 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await command('stop'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     pro = true; await mark(); await processTrainingDelivery(runtime, uid, row.id);
     expect(server.guides.size).toBe(0);
+  });
+  it.each(['enabled', 'stopped', 'paused', 'expired'])('reassesses old cosmetic warnings without overriding %s plan consent', async state => {
+    const title = 'Sample — interval session';
+    await user().collection('scheduledWorkouts').doc('w').update({ title, planId: 'p' });
+    await user().collection('trainingPlans').doc('p').set({ id: 'p', lifecycle: 'active', revision: 1 });
+    await user().collection('trainingPlanState').doc('current').update({ activePlanId: 'p' });
+    const transport = runtime.transport('suunto')!;
+    const assess = transport.assess.bind(transport);
+    const legacyAssessment = vi.spyOn(transport, 'assess').mockImplementation((workout, destination, zone) => ({
+      ...assess(workout, destination, zone), mappingVersion: 'suunto-guides-v1', digest: 'legacy-cosmetic-review',
+      level: 'degraded', issues: ['Watch title contains a character outside the minimum character set.'],
+    }));
+    await trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'plan', scopeId: 'p',
+      provider: 'suunto', action: 'configure', expectedScheduleRevision: 1, expectedScopeRevision: 1,
+      expectedSettingsRevision: 0, timeZone: 'Europe/Helsinki' }, false);
+    await drain(); const blocked = await ledger();
+    expect(blocked.status).toBe('approval_required'); expect(server.guides.size).toBe(0);
+    const settingsRef = user().collection('trainingDeliverySettings').doc('plan_p_suunto');
+    const settings = (await settingsRef.get()).data();
+    if (state === 'stopped') await command('stop');
+    if (state === 'paused') await user().collection('trainingPlans').doc('p').update({ lifecycle: 'paused' });
+    if (state === 'expired') pro = false;
+    legacyAssessment.mockRestore();
+    await mark();
+    if (state === 'stopped' || state === 'paused') {
+      expect((await ledger()).desired).toBe('absent');
+    }
+    await processTrainingDelivery(runtime, uid, blocked.id); await drain();
+    const current = await ledger();
+    expect(current.id).toBe(blocked.id);
+    expect((await settingsRef.get()).data()).toEqual(settings);
+    expect((await user().collection('scheduledWorkouts').doc('w').get()).data()?.title).toBe(title);
+    if (state === 'enabled') {
+      expect(current.status).toBe('delivered'); expect(server.guides.size).toBe(1);
+      expect([...server.guides.values()][0].guide.name).toBe('Sample - interval session');
+      expect([...server.guides.values()][0].guide.description).toBe(title);
+      expect(current.approvalDigest).toBeNull();
+    } else {
+      expect(current.status).toBe(state === 'expired' ? 'paused_pro' : 'removed');
+      expect(server.guides.size).toBe(0);
+      expect(server.calls.some(request => request.method === 'POST')).toBe(false);
+    }
   });
   it('recovers lost create acceptance on explicit Retry without a duplicate', async () => {
     server.afterHandle = async request => { if (request.method === 'POST') { server.afterHandle = null; throw new SuuntoGuideHttpError('uncertain', false); } };

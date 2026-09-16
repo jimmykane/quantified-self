@@ -95,6 +95,59 @@ describe('Training provider delivery controls', () => {
     // single-action slot, where they squeeze the provider name at phone widths.
     expect(fixture.nativeElement.querySelector('[compactRowAction]')).toBeNull();
   });
+  it.each([false, true])('makes review primary and keeps plan exclusion in a secondary menu, even when paused: %s', async paused => {
+    service.isReady.mockImplementation(provider => provider === 'suunto' && !paused);
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
+      status: 'approval_required', hasRemoteCopy: false, differsFromQS: false, lastAttemptAtMs: null, retryCount: 0, approvalDigest: 'approval' }] }));
+    TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
+      plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const heading = fixture.nativeElement.querySelector('.delivery-provider-settings .delivery-status-label');
+    expect(heading.textContent).toBe('Not sent · Needs review');
+    expect(fixture.nativeElement.textContent).not.toContain('A provider copy exists');
+    expect(fixture.nativeElement.querySelectorAll('.delivery-status-label')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.delivery-provider-settings').textContent).not.toContain('today and the next six days');
+    const guidance = fixture.nativeElement.querySelector('#delivery-guidance-details') as HTMLElement;
+    expect(guidance.hidden).toBe(true); expect(guidance.textContent).toContain('today and the next six days');
+    const review = fixture.nativeElement.querySelector('button[aria-label="Review workout changes for Suunto"]') as HTMLButtonElement | null;
+    expect(!!review).toBe(!paused);
+    if (review) expect(review.hasAttribute('mat-flat-button')).toBe(true);
+    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).not.toContain('Stop workout sync');
+    expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).not.toHaveBeenCalled();
+    const more = fixture.nativeElement.querySelector('button[aria-label="More Suunto workout sync actions"]') as HTMLButtonElement;
+    more.click(); fixture.detectChanges(); await fixture.whenStable();
+    const exclude = document.querySelector('[role="menuitem"]') as HTMLButtonElement;
+    expect(exclude.textContent?.trim()).toBe('Exclude from plan sync');
+    expect(document.querySelector('[role="menu"]')?.classList.contains('qs-menu-panel')).toBe(true);
+    exclude.click(); fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('h2').textContent).toBe('Exclude from plan sync?');
+    expect(fixture.nativeElement.textContent).toContain('It stays in your QS plan');
+    expect(fixture.nativeElement.textContent).toContain('Other workouts are not affected');
+    expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ provider: 'suunto', action: 'stop' }), expect.any(Function));
+    expect(service.mutate).not.toHaveBeenCalled();
+    expect(haptics.selection).toHaveBeenCalledTimes(2);
+    fixture.componentInstance.cancelReview(); fixture.detectChanges();
+    fixture.componentInstance.phase.set('saving'); fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('button[aria-label="More Suunto workout sync actions"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+  it('reviews real differences without approving them on open, and labels retained copies as updates', async () => {
+    service.isReady.mockImplementation(provider => provider === 'suunto');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto',
+      status: 'approval_required', approvalDigest: 'approval', lastAcceptedAtMs: 1000 }] }));
+    service.preview.mockResolvedValue({ ...(await service.preview()), approvalDigest: 'approval',
+      issues: ['The instruction will be shortened on the watch.'] });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Update needs review');
+    expect(fixture.nativeElement.textContent).not.toContain('Not sent');
+    fixture.nativeElement.querySelector('button[aria-label="Review workout changes for Suunto"]').click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('The instruction will be shortened on the watch');
+    expect(fixture.nativeElement.textContent).toContain('Approve differences');
+    expect(service.mutate).not.toHaveBeenCalled();
+    expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ action: 'approve', approvalDigest: 'approval' }), expect.any(Function));
+    expect(haptics.selection).toHaveBeenCalledOnce();
+  });
   it('checks without a preview or consent wizard and distinguishes cloud checking from device availability', async () => {
     service.isReady.mockReturnValue(true);
     service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, status: 'delivered', lastAcceptedAtMs: 1000 }],
@@ -113,7 +166,7 @@ describe('Training provider delivery controls', () => {
   });
   it('shows the last attempt for partial delivery instead of an empty last-sent date', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.delivery-status-label + .delivery-caption').textContent).toContain('Last attempt');
+    expect(fixture.nativeElement.querySelector('.delivery-status > .delivery-caption').textContent).toContain('Last attempt');
   });
   it('describes a failed manual check without telling the user to save sync settings', async () => {
     service.check.mockRejectedValue(new Error('not available'));
@@ -250,7 +303,7 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.querySelector('.delivery-context a[href="/training/plans/workout/w"]').textContent).toContain('Edit workout');
     await fixture.componentInstance.begin('garmin', 'stop'); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.delivery-edit-workout')).toBeNull();
-    expect(fixture.nativeElement.querySelector('h2').textContent).toBe('Stop workout sync?');
+    expect(fixture.nativeElement.querySelector('h2').textContent).toBe('Exclude from plan sync?');
     expect(fixture.nativeElement.textContent).toContain('Other workouts are not affected');
     expect(service.preview).toHaveBeenCalledWith(expect.objectContaining({ scope: 'workout', scopeId: 'w', action: 'stop' }), expect.any(Function));
     fixture.componentInstance.cancelReview(); fixture.detectChanges();
@@ -617,8 +670,7 @@ describe('Training provider delivery controls', () => {
     TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
       plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
-      .some(button => button.textContent?.trim() === 'Stop workout sync')).toBe(true);
+    expect(fixture.nativeElement.querySelector('button[aria-label="More Garmin workout sync actions"]')).not.toBeNull();
   });
   it('keeps Stop available after a transfer before a delivery status exists, ignoring the old plan suppression', () => {
     service.isReady.mockImplementation(provider => provider === 'garmin');
@@ -628,7 +680,7 @@ describe('Training provider delivery controls', () => {
       plans: [], workouts: [{ id: 'w', planId: 'new-plan', revision: 2 }] }) } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     expect(fixture.componentInstance.rows()[0].canStop).toBe(true);
-    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).toContain('Stop workout sync');
+    expect(fixture.nativeElement.querySelector('button[aria-label="More Garmin workout sync actions"]')).not.toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('Resume workout sync');
   });
   it.each(['old-plan', 'new-plan'])('only offers status-derived Resume for the current plan, not a previous plan (%s)', planId => {
@@ -638,7 +690,7 @@ describe('Training provider delivery controls', () => {
       plans: [], workouts: [{ id: 'w', planId: 'new-plan', revision: 2 }] }) } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     expect(fixture.nativeElement.textContent.includes('Resume workout sync')).toBe(planId === 'new-plan');
-    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).toContain('Stop workout sync');
+    expect(fixture.nativeElement.querySelector('button[aria-label="More Garmin workout sync actions"]')).not.toBeNull();
   });
   it.each(['stop', 'retry', 'resume', 'approve'] as const)('shows only the server-resolved inherited zone when reviewing %s', async action => {
     service.isReady.mockImplementation(provider => provider === 'garmin');
@@ -663,9 +715,9 @@ describe('Training provider delivery controls', () => {
     TestBed.overrideProvider(TrainingPlansService, { useValue: { watchSchedule: () => of({ state: { revision: 3 },
       plans: [], workouts: [{ id: 'w', planId: 'p', revision: 2 }] }) } });
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Stopped for this workout');
+    expect(fixture.nativeElement.textContent).toContain('Excluded from plan sync');
     expect(fixture.nativeElement.textContent).toContain('Resume workout sync');
-    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).not.toContain('Stop workout sync');
+    expect(fixture.nativeElement.querySelector('button[aria-label="More Garmin workout sync actions"]')).toBeNull();
     expect(service.mutate).not.toHaveBeenCalled();
   });
   it('does not offer Resume again after consent resumes while its old stopped status is still reconciling', () => {
@@ -679,7 +731,7 @@ describe('Training provider delivery controls', () => {
     expect(fixture.nativeElement.textContent).toContain('Resume workout sync');
     view$.next({ ...view$.value, settings: [{ ...view$.value.settings[0], suppressed: false }] }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('Resume workout sync');
-    expect(fixture.nativeElement.querySelector('.delivery-actions').textContent).toContain('Stop workout sync');
+    expect(fixture.nativeElement.querySelector('button[aria-label="More Garmin workout sync actions"]')).not.toBeNull();
     expect(service.mutate).not.toHaveBeenCalled();
   });
   it('opens retained workout delivery from history without linking to a deleted editor', () => {
@@ -770,6 +822,8 @@ describe('Training provider delivery controls', () => {
       // credentials, live data, or browser-selected production mode is involved.
       if (process.env.TRAINING_DELIVERY_QA_DIR) {
         const body = document.body.cloneNode(true) as HTMLElement;
+        // Match the running app; pre-hydration global styles intentionally hide font icons.
+        body.classList.add('app-hydrated');
         if (name.endsWith('-dark')) body.classList.add('dark-theme');
         document.querySelectorAll('input').forEach((input, index) => body.querySelectorAll('input')[index].setAttribute('value', input.value));
         writeFileSync(join(process.env.TRAINING_DELIVERY_QA_DIR, `${name}.html`),
@@ -883,6 +937,26 @@ describe('Training provider delivery controls', () => {
     expect(document.body.textContent).toContain('today and the next six days');
     expect(document.body.textContent).toContain('not confirmed on your watch');
     expect(document.body.textContent).toContain('Pinning stays under your control');
+    ref.close();
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'suunto', planId: 'p',
+      status: 'approval_required', hasRemoteCopy: false, differsFromQS: false, lastAttemptAtMs: null, retryCount: 0, approvalDigest: 'approval',
+      updatedAtMs: Date.parse('2026-12-29T12:00:00Z'),
+      issues: ['The step instruction is too long for the watch. Review the shortened version before sending.'] }] }));
+    ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'workout', id: 'w', title: 'Winter endurance workout' }, width: '640px', maxWidth: '95vw',
+    });
+    await TestBed.inject(ApplicationRef).whenStable(); render('suunto-review'); render('suunto-review-dark');
+    const menuButton = document.querySelector('button[aria-label="More Suunto workout sync actions"]') as HTMLButtonElement;
+    menuButton.focus();
+    menuButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    // JSDOM does not synthesize the native click following a keyboard activation.
+    menuButton.click();
+    await TestBed.inject(ApplicationRef).whenStable(); render('suunto-review-menu'); render('suunto-review-menu-dark');
+    expect(document.querySelector('[role="menuitem"]')?.textContent).toContain('Exclude from plan sync');
+    expect(document.activeElement?.getAttribute('role')).toBe('menuitem');
+    (document.querySelector('[role="menuitem"]') as HTMLButtonElement).click();
+    await TestBed.inject(ApplicationRef).whenStable(); render('suunto-exclude'); render('suunto-exclude-dark');
+    expect(ref.componentInstance.draft()?.action).toBe('stop');
     ref.close();
   });
 });

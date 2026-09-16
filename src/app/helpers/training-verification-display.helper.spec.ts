@@ -10,11 +10,23 @@ describe('Training remote check labels', () => {
     expect(trainingVerificationCommandError({ code: 'aborted' })).not.toContain('Cancel');
     expect(trainingVerificationCommandError(new Error('failure'))).toContain('Unable to check delivery');
   });
-  it.each(['failed', 'needs_attention', 'unsupported', 'approval_required', 'outside_horizon'] as const)(
+  it.each(['failed', 'needs_attention', 'unsupported', 'outside_horizon'] as const)(
     'does not hide %s behind an earlier check or restoration state', status => {
       for (const state of ['present', 'unknown', 'restoring', 'deferred'] as const) {
         expect(trainingVerificationLabel({ status } as TrainingDeliveryStatusV1, { state } as TrainingVerificationV1))
           .toBe(TRAINING_DELIVERY_STATUS_LABELS[status]);
       }
     });
+  it.each([
+    [false, null, null, 'Not sent · Needs review'],
+    [true, 1000, 1000, 'Update needs review'],
+    [true, null, 1000, 'Update needs review'],
+    [false, 1000, 1000, 'Update needs review'],
+    [false, null, 1000, 'Needs review'],
+  ])('distinguishes initial review from updates and uncertain acceptance (%s, %s, %s)', (hasRemoteCopy, lastAcceptedAtMs, lastAttemptAtMs, label) => {
+    for (const state of ['present', 'restoring', 'unknown'] as const) {
+      expect(trainingVerificationLabel({ status: 'approval_required', hasRemoteCopy, lastAcceptedAtMs, lastAttemptAtMs } as TrainingDeliveryStatusV1,
+        { state } as TrainingVerificationV1)).toBe(label);
+    }
+  });
 });

@@ -430,6 +430,53 @@ describe('planned-workout provider proof fixtures', () => {
         });
     });
 
+    it.each(['Tempo — steady run', 'Sample — interval session'])('adapts cosmetic watch text without approval: %s', name => {
+        const structure = oneStepStructure({ kind: 'step', id: 'work', purpose: 'work',
+            ending: { kind: 'time', seconds: 600 }, targets: [], note: '“Steady” — don’t rush…' });
+        const before = JSON.stringify(structure);
+        const result = serializeSuuntoGuideJsonV1(structure, {
+            name, owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03', sourceWorkoutId: 'cosmetic-workout', allowDegraded: false,
+        });
+        expect(result.level).toBe('exact'); expect(result.issues).toEqual([]);
+        expect(result.artifact.name).toBe(name.replace('—', '-'));
+        expect(result.artifact.description).toBe(name);
+        expect(Array.from(result.artifact.shortDescription).length).toBeLessThanOrEqual(23);
+        expect(result.artifact.steps[0]).toMatchObject({ fields: expect.arrayContaining([
+            { type: 'text', value: '"Steady" - don\'t rush...' },
+        ]) });
+        expect(JSON.stringify(structure)).toBe(before);
+    });
+
+    it('keeps genuine Suunto instruction, title and explicit-subtitle losses behind approval', () => {
+        const structure = oneStepStructure({ kind: 'step', id: 'work', purpose: 'work',
+            ending: { kind: 'time', seconds: 600 }, targets: [], note: 'x'.repeat(39) + '…' });
+        const result = serializeSuuntoGuideJsonV1(structure, {
+            name: 'x'.repeat(61), shortDescription: 'Explicit subtitle that is too long', owner: 'Quantified Self',
+            url: 'https://quantified-self.io/training/plans', localDate: '2026-09-03',
+            sourceWorkoutId: 'long-workout', allowDegraded: true,
+        });
+        expect(result.level).toBe('degraded');
+        expect(result.issues.map(issue => [issue.code, issue.path])).toEqual(expect.arrayContaining([
+            ['text_truncated', '$.name'], ['text_truncated', '$.shortDescription'],
+            ['text_truncated_for_metrics', '$.nodes[0].note'],
+        ]));
+    });
+
+    it('preserves Unicode and exact ownership rather than guessing, and does not repeat derived-text warnings', () => {
+        const structure = oneStepStructure({ kind: 'step', id: 'work', purpose: 'work',
+            ending: { kind: 'time', seconds: 600 }, targets: [] });
+        const result = serializeSuuntoGuideJsonV1(structure, {
+            name: 'Café 🚴', description: 'App-only description — Ελληνικά', owner: 'Coach — App',
+            url: 'https://quantified-self.io/training/plans', localDate: '2026-09-03',
+            sourceWorkoutId: 'unicode-title', allowDegraded: true,
+        });
+        expect(result.artifact.owner).toBe('Coach — App');
+        expect(result.artifact.name).toBe('Café 🚴');
+        expect(result.artifact.description).toBe('App-only description — Ελληνικά');
+        expect(result.issues.map(issue => issue.path)).toEqual(['$.name', '$.owner']);
+    });
+
     it('does not claim exact Suunto rendering outside the guaranteed watch character set', () => {
         const structure = oneStepStructure({
             kind: 'step',

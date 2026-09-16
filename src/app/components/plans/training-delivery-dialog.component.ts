@@ -90,7 +90,8 @@ export class TrainingDeliveryDialogComponent {
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)?.name ?? this.data.title
     : this.workout()?.title ?? this.data.title);
   readonly workoutRoute = computed(() => this.workout() && this.workout()?.lifecycle !== 'deleted' ? trainingPlansWorkoutRoute(this.data.id) : null);
-  readonly stopLabel = computed(() => this.data.scope === 'plan' ? 'Stop plan sync' : 'Stop workout sync');
+  readonly stopLabel = computed(() => this.data.scope === 'plan' ? 'Stop plan sync'
+    : this.planBound() && this.canSend() ? 'Exclude from plan sync' : 'Stop workout sync');
   readonly planBound = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.data.id)?.planId != null && this.data.scope === 'workout');
   readonly canSend = computed(() => !!this.scopeRecord() && this.scopeRecord()!.lifecycle !== 'deleted');
   readonly canReview = computed(() => this.view().loaded && !this.view().error && !!this.schedule() && this.data.scope !== 'history'
@@ -172,17 +173,18 @@ export class TrainingDeliveryDialogComponent {
       // Current settings precede the asynchronously reconciled status after Resume.
       canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'
         && (!this.planBound() || status.planId === currentPlanId))),
-      settingLabel: this.planBound() ? suppressed ? 'Stopped for this workout' : 'Follows plan sync settings'
+      settingLabel: this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : this.data.scope === 'plan' ? setting?.enabled ? 'Plan sync enabled' : 'Plan sync off'
           : setting?.enabled ? 'Workout sync enabled' : 'Workout sync off',
       visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
       canStop: !!setting?.enabled || (this.planBound() && !suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
-      approvalDigest: statuses.find(item => item.approvalDigest)?.approvalDigest ?? null,
+      approvalDigest: suppressed ? null : statuses.find(item => item.status === 'approval_required' && item.approvalDigest)?.approvalDigest ?? null,
       canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying'].includes(item.status)),
       reconnect: statuses.some(item => ['reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)),
     };
   }).filter(row => row.visible));
+  readonly showsSuuntoGuidance = computed(() => this.rows().some(row => row.provider === 'suunto'));
   readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
   readonly canConfirm = computed(() => {
     const preview = this.preview();

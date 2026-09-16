@@ -85,6 +85,23 @@ function truncateCodePoints(value: string, maximum: number): string {
     return Array.from(value).slice(0, maximum).join('');
 }
 
+/** Cosmetic watch-font substitutions only. Never transliterate letters, strip
+ * unknown characters, or apply these changes to ownership/identity fields. */
+function watchText(value: string): string {
+    return value.replace(/[\u2010-\u2015]/g, '-')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201c\u201d]/g, '"')
+        .replace(/\u2026/g, '...')
+        .replace(/[\u00a0\u202f]/g, ' ');
+}
+
+function generatedWatchSubtitle(name: string): string {
+    if (codePointLength(name) <= 23) return name;
+    const prefix = truncateCodePoints(name, 20);
+    const boundary = prefix.lastIndexOf(' ');
+    return `${(boundary > 0 ? prefix.slice(0, boundary) : prefix).trimEnd()}...`;
+}
+
 function usesCharactersOutsideSuuntoMinimum(value: string): boolean {
     return Array.from(value).some(character => !SUUNTO_MINIMUM_SUPPORTED_CHARACTERS.has(character));
 }
@@ -128,13 +145,14 @@ function addCharacterSetIssue(
     issues: ProviderSerializationIssueV1[],
     path: string,
     value: string,
+    label: string,
 ): void {
     if (!usesCharactersOutsideSuuntoMinimum(value)) return;
     issues.push({
         severity: 'degraded',
         code: 'device_character_support_unverified',
         path,
-        message: 'This text contains characters outside Suunto\'s guaranteed watch character set and may not render on every device.',
+        message: `${label} contains characters outside Suunto's guaranteed watch character set and may not render on every device.`,
     });
 }
 
@@ -250,10 +268,11 @@ function collectStepIssues(
     issues: ProviderSerializationIssueV1[],
 ): void {
     const visit = (step: WorkoutStepV1, path: string): void => {
-        if (step.note && codePointLength(step.note) > 54) {
+        const note = step.note ? watchText(step.note) : '';
+        if (codePointLength(note) > 54) {
             addTruncationIssue(issues, `${path}.note`, 'Suunto step text', 54);
         }
-        if (step.note && codePointLength(step.note) > 40 && (step.targets.length > 0 || step.ending.kind !== 'manual')) {
+        if (codePointLength(note) > 40 && (step.targets.length > 0 || step.ending.kind !== 'manual')) {
             issues.push({
                 severity: 'degraded',
                 code: 'text_truncated_for_metrics',
@@ -261,7 +280,7 @@ function collectStepIssues(
                 message: 'Suunto cannot show other fields alongside text longer than 40 characters.',
             });
         }
-        if (step.note) addCharacterSetIssue(issues, `${path}.note`, step.note);
+        if (note) addCharacterSetIssue(issues, `${path}.note`, note, 'Step instruction');
         step.targets.forEach((target, targetIndex) => {
             if (target.kind !== 'heart-rate') return;
             const values = absoluteTargetValues(target);
@@ -292,7 +311,7 @@ function stepToSuunto(step: WorkoutStepV1): SuuntoGuideFieldsStepV1 {
     ];
     if (step.note) {
         const maximum = fields.length > 0 ? 40 : 54;
-        fields.push({ type: 'text', value: truncateCodePoints(step.note, maximum) });
+        fields.push({ type: 'text', value: truncateCodePoints(watchText(step.note), maximum) });
     }
     if (fields.length === 0) fields.push({ type: 'text', value: 'Press lap' });
 
@@ -324,10 +343,11 @@ export function serializeSuuntoGuideJsonV1(
     const structure = parseWorkoutStructureV1(structureValue);
     const rawName = normalizedRequiredText(options.name, 'Suunto Guide name');
     const rawDescription = normalizedRequiredText(options.description ?? rawName, 'Suunto Guide description');
-    const rawShortDescription = normalizedRequiredText(
-        options.shortDescription ?? rawName,
-        'Suunto Guide short description',
-    );
+    const name = watchText(rawName);
+    // The generated subtitle is display metadata, not authored workout instructions.
+    // Explicit subtitles still require approval if their content must be shortened.
+    const shortDescription = options.shortDescription === undefined ? generatedWatchSubtitle(name)
+        : watchText(normalizedRequiredText(options.shortDescription, 'Suunto Guide short description'));
     const rawOwner = normalizedRequiredText(options.owner, 'Suunto Guide owner');
     const url = validateGuideUrl(options.url);
     const localDate = normalizeTrainingLocalDate(options.localDate);
@@ -337,18 +357,20 @@ export function serializeSuuntoGuideJsonV1(
     if (externalId.length > 64) throw new Error('Suunto Guide external ID must not exceed 64 characters.');
 
     const additionalIssues: ProviderSerializationIssueV1[] = [];
-    if (codePointLength(rawName) > 60) addTruncationIssue(additionalIssues, '$.name', 'Suunto Guide name', 60);
+    if (codePointLength(name) > 60) addTruncationIssue(additionalIssues, '$.name', 'Suunto Guide name', 60);
     if (codePointLength(rawDescription) > 256) {
         addTruncationIssue(additionalIssues, '$.description', 'Suunto Guide description', 256);
     }
-    if (codePointLength(rawShortDescription) > 23) {
+    if (codePointLength(shortDescription) > 23) {
         addTruncationIssue(additionalIssues, '$.shortDescription', 'Suunto Guide short description', 23);
     }
     if (codePointLength(rawOwner) > 64) addTruncationIssue(additionalIssues, '$.owner', 'Suunto Guide owner', 64);
-    addCharacterSetIssue(additionalIssues, '$.name', rawName);
-    addCharacterSetIssue(additionalIssues, '$.description', rawDescription);
-    addCharacterSetIssue(additionalIssues, '$.shortDescription', rawShortDescription);
-    addCharacterSetIssue(additionalIssues, '$.owner', rawOwner);
+    addCharacterSetIssue(additionalIssues, '$.name', name, 'Workout title');
+    // Description is app-only. A derived subtitle must not duplicate its title warning.
+    if (options.shortDescription !== undefined) {
+        addCharacterSetIssue(additionalIssues, '$.shortDescription', shortDescription, 'Watch subtitle');
+    }
+    addCharacterSetIssue(additionalIssues, '$.owner', rawOwner, 'Guide owner');
     collectStepIssues(structure, additionalIssues);
 
     const resolved = resolveProviderSerializationIssuesV1({
@@ -360,9 +382,9 @@ export function serializeSuuntoGuideJsonV1(
     const activity: 1 | 2 = structure.sport === ActivityTypes.Running ? 1 : 2;
     const artifact: SuuntoGuideJsonV1 = {
         type: 'sequence',
-        name: truncateCodePoints(rawName, 60),
+        name: truncateCodePoints(name, 60),
         description: truncateCodePoints(rawDescription, 256),
-        shortDescription: truncateCodePoints(rawShortDescription, 23),
+        shortDescription: truncateCodePoints(shortDescription, 23),
         owner: truncateCodePoints(rawOwner, 64),
         url,
         activities: [activity],

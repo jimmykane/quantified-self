@@ -632,8 +632,16 @@ details, not the workout editor. Loaded rows sort by scheduled date with ID tie-
 source date sort last and do not invent one. The live loaded-prefix query remains bounded and **Show more workout
 statuses** expands it; sorting does not claim all history has been loaded. History rows identify the current plan or
 Standalone, and transferred/deleted sources remain labelled rather than silently appearing to belong to the old plan.
-Workout details name their parent plan or Standalone, clearly label **Stop workout sync** / **Resume workout sync**,
-and explain that other workouts are unaffected. **Back to plan sync** / **Back to sync history** returns to the originating
+Workout details name their parent plan or Standalone. Plan-bound workouts place **Exclude from plan sync** in the
+provider's Material more-actions menu, with confirmation that the workout stays in QS and other workouts are unaffected.
+That removal control remains available when the provider is paused. Standalone workouts retain **Stop workout sync**;
+**Resume workout sync** removes an individual plan exclusion. Real compatibility warnings show a primary **Review**
+action, not a competing inline Stop button. **Not sent · Needs review** applies only before any delivery attempt or
+acceptance; retained copies show **Update needs review**, and ambiguous attempts show **Needs review** without claiming
+absence. The single-workout status appears above its actions, without a repeated heading in its details. Suunto's
+scheduling-window/watch instructions live under **How sync works** in workout details so the current status and actions
+remain upfront on narrow phones; plan overview retains its per-provider explanation.
+**Back to plan sync** / **Back to sync history** returns to the originating
 overview without commands or new consent; **Edit workout** is a separate labelled route action beside the workout's
 name/date, aligned to the right of the context header rather than mixed into provider controls or attempt history.
 At phone widths it can wrap onto its own right-aligned header line without squeezing the title. It remains absent for
@@ -711,13 +719,31 @@ device limits, COROS recovery-to-rest and first-target-only behavior, COROS inte
 ELEMNT behavior, unsupported Wahoo relative references frozen to their stored absolute snapshot, integer rounding for
 Wahoo FTP/heart-rate header references, Suunto relative targets frozen to absolute values, Wahoo relative HR/speed
 target support limited to treadmill workouts in its app, cadence converted from rpm to hertz, Unicode-safe text
-truncation, and Suunto text outside the guaranteed minimum watch character set. Unsupported sport, ending, or target
+truncation of authored text, and Suunto watch text outside the guaranteed minimum character set after the cosmetic
+adaptation described below. Unsupported sport, ending, or target
 combinations fail instead of being approximated. The common lifecycle is proved with the #646 test transport above;
 ordinary provider integration tests remain #647–#650, with contract questions in #645. Rollout, AI, templates, completion
 matching and Sports Lib extraction remain #651–#655; manual bulk-operation hardening remains #657 under epic #583.
 These are explicit tracked slices, not anonymous TODOs.
 
 #### SuuntoPlus Guide delivery (#650)
+
+Mapping `suunto-guides-v2` converts common typographic dashes, curly quotes, ellipses and non-breaking spaces only in
+outgoing watch text. Its default watch subtitle is derived from the title, word-shortened with an ASCII ellipsis to
+fit 23 code points. Those cosmetic adaptations require no per-workout approval; QS titles/recipes and the app-only
+description remain unchanged. Explicit subtitle truncation, title/instruction loss and remaining unsupported watch
+characters still require review. Identity fields and the configured Guide owner are never normalized. Character
+warnings identify the affected field; the derived subtitle does not repeat the title's warning, and app-only description
+text is not tested against watch fonts. This is a formatting policy, not a claim that Suunto rejects Unicode.
+
+Existing cosmetic-only blocked deliveries are reassessed by ordinary reconciliation after the mapping is deployed;
+no manual approval or data migration is needed. Current consent, plan lifecycle, Pro, account, scheduling-window and
+deletion guards still apply. Known Guide IDs update in place. Unknown create acceptance remains blocked if exact recovery
+cannot establish the old payload; a mapping change never authorizes another POST. Tests cover legacy blocked plan
+delivery, Stop, pause, Pro expiry, retained IDs/pinning, uncertain creates and mobile review/exclusion controls.
+MCP impact: no wire-contract change. Authored recipes, unit formatting and safe status enums are unchanged. Existing
+read-only projections already distinguish approval-required from delivered and exclude provider payloads/approval
+digests; the Suunto projection fixture covers both states. No new scopes, tools, plugin rebuild or activity-total change.
 
 One eligible scheduled workout becomes one dated SuuntoPlus Guide, not a native Suunto plan. The existing ledger,
 Cloud Task worker, consent controls and compact statuses are reused. `delivery/suunto/` packages the existing serializer

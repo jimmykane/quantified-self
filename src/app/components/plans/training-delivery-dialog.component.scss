@@ -1,6 +1,6 @@
 :host { display: block; min-width: 0; }
 p, li, span, a { overflow-wrap: anywhere; }
-.delivery-actions, .delivery-review-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.delivery-actions, .delivery-review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; }
 .delivery-review { display: flex; flex-direction: column; align-items: stretch; gap: 0.75rem; }
 .delivery-review p { margin-block: 0; }
 .delivery-subtitle, .delivery-caption { color: var(--mat-sys-on-surface-variant); }
@@ -21,6 +21,7 @@ app-compact-row p.delivery-caption { margin: 0; }
 .delivery-zone-form { display: flex; align-items: start; flex-wrap: wrap; gap: 0.25rem; }
 .delivery-zone-form mat-form-field { flex: 1 1 220px; min-width: 0; }
 .delivery-status-label { font-weight: 500; }
+.delivery-provider-settings .delivery-status-label { margin-block: 0.25rem; }
 .delivery-list { list-style: none; margin: 0; padding: 0; }
 .delivery-status { padding-block: 0.5rem; }
 .delivery-status + .delivery-status { border-top: 1px solid var(--mat-sys-outline-variant); }

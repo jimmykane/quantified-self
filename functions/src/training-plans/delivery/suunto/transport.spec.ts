@@ -37,6 +37,32 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     op = { ...op, kind: 'remove', workout: null, progress: null };
     expect(await execute()).toBeNull(); expect(server.guides.size).toBe(0);
   });
+  it('updates a retained pre-normalization Guide in place without changing pinning or identity', async () => {
+    next({ title: 'Sample — interval session' });
+    const artifact = (await execute())!;
+    const retained = server.guides.get(artifact.ids.guide)!;
+    retained.guide.name = op.workout!.title;
+    retained.guide.shortDescription = Array.from(op.workout!.title).slice(0, 23).join('');
+    retained.pinned = true;
+    next();
+    expect((await execute())!.ids).toEqual(artifact.ids);
+    expect(server.guides.get(artifact.ids.guide)!.guide.name).toBe('Sample - interval session');
+    expect(server.guides.get(artifact.ids.guide)!.pinned).toBe(true);
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.calls.filter(request => request.method === 'PUT')).toHaveLength(1);
+  });
+  it('does not duplicate an uncertain pre-normalization create whose content no longer matches', async () => {
+    next({ title: 'Sample — interval session' });
+    const artifact = (await execute())!;
+    const retained = server.guides.get(artifact.ids.guide)!;
+    retained.guide.name = op.workout!.title;
+    retained.guide.shortDescription = Array.from(op.workout!.title).slice(0, 23).join('');
+    op = { ...op, artifact: null, progress: { version: 1, step: 'create', state: 'started' } };
+    expect(await recover()).toEqual({ kind: 'uncertain' });
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(server.calls.filter(request => request.method === 'POST')).toHaveLength(1);
+    expect(server.guides.size).toBe(1);
+  });
   it('packages deterministic ZIPs with a valid non-personal 300x300 icon', async () => {
     const guide = guideMapping(op.workout!, op.destinationKey, owner).artifact;
     const archive = await packageGuide(guide); expect(await packageGuide(guide)).toEqual(archive);

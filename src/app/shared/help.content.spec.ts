@@ -31,7 +31,12 @@ describe('help.content', () => {
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('not enabled yet');
-    expect(content).toContain('private production pilot, not a public launch');
+    expect(content).toContain('Garmin and Suunto workout delivery are restricted to the private rollout, not a public launch');
+    expect(content).toContain('COROS and Wahoo delivery are not enabled yet');
+    expect(content).toContain('These cosmetic adjustments happen automatically');
+    expect(content).toContain('**Not sent · Needs review**');
+    expect(content).toContain('**Exclude from plan sync**');
+    expect(content).toContain('Opening Review never sends or approves anything by itself');
     expect(content).toContain('Older connections may need this even when activity imports work');
     expect(content).toContain('Stopping workout sync keeps your provider account connected');
     expect(content).toContain('If you separately choose to disconnect a provider or delete your Quantified Self account');

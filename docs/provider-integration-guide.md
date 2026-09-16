@@ -154,9 +154,13 @@ Suunto mapping follows the official [Guide API workflow](https://apizone.suunto.
 [Guide JSON reference](https://apizone.suunto.com/suuntoplus-guide-description), and
 [FIT correlation description](https://apizone.suunto.com/fit-description). Guide `externalId` values are deterministic,
 opaque, and at most 64 characters. Relative targets are frozen from the canonical reference snapshot only after explicit
-degradation approval. Text and metadata limits are never truncated silently, truncation counts Unicode code points, and
-text outside Suunto's guaranteed minimum watch character set requires explicit degradation approval because rendering
-remains device-dependent. The #650 transport packages that JSON with a valid 300 × 300 PNG, preserves Guide identity
+degradation approval. Mapping v2 adapts common punctuation/non-breaking spaces for watch fonts and generates a
+23-code-point subtitle from the title without approval. QS-authored text and the app-only description remain intact;
+owner and identity fields are not normalized. Authored title/instruction or explicit-subtitle truncation still requires
+review and counts Unicode code points. Remaining watch characters outside Suunto's guaranteed minimum set require
+approval because rendering is device-dependent; app-only description text is not subject to that watch-font check.
+See the [Training source of truth](training-workspace.md#suuntoplus-guide-delivery-650) for upgrade and recovery behavior.
+The #650 transport packages that JSON with a valid 300 × 300 PNG, preserves Guide identity
 and pin state through PUT, and retains completed FIT correlation metadata privately for #651. The existing OAuth
 application/client credentials/user tokens and `SUUNTOAPP_SUBSCRIPTION_KEY` are reused, with the
 exact OAuth application name supplied through the `SUUNTOAPP_GUIDE_OWNER` Secret Manager setting (`.secret.local`
