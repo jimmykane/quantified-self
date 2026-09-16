@@ -710,9 +710,13 @@ The non-secret `SUUNTOAPP_GUIDE_OWNER` runtime value must equal the exact OAuth 
 configuration disables the binding; no reconnect is required simply to add the Guides key. See
 [secret management](function-secret-management.md) before a separately approved deployment. No credentials or cloud
 configuration are created by this implementation.
+Documented APIM subscription-key rejection signatures are application configuration failures, not revoked user OAuth
+consent: they do not block the connection generation or request reconnect. After correcting the key, Retry uses the
+same connection and consent. Other 401 responses retain the OAuth reconnect behavior; raw error bodies are never exposed.
 
 Authority resolves one server-bound account, never an account supplied by the browser. Multiple retained Suunto accounts
 require an existing authoritative selection; ambiguity shows connection repair, not a picker or arbitrary first match.
+This includes malformed retained token records: filtering one out cannot make the remaining account authoritative.
 The selected token's trusted reverse binding and generation are verified independently of the root's latest OAuth
 revision. Shared token refresh is fenced by that root revision; both account authority and deletion are rechecked after
 refresh and immediately before every HTTP request.

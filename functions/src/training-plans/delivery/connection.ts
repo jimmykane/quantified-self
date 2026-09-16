@@ -55,6 +55,10 @@ export async function readTrainingDeliveryAuthority(db: Firestore, tx: Transacti
         && typeof data.tokenCredentialGeneration === 'string' && data.tokenCredentialGeneration.length > 0;
     });
     const pinned = typeof meta.providerUserId === 'string' ? meta.providerUserId : '';
+    // A malformed retained token is not proof that its account no longer exists.
+    // Without an authoritative selection, never silently fall back to the sole
+    // well-formed account when another retained account cannot be validated.
+    if (!pinned && tokens.size !== 1) return repair;
     const selected = pinned ? candidates.filter(doc => doc.data().userName === pinned) : candidates;
     if (selected.length !== 1) return repair;
     const token = selected[0]; const account = token.data().userName as string;

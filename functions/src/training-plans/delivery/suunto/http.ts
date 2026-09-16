@@ -42,6 +42,20 @@ async function readBounded(response: Response): Promise<Buffer> {
     return Buffer.concat(chunks);
   } finally { reader.releaseLock(); }
 }
+/** APIM authenticates the application subscription separately from the user's
+ * OAuth token. A known key rejection cannot be fixed by reconnecting the user.
+ * Inspect only the documented signature; never retain or expose the error body. */
+async function rejectedSubscriptionKey(response: Response): Promise<boolean> {
+  if (/^AzureApiManagementKey(?:\s|$)/i.test(response.headers.get('www-authenticate')?.trim() ?? '')) {
+    await response.body?.cancel().catch(() => {});
+    return true;
+  }
+  try {
+    const data = object(JSON.parse((await readBounded(response)).toString('utf8')));
+    return data.statusCode === 401 && typeof data.message === 'string'
+      && /^Access denied due to (?:invalid|missing) subscription key\.(?:\s|$)/.test(data.message);
+  } catch { return false; }
+}
 export function createSuuntoGuideClient(authorize: () => Promise<{ accessToken: string; account: string }>,
   subscriptionKey: () => string, fetcher: typeof fetch = fetch, now: () => number = Date.now): SuuntoGuideClient {
   return async (request, beforeSend) => {
@@ -68,11 +82,13 @@ export function createSuuntoGuideClient(authorize: () => Promise<{ accessToken: 
         await response.body?.cancel(); return { status: response.status, body: null };
       }
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new SuuntoGuideHttpError(await rejectedSubscriptionKey(response) ? 'terminal' : 'auth', true);
+        }
         await response.body?.cancel();
         const retry = response.headers.get('retry-after');
         const delay = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - now() : 0;
         const retryAfter = Number.isSafeInteger(delay) && delay > 0 && delay < Number.MAX_SAFE_INTEGER - now() ? delay : 0;
-        if (response.status === 401) throw new SuuntoGuideHttpError('auth', true);
         if (response.status === 403) throw new SuuntoGuideHttpError('permission', true);
         if (response.status === 429) throw new SuuntoGuideHttpError('deferred', true, retryAfter);
         if (response.status === 408 || response.status >= 500) throw new SuuntoGuideHttpError(mutating ? 'uncertain' : 'retryable', false, retryAfter);

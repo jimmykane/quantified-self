@@ -40,7 +40,7 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
-  it.each(['delivered', 'outside_horizon', 'needs_attention'])('projects Suunto %s without internal evidence or watch claims', async status => {
+  it.each(['delivered', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
     f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
       suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-account', associationPlanId: null, updatedAtMs: 1 };

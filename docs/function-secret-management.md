@@ -24,6 +24,10 @@ Training Guide delivery uses the dedicated `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY`, 
 client credentials and connected-user tokens are shared; no reconnect is required merely to configure the Guides key.
 Provision the already-issued Guides key through the normal Secret Manager workflow only with explicit approval,
 before deploying that worker. Never replace the general key used by activity, route, Sleep and Health integrations.
+Suunto's API gateway can return HTTP 401 for an invalid Guides subscription key independently of user OAuth.
+The worker recognizes the [documented APIM key-error signature](https://learn.microsoft.com/en-us/troubleshoot/azure/api-mgmt/availability/unauthorized-errors-invoke-apis)
+and fails the delivery without invalidating the user's connection. Correct the application key through the approved
+secret workflow, then Retry; do not ask the user to reconnect to fix an application key. Error bodies are not logged.
 `SUUNTOAPP_GUIDE_OWNER` is a non-secret runtime environment value containing the **exact existing OAuth application name**,
 not the client ID or an invented QS label. Configure the same value on every Training callable/worker/dispatcher that
 constructs the delivery runtime. Missing/invalid configuration leaves Suunto unavailable without affecting Garmin.

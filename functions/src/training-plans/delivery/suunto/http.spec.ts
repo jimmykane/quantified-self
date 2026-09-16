@@ -29,6 +29,23 @@ describe('Suunto Guides HTTP isolation', () => {
     const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(null, { status })));
     expect(await client({ method: 'PUT', path: '/v2/guides/files/id', body: Buffer.from('zip') }, vi.fn())).toEqual({ status, body: null });
   });
+  it.each(['invalid', 'missing'])('does not blame the user for an APIM %s subscription key', async reason => {
+    const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(JSON.stringify({ statusCode: 401,
+      message: `Access denied due to ${reason} subscription key. Private provider details must not be forwarded.` }), { status: 401 })));
+    await expect(client({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, vi.fn()))
+      .rejects.toMatchObject({ kind: 'terminal', rejected: true, message: 'terminal', diagnostics: { httpStatus: 401, failurePhase: 'response' } });
+  });
+  it('recognizes an application-key challenge without depending on a JSON error body', async () => {
+    const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response('private', { status: 401,
+      headers: { 'WWW-Authenticate': 'AzureApiManagementKey realm="private",name="Ocp-Apim-Subscription-Key",type="header"' } })));
+    await expect(client({ method: 'GET', path: '/v2/guides/files/id' }, vi.fn()))
+      .rejects.toMatchObject({ kind: 'terminal', rejected: true });
+  });
+  it.each(['{}', '{"statusCode":401,"message":"Invalid access token"}',
+    '{"statusCode":400,"message":"Access denied due to invalid subscription key."}'])('keeps other 401 responses as OAuth failures: %s', async body => {
+    const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(body, { status: 401 })));
+    await expect(client({ method: 'GET', path: '/v2/guides/files/id' }, vi.fn())).rejects.toMatchObject({ kind: 'auth', rejected: true });
+  });
   it.each(['', 'null', '{}', '{"error":null,"payload":{"username":"other"}}', 'x'.repeat(GUIDE_RESPONSE_BYTES + 1)])('rejects empty, malformed, wrong-account or oversized envelopes', async body => {
     const client = createSuuntoGuideClient(auth, key, vi.fn(async () => new Response(body, { status: 201 })));
     await expect(client({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, vi.fn())).rejects.toMatchObject({ kind: 'uncertain' });

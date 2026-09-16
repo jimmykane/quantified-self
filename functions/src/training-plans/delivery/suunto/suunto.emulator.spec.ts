@@ -10,7 +10,7 @@ import { stageTrainingDeliveryReconciliation } from '../marker';
 import { readTrainingDeliveryAuthority } from '../connection';
 import { DELIVERY_LEDGER, DELIVERY_QUEUE, type DeliveryLedgerV1, type DeliveryRuntime } from '../contracts';
 import { SuuntoGuideTransport } from './transport';
-import { SuuntoGuideHttpError } from './http';
+import { createSuuntoGuideClient, SuuntoGuideHttpError } from './http';
 import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../../../suunto/health-webhook-binding';
 import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../../suunto/guide-completion';
@@ -66,6 +66,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await processTrainingVerification(runtime, uid, row.id);
     expect((await ledger()).verification?.state).toBe('present');
   });
+  it('does not select an account by discarding a malformed retained token', async () => {
+    await db.collection('suuntoAppAccessTokens').doc(uid).collection('tokens').doc('second').set({ userName: 'second' });
+    await expect(command('send')).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(server.calls).toHaveLength(0);
+    expect((await user().collection('trainingDeliverySettings').get()).empty).toBe(true);
+    await user().collection('meta').doc(ServiceNames.SuuntoApp).update({ providerUserId: 'account' });
+    expect((await send()).status).toBe('delivered');
+  });
   it('withdraws a moved future Guide outside the window and sends latest content when it enters', async () => {
     const row = await send(); const externalId = row.actual!.ids.externalId;
     await user().collection('scheduledWorkouts').doc('w').update({ localDate: '2026-09-25', title: 'Later' }); await mark();
@@ -88,6 +96,23 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     expect(row.attempt?.progress).toMatchObject({ step: 'create', state: 'started' });
     await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered'); expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(1);
+  });
+  it('retries a corrected Guides application key without reconnecting or replacing consent', async () => {
+    let rejectedKey = true;
+    const client = createSuuntoGuideClient(async () => ({ accessToken: 'fixture-token', account: 'account' }),
+      () => 'fixture-guides-key', async () => new Response(JSON.stringify({ statusCode: 401,
+        message: 'Access denied due to invalid subscription key.' }), { status: 401 }));
+    const transport = new SuuntoGuideTransport((request, guard) => rejectedKey ? client(request, guard) : server.request(request, guard),
+      'Quantified Self', () => now);
+    runtime.transport = provider => provider === 'suunto' ? transport : null;
+    const row = await send();
+    expect(row.status).toBe('failed'); expect(row.blockedConnectionGeneration).toBeNull();
+    expect(row.attempt?.progress).toMatchObject({ step: 'create', state: 'rejected' });
+    expect(server.guides.size).toBe(0);
+    rejectedKey = false;
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect((await ledger()).status).toBe('delivered'); expect(server.guides.size).toBe(1);
+    expect((await user().collection('trainingDeliverySettings').doc('workout_w_suunto').get()).data()?.enabled).toBe(true);
   });
   it('blocks an unresolved create even after explicit Retry', async () => {
     server.afterHandle = async request => { if (request.method === 'POST') {
