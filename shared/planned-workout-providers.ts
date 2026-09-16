@@ -13,6 +13,7 @@ export type PlannedWorkoutProviderId = typeof PLANNED_WORKOUT_PROVIDER_IDS[numbe
 export type PlannedWorkoutProviderImplementationState =
   | 'blocked-contract'
   | 'fixture-only'
+  | 'private-rollout'
   | 'sandbox-verified'
   | 'enabled';
 
@@ -164,10 +165,10 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   suunto: {
     id: 'suunto',
     label: 'Suunto',
-    implementationState: 'fixture-only',
+    implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'dated-guide',
-    requiredScopes: ['SuuntoPlus Guides entitlement', 'Suunto subscription key'],
+    requiredScopes: ['SuuntoPlus Guides entitlement', 'Dedicated Guides subscription key', 'Existing Suunto OAuth authorization'],
     profile: {
       sports: [ActivityTypes.Running, ActivityTypes.Cycling],
       endingKinds: ['time', 'distance', 'manual'],
@@ -186,8 +187,9 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     ],
     completionCorrelation: 'The Guide externalId can be recovered from matching SuuntoPlus FIT session arrays.',
     unresolvedGates: [
-      'Confirm Guides entitlement, supported-watch workflow, storage, and pin/select behavior.',
-      'Pass sandbox create, update, reschedule, delete, duplicate, and FIT-correlation tests.',
+      'Verify app/watch selection and pin behavior through separately approved live use.',
+      'Authoritative missing-Guide detection is unavailable: ownership-related 404s and offset listings do not prove deletion.',
+      'Public rollout requires separate approval; today through today + 6 is QS scheduling policy.',
     ],
     evidence: [
       'https://apizone.suunto.com/how-to-use-suuntoplus-guides-api',

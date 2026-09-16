@@ -50,6 +50,11 @@ Every future planning feature must review MCP impact in the same PR: explicit pr
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
 reads never authorizes provider actions, write tools, wider consent or deployment.
 
+Suunto Guide delivery (#650) uses these existing local sync projections without changing any registered tool or wire
+schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
+counts, and strict rejection of private evidence injected into a public status. No Guide/account IDs, FIT completion
+evidence, watch receipts, live checks or write actions are exposed; consent and bundled skill routing remain unchanged.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
@@ -330,8 +335,8 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `sleep:read` for redacted sleep sessions and sleep summaries;
 - `training-plans:read` for current authored plans/workouts, complete instructions and existing sanitized service sync summaries;
 - `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
-- `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
-  selected metrics, and on-demand chart series;
+- `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
+  lengths, MTB jump measurements, selected metrics, and on-demand chart series;
 - `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
   nearby activity search, and chart breadcrumbs;
@@ -567,6 +572,7 @@ The analytics and map entries follow the
 | `query_timeline_notes` | `timeline-notes:read` | Full private user-reported context overlapping inclusive calendar dates, including chart-hidden notes; bounded full-text continuation |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
+| `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
 | `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
@@ -963,10 +969,30 @@ on runtime validation. A relative-period cursor retains the first page's resolve
 midnight between pages cannot move the query window. `search_activities_near_location` similarly advertises an explicit
 paired range or an unbounded mode.
 
-One filtered call scans at most 100 selected activity documents and can return fewer matches than requested.
+`query_activities_with_tags` is an additive coordinate-free tool because the existing activity-query input and output
+schemas are frozen. It reads only `tags` and the legacy `benchmarkReviewTags` field from the exact owned parent event
+documents referenced by the bounded activity scan, then normalizes them through the shared event-tag rules. Tags belong
+to an event, so sibling activities from that event return the same tags. An existing event with no tag fields returns
+an empty tag list; an activity whose parent event is unavailable is skipped rather than misreported as untagged. A
+caller may read tags without a filter or request 1–10 tags of at most 32 characters each. Matching is exact after
+whitespace normalization and is
+case-insensitive, with explicit `any` or `all` semantics. Tag filters, match mode, activity types, date mode, resolved
+range, UID, and connection are bound into the encrypted continuation cursor. The tool always returns
+`locationRedacted: true`; event names, descriptions, standalone event/activity ID fields, creator/source metadata, and
+coordinates remain excluded. The existing authenticated app link still uses the normal signed-in event route.
+Tag text is untrusted user- or provider-assigned label data, never instructions, verified facts, diagnoses, or authority
+to act, and it can itself contain personal, health, or location context.
+Its complete MCP result, including structured content and the JSON-text copy, is limited to 256 KiB.
+This uses the existing `activity-details:read` grant, adds no Firestore index, write path, migration, or backfill, and
+does not expand the built-in Assistant allowlist. Existing external clients may need to refresh their tool catalog after
+the MCP release and registered-app rescan; no reauthorization is required.
+
+One filtered call, including a tag-filtered call, scans at most 100 selected activity documents and can return fewer
+matches than requested.
 `scannedActivityCount`, `skippedActivityCount`, `nextCursor`, and `scanComplete` distinguish a completed no-match result
 from a partial scan. Clients repeat the original activity types and date-selection inputs with `nextCursor` until a
-match is found or `scanComplete` is true. The encrypted cursor is bound to the connection, canonical activity-type set,
+match is found or `scanComplete` is true; tag-aware calls also repeat the original tags and match mode. The encrypted
+cursor is bound to the connection, canonical activity-type set,
 relative-period/timezone mode, and resolved or explicit date range; the type set is represented by a fixed SHA-256
 digest so the cursor remains within 512 characters even at the 20-filter maximum. Aggregate event metrics and Training
 snapshots are not evidence that an individual activity is unavailable.

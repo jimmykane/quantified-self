@@ -89,6 +89,24 @@ Ordinary Suunto disconnect retains imported Workout, Route, Sleep, and Health hi
 
 ## Operations and rollback
 
+### Planned-workout Guides
+
+Training #650 uses the existing Suunto application and user OAuth connection but a distinct Guides subscription key,
+`SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY`; activity, route, Sleep and Health keys remain unchanged. Guide delivery runs in the
+existing Training worker, not these Health queues. Its owner-only rollout, exact app-name configuration, rolling dated
+Guide window, app/watch messaging, positive checks and uncertain-create recovery are documented in
+[Training workspace](training-workspace.md#suuntoplus-guide-delivery-650). Do not infer watch receipt from cloud delivery,
+or cloud deletion from unpinning, eviction, an ownership-related 404 or an unstable inventory scan. Safe missing-Guide
+repair is tracked by #710. No assumed subscription quota or separate certification process is introduced.
+
+Imported FIT files can retain QS-owned Guide/session correlations in the private event child
+`trainingCompletionEvidence/suunto`. Browsers and MCP cannot read it; event/account deletion removes it. It is evidence
+for future #651 matching, not an automatic completion decision. Original FITs and existing recorded activity totals
+are unchanged. Ordinary disconnect retains imported history and may leave provider-held Guides; Stop sync first if
+eligible future Guides should be removed while access remains valid. No new webhook endpoint is needed.
+
+### Sleep and Health
+
 The existing Sleep queue/Cloud Task worker carries both Sleep and Health work. Admin Queue Monitor labels it **Sleep & Health Sync** and exposes the existing pending, retry, lag, provider, and DLQ views. Health queue documents remain distinguishable by `type: suunto_health_poll` and `healthTrigger: poll | webhook | backfill`. Operations must also monitor failures and aging unprocessed documents for `fanOutSuuntoHealthWebhookIngress`; Eventarc retries transient fan-out or version-guarded delete failures, while successfully processed ingress remains short-lived until TTL cleanup.
 
 Production operations:

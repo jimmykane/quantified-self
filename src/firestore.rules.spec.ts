@@ -1519,7 +1519,8 @@ describe('Firestore Security Rules', () => {
                     await assertFails(owner.doc(path).delete());
                     await assertFails(owner.doc(`${path}/internal/value`).get());
                 }
-                for (const path of [`users/${userId}/trainingDeliveryLedger/id`,
+                for (const path of [`users/${userId}/events/event/trainingCompletionEvidence/suunto`,
+                    `users/${userId}/trainingDeliveryLedger/id`,
                     `users/${userId}/trainingDeliveryLedger/id/attempts/attempt`,
                     `users/${userId}/trainingDeliveryState/current`,
                     `users/${userId}/trainingDeliveryState/current/receipts/mutation`,
@@ -1530,6 +1531,14 @@ describe('Firestore Security Rules', () => {
                     `users/${userId}/trainingDeliveryState/current/checks/workout_w_garmin`]) {
                     await assertFails(owner.doc(path).get());
                     await assertFails(owner.doc(path).set({ forged: true }));
+                }
+                const evidence = `users/${userId}/events/event/trainingCompletionEvidence/suunto`;
+                await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(evidence).set({ schemaVersion: 1 }));
+                for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {
+                    await assertFails(client.doc(evidence).get());
+                    await assertFails(client.doc(evidence).update({ forged: true }));
+                    await assertFails(client.doc(evidence).delete());
+                    await assertFails(client.collection(`users/${userId}/events/event/trainingCompletionEvidence`).get());
                 }
             });
             const seedCurrentTrainingData = async () => {

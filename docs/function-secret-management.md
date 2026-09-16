@@ -2,10 +2,10 @@
 
 Quantified Self deploys backend credentials through Google Cloud Secret Manager and Firebase `defineSecret()` bindings. A Function receives only the secrets declared for that endpoint in `functions/src/secrets.ts`; an endpoint absent from the policy must receive none.
 
-The disabled Garmin Training adapter (#647) reuses the Garmin client ID/secret through the shared token-refresh helper.
-`processTrainingDeliveryTask` therefore binds that existing pair; the Training preview/mutation callables, queue trigger,
-and recovery dispatcher do not. No new secret or deployment is introduced, and binding credentials does not enable the
-provider: all Training delivery switches remain false until separately reviewed certification and enablement.
+The private Garmin and Suunto Training adapters reuse their existing OAuth client pairs through shared token refresh.
+Only `processTrainingDeliveryTask` binds those credentials; preview/mutation callables and dispatchers do not.
+Credentials never grant user consent or public provider readiness. All public Training delivery switches remain false;
+deployment and public enablement require separate approval.
 
 ## Managed inventory
 
@@ -13,11 +13,26 @@ provider: all Training delivery switches remain false until separately reviewed 
 | --- | --- |
 | COROS | `COROSAPI_CLIENT_ID`, `COROSAPI_CLIENT_SECRET` |
 | Garmin | `GARMINAPI_CLIENT_ID`, `GARMINAPI_CLIENT_SECRET` |
-| Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET` |
+| Suunto | `SUUNTOAPP_CLIENT_ID`, `SUUNTOAPP_CLIENT_SECRET`, `SUUNTOAPP_SUBSCRIPTION_KEY`, `SUUNTOAPP_NOTIFICATION_SECRET`, `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY` |
 | Wahoo | `WAHOOAPI_CLIENT_ID`, `WAHOOAPI_CLIENT_SECRET`, `WAHOOAPI_WEBHOOK_TOKEN`, `WAHOOAPI_ALLOWED_FILE_HOSTS` |
 | Stripe | `STRIPE_SECRET_KEY`, `STRIPE_ADMIN_BILLING_KEY` |
 | Built-in Assistant | `GEMINI_API_KEY` |
 | Backend geocoding | `MAPBOX_ACCESS_TOKEN` |
+
+Training Guide delivery uses the dedicated `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY`, bound only to
+`processTrainingDeliveryTask`. It never falls back to the general subscription key. The existing OAuth application,
+client credentials and connected-user tokens are shared; no reconnect is required merely to configure the Guides key.
+Provision the already-issued Guides key through the normal Secret Manager workflow only with explicit approval,
+before deploying that worker. Never replace the general key used by activity, route, Sleep and Health integrations.
+Suunto's API gateway can return HTTP 401 for an invalid Guides subscription key independently of user OAuth.
+The worker recognizes the [documented APIM key-error signature](https://learn.microsoft.com/en-us/troubleshoot/azure/api-mgmt/availability/unauthorized-errors-invoke-apis)
+and fails the delivery without invalidating the user's connection. Correct the application key through the approved
+secret workflow, then Retry; do not ask the user to reconnect to fix an application key. Error bodies are not logged.
+`SUUNTOAPP_GUIDE_OWNER` is a non-secret runtime environment value containing the **exact existing OAuth application name**,
+not the client ID or an invented QS label. Configure the same value on every Training callable/worker/dispatcher that
+constructs the delivery runtime. Missing/invalid configuration leaves Suunto unavailable without affecting Garmin.
+Keep deployment settings outside repository dotenv files, following the preflight rules below. No setting or secret is
+provisioned by adding these source registrations.
 
 Do not put these values in `functions/.env`, workflow YAML, repository documentation, or service-account files. Secret existence can be checked with `firebase functions:secrets:get NAME`; do not print or retrieve values during routine validation.
 

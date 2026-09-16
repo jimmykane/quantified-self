@@ -91,6 +91,9 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
         }
 
         const metadataSnapshot = await transaction.get(metadataRef);
+        // Fixed private completion-evidence leaf, never a subtree. Keeping this in
+        // the same event-existence transaction protects a recreated deterministic ID.
+        transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/suunto`));
         if (metadataSnapshot.empty) {
             return { skipped: false, deletedCount: 0 };
         }

@@ -96,6 +96,10 @@
             @if (!planBound() && row.setting) { <p class="delivery-caption">Time zone: {{ row.setting.timeZone }}</p> }
           }
           @if (!row.ready) { <p>Delivery unavailable. Existing copies and problems remain visible.</p> }
+          @if (row.provider === 'suunto') {
+            <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
+            <p class="delivery-caption">Sent means available in the Suunto app, not confirmed on your watch. Sync your compatible watch with the app, then select the Guide for your exercise. Pinning stays under your control.</p>
+          }
           @if (data.scope !== 'history') {
             <div class="delivery-actions">
               @if (row.ready) {

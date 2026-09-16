@@ -74,6 +74,16 @@ describe('config.ts', () => {
         expect(() => config.wahooapi.client_id).toThrow(/Missing required environment variable: WAHOOAPI_CLIENT_ID/);
     });
 
+    it('isolates the Guides subscription and never falls back to the general key', async () => {
+        const { config } = await import('./config');
+        delete process.env.SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY;
+        expect(() => config.suuntoapp.guides_subscription_key).toThrow('SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY');
+        expect(config.suuntoapp.subscription_key).toBe('suunto-sub');
+        process.env.SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY = 'guides-fixture';
+        expect(config.suuntoapp.guides_subscription_key).toBe('guides-fixture');
+        expect(config.suuntoapp.subscription_key).toBe('suunto-sub');
+    });
+
     it('reads only the requested provider credential', async () => {
         delete process.env.SUUNTOAPP_SUBSCRIPTION_KEY;
         delete process.env.WAHOOAPI_WEBHOOK_TOKEN;
