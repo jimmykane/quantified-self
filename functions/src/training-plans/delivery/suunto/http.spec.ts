@@ -3,14 +3,14 @@ import { createSuuntoGuideClient, GUIDE_RESPONSE_BYTES } from './http';
 
 describe('Suunto Guides HTTP isolation', () => {
   const auth = async () => ({ accessToken: 'fixture-token', account: 'fixture-user' });
-  const key = () => 'fixture-guides-key';
-  it('uses the Guides key, exact host and final guard with no redirects', async () => {
+  const key = () => 'fixture-subscription-key';
+  it('uses the supplied subscription key, exact host and final guard with no redirects', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ error: null, payload: { username: 'fixture-user' } }), { status: 201 }));
     const guard = vi.fn();
     await createSuuntoGuideClient(auth, key, fetcher)({ method: 'POST', path: '/v2/guides/files', body: Buffer.from('zip') }, guard);
     expect(guard).toHaveBeenCalledOnce();
     expect(fetcher).toHaveBeenCalledWith('https://cloudapi.suunto.com/v2/guides/files', expect.objectContaining({ redirect: 'error', headers: expect.objectContaining({
-      Authorization: 'Bearer fixture-token', 'Ocp-Apim-Subscription-Key': 'fixture-guides-key', 'Content-Type': 'application/zip',
+      Authorization: 'Bearer fixture-token', 'Ocp-Apim-Subscription-Key': 'fixture-subscription-key', 'Content-Type': 'application/zip',
     }) }));
   });
   it('does not fall back to other credentials or send when the guard fails', async () => {

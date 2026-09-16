@@ -5,7 +5,6 @@ interface SuuntoAppConfig {
     client_id: string;
     client_secret: string;
     subscription_key: string;
-    guides_subscription_key: string;
 }
 
 interface CorosApiConfig {
@@ -76,9 +75,6 @@ export const config: AppConfig = {
             },
             get subscription_key() {
                 return getEnvVar('SUUNTOAPP_SUBSCRIPTION_KEY');
-            },
-            get guides_subscription_key() {
-                return getEnvVar('SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY');
             },
         };
     },

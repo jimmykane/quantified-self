@@ -168,7 +168,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'dated-guide',
-    requiredScopes: ['SuuntoPlus Guides entitlement', 'Dedicated Guides subscription key', 'Existing Suunto OAuth authorization'],
+    requiredScopes: ['SuuntoPlus Guides entitlement', 'Existing Suunto API subscription key with Guides access', 'Existing Suunto OAuth authorization'],
     profile: {
       sports: [ActivityTypes.Running, ActivityTypes.Cycling],
       endingKinds: ['time', 'distance', 'manual'],

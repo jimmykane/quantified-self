@@ -661,7 +661,7 @@ Verification: `npm run test:training-delivery` runs unit and real loopback Fires
 HTTP calls, including changes during inspection and failed withdrawals after source deletion. CI runs this command in
 addition to the Functions unit suite. Use `npm run test:rules` for owner/cross-user/write/internal-record denial. Frontend coverage includes
 `training-delivery-dialog.component.spec.ts`, `training-delivery.service.spec.ts` and the existing Plans/calendar suites.
-Build Functions and run `npm --prefix functions run secrets:check`; Suunto's dedicated Guides key is described below.
+Build Functions and run `npm --prefix functions run secrets:check`; Suunto's reused API credentials are described below.
 Deploy indexes/Functions and any receipt TTL policy only with separate approval. Provider-specific integration tests
 remain in #647–#650 and contract questions in #645; completion matching remains #651 and Sports Lib extraction #654.
 
@@ -721,12 +721,17 @@ and subscription semantics are unchanged.
 
 The owner-only Suunto allowlist is separate from UI presentation. Auth/App Check, Pro, explicit consent, compatibility
 approval and final per-request lifecycle guards remain mandatory. Public readiness stays false. Use the existing
-Suunto OAuth application, client pair and user tokens, but **only the separate `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY`** for
-Guide requests. The worker alone binds that new key; activity/route/Health/Sleep keep their existing subscription key.
+Suunto OAuth application, client pair, connected-user tokens and **existing `SUUNTOAPP_SUBSCRIPTION_KEY`** for Guide
+requests. The [official Guides authentication workflow](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api)
+uses the normal Cloud API setup; it does not require a separate Guides key. The existing subscription must include
+Guides access, which credential reuse alone does not prove. The Training worker binds the existing API credential set;
+activity/route/Health/Sleep bindings and ingestion paths remain unchanged.
 The non-secret `SUUNTOAPP_GUIDE_OWNER` runtime value must equal the exact OAuth application name. Missing/invalid owner
-configuration disables the binding; no reconnect is required simply to add the Guides key. See
+configuration disables the binding; reusing the existing credentials requires no new OAuth connection. See
 [secret management](function-secret-management.md) before a separately approved deployment. No credentials or cloud
 configuration are created by this implementation.
+The former Guides-only key is no longer read or required; any existing cloud secret is left untouched. This correction
+requires a separately approved Training worker deployment, not a new secret or a frontend release.
 Documented APIM subscription-key rejection signatures are application configuration failures, not revoked user OAuth
 consent: they do not block the connection generation or request reconnect. After correcting the key, Retry uses the
 same connection and consent. Other 401 responses retain the OAuth reconnect behavior; raw error bodies are never exposed.
@@ -772,6 +777,12 @@ and no private evidence, identifiers, provider actions or scopes enter the publi
 bundled skills do not change. Actual app/watch CRUD and selection remain ordinary #650 integration tests requiring
 separate approval for live operations; synthetic fixtures do not claim those results. No deployment or public enablement
 is part of this change.
+
+Credential-reuse verification covers the real runtime's retained-ID and inventory request headers with mocked HTTP,
+missing-key failure before OAuth/HTTP, unchanged exact-account refresh fencing, and compiled secret bindings. The MCP
+impact review is no-impact: only server-owned credential selection changes; recipes, safe status projections, scopes,
+Assistant routing and registered wire schemas stay unchanged. Help was reviewed and needs no credential-specific copy:
+users keep their existing Suunto connection and explicit workout/plan sync consent.
 
 #### Private Garmin production pilot
 

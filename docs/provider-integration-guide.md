@@ -121,7 +121,7 @@ preflight and rollback. This is a controlled production pilot, not public rollou
 | Garmin | `fixture-only` | Training API V2 mapping plus an offline-tested HTTP adapter cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. Real delivery is restricted to the explicit private pilot. Synthetic fixtures and real Firestore transactions are not sandbox evidence. Actual production response semantics, device coverage and sandbox CRUD remain unproven; completion correlation is #651. |
 | COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
 | Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
-| Suunto | `private-rollout` | One workout maps to a dated SuuntoPlus Guide, not a native plan. ZIP/icon CRUD and exact external-ID recovery use existing OAuth plus a separate Guides subscription key; today through today + 6 is a QS product window. Synthetic HTTP/FIT and real Firestore tests cover lifecycle and private completion evidence. Actual app/watch operations remain ordinary #650 integration tests, not claimed from fixtures. Safe absence/repair remains #710. |
+| Suunto | `private-rollout` | One workout maps to a dated SuuntoPlus Guide, not a native plan. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Synthetic HTTP/FIT and real Firestore tests cover lifecycle and private completion evidence. Actual app/watch operations remain ordinary #650 integration tests, not claimed from fixtures. Safe absence/repair remains #710. |
 
 Garmin mapping follows the local ignored Training API V2 version 1.0 partner contract; the confidential PDF is evidence,
 not a repository artifact. Workout content and its date-only schedule remain separate artifacts because each has its own
@@ -158,9 +158,10 @@ degradation approval. Text and metadata limits are never truncated silently, tru
 text outside Suunto's guaranteed minimum watch character set requires explicit degradation approval because rendering
 remains device-dependent. The #650 transport packages that JSON with a valid 300 × 300 PNG, preserves Guide identity
 and pin state through PUT, and retains completed FIT correlation metadata privately for #651. The existing OAuth
-application/client credentials/user tokens are reused, with a **separate `SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY`** and the
-exact application-name `SUUNTOAPP_GUIDE_OWNER` configuration. The general Suunto subscription key is never replaced or
-used as fallback. See [Suunto delivery](training-workspace.md#suuntoplus-guide-delivery-650) for lifecycle, credentials,
+application/client credentials/user tokens and `SUUNTOAPP_SUBSCRIPTION_KEY` are reused, with the
+exact application-name `SUUNTOAPP_GUIDE_OWNER` configuration. Guides uses the documented normal Cloud API authentication;
+the existing subscription must include Guides access, but no separate key is required by QS. Do not replace credentials
+or infer entitlement from reuse. See [Suunto delivery](training-workspace.md#suuntoplus-guide-delivery-650) for lifecycle, credentials,
 seven-day window, absence limitations, FIT retention and deployment boundaries. No assumed Suunto quotas, evaluation
 budgets, new project or setup wizard are added.
 

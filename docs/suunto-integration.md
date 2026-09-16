@@ -91,8 +91,10 @@ Ordinary Suunto disconnect retains imported Workout, Route, Sleep, and Health hi
 
 ### Planned-workout Guides
 
-Training #650 uses the existing Suunto application and user OAuth connection but a distinct Guides subscription key,
-`SUUNTOAPP_GUIDES_SUBSCRIPTION_KEY`; activity, route, Sleep and Health keys remain unchanged. Guide delivery runs in the
+Training #650 reuses the existing Suunto OAuth client ID/secret, connected-user tokens and `SUUNTOAPP_SUBSCRIPTION_KEY`,
+as described by the [official Guides authentication workflow](https://apizone.suunto.com/how-to-use-suuntoplus-guides-api).
+The existing subscription must have Guides access; no separate Guides key or OAuth application is required by QS.
+Activity, route, Sleep and Health credential bindings remain unchanged. Guide delivery runs in the
 existing Training worker, not these Health queues. Its owner-only rollout, exact app-name configuration, rolling dated
 Guide window, app/watch messaging, positive checks and uncertain-create recovery are documented in
 [Training workspace](training-workspace.md#suuntoplus-guide-delivery-650). Do not infer watch receipt from cloud delivery,
