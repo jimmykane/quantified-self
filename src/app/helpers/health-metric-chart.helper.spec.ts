@@ -24,17 +24,24 @@ interface HealthMetricColorOption {
 }
 
 interface StressStateColorOption {
-  visualMap: {
-    type: string;
-    dimension: number;
-    pieces: Array<{ value: number; color: string }>;
-    outOfRange: { color: string };
-  };
   yAxis: { axisLabel: { color: (value: string) => string } };
   series: Array<{
-    data: Array<[number, string | null, number | null]>;
-    lineStyle: { color?: string; width: number };
-    itemStyle?: unknown;
+    type: string;
+    dimensions: string[];
+    encode: { x: number[]; y: number; tooltip: number[] };
+    data: Array<{
+      value: [number, number, number, string];
+      itemStyle: { color: string };
+    }>;
+    renderItem: (
+      params: { coordSys: { x: number; y: number; width: number; height: number } },
+      api: {
+        value: (dimension: number) => unknown;
+        coord: (value: [number, number]) => [number, number];
+        size: (value: [number, number]) => [number, number];
+        style: () => Record<string, unknown>;
+      },
+    ) => Record<string, unknown> | null;
   }>;
   tooltip: {
     formatter: (params: { value?: unknown }) => string;
@@ -558,33 +565,103 @@ describe('Health metric chart helpers', () => {
       'stressful',
       'provider specific',
     ]);
-    expect(option.visualMap).toMatchObject({
-      type: 'piecewise',
-      dimension: 2,
-      outOfRange: { color: style.secondaryTextColor },
+    expect(option.series[0]).toMatchObject({
+      type: 'custom',
+      dimensions: ['startTime', 'endTime', 'categoryIndex', 'state'],
+      encode: { x: [0, 1], y: 2, tooltip: [0, 3] },
     });
-    expect(option.visualMap.pieces).toEqual([
-      { value: 0, color: AppDataColors.Altitude },
-      { value: 1, color: AppDataColors.Distance },
-      { value: 2, color: AppColors.MediumGray },
-      { value: 3, color: AppDataColors['Heart Rate_0'] },
-      { value: 4, color: style.trendLineColor },
-    ]);
     expect(option.series[0].data).toEqual([
-      [0, 'passive', 2],
-      [DAY_MS, 'stressful', 3],
-      [DAY_MS * 2, 'relaxing', 0],
-      [DAY_MS * 3, 'active', 1],
-      [DAY_MS * 4, 'provider specific', 4],
+      { value: [0, DAY_MS, 2, 'passive'], itemStyle: { color: AppColors.MediumGray } },
+      { value: [DAY_MS, DAY_MS * 2, 3, 'stressful'], itemStyle: { color: AppDataColors['Heart Rate_0'] } },
+      { value: [DAY_MS * 2, DAY_MS * 3, 0, 'relaxing'], itemStyle: { color: AppDataColors.Altitude } },
+      { value: [DAY_MS * 3, DAY_MS * 4, 1, 'active'], itemStyle: { color: AppDataColors.Distance } },
+      { value: [DAY_MS * 4, DAY_MS * 4, 4, 'provider specific'], itemStyle: { color: style.trendLineColor } },
     ]);
-    expect(option.series[0].lineStyle).toEqual({ width: 1 });
-    expect(option.series[0].itemStyle).toBeUndefined();
     expect(option.yAxis.axisLabel.color('relaxing')).toBe(AppDataColors.Altitude);
     expect(option.yAxis.axisLabel.color('active')).toBe(AppDataColors.Distance);
     expect(option.yAxis.axisLabel.color('passive')).toBe(AppColors.MediumGray);
     expect(option.yAxis.axisLabel.color('stressful')).toBe(AppDataColors['Heart Rate_0']);
-    expect(option.tooltip.formatter({ value: [DAY_MS * 4, 'provider-specific', 4] }))
+    expect(option.tooltip.formatter({ value: [DAY_MS * 4, DAY_MS * 4, 4, 'provider-specific'] }))
       .toContain(`background:${style.trendLineColor}`);
+
+    const rendered = option.series[0].renderItem(
+      { coordSys: { x: 10, y: 20, width: 300, height: 120 } },
+      {
+        value: dimension => [DAY_MS, DAY_MS * 2, 3, 'stressful'][dimension],
+        coord: ([timestampMs, categoryIndex]) => [10 + timestampMs / DAY_MS * 20, 30 + categoryIndex * 20],
+        size: () => [0, 40],
+        style: () => ({ fill: AppDataColors['Heart Rate_0'] }),
+      },
+    );
+    expect(rendered).toMatchObject({
+      type: 'rect',
+      shape: { x: 30, y: 84, width: 20, height: 12, r: 2 },
+      style: { fill: AppDataColors['Heart Rate_0'] },
+    });
+  });
+
+  it('merges adjacent Stress readings into continuous blocks without filling data gaps', () => {
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.StressState,
+      chartKind: 'step',
+      valueType: HEALTH_VALUE_TYPES.Category,
+      unit: 'category',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 'passive', qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 'passive', qualityCode: null },
+        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 'active', qualityCode: null },
+        { timestampMs: DAY_MS * 10, calendarDate: '1970-01-11', value: 'active', qualityCode: null },
+      ],
+    })], 0, DAY_MS * 11)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 11,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as StressStateColorOption;
+
+    expect(model.data).toEqual([
+      [0, 'passive'],
+      [DAY_MS, 'passive'],
+      [DAY_MS * 2, 'active'],
+      [DAY_MS * 6, null],
+      [DAY_MS * 10, 'active'],
+    ]);
+    expect(option.series[0].data.map(item => item.value)).toEqual([
+      [0, DAY_MS * 2, 1, 'passive'],
+      [DAY_MS * 2, DAY_MS * 5, 0, 'active'],
+      [DAY_MS * 10, DAY_MS * 11, 0, 'active'],
+    ]);
+  });
+
+  it('colors supported non-Suunto Stress state labels by their meaning', () => {
+    const model = buildHealthChartModels([series({
+      metricId: HEALTH_METRIC_IDS.StressState,
+      chartKind: 'step',
+      valueType: HEALTH_VALUE_TYPES.Category,
+      unit: 'category',
+      points: [
+        { timestampMs: 0, calendarDate: '1970-01-01', value: 'rest', qualityCode: null },
+        { timestampMs: DAY_MS, calendarDate: '1970-01-02', value: 'activity', qualityCode: null },
+        { timestampMs: DAY_MS * 2, calendarDate: '1970-01-03', value: 'restful_awake', qualityCode: null },
+        { timestampMs: DAY_MS * 3, calendarDate: '1970-01-04', value: 'stressful_awake', qualityCode: null },
+      ],
+    })], 0, DAY_MS * 3)[0];
+    const option = buildHealthMetricEChartsOption(
+      model,
+      0,
+      DAY_MS * 3,
+      buildDashboardEChartsStyleTokens(false, 640),
+      false,
+    ) as StressStateColorOption;
+
+    expect(option.series[0].data.map(item => item.itemStyle.color)).toEqual([
+      AppDataColors.Altitude,
+      AppDataColors.Distance,
+      AppDataColors.Altitude,
+      AppDataColors['Heart Rate_0'],
+    ]);
   });
 
   it('renders provider-specific Body Energy as separately graded resource bars', () => {
