@@ -52,6 +52,32 @@ export async function trainingDeliverySummaryIdentity(uid: string, provider: Pla
 
 type Outcome = { label: string; code: TrainingSyncOutcome; synced: boolean; attention: boolean; copy: boolean };
 
+/** Counted plan summaries need noun and verb agreement, unlike single-workout labels. */
+function countedOutcome(label: string, count: number): string {
+  const forms: Record<string, readonly [string, string]> = {
+    'Retry scheduled': ['retry scheduled', 'retries scheduled'],
+    'Needs approval': ['needs approval', 'need approval'],
+    'Needs sync setup': ['needs sync setup', 'need sync setup'],
+    'Delivery unconfirmed': ['delivery unconfirmed', 'deliveries unconfirmed'],
+    'Copy removed': ['copy removed', 'copies removed'],
+    'Removal pending': ['removal pending', 'removals pending'],
+    'Removal unconfirmed': ['removal unconfirmed', 'removals unconfirmed'],
+    'Sync failed': ['sync failed', 'syncs failed'],
+    'Sync stopped': ['sync stopped', 'syncs stopped'],
+    'Sync off': ['not syncing', 'not syncing'],
+    'Delivery unavailable': ['delivery unavailable', 'deliveries unavailable'],
+    'Status unconfirmed': ['status unconfirmed', 'statuses unconfirmed'],
+    'Check connection': ['needs a connection check', 'need a connection check'],
+    'Reconnect required': ['requires reconnection', 'require reconnection'],
+    'Plan inactive': ['in an inactive plan', 'in an inactive plan'],
+    'Plan inactive · copy remains': ['in an inactive plan · provider copy kept', 'in an inactive plan · provider copies kept'],
+    'Sync off · copy remains': ['not syncing · provider copy kept', 'not syncing · provider copies kept'],
+    'Skipped · copy remains': ['skipped · provider copy kept', 'skipped · provider copies kept'],
+  };
+  // Lowercase only the leading letter, preserving names such as Pro and QS.
+  return `${count} ${forms[label]?.[count === 1 ? 0 : 1] ?? label.charAt(0).toLowerCase() + label.slice(1)}`;
+}
+
 function workoutOutcome(workout: TrainingSyncWorkout, status: TrainingSyncStatus | undefined,
   setting: TrainingSyncSetting | undefined, plan: TrainingSyncPlan | null): Outcome {
   const outcome = (label: string, synced = false, attention = false,
@@ -140,7 +166,7 @@ export async function buildTrainingDeliverySummaries(input: {
     const attention = outcomes.filter(item => item.attention).length;
     const notes = new Map<string, number>();
     for (const outcome of outcomes) if (input.scope === 'plan' && outcome.label !== 'Synced') notes.set(outcome.label, (notes.get(outcome.label) ?? 0) + 1);
-    const detail = [...notes].map(([label, count]) => input.scope === 'plan' ? `${count} ${label.toLowerCase()}` : label);
+    const detail = [...notes].map(([label, count]) => countedOutcome(label, count));
     if (input.scope === 'workout' && outcomes[0]?.copy && !outcomes[0].synced) {
       detail.push('A provider copy remains; current delivery is not confirmed');
     }

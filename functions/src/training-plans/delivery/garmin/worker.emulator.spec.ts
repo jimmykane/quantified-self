@@ -16,6 +16,7 @@ import { GarminTrainingHttpError } from './http';
 import { authorizeGarminTrainingRequest } from './authorization';
 import { GARMIN_INSPECTION_POLICY } from './inspection';
 import { processTrainingVerification } from '../verification-worker';
+import * as logger from 'firebase-functions/logger';
 
 // Real Firestore authority and worker transactions; shared OAuth refresh is replaced
 // with its persisted result, and every provider request stays in the synthetic server.
@@ -58,6 +59,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     await mark(); await drain();
   };
   beforeEach(async () => {
+    vi.mocked(logger.warn).mockClear();
     uid = `garmin-delivery-test-${randomUUID()}`; users.push(uid);
     now = Date.parse('2026-09-14T10:00:00Z'); pro = true; proveRepair = false; server = new GarminHttpFixture();
     const inspectionPolicy = () => ({ ...GARMIN_INSPECTION_POLICY, authoritativeAbsence: proveRepair, repairReady: proveRepair });
@@ -215,6 +217,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
       persistence = vi.spyOn(db, 'runTransaction').mockRejectedValueOnce(new Error('Synthetic persistence failure'));
     };
     await processTrainingDelivery(runtime, uid, id); persistence?.mockRestore();
+    if (fault === 'lost-checkpoint') expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', {
+      event: 'checkpoint_failed', provider: 'garmin', complete: false, checkpointState: 'accepted', persistenceCode: 'unknown',
+    });
+    else expect(logger.warn).not.toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'checkpoint_failed' }));
     expect((await ledger()).attempt?.progress).toMatchObject({ step: 'workout-create', state: 'started' });
     await retry(id); expect((await ledger()).status).toBe('needs_attention');
     await command('retry'); await drain(); await retry(id);

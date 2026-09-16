@@ -185,6 +185,11 @@ attention, never retried blindly. Do not turn an empty schedule lookup into proo
 handling includes documented empty schedule-create success: a POST 204 is followed by an exact workout/date lookup,
 and only one matching schedule ID confirms that artifact. No match or multiple matches keep the journal uncertain.
 Allowlisted HTTP status and failure-phase diagnostics distinguish transport failures without logging raw provider data.
+Garmin delivery logs fixed resource/method categories, response/identity-field types, contract-validation reasons and
+schedule-lookup outcomes; the shared worker separately logs journal persistence failures before attempting to save
+retry state. Correlate the `[TrainingDelivery]` events by Cloud Logging execution ID, not user/provider identifiers.
+See [Training diagnostics](training-workspace.md#provider-delivery-foundation-646) for event names and filters.
+Never add response bodies, arbitrary field names, dates, workout contents, credentials, IDs or raw error text to these logs.
 Functions-only emulation can still write live Firestore and trigger deployed delivery workers; isolate bulk/failure
 tests with the demo Firestore suite and synthetic transport, not just a localhost callable URL. HTTP response
 tests also distinguish empty successful reads from explicit 404 absence and asynchronous acknowledgement from

@@ -11,6 +11,7 @@ import { stageTrainingDeliveryReconciliation } from './marker';
 import { inspectionBinding } from './verification-evidence';
 import { VERIFICATION_DAY_MS } from './verification-contracts';
 import { emptyVerification } from './verification-queue';
+import { observeDeliveryCheckpoint } from './diagnostics';
 
 function validateArtifact(value: DeliveryArtifact | null): void {
   if (value === null) return;
@@ -129,7 +130,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       // Preserve the journal and inspect inconsistent acknowledgements rather than claiming success.
       throw new TrainingDeliveryTransportError('uncertain');
     }
-    const recorded = await db.runTransaction(async tx => {
+    const recorded = await observeDeliveryCheckpoint(claim.provider, complete, progress, () => db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return false;
       const doc = await tx.get(ledgerRef);
       if (!doc.exists) return false;
@@ -202,7 +203,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         stageTrainingDeliveryReconciliation(tx, db, uid);
       }
       return true;
-    });
+    }));
     if (!recorded) throw new TrainingDeliveryTransportError('retryable');
     operation.artifact = artifact;
     if (progress !== undefined) operation.progress = progress;

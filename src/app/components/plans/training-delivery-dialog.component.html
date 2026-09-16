@@ -75,7 +75,7 @@
           @if (!preview.result.available) { <p>This provider is not yet available for workout delivery.</p> }
           @if (preview.result.connection !== 'connected') { <p>Check access in <a routerLink="/services" (click)="dialogRef.close()" appHapticTap>Connectivity</a>.</p> }
           @if (preview.result.warningCount) {
-            <p>{{ preview.result.warningCount }} workouts need review. Unsupported workouts cannot be sent; degraded workouts require individual approval.</p>
+            <p>{{ preview.result.warningCount }} {{ preview.result.warningCount === 1 ? 'workout needs' : 'workouts need' }} review. Unsupported workouts cannot be sent; degraded workouts require individual approval.</p>
           }
         }
         @if (preview.result.issues.length) {

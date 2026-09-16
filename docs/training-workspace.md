@@ -691,8 +691,8 @@ labelled inputs, named dialog, wrapping, scrolling, Close, and disabled pending 
 These rendered fixtures contain no application backend or selectable transport. Component tests exercise actual actions
 and account reset; emulator tests exercise backend lifecycle. Browser emulation does not establish physical vibration.
 
-Allowlisted diagnostics use the `[TrainingDelivery]` message with `event`, `provider`, `operation`, `category`, `retryCount`,
-`latencyMs`, `inspected`, `dispatched`, and optional allowlisted `httpStatus`/`failurePhase` fields only. Failure phase is
+Allowlisted delivery diagnostics use the `[TrainingDelivery]` message with `event`, `provider`, `operation`, `category`, `retryCount`,
+`latencyMs`, `inspected`, `dispatched`, and optional allowlisted `httpStatus`/`failurePhase` fields. Failure phase is
 one of `request`, `response`, `decode`, or `contract`; HTTP status is an integer from 100 through 599. They exclude workout
 titles, recipes, IDs, tokens, raw response bodies, URLs and provider error messages.
 Cloud Logging filters: `jsonPayload.message="[TrainingDelivery]"`; add `jsonPayload.event="failure"` and group by
@@ -701,6 +701,25 @@ delivery latency, `stale_suppressed` for obsolete work, and `recovered_acceptanc
 For HTTP failures, group by `jsonPayload.httpStatus` and `jsonPayload.failurePhase` to distinguish rejected responses
 from network uncertainty and response decoding. Legacy failure records lack these fields and cannot prove a specific
 provider response status after the fact.
+Garmin delivery/recovery additionally emits `garmin_response` for each returned HTTP result, with fixed `method` and
+`resource` (`workout`, `schedule`, `schedule-list`, or `unknown`) categories, HTTP status and `responseShape`.
+For object responses, only the types of the fixed `workoutId`, `scheduleId`, `ownerId` and `date` fields are recorded
+(`workoutIdShape`, `scheduleIdShape`, `ownerIdShape`, `dateShape`), never their values or arbitrary property names.
+`garmin_request_incomplete` retains safe HTTP failure context; it does not assert that a request reached Garmin.
+`garmin_contract_failure` gives a fixed validation `reason`; `garmin_schedule_lookup` distinguishes `matched`,
+`no_match`, `multiple_matches`, `invalid_response` and `too_many_results`. A matched lookup is not durable acceptance.
+`checkpoint_failed` records a failed journal transaction independently of the later retry-state write, with
+`complete`, allowlisted `checkpointState`, and `persistenceCode` (known Firestore error categories or `unknown`).
+Filter the same Cloud Logging execution ID alongside these events and `failure` to distinguish provider response,
+validation, schedule discovery and local persistence. No extra provider requests, retry-policy changes or persisted
+diagnostic records are introduced, and older incidents cannot gain missing response evidence retroactively.
+
+Counted plan summaries use explicit singular/plural noun and verb forms (for example, `1 retry scheduled`,
+`2 retries scheduled`, `1 needs approval`, `2 need approval`); single-workout labels stay singular. Preview warnings
+likewise use `1 workout needs review` / `2 workouts need review`, and zero warnings are omitted. These presentation
+changes preserve the machine outcome codes/counts, sync totals and completed-activity totals. MCP impact: private
+diagnostics and English grammar add no read capability or data; existing `get_training_sync_status` projection,
+schemas, consent, plugin instructions and provider actions remain unchanged. No app rescan or plugin sync is needed.
 Production dashboards, alerts and broader rollout remain #655; ordinary Garmin integration checks remain #647/#703.
 The separate certification/evaluation ticket #698 is retired; it is not an enablement prerequisite.
 

@@ -6,6 +6,8 @@ import { GarminTrainingHttpError } from './http';
 import { GarminHttpFixture } from '../test-support/garmin-http-fixture';
 import type { DeliveryArtifact, DeliveryCheckpoint, DeliveryOperation, DeliveryTransportProgress } from '../contracts';
 import { GARMIN_INSPECTION_POLICY } from './inspection';
+import * as logger from 'firebase-functions/logger';
+import { observeDeliveryCheckpoint } from '../diagnostics';
 
 describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   let server: GarminHttpFixture;
@@ -31,6 +33,7 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
       digest: transport.assess(workout, 'opaque-account', 'Europe/Helsinki').digest };
     checkpoint = async (artifact, progress) => { journal.push(structuredClone({ artifact, progress })); };
     guard.mockClear();
+    vi.mocked(logger.info).mockClear(); vi.mocked(logger.warn).mockClear();
   });
   const execute = () => transport.execute(operation, checkpoint, guard);
   const recover = () => transport.recover(operation, checkpoint, guard);
@@ -204,13 +207,15 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   });
   it('never continues after provider acceptance when its artifact checkpoint fails', async () => {
     const original = checkpoint;
-    checkpoint = async (artifact, progress) => {
+    checkpoint = (artifact, progress) => observeDeliveryCheckpoint('garmin', false, progress, async () => {
       if (progress?.step === 'workout-create' && progress.state === 'accepted') throw new Error('persistence unavailable');
       return original(artifact, progress);
-    };
+    });
     await expect(execute()).rejects.toThrow('persistence unavailable');
     expect(operation.artifact).toBeNull(); expect(await recover()).toEqual({ kind: 'uncertain' });
     expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(0);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'garmin_response', resource: 'workout', httpStatus: 200 }));
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'checkpoint_failed', checkpointState: 'accepted', complete: false }));
   });
   it('recovers an accepted schedule by exact workout ID and local date without repeating either POST', async () => {
     server.afterHandle = async request => { if (request.method === 'POST' && request.path.includes('schedule')) throw new GarminTrainingHttpError('uncertain', false); };
@@ -232,6 +237,8 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(writes()).toHaveLength(2);
     expect(server.calls.at(-1)?.path).toBe('/training-api/schedule?startDate=2026-09-15&endDate=2026-09-15');
     expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted' });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'garmin_response', resource: 'schedule', httpStatus: 204, responseShape: 'null' }));
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_lookup', provider: 'garmin', outcome: 'matched' });
   });
   it.each(['empty', 'duplicate'] as const)('retains an empty-success POST journal when immediate inspection is %s, never repeating create', async mode => {
     transport = new GarminTrainingTransport(async (request, beforeSend) => {
@@ -247,6 +254,7 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
     expect(await recover()).toEqual({ kind: 'uncertain' });
     expect(writes()).toHaveLength(2);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_lookup', provider: 'garmin', outcome: mode === 'empty' ? 'no_match' : 'multiple_matches' });
   });
   it.each(['empty', 'duplicate'] as const)('does not infer schedule POST nonacceptance from an %s lookup', async mode => {
     server.afterHandle = async request => { if (request.path === '/training-api/schedule/') throw new GarminTrainingHttpError('uncertain', false); };
@@ -314,6 +322,23 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
     expect(operation.artifact).toEqual(artifact);
     expect(operation.progress).toMatchObject({ step: 'schedule-update', state: 'started' });
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_contract_failure', provider: 'garmin', reason: 'expected_object' });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'garmin_response', method: 'PUT', resource: 'schedule', httpStatus: 200, responseShape: 'null' }));
+  });
+  it.each(['invalid', 'mismatched'] as const)('diagnoses a %s schedule response while retaining the started journal', async mode => {
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      const response = await server.request(request, beforeSend);
+      return request.path === '/training-api/schedule/' ? { status: 200, body: mode === 'invalid'
+        ? { scheduleId: 'private-invalid-id', workoutId: operation.artifact!.ids.workout, date: operation.workout!.localDate }
+        : { scheduleId: '1', workoutId: '2', date: operation.workout!.localDate } } : response;
+    }, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain', diagnostics: { failurePhase: 'contract' } });
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_contract_failure', provider: 'garmin',
+      reason: mode === 'invalid' ? 'invalid_schedule' : 'schedule_identity_mismatch' });
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private');
+    expect(await recover()).toEqual({ kind: 'resume' });
+    await execute(); expect(writes()).toHaveLength(2);
   });
   it('treats legacy operations without a transport journal as uncertain', async () => {
     delete operation.progress;

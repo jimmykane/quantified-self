@@ -503,6 +503,7 @@ describe('Training provider delivery controls', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     const component = fixture.componentInstance;
     await component.begin('garmin', 'send'); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('1 workout needs review');
     expect(fixture.nativeElement.textContent).toContain('degraded workouts require individual approval');
     expect(service.mutate).not.toHaveBeenCalled();
     await component.confirm();
@@ -511,6 +512,13 @@ describe('Training provider delivery controls', () => {
     expect(service.mutate).toHaveBeenCalledOnce(); // approving is a separate, explicit action
     await component.confirm();
     expect(service.mutate.mock.calls[1][0]).toMatchObject({ action: 'approve', approvalDigest: 'latest-digest' });
+  });
+  it.each([0, 1, 2])('renders %s preview warnings with matching nouns and verbs', async warningCount => {
+    service.preview.mockResolvedValue({ ...(await service.preview()), warningCount });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    await fixture.componentInstance.begin('garmin', 'send'); fixture.detectChanges();
+    if (warningCount) expect(fixture.nativeElement.textContent).toContain(`${warningCount} ${warningCount === 1 ? 'workout needs' : 'workouts need'} review`);
+    else expect(fixture.nativeElement.textContent).not.toContain('workouts need review');
   });
   it('renders 25 dense history summaries without a panel or repeated attempt/help details per workout', () => {
     TestBed.overrideProvider(MAT_DIALOG_DATA, { useValue: { scope: 'history', id: 'current', title: 'All deliveries' } });

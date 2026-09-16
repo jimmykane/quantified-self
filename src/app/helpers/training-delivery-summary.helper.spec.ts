@@ -50,7 +50,7 @@ describe('Training delivery service summaries', () => {
     });
   it('does not count a partial first delivery or an older accepted version', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a', { lastAcceptedAtMs: null }), status('b', { differsFromQS: true })] });
-    expect(row.label).toBe('0 of 3 workouts synced'); expect(row.detail).toContain('2 delivery unconfirmed');
+    expect(row.label).toBe('0 of 3 workouts synced'); expect(row.detail).toContain('2 deliveries unconfirmed');
   });
   it('does not count confirmed missing remote artifacts even though earlier acceptance is retained', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [
@@ -82,7 +82,7 @@ describe('Training delivery service summaries', () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts: states.map(id => workout(id)),
       statuses: states.map(id => status(id, { status: id, hasRemoteCopy: id !== 'removed' })) });
     expect(row.label).toBe('0 of 7 workouts synced');
-    for (const phrase of ['removal pending', 'pro required', 'scheduled for later', 'copy removed', 'delivery unavailable', 'retry scheduled']) expect(row.detail).toContain(phrase);
+    for (const phrase of ['removals pending', 'Pro required', 'scheduled for later', 'copy removed', 'delivery unavailable', 'retry scheduled']) expect(row.detail).toContain(phrase);
     const [inactive] = await buildTrainingDeliverySummaries({ ...input(), plan: { ...plan, lifecycle: 'paused' } });
     expect(inactive.label).toBe('Plan inactive · 0 of 3 workouts synced');
     const [skipped] = await buildTrainingDeliverySummaries({ ...input(), workouts: [workout('a', { lifecycle: 'skipped' })] });
@@ -93,6 +93,44 @@ describe('Training delivery service summaries', () => {
   it('retains confirmed past/completed copies without claiming that they will be updated', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), statuses: [status('a', { status: 'past' }), status('b', { status: 'completed' })] });
     expect(row.label).toBe('2 of 3 workouts synced'); expect(row.detail).toContain('left unchanged');
+  });
+  it.each([
+    ['retrying', 'retry scheduled', 'retries scheduled'],
+    ['approval_required', 'needs approval', 'need approval'],
+    ['fresh_consent_required', 'needs sync setup', 'need sync setup'],
+    ['needs_attention', 'delivery unconfirmed', 'deliveries unconfirmed'],
+    ['removed', 'copy removed', 'copies removed'],
+    ['stopped', 'removal pending', 'removals pending'],
+    ['failed', 'sync failed', 'syncs failed'],
+    ['provider_unavailable', 'delivery unavailable', 'deliveries unavailable'],
+    ['connection_repair', 'needs a connection check', 'need a connection check'],
+    ['reconnect_required', 'requires reconnection', 'require reconnection'],
+    ['paused_pro', 'paused · Pro required', 'paused · Pro required'],
+  ] as const)('agrees with one or many %s outcomes without changing the machine projection', async (state, singular, plural) => {
+    for (const count of [1, 2, 400]) {
+      const workouts = Array.from({ length: count }, (_, index) => workout(String(index)));
+      const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts,
+        statuses: workouts.map(item => status(item.id, { status: state, hasRemoteCopy: state !== 'removed' })) });
+      expect(row.detail).toBe(`${count} ${count === 1 ? singular : plural}`);
+      expect(row.projection.outcomes).toEqual([{ status: state, count }]);
+    }
+  });
+  it('pluralizes retained copies in skipped, inactive and stopped summaries', async () => {
+    for (const count of [1, 2]) {
+      for (const mode of ['skipped', 'inactive', 'off']) {
+        const workouts = Array.from({ length: count }, (_, index) => workout(String(index), { lifecycle: mode === 'skipped' ? 'skipped' : 'planned' }));
+        const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts,
+          plan: { ...plan, lifecycle: mode === 'inactive' ? 'paused' : 'active' },
+          settings: [{ ...setting, enabled: mode !== 'off' }], statuses: workouts.map(item => status(item.id)) });
+        expect(row.detail).toContain(`provider ${count === 1 ? 'copy' : 'copies'} kept`);
+      }
+    }
+  });
+  it('keeps the single-workout retry label and omits zero-count outcomes', async () => {
+    const [single] = await buildTrainingDeliverySummaries({ ...input(), scope: 'workout', id: 'a', workouts: [workout('a')], statuses: [status('a', { status: 'retrying' })] });
+    expect(single.label).toBe('Retry scheduled');
+    const [empty] = await buildTrainingDeliverySummaries({ ...input(), workouts: [], statuses: [] });
+    expect(empty.detail).toBe(''); expect(empty.projection.outcomes).toEqual([]);
   });
   it('shows an empty enabled plan as empty, never fully synced', async () => {
     const [row] = await buildTrainingDeliverySummaries({ ...input(), workouts: [], statuses: [] });
