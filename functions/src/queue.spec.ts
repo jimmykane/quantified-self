@@ -223,6 +223,9 @@ vi.mock('./tokens', () => {
         TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
             readonly name = 'TokenRefreshSkippedForDeletedUserError';
         },
+        TokenRefreshInProgressError: class TokenRefreshInProgressError extends Error {
+            readonly name = 'TokenRefreshInProgressError';
+        },
     };
 });
 
@@ -347,7 +350,7 @@ import {
     ProviderQueueUserNotConnectedError,
 } from './queue';
 import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkoutQueueItemInterface } from './queue/queue-item.interface';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshInProgressError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import { QUEUE_SKIPPED_REASONS, QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 import { PermanentCOROSFITDownloadError } from './coros/file-download';
@@ -3005,6 +3008,29 @@ describe('queue', () => {
             }));
             expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
                 retryCount: expect.any(Number),
+            }));
+        });
+
+        it('defers without consuming retries when another worker owns the token refresh lease', async () => {
+            vi.mocked(getTokenData).mockRejectedValueOnce(new TokenRefreshInProgressError());
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({ ...suuntoQueueItem, ref: undefined }),
+            });
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Deferred);
+            expect(getBinaryResponse).not.toHaveBeenCalled();
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
+                dispatchedToCloudTask: null,
+                providerOperationStartedAt: null,
+            }));
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+                totalRetryCount: expect.any(Number),
             }));
         });
 

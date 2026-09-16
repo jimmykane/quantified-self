@@ -8,7 +8,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import * as crypto from 'crypto';
 
-import { deferQueueItemForPendingDisconnect, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
+import { deferQueueItemForPendingDisconnect, deferQueueItemForTokenRefreshContentionIfCurrentUserActive, increaseRetryCountForQueueItem, markQueueItemSkipped, QUEUE_SKIPPED_REASONS, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import {
   QueueItemInterface,
@@ -27,6 +27,7 @@ import {
 import {
   getTokenData,
   TerminalServiceAuthError,
+  TokenRefreshInProgressError,
   TokenRefreshSkippedForDeletedUserError,
 } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
@@ -829,6 +830,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   let sawUserDeletionSkip = false;
   let sawPendingDisconnectSkip = false;
   let pendingDisconnectFirebaseUserID: string | null = null;
+  let tokenRefreshContentionFirebaseUserID: string | null = null;
   let sawInactiveProviderAccount = false;
   let processedAdditionalData: Record<string, unknown> | undefined;
 
@@ -888,6 +890,14 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
+      if (e instanceof TokenRefreshInProgressError) {
+        tokenRefreshContentionFirebaseUserID ??= parentID;
+        logger.info('[WorkoutQueue] Deferring item after token-refresh contention.', {
+          serviceName,
+          queueItemId: queueItem.id,
+        });
+        continue;
+      }
       if (isTokenRefreshSkippedForDeletedUserError(e)) {
         sawUserDeletionSkip = true;
         logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for token ${tokenQueryDocumentSnapshot.id} because the owning user is missing or deletion is in progress.`);
@@ -1403,6 +1413,21 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     return markWorkoutQueueItemSkippedForInactiveProviderAccount(queueItem, bulkWriter);
   }
 
+  if (tokenRefreshContentionFirebaseUserID && !sawRetryableFailure) {
+    return deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
+      queueItem,
+      userID: tokenRefreshContentionFirebaseUserID,
+      phase: `workout_queue_token_refresh_contention:${serviceName}`,
+      logPrefix: 'WorkoutQueue',
+      isCurrent: currentQueueItem => isCurrentWorkoutQueueItemForTokenRefreshContention(
+        queueItem,
+        serviceName,
+        tokenRefreshContentionFirebaseUserID,
+        currentQueueItem,
+      ),
+    });
+  }
+
   // If we finished the loop without returning, it means every token attempt failed.
   const retryError = retryableSuuntoFITPayloadError || lastError;
   const effectiveRetryIncrement = retryableSuuntoFITPayloadError ? 1 : retryIncrement;
@@ -1416,6 +1441,21 @@ async function parseWorkoutQueueItemForServiceNameInternal(
       ? SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT
       : undefined,
   );
+}
+
+function isCurrentWorkoutQueueItemForTokenRefreshContention(
+  queueItem: ProviderWorkoutQueueItem,
+  serviceName: ServiceNames,
+  firebaseUserID: string,
+  currentQueueItem: Record<string, unknown>,
+): boolean {
+  if (currentQueueItem.processed === true) return false;
+  if (typeof currentQueueItem.firebaseUserID === 'string'
+    && currentQueueItem.firebaseUserID !== firebaseUserID) return false;
+  if (serviceName === ServiceNames.COROSAPI) {
+    return workoutQueueGenerationMatches(queueItem, currentQueueItem);
+  }
+  return currentQueueItem.dateCreated === queueItem.dateCreated;
 }
 
 function isFirestoreAlreadyExistsError(error: unknown): boolean {

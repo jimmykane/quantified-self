@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
+import { deferQueueItemForPendingDisconnect, deferQueueItemForPendingDisconnectIfCurrentUserActive, deferQueueItemForReconnectRequiredIfCurrentUserActive, deferQueueItemForTokenRefreshContentionIfCurrentUserActive, moveToDeadLetterQueue, moveToDeadLetterQueueIfCurrentUserActive, increaseRetryCountForQueueItem, increaseRetryCountIfCurrentUserActive, isCurrentSleepQueueTransition, isProviderOperationInFlightLeaseActive, markQueueItemSkipped, PENDING_DISCONNECT_QUEUE_DISPATCH_MARKER, PROVIDER_OPERATION_IN_FLIGHT_LEASE_MS, PROVIDER_OPERATION_IN_FLIGHT_QUEUE_DISPATCH_MARKER, QUEUE_DEFERRED_REASONS, QUEUE_SKIPPED_REASONS, updateToProcessed, QueueResult } from './queue-utils';
 import { TTL_CONFIG } from './shared/ttl-config';
 
 // Hoisted Firestore mocks
@@ -982,6 +982,40 @@ describe('queue-utils', () => {
             }));
             expect(hoisted.transaction.update).not.toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
                 retryCount: expect.any(Number),
+            }));
+        });
+    });
+
+    describe('deferQueueItemForTokenRefreshContentionIfCurrentUserActive', () => {
+        it('re-opens only the current item without consuming its retry budget', async () => {
+            const queueItem: any = {
+                id: 'contention-item',
+                ref: { id: 'contention-item' },
+                retryCount: 3,
+                totalRetryCount: 5,
+                dispatchedToCloudTask: 123,
+            };
+            hoisted.transaction.get.mockResolvedValue({
+                exists: true,
+                data: () => ({ processed: false, revision: 'expected' }),
+            });
+
+            const result = await deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
+                queueItem,
+                userID: 'user-1',
+                phase: 'workout_queue_token_refresh_contention',
+                logPrefix: 'WorkoutQueue',
+                isCurrent: current => current.revision === 'expected',
+            });
+
+            expect(result).toBe(QueueResult.Deferred);
+            expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+                dispatchedToCloudTask: null,
+                providerOperationStartedAt: null,
+            }));
+            expect(hoisted.transaction.update).not.toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
+                retryCount: expect.any(Number),
+                totalRetryCount: expect.any(Number),
             }));
         });
     });
