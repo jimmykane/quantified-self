@@ -3,7 +3,8 @@ import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
 import { serializeCorosTrainingPlanV1, type CorosTrainingPlanPushDataV1,
   type CorosTrainingWorkoutV1 } from '../../providers/coros-training-plan.serializer';
 import { assessTrainingDeliveryMapping } from '../mapping';
-import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryBatchOutcome,
+import { TrainingDeliveryBatchAdmissionChangedError, TrainingDeliveryTransportError,
+  type DeliveryArtifact, type DeliveryBatchOutcome,
   type DeliveryCheckpoint, type DeliveryOperation, type DeliveryRecovery, type DeliveryRequestGuard,
   type TrainingDeliveryBatchTransport, type TrainingDeliveryTransport } from '../contracts';
 import { CorosTrainingHttpError, type CorosTrainingClient } from './http';
@@ -162,7 +163,18 @@ export class CorosTrainingTransport implements TrainingDeliveryTransport {
     let kind: 'upsert' | 'remove';
     try { kind = this.validate(operations); }
     catch { throw new CorosTrainingHttpError('terminal', true); }
-    await guard(true);
+    try {
+      await guard(true);
+    } catch (error) {
+      // This admission check runs before authorization, journaling, or COROS
+      // HTTP. A transient local read failure is therefore safe to retry and
+      // must not be misclassified as an uncertain provider acceptance.
+      if (error instanceof TrainingDeliveryBatchAdmissionChangedError) throw error;
+      if (error instanceof TrainingDeliveryTransportError) {
+        throw new CorosTrainingHttpError(error.kind, true, error.retryAfterMs, error.diagnostics);
+      }
+      throw new CorosTrainingHttpError('retryable', true);
+    }
     if (kind === 'upsert') {
       let payload: CorosTrainingPlanPushDataV1;
       try { payload = this.pushPayload(operations); }

@@ -260,6 +260,24 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     expect(client).toHaveBeenCalledTimes(1);
   });
 
+  it('retries a transient admission-read failure without sending a COROS request', async () => {
+    const [id] = await seed(1);
+    let connectionReads = 0;
+    runtime.connection = async () => {
+      connectionReads++;
+      if (connectionReads === 2) throw new Error('transient Firestore read');
+      return { state: 'connected', destinationKey: 'destination', generation: 'connection', epoch: 0 };
+    };
+
+    await processTrainingDelivery(runtime, uid, id);
+
+    expect(client).not.toHaveBeenCalled();
+    expect((await db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(id).get()).data())
+      .toMatchObject({ status: 'retrying', attempt: null, lease: null, retries: 1 });
+    expect((await db.collection(DELIVERY_QUEUE).doc(id).get()).data())
+      .toMatchObject({ kind: 'delivery', provider: 'coros', operationKind: 'upsert' });
+  });
+
   it('rejects malformed accepted batch artifacts before changing remote state projections', async () => {
     const [id] = await seed(1);
     const base = transport;
