@@ -210,24 +210,6 @@ describe('Cloud Tasks Utils', () => {
             });
         });
 
-        it('enqueues a forced workout recovery without deduplicating against the running base task', async () => {
-            const { enqueueWorkoutTask } = await import('./cloud-tasks');
-
-            await expect(enqueueWorkoutTask('suuntoApp' as ServiceNames, 'item-123', 1000, 95, {
-                recoveryTaskKey: 'token-refresh-attempt',
-                forceRecoveryTask: true,
-            })).resolves.toBe(true);
-
-            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
-                { queueItemId: 'item-123', serviceName: 'suuntoApp' },
-                {
-                    id: 'suuntoApp-item-123-1000-dedupe-recovery-token-refresh-attempt',
-                    scheduleDelaySeconds: 95,
-                },
-            );
-            expect(hoisted.mockCloudTasksClient.getTask).not.toHaveBeenCalled();
-        });
-
         it('treats a local duplicate as live without querying the production task API', async () => {
             process.env.CLOUD_TASKS_EMULATOR_HOST = '127.0.0.1:9199';
             const { enqueueWorkoutTask } = await import('./cloud-tasks');

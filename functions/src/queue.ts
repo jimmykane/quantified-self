@@ -30,7 +30,6 @@ import {
   TokenRefreshInProgressError,
   TokenRefreshSkippedForDeletedUserError,
 } from './tokens';
-import { TOKEN_REFRESH_LEASE_MS } from './token-refresh-coordinator';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
@@ -408,9 +407,6 @@ const TIMEOUT_DEFAULT = 300;
 const MEMORY_DEFAULT = '256MB';
 const TIMEOUT_HIGH = 540;
 const MEMORY_HIGH = '1GB';
-// The refresh HTTP request has a 60-second deadline and is protected by a
-// 90-second durable lease. Run the contention retry after that lease can end.
-const TOKEN_REFRESH_CONTENTION_RETRY_DELAY_SECONDS = Math.ceil(TOKEN_REFRESH_LEASE_MS / 1000) + 5;
 
 export const parseGarminAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
@@ -1393,14 +1389,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   // rows; otherwise we could discard work while the usable token is merely
   // being refreshed by another worker.
   if (tokenRefreshContentionFirebaseUserID && !sawRetryableFailure) {
-    const retryTaskCreated = await enqueueTokenRefreshContentionRetryTask(serviceName, queueItem);
-    if (!retryTaskCreated) {
-      logger.error('[WorkoutQueue] Could not enqueue token-refresh contention retry; retaining the current Cloud Task retry.', {
-        serviceName,
-        queueItemId: queueItem.id,
-      });
-      return QueueResult.Failed;
-    }
     return deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
       queueItem,
       userID: tokenRefreshContentionFirebaseUserID,
@@ -1456,25 +1444,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     retryableSuuntoFITPayloadError
       ? SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT
       : undefined,
-  );
-}
-
-async function enqueueTokenRefreshContentionRetryTask(
-  serviceName: ServiceNames,
-  queueItem: ProviderWorkoutQueueItem,
-): Promise<boolean> {
-  return enqueueWorkoutTask(
-    serviceName,
-    queueItem.id,
-    queueItem.dateCreated,
-    TOKEN_REFRESH_CONTENTION_RETRY_DELAY_SECONDS,
-    {
-      recoveryTaskKey: `token-refresh-${crypto.randomUUID()}`,
-      forceRecoveryTask: true,
-      ...(normalizeQueueRevision(queueItem.queueRevision)
-        ? { queueRevision: queueItem.queueRevision }
-        : {}),
-    },
   );
 }
 
