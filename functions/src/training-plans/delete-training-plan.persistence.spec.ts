@@ -257,6 +257,7 @@ describe('deleteTrainingPlanForUser persistence', () => {
         const current = workout('workout-1');
         seed(db, [current]);
         db.seed('users/user-1/scheduledWorkouts/workout-1/revisions/0000000002', { privateHistory: true });
+        db.seed('users/user-1/trainingWorkoutCompletions/workout-1', { schemaVersion: 1, workoutId: 'workout-1' });
 
         const response = await deleteTrainingPlanForUser(
             'user-1', request('delete-workouts'), { db: db as never, nowMs: NOW_MS },
@@ -265,6 +266,7 @@ describe('deleteTrainingPlanForUser persistence', () => {
         expect(response.permanentlyDeletedWorkoutIds).toEqual(['workout-1']);
         expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toBeUndefined();
         expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000002')).toBeUndefined();
+        expect(db.read('users/user-1/trainingWorkoutCompletions/workout-1')).toBeUndefined();
         expect(db.read('users/user-1/trainingPlanState/current')).toMatchObject({ currentWorkoutCount: 0 });
         const workoutTombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', 'workout-1');
         expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${workoutTombstoneId}`)).toMatchObject({

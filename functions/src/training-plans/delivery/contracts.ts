@@ -103,6 +103,9 @@ export interface DeliveryRuntime {
 export interface DeliveryLedgerV1 {
   verification?: VerificationEvidence;
   repair?: DeliveryRepair | null;
+  /** Private reverse-link identity when `actual.completed` came from an imported
+   * activity marker. Remote provider completion observations leave this unset. */
+  completionLinkId?: string | null;
   schemaVersion: 1;
   id: string;
   workoutId: string;

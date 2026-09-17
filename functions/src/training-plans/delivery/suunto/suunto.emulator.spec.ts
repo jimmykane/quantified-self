@@ -203,4 +203,32 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await event.set({ test: true }); await db.collection('userDeletionTombstones').doc(uid).set({}); await retain();
     expect((await event.collection('trainingCompletionEvidence').get()).empty).toBe(true);
   });
+  it('links an exact Guide marker and protects the delivered artifact in one real transaction', async () => {
+    const delivered = await send();
+    const externalId = delivered.actual?.ids.externalId;
+    expect(externalId).toBeTruthy();
+    const event = user().collection('events').doc('completed-event');
+    await event.set({ test: true });
+
+    const result = await retainSuuntoGuideCompletions(
+      db,
+      uid,
+      event.id,
+      'account',
+      'retained',
+      suuntoFitFixture(['qs'], [externalId!]),
+      'qs',
+      [{ id: 'activity', startTimeMs: 631065723000 }],
+      now,
+    );
+
+    expect(result.linkedWorkoutIds).toEqual(['w']);
+    expect((await user().collection('trainingWorkoutCompletions').doc('w').get()).data()).toMatchObject({
+      provider: 'suunto', eventId: event.id, activityId: 'activity', matchMethod: 'provider_marker',
+    });
+    expect(await ledger()).toMatchObject({
+      status: 'completed', desired: 'preserve', completionLinkId: expect.any(String),
+      actual: { completed: true },
+    });
+  });
 });

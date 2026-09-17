@@ -27,6 +27,7 @@ import {
 } from './mutation';
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
 import { invalidateTrainingWorkoutConsent, stageTrainingDeliveryReconciliation } from './delivery/marker';
+import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 
 const MUTATION_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const FIRESTORE_TRANSACTION_WRITE_BUDGET = 490;
@@ -509,6 +510,7 @@ export async function mutateTrainingScheduleForUser(
             );
             transaction.create(deletionTombstonesRef.doc(tombstone.entityIdHash), tombstone);
             transaction.delete(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId));
+            transaction.delete(userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workoutId));
         }
 
         const receipt: StoredMutationReceiptV1 = {

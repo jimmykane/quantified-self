@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { retireTrainingPlanDeliverySettings, stageTrainingDeliveryReconciliation } from './delivery/marker';
+import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
@@ -605,7 +606,10 @@ async function finalizePlanDeletion(
         if (request.workoutDisposition === 'convert-to-standalone') {
             applied.convertedWorkouts.forEach((workout) => transaction.set(workoutsRef.doc(workout.id), workout));
         } else {
-            applied.response.permanentlyDeletedWorkoutIds.forEach(id => transaction.delete(workoutsRef.doc(id)));
+            applied.response.permanentlyDeletedWorkoutIds.forEach(id => {
+                transaction.delete(workoutsRef.doc(id));
+                transaction.delete(userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(id));
+            });
         }
         transaction.delete(planRef);
         transaction.create(receiptRef, {

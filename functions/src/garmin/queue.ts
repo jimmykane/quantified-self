@@ -29,6 +29,7 @@ import { createParsingOptions } from '../../../shared/parsing-options';
 import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueue-imported-event';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
+import { retainGarminFITWorkoutReferences } from '../training-plans/completion/fit-workout-evidence';
 
 interface RequestError extends Error {
   statusCode?: number;
@@ -326,6 +327,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   try {
     logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     let event;
+    let parsedFromFIT = queueItem.activityFileType === 'FIT';
     switch (queueItem.activityFileType) {
       case 'FIT':
         event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
@@ -350,6 +352,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
           logger.info('Ending timer: DownloadFileRetry');
           logger.info(`Downloaded ${queueItem.activityFileType} (retry as FIT) for ${queueItem.id}`);
           event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
+          parsedFromFIT = true;
         }
         break;
       case 'TCX':
@@ -381,6 +384,16 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);
     }
     const setEventResult = await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    if (parsedFromFIT) {
+      await retainGarminFITWorkoutReferences(
+        admin.firestore(),
+        firebaseUserID,
+        eventID,
+        queueItem.userID,
+        String(tokenQuerySnapshots.docs[0].data().tokenCredentialGeneration ?? ''),
+        Buffer.from(result),
+      );
+    }
     if (!bulkWriter) {
       if (await shouldSkipQueueWorkForDeletedUser(firebaseUserID, ServiceNames.GarminAPI, queueItem.id, 'before_activity_sync_enqueue')) {
         return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);

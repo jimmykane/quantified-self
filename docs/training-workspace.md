@@ -50,7 +50,7 @@ planning or MCP contract impact.
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `19`
-- `@sports-alliance/sports-lib`: `21.0.3`
+- `@sports-alliance/sports-lib`: `21.2.1`
 - Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -865,14 +865,34 @@ disabled. #710, an epic subissue, owns establishing safe absence/repair; #645 tr
 watch eviction and storage limits are not cloud deletion. The UI separates Last sent / Last checked from watch availability
 and explains Suunto app/watch sync and Guide selection without adding a setup wizard.
 
-The activity ingestion worker reads Suunto FIT session developer fields `suuntoplus_plugin_owner_id` and
-`suuntoplus_plugin_external_id` as aligned string arrays for the trusted `SuuntoFitExport1` exporter. A bounded, CRC-checked
-metadata reader preserves NUL-separated array boundaries (the general FIT parser collapses them); it does not modify
-Sports Lib, recorded metrics or event JSON. Matching the existing OAuth client ID retains only QS Guide IDs, session
-index and optional FIT-epoch start seconds under `events/{eventId}/trainingCompletionEvidence/suunto`. This server-only
-leaf is idempotent, exact-account/generation/deletion-fenced, denied to browsers, recursively removed with the account
-and explicitly removed by event cleanup. Provider-held Guides may remain after revoking access. Matching or marking a
-planned workout complete is still #651, not this reader.
+Activity ingestion now uses Sports Lib `readFITWorkoutReferences(...)`; QS no longer walks FIT definitions itself.
+Sports Lib validates framing, CRC, base types, endianness, definition reuse and developer-data pairing, and supports both
+documented Suunto exporters (`SuuntoFitExport1` and `SuuntoplusFitExt`) without fixed developer field numbers. The three
+nonnumeric data classes remain outside Event/Activity JSON and numeric metric discovery. QS persists their bounded plain
+JSON envelopes only under `events/{eventId}/trainingCompletionEvidence/fit`, with source-account authority proven again
+inside the write transaction. This private leaf is denied to browsers, recursively removed with the account and explicitly
+removed by event cleanup. Malformed optional evidence never changes normal activity parsing or recorded metrics.
+
+For Suunto, QS filters the parsed owner to its existing OAuth client ID and accepts only its deterministic Guide
+`externalId`. One unambiguous Guide marker in one session may link that imported activity to the matching current
+scheduled workout and mark the delivery artifact protected as completed. The safe owner-readable projection is
+`trainingWorkoutCompletions/{workoutId}`; the account digest, Guide ID, raw reference data, reverse uniqueness record and
+matching evidence stay private. Activity identity is attached only when its start timestamp uniquely matches the native
+FIT session timestamp; source order is never treated as an activity ID. A repeated marker, missing workout, different
+account, multiple candidate ledgers or conflicting existing link fails closed. The UI says **Activity linked**; this means
+the Guide was referenced by a recorded session, not that every prescribed interval or target was completed. Planned
+workouts remain separate from completed-activity totals and authored schedule/revision history. Linking waits for any
+in-flight delivery lease to finish. Deleting the source event removes its safe/private link records, clears only the
+matching marker-derived completion protection and transactionally queues delivery reconciliation; provider-reported
+completion evidence is not cleared through this path. A history-recoverable workout deletion retains the link; permanent
+workout or delete-with-plan removal deletes the owner-visible projection while retaining private event-bound duplicate
+protection until that source event or account is deleted.
+
+For Garmin, standard FIT `training_file` (message 72) and embedded workout (message 26) data are retained only as
+account-bound candidate evidence. The unsigned serial is not reinterpreted as a Training API workout ID or schedule ID,
+and no exact link is created until the separately recorded #651 contract proof establishes a real identifier path.
+Bounded fallback matching, ambiguous confirmation, audited unlink/relink and cross-provider adoption remain open in
+#651; this Sports Lib adoption does not silently narrow those acceptance criteria.
 
 Verification combines synthetic HTTP/ZIP/FIT fixtures, real Firestore transactions, Rules, UI/help and MCP read tests.
 MCP continues to read strict local delivery projections: Suunto counts derive from workouts, no watch receipt is inferred,
@@ -2978,9 +2998,14 @@ sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes;
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
 and do not require a Training snapshot rebuild solely for this storage transition.
 
-The repository now pins Sports Lib `21.0.3`. This release changes package emission to module-preserving ESM and
-per-module CommonJS without changing parser results, serialized data, or persisted metrics. It requires no source-file
-reparse, derived-snapshot rebuild, or data migration. Sports Lib `20.0.3` introduced the FIT parser `5.0.2` transition.
+The repository now pins Sports Lib `21.2.1`. The 21.0.3 package-emission transition remains module-preserving ESM and
+per-module CommonJS. Sports Lib 21.2.1 adds nonnumeric, package-root FIT workout-reference classes and the bounded
+`readFITWorkoutReferences(...)` metadata reader. These values stay outside default Event/Activity JSON, streams, metrics,
+MCP metric discovery and Training-derived calculations. New Garmin and Suunto FIT imports can retain private evidence;
+there is no Firestore activity-schema migration, derived-snapshot rebuild or global reparse requirement. A separately
+approved targeted source-backed reparse may be used only when a retained original must acquire this new private evidence
+and the reparse path has first been wired to retain it; the current generic reparse writer does not infer or persist the
+sidecar. Sports Lib `20.0.3` introduced the FIT parser `5.0.2` transition.
 New FIT imports persist session field 196 as canonical `Metabolic Calories`; they do not emit a replacement
 `Resting Calories` stat.
 Existing persisted Resting Calories values remain historical values until a source reparse replaces their source stats.

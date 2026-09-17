@@ -76,6 +76,7 @@ import {
   type TrainingScheduleHistoryEntryV1,
   type TrainingScheduleRevisionScope,
 } from '@shared/training-plans';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 
 type PlansView = 'plans' | 'standalone';
 
@@ -95,6 +96,7 @@ interface WorkoutEditorSession {
 
 interface WorkoutRow {
   workout: ScheduledWorkoutV1;
+  completion: TrainingWorkoutCompletionV1 | null;
   summary: string[];
   actionBusy: boolean;
   historyScope: TrainingScheduleRevisionScope;
@@ -205,6 +207,12 @@ export class PlansWorkspaceComponent {
       : of({ status: 'ready', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState)),
   ), { initialValue: { status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState });
   readonly schedule = computed(() => this.scheduleState().schedule);
+  readonly completions = toSignal(this.userService.user$.pipe(
+    switchMap(user => isTrainingPlanningUIAllowed(user?.uid)
+      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(catchError(() => of([])))
+      : of([])),
+  ), { initialValue: [] as TrainingWorkoutCompletionV1[] });
+  readonly completedWorkoutIds = computed(() => this.completions().map(completion => completion.workoutId));
   readonly view = signal<PlansView>('plans');
   readonly selectedPlanId = signal<string | null>(null);
   readonly today = signal(todayLocalDate());
@@ -274,6 +282,7 @@ export class PlansWorkspaceComponent {
         : workout.planId === selectedPlanId)
       .map(workout => ({
         workout,
+        completion: this.completions().find(completion => completion.workoutId === workout.id) ?? null,
         summary: formatManualWorkoutStructure(
           workout.structure,
           this.currentUser()?.settings?.unitSettings ?? null,

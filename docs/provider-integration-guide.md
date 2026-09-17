@@ -170,8 +170,12 @@ owner and identity fields are not normalized. Authored title/instruction or expl
 review and counts Unicode code points. Remaining watch characters outside Suunto's guaranteed minimum set require
 approval because rendering is device-dependent; app-only description text is not subject to that watch-font check.
 See the [Training source of truth](training-workspace.md#suuntoplus-guide-delivery-650) for upgrade and recovery behavior.
-The #650 transport packages that JSON with a valid 300 × 300 PNG, preserves Guide identity
-and pin state through PUT, and retains completed FIT correlation metadata privately for #651. The existing OAuth
+The #650 transport packages that JSON with a valid 300 × 300 PNG and preserves Guide identity
+and pin state through PUT. Incoming FIT metadata is now read through Sports Lib 21.2.1. QS revalidates the exact connected
+account, filters its OAuth client owner and deterministic Guide external ID, and links only one unambiguous session marker
+to the matching scheduled workout. The private IDs/evidence never enter Event/Activity JSON; the owner sees only
+**Activity linked**, which does not claim target or interval adherence. Garmin message 72 remains candidate-only because
+its serial-to-Training-API semantics are not documented. Bounded fallback/manual reconciliation remains in #651. The existing OAuth
 application/client credentials/user tokens and `SUUNTOAPP_SUBSCRIPTION_KEY` are reused, with the
 exact OAuth application name supplied through the `SUUNTOAPP_GUIDE_OWNER` Secret Manager setting (`.secret.local`
 for emulators). The name is not hardcoded; only the two Training delivery callables and worker bind it. Guides uses the

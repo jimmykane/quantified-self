@@ -1,5 +1,5 @@
 import * as functions from 'firebase-functions/v1';
-import { retainSuuntoGuideCompletions } from './suunto/guide-completion';
+import { fitActivityReferencesFromEvent, retainSuuntoGuideCompletions } from './suunto/guide-completion';
 import { config } from './config';
 import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
@@ -1288,7 +1288,8 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           });
           const setEventResult = await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           await retainSuuntoGuideCompletions(admin.firestore(), parentID, deterministicID, suuntoWorkoutQueueItem.userName,
-            String(tokenQueryDocumentSnapshot.data().tokenCredentialGeneration ?? ''), Buffer.from(result), config.suuntoapp.client_id);
+            String(tokenQueryDocumentSnapshot.data().tokenCredentialGeneration ?? ''), Buffer.from(result), config.suuntoapp.client_id,
+            fitActivityReferencesFromEvent(event));
           if (!bulkWriter) {
             const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
               userID: parentID,

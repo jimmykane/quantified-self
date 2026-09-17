@@ -87,6 +87,19 @@ describe('PlanScheduleCalendarComponent', () => {
     expect(selection).not.toHaveBeenCalled();
   });
 
+  it('shows a linked activity compactly without changing the scheduled workout state', async () => {
+    const fixture = await render();
+    fixture.componentRef.setInput('completedWorkoutIds', [workout.id]);
+    fixture.detectChanges();
+    const edit = fixture.nativeElement.querySelector('.calendar-workout') as HTMLButtonElement;
+    expect(edit.getAttribute('aria-label')).toBe(`Edit ${workout.title}, skipped, activity linked`);
+    expect(edit.textContent?.replace(/\s+/g, ' ').trim()).toBe(`Skipped · Linked · ${workout.title.trim()}`);
+    const count = fixture.nativeElement.querySelector('[data-plan-date="2026-09-12"] .calendar-day-count');
+    expect(count?.querySelector('mat-icon')?.textContent?.trim()).toBe('task_alt');
+    expect(workout.lifecycle).toBe('skipped');
+    expect(selection).not.toHaveBeenCalled();
+  });
+
   it('marks the configured first day and actual weekends without changing selection or disabled/today states', async () => {
     const fixture = await render();
     expect(fixture.nativeElement.querySelector('.calendar-weekday--week-start')?.textContent).toBe('Mon');

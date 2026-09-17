@@ -18,6 +18,7 @@ const {
     runTransactionMock,
     transactionDeleteMock,
     transactionGetMock,
+    transactionSetMock,
 } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     const documentMock = vi.fn(() => ({ onDelete: onDeleteMock }));
@@ -25,6 +26,7 @@ const {
     const recursiveDeleteMock = vi.fn().mockResolvedValue(undefined); // Keep for potential other use or safety
     const collectionMock = vi.fn((path) => ({
         path: path || 'mock/path',
+        doc: vi.fn((id: string) => ({ path: `${path}/${id}` })),
         where: vi.fn((field: string, operator: string, value: unknown) => ({
             path: path || 'mock/path',
             filters: [{ field, operator, value }],
@@ -38,11 +40,13 @@ const {
 
     const transactionGetMock = vi.fn();
     const transactionDeleteMock = vi.fn();
+    const transactionSetMock = vi.fn();
     const runTransactionMock = vi.fn(async (handler: unknown) => (
         handler as (transaction: unknown) => Promise<unknown>
     )({
         get: transactionGetMock,
         delete: transactionDeleteMock,
+        set: transactionSetMock,
     }));
 
     const firestoreMock = {
@@ -92,6 +96,7 @@ const {
         runTransactionMock,
         transactionDeleteMock,
         transactionGetMock,
+        transactionSetMock,
     };
 });
 
@@ -140,6 +145,7 @@ describe('cleanupEventFile', () => {
         runTransaction: runTransactionMock,
         transactionDelete: transactionDeleteMock,
         transactionGet: transactionGetMock,
+        transactionSet: transactionSetMock,
     };
 
     beforeEach(() => {
@@ -175,6 +181,7 @@ describe('cleanupEventFile', () => {
         )({
             get: mocks.transactionGet,
             delete: mocks.transactionDelete,
+            set: mocks.transactionSet,
         }));
     });
 
@@ -235,8 +242,8 @@ describe('cleanupEventFile', () => {
             filters: [{ field: 'eventID', operator: '==', value: 'testEvent' }],
         });
 
-        // Two activities and the fixed private completion-evidence leaf.
-        expect(mocks.transactionDelete).toHaveBeenCalledTimes(3);
+        // Two activities and the current/legacy fixed private evidence leaves.
+        expect(mocks.transactionDelete).toHaveBeenCalledTimes(4);
         expect(mocks.transactionDelete).toHaveBeenCalledWith('docRef1');
         expect(mocks.transactionDelete).toHaveBeenCalledWith('docRef2');
 
@@ -392,7 +399,8 @@ describe('cleanupEventFile', () => {
 
         // Check flat activity delete query called
         expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
-        expect(mocks.transactionDelete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/suunto' }));
+        expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/fit' }));
+        expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/suunto' }));
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.fileDelete).not.toHaveBeenCalled();
     });
@@ -424,9 +432,91 @@ describe('cleanupEventFile', () => {
         await wrapped(event);
 
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
-        expect(mocks.transactionDelete).toHaveBeenCalledTimes(3);
+        expect(mocks.transactionDelete).toHaveBeenCalledTimes(4);
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef1');
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef2');
+    });
+
+    it('should remove owner-visible completion projections and private reverse links for the deleted event', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
+        const event = { data: snap, params: { userId: 'testUser', eventId: 'testEvent' } };
+        mocks.transactionGet.mockImplementation(async (refOrQuery: { path?: string }) => {
+            if (refOrQuery.path === 'users/testUser/events/testEvent') return { exists: false };
+            if (refOrQuery.path === 'users/testUser/activities') return { empty: true, size: 0, docs: [] };
+            if (refOrQuery.path === 'users/testUser/events/testEvent/metaData') return { empty: true, size: 0, docs: [] };
+            if (refOrQuery.path === 'users/testUser/trainingWorkoutCompletions') {
+                return { empty: false, size: 1, docs: [{ ref: 'completionRef' }] };
+            }
+            if (refOrQuery.path === 'users/testUser/trainingActivityCompletionLinks') {
+                return { empty: false, size: 1, docs: [{ id: 'reverse-link', ref: 'reverseLinkRef', data: () => ({
+                    schemaVersion: 1, deliveryId: 'delivery', eventId: 'testEvent', workoutId: 'workout',
+                }) }] };
+            }
+            if (refOrQuery.path === 'users/testUser/trainingDeliveryLedger/delivery') {
+                return { exists: true, ref: { path: refOrQuery.path }, data: () => ({
+                    schemaVersion: 1, id: 'delivery', workoutId: 'workout', planId: 'plan', provider: 'suunto',
+                    destinationKey: 'destination', desiredGeneration: 1, connectionEpoch: 0, settingsRevision: 1,
+                    desiredDigest: 'digest', desired: 'preserve', status: 'completed', timeZone: 'Europe/Helsinki',
+                    issues: [], approvalDigest: null, actual: { ids: { externalId: 'guide' }, localDate: '2026-09-17', completed: true },
+                    acceptedDigest: 'digest', contentDigest: 'content', acceptedContentDigest: 'content', attempt: null,
+                    lease: null, retries: 0, retryAtMs: 0, blockedConnectionGeneration: null, lastAttemptAtMs: null,
+                    lastAcceptedAtMs: 1, updatedAtMs: 1, completionLinkId: 'reverse-link',
+                }) };
+            }
+            return { empty: true, size: 0, docs: [] };
+        });
+
+        await wrapped(event);
+
+        expect(mocks.transactionDelete).toHaveBeenCalledWith('completionRef');
+        expect(mocks.transactionDelete).toHaveBeenCalledWith('reverseLinkRef');
+        expect(mocks.transactionSet).toHaveBeenCalledWith(
+            expect.objectContaining({ path: 'users/testUser/trainingDeliveryLedger/delivery' }),
+            expect.objectContaining({ status: 'pending', desired: 'preserve', desiredGeneration: 2,
+                actual: expect.objectContaining({ completed: false }) }),
+        );
+        expect(mocks.transactionSet).toHaveBeenCalledWith(
+            expect.objectContaining({ path: expect.stringMatching(/^trainingDeliveryQueue\/reconcile_/) }),
+            expect.objectContaining({ uid: 'testUser', kind: 'reconcile', dueAtMs: 0 }),
+            { merge: true },
+        );
+    });
+
+    it('should not recreate delivery work while account deletion owns cleanup', async () => {
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
+        const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
+        const event = { data: snap, params: { userId: 'testUser', eventId: 'testEvent' } };
+        mocks.transactionGet.mockImplementation(async (refOrQuery: { path?: string }) => {
+            if (refOrQuery.path === 'users/testUser/events/testEvent') return { exists: false };
+            if (refOrQuery.path === 'users/testUser/activities') return { empty: true, size: 0, docs: [] };
+            if (refOrQuery.path === 'users/testUser/events/testEvent/metaData') return { empty: true, size: 0, docs: [] };
+            if (refOrQuery.path === 'userDeletionTombstones/testUser') return { exists: true };
+            if (refOrQuery.path === 'users/testUser/trainingWorkoutCompletions') {
+                return { empty: false, size: 1, docs: [{ ref: 'completionRef' }] };
+            }
+            if (refOrQuery.path === 'users/testUser/trainingActivityCompletionLinks') {
+                return { empty: false, size: 1, docs: [{ id: 'reverse-link', ref: 'reverseLinkRef', data: () => ({
+                    schemaVersion: 1, deliveryId: 'delivery', eventId: 'testEvent', workoutId: 'workout',
+                }) }] };
+            }
+            if (refOrQuery.path === 'users/testUser/trainingDeliveryLedger/delivery') {
+                return { exists: true, ref: { path: refOrQuery.path }, data: () => ({
+                    schemaVersion: 1, id: 'delivery', provider: 'suunto', workoutId: 'workout', completionLinkId: 'reverse-link',
+                    desiredGeneration: 1, actual: { ids: {}, localDate: '2026-09-17', completed: true },
+                }) };
+            }
+            return { empty: true, size: 0, docs: [] };
+        });
+
+        await wrapped(event);
+
+        expect(mocks.transactionDelete).toHaveBeenCalledWith('completionRef');
+        expect(mocks.transactionSet).not.toHaveBeenCalledWith(
+            expect.objectContaining({ path: expect.stringMatching(/^trainingDeliveryQueue\//) }),
+            expect.anything(),
+            expect.anything(),
+        );
     });
 
     it('should skip destructive cleanup when a deleted event has been recreated inside the activity transaction', async () => {
@@ -505,7 +595,8 @@ describe('cleanupEventFile', () => {
 
         await wrapped(event);
 
-        expect(mocks.transactionDelete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/suunto' }));
+        expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/fit' }));
+        expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/suunto' }));
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.fileDelete).not.toHaveBeenCalled();

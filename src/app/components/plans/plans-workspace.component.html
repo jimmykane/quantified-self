@@ -491,6 +491,7 @@
       <div [class.plan-schedule-layout]="view() === 'plans'">
       @if (view() === 'plans' && selectedPlan(); as plan) {
         <app-plan-schedule-calendar [plan]="plan" [workouts]="schedule().workouts"
+          [completedWorkoutIds]="completedWorkoutIds()"
           [selectedDate]="planScheduleDate()!" [today]="today()"
           [startOfWeek]="currentUser()?.settings?.unitSettings?.startOfTheWeek ?? null"
           [disabled]="busyAction() !== null" (dateSelected)="selectScheduleDate($event)"
@@ -533,6 +534,14 @@
                 <mat-chip-set aria-label="Workout state">
                   <mat-chip>Skipped</mat-chip>
                 </mat-chip-set>
+                }
+                @if (row.completion) {
+                <span class="workout-completion-state">
+                  <mat-icon aria-hidden="true">task_alt</mat-icon>
+                  <span>Activity linked@if (row.completion.workoutRevisionAtLink !== row.workout.revision) { · workout changed since
+                    } @else if (row.completion.timing === 'late') { · late
+                    } @else if (row.completion.timing === 'early') { · early }</span>
+                </span>
                 }
               </div>
                 <ol class="workout-summary">
