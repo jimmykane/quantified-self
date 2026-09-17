@@ -83,6 +83,40 @@ describe('processWorkoutTask', () => {
                 processed: false,
                 some: 'data',
             }),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { tokenRefreshRecoveryGeneration: undefined },
+        );
+    });
+
+    it('passes the token-refresh recovery generation to queue processing', async () => {
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed: false }),
+        });
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Deferred);
+
+        const invokeTask = processWorkoutTask as unknown as (
+            request: { data: Record<string, unknown> },
+        ) => Promise<void>;
+        await expect(invokeTask({
+            data: {
+                queueItemId: 'recovery-item',
+                serviceName: ServiceNames.SuuntoApp,
+                tokenRefreshRecoveryGeneration: 3,
+            },
+        })).resolves.toBeUndefined();
+
+        expect(mockParseWorkoutQueueItemForServiceName).toHaveBeenCalledWith(
+            ServiceNames.SuuntoApp,
+            expect.objectContaining({ id: 'recovery-item' }),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { tokenRefreshRecoveryGeneration: 3 },
         );
     });
 
@@ -196,6 +230,11 @@ describe('processWorkoutTask', () => {
                 id: 'legacy-coros-id',
                 dateCreated: 100,
             }),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { tokenRefreshRecoveryGeneration: undefined },
         );
     });
 
@@ -220,6 +259,11 @@ describe('processWorkoutTask', () => {
                 id: 'stable-coros-id',
                 queueRevision: 'revision-2',
             }),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { tokenRefreshRecoveryGeneration: undefined },
         );
     });
 

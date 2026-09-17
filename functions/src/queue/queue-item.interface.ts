@@ -17,6 +17,8 @@ export interface QueueItemInterface {
   /** Opaque provider-payload revision used to reject stale Cloud Task writes. */
   queueRevision?: string,
   dispatchRecoveryGeneration?: number,
+  /** Durable generation of the delayed token-refresh recovery task. */
+  tokenRefreshRecoveryGeneration?: number,
   errors?: QueueItemError[],
   processedAt?: number,
   expireAt?: Timestamp | Date,

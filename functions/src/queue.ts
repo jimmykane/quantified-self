@@ -52,7 +52,10 @@ import {
 } from './queue/cleanup-tombstone';
 import { resolveProviderImportEventID } from './queue/provider-event-id';
 import { processWahooWorkoutQueueItem } from './wahoo/processor';
-import { deferWorkoutQueueItemForTokenRefreshContention } from './queue/token-refresh-contention';
+import {
+  deferWorkoutQueueItemForTokenRefreshContention,
+  type WorkoutQueueTaskContext,
+} from './queue/token-refresh-contention';
 import { getActiveCOROSTokenSnapshot } from './coros/account';
 import {
   downloadCOROSFITFile,
@@ -702,6 +705,7 @@ export async function parseWorkoutQueueItemForServiceName(
   tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
+  taskContext?: WorkoutQueueTaskContext,
 ): Promise<QueueResult> {
   if (serviceName !== ServiceNames.COROSAPI) {
     return parseWorkoutQueueItemForServiceNameInternal(
@@ -711,6 +715,8 @@ export async function parseWorkoutQueueItemForServiceName(
       tokenCache,
       usageCache,
       pendingWrites,
+      undefined,
+      taskContext,
     );
   }
 
@@ -748,6 +754,7 @@ export async function parseWorkoutQueueItemForServiceName(
       usageCache,
       pendingWrites,
       claimState,
+      taskContext,
     );
   } finally {
     await releaseCOROSRevisionClaimIfHeld(corosQueueItem, claimState);
@@ -763,9 +770,17 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
   corosClaimState?: COROSQueueProcessingClaim,
+  taskContext?: WorkoutQueueTaskContext,
 ): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
-    return processGarminAPIActivityQueueItem(queueItem as GarminAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
+    return processGarminAPIActivityQueueItem(
+      queueItem as GarminAPIActivityQueueItemInterface,
+      bulkWriter,
+      tokenCache,
+      usageCache,
+      pendingWrites,
+      taskContext,
+    );
   }
   if (serviceName === ServiceNames.WahooAPI) {
     return processWahooWorkoutQueueItem(queueItem as WahooAPIWorkoutQueueItemInterface);
@@ -1417,6 +1432,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
         contentionUserID,
         currentQueueItem,
       ),
+      currentRecoveryGeneration: taskContext?.tokenRefreshRecoveryGeneration,
     });
   }
 

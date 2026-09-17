@@ -537,6 +537,7 @@ export interface DeferQueueItemForTokenRefreshContentionIfCurrentUserActiveParam
     phase: string;
     logPrefix: string;
     recoveryDispatchedAtMs: number;
+    recoveryGeneration: number;
     isCurrent: (queueItem: Record<string, unknown>) => boolean;
 }
 
@@ -568,6 +569,7 @@ export async function deferQueueItemForTokenRefreshContentionIfCurrentUserActive
         }, async transaction => {
             transaction.update(params.queueItem.ref!, {
                 dispatchedToCloudTask: params.recoveryDispatchedAtMs,
+                tokenRefreshRecoveryGeneration: params.recoveryGeneration,
                 providerOperationStartedAt: null,
                 ...clearRevisionProcessingLeaseUpdate(),
             });

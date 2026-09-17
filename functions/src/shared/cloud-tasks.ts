@@ -37,10 +37,11 @@ interface EnqueueSportsLibReparseHeavyTaskOptions {
 interface EnqueueWorkoutTaskOptions {
     recoveryTaskKey?: number | string;
     queueRevision?: string;
+    tokenRefreshRecoveryGeneration?: number;
 }
 
 export interface EnqueueWorkoutRecoveryTaskOptions {
-    recoveryTaskKey: number | string;
+    recoveryGeneration: number;
     queueRevision?: string;
 }
 
@@ -51,6 +52,7 @@ export interface WorkoutTaskDispatchItem {
     totalRetryCount?: number;
     queueRevision?: string;
     dispatchRecoveryGeneration?: number;
+    tokenRefreshRecoveryGeneration?: number;
 }
 
 export interface EnqueueWorkoutTaskWithDispatchRecoveryParams<T extends WorkoutTaskDispatchItem> {
@@ -294,6 +296,9 @@ export async function enqueueWorkoutTask(
     const payload = {
         queueItemId,
         serviceName,
+        ...(typeof options.tokenRefreshRecoveryGeneration === 'number'
+            ? { tokenRefreshRecoveryGeneration: options.tokenRefreshRecoveryGeneration }
+            : {}),
         ...(queueRevision ? { queueRevision } : {}),
         ...(serviceName === ServiceNames.COROSAPI && !queueRevision
             ? { queueDateCreated: safeDateCreated }
@@ -367,11 +372,12 @@ export async function enqueueWorkoutRecoveryTask(
         ? sanitizeTaskNamePart(queueRevision).slice(0, 80)
         : '';
     const baseTaskId = `${sanitizeTaskNamePart(serviceName)}-${sanitizeTaskNamePart(`${queueItemId}`)}-${safeDateCreated}${safeQueueRevision ? `-revision-${safeQueueRevision}` : ''}`;
-    const recoveryTaskId = `${baseTaskId}-token-refresh-${sanitizeTaskNamePart(`${options.recoveryTaskKey}`)}`;
+    const recoveryTaskId = `${baseTaskId}-token-refresh-${options.recoveryGeneration}`;
     const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
     const payload = {
         queueItemId,
         serviceName,
+        tokenRefreshRecoveryGeneration: options.recoveryGeneration,
         ...(queueRevision
             ? { queueRevision }
             : { queueDateCreated: safeDateCreated }),
@@ -418,9 +424,15 @@ function workoutTaskRecoveryKey(queueItem: WorkoutTaskDispatchItem): number | st
 
 function workoutTaskEnqueueOptions(queueItem: WorkoutTaskDispatchItem): EnqueueWorkoutTaskOptions {
     const queueRevision = normalizeQueueRevision(queueItem.queueRevision) || '';
+    const tokenRefreshRecoveryGeneration = typeof queueItem.tokenRefreshRecoveryGeneration === 'number'
+        && Number.isSafeInteger(queueItem.tokenRefreshRecoveryGeneration)
+        && queueItem.tokenRefreshRecoveryGeneration >= 0
+        ? queueItem.tokenRefreshRecoveryGeneration
+        : null;
     return {
         recoveryTaskKey: workoutTaskRecoveryKey(queueItem),
         ...(queueRevision ? { queueRevision } : {}),
+        ...(tokenRefreshRecoveryGeneration !== null ? { tokenRefreshRecoveryGeneration } : {}),
     };
 }
 

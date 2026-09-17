@@ -2855,6 +2855,62 @@ describe('queue', () => {
             expect(mockBatch.set).not.toHaveBeenCalled();
         });
 
+        it('should defer a legacy shared-provider item when a usable token is refreshing', async () => {
+            const admin = await import('firebase-admin');
+            const tokenQuery = admin.firestore().collectionGroup('tokens');
+            vi.spyOn(tokenQuery, 'get').mockResolvedValueOnce({
+                size: 2,
+                docs: [{
+                    id: 'terminal-token',
+                    ref: {
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'stale-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }, {
+                    id: 'refreshing-token',
+                    ref: {
+                        parent: {
+                            id: 'tokens',
+                            parent: { id: 'active-user-id' },
+                        },
+                    },
+                    data: vi.fn(() => ({})),
+                }],
+                empty: false,
+            } as Awaited<ReturnType<typeof tokenQuery.get>>);
+            vi.mocked(getTokenData)
+                .mockRejectedValueOnce(new TerminalServiceAuthError(
+                    ServiceNames.SuuntoApp,
+                    'stale-user-id',
+                    'suuntoUser',
+                    400,
+                    'invalid_grant',
+                    'User no longer active/connected with the partner',
+                    new Error('400 invalid_grant'),
+                ))
+                .mockRejectedValueOnce(new TokenRefreshInProgressError(
+                    ServiceNames.SuuntoApp,
+                    'refreshing-token',
+                ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Deferred);
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.SuuntoApp,
+                queueItem: suuntoQueueItem,
+                userID: 'active-user-id',
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
+        });
+
         it('should mark processed as skipped without retrying when account deletion starts before event write', async () => {
             mockShouldSkipQueueWorkForDeletedUser
                 .mockResolvedValueOnce(false)

@@ -25,11 +25,18 @@ export const processWorkoutTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
-    const { queueItemId, serviceName, queueRevision, queueDateCreated } = request.data as {
+    const {
+        queueItemId,
+        serviceName,
+        queueRevision,
+        queueDateCreated,
+        tokenRefreshRecoveryGeneration,
+    } = request.data as {
         queueItemId: string;
         serviceName: ServiceNames;
         queueRevision?: string;
         queueDateCreated?: number;
+        tokenRefreshRecoveryGeneration?: number;
     };
 
     const collectionName = getServiceWorkoutQueueName(serviceName);
@@ -86,7 +93,15 @@ export const processWorkoutTask = onTaskDispatched({
             id: queueItemId,
             ref: queueRef,
         }, queueItem) as any;
-        const result = await parseWorkoutQueueItemForServiceName(serviceName, queueItemForProcessing);
+        const result = await parseWorkoutQueueItemForServiceName(
+            serviceName,
+            queueItemForProcessing,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { tokenRefreshRecoveryGeneration },
+        );
 
         switch (result) {
             case QueueResult.Processed:

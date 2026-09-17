@@ -1098,12 +1098,14 @@ describe('queue-utils', () => {
                 phase: 'workout_token_refresh_contention',
                 logPrefix: 'WorkoutQueue',
                 recoveryDispatchedAtMs: 1_782_126_100_000,
+                recoveryGeneration: 2,
                 isCurrent: current => current.revision === 'expected',
             });
 
             expect(result).toBe(QueueResult.Deferred);
             expect(hoisted.transaction.update).toHaveBeenCalledWith(queueItem.ref, expect.objectContaining({
                 dispatchedToCloudTask: 1_782_126_100_000,
+                tokenRefreshRecoveryGeneration: 2,
                 providerOperationStartedAt: null,
                 processingOwner: hoisted.fieldValueDelete,
                 processingRevision: hoisted.fieldValueDelete,

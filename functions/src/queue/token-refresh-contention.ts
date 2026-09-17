@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { QueueItemInterface } from './queue-item.interface';
@@ -12,6 +11,10 @@ import { normalizeQueueRevision } from './revision-identity';
 
 const TOKEN_REFRESH_CONTENTION_RETRY_DELAY_SECONDS = Math.ceil(TOKEN_REFRESH_LEASE_MS / 1000) + 5;
 
+export interface WorkoutQueueTaskContext {
+  tokenRefreshRecoveryGeneration?: number;
+}
+
 export interface DeferWorkoutQueueItemForTokenRefreshContentionParams {
   serviceName: ServiceNames;
   queueItem: QueueItemInterface;
@@ -19,6 +22,13 @@ export interface DeferWorkoutQueueItemForTokenRefreshContentionParams {
   phase: string;
   logPrefix: string;
   isCurrent: (queueItem: Record<string, unknown>) => boolean;
+  currentRecoveryGeneration?: number;
+}
+
+function normalizeRecoveryGeneration(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : 0;
 }
 
 /**
@@ -30,6 +40,33 @@ export async function deferWorkoutQueueItemForTokenRefreshContention(
   params: DeferWorkoutQueueItemForTokenRefreshContentionParams,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
   const queueRevision = normalizeQueueRevision(params.queueItem.queueRevision);
+  const persistedRecoveryGeneration = normalizeRecoveryGeneration(
+    params.queueItem.tokenRefreshRecoveryGeneration,
+  );
+  const currentRecoveryGeneration = normalizeRecoveryGeneration(params.currentRecoveryGeneration);
+  if (currentRecoveryGeneration < persistedRecoveryGeneration) {
+    logger.info('[WorkoutQueue] Skipping stale token-refresh contention task because a later recovery is already pending.', {
+      serviceName: params.serviceName,
+      queueItemId: params.queueItem.id,
+      currentRecoveryGeneration,
+      persistedRecoveryGeneration,
+    });
+    return QueueResult.Deferred;
+  }
+
+  const recoveryGeneration = Math.max(
+    currentRecoveryGeneration,
+    persistedRecoveryGeneration,
+  ) + 1;
+  if (!Number.isSafeInteger(recoveryGeneration)) {
+    logger.error('[WorkoutQueue] Could not advance the token-refresh contention recovery generation.', {
+      serviceName: params.serviceName,
+      queueItemId: params.queueItem.id,
+      currentRecoveryGeneration,
+      persistedRecoveryGeneration,
+    });
+    return QueueResult.Failed;
+  }
   const recoveryDispatchedAtMs = Date.now();
   const recoveryTaskCreated = await enqueueWorkoutRecoveryTask(
     params.serviceName,
@@ -37,7 +74,7 @@ export async function deferWorkoutQueueItemForTokenRefreshContention(
     params.queueItem.dateCreated,
     TOKEN_REFRESH_CONTENTION_RETRY_DELAY_SECONDS,
     {
-      recoveryTaskKey: crypto.randomUUID(),
+      recoveryGeneration,
       ...(queueRevision ? { queueRevision } : {}),
     },
   );
@@ -55,6 +92,9 @@ export async function deferWorkoutQueueItemForTokenRefreshContention(
     phase: params.phase,
     logPrefix: params.logPrefix,
     recoveryDispatchedAtMs,
-    isCurrent: params.isCurrent,
+    recoveryGeneration,
+    isCurrent: currentQueueItem => params.isCurrent(currentQueueItem)
+      && normalizeRecoveryGeneration(currentQueueItem.tokenRefreshRecoveryGeneration)
+        === persistedRecoveryGeneration,
   });
 }
