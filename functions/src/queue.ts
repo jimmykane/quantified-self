@@ -1384,25 +1384,6 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     return updateToProcessed(queueItem, bulkWriter, processedAdditionalData);
   }
 
-  // A refresh lease is transient state on a still-usable token. It must take
-  // precedence over terminal/removed sibling tokens on legacy shared-provider
-  // rows; otherwise we could discard work while the usable token is merely
-  // being refreshed by another worker.
-  if (tokenRefreshContentionFirebaseUserID && !sawRetryableFailure) {
-    return deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
-      queueItem,
-      userID: tokenRefreshContentionFirebaseUserID,
-      phase: `workout_queue_token_refresh_contention:${serviceName}`,
-      logPrefix: 'WorkoutQueue',
-      isCurrent: currentQueueItem => isCurrentWorkoutQueueItemForTokenRefreshContention(
-        queueItem,
-        serviceName,
-        tokenRefreshContentionFirebaseUserID,
-        currentQueueItem,
-      ),
-    });
-  }
-
   if (sawPendingDisconnectSkip && !sawRetryableFailure) {
     logger.warn(`Deferring ${serviceName} queue item ${queueItem.id} because at least one matching token is pending disconnect and no token succeeded.`);
     return deferWorkoutQueueItemForPendingDisconnect(
@@ -1430,6 +1411,21 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   if (sawInactiveProviderAccount && !sawRetryableFailure) {
     logger.info(`Skipping ${serviceName} queue item ${queueItem.id} without retry because it belongs to an inactive provider account.`);
     return markWorkoutQueueItemSkippedForInactiveProviderAccount(queueItem, bulkWriter);
+  }
+
+  if (tokenRefreshContentionFirebaseUserID && !sawRetryableFailure) {
+    return deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
+      queueItem,
+      userID: tokenRefreshContentionFirebaseUserID,
+      phase: `workout_queue_token_refresh_contention:${serviceName}`,
+      logPrefix: 'WorkoutQueue',
+      isCurrent: currentQueueItem => isCurrentWorkoutQueueItemForTokenRefreshContention(
+        queueItem,
+        serviceName,
+        tokenRefreshContentionFirebaseUserID,
+        currentQueueItem,
+      ),
+    });
   }
 
   // If we finished the loop without returning, it means every token attempt failed.
