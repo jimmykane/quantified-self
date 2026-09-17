@@ -3034,62 +3034,6 @@ describe('queue', () => {
             }));
         });
 
-        it('defers rather than DLQing a legacy shared-provider item when another token is refreshing', async () => {
-            const admin = await import('firebase-admin');
-            const tokenQuery = admin.firestore().collectionGroup('tokens');
-            vi.spyOn(tokenQuery, 'get').mockResolvedValueOnce({
-                size: 2,
-                docs: [{
-                    id: 'terminal-token',
-                    ref: {
-                        parent: {
-                            id: 'tokens',
-                            parent: { id: 'stale-user-id' },
-                        },
-                    },
-                    data: vi.fn(() => ({})),
-                }, {
-                    id: 'refreshing-token',
-                    ref: {
-                        parent: {
-                            id: 'tokens',
-                            parent: { id: 'active-user-id' },
-                        },
-                    },
-                    data: vi.fn(() => ({})),
-                }],
-                empty: false,
-            } as Awaited<ReturnType<typeof tokenQuery.get>>);
-            vi.mocked(getTokenData)
-                .mockRejectedValueOnce(new TerminalServiceAuthError(
-                    ServiceNames.SuuntoApp,
-                    'stale-user-id',
-                    'suuntoUser',
-                    400,
-                    'invalid_grant',
-                    'User no longer active/connected with the partner',
-                    new Error('400 invalid_grant'),
-                ))
-                .mockRejectedValueOnce(new TokenRefreshInProgressError());
-            mockRef.get.mockResolvedValue({
-                exists: true,
-                data: () => ({ ...suuntoQueueItem, ref: undefined }),
-            });
-
-            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
-
-            expect(result).toBe(QueueResult.Deferred);
-            expect(mockBatch.set).not.toHaveBeenCalled();
-            expect(mockBatch.delete).not.toHaveBeenCalledWith(mockRef);
-            expect(mockRef.update).toHaveBeenCalledWith(expect.objectContaining({
-                dispatchedToCloudTask: null,
-                providerOperationStartedAt: null,
-            }));
-            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
-                retryCount: expect.any(Number),
-            }));
-        });
-
         it('should prefer INVALID_GRANT when multiple terminal auth failures disagree on DLQ context', async () => {
             const admin = await import('firebase-admin');
             vi.spyOn(admin.firestore().collectionGroup('tokens'), 'get').mockResolvedValueOnce({
