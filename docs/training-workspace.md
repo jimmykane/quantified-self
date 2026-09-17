@@ -50,7 +50,7 @@ planning or MCP contract impact.
 Current compatibility baseline:
 
 - Quantified Self derived-metric schema: `19`
-- `@sports-alliance/sports-lib`: `21.2.2`
+- `@sports-alliance/sports-lib`: `21.2.3`
 - Training sport groups: eight modeled benchmark families plus data-backed Fitness & Gym and Other training volume groups
 - Imported FTP/VO2 capacity disciplines: Running and Cycling only
 - Rolling power-system capacity: every exact canonical activity type with usable persisted power curves
@@ -3063,17 +3063,18 @@ sleep duration, score, HRV, and sleep-heart-rate aggregates it already consumes;
 changes. Existing normalized Sleep documents use the dedicated Health/Sleep scalar migration, not an activity reparse,
 and do not require a Training snapshot rebuild solely for this storage transition.
 
-The repository now pins Sports Lib `21.2.2`, and Functions pins FIT parser `5.2.1`. The 21.0.3 package-emission transition
+The repository now pins Sports Lib `21.2.3`, and Functions pins FIT parser `5.2.1`. The 21.0.3 package-emission transition
 remains module-preserving ESM and per-module CommonJS. Sports Lib 21.2.1 added nonnumeric, package-root FIT
-workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.2 keeps those
-public classes, return shapes and numeric values unchanged while delegating FIT wire decoding to the parser's bounded,
-lossless selected-message output. Unrelated nonstandard vendor definitions no longer make otherwise usable selected
-metadata fail closed. These values stay outside default Event/Activity JSON, streams, metrics, MCP metric discovery and
-Training-derived calculations. New Garmin and Suunto FIT imports can retain private evidence; there is no Firestore
-activity-schema migration, derived-snapshot rebuild or global reparse requirement. A separately approved targeted
-source-backed reparse may be used only when a retained original must acquire this new private evidence and the reparse
-path has first been wired to retain it; the current generic reparse writer does not infer or persist the sidecar. MCP
-impact is none: scopes, schemas, projections, consent and provider actions are unchanged. Sports Lib `20.0.3` introduced
+workout-reference classes and the bounded `readFITWorkoutReferences(...)` metadata reader. Sports Lib 21.2.3 keeps those
+public classes, return shapes and numeric values unchanged while restoring the bounded metadata-only synchronous reader;
+the full `fit-file-parser` remains lazy for activity and route imports instead of entering application startup bundles.
+It also retains 21.2.2's tolerance for irrelevant nonstandard vendor definitions on unrelated messages. These values stay
+outside default Event/Activity JSON, streams, metrics, MCP metric discovery and Training-derived calculations. New Garmin
+and Suunto FIT imports can retain private evidence; there is no Firestore activity-schema migration, derived-snapshot
+rebuild or global reparse requirement. A separately approved targeted source-backed reparse may be used only when a
+retained original must acquire this new private evidence and the reparse path has first been wired to retain it; the
+current generic reparse writer does not infer or persist the sidecar. MCP impact is none: scopes, schemas, projections,
+consent and provider actions are unchanged. Sports Lib `20.0.3` introduced
 the FIT parser `5.0.2` transition.
 New FIT imports persist session field 196 as canonical `Metabolic Calories`; they do not emit a replacement
 `Resting Calories` stat.
