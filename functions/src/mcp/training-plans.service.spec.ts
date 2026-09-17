@@ -55,7 +55,8 @@ describe('Training plan MCP reads', () => {
       expect(result.services).toEqual([expect.objectContaining({ provider: 'wahoo', outcomes: [{ status, count: 1 }] })]);
       expect(JSON.stringify(result)).not.toMatch(/private-wahoo|externalId|workout_token|plan_id|journal|device|ELEMNT/);
       Object.assign(f.collections.trainingDeliveryStatuses[id], { externalId: 'private-plan', workout_token: 'private-workout',
-        plan_id: '123', providerAccessBlocked: true, providerJournal: { step: 'plan-create', state: 'started' } });
+        plan_id: '123', providerAccessBlocked: true, providerJournal: { step: 'plan-create', state: 'started' },
+        artifact: { timeZone: 'Pacific/Pago_Pago' } });
       await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
     });
   it.each(['delivered', 'approval_required', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {

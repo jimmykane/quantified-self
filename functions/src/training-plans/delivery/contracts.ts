@@ -27,6 +27,8 @@ export interface DeliveryArtifact {
   ids: Record<string, string>;
   localDate: string;
   completed: boolean;
+  /** Private zone of the retained provider copy, independent from later settings edits. */
+  timeZone?: string;
 }
 export interface DeliveryOperation {
   id: string;

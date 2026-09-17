@@ -25,11 +25,11 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
   const ledger = async () => (await user().collection(DELIVERY_LEDGER).get()).docs[0].data() as DeliveryLedgerV1;
   const drain = async () => { for (let i = 0; i < 100; i++) if (!await reconcileTrainingDeliveryPage(runtime, uid)) return; throw new Error('scan'); };
   const mark = async () => { await db.runTransaction(async tx => stageTrainingDeliveryReconciliation(tx, db, uid)); await drain(); };
-  const command = async (action: TrainingDeliveryCommandV1['action']) => {
+  const command = async (action: TrainingDeliveryCommandV1['action'], timeZone = 'Europe/Helsinki') => {
     const setting = await user().collection('trainingDeliverySettings').doc('workout_w_wahoo').get();
     return trainingDeliveryCommand(runtime, uid, { schemaVersion: 1, mutationId: randomUUID(), scope: 'workout', scopeId: 'w', provider: 'wahoo',
       action, expectedScheduleRevision: 1, expectedScopeRevision: 1, expectedSettingsRevision: setting.data()?.revision ?? 0,
-      ...(action === 'send' ? { timeZone: 'Europe/Helsinki' } : {}) }, false);
+      ...(action === 'send' ? { timeZone } : {}) }, false);
   };
   const send = async () => { await command('send'); await drain(); const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain(); return ledger(); };
   beforeEach(async () => {
@@ -96,6 +96,31 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Wahoo worker with real Fi
     expect(server.calls).toHaveLength(calls); expect((await ledger()).status).toBe('provider_unavailable');
     server.beforeHandle = null; await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
     expect((await ledger()).status).toBe('delivered');
+  });
+  it('reschedules retained IDs after a date-line time-zone settings edit', async () => {
+    await user().collection('scheduledWorkouts').doc('w').update({ localDate: '2026-10-29' });
+    await command('send', 'Pacific/Pago_Pago'); await drain();
+    const row = await ledger(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    const ids = (await ledger()).actual!.ids;
+    await command('send', 'Pacific/Kiritimati'); await drain();
+    await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(await ledger()).toMatchObject({ status: 'delivered', actual: { ids, timeZone: 'Pacific/Kiritimati' } });
+    expect(server.workouts.get(ids.workout)?.starts).toBe('2026-10-28T22:00:00.000Z');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it.each(['completed', 'past'])('retires lost-response creation after the provider copy becomes %s', async status => {
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === '/v1/workouts') {
+      server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+    } };
+    const row = await send();
+    if (status === 'completed') [...server.workouts.values()][0].workout_summary = { id: 42 };
+    else now = Date.parse('2026-10-26T12:00:00Z');
+    const writes = server.calls.filter(call => call.method !== 'GET').length;
+    await command('retry'); await drain(); await processTrainingDelivery(runtime, uid, row.id); await drain();
+    expect(await ledger()).toMatchObject({ status, desired: 'preserve', attempt: null });
+    expect((await ledger()).completionLinkId).toBeFalsy();
+    expect(server.calls.filter(call => call.method !== 'GET')).toHaveLength(writes);
+    expect(server.workouts.size).toBe(1); expect(server.plans.size).toBe(1);
   });
   it.each(['stop', 'edit', 'deletion', 'disconnect'])('guards %s between Plan acceptance and Workout creation', async change => {
     server.afterHandle = async request => { if (request.method === 'POST' && request.path === '/v1/plans') {

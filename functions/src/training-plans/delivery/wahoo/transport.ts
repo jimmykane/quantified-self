@@ -1,10 +1,10 @@
 import type { ScheduledWorkoutV1 } from '../../../../../shared/training-plans';
-import { trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
+import { normalizeDeliveryTimeZone, trainingDeliveryLocalDate } from '../../../../../shared/training-provider-delivery';
 import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryCheckpoint, type DeliveryOperation,
   type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport } from '../contracts';
 import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
 import { WahooTrainingHttpError, wahooId, wahooObject, type WahooTrainingClient, type WahooTrainingRequest } from './http';
-import { assessWahooDelivery, WAHOO_MAPPING_VERSION, wahooIdentities, wahooPlanBody, wahooWorkoutBody, wahooWorkoutDate, wahooWorkoutFields } from './mapping';
+import { assessWahooDelivery, WAHOO_MAPPING_VERSION, wahooIdentities, wahooPlanBody, wahooStarts, wahooWorkoutBody, wahooWorkoutDate, wahooWorkoutFields } from './mapping';
 
 export const WAHOO_INSPECTION_POLICY: InspectionPolicy = {
   version: 'wahoo-owned-plan-workout-v1', mode: 'retained-ids', required: ['plan', 'workout', 'association'],
@@ -16,6 +16,9 @@ type Value = Record<string, unknown>;
 function uncertain(): never { throw new TrainingDeliveryTransportError('uncertain'); }
 function validateArtifact(artifact: DeliveryArtifact): void {
   const ids = artifact.ids;
+  if (artifact.timeZone !== undefined) {
+    try { normalizeDeliveryTimeZone(artifact.timeZone); } catch { uncertain(); }
+  }
   wahooId(ids.plan);
   if (!/^qs-plan-[A-Za-z0-9_-]{43}$/.test(ids.externalId) || ids.workoutToken !== `qs-workout-${ids.externalId.slice(8)}`
     || Object.keys(ids).some(key => !['plan', 'workout', 'externalId', 'workoutToken', 'association'].includes(key))) uncertain();
@@ -66,7 +69,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       if (workout) {
         const value = ownedWorkout(workout, artifact);
         completed = isCompleted(value);
-        workoutPresent = wahooWorkoutDate(value.starts, request.timeZone) === artifact.localDate;
+        workoutPresent = wahooWorkoutDate(value.starts, artifact.timeZone ?? request.timeZone) === artifact.localDate;
         conflict = !workoutPresent || !associationMatches(value, artifact.ids.plan);
         if (!conflict) associated = await this.association(artifact, guard);
         conflict ||= !associated;
@@ -79,7 +82,9 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     } };
   }
   assess(workout: ScheduledWorkoutV1, destination: string, zone: string) { return assessWahooDelivery(workout, destination, zone); }
-  canRemove(artifact: DeliveryArtifact, today: string): boolean { return !artifact.completed && artifact.localDate >= today; }
+  canRemove(artifact: DeliveryArtifact, today: string): boolean {
+    return !artifact.completed && artifact.localDate >= (artifact.timeZone ? trainingDeliveryLocalDate(this.now(), artifact.timeZone) : today);
+  }
   private validate(operation: DeliveryOperation): void {
     if (operation.repair || operation.recoveryBlocked) uncertain();
     if (operation.progress && (operation.progress.version !== 1 || !STEPS.includes(operation.progress.step as Step)
@@ -131,24 +136,36 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     ownedPlan(rows[0], artifact);
     return true;
   }
-  private async inspectWorkout(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<Value> {
+  private async inspectWorkout(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard,
+    recovering = false): Promise<Value> {
     const artifact = operation.artifact!;
     const raw = await this.read(`/v1/workouts/${artifact.ids.workout}`, guard);
     if (!raw) uncertain();
     const value = ownedWorkout(raw, artifact);
-    const date = wahooWorkoutDate(value.starts, operation.timeZone);
+    const retainedZone = artifact.timeZone ?? operation.timeZone;
+    const retainedDate = wahooWorkoutDate(value.starts, retainedZone);
+    // A time-zone edit can move the old instant onto a different calendar date.
+    // Compare the retained copy in its own zone until readback matches our exact
+    // desired starts instant (including an accepted PUT whose response was lost).
+    const desiredStarts = operation.kind === 'upsert'
+      && Date.parse(String(value.starts)) === Date.parse(wahooStarts(operation.workout!.localDate, operation.timeZone));
+    const timeZone = desiredStarts ? operation.timeZone : retainedZone;
+    const date = wahooWorkoutDate(value.starts, timeZone);
     const completed = isCompleted(value);
-    if (completed || date < trainingDeliveryLocalDate(this.now(), operation.timeZone)) {
-      const protectedArtifact = { ...artifact, completed: artifact.completed || completed, localDate: date };
+    if (completed || date < trainingDeliveryLocalDate(this.now(), timeZone)) {
+      const protectedArtifact = { ...artifact, completed: artifact.completed || completed, localDate: date, timeZone };
       await checkpoint(protectedArtifact); operation.artifact = protectedArtifact;
+      // Recovery can now retire the superseded operation against protected
+      // evidence. It must not report delivery success or retry another write.
+      if (recovering) return value;
       uncertain();
     }
-    // The saved date or this operation's new date are the only admissible dates.
+    // Only the retained calendar date or this operation's exact new instant is admissible.
     // Manual provider moves must not be silently overwritten or removed.
-    if ((date !== artifact.localDate && (operation.kind !== 'upsert' || date !== operation.workout?.localDate))
+    if ((retainedDate !== artifact.localDate && !desiredStarts)
       || !associationMatches(value, artifact.ids.plan)) uncertain();
-    if (date !== artifact.localDate) {
-      const observed = { ...artifact, localDate: date };
+    if (date !== artifact.localDate || timeZone !== artifact.timeZone) {
+      const observed = { ...artifact, localDate: date, timeZone };
       await checkpoint(observed); operation.artifact = observed;
     }
     return value;
@@ -165,7 +182,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     const expected = wahooWorkoutFields(operation.workout!, operation.destinationKey, operation.timeZone, operation.artifact!.ids.plan);
     return value.name === expected.name && value.workout_token === expected.workout_token
       && numeric(value.workout_type_id) === expected.workout_type_id && numeric(value.minutes) === expected.minutes
-      && wahooWorkoutDate(value.starts, operation.timeZone) === operation.workout!.localDate
+      && Date.parse(String(value.starts)) === Date.parse(expected.starts)
       && associationMatches(value, expected.plan_id);
   }
   private async lookupPlan(operation: DeliveryOperation, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null> {
@@ -174,7 +191,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     if (!Array.isArray(rows) || rows.length > 1) uncertain();
     if (!rows.length) return null;
     const value = wahooObject(rows[0]);
-    const artifact = { ids: { ...ids, plan: wahooId(value.id) }, localDate: operation.workout!.localDate, completed: false };
+    const artifact = { ids: { ...ids, plan: wahooId(value.id) }, localDate: operation.workout!.localDate, completed: false, timeZone: operation.timeZone };
     ownedPlan(value, artifact);
     return artifact;
   }
@@ -203,7 +220,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
         body: wahooPlanBody(workout, operation.destinationKey, true) }, checkpoint, guard);
       const value = wahooObject(response.body);
       const artifact: DeliveryArtifact = { ids: { ...wahooIdentities(operation.destinationKey, workout.id), plan: wahooId(value.id) },
-        localDate: workout.localDate, completed: false };
+        localDate: workout.localDate, completed: false, timeZone: operation.timeZone };
       // Retain receipt before further validation; malformed metadata must never cause
       // a second create or erase the only known provider identity.
       await checkpoint(artifact); operation.artifact = artifact;
@@ -235,7 +252,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
     const plan = await this.read(`/v1/plans/${artifact.ids.plan}`, guard);
     if (!plan) uncertain();
     this.confirmPlan(plan, operation);
-    const accepted = { ...operation.artifact!, localDate: workout.localDate,
+    const accepted = { ...operation.artifact!, localDate: workout.localDate, timeZone: operation.timeZone,
       ids: { ...operation.artifact!.ids, association: `${operation.artifact!.ids.workout}:${artifact.ids.plan}` } };
     await this.save(operation, checkpoint, accepted, 'finished', 'accepted');
     return accepted;
@@ -304,11 +321,13 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       if (!id) return { kind: 'uncertain' };
       const artifact: DeliveryArtifact = { ...operation.artifact, ids: { ...operation.artifact.ids, workout: id } };
       await checkpoint(artifact); operation.artifact = artifact;
-      const value = await this.inspectWorkout(operation, checkpoint, guard);
+      const value = await this.inspectWorkout(operation, checkpoint, guard, true);
+      if (!this.canRemove(operation.artifact!, trainingDeliveryLocalDate(this.now(), operation.timeZone))) return { kind: 'resume' };
       const plan = await this.read(`/v1/plans/${artifact.ids.plan}`, guard);
       if (!plan || !this.matchesWorkout(value, operation) || !await this.association(artifact, guard)) return { kind: 'uncertain' };
       this.confirmPlan(plan, operation);
-      const accepted = { ...artifact, localDate: operation.workout!.localDate, ids: { ...artifact.ids, association: `${id}:${artifact.ids.plan}` } };
+      const accepted = { ...operation.artifact!, localDate: operation.workout!.localDate, timeZone: operation.timeZone,
+        ids: { ...artifact.ids, association: `${id}:${artifact.ids.plan}` } };
       await this.save(operation, checkpoint, accepted, 'finished', 'accepted');
       return { kind: 'accepted', artifact: accepted };
     }
@@ -316,7 +335,7 @@ export class WahooTrainingTransport implements TrainingDeliveryTransport {
       const raw = await this.read(`/v1/plans/${operation.artifact.ids.plan}`, guard);
       if (!raw) return { kind: 'uncertain' };
       ownedPlan(raw, operation.artifact);
-      if (operation.artifact.ids.workout) await this.inspectWorkout(operation, checkpoint, guard);
+      if (operation.artifact.ids.workout) await this.inspectWorkout(operation, checkpoint, guard, true);
       await this.save(operation, checkpoint, operation.artifact, progress.step, 'ready');
       return { kind: 'resume' };
     }

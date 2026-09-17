@@ -998,6 +998,10 @@ copy outside the window withdraws it and preserves consent for later re-entry. Q
 with `starts` at noon in the saved zone, including DST/year boundaries. Optional `day_code` is omitted because Wahoo's
 public epoch statement and examples disagree. Verify the resulting calendar date and current-day/+6 device behavior
 with the existing production app/account; there is no assumed sandbox or device-receipt claim.
+The private artifact retains its own delivery zone separately from mutable sync settings. A later zone edit checks
+the old provider instant in that retained zone, then adopts the new zone only when readback matches the intended
+`starts` instant. Past-copy protection also uses the retained zone, including date-line changes; unknown legacy zones
+are never guessed across mismatched dates.
 
 Each QS workout owns its own app-created Plan plus dated Workout, even for copied recipes. Destination-bound hashed
 `external_id` and `workout_token` remain stable through edits/rescheduling. Private ledger IDs retain the Plan,
@@ -1014,6 +1018,9 @@ positive adoption, never absence. Larger, partial, unstable, duplicate or empty 
 another POST. A pre-existing Plan found without local receipts also requires Workout discovery, not a blind create.
 An uncertain PUT resumes against owned retained IDs; missing resources never authorize replacement POSTs. A lost
 DELETE acknowledgement remains ambiguous and cannot trigger speculative Plan cleanup.
+If recovery positively identifies a copy that is now past or provider-completed, retain that protective evidence and
+retire the superseded attempt without another write or a false delivery-success claim. The normal public status then
+becomes Past or Completed; a lost response must not leave such a protected copy stuck in an uncertainty retry loop.
 
 New/reconnected OAuth requests retain existing scopes and add `plans_read plans_write`; existing credentials are not
 assumed to have those grants. Missing Training permissions expose targeted reconnect copy/action without breaking
@@ -1030,8 +1037,10 @@ status and phase, never provider bodies, tokens, file URLs or private artifact I
 
 MCP impact: existing `training-plans:read` projections already represent Wahoo and all used outcomes. Same-PR positive
 and negative fixtures cover status reads and reject Plan IDs, workout tokens and journals. This change needs no new
-public schema, scope, write tool, plugin artifact or registered-client refresh. No Rules/index changes are required: all private
-evidence stays in the existing server-only ledger, with unchanged safe owner-visible status projections and cleanup.
+public schema, scope, write tool, plugin artifact or registered-client refresh. The retained artifact zone is private
+recovery metadata, not an extra MCP field; the existing public time zone remains the user's sync setting.
+No Rules/index changes are required: all private evidence stays in the existing server-only ledger, with unchanged
+safe owner-visible status projections and cleanup.
 
 Release gate: public `deliveryEnabled` stays false and the exact pilot UID is checked on frontend and backend. Prepare
 Functions `getWahooAPIAuthRequestTokenRedirectURI`, `requestAndSetWahooAPIAccessToken`, `previewTrainingProviderDelivery`,

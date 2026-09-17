@@ -24,7 +24,8 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   const today = trainingDeliveryLocalDate(nowMs, timeZone);
   const retained = [ledger?.actual, ledger?.repair?.original].filter(artifact => !!artifact);
   if (retained.some(artifact => artifact.completed)) return result('preserve', 'completed');
-  if (retained.some(artifact => artifact.localDate < today) || (workout && workout.localDate < today)) return result('preserve', 'past');
+  if (retained.some(artifact => artifact.localDate < (artifact.timeZone
+    ? trainingDeliveryLocalDate(nowMs, artifact.timeZone) : today)) || (workout && workout.localDate < today)) return result('preserve', 'past');
   // Explicit disconnect ends consent, but must NOT withdraw provider copies.
   if (setting && setting.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
   if (!setting && ledger && ledger.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');

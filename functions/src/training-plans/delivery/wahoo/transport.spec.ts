@@ -43,6 +43,62 @@ describe('Wahoo Plan + dated Workout lifecycle', () => {
     expect(second.ids.plan).not.toBe(first.ids.plan); expect(second.ids.workout).not.toBe(first.ids.workout);
     expect(server.plans.size).toBe(2); expect(server.workouts.size).toBe(2);
   });
+  it('updates the same owned Workout when a time-zone edit crosses the date line', async () => {
+    op.timeZone = 'Pacific/Pago_Pago'; next({ localDate: '2026-10-29' });
+    const first = (await execute())!;
+    op.timeZone = 'Pacific/Kiritimati'; next();
+    const updated = (await execute())!;
+    expect(updated.ids).toEqual(first.ids);
+    expect(server.workouts.get(first.ids.workout)?.starts).toBe('2026-10-28T22:00:00.000Z');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it('does not accept a time-zone edit when readback retains the old instant on the same day', async () => {
+    const first = (await execute())!;
+    const starts = server.workouts.get(first.ids.workout)!.starts;
+    op.timeZone = 'Europe/London'; next();
+    server.afterHandle = async request => { if (request.method === 'PUT' && request.path.includes('/workouts/')) {
+      server.afterHandle = null; server.workouts.get(first.ids.workout)!.starts = starts;
+    } };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(op.artifact?.timeZone).toBe('Europe/Helsinki');
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect((await execute())!.timeZone).toBe('Europe/London');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it.each(['before', 'after'])('recovers a time-zone edit interrupted %s Workout acceptance', async phase => {
+    op.timeZone = 'Pacific/Pago_Pago'; next({ localDate: '2026-10-29' });
+    const first = (await execute())!;
+    op.timeZone = 'Pacific/Kiritimati'; next();
+    const hook = phase === 'before' ? 'beforeHandle' : 'afterHandle';
+    server[hook] = async request => { if (request.method === 'PUT' && request.path.includes('/workouts/')) {
+      server[hook] = null; throw new WahooTrainingHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toThrow();
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect((await execute())!.ids).toEqual(first.ids);
+    expect(op.artifact?.timeZone).toBe('Pacific/Kiritimati');
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+  });
+  it('inspects and removes the retained copy in its own zone after settings change', async () => {
+    op.timeZone = 'Pacific/Pago_Pago'; next({ localDate: '2026-10-29' });
+    const artifact = (await execute())!;
+    const result = await transport.inspection.inspect({ artifact, destinationKey: op.destinationKey,
+      connectionGeneration: op.connectionGeneration, timeZone: 'Pacific/Kiritimati', cursor: null }, guard);
+    expect(result).toMatchObject({ conflict: false, artifacts: ['plan', 'workout', 'association'].map(key => ({ key, state: 'present', authoritative: true })) });
+    op = { ...op, timeZone: 'Pacific/Kiritimati', kind: 'remove', workout: null, progress: null };
+    expect(await execute()).toBeNull();
+  });
+  it('retires uncertain creation safely when readback proves the Workout completed', async () => {
+    server.afterHandle = async request => { if (request.method === 'POST' && request.path === '/v1/workouts') {
+      server.afterHandle = null; throw new WahooTrainingHttpError('uncertain', false);
+    } };
+    await expect(execute()).rejects.toThrow();
+    [...server.workouts.values()][0].workout_summary = { id: 42 };
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect(op.artifact?.completed).toBe(true);
+    expect(server.calls.filter(call => call.method === 'POST')).toHaveLength(2);
+    await expect(execute()).rejects.toThrow();
+  });
   it('never creates another Workout when only its existing Plan can be rediscovered', async () => {
     const accepted = (await execute())!;
     op.artifact = null; next();

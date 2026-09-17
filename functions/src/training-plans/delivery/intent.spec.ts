@@ -66,6 +66,14 @@ describe('delivery intent', () => {
     ledger.actual!.completed = true;
     expect(resolveDeliveryIntent(base, ledger).status).toBe('completed');
   });
+  it('protects the retained copy using its original zone after a settings edit', () => {
+    const context = { ...base, setting: { ...base.setting!, timeZone: 'Pacific/Pago_Pago' },
+      nowMs: Date.parse('2026-09-10T10:30:00Z') };
+    const ledger = { actual: { ids: { workout: 'id' }, localDate: '2026-09-10', completed: false,
+      timeZone: 'Pacific/Kiritimati' } } as DeliveryLedgerV1;
+    // The old copy is already September 11's past, even though new settings say September 9.
+    expect(resolveDeliveryIntent(context, ledger).status).toBe('past');
+  });
   it('protects original artifacts retained during a repair even when no replacement was accepted', () => {
     const ledger = { actual: null, repair: { original: { ids: { workout: 'old', schedule: 'original' },
       localDate: '2026-09-09', completed: false } } } as DeliveryLedgerV1;
