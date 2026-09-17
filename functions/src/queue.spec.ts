@@ -400,7 +400,7 @@ function createBinaryResponse(body: Buffer, contentType = 'application/octet-str
 describe('queue', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
-        mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue(QueueResult.Deferred);
+        mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue(QueueResult.TokenRefreshDeferred);
         mockDocRef.update.mockResolvedValue(undefined);
         mockDocRef.set.mockResolvedValue(undefined);
         mockDocRef.create.mockResolvedValue(undefined);
@@ -2867,7 +2867,7 @@ describe('queue', () => {
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
 
-            expect(result).toBe(QueueResult.Deferred);
+            expect(result).toBe(QueueResult.TokenRefreshDeferred);
             expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
                 serviceName: ServiceNames.SuuntoApp,
                 queueItem: suuntoQueueItem,
@@ -2923,7 +2923,7 @@ describe('queue', () => {
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
 
-            expect(result).toBe(QueueResult.Deferred);
+            expect(result).toBe(QueueResult.TokenRefreshDeferred);
             expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
                 serviceName: ServiceNames.SuuntoApp,
                 queueItem: suuntoQueueItem,
@@ -3781,7 +3781,7 @@ describe('queue', () => {
             };
 
             await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
-                .resolves.toBe(QueueResult.Deferred);
+                .resolves.toBe(QueueResult.TokenRefreshDeferred);
 
             expect(getTokenData).toHaveBeenCalledTimes(2);
             expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
@@ -4051,7 +4051,7 @@ describe('queue', () => {
 
             const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
 
-            expect(result).toBe(QueueResult.Deferred);
+            expect(result).toBe(QueueResult.TokenRefreshDeferred);
             expect(getTokenData).toHaveBeenCalledTimes(2);
             expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
                 serviceName: ServiceNames.SuuntoApp,

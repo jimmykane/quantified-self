@@ -116,6 +116,9 @@ export const processWorkoutTask = onTaskDispatched({
             case QueueResult.Deferred:
                 logger.warn(`[TaskWorker] Deferred ${serviceName} item ${queueItemId}; it remains queued for a future dispatcher run.`);
                 break;
+            case QueueResult.TokenRefreshDeferred:
+                logger.info(`[TaskWorker] Deferred ${serviceName} item ${queueItemId} while another worker refreshes its token.`);
+                break;
             case QueueResult.MovedToDLQ:
                 logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);
                 break;

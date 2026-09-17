@@ -8,6 +8,17 @@ vi.mock('firebase-functions/v2/tasks', () => ({
     onTaskDispatched: (opts: any, handler: any) => handler,
 }));
 
+const { mockLoggerInfo, mockLoggerWarn } = vi.hoisted(() => ({
+    mockLoggerInfo: vi.fn(),
+    mockLoggerWarn: vi.fn(),
+}));
+
+vi.mock('firebase-functions/logger', () => ({
+    info: mockLoggerInfo,
+    warn: mockLoggerWarn,
+    error: vi.fn(),
+}));
+
 // Hoisted mocks for admin
 const { mockCollection, mockDoc, mockGet } = vi.hoisted(() => {
     const mockGet = vi.fn();
@@ -96,7 +107,7 @@ describe('processWorkoutTask', () => {
             exists: true,
             data: () => ({ processed: false }),
         });
-        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Deferred);
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.TokenRefreshDeferred);
 
         const invokeTask = processWorkoutTask as unknown as (
             request: { data: Record<string, unknown> },
@@ -117,6 +128,12 @@ describe('processWorkoutTask', () => {
             undefined,
             undefined,
             { tokenRefreshRecoveryGeneration: 3 },
+        );
+        expect(mockLoggerInfo).toHaveBeenCalledWith(
+            `[TaskWorker] Deferred ${ServiceNames.SuuntoApp} item recovery-item while another worker refreshes its token.`,
+        );
+        expect(mockLoggerWarn).not.toHaveBeenCalledWith(
+            expect.stringContaining('recovery-item'),
         );
     });
 

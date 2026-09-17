@@ -59,7 +59,7 @@ describe('deferWorkoutQueueItemForTokenRefreshContention', () => {
       logPrefix: 'WorkoutQueue',
       isCurrent,
       currentRecoveryGeneration: 3,
-    })).resolves.toBe(QueueResult.Deferred);
+    })).resolves.toBe(QueueResult.TokenRefreshDeferred);
 
     expect(hoisted.enqueueWorkoutRecoveryTask).toHaveBeenCalledWith(
       ServiceNames.COROSAPI,
@@ -142,7 +142,7 @@ describe('deferWorkoutQueueItemForTokenRefreshContention', () => {
     await expect(deferWorkoutQueueItemForTokenRefreshContention(params))
       .resolves.toBe(QueueResult.Failed);
     await expect(deferWorkoutQueueItemForTokenRefreshContention(params))
-      .resolves.toBe(QueueResult.Deferred);
+      .resolves.toBe(QueueResult.TokenRefreshDeferred);
 
     expect(hoisted.enqueueWorkoutRecoveryTask).toHaveBeenCalledTimes(2);
     expect(hoisted.enqueueWorkoutRecoveryTask.mock.calls[0][4]).toEqual({
@@ -170,7 +170,7 @@ describe('deferWorkoutQueueItemForTokenRefreshContention', () => {
       logPrefix: 'WorkoutQueue',
       isCurrent: () => true,
       currentRecoveryGeneration: 1,
-    })).resolves.toBe(QueueResult.Deferred);
+    })).resolves.toBe(QueueResult.TokenRefreshDeferred);
 
     expect(hoisted.enqueueWorkoutRecoveryTask).not.toHaveBeenCalled();
     expect(hoisted.deferQueueItemForTokenRefreshContentionIfCurrentUserActive).not.toHaveBeenCalled();

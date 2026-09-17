@@ -38,7 +38,7 @@ function normalizeRecoveryGeneration(value: unknown): number {
  */
 export async function deferWorkoutQueueItemForTokenRefreshContention(
   params: DeferWorkoutQueueItemForTokenRefreshContentionParams,
-): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+): Promise<QueueResult.TokenRefreshDeferred | QueueResult.Processed | QueueResult.Failed> {
   const queueRevision = normalizeQueueRevision(params.queueItem.queueRevision);
   const persistedRecoveryGeneration = normalizeRecoveryGeneration(
     params.queueItem.tokenRefreshRecoveryGeneration,
@@ -51,7 +51,7 @@ export async function deferWorkoutQueueItemForTokenRefreshContention(
       currentRecoveryGeneration,
       persistedRecoveryGeneration,
     });
-    return QueueResult.Deferred;
+    return QueueResult.TokenRefreshDeferred;
   }
 
   const recoveryGeneration = Math.max(
@@ -86,7 +86,7 @@ export async function deferWorkoutQueueItemForTokenRefreshContention(
     return QueueResult.Failed;
   }
 
-  return deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
+  const result = await deferQueueItemForTokenRefreshContentionIfCurrentUserActive({
     queueItem: params.queueItem,
     userID: params.userID,
     phase: params.phase,
@@ -97,4 +97,7 @@ export async function deferWorkoutQueueItemForTokenRefreshContention(
       && normalizeRecoveryGeneration(currentQueueItem.tokenRefreshRecoveryGeneration)
         === persistedRecoveryGeneration,
   });
+  return result === QueueResult.Deferred
+    ? QueueResult.TokenRefreshDeferred
+    : result;
 }

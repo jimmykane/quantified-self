@@ -164,6 +164,7 @@ vi.mock('../queue-utils', () => ({
         Processed: 'PROCESSED',
         Skipped: 'SKIPPED',
         Deferred: 'DEFERRED',
+        TokenRefreshDeferred: 'TOKEN_REFRESH_DEFERRED',
         MovedToDLQ: 'MOVED_TO_DLQ',
         RetryIncremented: 'RETRY_INCREMENTED',
         Failed: 'FAILED',
@@ -508,7 +509,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 savedOriginalFiles: [{ path: 'users/firebase-user-id/events/saved-event-id/original.fit' }],
             });
             mockDeferQueueItemForPendingDisconnect.mockResolvedValue('DEFERRED');
-            mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue('DEFERRED');
+            mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue('TOKEN_REFRESH_DEFERRED');
             mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
             mockMarkQueueItemSkipped.mockResolvedValue('PROCESSED');
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
@@ -523,7 +524,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
-            expect(result).toBe('DEFERRED');
+            expect(result).toBe('TOKEN_REFRESH_DEFERRED');
             expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
                 serviceName: ServiceNames.GarminAPI,
                 queueItem,
