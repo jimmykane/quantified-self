@@ -1,93 +1,270 @@
 import { createHash } from 'node:crypto';
-import { FitEncoder } from 'fit-file-parser';
-import type { Firestore } from 'firebase-admin/firestore';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import type { Firestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import {
+  type EventInterface,
+} from '@sports-alliance/sports-lib';
+import { parseScheduledWorkoutV1 } from '../../../shared/training-plans';
+import { trainingDeliveryLocalDate } from '../../../shared/training-provider-delivery';
+import {
+  TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID,
+  TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID,
+  parseTrainingWorkoutCompletionV1,
+  type TrainingWorkoutCompletionTiming,
+  type TrainingWorkoutCompletionV1,
+} from '../../../shared/training-workout-completion';
+import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
-import { doesSuuntoHealthWebhookBindingMatch, getSuuntoHealthWebhookAccountBindingRef, parseSuuntoHealthWebhookAccountBinding } from './health-webhook-binding';
-import { isServiceDisconnectPendingData } from '../service-disconnect-pending-state';
+import { fitWorkoutEvidencePayload, readFITWorkoutReferenceEvidence } from '../training-plans/completion/fit-workout-evidence';
+import type { FITWorkoutReferenceEvidence } from '../training-plans/completion/fit-workout-evidence';
+import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../training-plans/delivery/contracts';
+import { readTrainingDeliveryAuthority } from '../training-plans/delivery/connection';
+import { projectDelivery } from '../training-plans/delivery/store';
 
-export interface SuuntoGuideCompletion { sessionIndex: number; startTimeSeconds: number | null; externalIds: string[]; }
-interface Field { number: number; size: number; type: number; }
-interface Definition { global: number; little: boolean; fields: Field[]; developers: Field[]; }
-const OWNER = 'suuntoplus_plugin_owner_id'; const EXTERNAL = 'suuntoplus_plugin_external_id';
-const EXPORTER = Buffer.from('SuuntoFitExport1');
+export { readFITWorkoutReferenceEvidence } from '../training-plans/completion/fit-workout-evidence';
 
-/** QS-only metadata reader. The activity parser flattens NUL-separated string
- * arrays. Walk FIT definitions without decoding samples or changing Sports Lib.
- * Malformed optional metadata never prevents an otherwise valid activity import. */
-export function readSuuntoGuideCompletions(bytes: Buffer, clientId: string): SuuntoGuideCompletion[] {
-  try {
-    if (!clientId || bytes.length < 14 || bytes.length > 64 * 1024 * 1024 || bytes.toString('ascii', 8, 12) !== '.FIT') return [];
-    const header = bytes[0]; const end = header + bytes.readUInt32LE(4);
-    if (![12, 14].includes(header) || end + 2 !== bytes.length || FitEncoder.calculateCRC(bytes.subarray(0, end)) !== bytes.readUInt16LE(end)) return [];
-    const definitions = new Map<number, Definition>(); const exporters = new Map<number, boolean>();
-    const descriptions = new Map<string, string>(); const results: SuuntoGuideCompletion[] = [];
-    let cursor = header; let sessionIndex = 0;
-    const take = (size: number) => { if (size < 0 || cursor + size > end) throw new Error(); const value = bytes.subarray(cursor, cursor + size); cursor += size; return value; };
-    const text = (value?: Buffer) => value ? new TextDecoder('utf-8', { fatal: true }).decode(value).replace(/\0+$/, '') : '';
-    while (cursor < end) {
-      const record = take(1)[0]; const compressed = !!(record & 0x80); const local = compressed ? (record >> 5) & 3 : record & 15;
-      if (!compressed && record & 0x40) {
-        const base = take(5); if (base[1] > 1) throw new Error();
-        const little = base[1] === 0; const global = little ? base.readUInt16LE(2) : base.readUInt16BE(2);
-        const fields: Field[] = []; const developers: Field[] = [];
-        for (let n = 0; n < base[4]; n++) { const f = take(3); fields.push({ number: f[0], size: f[1], type: f[2] }); }
-        if (record & 0x20) { const count = take(1)[0]; for (let n = 0; n < count; n++) { const f = take(3); developers.push({ number: f[0], size: f[1], type: f[2] }); } }
-        definitions.set(local, { global, little, fields, developers }); continue;
-      }
-      const def = definitions.get(local); if (!def) throw new Error();
-      const values = new Map<number, Buffer>();
-      for (const field of def.fields) {
-        if (compressed && field.number === 253 && field.size === 4) continue;
-        const raw = take(field.size);
-        if ([18, 206, 207].includes(def.global)) values.set(field.number, raw);
-      }
-      const developerValues = new Map<string, Buffer>();
-      for (const field of def.developers) {
-        const raw = take(field.size); const name = descriptions.get(`${field.type}:${field.number}`);
-        if (def.global === 18 && exporters.get(field.type) && (name === OWNER || name === EXTERNAL)) {
-          if (developerValues.has(name)) throw new Error(); developerValues.set(name, raw);
-        }
-      }
-      if (def.global === 207) {
-        const index = values.get(3)?.[0]; if (index !== undefined) exporters.set(index, !!values.get(1)?.equals(EXPORTER));
-      } else if (def.global === 206) {
-        const index = values.get(0)?.[0]; const number = values.get(1)?.[0]; const type = values.get(2)?.[0];
-        if (index !== undefined && number !== undefined) descriptions.set(`${index}:${number}`, type === 7 ? text(values.get(3)) : '');
-      } else if (def.global === 18) {
-        const owners = text(developerValues.get(OWNER)).split('\0'); const ids = text(developerValues.get(EXTERNAL)).split('\0');
-        const valid = (list: string[]) => list.length <= 10 && list.every(value => value.length > 0 && value.length <= 64
-          && !Array.from(value).some(character => character.charCodeAt(0) < 32 || character === '\ufffd'));
-        if (owners.length === ids.length && valid(owners) && valid(ids)) {
-          const externalIds = [...new Set(ids.filter((id, index) => owners[index] === clientId && /^qs-suunto-[A-Za-z0-9_-]{43}$/.test(id)))];
-          const start = values.get(2); const seconds = start?.length === 4 ? def.little ? start.readUInt32LE() : start.readUInt32BE() : null;
-          if (externalIds.length) results.push({ sessionIndex, startTimeSeconds: seconds === 0xffffffff ? null : seconds, externalIds });
-        }
-        sessionIndex++;
-        if (sessionIndex > 100) throw new Error();
-      }
-    }
-    return results;
-  } catch { return []; }
+const MAX_EXACT_GUIDE_IDS = 30;
+const QS_SUUNTO_EXTERNAL_ID = /^qs-suunto-[A-Za-z0-9_-]{43}$/;
+
+export interface FITActivityReference {
+  id: string;
+  startTimeMs: number | null;
 }
 
-/** Permanent leaf under its event: no descendants, browser access, matching or consent changes. */
-export async function retainSuuntoGuideCompletions(db: Firestore, uid: string, eventId: string, account: string,
-  tokenGeneration: string, bytes: Buffer, clientId: string): Promise<void> {
-  const sessions = readSuuntoGuideCompletions(bytes, clientId); if (!sessions.length) return;
-  const user = db.collection('users').doc(uid); const event = user.collection('events').doc(eventId);
-  await db.runTransaction(async tx => {
-    if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return;
-    const root = db.collection('suuntoAppAccessTokens').doc(uid);
-    const [eventDoc, tokenDoc, rootDoc, metaDoc, bindingDoc] = await Promise.all([
-      tx.get(event), tx.get(root.collection('tokens').doc(account)), tx.get(root), tx.get(user.collection('meta').doc(ServiceNames.SuuntoApp)),
-      tx.get(getSuuntoHealthWebhookAccountBindingRef(db, account, uid)),
-    ]);
-    if (!eventDoc.exists || !rootDoc.exists || rootDoc.data()?.disconnectOperationGeneration || isServiceDisconnectPendingData(rootDoc.data())
-      || metaDoc.data()?.connectionState !== 'connected' || tokenDoc.data()?.userName !== account
-      || tokenDoc.data()?.tokenCredentialGeneration !== tokenGeneration
-      || !doesSuuntoHealthWebhookBindingMatch(parseSuuntoHealthWebhookAccountBinding(bindingDoc.data()), uid, account, tokenGeneration)) return;
-    tx.set(event.collection('trainingCompletionEvidence').doc('suunto'), { schemaVersion: 1, provider: 'suunto',
-      accountDigest: createHash('sha256').update(account).digest('hex'), sessions });
+export interface SuuntoGuideCompletion {
+  sessionIndex: number;
+  startTimeUnixMs: number | null;
+  externalIds: string[];
+}
+
+export interface RetainedFITWorkoutEvidenceResult {
+  retained: boolean;
+  linkedWorkoutIds: string[];
+}
+
+function timestampMs(value: unknown): number | null {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
+  if (value && typeof value === 'object' && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+    const milliseconds = Number((value as { toMillis: () => unknown }).toMillis());
+    return Number.isFinite(milliseconds) ? milliseconds : null;
+  }
+  const milliseconds = typeof value === 'number' ? value : typeof value === 'string' ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(milliseconds) ? milliseconds : null;
+}
+
+export function fitActivityReferencesFromEvent(event: Pick<EventInterface, 'getActivities'>): FITActivityReference[] {
+  return event.getActivities().flatMap(activity => {
+    const id = `${activity.getID?.() ?? ''}`.trim();
+    return id ? [{ id, startTimeMs: timestampMs(activity.startDate) }] : [];
+  });
+}
+
+/** Compatibility projection for existing callers and tests. Provider ownership
+ * is checked here; account authority is checked again before persistence. */
+export function readSuuntoGuideCompletions(input: ArrayBuffer | Uint8Array, clientId: string): SuuntoGuideCompletion[] {
+  if (!clientId) return [];
+  const evidence = readFITWorkoutReferenceEvidence(input);
+  return projectSuuntoGuideCompletions(evidence, clientId);
+}
+
+function projectSuuntoGuideCompletions(
+  evidence: FITWorkoutReferenceEvidence,
+  clientId: string,
+): SuuntoGuideCompletion[] {
+  if (evidence.status === 'invalid') return [];
+  const startBySession = new Map(evidence.sessions.map(session => [session.sessionIndex, session.startTimeUnixMs ?? null]));
+  const idsBySession = new Map<number, string[]>();
+  for (const reference of evidence.suuntoGuides) {
+    if (reference.ownerId !== clientId || !QS_SUUNTO_EXTERNAL_ID.test(reference.externalId)) continue;
+    const ids = idsBySession.get(reference.sessionIndex) ?? [];
+    if (!ids.includes(reference.externalId)) ids.push(reference.externalId);
+    idsBySession.set(reference.sessionIndex, ids);
+  }
+  return [...idsBySession]
+    .sort(([left], [right]) => left - right)
+    .map(([sessionIndex, externalIds]) => ({ sessionIndex, startTimeUnixMs: startBySession.get(sessionIndex) ?? null, externalIds }));
+}
+
+function activityForSession(session: SuuntoGuideCompletion, activities: readonly FITActivityReference[]): FITActivityReference | null {
+  if (session.startTimeUnixMs === null) return null;
+  const matches = activities.filter(activity => activity.startTimeMs !== null
+    && Math.abs(activity.startTimeMs - session.startTimeUnixMs!) <= 2_000);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function timingFor(localDate: string, activityStartAtMs: number | null, timeZone: string): TrainingWorkoutCompletionTiming {
+  if (activityStartAtMs === null) return 'unknown';
+  const activityLocalDate = trainingDeliveryLocalDate(activityStartAtMs, timeZone);
+  return activityLocalDate === localDate ? 'on_date' : activityLocalDate < localDate ? 'early' : 'late';
+}
+
+function activityLinkId(uid: string, eventId: string, sessionIndex: number): string {
+  return createHash('sha256').update(JSON.stringify([uid, eventId, sessionIndex])).digest('hex');
+}
+
+function candidateLedger(snapshot: QueryDocumentSnapshot, destinationKey: string, externalId: string): DeliveryLedgerV1 | null {
+  const data = snapshot.data() as DeliveryLedgerV1;
+  if (data.schemaVersion !== 1 || data.provider !== 'suunto' || data.destinationKey !== destinationKey
+    || data.actual?.ids.externalId !== externalId || data.actual.completed !== false) return null;
+  // Completion must serialize with delivery writes. Retrying the import after
+  // the short delivery lease is safer than allowing a late checkpoint to erase it.
+  if (data.attempt || data.lease) throw new Error('Training completion link deferred while delivery is changing.');
+  return data;
+}
+
+/** Retains neutral Sports Lib evidence and links only one unambiguous, account-bound
+ * QS Guide marker in a source session. It never infers target adherence from FIT. */
+export async function retainSuuntoGuideCompletions(
+  db: Firestore,
+  uid: string,
+  eventId: string,
+  account: string,
+  tokenGeneration: string,
+  input: ArrayBuffer | Uint8Array,
+  clientId: string,
+  activities: readonly FITActivityReference[] = [],
+  nowMs = Date.now(),
+): Promise<RetainedFITWorkoutEvidenceResult> {
+  const evidence = readFITWorkoutReferenceEvidence(input);
+  const sessions = projectSuuntoGuideCompletions(evidence, clientId);
+  if (evidence.status === 'invalid' || sessions.length === 0) return { retained: false, linkedWorkoutIds: [] };
+  const exactIds = [...new Set(sessions.flatMap(session => session.externalIds))];
+  if (exactIds.length === 0 || exactIds.length > MAX_EXACT_GUIDE_IDS) return { retained: false, linkedWorkoutIds: [] };
+
+  const user = db.collection('users').doc(uid);
+  const eventRef = user.collection('events').doc(eventId);
+  return db.runTransaction(async tx => {
+    if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) {
+      return { retained: false, linkedWorkoutIds: [] };
+    }
+    const authority = await readTrainingDeliveryAuthority(db, tx, uid, 'suunto');
+    const eventDoc = await tx.get(eventRef);
+    if (!eventDoc.exists || authority.connection.state !== 'connected' || authority.account !== account
+      || authority.token?.data().tokenCredentialGeneration !== tokenGeneration) {
+      return { retained: false, linkedWorkoutIds: [] };
+    }
+
+    const ledgerSnapshot = await tx.get(user.collection(DELIVERY_LEDGER)
+      .where('actual.ids.externalId', 'in', exactIds));
+    const ledgersByExternalId = new Map<string, DeliveryLedgerV1[]>();
+    for (const document of ledgerSnapshot.docs) {
+      const externalId = document.data()?.actual?.ids?.externalId;
+      if (typeof externalId !== 'string') continue;
+      const ledger = candidateLedger(document, authority.connection.destinationKey, externalId);
+      if (ledger) ledgersByExternalId.set(externalId, [...(ledgersByExternalId.get(externalId) ?? []), ledger]);
+    }
+
+    const uniqueByWorkout = new Map<string, { session: SuuntoGuideCompletion; ledger: DeliveryLedgerV1 }>();
+    const conflictedWorkoutIds = new Set<string>();
+    for (const session of sessions) {
+      const candidates = session.externalIds.flatMap(externalId => ledgersByExternalId.get(externalId) ?? []);
+      const unique = [...new Map(candidates.map(ledger => [ledger.id, ledger])).values()];
+      if (unique.length !== 1) continue;
+      const ledger = unique[0];
+      if (uniqueByWorkout.has(ledger.workoutId)) conflictedWorkoutIds.add(ledger.workoutId);
+      else uniqueByWorkout.set(ledger.workoutId, { session, ledger });
+    }
+    for (const workoutId of conflictedWorkoutIds) uniqueByWorkout.delete(workoutId);
+
+    const candidates = [...uniqueByWorkout.values()];
+    const related = await Promise.all(candidates.map(async candidate => {
+      const reverseId = activityLinkId(uid, eventId, candidate.session.sessionIndex);
+      const [workout, completion, reverse] = await Promise.all([
+        tx.get(user.collection('scheduledWorkouts').doc(candidate.ledger.workoutId)),
+        tx.get(user.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(candidate.ledger.workoutId)),
+        tx.get(user.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID).doc(reverseId)),
+      ]);
+      return { ...candidate, reverseId, workout, completion, reverse };
+    }));
+
+    const linkedWorkoutIds: string[] = [];
+    const matchOutcomes: Array<{ sessionIndex: number; workoutId: string; state: 'linked' | 'already_linked' | 'conflict' | 'workout_unavailable' }> = [];
+    for (const candidate of related) {
+      const { ledger, session } = candidate;
+      if (!candidate.workout.exists) {
+        matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'workout_unavailable' });
+        continue;
+      }
+      const workout = parseScheduledWorkoutV1(candidate.workout.data());
+      if (workout.lifecycle === 'deleted') {
+        matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'workout_unavailable' });
+        continue;
+      }
+      let existingCompletion: TrainingWorkoutCompletionV1 | undefined;
+      try {
+        existingCompletion = candidate.completion.exists
+          ? parseTrainingWorkoutCompletionV1(candidate.completion.data())
+          : undefined;
+      } catch {
+        matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
+        continue;
+      }
+      const existingReverse = candidate.reverse.data() as { workoutId?: unknown; eventId?: unknown; sourceSessionIndex?: unknown } | undefined;
+      const sameCompletion = existingCompletion?.eventId === eventId
+        && existingCompletion.sourceSessionIndex === session.sessionIndex;
+      const sameReverse = existingReverse?.workoutId === workout.id && existingReverse.eventId === eventId
+        && existingReverse.sourceSessionIndex === session.sessionIndex;
+      if ((candidate.completion.exists && !sameCompletion) || (candidate.reverse.exists && !sameReverse)) {
+        matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId, state: 'conflict' });
+        continue;
+      }
+
+      const activity = activityForSession(session, activities);
+      const completion: TrainingWorkoutCompletionV1 = existingCompletion ?? {
+        schemaVersion: 1,
+        workoutId: workout.id,
+        planId: workout.planId,
+        provider: 'suunto',
+        matchMethod: 'provider_marker',
+        eventId,
+        activityId: activity?.id ?? null,
+        sourceSessionIndex: session.sessionIndex,
+        activityStartAtMs: activity?.startTimeMs ?? session.startTimeUnixMs,
+        scheduledLocalDate: workout.localDate,
+        workoutRevisionAtLink: workout.revision,
+        timing: timingFor(workout.localDate, activity?.startTimeMs ?? session.startTimeUnixMs, ledger.timeZone),
+        linkedAtMs: nowMs,
+        updatedAtMs: nowMs,
+      };
+      tx.set(user.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workout.id), completion);
+      tx.set(user.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID).doc(candidate.reverseId), {
+        schemaVersion: 1,
+        deliveryId: ledger.id,
+        workoutId: workout.id,
+        eventId,
+        activityId: completion.activityId,
+        sourceSessionIndex: session.sessionIndex,
+        provider: 'suunto',
+        linkedAtMs: completion.linkedAtMs,
+      });
+      const completedLedger: DeliveryLedgerV1 = {
+        ...ledger,
+        completionLinkId: candidate.reverseId,
+        desired: 'preserve',
+        status: 'completed',
+        actual: { ...ledger.actual!, completed: true },
+        updatedAtMs: nowMs,
+      };
+      tx.set(user.collection(DELIVERY_LEDGER).doc(ledger.id), completedLedger);
+      tx.set(user.collection('trainingDeliveryStatuses').doc(ledger.id), projectDelivery(completedLedger));
+      linkedWorkoutIds.push(workout.id);
+      matchOutcomes.push({ sessionIndex: session.sessionIndex, workoutId: ledger.workoutId,
+        state: existingCompletion ? 'already_linked' : 'linked' });
+    }
+
+    const filteredGuides = evidence.suuntoGuides.filter(reference => reference.ownerId === clientId
+      && QS_SUUNTO_EXTERNAL_ID.test(reference.externalId));
+    tx.set(eventRef.collection('trainingCompletionEvidence').doc('fit'), {
+      schemaVersion: 1,
+      reader: 'sports-lib',
+      sportsLibVersion: SPORTS_LIB_VERSION,
+      sourceProvider: 'suunto',
+      accountDigest: createHash('sha256').update(account).digest('hex'),
+      ...fitWorkoutEvidencePayload(evidence, filteredGuides),
+      matchOutcomes,
+      capturedAtMs: nowMs,
+    });
+    // Remove the pre-Sports-Lib evidence leaf only after its replacement is durable.
+    tx.delete(eventRef.collection('trainingCompletionEvidence').doc('suunto'));
+    return { retained: true, linkedWorkoutIds };
   });
 }

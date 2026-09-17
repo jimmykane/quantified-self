@@ -166,6 +166,10 @@ after the dashboard mounts, and Health tile reads use the existing three-request
 before scrolling without turning chart creation or Health reads into one main-thread/network burst. Other workspaces
 remain viewport-aware. The shared observer options also gate Health tile evidence, avoiding a second, shorter preload
 threshold before ECharts can start.
+Scope and scroll-root detection must run after view attachment: Health tiles use `afterNextRender`, and the shared
+plot queue defers registration of detached hosts until the current render completes. Checking ancestry in a child
+constructor or static view query can otherwise leave dashboard charts waiting for scrolling. Cancellation before
+attachment must remove the queued request without registering an observer or loading ECharts.
 Only plot initialization is deferred: Angular titles,
 values, accessible descriptions, and controls remain present. Initialized plots stay mounted when scrolled away.
 Dashboard map tiles similarly defer their renderer with Angular's viewport trigger. Their fixed-height body keeps
@@ -213,6 +217,9 @@ their existing Sports Lib formatting, data loading, accessible chart description
 
 Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces. Sleep-stage
 legend columns wrap to the available card width, including the narrow columns in tablet Highlights.
+The shared Health ECharts option renders Stress state as colored horizontal time blocks on named category lanes.
+The Health explorer, dashboard tiles, chart-library previews and thumbnails all use that same projection, while
+other categorical Health metrics retain their stepped series. Unknown provider states stay neutral and readable.
 Highlight **Open** actions scroll to and focus the explorer heading, including when that metric is already selected.
 They preserve the selected date range and source filters; opening the current metric does not save preferences again.
 

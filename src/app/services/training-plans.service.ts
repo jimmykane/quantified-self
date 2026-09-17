@@ -32,6 +32,11 @@ import {
 } from '@shared/training-plans';
 import { AppFunctionsService } from './app.functions.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
+import {
+  TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID,
+  parseTrainingWorkoutCompletionV1,
+  type TrainingWorkoutCompletionV1,
+} from '@shared/training-workout-completion';
 
 export interface CurrentTrainingScheduleV1 {
   state: TrainingPlanStateV1;
@@ -74,6 +79,7 @@ export class TrainingPlansService {
   private readonly functions = inject(AppFunctionsService);
   private readonly browserCompatibility = inject(BrowserCompatibilityService);
   private readonly scheduleStreams = new Map<string, Observable<CurrentTrainingScheduleV1>>();
+  private readonly completionStreams = new Map<string, Observable<TrainingWorkoutCompletionV1[]>>();
 
   watchSchedule(userId: string | null | undefined): Observable<CurrentTrainingScheduleV1> {
     const uid = `${userId || ''}`.trim();
@@ -116,6 +122,22 @@ export class TrainingPlansService {
 
   watchCalendarWorkouts(userId: string | null | undefined): Observable<ScheduledWorkoutV1[]> {
     return this.watchSchedule(userId).pipe(map(schedule => selectCalendarVisibleScheduledWorkouts(schedule)));
+  }
+
+  watchWorkoutCompletions(userId: string | null | undefined): Observable<TrainingWorkoutCompletionV1[]> {
+    const uid = `${userId || ''}`.trim();
+    if (!uid) return of([]);
+    const existing = this.completionStreams.get(uid);
+    if (existing) return existing;
+    const completionsRef = collection(this.firestore, 'users', uid, TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID);
+    const completions$ = collectionData(completionsRef, { idField: 'workoutId' }).pipe(
+      map(values => (values as unknown[]).map(parseTrainingWorkoutCompletionV1)
+        .sort((left, right) => left.scheduledLocalDate.localeCompare(right.scheduledLocalDate)
+          || left.workoutId.localeCompare(right.workoutId))),
+      shareReplay({ bufferSize: 1, refCount: true }),
+    );
+    this.completionStreams.set(uid, completions$);
+    return completions$;
   }
 
   createMutationId(prefix: string): string {

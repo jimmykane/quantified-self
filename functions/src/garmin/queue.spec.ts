@@ -28,6 +28,7 @@ const {
     MockTokenRefreshSkippedForDeletedUserError,
     MockTokenRefreshInProgressError,
     mockShouldSkipQueueWorkForDeletedUser,
+    mockRetainGarminFITWorkoutReferences,
 } = vi.hoisted(() => {
     class MockTerminalServiceAuthError extends Error {
         readonly name = 'TerminalServiceAuthError';
@@ -65,6 +66,7 @@ const {
         MockTokenRefreshSkippedForDeletedUserError,
         MockTokenRefreshInProgressError,
         mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
+        mockRetainGarminFITWorkoutReferences: vi.fn().mockResolvedValue(true),
     };
 });
 
@@ -142,6 +144,10 @@ vi.mock('../activity-sync/enqueue-imported-event', () => ({
 
 vi.mock('../queue/provider-event-id', () => ({
     resolveProviderImportEventID: mockResolveProviderImportEventID,
+}));
+
+vi.mock('../training-plans/completion/fit-workout-evidence', () => ({
+    retainGarminFITWorkoutReferences: mockRetainGarminFITWorkoutReferences,
 }));
 
 // Mock queue utilities
@@ -562,6 +568,9 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 sourceServiceName: ServiceNames.GarminAPI,
                 sourceActivityID: queueItem.activityFileID,
             }));
+            expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledWith(
+                expect.anything(), firebaseUserID, 'event-id', 'garmin-user-id', '', expect.any(Buffer),
+            );
             expect(updateToProcessed).toHaveBeenCalledWith(queueItem, undefined);
         });
 
@@ -629,6 +638,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             // Second download attempt
             expect(mockRequestGet).toHaveBeenCalledTimes(2);
             expect(mockCreateParsingOptions).toHaveBeenCalledTimes(2);
+            expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledOnce();
         });
 
         it('should successfully process a TCX file', async () => {
@@ -645,6 +655,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(result).toBe('PROCESSED');
             expect(EventImporterTCX.getFromXML).toHaveBeenCalled();
             expect(mockCreateParsingOptions).toHaveBeenCalledTimes(1);
+            expect(mockRetainGarminFITWorkoutReferences).not.toHaveBeenCalled();
         });
 
         it('should move to DLQ if no token is found', async () => {

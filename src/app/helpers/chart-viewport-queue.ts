@@ -35,21 +35,33 @@ export class ChartViewportQueue {
     if (!BrowserCompatibilityService.checkIntersectionObserverSupport()) {
       return { ready: Promise.resolve(true), cancel: () => undefined };
     }
-    const { root, rootMargin } = chartViewportObserverOptions(element);
     let resolve: PendingChart['resolve'];
     let reject: PendingChart['reject'];
     const ready = new Promise<boolean>((done, fail) => { resolve = done; reject = fail; });
     const job: PendingChart = {
-      element, root, observed: false,
+      element, root: null, observed: false,
       resolve: resolve!, reject: reject!, prepare, preparing: false, prepared: !prepare,
     };
     this.pending.add(job);
+
+    // Static view queries can request a chart before Angular attaches its view.
+    // Let that synchronous render finish before choosing the scope/scroll root.
+    if (element.isConnected) this.observe(job);
+    else void Promise.resolve().then(() => this.observe(job));
+    return { ready, cancel: () => this.finish(job, false) };
+  }
+
+  private observe(job: PendingChart): void {
+    if (!this.pending.has(job)) return;
+    const { element } = job;
+    const { root, rootMargin } = chartViewportObserverOptions(element);
+    job.root = root;
 
     if (shouldPreloadChartInBackground(element)) {
       this.nearby.add(job);
       this.prepare(job);
       this.schedule();
-      return { ready, cancel: () => this.finish(job, false) };
+      return;
     }
 
     let observer = this.observers.get(root);
@@ -68,13 +80,12 @@ export class ChartViewportQueue {
         this.schedule();
       }, { root, rootMargin });
     } catch {
-      this.pending.delete(job);
-      return { ready: Promise.resolve(true), cancel: () => undefined };
+      this.finish(job, true);
+      return;
     }
     this.observers.set(root, observer);
     job.observed = true;
     try { observer.observe(element); } catch { this.finish(job, true); }
-    return { ready, cancel: () => this.finish(job, false) };
   }
 
   private prepare(job: PendingChart): void {

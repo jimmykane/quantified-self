@@ -109,6 +109,11 @@ const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSk
     };
 });
 
+const { mockFitActivityReferencesFromEvent, mockRetainSuuntoGuideCompletions } = vi.hoisted(() => ({
+    mockFitActivityReferencesFromEvent: vi.fn().mockReturnValue([]),
+    mockRetainSuuntoGuideCompletions: vi.fn().mockResolvedValue({ retained: false, linkedWorkoutIds: [] }),
+}));
+
 // Mock firebase-admin before importing modules that use it
 vi.mock('firebase-admin', () => {
     const mockFirestore = {
@@ -321,6 +326,11 @@ vi.mock('./garmin/queue', () => ({
     processGarminAPIActivityQueueItem: vi.fn().mockResolvedValue('PROCESSED'),
 }));
 
+vi.mock('./suunto/guide-completion', () => ({
+    fitActivityReferencesFromEvent: mockFitActivityReferencesFromEvent,
+    retainSuuntoGuideCompletions: mockRetainSuuntoGuideCompletions,
+}));
+
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const original: any = await importOriginal();
     return {
@@ -415,6 +425,10 @@ describe('queue', () => {
         mockDownloadCOROSFITFile.mockResolvedValue(Buffer.from('test-fit-data'));
         mockRecoverCOROSFITFileURL.mockReset();
         mockRecoverCOROSFITFileURL.mockResolvedValue('https://oss.coros.com/fit/recovered.fit');
+        mockFitActivityReferencesFromEvent.mockReset();
+        mockFitActivityReferencesFromEvent.mockReturnValue([]);
+        mockRetainSuuntoGuideCompletions.mockReset();
+        mockRetainSuuntoGuideCompletions.mockResolvedValue({ retained: false, linkedWorkoutIds: [] });
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -2684,6 +2698,17 @@ describe('queue', () => {
                 undefined,
                 undefined,
                 undefined
+            );
+            expect(mockFitActivityReferencesFromEvent).toHaveBeenCalledOnce();
+            expect(mockRetainSuuntoGuideCompletions).toHaveBeenCalledWith(
+                expect.anything(),
+                'mock-user-id',
+                'standardized-event-id',
+                'suuntoUser',
+                expect.any(String),
+                expect.any(Buffer),
+                'test-suunto-client-id',
+                [],
             );
             expect(vi.mocked(resolveProviderImportEventID)).toHaveBeenCalledWith({
                 userID: 'mock-user-id',

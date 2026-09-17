@@ -15,14 +15,19 @@ describe('chart viewport queue', () => {
     vi.stubGlobal('requestAnimationFrame', vi.fn(handler => { frames.push(handler); return frames.length; }));
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
   });
-  afterEach(() => vi.unstubAllGlobals());
+  const elements: HTMLElement[] = [];
+  function attachedChart(): HTMLElement {
+    const element = document.createElement('div');
+    document.body.append(element); elements.push(element); return element;
+  }
+  afterEach(() => { vi.unstubAllGlobals(); elements.splice(0).forEach(element => element.remove()); });
   const entry = (target: HTMLElement, isIntersecting = true) => ({ target, isIntersecting } as IntersectionObserverEntry);
   const notify = (...entries: IntersectionObserverEntry[]) => callback(entries, observer as unknown as IntersectionObserver);
 
   it('waits for nearby plots, then starts only one per frame using one observer', async () => {
     const queue = new ChartViewportQueue();
-    const firstElement = document.createElement('div');
-    const secondElement = document.createElement('div');
+    const firstElement = attachedChart();
+    const secondElement = attachedChart();
     const first = queue.wait(firstElement); const second = queue.wait(secondElement);
     const firstReady = vi.fn(); const secondReady = vi.fn();
     void first.ready.then(firstReady); void second.ready.then(secondReady);
@@ -41,7 +46,7 @@ describe('chart viewport queue', () => {
 
   it('does not initialize charts scrolled past before their frame runs', async () => {
     const queue = new ChartViewportQueue();
-    const element = document.createElement('div');
+    const element = attachedChart();
     const wait = queue.wait(element); const ready = vi.fn(); void wait.ready.then(ready);
     notify(entry(element)); notify(entry(element, false));
     frames.shift()!(0); await Promise.resolve();
@@ -52,7 +57,7 @@ describe('chart viewport queue', () => {
 
   it('cancels destroyed charts and cleans up the final observer and frame', async () => {
     const queue = new ChartViewportQueue();
-    const element = document.createElement('div');
+    const element = attachedChart();
     const wait = queue.wait(element);
     notify(entry(element)); wait.cancel(); wait.cancel();
     await expect(wait.ready).resolves.toBe(false);
@@ -66,9 +71,9 @@ describe('chart viewport queue', () => {
   it('renders normally when viewport observation is unavailable or fails', async () => {
     const queue = new ChartViewportQueue();
     vi.stubGlobal('IntersectionObserver', undefined);
-    await expect(queue.wait(document.createElement('div')).ready).resolves.toBe(true);
+    await expect(queue.wait(attachedChart()).ready).resolves.toBe(true);
     vi.stubGlobal('IntersectionObserver', vi.fn(function () { throw new Error('unsupported'); }));
-    await expect(queue.wait(document.createElement('div')).ready).resolves.toBe(true);
+    await expect(queue.wait(attachedChart()).ready).resolves.toBe(true);
   });
 
   it('spreads rendering across frames after a shared cold library load completes', async () => {
@@ -76,8 +81,8 @@ describe('chart viewport queue', () => {
     let loaded: () => void;
     const loading = new Promise<void>(resolve => { loaded = resolve; });
     const prepare = vi.fn(() => loading);
-    const firstElement = document.createElement('div');
-    const secondElement = document.createElement('div');
+    const firstElement = attachedChart();
+    const secondElement = attachedChart();
     const first = queue.wait(firstElement, prepare); const second = queue.wait(secondElement, prepare);
     const secondReady = vi.fn(); void second.ready.then(secondReady);
     expect(prepare).not.toHaveBeenCalled();
@@ -112,11 +117,38 @@ describe('chart viewport queue', () => {
     dashboard.remove();
   });
 
+
+  it('recognizes background scope when a detached chart is attached during the same render', async () => {
+    const queue = new ChartViewportQueue();
+    const element = document.createElement('div');
+    const dashboard = attachedChart();
+    dashboard.dataset['chartPreload'] = 'background';
+    const wait = queue.wait(element);
+    dashboard.append(element);
+    await Promise.resolve();
+    expect(IntersectionObserver).not.toHaveBeenCalled();
+    expect(frames).toHaveLength(1);
+    frames.shift()!(0);
+    await expect(wait.ready).resolves.toBe(true);
+    expect(frames).toHaveLength(0);
+  });
+
+  it('does not observe or prepare a detached chart cancelled before attachment', async () => {
+    const queue = new ChartViewportQueue();
+    const prepare = vi.fn(() => Promise.resolve());
+    const wait = queue.wait(document.createElement('div'), prepare);
+    wait.cancel();
+    await expect(wait.ready).resolves.toBe(false);
+    expect(IntersectionObserver).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(frames).toHaveLength(0);
+  });
+
   it('keeps a chart deferred if it leaves the preload area while the library loads', async () => {
     const queue = new ChartViewportQueue();
     let loaded: () => void;
     const prepare = vi.fn(() => new Promise<void>(resolve => { loaded = resolve; }));
-    const element = document.createElement('div');
+    const element = attachedChart();
     const wait = queue.wait(element, prepare);
     notify(entry(element));
     await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
@@ -135,7 +167,7 @@ describe('chart viewport queue', () => {
     let resolveLoad: () => void; let rejectLoad: (error: Error) => void;
     const loading = new Promise<void>((resolve, reject) => { resolveLoad = resolve; rejectLoad = reject; });
     const prepare = vi.fn(() => loading);
-    const element = document.createElement('div');
+    const element = attachedChart();
     const wait = queue.wait(element, prepare);
     notify(entry(element));
     await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
@@ -149,7 +181,7 @@ describe('chart viewport queue', () => {
 
   it('cleans up a failed preparation and allows a fresh attempt', async () => {
     const queue = new ChartViewportQueue();
-    const element = document.createElement('div');
+    const element = attachedChart();
     const wait = queue.wait(element, () => Promise.reject(new Error('offline')));
     const failure = expect(wait.ready).rejects.toThrow('offline');
     notify(entry(element)); await failure;

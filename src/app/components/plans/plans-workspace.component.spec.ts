@@ -42,6 +42,7 @@ describe('PlansWorkspaceComponent', () => {
   let routeDataChanges$: Subject<Data>;
   let schedule: CurrentTrainingScheduleV1;
   let watchSchedule: ReturnType<typeof vi.fn>;
+  let watchWorkoutCompletions: ReturnType<typeof vi.fn>;
   let mutate: ReturnType<typeof vi.fn>;
   let getHistory: ReturnType<typeof vi.fn>;
   let previewRestore: ReturnType<typeof vi.fn>;
@@ -69,6 +70,7 @@ describe('PlansWorkspaceComponent', () => {
     };
     schedule = populatedSchedule();
     watchSchedule = vi.fn().mockImplementation(() => of(schedule));
+    watchWorkoutCompletions = vi.fn().mockReturnValue(of([]));
     mutate = vi.fn().mockImplementation(async request => ({
       mutationId: request.mutationId,
       state: schedule.state,
@@ -98,6 +100,7 @@ describe('PlansWorkspaceComponent', () => {
           provide: TrainingPlansService,
           useValue: {
             watchSchedule,
+            watchWorkoutCompletions,
             createEntityId: vi.fn().mockReturnValue('workout-new'),
             createMutationId: vi.fn().mockReturnValue('mutation-1'),
             mutate,
@@ -177,6 +180,30 @@ describe('PlansWorkspaceComponent', () => {
     }
     expect(fixture.nativeElement.querySelector('.workout-list mat-card')).toBeNull();
     expect(rows[1].nativeElement.querySelector('mat-chip')?.textContent).toContain('Skipped');
+  });
+
+  it('shows a compact activity link without changing the authored workout or recorded totals', async () => {
+    watchWorkoutCompletions.mockReturnValue(of([{
+      schemaVersion: 1,
+      workoutId: schedule.workouts[0].id,
+      planId: schedule.workouts[0].planId,
+      provider: 'suunto',
+      matchMethod: 'provider_marker',
+      eventId: 'event-1',
+      activityId: 'activity-1',
+      sourceSessionIndex: 0,
+      activityStartAtMs: Date.parse('2026-09-09T08:00:00Z'),
+      scheduledLocalDate: schedule.workouts[0].localDate,
+      workoutRevisionAtLink: schedule.workouts[0].revision,
+      timing: 'late',
+      linkedAtMs: 1,
+      updatedAtMs: 1,
+    }]));
+    const fixture = await renderPlans();
+    expect(fixture.nativeElement.querySelector('.workout-completion-state > span')?.textContent.replace(/\s+/g, ' ').trim())
+      .toBe('Activity linked · late');
+    expect(schedule.workouts[0].lifecycle).toBe('planned');
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('reacts to the account week-start setting without moving the selected date or writing the schedule', async () => {

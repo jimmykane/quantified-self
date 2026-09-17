@@ -1,6 +1,9 @@
 import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../training-plans/delivery/contracts';
+import { stageTrainingDeliveryReconciliation } from '../training-plans/delivery/marker';
+import { projectDelivery } from '../training-plans/delivery/store';
 
 interface EventSourceFileForCleanup {
     path: string;
@@ -83,6 +86,8 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
     const db = admin.firestore();
     const eventRef = db.doc(`users/${userId}/events/${eventId}`);
     const metadataRef = db.collection(`users/${userId}/events/${eventId}/metaData`);
+    const completionsQuery = db.collection(`users/${userId}/trainingWorkoutCompletions`).where('eventId', '==', eventId);
+    const reverseLinksQuery = db.collection(`users/${userId}/trainingActivityCompletionLinks`).where('eventId', '==', eventId);
 
     const result = await db.runTransaction(async (transaction): Promise<GuardedCleanupResult> => {
         const currentEventSnapshot = await transaction.get(eventRef);
@@ -90,21 +95,61 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
             return { skipped: true, deletedCount: 0 };
         }
 
-        const metadataSnapshot = await transaction.get(metadataRef);
-        // Fixed private completion-evidence leaf, never a subtree. Keeping this in
-        // the same event-existence transaction protects a recreated deterministic ID.
-        transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/suunto`));
-        if (metadataSnapshot.empty) {
-            return { skipped: false, deletedCount: 0 };
-        }
+        const [metadataSnapshot, completionsSnapshot, reverseLinksSnapshot, deletionTombstone] = await Promise.all([
+            transaction.get(metadataRef),
+            transaction.get(completionsQuery),
+            transaction.get(reverseLinksQuery),
+            transaction.get(db.collection('userDeletionTombstones').doc(userId)),
+        ]);
+        const completionBindings = (reverseLinksSnapshot.docs || []).flatMap((document) => {
+            const data = document.data?.() as Record<string, unknown> | undefined;
+            return data?.schemaVersion === 1 && typeof data.deliveryId === 'string' && data.deliveryId.length > 0
+                && data.deliveryId.length <= 1500 && !data.deliveryId.includes('/')
+                ? [{ linkId: document.id, deliveryId: data.deliveryId }]
+                : [];
+        });
+        const deliverySnapshots = await Promise.all(completionBindings.map(binding =>
+            transaction.get(db.doc(`users/${userId}/${DELIVERY_LEDGER}/${binding.deliveryId}`))));
 
-        metadataSnapshot.docs.forEach((doc) => {
+        // Fixed private evidence leaves and safe link projections stay in this
+        // event-existence transaction so a recreated deterministic ID is protected.
+        transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/fit`));
+        transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/suunto`));
+        const linkedDocuments = [
+            ...(completionsSnapshot.docs || []),
+            ...(reverseLinksSnapshot.docs || []),
+        ];
+        linkedDocuments.forEach((doc) => transaction.delete(doc.ref));
+        let stagedDeliveryReconciliation = false;
+        deliverySnapshots.forEach((snapshot, index) => {
+            if (!snapshot.exists) return;
+            const ledger = snapshot.data() as DeliveryLedgerV1;
+            if (ledger.schemaVersion !== 1 || ledger.completionLinkId !== completionBindings[index].linkId
+                || !ledger.actual?.completed) return;
+            const nextLedger: DeliveryLedgerV1 = {
+                ...ledger,
+                completionLinkId: null,
+                actual: { ...ledger.actual, completed: false },
+                desiredGeneration: ledger.desiredGeneration + 1,
+                desired: 'preserve',
+                status: 'pending',
+                updatedAtMs: Date.now(),
+            };
+            transaction.set(snapshot.ref, nextLedger);
+            transaction.set(db.doc(`users/${userId}/trainingDeliveryStatuses/${ledger.id}`), projectDelivery(nextLedger));
+            stagedDeliveryReconciliation = true;
+        });
+        // Account cleanup owns its own queue purge. Reading the tombstone in this
+        // transaction also prevents a concurrent deletion from racing a new job.
+        if (stagedDeliveryReconciliation && !deletionTombstone.exists) {
+            stageTrainingDeliveryReconciliation(transaction, db, userId);
+        }
+        (metadataSnapshot.docs || []).forEach((doc) => {
             // Event metadata docs are leaf provider/status docs; this transaction prevents stale delete triggers
             // from deleting metadata that belongs to a recreated deterministic event ID.
             transaction.delete(doc.ref);
         });
-
-        return { skipped: false, deletedCount: metadataSnapshot.size };
+        return { skipped: false, deletedCount: (metadataSnapshot.size || 0) + linkedDocuments.length };
     });
 
     if (result.skipped) {

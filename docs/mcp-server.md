@@ -59,6 +59,12 @@ recipe schema already accepts the complete Sports Lib activity-type enum, and fo
 Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
 `RUNNING`/`CYCLING` payload fold remain private adapter behavior; the MCP recipe keeps the authored exact sport.
 
+Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
+provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.
+Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status
+already present in the frozen delivery schema. The separate safe **Activity linked** projection is not exposed through MCP
+in this slice; #651 remains open for the bounded fallback/manual-link workflow and its planned linked/unlinked read review.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the

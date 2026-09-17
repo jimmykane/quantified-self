@@ -78,17 +78,24 @@ class FakeDocumentReference {
 
 class FakeTransaction {
     constructor(private readonly db: FakeFirestore) {}
+    writeCount = 0;
     async get(ref: FakeDocumentReference | FakeQuery): Promise<FakeSnapshot | { docs: FakeSnapshot[]; empty: boolean }> {
         if (ref instanceof FakeDocumentReference) return this.db.snapshot(ref);
         const docs = this.db.query(ref);
         return { docs, empty: docs.length === 0 };
     }
-    set(ref: FakeDocumentReference, value: unknown): void { this.db.docs.set(ref.path, clone(value as Stored)); }
+    set(ref: FakeDocumentReference, value: unknown): void {
+        this.writeCount += 1;
+        this.db.docs.set(ref.path, clone(value as Stored));
+    }
     create(ref: FakeDocumentReference, value: unknown): void {
         if (this.db.docs.has(ref.path)) throw new Error(`Document exists: ${ref.path}`);
         this.set(ref, value);
     }
-    delete(ref: FakeDocumentReference): void { this.db.docs.delete(ref.path); }
+    delete(ref: FakeDocumentReference): void {
+        this.writeCount += 1;
+        this.db.docs.delete(ref.path);
+    }
 }
 
 class FakeBatch {
@@ -108,6 +115,7 @@ class FakeBatch {
 
 class FakeFirestore {
     readonly docs = new Map<string, Stored>();
+    readonly transactionWriteCounts: number[] = [];
     readonly recursiveDelete = vi.fn(async (ref: FakeDocumentReference) => {
         [...this.docs.keys()].forEach((path) => {
             if (path === ref.path || path.startsWith(`${ref.path}/`)) this.docs.delete(path);
@@ -116,7 +124,10 @@ class FakeFirestore {
     collection(id: string): FakeCollectionReference { return new FakeCollectionReference(this, id); }
     batch(): FakeBatch { return new FakeBatch(this); }
     async runTransaction<T>(handler: (transaction: FakeTransaction) => Promise<T>): Promise<T> {
-        return handler(new FakeTransaction(this));
+        const transaction = new FakeTransaction(this);
+        const result = await handler(transaction);
+        this.transactionWriteCounts.push(transaction.writeCount);
+        return result;
     }
     async getAll(...refs: FakeDocumentReference[]): Promise<FakeSnapshot[]> {
         return refs.map(ref => this.snapshot(ref));
@@ -257,6 +268,7 @@ describe('deleteTrainingPlanForUser persistence', () => {
         const current = workout('workout-1');
         seed(db, [current]);
         db.seed('users/user-1/scheduledWorkouts/workout-1/revisions/0000000002', { privateHistory: true });
+        db.seed('users/user-1/trainingWorkoutCompletions/workout-1', { schemaVersion: 1, workoutId: 'workout-1' });
 
         const response = await deleteTrainingPlanForUser(
             'user-1', request('delete-workouts'), { db: db as never, nowMs: NOW_MS },
@@ -265,6 +277,7 @@ describe('deleteTrainingPlanForUser persistence', () => {
         expect(response.permanentlyDeletedWorkoutIds).toEqual(['workout-1']);
         expect(db.read('users/user-1/scheduledWorkouts/workout-1')).toBeUndefined();
         expect(db.read('users/user-1/scheduledWorkouts/workout-1/revisions/0000000002')).toBeUndefined();
+        expect(db.read('users/user-1/trainingWorkoutCompletions/workout-1')).toBeUndefined();
         expect(db.read('users/user-1/trainingPlanState/current')).toMatchObject({ currentWorkoutCount: 0 });
         const workoutTombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', 'workout-1');
         expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${workoutTombstoneId}`)).toMatchObject({
@@ -283,6 +296,10 @@ describe('deleteTrainingPlanForUser persistence', () => {
         };
         seed(db, [current, previouslyDeleted]);
         db.seed('users/user-1/scheduledWorkouts/workout-deleted/revisions/0000000003', { privateHistory: true });
+        db.seed('users/user-1/trainingWorkoutCompletions/workout-deleted', {
+            schemaVersion: 1,
+            workoutId: 'workout-deleted',
+        });
 
         await deleteTrainingPlanForUser(
             'user-1', request('convert-to-standalone'), { db: db as never, nowMs: NOW_MS },
@@ -290,6 +307,7 @@ describe('deleteTrainingPlanForUser persistence', () => {
 
         expect(db.read('users/user-1/scheduledWorkouts/workout-deleted')).toBeUndefined();
         expect(db.read('users/user-1/scheduledWorkouts/workout-deleted/revisions/0000000003')).toBeUndefined();
+        expect(db.read('users/user-1/trainingWorkoutCompletions/workout-deleted')).toBeUndefined();
         const tombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', 'workout-deleted');
         expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${tombstoneId}`)).toMatchObject({
             entityKind: 'workout',
@@ -327,6 +345,24 @@ describe('deleteTrainingPlanForUser persistence', () => {
 
         expect(response.convertedWorkoutIds).toHaveLength(400);
         expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toMatchObject({ planId: null, revision: 3 });
+    });
+
+    it('permanently deletes 400 workouts without exceeding the Firestore transaction write limit', async () => {
+        const workouts = Array.from({ length: 400 }, (_, index) => workout(`workout-${`${index}`.padStart(3, '0')}`));
+        seed(db, workouts);
+        workouts.forEach(item => db.seed(`users/user-1/trainingWorkoutCompletions/${item.id}`, {
+            schemaVersion: 1,
+            workoutId: item.id,
+        }));
+
+        const response = await deleteTrainingPlanForUser(
+            'user-1', request('delete-workouts'), { db: db as never, nowMs: NOW_MS },
+        );
+
+        expect(response.permanentlyDeletedWorkoutIds).toHaveLength(400);
+        expect(Math.max(...db.transactionWriteCounts)).toBeLessThanOrEqual(500);
+        expect(db.read('users/user-1/scheduledWorkouts/workout-399')).toBeUndefined();
+        expect(db.read('users/user-1/trainingWorkoutCompletions/workout-399')).toBeUndefined();
     });
 
     it('rechecks account deletion before acquiring or finalizing a lock', async () => {

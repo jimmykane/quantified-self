@@ -35,8 +35,30 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 export type HealthChartDatum = [
   timestampMs: number,
   value: number | string | null,
-  visualValue?: number | null,
 ];
+
+type StressStateBlockValue = [
+  startTimeMs: number,
+  endTimeMs: number,
+  categoryIndex: number,
+  state: string,
+];
+
+interface StressStateBlockDatum {
+  value: StressStateBlockValue;
+  itemStyle: { color: string };
+}
+
+interface StressStateRenderParams {
+  coordSys?: { x: number; y: number; width: number; height: number };
+}
+
+interface StressStateRenderApi {
+  value(dimension: number): unknown;
+  coord(value: [number, number]): [number, number];
+  size(value: [number, number]): [number, number];
+  style(): Record<string, unknown>;
+}
 
 export interface HealthChartSeriesModel {
   series: HealthWorkspaceSeries;
@@ -141,15 +163,22 @@ export function buildHealthMetricEChartsOption(
     : new Map<number, HealthChartPointStatus>();
   const useHrvPointColors = hrvPointStatuses.size > 0;
   const useBodyEnergyColors = isProviderBodyEnergySeries(model.series);
-  const chartData = useStressStateColors
-    ? stressStateChartData(model.data, model.categoryLabels)
-    : model.data;
+  const stressStateBlocks = useStressStateColors
+    ? buildStressStateBlockData(
+      model.data,
+      model.categoryLabels,
+      startTimeMs,
+      endTimeMs,
+      seriesColor,
+      style.trendLineColor,
+    )
+    : [];
   // Baselines have their own daily timeline; missing readings stay missing.
   const rangeData: Array<[number, number | null, number | null]> = statusOverlay?.rangePoints
     && model.series.metricId === HEALTH_METRIC_IDS.HeartRateVariability
     ? statusOverlay.rangePoints.filter(point => point.timestampMs >= startTimeMs && point.timestampMs <= endTimeMs)
       .map(({ timestampMs, normalRange }) => [timestampMs, normalRange?.min ?? null, normalRange?.max ?? null])
-    : chartData.map(([timestampMs, value]) => {
+    : model.data.map(([timestampMs, value]) => {
     const range = typeof value === 'number' && timestampMs >= startTimeMs && timestampMs <= endTimeMs
       ? hrvPointStatuses.get(timestampMs)?.normalRange : null;
     return range ? [timestampMs, range.min, range.max] : [timestampMs, null, null];
@@ -259,7 +288,7 @@ export function buildHealthMetricEChartsOption(
         data: model.categoryLabels,
         axisTick: { show: false },
         axisLine: { show: false },
-        splitLine: { lineStyle: { color: style.gridColor } },
+        splitLine: { show: useStressStateColors, lineStyle: { color: style.gridColor } },
         axisLabel: {
           hideOverlap: compact,
           color: useStressStateColors
@@ -297,34 +326,20 @@ export function buildHealthMetricEChartsOption(
           ),
         },
       },
-    visualMap: useStressStateColors
-      ? {
-        type: 'piecewise',
-        show: false,
-        seriesIndex: 0,
-        dimension: 2,
-        pieces: model.categoryLabels.map((value, index) => ({
-          value: index,
-          color: resolveHealthValueColor(
-            model.series.metricId,
-            value,
-            seriesColor,
-            style.trendLineColor,
-          ),
-        })),
-        outOfRange: { color: style.secondaryTextColor },
-      }
-      : undefined,
-    series: [{
+    series: [useStressStateColors ? {
+      name: model.series.sourceLabel,
+      type: 'custom',
+      dimensions: ['startTime', 'endTime', 'categoryIndex', 'state'],
+      encode: { x: [0, 1], y: 2, tooltip: [0, 3] },
+      data: stressStateBlocks,
+      renderItem: (params: StressStateRenderParams, api: StressStateRenderApi) =>
+        renderStressStateBlock(params, api, compact),
+      emphasis: { itemStyle: { opacity: 0.82 } },
+      z: 2,
+    } : {
       name: model.series.sourceLabel,
       type: isBar ? 'bar' : isPoint ? 'scatter' : 'line',
-      data: chartData,
-      dimensions: useStressStateColors
-        ? ['timestamp', 'value', 'visualValue']
-        : undefined,
-      encode: useStressStateColors
-        ? { x: 0, y: 1 }
-        : undefined,
+      data: model.data,
       connectNulls: false,
       step: isCategorical ? 'end' : undefined,
       showSymbol: useHrvPointColors
@@ -337,12 +352,10 @@ export function buildHealthMetricEChartsOption(
       barMaxWidth: 28,
       z: useHrvPointColors ? 3 : undefined,
       lineStyle: {
-        ...(!useStressStateColors ? { color: useHrvPointColors ? 'transparent' : seriesColor } : {}),
+        color: useHrvPointColors ? 'transparent' : seriesColor,
         width: HEALTH_TREND_LINE_WIDTH,
       },
-      itemStyle: useStressStateColors
-        ? undefined
-        : useHrvPointColors
+      itemStyle: useHrvPointColors
           ? {
             color: (params: { value?: unknown }) => hrvPointStatuses.get(
               chartTimestamp(params.value),
@@ -484,9 +497,12 @@ function resolveHealthValueColor(
     case 'relaxing':
     case 'recovering':
     case 'calm':
+    case 'rest':
+    case 'restful awake':
     case 'low':
       return AppDataColors.Altitude;
     case 'active':
+    case 'activity':
       return AppDataColors.Distance;
     case 'passive':
     case 'inactive':
@@ -494,6 +510,7 @@ function resolveHealthValueColor(
     case 'medium':
       return AppDataColors.Stress;
     case 'stressful':
+    case 'stressful awake':
     case 'stressed':
     case 'high':
       return AppDataColors['Heart Rate_0'];
@@ -531,16 +548,107 @@ function chartValue(value: unknown): unknown {
   return Array.isArray(value) ? value[1] : value;
 }
 
-function stressStateChartData(
+function buildStressStateBlockData(
   data: readonly HealthChartDatum[],
   categoryLabels: readonly string[],
-): HealthChartDatum[] {
+  startTimeMs: number,
+  endTimeMs: number,
+  seriesColor: string,
+  neutralColor: string,
+): StressStateBlockDatum[] {
   const categoryIndexes = new Map(categoryLabels.map((value, index) => [value, index]));
-  return data.map(([timestampMs, value]) => [
-    timestampMs,
-    value,
-    typeof value === 'string' ? categoryIndexes.get(value) ?? null : null,
-  ]);
+  const positiveDeltas = data.slice(1)
+    .map((datum, index) => datum[0] - data[index][0])
+    .filter(delta => delta > 0)
+    .sort((left, right) => left - right);
+  const fallbackDurationMs = positiveDeltas.length
+    ? positiveDeltas[Math.floor((positiveDeltas.length - 1) / 2)]
+    : Math.max(1, Math.floor((endTimeMs - startTimeMs) / 100));
+  const maximumBlockDurationMs = fallbackDurationMs * 3;
+
+  const blocks: StressStateBlockDatum[] = [];
+  let previousWasGap = true;
+  data.forEach((datum, index) => {
+    const [timestampMs, value] = datum;
+    if (typeof value !== 'string') {
+      previousWasGap = true;
+      return;
+    }
+    const categoryIndex = categoryIndexes.get(value);
+    if (categoryIndex === undefined) {
+      previousWasGap = true;
+      return;
+    }
+    const nextTimestampMs = data[index + 1]?.[0] ?? timestampMs + fallbackDurationMs;
+    const endTime = Math.min(
+      endTimeMs,
+      Math.max(timestampMs, Math.min(nextTimestampMs, timestampMs + maximumBlockDurationMs)),
+    );
+    const previous = blocks.at(-1);
+    if (!previousWasGap && previous?.value[3] === value && previous.value[1] === timestampMs) {
+      previous.value[1] = endTime;
+      return;
+    }
+    blocks.push({
+      value: [
+        timestampMs,
+        endTime,
+        categoryIndex,
+        value,
+      ],
+      itemStyle: {
+        color: resolveHealthValueColor(
+          HEALTH_METRIC_IDS.StressState,
+          value,
+          seriesColor,
+          neutralColor,
+        ),
+      },
+    });
+    previousWasGap = false;
+  });
+  return blocks;
+}
+
+function renderStressStateBlock(
+  params: StressStateRenderParams,
+  api: StressStateRenderApi,
+  compact: boolean,
+): object | null {
+  const coordSys = params.coordSys;
+  const startTimeMs = Number(api.value(0));
+  const endTimeMs = Number(api.value(1));
+  const categoryIndex = Number(api.value(2));
+  if (!coordSys || !Number.isFinite(startTimeMs) || !Number.isFinite(endTimeMs)
+    || !Number.isFinite(categoryIndex)) {
+    return null;
+  }
+
+  const start = api.coord([startTimeMs, categoryIndex]);
+  const end = api.coord([endTimeMs, categoryIndex]);
+  const categoryBandHeight = Math.abs(api.size([0, 1])[1]);
+  const height = Math.max(4, Math.min(compact ? 8 : 12, categoryBandHeight * 0.42));
+  const left = Math.max(coordSys.x, Math.min(start[0], end[0]));
+  const right = Math.min(coordSys.x + coordSys.width, Math.max(start[0], end[0]));
+  const width = Math.max(2, right - left);
+  const x = Math.max(coordSys.x, Math.min(left, coordSys.x + coordSys.width - width));
+  const top = Math.max(coordSys.y, Math.min(
+    coordSys.y + coordSys.height - height,
+    start[1] - height / 2,
+  ));
+
+  return {
+    type: 'rect',
+    shape: {
+      x,
+      y: top,
+      width,
+      height,
+      r: Math.min(2, height / 2),
+    },
+    style: api.style(),
+    transition: ['shape'],
+  };
 }
 
 function buildPointStatusLineSeries(

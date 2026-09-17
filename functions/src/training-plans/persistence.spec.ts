@@ -491,6 +491,10 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         db.seed(`users/user-1/scheduledWorkouts/${deletedWorkout.id}/revisions/0000000002`, {
             revision: 2,
         });
+        db.seed(`users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}`, {
+            schemaVersion: 1,
+            workoutId: deletedWorkout.id,
+        });
         const mutation: MutateTrainingScheduleRequestV1 = {
             mutationId: 'permanent-delete',
             expectedRevisions: [
@@ -511,6 +515,7 @@ describe('mutateTrainingScheduleForUser persistence', () => {
         }));
         expect(db.read(`users/user-1/scheduledWorkouts/${deletedWorkout.id}`)).toBeUndefined();
         expect(db.read(`users/user-1/scheduledWorkouts/${deletedWorkout.id}/revisions/0000000002`)).toBeUndefined();
+        expect(db.read(`users/user-1/trainingWorkoutCompletions/${deletedWorkout.id}`)).toBeUndefined();
         const tombstoneId = trainingScheduleDeletionTombstoneDocumentId('workout', deletedWorkout.id);
         expect(db.read(`users/user-1/trainingPlanState/current/deletionTombstones/${tombstoneId}`)).toMatchObject({
             entityKind: 'workout',

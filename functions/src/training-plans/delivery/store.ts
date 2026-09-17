@@ -71,6 +71,7 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const retried = settingRevision !== previous?.settingsRevision;
   const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
     ...(previous?.repair ? { repair: previous.repair } : {}),
+    ...(previous?.completionLinkId ? { completionLinkId: previous.completionLinkId } : {}),
     schemaVersion: 1, id, workoutId, planId: context.workout ? context.workout.planId : previous?.planId ?? null,
     provider, destinationKey,
     desiredGeneration: (previous?.desiredGeneration ?? 0) + (changed ? 1 : 0), desiredDigest: intent.digest,

@@ -304,6 +304,21 @@
   flex: 0 0 18px;
 }
 
+.workout-completion-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-medium);
+}
+
+.workout-completion-state mat-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
 .workout-row-actions {
   display: flex;
   align-items: center;
