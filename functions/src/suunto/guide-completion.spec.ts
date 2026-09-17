@@ -1,12 +1,26 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFITWorkoutReferenceEvidence, readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from './guide-completion';
 import { guideExternalId } from '../training-plans/delivery/suunto/mapping';
-import { suuntoFitFixture } from '../training-plans/delivery/test-support/suunto-fit-fixture';
+import {
+  suuntoFitFixture,
+  suuntoMultiSessionFitFixture,
+} from '../training-plans/delivery/test-support/suunto-fit-fixture';
 import type { Firestore } from 'firebase-admin/firestore';
 const deletion = vi.hoisted(() => vi.fn());
 const authority = vi.hoisted(() => vi.fn());
 vi.mock('../shared/user-deletion-guard', () => ({ getUserDeletionGuardStateInTransaction: deletion }));
 vi.mock('../training-plans/delivery/connection', () => ({ readTrainingDeliveryAuthority: authority }));
+
+interface MockFirestoreTarget {
+  path: string;
+  query?: boolean;
+}
+
+interface MockFirestoreRef extends MockFirestoreTarget {
+  collection(part: string): MockFirestoreRef;
+  doc(part: string): MockFirestoreRef;
+  where(field?: string, operator?: string, values?: string[]): MockFirestoreTarget;
+}
 
 describe('Suunto private FIT Guide evidence', () => {
   const id = guideExternalId('account', 'workout'); const second = guideExternalId('account', 'second');
@@ -34,12 +48,52 @@ describe('Suunto private FIT Guide evidence', () => {
     expect(readSuuntoGuideCompletions(bytes.subarray(0, bytes.length - 1), 'qs')).toEqual([]);
     bytes[15] ^= 1; expect(readSuuntoGuideCompletions(bytes, 'qs')).toEqual([]);
   });
+  it('retains valid evidence and pages ledger lookups beyond one Firestore in-query', async () => {
+    deletion.mockResolvedValue({ shouldSkip: false });
+    authority.mockResolvedValue({ account: 'account', token: { data: () => ({ tokenCredentialGeneration: 'g' }) },
+      connection: { state: 'connected', destinationKey: 'destination' } });
+    const externalIds = Array.from({ length: 31 }, (_, index) => guideExternalId('account', `workout-${index}`));
+    const queryPages: string[][] = [];
+    const writes = vi.fn();
+    const ref = (path: string): MockFirestoreRef => ({
+      path,
+      collection: (part: string) => ref(`${path}/${part}`),
+      doc: (part: string) => ref(`${path}/${part}`),
+      where: (_field: string, _operator: string, values: string[]) => {
+        queryPages.push(values);
+        return { path: `${path}?query=${queryPages.length}`, query: true };
+      },
+    });
+    const tx = { set: writes, delete: vi.fn(), get: vi.fn(async (target: { path: string; query?: boolean }) => (
+      target.query ? { docs: [] } : { exists: target.path.endsWith('/events/event'), data: () => ({}) }
+    )) };
+    const db = { collection: (path: string) => ref(path), runTransaction: (callback: (value: unknown) => unknown) => callback(tx) } as unknown as Firestore;
+
+    await expect(retainSuuntoGuideCompletions(
+      db,
+      'uid',
+      'event',
+      'account',
+      'g',
+      suuntoMultiSessionFitFixture(Array.from({ length: Math.ceil(externalIds.length / 4) }, (_, index) => {
+        const page = externalIds.slice(index * 4, (index + 1) * 4);
+        return { owners: page.map(() => 'qs'), externalIds: page };
+      })),
+      'qs',
+    )).resolves.toEqual({ retained: true, linkedWorkoutIds: [] });
+
+    expect(queryPages.map(page => page.length)).toEqual([30, 1]);
+    expect(writes).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ path: 'users/uid/events/event/trainingCompletionEvidence/fit' }),
+      expect.objectContaining({ sourceProvider: 'suunto' }),
+    );
+  });
   it.each(['write', 'deletion', 'event-deleted', 'generation', 'disconnect', 'binding', 'failure'])('fences persistence: %s', async scenario => {
     const writes = vi.fn(); deletion.mockResolvedValue({ shouldSkip: scenario === 'deletion' });
     authority.mockResolvedValue({ account: scenario === 'binding' ? 'other' : 'account',
       token: { data: () => ({ tokenCredentialGeneration: scenario === 'generation' ? 'new' : 'g' }) },
       connection: { state: scenario === 'disconnect' ? 'reconnect_required' : 'connected', destinationKey: 'destination' } });
-    const ref = (path: string): any => ({ path, collection: (p: string) => ref(`${path}/${p}`), doc: (p: string) => ref(`${path}/${p}`),
+    const ref = (path: string): MockFirestoreRef => ({ path, collection: (p: string) => ref(`${path}/${p}`), doc: (p: string) => ref(`${path}/${p}`),
       where: () => ({ path: `${path}?query`, query: true }) });
     const tx = { set: writes, delete: vi.fn(), get: vi.fn(async (r: { path: string; query?: boolean }) => {
       if (scenario === 'failure') throw new Error('database-failure');
@@ -71,7 +125,7 @@ describe('Suunto private FIT Guide evidence', () => {
       title: 'Ride', structure: { version: 1, sport: 'Cycling', nodes: [{ kind: 'step', id: 's', purpose: 'work',
         ending: { kind: 'time', seconds: 600 }, targets: [] }] }, revision: 2, createdAtMs: 1, updatedAtMs: 2 };
     const writes = vi.fn();
-    const ref = (path: string): any => ({ path, collection: (p: string) => ref(`${path}/${p}`), doc: (p: string) => ref(`${path}/${p}`),
+    const ref = (path: string): MockFirestoreRef => ({ path, collection: (p: string) => ref(`${path}/${p}`), doc: (p: string) => ref(`${path}/${p}`),
       where: () => ({ path: `${path}?query`, query: true }) });
     const tx = { set: writes, delete: vi.fn(), get: vi.fn(async (r: { path: string; query?: boolean }) => {
       if (r.query) return { docs: [{ id: 'ledger', data: () => ledger }] };
@@ -97,7 +151,7 @@ describe('Suunto private FIT Guide evidence', () => {
     const ledger = { schemaVersion: 1, id: 'ledger', workoutId: 'workout', provider: 'suunto', destinationKey: 'destination',
       actual: { ids: { externalId: id }, localDate: '1990-01-01', completed: false },
       attempt: { id: 'operation' }, lease: { id: 'lease', expiresAtMs: 10_000 } };
-    const ref = (path: string): any => ({ path, collection: (part: string) => ref(`${path}/${part}`),
+    const ref = (path: string): MockFirestoreRef => ({ path, collection: (part: string) => ref(`${path}/${part}`),
       doc: (part: string) => ref(`${path}/${part}`), where: () => ({ path: `${path}?query`, query: true }) });
     const tx = { get: vi.fn(async (target: { path: string; query?: boolean }) => target.query
       ? { docs: [{ id: 'ledger', data: () => ledger }] }

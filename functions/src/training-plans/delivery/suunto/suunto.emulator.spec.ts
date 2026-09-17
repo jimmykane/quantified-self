@@ -14,7 +14,7 @@ import { createSuuntoGuideClient, SuuntoGuideHttpError } from './http';
 import { SuuntoHttpFixture } from '../test-support/suunto-http-fixture';
 import { buildSuuntoHealthWebhookAccountBinding, getSuuntoHealthWebhookAccountBindingRef } from '../../../suunto/health-webhook-binding';
 import { readSuuntoGuideCompletions, retainSuuntoGuideCompletions } from '../../../suunto/guide-completion';
-import { suuntoFitFixture } from '../test-support/suunto-fit-fixture';
+import { suuntoFitFixture, suuntoMultiSessionFitFixture } from '../test-support/suunto-fit-fixture';
 import { guideExternalId } from './mapping';
 import type { TrainingDeliveryCommandV1 } from '../../../../../shared/training-provider-delivery';
 
@@ -202,6 +202,28 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Suunto worker with real F
     await db.recursiveDelete(event); await retain(); expect((await event.collection('trainingCompletionEvidence').get()).empty).toBe(true);
     await event.set({ test: true }); await db.collection('userDeletionTombstones').doc(uid).set({}); await retain();
     expect((await event.collection('trainingCompletionEvidence').get()).empty).toBe(true);
+  });
+  it('retains more than 30 Guide markers through bounded real Firestore queries', async () => {
+    const externalIds = Array.from({ length: 31 }, (_, index) => guideExternalId('account', `workout-${index}`));
+    const sessions = Array.from({ length: Math.ceil(externalIds.length / 4) }, (_, index) => {
+      const page = externalIds.slice(index * 4, (index + 1) * 4);
+      return { owners: page.map(() => 'qs'), externalIds: page };
+    });
+    const event = user().collection('events').doc('many-markers');
+    await event.set({ test: true });
+
+    await expect(retainSuuntoGuideCompletions(
+      db,
+      uid,
+      event.id,
+      'account',
+      'retained',
+      suuntoMultiSessionFitFixture(sessions),
+      'qs',
+    )).resolves.toEqual({ retained: true, linkedWorkoutIds: [] });
+
+    const evidence = (await event.collection('trainingCompletionEvidence').doc('fit').get()).data();
+    expect(evidence?.suuntoGuides?.['SuuntoPlus Guide References']?.references).toHaveLength(31);
   });
   it('links an exact Guide marker and protects the delivered artifact in one real transaction', async () => {
     const delivered = await send();

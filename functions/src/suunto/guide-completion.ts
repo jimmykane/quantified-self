@@ -22,7 +22,7 @@ import { projectDelivery } from '../training-plans/delivery/store';
 
 export { readFITWorkoutReferenceEvidence } from '../training-plans/completion/fit-workout-evidence';
 
-const MAX_EXACT_GUIDE_IDS = 30;
+const FIRESTORE_IN_QUERY_LIMIT = 30;
 const QS_SUUNTO_EXTERNAL_ID = /^qs-suunto-[A-Za-z0-9_-]{43}$/;
 
 export interface FITActivityReference {
@@ -128,7 +128,7 @@ export async function retainSuuntoGuideCompletions(
   const sessions = projectSuuntoGuideCompletions(evidence, clientId);
   if (evidence.status === 'invalid' || sessions.length === 0) return { retained: false, linkedWorkoutIds: [] };
   const exactIds = [...new Set(sessions.flatMap(session => session.externalIds))];
-  if (exactIds.length === 0 || exactIds.length > MAX_EXACT_GUIDE_IDS) return { retained: false, linkedWorkoutIds: [] };
+  if (exactIds.length === 0) return { retained: false, linkedWorkoutIds: [] };
 
   const user = db.collection('users').doc(uid);
   const eventRef = user.collection('events').doc(eventId);
@@ -143,10 +143,16 @@ export async function retainSuuntoGuideCompletions(
       return { retained: false, linkedWorkoutIds: [] };
     }
 
-    const ledgerSnapshot = await tx.get(user.collection(DELIVERY_LEDGER)
-      .where('actual.ids.externalId', 'in', exactIds));
+    const ledgerSnapshots = await Promise.all(Array.from(
+      { length: Math.ceil(exactIds.length / FIRESTORE_IN_QUERY_LIMIT) },
+      (_, index) => tx.get(user.collection(DELIVERY_LEDGER).where(
+        'actual.ids.externalId',
+        'in',
+        exactIds.slice(index * FIRESTORE_IN_QUERY_LIMIT, (index + 1) * FIRESTORE_IN_QUERY_LIMIT),
+      )),
+    ));
     const ledgersByExternalId = new Map<string, DeliveryLedgerV1[]>();
-    for (const document of ledgerSnapshot.docs) {
+    for (const document of ledgerSnapshots.flatMap(snapshot => snapshot.docs)) {
       const externalId = document.data()?.actual?.ids?.externalId;
       if (typeof externalId !== 'string') continue;
       const ledger = candidateLedger(document, authority.connection.destinationKey, externalId);
