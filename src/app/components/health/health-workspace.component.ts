@@ -38,7 +38,7 @@ import {
 } from '@shared/health';
 import { ProviderPresentation, buildProviderPresentation } from '@shared/provider-presentation';
 import { SleepSession } from '@shared/sleep';
-import { projectHealthRange } from '@shared/health-query';
+import { projectLoadedHealthRange } from '@shared/health-query';
 import { healthMetricUsesSleep } from '../../helpers/health-workspace.helper';
 import { manualHealthEntryMetric, type ManualHealthMetricId } from '@shared/manual-health';
 import { from, Subscription } from 'rxjs';
@@ -81,6 +81,8 @@ import {
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import {
   HEALTH_WORKSPACE_DEFAULT_RANGE,
+  HEALTH_WORKSPACE_SAMPLE_RANGE,
+  HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
   HEALTH_WORKSPACE_RANGES,
   HEALTH_HRV_PERSONAL_RANGE_SEMANTIC_VARIANTS,
   HealthMetricCatalogGroup,
@@ -449,9 +451,13 @@ export class HealthWorkspaceComponent {
   });
   private readonly metricProjectionResult = computed(() => {
     const window = this.selectedWindow();
-    return this.filteredHealthResult() || projectHealthRange([], [], {
+    return this.filteredHealthResult() || projectLoadedHealthRange([], [], {
       startDate: window.startDate, endDate: window.endDate,
       metricIds: window.metric === 'sleep' ? [] : [window.metric], includeSamples: window.includeSamples,
+    }, {
+      sourceRecordsComplete: true,
+      samplesComplete: true,
+      maximumSampleRangeDays: HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
     });
   });
   readonly filteredActivityHealthObservations = computed<ActivityHealthObservation[]>(() => {
@@ -648,6 +654,14 @@ export class HealthWorkspaceComponent {
       return selectedProviders.length === 0 || selectedProviders.includes(provider);
     }) === true
     && this.metricView().series.length === 0);
+  readonly sampleRangeLimited = computed(() => {
+    if (this.sampleOnlyLongRange()) return true;
+    if (this.selectedIsSleep() || this.selectedMetric() === HEALTH_METRIC_IDS.HeartRate) return false;
+    const filters = this.effectiveProviderFilters();
+    const hasSampleBackedSource = (this.selectedHealthLoad()?.sampleBackedProviders || [])
+      .some(provider => !filters.length || filters.includes(provider));
+    return hasSampleBackedSource && !this.metricView().series.some(series => !series.sampleBased);
+  });
   readonly omittedSampleSourceNotice = computed(() => {
     if (this.selectedIsSleep() || this.selectedWindow().includeSamples
       || this.selectedStatus() !== 'ready' || !this.hasData()) return null;
@@ -658,7 +672,7 @@ export class HealthWorkspaceComponent {
     const omitted = (this.selectedHealthLoad()?.sampleBackedProviders || [])
       .filter(provider => (!filters.length || filters.includes(provider)) && !shownProviders.has(provider));
     return omitted.length
-      ? `${omitted.map(providerLabel).join(', ')}: detailed readings exist, but no daily summary is available in this view. Select 30 days or less to see those readings.`
+      ? `${omitted.map(providerLabel).join(', ')}: detailed readings exist, but no daily summary is available in this view. Select 90 days or less to see those readings.`
       : null;
   });
   readonly heartRateReadingNotice = computed(() => {
@@ -896,6 +910,11 @@ export class HealthWorkspaceComponent {
       this.selectedMetric.set(savedMetric);
       this.selectedEndDate.set(this.todayDate);
       this.selectedRange.set(savedRange);
+    });
+
+    effect(() => {
+      if (this.selectedRange() !== '1y' || !this.sampleRangeLimited()) return;
+      untracked(() => this.applyRange(HEALTH_WORKSPACE_SAMPLE_RANGE, false));
     });
 
     effect(onCleanup => {
@@ -1182,10 +1201,19 @@ export class HealthWorkspaceComponent {
 
   selectRange(range: HealthWorkspaceRange): void {
     const normalizedRange = normalizeHealthWorkspaceRange(range);
+    if (this.isRangeDisabled(normalizedRange)) return;
+    this.applyRange(normalizedRange, true);
+  }
+
+  isRangeDisabled(range: HealthWorkspaceRange): boolean {
+    return range === '1y' && this.sampleRangeLimited();
+  }
+
+  private applyRange(normalizedRange: HealthWorkspaceRange, withHaptic: boolean): void {
     if (normalizedRange === this.selectedRange() && !this.preferencesSaveFailed()) {
       return;
     }
-    this.haptics.selection();
+    if (withHaptic) this.haptics.selection();
     this.rangePreferenceTouched = true;
     this.selectedRange.set(normalizedRange);
     this.queueWorkspacePreferenceWrite();

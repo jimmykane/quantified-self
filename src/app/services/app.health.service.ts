@@ -49,6 +49,7 @@ import type {
 import { MANUAL_HEALTH_SOURCE_RECORD_TYPE, MANUAL_HEALTH_VALUE_MAXIMUMS } from '@shared/manual-health';
 import { decodeHealthSourceRecordSportsLibData } from '@shared/sports-lib-health-data';
 import { countStaleHeartRateChunks, withDailyHeartRateSummaries } from '../helpers/health-heart-rate-summary.helper';
+import { HEALTH_WORKSPACE_SAMPLE_MAX_DAYS } from '../helpers/health-workspace.helper';
 
 export const HEALTH_WORKSPACE_LOAD_LIMITS = Object.freeze({
     sourceRecords: 2_048,
@@ -262,7 +263,9 @@ export class AppHealthService {
             providers: [],
             includeSamples: request.includeSamples,
         };
-        const normalizedQuery = planHealthFirestoreQueries(queryValue).query;
+        const normalizedQuery = planHealthFirestoreQueries(queryValue, {
+            maximumSampleRangeDays: HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+        }).query;
         if (!uid) {
             return this.buildWorkspaceLoad([], [], normalizedQuery, true, true, null, null, 0);
         }
@@ -348,7 +351,9 @@ export class AppHealthService {
         let cursor: HealthQueryCursor | null = null;
         let serializedBytes = 0;
         while (true) {
-            const plan = planHealthFirestoreQueries({ ...queryValue, sourceRecordCursor: cursor }).sourceRecords;
+            const plan = planHealthFirestoreQueries({ ...queryValue, sourceRecordCursor: cursor }, {
+                maximumSampleRangeDays: HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+            }).sourceRecords;
             const snapshot = await getDocs(this.buildCollectionQuery(userID, plan));
             const page = snapshot.docs.slice(0, plan.fetchLimit - 1);
             for (const documentSnapshot of page) {
@@ -384,8 +389,9 @@ export class AppHealthService {
         let samplePoints = 0;
         let windowStart = queryValue.startDate;
         while (true) {
-            // The shared sample-query contract remains at 31 days. Long-range
-            // summaries walk those windows with one cumulative load budget.
+            // The shared sample-query contract remains at 31 days. App sample
+            // views and long-range HR summaries walk those windows with one
+            // cumulative load budget.
             const windowEnd = new Date(Math.min(Date.parse(queryValue.endDate),
                 Date.parse(windowStart) + 30 * 86_400_000)).toISOString().slice(0, 10);
             const plan = planHealthFirestoreQueries({ ...queryValue,
@@ -459,6 +465,7 @@ export class AppHealthService {
             samplesComplete,
             sourceRecordCursor,
             chunkCursor,
+            maximumSampleRangeDays: HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
         });
         const metricId = result.query.metricIds[0];
         const matchingRecords = metricId

@@ -1286,7 +1286,7 @@ describe('HealthWorkspaceComponent', () => {
   });
 
   it('keeps provider readings visible when Sleep fails and explains omitted all-day samples beside a Sleep summary', async () => {
-    await createComponent(undefined, '90d', {}, HEALTH_METRIC_IDS.HeartRate);
+    await createComponent(undefined, '1y', {}, HEALTH_METRIC_IDS.HeartRate);
     component.selectedSleepStatus.set('error'); fixture.detectChanges();
     expect(component.selectedStatus()).toBe('ready');
     expect(component.metricSourceNotice()).toContain('Sleep readings could not be loaded');
@@ -1295,7 +1295,7 @@ describe('HealthWorkspaceComponent', () => {
       sampleBackedProviders: [HEALTH_PROVIDERS.GarminAPI] }); fixture.detectChanges();
     expect(component.hasData()).toBe(true);
     expect(component.sampleOnlyLongRange()).toBe(false);
-    expect(component.omittedSampleSourceNotice()).toContain('Select 30 days or less');
+    expect(component.omittedSampleSourceNotice()).toContain('Select 90 days or less');
   });
 
   it('keeps the complete catalog visible when availability discovery fails', async () => {
@@ -2564,8 +2564,10 @@ describe('HealthWorkspaceComponent', () => {
     expect(emptyState?.querySelector('[routerlink="/services"]')).toBeNull();
   });
 
-  it('explains sample-only metrics instead of implying an empty 90-day aggregate', async () => {
-    await createComponent(undefined, undefined, { sleepSessions: [] });
+  it('clamps sample-only metrics to 90 days and prevents reopening an unsupported year', async () => {
+    await createComponent(undefined, undefined, {
+      sleepSessions: [], metricIds: [HEALTH_METRIC_IDS.StressState],
+    });
     loadMetricRange.mockImplementation((_uid: string, request: { metricId: HealthMetricId }) => Promise.resolve({
       ...rangeLoad(request.metricId, true),
       hasMatchingSourceRecords: true,
@@ -2574,20 +2576,27 @@ describe('HealthWorkspaceComponent', () => {
       sampleBackedProviders: [HEALTH_PROVIDERS.GarminAPI],
     }));
 
-    component.selectMetric(HEALTH_METRIC_IDS.HeartRate);
-    component.selectRange('90d');
+    component.selectMetric(HEALTH_METRIC_IDS.StressState);
+    component.selectRange('1y');
+    fixture.detectChanges();
+    await fixture.whenStable();
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const text = (fixture.nativeElement as HTMLElement).textContent || '';
-    expect(text).toContain('This metric is stored as detailed samples');
-    expect(text).toContain('Choose 1d, 14d, or 30d to view the detailed readings');
-    expect(text).not.toContain('No Heart rate data in this window');
+    expect(component.routeState().range).toBe('90d');
+    expect(component.selectedWindow().includeSamples).toBe(true);
+    expect(component.isRangeDisabled('1y')).toBe(true);
+    expect(updateHealthWorkspacePreferences).toHaveBeenLastCalledWith('user-1', {
+      metric: HEALTH_METRIC_IDS.StressState,
+      range: '90d',
+    });
   });
 
   it('keeps sample-only providers filterable and scopes the long-range explanation', async () => {
-    await createComponent(undefined, undefined, { sleepSessions: [] });
+    await createComponent(undefined, undefined, {
+      sleepSessions: [], metricIds: [HEALTH_METRIC_IDS.StressState],
+    });
     loadMetricRange.mockImplementation((_uid: string, request: { metricId: HealthMetricId }) => Promise.resolve({
       ...rangeLoad(request.metricId, true),
       hasMatchingSourceRecords: true,
@@ -2596,20 +2605,21 @@ describe('HealthWorkspaceComponent', () => {
       sampleBackedProviders: [HEALTH_PROVIDERS.GarminAPI],
     }));
 
-    component.selectMetric(HEALTH_METRIC_IDS.HeartRate);
+    component.selectMetric(HEALTH_METRIC_IDS.StressState);
     component.selectRange('90d');
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(component.availableProviders()).toEqual([HEALTH_PROVIDERS.COROSAPI, HEALTH_PROVIDERS.GarminAPI]);
-    expect(component.sampleOnlyLongRange()).toBe(true);
+    expect(component.sampleOnlyLongRange()).toBe(false);
+    expect(component.isRangeDisabled('1y')).toBe(true);
 
     component.toggleProvider(HEALTH_PROVIDERS.COROSAPI);
     fixture.detectChanges();
 
-    expect(component.sampleOnlyLongRange()).toBe(false);
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No Heart rate data in this window');
+    expect(component.isRangeDisabled('1y')).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No Stress state data in this window');
   });
 
   it('explains a missing sample-only source even when another provider has visible summaries', async () => {

@@ -41,7 +41,7 @@ export function buildHealthPreviewSeries(kind: HealthPreviewKind): HealthWorkspa
     recordingMethod: kind === 'weight' ? HEALTH_RECORDING_METHODS.Manual : HEALTH_RECORDING_METHODS.ProviderCalculated,
     unit: getHealthMetricDefinition(metricId).canonicalUnit,
     normalizationStatus: 'canonical', nativeOnly: false, valueType: HEALTH_VALUE_TYPES.Number,
-    chartKind: kind === 'sleep' ? 'bar' : 'line',
+    chartKind: kind === 'sleep' ? 'bar' : 'line', sampleBased: false,
     points: Array.from({ length: count }, (_, index) => {
       const timestampMs = Date.UTC(2026, 7, 31, 7) - (count - 1 - index) * DAY;
       const variation = variations[index % variations.length];

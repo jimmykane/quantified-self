@@ -82,6 +82,8 @@ export type HealthWorkspaceSleepSession = SleepSession & { healthAccountKey?: st
 
 export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRate;
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
+export const HEALTH_WORKSPACE_SAMPLE_RANGE: HealthWorkspaceRange = '90d';
+export const HEALTH_WORKSPACE_SAMPLE_MAX_DAYS = 90;
 const HEALTH_WORKSPACE_METRICS = new Set<HealthWorkspaceMetricSelection>([
   ...APP_HEALTH_WORKSPACE_METRICS,
 ].filter(metric => metric !== HEALTH_METRIC_IDS.Distance
@@ -139,6 +141,7 @@ export interface HealthWorkspaceSeries {
   nativeOnly: boolean;
   valueType: HealthValueType;
   chartKind: HealthWorkspaceChartKind;
+  sampleBased: boolean;
   points: HealthWorkspaceSeriesPoint[];
   deviceLabel: string | null;
   coverageText: string;
@@ -391,7 +394,7 @@ export function resolveHealthWorkspaceWindow(
     startTimeMs,
     endTimeMs,
     dayCount,
-    includeSamples: dayCount <= 30,
+    includeSamples: dayCount <= HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
     canNavigateNewer: endDate < todayDate,
     label: oneDayLabel || explicitWindowLabel,
   };
@@ -551,6 +554,7 @@ export function buildHealthMetricWorkspaceView(
       nativeOnly: first.nativeOnly,
       valueType: first.valueType,
       chartKind: resolveChartKind(first, points.length),
+      sampleBased: items.every(item => item.rowKind === 'chunk'),
       points,
       deviceLabel: deviceLabels.length === 1 ? deviceLabels[0] : deviceLabels.length > 1 ? 'Multiple devices' : null,
       coverageText,

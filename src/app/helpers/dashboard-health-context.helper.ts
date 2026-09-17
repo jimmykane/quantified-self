@@ -1,4 +1,4 @@
-import { projectHealthRange } from '@shared/health-query';
+import { projectLoadedHealthRange } from '@shared/health-query';
 import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { HEALTH_METRIC_IDS, type HealthProvider } from '@shared/health';
 import type { ActivityHealthRangeResult } from '@shared/activity-health';
@@ -7,7 +7,7 @@ import { sleepEvidenceSourceKey } from '@shared/nightly-hrv';
 import type { SleepSession } from '@shared/sleep';
 import type { HealthWorkspaceRangeLoad } from '../services/app.health.service';
 import type { AppDashboardHealthMetricSettings } from '../models/app-user.interface';
-import { buildHealthMetricWorkspaceView, buildHealthHrvPersonalRangeStatus, selectActivityHealthObservations, selectWorkoutWeightContextFallback, type HealthWorkspaceWindow, type HealthWorkspaceSeries, formatHealthValue } from './health-workspace.helper';
+import { HEALTH_WORKSPACE_SAMPLE_MAX_DAYS, buildHealthMetricWorkspaceView, buildHealthHrvPersonalRangeStatus, selectActivityHealthObservations, selectWorkoutWeightContextFallback, type HealthWorkspaceWindow, type HealthWorkspaceSeries, formatHealthValue } from './health-workspace.helper';
 import { buildHealthChartModels, buildHealthHrvChartStatusOverlay, healthHrvChartStatusDescription } from './health-metric-chart.helper';
 import { buildDashboardSleepTrendContext, resolveSleepTrendDate } from './dashboard-sleep-chart.helper';
 import type { DashboardChartAvailability } from './dashboard-chart-availability.helper';
@@ -27,7 +27,9 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
         const date = resolveSleepTrendDate(session);
         return date && date >= window.startDate && date <= window.endDate;
     });
-    const result = health?.result || projectHealthRange([], [], { startDate: window.startDate, endDate: window.endDate, metricIds: settings.metric === 'sleep' ? [] : [settings.metric], includeSamples: window.includeSamples });
+    const result = health?.result || projectLoadedHealthRange([], [], { startDate: window.startDate, endDate: window.endDate, metricIds: settings.metric === 'sleep' ? [] : [settings.metric], includeSamples: window.includeSamples }, {
+        sourceRecordsComplete: true, samplesComplete: true, maximumSampleRangeDays: HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+    });
     const observations = activities && settings.metric !== 'sleep' && isActivityHealthMetricId(settings.metric)
         ? selectActivityHealthObservations(settings.metric, result, activities.observations) : [];
     // Source records can exist without a point the selected chart can draw (for
@@ -77,6 +79,8 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
     const hasData = settings.metric === 'sleep' ? sleep.hasRealPoints === true : !!selected?.model.displayedPointCount;
     const missingSource = !!settings.sourceKey && !sources.some(source => source.key === settings.sourceKey);
     const sampleOnly = !window.includeSamples && !!health?.hasSampleBackedMetric && !hasData;
+    const sampleRangeLimited = sampleOnly || (settings.metric !== HEALTH_METRIC_IDS.HeartRate
+        && (selected?.model.series.sampleBased === true || !hasData && !!health?.hasSampleBackedMetric));
     const limited = !!health?.limitReached || activities?.complete === false;
     const notices = [...evidence.errors.map(source => evidence.staleSources?.includes(source)
         ? `${source} could not be refreshed. Previous readings are shown. Try again.`
@@ -93,9 +97,9 @@ export function buildDashboardHealthContext(evidence: DashboardHealthEvidence, s
         state: hasData ? 'ready' : unavailable ? 'error' : 'no-data', hasData,
         label: hasData ? 'Ready with your data' : unavailable ? 'Some data unavailable' : sampleOnly ? 'Choose a shorter period' : 'No data in this period',
         reason: hasData ? 'Recorded readings are available.' : missingFilteredSource ? 'No readings from the Health source filter in this period. Choose another source or period.' : missingSource ? 'The selected source and reading have no data in this period. Choose another period or source.'
-            : sampleOnly ? 'Detailed readings are available without a daily summary. Choose 30 days or less.'
+            : sampleOnly ? 'Detailed readings are available without a daily summary. Choose 90 days or less.'
                 : unavailable ? notices.join(' ') : 'No matching readings were found in this period.',
     };
-    return { window, sources, selectedKey, selected, sleep, hasData, missingSource, sampleOnly, notices, failedSources: evidence.errors.length, availability };
+    return { window, sources, selectedKey, selected, sleep, hasData, missingSource, sampleOnly, sampleRangeLimited, notices, failedSources: evidence.errors.length, availability };
 }
 export type DashboardHealthContext = ReturnType<typeof buildDashboardHealthContext>;

@@ -6,6 +6,7 @@ import {
   NormalizedHealthRangeQuery,
 } from './health';
 import { normalizeHealthRangeQuery } from './health-query';
+import type { HealthRangeQueryNormalizationOptions } from './health-query';
 
 export type HealthFirestoreFilterOperator = '==' | 'in' | 'array-contains' | 'array-contains-any';
 
@@ -62,8 +63,9 @@ function chunkMetricFilter(metricIds: readonly string[]): HealthFirestoreFilterP
 
 export function planHealthFirestoreQueries(
   queryValue: HealthRangeQuery | NormalizedHealthRangeQuery | unknown,
+  options: HealthRangeQueryNormalizationOptions = {},
 ): HealthFirestoreQueryPlans {
-  const query = normalizeHealthRangeQuery(queryValue);
+  const query = normalizeHealthRangeQuery(queryValue, options);
   // A provider predicate takes precedence so provider + metric queries do not
   // require a combinatorial provider/metric/date index. The shared projector
   // applies every requested filter to the bounded result set afterward.

@@ -347,7 +347,8 @@ describe('Health workspace helpers', () => {
     const older = navigateHealthWorkspaceWindow(state, 'older', '2026-08-30');
     expect(older.endDate).toBe('2026-08-16');
     expect(navigateHealthWorkspaceWindow(older, 'newer', '2026-08-30').endDate).toBe('2026-08-30');
-    expect(resolveHealthWorkspaceWindow({ ...state, range: '90d' }, '2026-08-30').includeSamples).toBe(false);
+    expect(resolveHealthWorkspaceWindow({ ...state, range: '90d' }, '2026-08-30').includeSamples).toBe(true);
+    expect(resolveHealthWorkspaceWindow({ ...state, range: '1y' }, '2026-08-30').includeSamples).toBe(false);
   });
 
   it('labels one-day history by its inspected date and pages it one day at a time', () => {

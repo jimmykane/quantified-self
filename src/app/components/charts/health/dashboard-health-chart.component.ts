@@ -13,7 +13,7 @@ import { HEALTH_METRIC_CATALOG } from '@shared/health';
 import type { AppDashboardHealthMetricSettings, AppHealthWorkspaceRange, AppUserInterface } from '../../../models/app-user.interface';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
 import { buildDashboardHealthContext, DashboardHealthContext, DashboardHealthEvidence } from '../../../helpers/dashboard-health-context.helper';
-import { localCalendarDate, navigateHealthWorkspaceWindow, resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
+import { HEALTH_WORKSPACE_SAMPLE_RANGE, localCalendarDate, navigateHealthWorkspaceWindow, resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
 import { DashboardHealthService } from '../../../services/dashboard-health.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HealthMetricSeriesChartComponent } from '../../health/health-metric-series-chart.component';
@@ -90,6 +90,9 @@ export class DashboardHealthChartComponent {
         value: AppHealthWorkspaceRange;
         label: string;
     }[] = [{ value: 'today', label: '1d' }, { value: '14d', label: '14d' }, { value: '30d', label: '30d' }, { value: '90d', label: '90d' }, { value: '1y', label: '1y' }];
+    isRangeDisabled(range: AppHealthWorkspaceRange): boolean {
+        return range === '1y' && this.context()?.sampleRangeLimited === true;
+    }
     // Source and formatting changes select from the same bounded evidence.
     private readonly viewKey = computed(() => JSON.stringify([this.user().settings.unitSettings,
         this.user().settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability,
@@ -173,6 +176,10 @@ export class DashboardHealthChartComponent {
         this.projectionKey = this.viewKey();
         this.context.set(context);
         this.contextChange.emit(context);
+        if (settings.range === '1y' && context.sampleRangeLimited) {
+            this.endDate.set(localCalendarDate());
+            this.settingsChange.emit({ settings: { ...this.effectiveSettings(), range: HEALTH_WORKSPACE_SAMPLE_RANGE }, initial: false });
+        }
     }
     selectSource(sourceKey: string): void {
         if (this.disabled() || sourceKey === this.effectiveSettings().sourceKey || !this.context()?.sources.some(source => source.key === sourceKey))
@@ -181,7 +188,7 @@ export class DashboardHealthChartComponent {
         this.settingsChange.emit({ settings: { ...this.settings(), sourceKey }, initial: false });
     }
     selectRange(range: AppHealthWorkspaceRange): void {
-        if (this.disabled() || range === this.settings().range)
+        if (this.disabled() || this.isRangeDisabled(range) || range === this.settings().range)
             return;
         this.haptics.selection();
         this.endDate.set(localCalendarDate());

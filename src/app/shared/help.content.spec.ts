@@ -194,7 +194,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('**Read Heart rate charts by their time period.**');
     expect(healthSection?.content).toContain('unweighted arithmetic average');
     expect(healthSection?.content).toContain('**not the day\'s true heart-rate extremes**');
-    expect(healthSection?.content).toContain('names the omitted source even when other providers have visible charts');
+    expect(healthSection?.content).toContain('names the omitted source, returns an older saved 1-year selection to 90 days');
     expect(healthSection?.content).toContain('**Calculated by QS**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
@@ -231,7 +231,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('equivalent typed Sleep reference is already present');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
-    expect(healthSection?.content).toContain('**1d**, **14d**, **30d**, **90d**, or **1y**');
+    expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed sample readings');
+    expect(healthSection?.content).toContain('**1y** remains available for readings with daily summaries');
     expect(healthSection?.content).toContain('identifies **Today**, **Yesterday**, or the inspected date');
     expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
@@ -244,7 +245,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('without overwriting your saved choice');
     expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
-    expect(healthSection?.content).toContain('Detailed sample charts are available for 1d, 14-day, and 30-day windows');
+    expect(healthSection?.content).toContain('Detailed sample charts are available for 1d, 14-day, 30-day, and 90-day windows');
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');

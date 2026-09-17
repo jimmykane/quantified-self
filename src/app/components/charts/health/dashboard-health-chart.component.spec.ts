@@ -13,6 +13,7 @@ import { DashboardHealthService } from '../../../services/dashboard-health.servi
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
 import { DashboardHealthEvidence } from '../../../helpers/dashboard-health-context.helper';
+import { projectLoadedHealthRange } from '@shared/health-query';
 
 describe('independent dashboard Health views',()=>{
   const owner=signal(true), watch=vi.fn(), haptics={selection:vi.fn()};
@@ -26,10 +27,10 @@ describe('independent dashboard Health views',()=>{
     ]}).overrideComponent(DashboardHealthChartComponent,{set:{template:'',imports:[]}}).compileComponents();
   });
   afterEach(() => vi.unstubAllGlobals());
-  function create(metric='steps') {
+  function create(metric='steps', range: '30d' | '1y' = '30d') {
     const fixture=TestBed.createComponent(DashboardHealthChartComponent);
     fixture.componentRef.setInput('user',{uid:'owner',settings:{unitSettings:{},appSettings:{}}});
-    fixture.componentRef.setInput('settings',{metric,range:'30d'});
+    fixture.componentRef.setInput('settings',{metric,range});
     fixture.componentInstance['visible'].set(true);fixture.detectChanges();return fixture;
   }
   function result(metric='steps',endDate='2026-09-15'):DashboardHealthEvidence {
@@ -204,6 +205,22 @@ describe('independent dashboard Health views',()=>{
     expect(changed).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
   });
 
+  it('normalizes an existing sample-only year to 90 days and disables selecting it again', () => {
+    const fixture = create('stress_state', '1y');
+    const component = fixture.componentInstance;
+    const changed = vi.fn(); component.settingsChange.subscribe(changed);
+    const window = resolveHealthWorkspaceWindow({ metric: 'stress_state', range: '1y', endDate: '2026-09-15' }, '2026-09-15');
+    const result = projectLoadedHealthRange([], [], {
+      startDate: window.startDate, endDate: window.endDate, metricIds: ['stress_state'], includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    streams[0].next({ window, health: { result, limitReached: null, sourceRecordCount: 1, sampleChunkCount: 0,
+      samplePointCount: 0, serializedBytes: 0, hasMatchingSourceRecords: true, hasSampleBackedMetric: true,
+      providers: ['SuuntoApp'], sampleBackedProviders: ['SuuntoApp'] }, history: null, activities: null, sessions: [], errors: [] });
+    fixture.detectChanges();
+    expect(component.isRangeDisabled('1y')).toBe(true);
+    expect(changed).toHaveBeenCalledWith({ settings: { metric: 'stress_state', range: '90d' }, initial: false });
+  });
+
 });
 
 
@@ -218,20 +235,20 @@ describe('Health library preview states', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(DashboardHealthChartComponent);
     fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {} } });
-    fixture.componentRef.setInput('settings', { metric: 'heart_rate', range: '90d' });
+    fixture.componentRef.setInput('settings', { metric: 'stress_state', range: '1y' });
     fixture.componentRef.setInput('preview', true);
     fixture.detectChanges();
     const component = fixture.componentInstance;
     const context = buildDashboardHealthContext({ window: component.window(), health: null, history: null, activities: null, sessions: [], errors: [] }, component.settings());
-    component.context.set({ ...context, sampleOnly: true, availability: { ...context.availability, reason: 'Detailed readings are available without a daily summary. Choose 30 days or less.' } });
+    component.context.set({ ...context, sampleOnly: true, sampleRangeLimited: true, availability: { ...context.availability, reason: 'Detailed readings are available without a daily summary. Choose 90 days or less.' } });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Example data');
-    expect(fixture.nativeElement.textContent).toContain('Choose 30 days or less');
+    expect(fixture.nativeElement.textContent).toContain('Choose 90 days or less');
     expect(fixture.nativeElement.querySelector('app-health-metric-series-chart')).toBeTruthy();
     const changed = vi.fn(); component.settingsChange.subscribe(changed);
-    const button = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(item => item.textContent?.includes('Show 30 days'))!;
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(item => item.textContent?.includes('Show 90 days'))!;
     button.click();
-    expect(changed).toHaveBeenCalledWith({ settings: { metric: 'heart_rate', range: '30d' }, initial: false });
+    expect(changed).toHaveBeenCalledWith({ settings: { metric: 'stress_state', range: '90d' }, initial: false });
     fixture.destroy();
   });
 });
