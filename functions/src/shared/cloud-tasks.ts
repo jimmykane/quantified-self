@@ -37,6 +37,8 @@ interface EnqueueSportsLibReparseHeavyTaskOptions {
 interface EnqueueWorkoutTaskOptions {
     recoveryTaskKey?: number | string;
     queueRevision?: string;
+    /** Enqueue the recovery name directly instead of deduplicating against the base task. */
+    forceRecoveryTask?: boolean;
 }
 
 export interface WorkoutTaskDispatchItem {
@@ -295,6 +297,43 @@ export async function enqueueWorkoutTask(
             : {}),
     };
 
+    const recoveryTaskKey = sanitizeTaskNamePart(`${options.recoveryTaskKey ?? 0}`);
+    const recoveryTaskId = `${taskId}-dedupe-recovery-${recoveryTaskKey}`;
+    const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
+
+    const enqueueRecoveryTask = async (): Promise<boolean> => {
+        const recoveryTaskCreated = await enqueueTaskWithRetry({
+            projectId,
+            location,
+            functionName: workoutQueue,
+            taskId: recoveryTaskId,
+            payload,
+            scheduleDelaySeconds,
+            alreadyExistsLogMessage: `[Dispatcher] Recovery task already exists for ${serviceName}:${queueItemId}, skipping`,
+            failedLogPrefix: `[Dispatcher] Failed to enqueue recovery task for ${serviceName}:${queueItemId}:`,
+        });
+        if (recoveryTaskCreated) {
+            return true;
+        }
+
+        if (await cloudTaskExists(recoveryTaskName)) {
+            logger.info(`[Dispatcher] Existing recovery task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
+            return true;
+        }
+
+        logger.warn(`[Dispatcher] Recovery task name for ${serviceName}:${queueItemId} is reserved but no live recovery task was found; leaving dispatch marker unchanged.`);
+        return false;
+    };
+
+    // A running worker can intentionally schedule a follow-up while its base
+    // task is still live. Bypassing the base name is necessary in that case:
+    // treating the currently executing task as the follow-up would strand the
+    // queue item once it acknowledges.
+    if (options.forceRecoveryTask) {
+        logger.info(`[Dispatcher] Enqueueing forced recovery task for ${serviceName}:${queueItemId}.`);
+        return enqueueRecoveryTask();
+    }
+
     const taskCreated = await enqueueTaskWithRetry({
         projectId,
         location,
@@ -314,31 +353,8 @@ export async function enqueueWorkoutTask(
         return true;
     }
 
-    const recoveryTaskKey = sanitizeTaskNamePart(`${options.recoveryTaskKey ?? 0}`);
-    const recoveryTaskId = `${taskId}-dedupe-recovery-${recoveryTaskKey}`;
-    const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
     logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
-    const recoveryTaskCreated = await enqueueTaskWithRetry({
-        projectId,
-        location,
-        functionName: workoutQueue,
-        taskId: recoveryTaskId,
-        payload,
-        scheduleDelaySeconds,
-        alreadyExistsLogMessage: `[Dispatcher] Recovery task already exists for ${serviceName}:${queueItemId}, skipping`,
-        failedLogPrefix: `[Dispatcher] Failed to enqueue recovery task for ${serviceName}:${queueItemId}:`,
-    });
-    if (recoveryTaskCreated) {
-        return true;
-    }
-
-    if (await cloudTaskExists(recoveryTaskName)) {
-        logger.info(`[Dispatcher] Existing recovery task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
-        return true;
-    }
-
-    logger.warn(`[Dispatcher] Recovery task name for ${serviceName}:${queueItemId} is reserved but no live recovery task was found; leaving dispatch marker unchanged.`);
-    return false;
+    return enqueueRecoveryTask();
 }
 
 function workoutTaskRetryGeneration(queueItem: Pick<WorkoutTaskDispatchItem, 'totalRetryCount' | 'retryCount'>): number {

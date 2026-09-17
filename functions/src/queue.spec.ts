@@ -3032,6 +3032,28 @@ describe('queue', () => {
                 retryCount: expect.any(Number),
                 totalRetryCount: expect.any(Number),
             }));
+            expect(vi.mocked(utils.enqueueWorkoutTask)).toHaveBeenCalledWith(
+                ServiceNames.SuuntoApp,
+                suuntoQueueItem.id,
+                suuntoQueueItem.dateCreated,
+                95,
+                expect.objectContaining({
+                    forceRecoveryTask: true,
+                    recoveryTaskKey: expect.stringMatching(/^token-refresh-/),
+                }),
+            );
+        });
+
+        it('keeps the current Cloud Task retryable when the contention follow-up cannot be enqueued', async () => {
+            vi.mocked(getTokenData).mockRejectedValueOnce(new TokenRefreshInProgressError());
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValueOnce(false);
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.Failed);
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                dispatchedToCloudTask: null,
+            }));
         });
 
         it('defers rather than DLQing a legacy shared-provider item when another token is refreshing', async () => {

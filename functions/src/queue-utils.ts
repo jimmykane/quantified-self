@@ -553,10 +553,11 @@ export async function deferQueueItemForPendingDisconnectIfCurrentUserActive(
 }
 
 /**
- * A competing worker already owns the token-refresh lease. Re-open only the
- * current queue item for the scheduled dispatcher without charging its
- * provider-failure retry budget. The lease makes a duplicate refresh unsafe;
- * acknowledging this task lets the winning refresh complete first.
+ * A competing worker already owns the token-refresh lease. After the caller
+ * has enqueued a distinct delayed recovery task, re-open only the current
+ * queue item without charging its provider-failure retry budget. The lease
+ * makes a duplicate refresh unsafe; acknowledging this task lets the winning
+ * refresh complete first.
  */
 export async function deferQueueItemForTokenRefreshContentionIfCurrentUserActive(
     params: DeferQueueItemForTokenRefreshContentionIfCurrentUserActiveParams,
