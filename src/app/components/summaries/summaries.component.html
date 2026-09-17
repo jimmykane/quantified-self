@@ -64,7 +64,7 @@
   }
   @if (showTodaySummary) {
   <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
-    [class.has-recovery]="dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null">
+    [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null)">
     <div class="dashboard-current-state-top">
       <div class="dashboard-current-state-primary dashboard-training-state-primary">
         <span>Training state</span>
@@ -114,6 +114,10 @@
       <small class="dashboard-readiness-imported-recovery">Recovery left · <strong>{{ dashboardTodayReadiness.recoveryText }}</strong> remaining · until {{ dashboardTodayReadiness.recoveryFinishTimeMs | date:'shortTime' }} · separate from score</small>
       <app-metric-indicator class="dashboard-readiness-recovery-indicator" label="Recovery remaining"
         [value]="dashboardTodayReadiness.recoveryRemainingPercent" [max]="100" tone="recover" [compact]="true"></app-metric-indicator>
+    </div>
+    } @else if (dashboardTodayReadiness.loading) {
+    <div class="dashboard-readiness-recovery-band dashboard-readiness-recovery-placeholder" aria-hidden="true">
+      <span></span><span></span>
     </div>
     }
     <dl>

@@ -1587,12 +1587,21 @@ describe('SummariesComponent', () => {
       const scoreSlot = readiness.querySelector('.dashboard-readiness-score')!;
       const training = host.querySelector<HTMLElement>('.dashboard-training-state-primary')!;
       const drivers = [...host.querySelectorAll<HTMLElement>('.dashboard-current-state-row dl > div')];
+      const reservedTopAndRecoveryHeight = () => {
+        const top = host.querySelector<HTMLElement>('.dashboard-current-state-top')!;
+        const recovery = host.querySelector<HTMLElement>('.dashboard-readiness-recovery-band');
+        return parseFloat(getComputedStyle(top).minBlockSize)
+          + (recovery ? parseFloat(getComputedStyle(recovery).minBlockSize) : 0);
+      };
       const reservations = () => [training, readiness, ...drivers].map(element => ({
         minimum: getComputedStyle(element).minBlockSize,
         sizing: getComputedStyle(element).boxSizing,
       }));
       const pendingLayout = reservations();
+      const pendingTopAndRecoveryHeight = reservedTopAndRecoveryHeight();
       expect(pendingLayout.every(({ minimum, sizing }) => parseFloat(minimum) > 0 && sizing === 'border-box')).toBe(true);
+      expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).not.toBeNull();
+      expect(getComputedStyle(host.querySelector<HTMLElement>('.dashboard-readiness-recovery-band')!).boxSizing).toBe('border-box');
       expect(getComputedStyle(readiness).alignContent).toBe('start');
       expect(scoreSlot.querySelector('[aria-label="Loading readiness"]')).not.toBeNull();
 
@@ -1604,8 +1613,10 @@ describe('SummariesComponent', () => {
       expect(readiness.querySelector('.dashboard-readiness-score')).toBe(scoreSlot);
       expect(scoreSlot.querySelector('[label="Readiness"]')).not.toBeNull();
       expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).toBeNull();
       expect(host.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night');
       expect(reservations()).toEqual(pendingLayout);
+      expect(reservedTopAndRecoveryHeight()).toBe(pendingTopAndRecoveryHeight);
 
       sleep$.error(new Error('refresh failed'));
       vi.advanceTimersToNextFrame();

@@ -175,11 +175,22 @@
   background: var(--mat-sys-surface-container);
   border-bottom: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
   border-top: 1px solid var(--qs-glass-panel-border, var(--mat-sys-outline-variant));
+  box-sizing: border-box;
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(260px, 0.75fr) minmax(280px, 1.25fr);
-  min-block-size: 3rem;
+  min-block-size: 3.75rem;
   padding: 0.65rem 1rem;
+}
+
+.dashboard-readiness-recovery-placeholder > span {
+  background: var(--mat-sys-surface-container-highest);
+  border-radius: 999px;
+  block-size: 0.45rem;
+}
+
+.dashboard-readiness-recovery-placeholder > span:first-child {
+  inline-size: min(100%, 260px);
 }
 
 .dashboard-readiness-imported-recovery {
@@ -342,7 +353,16 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    min-block-size: 5.25rem;
     padding: 0.8rem 1rem;
+  }
+
+  .dashboard-readiness-recovery-placeholder {
+    justify-content: center;
+  }
+
+  .dashboard-readiness-recovery-placeholder > span:last-child {
+    inline-size: min(100%, 170px);
   }
 }
 
@@ -353,6 +373,10 @@
 
   .dashboard-readiness-primary {
     min-block-size: 10rem;
+  }
+
+  .dashboard-readiness-recovery-band {
+    min-block-size: 6rem;
   }
 
   .dashboard-current-state-row dl > .dashboard-readiness-hrv {
