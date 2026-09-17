@@ -73,7 +73,6 @@ describe('deferWorkoutQueueItemForTokenRefreshContention', () => {
       updateData: expect.objectContaining({
         dispatchedToCloudTask: 2_000,
         dispatchRecoveryGeneration: 4,
-        providerOperationStartedAt: null,
         processingLeaseOwner: null,
       }),
     }));

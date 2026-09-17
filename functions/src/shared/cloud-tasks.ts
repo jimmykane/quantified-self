@@ -291,9 +291,9 @@ export async function enqueueWorkoutTask(
     const payload = {
         queueItemId,
         serviceName,
-        ...(typeof options.dispatchRecoveryGeneration === 'number'
-            ? { dispatchRecoveryGeneration: options.dispatchRecoveryGeneration }
-            : {}),
+        dispatchRecoveryGeneration: typeof options.dispatchRecoveryGeneration === 'number'
+            ? options.dispatchRecoveryGeneration
+            : 0,
         ...(queueRevision ? { queueRevision } : {}),
         ...((serviceName === ServiceNames.COROSAPI || options.recoveryTaskOnly) && !queueRevision
             ? { queueDateCreated: safeDateCreated }

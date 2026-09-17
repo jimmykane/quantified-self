@@ -133,7 +133,7 @@ describe('Cloud Tasks Utils', () => {
                 'projects/test-project/locations/test-location/functions/processWorkoutTask',
             );
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
-                { queueItemId: 'item-123', serviceName: 'garminAPI' },
+                { queueItemId: 'item-123', serviceName: 'garminAPI', dispatchRecoveryGeneration: 0 },
                 { id: 'garminAPI-item-123-1000', scheduleDelaySeconds: 60 },
             );
         });
@@ -144,7 +144,7 @@ describe('Cloud Tasks Utils', () => {
             await expect(enqueueWorkoutTask('service.with.dots' as ServiceNames, 'item/with spaces', 7.8)).resolves.toBe(true);
 
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
-                { queueItemId: 'item/with spaces', serviceName: 'service.with.dots' },
+                { queueItemId: 'item/with spaces', serviceName: 'service.with.dots', dispatchRecoveryGeneration: 0 },
                 { id: 'service-with-dots-item-with-spaces-7', scheduleDelaySeconds: 1 },
             );
         });
@@ -178,6 +178,7 @@ describe('Cloud Tasks Utils', () => {
                 {
                     queueItemId: 'legacy-item',
                     serviceName: 'corosAPI',
+                    dispatchRecoveryGeneration: 0,
                     queueDateCreated: 1000,
                 },
                 { id: 'corosAPI-legacy-item-1000', scheduleDelaySeconds: 1 },
@@ -230,11 +231,11 @@ describe('Cloud Tasks Utils', () => {
             })).resolves.toBe(true);
 
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(1,
-                { queueItemId: 'item-123', serviceName: 'suuntoApp' },
+                { queueItemId: 'item-123', serviceName: 'suuntoApp', dispatchRecoveryGeneration: 0 },
                 { id: 'suuntoApp-item-123-1000', scheduleDelaySeconds: 1 },
             );
             expect(hoisted.mockTaskQueue.enqueue).toHaveBeenNthCalledWith(2,
-                { queueItemId: 'item-123', serviceName: 'suuntoApp' },
+                { queueItemId: 'item-123', serviceName: 'suuntoApp', dispatchRecoveryGeneration: 0 },
                 { id: 'suuntoApp-item-123-1000-dedupe-recovery-7', scheduleDelaySeconds: 1 },
             );
             expect(hoisted.mockCloudTasksClient.getTask).toHaveBeenCalledWith({

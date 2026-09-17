@@ -100,7 +100,6 @@ export async function deferWorkoutQueueItemForTokenRefreshContention(
       updateData: {
         dispatchedToCloudTask: recoveryDispatchedAtMs,
         dispatchRecoveryGeneration: recoveryGeneration,
-        providerOperationStartedAt: null,
         ...clearRevisionProcessingLeaseUpdate(),
       },
       isCurrent: currentQueueItem => params.isCurrent(currentQueueItem)
