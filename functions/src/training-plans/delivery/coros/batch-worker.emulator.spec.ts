@@ -133,6 +133,38 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     expect(JSON.parse(client.mock.calls[1][0].data).Workouts).toHaveLength(1);
   });
 
+  it('clears an expired unstarted attempt when another saved time zone defers that workout', async () => {
+    const ids = await seed(2);
+    const user = db.collection('users').doc(uid);
+    await user.collection('trainingDeliverySettings').doc('workout_w1_coros').update({
+      timeZone: 'America/New_York', revision: 2, updatedAtMs: now + 1,
+    });
+    const ledger = (await user.collection(DELIVERY_LEDGER).doc(ids[1]).get()).data() as DeliveryLedgerV1;
+    const attempt = { id: 'deferred-prepared-operation', batchId: 'abandoned-batch', kind: 'upsert' as const,
+      deliveryId: ids[1], generation: ledger.desiredGeneration, connectionGeneration: 'connection',
+      destinationKey: 'destination', timeZone: 'America/New_York', digest: ledger.desiredDigest,
+      contentDigest: ledger.contentDigest, workout: workout(1), artifact: null, progress: null };
+    await user.collection(DELIVERY_LEDGER).doc(ids[1]).update({
+      timeZone: 'America/New_York', attempt, lease: { id: 'expired-lease', expiresAtMs: now - 1 },
+    });
+    await user.collection(DELIVERY_LEDGER).doc(ids[1]).collection('attempts').doc(attempt.id)
+      .set({ schemaVersion: 1, operation: attempt, state: 'prepared', startedAtMs: now - 1000 });
+
+    await processTrainingDelivery(runtime, uid, ids[0]);
+
+    expect(client).toHaveBeenCalledTimes(1);
+    expect((await user.collection(DELIVERY_LEDGER).doc(ids[1]).get()).data())
+      .toMatchObject({ status: 'pending', attempt: null, lease: null, timeZone: 'America/New_York' });
+    expect((await user.collection(DELIVERY_LEDGER).doc(ids[1]).collection('attempts').doc(attempt.id).get()).data())
+      .toMatchObject({ state: 'superseded', reason: 'request_not_started' });
+    expect((await db.collection(DELIVERY_QUEUE).doc(ids[1]).get()).exists).toBe(true);
+
+    await processTrainingDelivery(runtime, uid, ids[1]);
+    expect(client).toHaveBeenCalledTimes(2);
+    expect((await user.collection(DELIVERY_LEDGER).doc(ids[1]).get()).data())
+      .toMatchObject({ status: 'delivered', attempt: null, lease: null });
+  });
+
   it('retains stable workout identities across an authored edit', async () => {
     const [id] = await seed(1);
     await processTrainingDelivery(runtime, uid, id);

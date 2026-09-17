@@ -131,14 +131,23 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
         continue;
       }
       if (kind !== operationKind) {
-        deferredWrites.push(() => tx.set(job.ref, { ...queueMetadata(ledger, kind), uid, dueAtMs: 0,
-          dispatchToken: randomUUID() }, { merge: true }));
+        deferredWrites.push(() => {
+          writeDelivery(runtime, tx, uid, ledger);
+          tx.set(job.ref, { ...queueMetadata(ledger, kind), uid, dueAtMs: 0,
+            dispatchToken: randomUUID() }, { merge: true });
+        });
         continue;
       }
       // A provider request has one scheduling calendar. Workouts with another
       // saved zone remain queued for a later batch instead of invalidating all
       // otherwise eligible members of this one.
-      if (batchTimeZone !== null && intent.timeZone !== batchTimeZone) continue;
+      if (batchTimeZone !== null && intent.timeZone !== batchTimeZone) {
+        // Persist refreshed intent and, critically, removal of an expired
+        // prepared attempt even though this workout belongs in another batch.
+        // Its queue leaf stays due so the next worker can claim that zone.
+        deferredWrites.push(() => writeDelivery(runtime, tx, uid, ledger));
+        continue;
+      }
       batchTimeZone = intent.timeZone;
       prepared.push({ ledger, operation: { id: randomUUID(), kind, deliveryId: ledger.id,
         generation: ledger.desiredGeneration, connectionGeneration: context.connection.generation,
