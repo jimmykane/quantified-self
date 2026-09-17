@@ -49,7 +49,7 @@ import type {
 import { MANUAL_HEALTH_SOURCE_RECORD_TYPE, MANUAL_HEALTH_VALUE_MAXIMUMS } from '@shared/manual-health';
 import { decodeHealthSourceRecordSportsLibData } from '@shared/sports-lib-health-data';
 import { countStaleHeartRateChunks, withDailyHeartRateSummaries } from '../helpers/health-heart-rate-summary.helper';
-import { HEALTH_WORKSPACE_SAMPLE_MAX_DAYS } from '../helpers/health-workspace.helper';
+import { APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS } from '../models/app-user.interface';
 
 export const HEALTH_WORKSPACE_LOAD_LIMITS = Object.freeze({
     sourceRecords: 2_048,
@@ -264,7 +264,7 @@ export class AppHealthService {
             includeSamples: request.includeSamples,
         };
         const normalizedQuery = planHealthFirestoreQueries(queryValue, {
-            maximumSampleRangeDays: HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+            maximumSampleRangeDays: APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
         }).query;
         if (!uid) {
             return this.buildWorkspaceLoad([], [], normalizedQuery, true, true, null, null, 0);
@@ -352,7 +352,7 @@ export class AppHealthService {
         let serializedBytes = 0;
         while (true) {
             const plan = planHealthFirestoreQueries({ ...queryValue, sourceRecordCursor: cursor }, {
-                maximumSampleRangeDays: HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+                maximumSampleRangeDays: APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
             }).sourceRecords;
             const snapshot = await getDocs(this.buildCollectionQuery(userID, plan));
             const page = snapshot.docs.slice(0, plan.fetchLimit - 1);
@@ -465,7 +465,7 @@ export class AppHealthService {
             samplesComplete,
             sourceRecordCursor,
             chunkCursor,
-            maximumSampleRangeDays: HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+            maximumSampleRangeDays: APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
         });
         const metricId = result.query.metricIds[0];
         const matchingRecords = metricId

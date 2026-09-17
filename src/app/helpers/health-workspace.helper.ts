@@ -53,6 +53,8 @@ import {
 import {
   APP_HEALTH_WORKSPACE_METRICS,
   APP_HEALTH_WORKSPACE_RANGES,
+  APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+  APP_HEALTH_WORKSPACE_SAMPLE_RANGE,
   AppHealthWorkspaceMetric,
   AppHealthWorkspaceRange,
 } from '../models/app-user.interface';
@@ -82,8 +84,8 @@ export type HealthWorkspaceSleepSession = SleepSession & { healthAccountKey?: st
 
 export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRate;
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
-export const HEALTH_WORKSPACE_SAMPLE_RANGE: HealthWorkspaceRange = '90d';
-export const HEALTH_WORKSPACE_SAMPLE_MAX_DAYS = 90;
+export const HEALTH_WORKSPACE_SAMPLE_RANGE = APP_HEALTH_WORKSPACE_SAMPLE_RANGE;
+export const HEALTH_WORKSPACE_SAMPLE_MAX_DAYS = APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS;
 const HEALTH_WORKSPACE_METRICS = new Set<HealthWorkspaceMetricSelection>([
   ...APP_HEALTH_WORKSPACE_METRICS,
 ].filter(metric => metric !== HEALTH_METRIC_IDS.Distance

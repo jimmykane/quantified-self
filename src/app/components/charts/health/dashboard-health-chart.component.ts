@@ -58,6 +58,7 @@ export class DashboardHealthChartComponent {
     private identity = '';
     private evidence: DashboardHealthEvidence | null = null;
     private projectionKey: string | null = null;
+    private sampleRangeCorrectionPending = false;
     readonly sleepThumbnail = computed(() => ({
         tile: { ...buildDashboardManagerPresetTile({ presetId: 'curated-sleep', order: 0, size: { columns: 1, rows: 1 } }), sleepTrend: this.displayContext()?.sleep },
         source: 'user', loading: false, note: '', calendarEvents: [], anchorMs: Date.now(),
@@ -107,6 +108,7 @@ export class DashboardHealthChartComponent {
             this.requestKey();
             untracked(() => {
                 const user = this.user(), settings = this.settings(), endDate = this.endDate();
+                if (settings.range !== '1y') this.sampleRangeCorrectionPending = false;
                 const identity = `${user.uid}:${settings.metric}`;
                 const visible = this.visible(), priority = this.priority();
                 if (identity !== this.identity) {
@@ -114,11 +116,13 @@ export class DashboardHealthChartComponent {
                     this.context.set(null);
                     this.initialSource.set(null);
                     this.evidence = null;
+                    this.sampleRangeCorrectionPending = false;
                 }
                 const version = ++this.version;
                 if (!visible || !this.data.isOwner(user.uid)) {
                     this.context.set(null);
                     this.evidence = null;
+                    this.sampleRangeCorrectionPending = false;
                     this.loading.set(false);
                     return;
                 }
@@ -177,8 +181,13 @@ export class DashboardHealthChartComponent {
         this.context.set(context);
         this.contextChange.emit(context);
         if (settings.range === '1y' && context.sampleRangeLimited) {
-            this.endDate.set(localCalendarDate());
-            this.settingsChange.emit({ settings: { ...this.effectiveSettings(), range: HEALTH_WORKSPACE_SAMPLE_RANGE }, initial: false });
+            if (!this.sampleRangeCorrectionPending) {
+                this.sampleRangeCorrectionPending = true;
+                this.endDate.set(localCalendarDate());
+                this.settingsChange.emit({ settings: { ...this.effectiveSettings(), range: HEALTH_WORKSPACE_SAMPLE_RANGE }, initial: false });
+            }
+        } else {
+            this.sampleRangeCorrectionPending = false;
         }
     }
     selectSource(sourceKey: string): void {

@@ -48,6 +48,8 @@ export type AppDashboardSleepTrendRange = '14d' | '30d' | '90d' | '1y';
 
 export const APP_HEALTH_WORKSPACE_RANGES = ['today', '14d', '30d', '90d', '1y'] as const;
 export type AppHealthWorkspaceRange = typeof APP_HEALTH_WORKSPACE_RANGES[number];
+export const APP_HEALTH_WORKSPACE_SAMPLE_RANGE: AppHealthWorkspaceRange = '90d';
+export const APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS = 90;
 export type AppHealthWorkspaceMetric = 'sleep' | HealthMetricId;
 export const APP_HEALTH_WORKSPACE_METRICS: readonly AppHealthWorkspaceMetric[] = [
     'sleep',

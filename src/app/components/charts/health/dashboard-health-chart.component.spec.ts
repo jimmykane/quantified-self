@@ -213,12 +213,15 @@ describe('independent dashboard Health views',()=>{
     const result = projectLoadedHealthRange([], [], {
       startDate: window.startDate, endDate: window.endDate, metricIds: ['stress_state'], includeSamples: false,
     }, { sourceRecordsComplete: true, samplesComplete: true });
-    streams[0].next({ window, health: { result, limitReached: null, sourceRecordCount: 1, sampleChunkCount: 0,
+    const evidence = { window, health: { result, limitReached: null, sourceRecordCount: 1, sampleChunkCount: 0,
       samplePointCount: 0, serializedBytes: 0, hasMatchingSourceRecords: true, hasSampleBackedMetric: true,
-      providers: ['SuuntoApp'], sampleBackedProviders: ['SuuntoApp'] }, history: null, activities: null, sessions: [], errors: [] });
+      providers: ['SuuntoApp'], sampleBackedProviders: ['SuuntoApp'] }, history: null, activities: null, sessions: [], errors: [] } as DashboardHealthEvidence;
+    streams[0].next(evidence);
     fixture.detectChanges();
     expect(component.isRangeDisabled('1y')).toBe(true);
     expect(changed).toHaveBeenCalledWith({ settings: { metric: 'stress_state', range: '90d' }, initial: false });
+    streams[0].next(evidence);
+    expect(changed).toHaveBeenCalledTimes(1);
   });
 
 });
