@@ -102,7 +102,8 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         EventImporterFIT: {
             getFromArrayBuffer: vi.fn(() => ({
                 startDate: new Date(),
-                getID: () => 'event-123'
+                getID: () => 'event-123',
+                getActivities: () => [],
             }))
         }
     };
