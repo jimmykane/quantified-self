@@ -68,6 +68,12 @@ import {
 } from '../../helpers/dashboard-training-insights.helper';
 import { formatDashboardRelativeDay } from '../../helpers/dashboard-relative-date.helper';
 import { buildCurrentTrainingStateContext } from '../../helpers/current-training-state.helper';
+import {
+  buildDashboardTodayLoadBars,
+  buildDashboardTodayOvernightHeartRateBars,
+  resolveDashboardTodayTrainingStateScale,
+  type DashboardTodayHistoryBar,
+} from '../../helpers/dashboard-today-visuals.helper';
 import { AppUserService } from '../../services/app.user.service';
 import {
   DashboardDerivedMetricsService,
@@ -234,11 +240,15 @@ interface DashboardTodayReadinessViewModel {
   recoveryText: string;
   recoveryRemainingPercent: number | null;
   recoveryFinishTimeMs: number | null;
+  loadBars: DashboardTodayHistoryBar[];
+  overnightHeartRateBars: DashboardTodayHistoryBar[];
 }
 
 interface DashboardTodayTrainingStateViewModel {
   label: string;
   caption: string;
+  scalePosition: number | null;
+  scaleTone: DashboardTodayReadinessTone;
 }
 
 function createEmptyDashboardTodayReadinessViewModel(loading = false): DashboardTodayReadinessViewModel {
@@ -266,6 +276,8 @@ function createEmptyDashboardTodayReadinessViewModel(loading = false): Dashboard
     recoveryText: '--',
     recoveryRemainingPercent: null,
     recoveryFinishTimeMs: null,
+    loadBars: [],
+    overnightHeartRateBars: [],
   };
 }
 
@@ -273,6 +285,8 @@ function createEmptyDashboardTodayTrainingStateViewModel(): DashboardTodayTraini
   return {
     label: 'Awaiting data',
     caption: 'TSS-derived state is preparing',
+    scalePosition: null,
+    scaleTone: 'neutral',
   };
 }
 
@@ -438,6 +452,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public derivedMetricsBanner: DashboardDerivedMetricsBanner | null = null;
   public dashboardTodayReadiness = createEmptyDashboardTodayReadinessViewModel(true);
   public dashboardTodayTrainingState = createEmptyDashboardTodayTrainingStateViewModel();
+  public readonly dashboardTodayTrainingStateScaleSegments = [0, 1, 2, 3, 4, 5];
 
   private readonly onDocumentVisibilityChange = (): void => {
     if (this.documentRef.visibilityState !== 'visible') {
@@ -1926,10 +1941,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       || this.derivedFormNowContext;
     const rampRate = resolveDashboardRampRateContextFromPoints(this.derivedFormPoints, nowMs)
       || this.derivedRampRateContext;
+    const sleepTrend = buildDashboardSleepTrendContext(this.readinessSleepSessions);
     const context = buildDashboardReadinessSignalsContext({
       formNow,
       rampRate,
-      sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
+      sleepTrend,
       nowMs,
     });
     const recoveryRemainingSeconds = resolveRemainingRecoverySeconds(this.derivedRecoveryNowContext, nowMs);
@@ -1941,6 +1957,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       : null;
     const recoveryText = formatSleepDuration(recoveryRemainingSeconds);
     const recoveryFinishTimeMs = resolveRecoveryFinishTimeMs(this.derivedRecoveryNowContext, nowMs);
+    const loadBars = buildDashboardTodayLoadBars(
+      this.derivedFormPoints,
+      this.dashboardTodayTrainingState.label,
+      nowMs,
+    );
     if (!context) {
       return {
         ...createEmptyDashboardTodayReadinessViewModel(),
@@ -1949,9 +1970,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         recoveryText,
         recoveryRemainingPercent,
         recoveryFinishTimeMs,
+        loadBars,
       };
     }
     const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, this.user?.settings?.unitSettings);
+    const overnightHeartRateTone = this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true);
     return {
       loading: false,
       warningText,
@@ -1976,10 +1999,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       overnightHeartRateDeviationPercent: context.overnightHeartRateRatio === null
         ? null
         : (context.overnightHeartRateRatio - 1) * 100,
-      overnightHeartRateTone: this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true),
+      overnightHeartRateTone,
       recoveryText,
       recoveryRemainingPercent,
       recoveryFinishTimeMs,
+      loadBars,
+      overnightHeartRateBars: buildDashboardTodayOvernightHeartRateBars(
+        sleepTrend,
+        overnightHeartRateTone,
+        nowMs,
+      ),
     };
   }
 
@@ -1989,15 +2018,19 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       fallbackFormNow: this.derivedFormNowContext,
       fallbackRampRate: this.derivedRampRateContext,
     }).state;
+    const label = state.label || 'Awaiting data';
+    const scale = resolveDashboardTodayTrainingStateScale(label);
     return {
-      label: state.label || 'Awaiting data',
+      label,
       caption: state.caption || 'TSS-derived state is preparing',
+      scalePosition: scale.position,
+      scaleTone: scale.tone,
     };
   }
 
   private refreshDashboardTodaySignals(): void {
-    this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
     this.dashboardTodayTrainingState = this.buildDashboardTodayTrainingState();
+    this.dashboardTodayReadiness = this.buildDashboardTodayReadiness();
   }
 
   private formatDashboardTodayMetric(value: number | null | undefined, signed = false): string {

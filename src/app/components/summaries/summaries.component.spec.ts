@@ -1450,6 +1450,11 @@ describe('SummariesComponent', () => {
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
+    expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars')?.getAttribute('aria-label'))
+      .toBe('Overnight heart rate for the latest 7 eligible nights');
+    expect(overnightHeartRate?.querySelectorAll('.dashboard-today-history-bars > span')).toHaveLength(7);
+    expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars > span.current')?.getAttribute('data-tone'))
+      .toBe('positive');
     const sleep = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Sleep');
     expect(sleep?.querySelector('small')?.textContent?.trim()).toBe('Today');
@@ -1721,6 +1726,11 @@ describe('SummariesComponent', () => {
     expect(state.textContent).toContain('TSS only');
     expect(state.querySelector('strong')?.textContent?.trim()).toBe('Fatigued');
     expect(state.querySelector('app-metric-indicator')).toBeNull();
+    expect(state.querySelector('.dashboard-training-state-scale')?.getAttribute('aria-label'))
+      .toBe('Training state: Fatigued');
+    expect(state.querySelectorAll('.dashboard-training-state-scale > span')).toHaveLength(6);
+    expect(state.querySelector('.dashboard-training-state-scale > span.active')?.getAttribute('data-tone'))
+      .toBe('negative');
   });
 
   it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {
