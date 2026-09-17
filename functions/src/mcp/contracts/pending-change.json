@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "c1b6448bba7d8ead036fed3c6d3b4a7f73da51c296b7e81481944832c66cb17f",
+  "candidateSha256": "f9217fdf0f3766f270b68c782c57e96d06877b656492c9505415163c943866e4",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add Training plan/workout reads, exact completion links, sync summaries, independent write/delivery scopes, bounded preview and confirmed apply (#690; #652/#651). Retain pending formula-4 readiness/history and HRV; frozen formula-3; activity samples, descriptions and tags; Timeline notes; Health; reports; nearby activity/routes; multi-metric queries; Training discovery; activity overviews and rankings; jump/sleep-vital routing; RS256 private_key_jwt; and PKCE.",
+  "summary": "Add Training plan/workout reads, exact completion links, sync summaries, independent write/delivery scopes, bounded preview, confirmed apply and recipe guidance (#690; #652/#651). Retain pending formula-4 readiness/history and HRV; frozen formula-3; activity samples, descriptions and tags; Timeline notes; Health; reports; nearby activity/routes; multi-metric queries; Training discovery; activity overviews and rankings; jump/sleep-vital routing; RS256 private_key_jwt; and PKCE.",
   "rescanRequired": true
 }

@@ -70,6 +70,14 @@ Every future planning feature must review MCP impact in the same PR: explicit pr
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
 registered write actions never automatically expand when internal lifecycle or provider fields are added.
 
+The manually mirrored public recipe schema has an exhaustive compile-time coverage map for the version, node/ending
+kinds, step purposes, target modes and kind/mode pairs, relative-target references and speed presentation. Focused
+fixtures iterate every shared step purpose and covered discriminant through both `get_planned_workout` output validation
+and `create-workout` input validation after a JSON round trip. A shared recipe addition therefore fails the build or tests
+until MCP exposure is deliberately reviewed; it is never exposed merely because it was persisted. MCP/Assistant guidance
+documents canonical units, stable node IDs, repeat shape and reference snapshots, and forbids inventing missing
+thresholds. This is contract hardening only: it adds no recipe kind, mutation, scope, provider action or transport call.
+
 Suunto Guide delivery (#650) uses these existing local sync projections without changing any registered tool or wire
 schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
 counts, and strict rejection of private evidence injected into a public status. No Guide/account IDs, FIT completion

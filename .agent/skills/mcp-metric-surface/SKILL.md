@@ -42,6 +42,10 @@ Lib version or parser change, also use `.agent/skills/sports-lib-upgrade-and-rep
   `docs/training-workspace.md`; distinguish implementation from deployed/registered-client availability.
   Never forward whole records or automatically expose new stored fields. Preserve registered schemas using the
   compatible additive-tool lifecycle when a shape cannot safely change. Keep private delivery fields private.
+  Keep every manually mirrored workout recipe discriminant behind an exhaustive compile-time coverage map and fixtures
+  that JSON-round-trip each shared variant through public read and write validation. A shared-model addition must fail
+  closed until its MCP schema, formatting, Assistant/plugin authoring guidance, contract digest and tests are reviewed;
+  never make the coverage map an automatic field-exposure mechanism.
   Read extensions use `training-plans:read`. New mutation capability is never implied: it must fit the explicit safe
   Training lifecycle, use the independent `training-plans:write` or `training-delivery:write` child scope, enter one
   bounded preview, bind owner/connection/grant/revision/expiry, and require a server-controlled confirmation before an

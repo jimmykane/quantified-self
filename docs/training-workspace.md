@@ -45,7 +45,11 @@ projections. Valid sync-off settings without a destination remain readable. Plan
 directly to planning reads without asking for metric permission or catalog access.
 
 Every planning feature PR must assess MCP impact using the root instructions and MCP skill. New recipe targets require
-explicit public schemas, formatters and tests in the same PR; presentation-only spacing can document no wire impact;
+explicit public schemas, formatters, exhaustive discriminant coverage and read/write JSON round-trip tests in the same
+PR. The coverage gate must fail closed when the shared version, node, purpose, ending, target, reference or presentation
+variants change; it must never auto-expose a stored field. MCP authoring guidance must preserve canonical units, stable
+IDs and explicit relative-target snapshots rather than inventing athlete thresholds. Presentation-only spacing can
+document no wire impact;
 private provider artifact metadata must remain excluded. Review safe projections, lifecycle semantics, scope isolation,
 pagination/bytes, unit formatting, Assistant evidence/routing and bundled skills together. A real deferral needs a focused
 #583 subissue in Project 2 before completion. Existing write scopes never implicitly authorize new lifecycle mutations,

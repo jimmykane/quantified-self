@@ -673,6 +673,36 @@ describe('MCP HTTP scope enforcement', () => {
     ]);
   }, 15_000);
 
+  it('advertises canonical workout authoring guidance only when Training writes are available', async () => {
+    async function readInstructions(scopes: string[]): Promise<string> {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const server = createMcpServer({
+        uid: 'user-1', clientId: 'https://client.example/mcp.json', connectionId: 'connection-1', scopes,
+      }, 'https://quantified-self.io');
+      const client = new Client({ name: 'training-recipe-instructions-client', version: '1.0.0' });
+      try {
+        await server.connect(serverTransport);
+        await client.connect(clientTransport);
+        return client.getInstructions() || '';
+      } finally {
+        await client.close();
+        await server.close();
+      }
+    }
+
+    const writeInstructions = await readInstructions([
+      MCP_OAUTH_SCOPES.TrainingPlansRead,
+      MCP_OAUTH_SCOPES.TrainingPlansWrite,
+    ]);
+    expect(writeInstructions).toContain('Construct workout recipes only from the advertised v1 schema');
+    expect(writeInstructions).toContain('Pace is still stored as metres per second with pace presentation');
+    expect(writeInstructions).toContain('Never invent a threshold or relative-target reference snapshot');
+
+    const readInstructionsOnly = await readInstructions([MCP_OAUTH_SCOPES.TrainingPlansRead]);
+    expect(readInstructionsOnly).not.toContain('Construct workout recipes');
+    expect(readInstructionsOnly).toContain('No planning edits or provider actions are available');
+  });
+
   it('requires a modern MCP confirmation round and applies only an accepted Training proposal', async () => {
     const preview = {
       proposalRef: 'opaque-proposal-reference', expiresAtMs: Date.now() + 60_000,

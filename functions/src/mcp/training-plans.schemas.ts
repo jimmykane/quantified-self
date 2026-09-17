@@ -1,6 +1,19 @@
 import { z } from 'zod';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
-import { WORKOUT_STEP_PURPOSES, parseWorkoutStructureV1 } from '../../../shared/planned-workout';
+import {
+  WORKOUT_STEP_PURPOSES,
+  WORKOUT_STRUCTURE_MAX_NODES,
+  WORKOUT_STRUCTURE_MAX_REPEAT_COUNT,
+  WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP,
+  WORKOUT_STRUCTURE_VERSION,
+  parseWorkoutStructureV1,
+  type WorkoutEndingKindV1,
+  type WorkoutNodeV1,
+  type WorkoutSpeedPresentationV1,
+  type WorkoutStepPurposeV1,
+  type WorkoutTargetModeV1,
+  type WorkoutTargetV1,
+} from '../../../shared/planned-workout';
 import { normalizeTrainingLocalDate, TRAINING_PLAN_COLORS } from '../../../shared/training-plans';
 import { TRAINING_SYNC_OUTCOMES } from '../../../shared/training-delivery-summary';
 import { PLANNED_WORKOUT_PROVIDER_IDS } from '../../../shared/planned-workout-providers';
@@ -32,6 +45,71 @@ export const TRAINING_READ_INPUTS = {
   get_planned_workout_completion: z.strictObject({ workoutRef: ref }),
 };
 
+type WorkoutTargetVariantKey<T extends WorkoutTargetV1 = WorkoutTargetV1> = T extends WorkoutTargetV1
+  ? `${T['kind']}:${T['mode']}`
+  : never;
+type RelativeWorkoutTargetV1 = Extract<WorkoutTargetV1, { mode: 'relative' }>;
+type WorkoutTargetReferenceKey<T extends RelativeWorkoutTargetV1 = RelativeWorkoutTargetV1> =
+  T extends RelativeWorkoutTargetV1
+    ? T['reference'] extends { kind: infer ReferenceKind extends string }
+      ? `${T['kind']}:${ReferenceKind}`
+      : never
+    : never;
+
+/**
+ * Compile-time review gate for every shared recipe discriminant that MCP mirrors manually.
+ * Adding a shared variant fails the Functions build until the public schema and fixtures are
+ * deliberately extended; this map must never be used to expose stored fields automatically.
+ */
+export const MCP_WORKOUT_RECIPE_VARIANT_COVERAGE = {
+  version: 1 satisfies typeof WORKOUT_STRUCTURE_VERSION,
+  nodes: {
+    step: true,
+    repeat: true,
+  } satisfies Record<WorkoutNodeV1['kind'], true>,
+  stepPurposes: {
+    warmup: true,
+    work: true,
+    recovery: true,
+    cooldown: true,
+    rest: true,
+    other: true,
+  } satisfies Record<WorkoutStepPurposeV1, true>,
+  endings: {
+    time: true,
+    distance: true,
+    kilojoules: true,
+    repetitions: true,
+    manual: true,
+  } satisfies Record<WorkoutEndingKindV1, true>,
+  targetModes: {
+    absolute: true,
+    relative: true,
+  } satisfies Record<WorkoutTargetModeV1, true>,
+  targetVariants: {
+    'heart-rate:absolute': true,
+    'heart-rate:relative': true,
+    'power:absolute': true,
+    'power:relative': true,
+    'speed:absolute': true,
+    'speed:relative': true,
+    'cadence:absolute': true,
+    'cadence:relative': true,
+  } satisfies Record<WorkoutTargetVariantKey, true>,
+  targetReferences: {
+    'heart-rate:max-heart-rate': true,
+    'heart-rate:threshold-heart-rate': true,
+    'power:functional-threshold-power': true,
+    'power:critical-power': true,
+    'speed:threshold-speed': true,
+    'cadence:preferred-cadence': true,
+  } satisfies Record<WorkoutTargetReferenceKey, true>,
+  speedPresentations: {
+    pace: true,
+    speed: true,
+  } satisfies Record<WorkoutSpeedPresentationV1, true>,
+} as const;
+
 const ending = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('time'), seconds: positive }),
   z.strictObject({ kind: z.literal('distance'), meters: positive }),
@@ -55,11 +133,12 @@ const target = z.union([
   z.strictObject({ kind: z.literal('cadence'), ...percent, reference: z.strictObject({ kind: z.literal('preferred-cadence'), rpm: positive }) }),
 ]);
 const step = z.strictObject({ kind: z.literal('step'), id: nodeId, purpose: z.enum(WORKOUT_STEP_PURPOSES),
-  ending, targets: z.array(target).max(2), note: z.string().max(500).optional() });
+  ending, targets: z.array(target).max(WORKOUT_STRUCTURE_MAX_TARGETS_PER_STEP), note: z.string().max(500).optional() });
 /** Explicit public contract. New stored fields must never appear here implicitly. */
-export const TRAINING_RECIPE_SCHEMA = z.strictObject({ version: z.literal(1), sport: z.enum(ActivityTypesHelper.getActivityTypesAsUniqueArray()),
+export const TRAINING_RECIPE_SCHEMA = z.strictObject({ version: z.literal(WORKOUT_STRUCTURE_VERSION), sport: z.enum(ActivityTypesHelper.getActivityTypesAsUniqueArray()),
   nodes: z.array(z.union([step, z.strictObject({ kind: z.literal('repeat'), id: nodeId,
-    count: z.number().int().min(1).max(100), steps: z.array(step).min(1).max(100) })])).min(1).max(100),
+    count: z.number().int().min(1).max(WORKOUT_STRUCTURE_MAX_REPEAT_COUNT),
+    steps: z.array(step).min(1).max(WORKOUT_STRUCTURE_MAX_NODES) })])).min(1).max(WORKOUT_STRUCTURE_MAX_NODES),
 }).refine(value => { try { parseWorkoutStructureV1(value); return true; } catch { return false; } });
 const plan = z.strictObject({ planRef: ref, name: z.string().min(1).max(120), lifecycle,
   startDate: trainingDate, endDate: trainingDate, revision: count, currentWorkoutCount: count.max(400),
