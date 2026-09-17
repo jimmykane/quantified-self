@@ -65,6 +65,11 @@ Existing sync status may truthfully become `completed` after an account-bound Gu
 already present in the frozen delivery schema. The separate safe **Activity linked** projection is not exposed through MCP
 in this slice; #651 remains open for the bounded fallback/manual-link workflow and its planned linked/unlinked read review.
 
+Garmin schedule-only remote repair also preserves the registered MCP contract. The existing sanitized delivery status
+already stops a confirmed missing copy from counting as synced and represents restoration as a non-success outcome.
+Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live
+provider check or repair and gains no tool, field, scope, consent or write authority.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the

@@ -41,7 +41,8 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   const repair = async (missing: string[]) => {
     const original = structuredClone(operation.artifact!);
     transport = new GarminTrainingTransport(server.request, () => now,
-      { ...GARMIN_INSPECTION_POLICY, authoritativeAbsence: true, repairReady: true });
+      { ...GARMIN_INSPECTION_POLICY, authoritativeAbsenceKeys: ['workout', 'schedule'],
+        repairReadyKeys: ['workout', 'schedule'] });
     operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
       binding: 'synthetic-authority', missing, original } };
   };
@@ -105,9 +106,20 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     const original = (await execute())!;
     server.workouts.get(original.ids.workout)!.workoutName = 'Edited in Garmin';
     server.schedules.delete(original.ids.schedule);
-    await repair(['schedule']); await execute();
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'production-schedule-authority', missing: ['schedule'], original: structuredClone(original) } };
+    await execute();
     expect(writes().filter(request => request.method === 'PUT' && request.path.includes('workout'))).toHaveLength(0);
     expect(server.workouts.get(original.ids.workout)!.workoutName).toBe('Edited in Garmin');
+  });
+  it('refuses a missing-workout repair under the production policy before another POST', async () => {
+    const original = (await execute())!;
+    server.workouts.delete(original.ids.workout);
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'unproved-workout-authority', missing: ['workout'], original: structuredClone(original) } };
+    const before = writes().length;
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes()).toHaveLength(before);
   });
   it('blocks unknown replacement POST acceptance, including explicit repeated recovery', async () => {
     const original = (await execute())!; server.workouts.delete(original.ids.workout);
@@ -138,7 +150,7 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(await execute()).toEqual(original); expect(writes()).toHaveLength(before);
     expect(server.workouts.size).toBe(1);
   });
-  it('keeps unproved production 404s non-authoritative and reports ownership conflicts separately', async () => {
+  it('authorizes only a production Schedule 404 and reports ownership conflicts separately', async () => {
     const artifact = (await execute())!;
     const inspect = () => transport.inspection.inspect({ artifact, destinationKey: 'opaque-account',
       connectionGeneration: 'connection-1', timeZone: 'Europe/Helsinki', cursor: null }, guard);
@@ -146,11 +158,15 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     const noOwner = { ...artifact, ids: { workout: artifact.ids.workout, schedule: artifact.ids.schedule } };
     expect((await transport.inspection.inspect({ artifact: noOwner, destinationKey: 'opaque-account',
       connectionGeneration: 'connection-1', timeZone: 'Europe/Helsinki', cursor: null }, guard)).conflict).toBe(false);
+    const originalWorkout = structuredClone(server.workouts.get(artifact.ids.workout)!);
     server.schedules.delete(artifact.ids.schedule);
-    expect((await inspect()).artifacts.find(item => item.key === 'schedule')).toEqual({ key: 'schedule', state: 'absent', authoritative: false });
+    expect((await inspect()).artifacts.find(item => item.key === 'schedule')).toEqual({ key: 'schedule', state: 'absent', authoritative: true });
+    server.workouts.delete(artifact.ids.workout);
+    expect((await inspect()).artifacts.find(item => item.key === 'workout')).toEqual({ key: 'workout', state: 'absent', authoritative: false });
+    server.workouts.set(artifact.ids.workout, originalWorkout);
     server.workouts.get(artifact.ids.workout)!.ownerId = '1234';
     expect((await inspect()).conflict).toBe(true);
-    expect(transport.inspection.policy.repairReady).toBe(false);
+    expect(transport.inspection.policy.repairReadyKeys).toEqual(['schedule']);
   });
   it('reuses a reappearing original schedule after a rejected replacement POST', async () => {
     const original = (await execute())!;

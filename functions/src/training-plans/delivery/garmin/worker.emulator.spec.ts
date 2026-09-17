@@ -62,7 +62,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     vi.mocked(logger.warn).mockClear();
     uid = `garmin-delivery-test-${randomUUID()}`; users.push(uid);
     now = Date.parse('2026-09-14T10:00:00Z'); pro = true; proveRepair = false; server = new GarminHttpFixture();
-    const inspectionPolicy = () => ({ ...GARMIN_INSPECTION_POLICY, authoritativeAbsence: proveRepair, repairReady: proveRepair });
+    const inspectionPolicy = () => proveRepair ? { ...GARMIN_INSPECTION_POLICY,
+      authoritativeAbsenceKeys: ['workout', 'schedule'], repairReadyKeys: ['workout', 'schedule'] }
+      : GARMIN_INSPECTION_POLICY;
     const bind = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new GarminTrainingTransport(async (request, beforeSend) => {
       await authorizeGarminTrainingRequest(db, uid, operation);
       return server.request(request, beforeSend);
@@ -71,7 +73,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     runtime = { ...productionDeliveryRuntime(db), now: () => now, hasPro: async () => pro,
       transport: provider => provider !== 'garmin' ? null : {
         mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays,
-        ...(proveRepair ? { inspection: { policy: inspectionPolicy(), inspect: (request, guard) => bind(request).inspection.inspect(request, guard) } } : {}),
+        inspection: { policy: inspectionPolicy(), inspect: (request, guard) => bind(request).inspection.inspect(request, guard) },
         assess: (...args) => policy.assess(...args), canRemove: (...args) => policy.canRemove(...args),
         execute: (operation, checkpoint, guard) => bind(operation).execute(operation, checkpoint, guard),
         recover: (operation, checkpoint, guard) => bind(operation).recover(operation, checkpoint, guard),
@@ -99,6 +101,34 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     }
     await db.terminate();
   }, 120_000);
+
+  it('confirms and repairs only a deleted Garmin schedule with the production policy', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.schedules.delete(original.ids.schedule);
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'suspected_missing', missing: false, missingKeys: ['schedule'] });
+    now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'restoring', missing: true, missingKeys: ['schedule'] });
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    const repaired = (await ledger()).actual!;
+    expect(repaired.ids.workout).toBe(original.ids.workout);
+    expect(repaired.ids.schedule).not.toBe(original.ids.schedule);
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    expect((await ledger()).status).toBe('delivered');
+  });
+
+  it('keeps a deleted Garmin workout inconclusive under the production policy', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.workouts.delete(original.ids.workout);
+    await processTrainingVerification(runtime, uid, id); now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'unknown', missing: false, missingKeys: [] });
+    expect((await ledger()).repair).toBeFalsy();
+    expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
+  });
 
   it('serializes duplicate workers, updates retained Long IDs, and deletes both artifacts after Stop without Pro', async () => {
     const id = await send();

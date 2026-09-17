@@ -12,7 +12,7 @@ import { assessSuuntoGuide, guideExternalId, guideMapping, SUUNTO_MAPPING_VERSIO
 export const SUUNTO_INSPECTION_POLICY: InspectionPolicy = {
   version: 'suunto-owned-guide-v1', mode: 'retained-ids', required: ['guide'], confirmationDelayMs: 15 * 60_000,
   // #710 / #645: 404 conflates ownership and absence; offset inventory has no snapshot guarantee.
-  authoritativeAbsence: false, repairReady: false,
+  authoritativeAbsenceKeys: [], repairReadyKeys: [],
 };
 function equal(a: unknown, b: unknown): boolean { return hashTrainingScheduleRequestPayload(a) === hashTrainingScheduleRequestPayload(b); }
 

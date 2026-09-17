@@ -190,7 +190,7 @@ const TRAINING_PLANS_HELP_CONTENT = `## Plan without a connected service
 - When available, **Check Garmin** checks upcoming synced workouts in Garmin Connect without changing your sync settings. Results update in the same compact details view. Repeated checks within 15 minutes are combined.
 - **Last sent** is when delivery was accepted; **Last checked** is the latest remote check. Neither confirms a download to your watch or bike computer. Device availability is managed by the connected app.
 - Where supported, active sync checks daily and restores workouts confirmed missing from the connected app. Provider limits can delay checking or restoration. **Stop sync** prevents restoration. Past and completed workouts stay unchanged.
-- **Sent · remote checking unavailable** means delivery was accepted but that service cannot currently be checked. **Could not check workout** is not proof it was deleted. Garmin automatic restoration is not enabled until provider verification is complete.
+- **Sent · remote checking unavailable** means delivery was accepted but that service cannot currently be checked. **Could not check workout** is not proof it was deleted. For Garmin, QS can restore a confirmed missing calendar entry while keeping the existing workout definition. A missing workout definition remains inconclusive and is not recreated automatically.
 
 ## Organize plans and standalone workouts
 

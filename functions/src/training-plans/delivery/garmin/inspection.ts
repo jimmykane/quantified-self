@@ -1,12 +1,13 @@
-import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
+import { isAuthoritativeAbsenceKey, type InspectionPolicy, type RemoteInspection } from '../verification-contracts';
 import { garminId, type GarminTrainingClient } from './http';
 import { normalizeTrainingLocalDate } from '../../../../../shared/training-plans';
 
-/** #698 must prove missing-ID/ownership semantics before negative classification or repair is enabled.
- * This policy cannot be selected through a browser parameter or environment variable. */
+/** The controlled #703 deletion check proved an exact retained Schedule 404 after
+ * user deletion while the retained Workout remained present. Workout absence and
+ * replacement remain unproved. This policy is not browser/config selectable. */
 export const GARMIN_INSPECTION_POLICY: InspectionPolicy = {
-  version: 'garmin-retained-v1', mode: 'retained-ids', required: ['workout', 'schedule'],
-  confirmationDelayMs: 15 * 60_000, authoritativeAbsence: false, repairReady: false,
+  version: 'garmin-retained-v2-schedule-repair', mode: 'retained-ids', required: ['workout', 'schedule'],
+  confirmationDelayMs: 15 * 60_000, authoritativeAbsenceKeys: ['schedule'], repairReadyKeys: ['schedule'],
 };
 export function createGarminInspection(client: GarminTrainingClient, policy = GARMIN_INSPECTION_POLICY): RemoteInspection {
   return { policy, async inspect(request, guard) {
@@ -19,7 +20,7 @@ export function createGarminInspection(client: GarminTrainingClient, policy = GA
       const response = await client({ method: 'GET', path: key === 'workout'
         ? `/training-api/workout/v2/${garminId(id)}` : `/training-api/schedule/${garminId(id)}` }, () => guard(false));
       if (response.status === 404) {
-        artifacts.push({ key, state: 'absent', authoritative: policy.authoritativeAbsence }); continue;
+        artifacts.push({ key, state: 'absent', authoritative: isAuthoritativeAbsenceKey(policy, key) }); continue;
       }
       const raw = response.body;
       if (response.status !== 200 || !raw || typeof raw !== 'object' || Array.isArray(raw)) {

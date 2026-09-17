@@ -6,7 +6,7 @@ import { TrainingDeliveryTransportError, type DeliveryArtifact, type DeliveryChe
   type DeliveryRecovery, type DeliveryRequestGuard, type DeliveryTransportProgress, type TrainingDeliveryTransport } from '../contracts';
 import { GarminTrainingHttpError, garminBody, garminId, type GarminTrainingClient, type GarminTrainingRequest, type GarminTrainingResponse } from './http';
 import { createGarminInspection, GARMIN_INSPECTION_POLICY } from './inspection';
-import type { InspectionPolicy, RemoteInspection } from '../verification-contracts';
+import { canRepairMissingArtifacts, type InspectionPolicy, type RemoteInspection } from '../verification-contracts';
 import { garminContractFailure, logGarminScheduleConfirmation, logGarminScheduleLookup, logGarminTrainingRequestFailure, logGarminTrainingResponse } from './diagnostics';
 
 const STEPS = ['repair-prepare', 'workout-create', 'workout-update', 'schedule-create', 'schedule-update', 'schedule-delete', 'workout-delete',
@@ -158,12 +158,13 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     this.assertFuture(operation);
     if (operation.progress === undefined || operation.progress?.state === 'started') throw new TrainingDeliveryTransportError('uncertain');
     if (operation.kind === 'remove') return this.remove(operation, checkpoint, guard);
-    if (operation.repair?.continuation && (!operation.artifact?.ids.workout || !this.inspection.policy.repairReady)) {
+    if (operation.repair?.continuation && (!operation.artifact?.ids.workout
+      || !canRepairMissingArtifacts(this.inspection.policy, operation.repair.missing))) {
       throw new TrainingDeliveryTransportError('uncertain');
     }
     if (operation.repair && !operation.repair.continuation && (operation.progress === null || !operation.artifact)) {
       const repair = operation.repair;
-      if (!this.inspection.policy.repairReady || !this.inspection.policy.authoritativeAbsence
+      if (!canRepairMissingArtifacts(this.inspection.policy, repair.missing)
         || repair.policyVersion !== this.inspection.policy.version) throw new TrainingDeliveryTransportError('uncertain');
       const original = operation.artifact ?? repair.original;
       const observation = await this.inspection.inspect({ destinationKey: operation.destinationKey,

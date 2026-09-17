@@ -9,7 +9,7 @@ import { readDeliveryContext, writeDelivery } from './store';
 import { deliveryContentDigest, resolveDeliveryIntent } from './intent';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { inspectionBinding } from './verification-evidence';
-import { VERIFICATION_DAY_MS } from './verification-contracts';
+import { canRepairMissingArtifacts, VERIFICATION_DAY_MS } from './verification-contracts';
 import { emptyVerification } from './verification-queue';
 import { observeDeliveryCheckpoint } from './diagnostics';
 
@@ -73,7 +73,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (!kind) { writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null; }
       if (kind === 'upsert' && ledger.repair?.continuation) {
         const policy = transport.inspection?.policy;
-        if (!ledger.actual || !policy?.repairReady || !policy.authoritativeAbsence || policy.mode === 'unavailable') {
+        if (!ledger.actual || !policy || !canRepairMissingArtifacts(policy, ledger.repair.missing)) {
           ledger.status = 'provider_unavailable';
           writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null;
         }
@@ -82,7 +82,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.repair = { ...ledger.repair, policyVersion: policy.version,
           binding: inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, policy) };
       }
-      if (kind === 'upsert' && ledger.verification?.missing && (!ledger.repair || !transport.inspection?.policy.repairReady
+      if (kind === 'upsert' && ledger.verification?.missing && (!ledger.repair || !transport.inspection?.policy
+        || !canRepairMissingArtifacts(transport.inspection.policy, ledger.repair.missing)
         || inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, transport.inspection.policy) !== ledger.repair.binding)) {
         // An edit/transfer/reconnect invalidates confirmation, not the stable remote identity.
         // Re-inspect current intent before another repair; never fall through to ordinary upsert.
@@ -250,7 +251,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         || context.connection.generation !== operation.connectionGeneration
         || ledger.blockedConnectionGeneration === context.connection.generation) return 'blocked';
       const intent = resolveDeliveryIntent(context, ledger);
-      if (operation.kind === 'upsert' && operation.repair && (!context.transport?.inspection?.policy.repairReady
+      if (operation.kind === 'upsert' && operation.repair && (!context.transport?.inspection?.policy
+        || !canRepairMissingArtifacts(context.transport.inspection.policy, operation.repair.missing)
         || inspectionBinding({ ...ledger, actual: operation.repair.original, desiredDigest: operation.digest },
           context, context.transport.inspection.policy) !== operation.repair.binding)) return 'recover-only';
       return (operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)

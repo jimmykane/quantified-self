@@ -1,6 +1,7 @@
 import { hashTrainingScheduleRequestPayload } from '../persistence';
 import type { DeliveryContext, DeliveryLedgerV1 } from './contracts';
-import { VERIFICATION_DAY_MS, type InspectionObservation, type InspectionPolicy, type VerificationEvidence } from './verification-contracts';
+import { isAuthoritativeAbsenceKey, isInspectionPolicyValid, VERIFICATION_DAY_MS,
+  type InspectionObservation, type InspectionPolicy, type VerificationEvidence } from './verification-contracts';
 
 export function inspectionBinding(ledger: DeliveryLedgerV1, context: DeliveryContext, policy: InspectionPolicy): string {
   return hashTrainingScheduleRequestPayload({ destination: ledger.destinationKey, epoch: context.connection.epoch,
@@ -17,6 +18,7 @@ export function observeInspection(previous: VerificationEvidence | undefined, bi
     requestedAtMs: previous?.requestedAtMs ?? 0, manualPending: false, cursor: null,
     repairTimes: (previous?.repairTimes ?? []).filter(time => time > now - VERIFICATION_DAY_MS),
   };
+  if (!isInspectionPolicyValid(policy)) return result;
   if (policy.mode === 'unavailable') return { ...result, state: 'unsupported' };
   if (!observation || typeof observation.conflict !== 'boolean' || !Array.isArray(observation.artifacts)
     || observation.artifacts.length > 16 || observation.artifacts.some(item => !item
@@ -39,8 +41,8 @@ export function observeInspection(previous: VerificationEvidence | undefined, bi
     return { ...result, cursor, suspectedAtMs: same && cursor && coverage?.stable === true && !positive ? previous.suspectedAtMs : null,
       manualPending: !!cursor && (previous?.manualPending ?? false) };
   }
-  if (!policy.authoritativeAbsence || observation.artifacts.some(item => item.state === 'unknown'
-    || !item.authoritative)) return result;
+  if (observation.artifacts.some(item => item.state === 'unknown' || !item.authoritative
+    || (item.state === 'absent' && !isAuthoritativeAbsenceKey(policy, item.key)))) return result;
   const missing = observation.artifacts.filter(item => item.state === 'absent').map(item => item.key).sort();
   if (!missing.length) return result;
   const continuing = same && previous.suspectedAtMs !== null && JSON.stringify(previous.missingKeys) === JSON.stringify(missing);

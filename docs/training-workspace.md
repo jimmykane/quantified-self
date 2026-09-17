@@ -946,11 +946,12 @@ it does not import provider-side edits, compare/rewrite recipe content routinely
 Garmin's retained workout and schedule IDs are inspected separately. Suunto supports positive owned-Guide inspection
 as described above; COROS and Wahoo have no transport binding. Delivery readiness alone never grants repair readiness.
 
-`verification-contracts.ts` declares adapter-owned inspection policies and normalized observations. The shared evidence
+`verification-contracts.ts` declares adapter-owned, per-artifact inspection and repair capabilities plus normalized observations. The shared evidence
 reducer binds observations to the exact destination, connection generation/epoch, IDs, saved zone, settings/association
 and policy version. A missing resource needs two authoritative observations at least 15 minutes apart. An intervening
 positive or inconclusive observation resets confirmation. Unknown/malformed responses, ownership failures and duplicate
-identities never establish absence. Inventory adapters provide bounded cursors and explicit complete/stable/unfiltered
+identities never establish absence. A proved schedule/association absence cannot authorize classifying or repairing an
+unproved workout/content resource. Invalid or contradictory capability declarations fail closed. Inventory adapters provide bounded cursors and explicit complete/stable/unfiltered
 coverage; a partial or changing offset listing cannot prove deletion. COROS remains unsupported until #648 establishes
 a documented planned-resource inspection mechanism, not recorded-activity polling or blind schedule republishing.
 Wahoo #649 must model Plan/Workout/association separately and prove external-ID and uncertain-create recovery;
@@ -998,14 +999,18 @@ artifact, including retired IDs. Rules deny evidence, receipts, jobs and budgets
 the new user collections and all existing delivery queue jobs; late workers cannot recreate a missing/deleting user.
 Application counters are non-personal aggregate capacity and deliberately survive individual account deletion.
 
-The Garmin adapter can repair only the missing schedule, or recreate a missing workout and safely relink an unchanged
-surviving schedule. Changed dates/owners/associations require attention. Repairs reuse the operation journal and stable
-QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and deletion
-supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Successful repair
-cycles are limited to two per delivery per rolling day, then deferred until capacity returns. **Production negative
-classification and automatic repair remain disabled in `GARMIN_INSPECTION_POLICY` until real missing-ID semantics and
-repair behavior are established through ordinary #647/#703 integration tests (#645 contract questions).
-Synthetic fixtures alone cannot establish those semantics.** No new webhook endpoint is introduced.
+Garmin production policy enables only schedule absence and repair. A controlled real-account deletion left the retained
+Workout present while the exact retained Schedule ID returned 404, establishing the independent schedule lifecycle.
+Two unchanged authoritative Schedule observations at least 15 minutes apart are still required before repair. The
+adapter then rechecks both retained IDs, keeps the original Workout and recreates only its dated Schedule. A reappearing
+unchanged Schedule is reused without a POST; changed dates/owners/associations require attention. A missing Workout is
+non-authoritative, remains `unknown`, does not reduce the copy to a confirmed missing state and cannot trigger recreation.
+The replacement-workout path remains fixture-gated pending #703/#645 proof. Repairs reuse the operation journal and
+stable QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and
+deletion supersede repair. Pro expiry pauses it; past/provider-confirmed completed workouts remain protected. Successful
+repair cycles are limited to two per delivery per rolling day, then deferred until capacity returns. The production
+policy version change invalidates older evidence so it must be observed under the artifact-specific rules. No new
+webhook endpoint is introduced.
 
 Before a replacement schedule POST, re-read the original schedule ID even after an explicitly rejected attempt. Reuse
 an unchanged reappearing association, and reject a conflicting one, rather than creating a second calendar entry.
@@ -1032,6 +1037,11 @@ The compact sync details offer **Check Garmin** when supported, without another 
 and device availability are separate. Unsupported verification reads **Sent · remote checking unavailable**, not failure
 or verified presence. Checking/restoring/deferred/inconclusive states remain concise, with thin global scrollbars,
 surface-free details, keyboard access and sign-out guards. The existing UID restrictions are unchanged.
+
+MCP impact: none. `get_training_sync_status` already consumes the sanitized delivery projection, where confirmed missing
+artifacts stop counting as synced and restoration remains an existing non-success delivery outcome. This change adds no
+tool, scope, field, provider ID, live check, write authority or provider payload to MCP; registered schemas, Assistant
+routing and bundled plugin guidance remain unchanged.
 
 Diagnostics use `[TrainingVerification]` with allowlisted event/provider/category/coverage/latency fields and
 `[TrainingDelivery]` acceptance/recovery events. Example Cloud Logging filters:

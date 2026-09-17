@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { observeInspection } from './verification-evidence';
-import type { InspectionObservation, InspectionPolicy } from './verification-contracts';
+import { canRepairMissingArtifacts, type InspectionObservation, type InspectionPolicy } from './verification-contracts';
 
 const policy: InspectionPolicy = { version: 'proof-v1', mode: 'retained-ids', required: ['workout', 'schedule'],
-  confirmationDelayMs: 900_000, authoritativeAbsence: true, repairReady: true };
+  confirmationDelayMs: 900_000, authoritativeAbsenceKeys: ['workout', 'schedule'], repairReadyKeys: ['workout', 'schedule'] };
 const missing: InspectionObservation = { conflict: false, artifacts: [
   { key: 'workout', state: 'present', authoritative: true }, { key: 'schedule', state: 'absent', authoritative: true }] };
 describe('provider-neutral inspection evidence', () => {
   it('resumes positive discovery in an unstable Suunto inventory without carrying negative proof', () => {
-    const suunto = { ...policy, required: ['guide'], authoritativeAbsence: false, repairReady: false };
+    const suunto = { ...policy, required: ['guide'], authoritativeAbsenceKeys: [], repairReadyKeys: [] };
     const page: InspectionObservation = { conflict: false, artifacts: [{ key: 'guide', state: 'unknown', authoritative: false }],
       coverage: { complete: false, stable: false, filtered: false, nextCursor: '50' } };
     const first = observeInspection(undefined, 'a', suunto, page, 0);
@@ -31,17 +31,34 @@ describe('provider-neutral inspection evidence', () => {
     }
   });
   it('does not promote unproved or ownership-related 404s', () => {
-    expect(observeInspection(undefined, 'a', { ...policy, authoritativeAbsence: false }, missing, 0).state).toBe('unknown');
+    expect(observeInspection(undefined, 'a', { ...policy, authoritativeAbsenceKeys: [] }, missing, 0).state).toBe('unknown');
     expect(observeInspection(undefined, 'a', policy, { ...missing, artifacts: missing.artifacts.map(item => ({ ...item, authoritative: false })) }, 0).state).toBe('unknown');
   });
   it('models independent Wahoo Plan/Workout/association resources without Garmin assumptions', () => {
-    const wahoo = { ...policy, required: ['plan', 'workout', 'association'] };
+    const wahoo = { ...policy, required: ['plan', 'workout', 'association'],
+      authoritativeAbsenceKeys: ['plan', 'workout', 'association'], repairReadyKeys: ['plan', 'workout', 'association'] };
     const observation: InspectionObservation = { conflict: false, artifacts: wahoo.required.map(key => ({ key,
       state: key === 'association' ? 'absent' : 'present', authoritative: true })) };
     expect(observeInspection(undefined, 'a', wahoo, observation, 0).missingKeys).toEqual(['association']);
   });
+  it('allows one proved artifact to confirm without authorizing an unproved sibling', () => {
+    const scheduleOnly = { ...policy, authoritativeAbsenceKeys: ['schedule'], repairReadyKeys: ['schedule'] };
+    const first = observeInspection(undefined, 'a', scheduleOnly, missing, 0);
+    expect(first).toMatchObject({ state: 'suspected_missing', missingKeys: ['schedule'] });
+    expect(observeInspection(first, 'a', scheduleOnly, missing, 900_000)).toMatchObject({
+      state: 'confirmed_missing', missing: true, missingKeys: ['schedule'],
+    });
+    const workoutMissing: InspectionObservation = { conflict: false, artifacts: [
+      { key: 'workout', state: 'absent', authoritative: true },
+      { key: 'schedule', state: 'present', authoritative: true },
+    ] };
+    expect(observeInspection(undefined, 'a', scheduleOnly, workoutMissing, 0)).toMatchObject({
+      state: 'unknown', missing: false, missingKeys: [],
+    });
+  });
   it('never infers Suunto Guide absence from partial, filtered, unstable or empty inventories', () => {
-    const suunto = { ...policy, mode: 'inventory' as const, required: ['guide'] };
+    const suunto = { ...policy, mode: 'inventory' as const, required: ['guide'],
+      authoritativeAbsenceKeys: ['guide'], repairReadyKeys: ['guide'] };
     for (const coverage of [undefined, { complete: false, stable: true, filtered: false, nextCursor: '50' },
       { complete: true, stable: false, filtered: false, nextCursor: null },
       { complete: true, stable: true, filtered: true, nextCursor: null }]) {
@@ -55,7 +72,8 @@ describe('provider-neutral inspection evidence', () => {
     expect(observeInspection(undefined, 'a', policy, { ...missing, artifacts: [...missing.artifacts, missing.artifacts[0]] }, 0).state).toBe('unknown');
   });
   it('retains manual priority through bounded inventory pages, then clears it on completion', () => {
-    const suunto = { ...policy, mode: 'inventory' as const, required: ['guide'] };
+    const suunto = { ...policy, mode: 'inventory' as const, required: ['guide'],
+      authoritativeAbsenceKeys: ['guide'], repairReadyKeys: ['guide'] };
     const previous = { ...observeInspection(undefined, 'a', suunto, { conflict: false, artifacts: [] }, 0), manualPending: true };
     const partial = observeInspection(previous, 'a', suunto, { conflict: false,
       artifacts: [{ key: 'guide', state: 'unknown', authoritative: false }],
@@ -65,7 +83,8 @@ describe('provider-neutral inspection evidence', () => {
       artifacts: [{ key: 'guide', state: 'present', authoritative: true }] }, 2)).toMatchObject({ state: 'present', cursor: null, manualPending: false });
   });
   it('confirms absence across two complete multi-page inventories, never from a partial page', () => {
-    const inventory = { ...policy, mode: 'inventory' as const, required: ['guide'] };
+    const inventory = { ...policy, mode: 'inventory' as const, required: ['guide'],
+      authoritativeAbsenceKeys: ['guide'], repairReadyKeys: ['guide'] };
     const complete: InspectionObservation = { conflict: false, artifacts: [{ key: 'guide', state: 'absent', authoritative: true }],
       coverage: { complete: true, stable: true, filtered: false, nextCursor: null } };
     const first = observeInspection(undefined, 'a', inventory, complete, 1000);
@@ -92,5 +111,15 @@ describe('provider-neutral inspection evidence', () => {
       { ...missing, artifacts: [{ key: 'workout', state: 'invalid', authoritative: true }, missing.artifacts[1]] }]) {
       expect(observeInspection(undefined, 'a', policy, value as never, 0).state).toBe('unknown');
     }
+  });
+  it('fails closed for contradictory or malformed artifact capabilities', () => {
+    for (const invalid of [
+      { ...policy, required: ['workout', 'workout'] },
+      { ...policy, authoritativeAbsenceKeys: ['missing'] },
+      { ...policy, authoritativeAbsenceKeys: ['schedule'], repairReadyKeys: ['workout'] },
+      { ...policy, confirmationDelayMs: -1 },
+    ]) expect(observeInspection(undefined, 'a', invalid, missing, 0)).toMatchObject({ state: 'unknown', missing: false });
+    expect(canRepairMissingArtifacts(policy, null as never)).toBe(false);
+    expect(canRepairMissingArtifacts(policy, ['schedule', 'schedule'])).toBe(false);
   });
 });

@@ -8,7 +8,7 @@ import { resolveDeliveryIntent } from './intent';
 import { readDeliveryContext, writeDelivery } from './store';
 import { inspectionBinding, observeInspection } from './verification-evidence';
 import { emptyVerification } from './verification-queue';
-import { VERIFICATION_DAY_MS, type InspectionObservation } from './verification-contracts';
+import { canRepairMissingArtifacts, VERIFICATION_DAY_MS, type InspectionObservation } from './verification-contracts';
 import { stageTrainingDeliveryReconciliation } from './marker';
 
 /** Shares the delivery lease. No HTTP is performed inside a transaction. */
@@ -129,7 +129,8 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
       ledger.actual = { ...ledger.actual!, completed: true };
       ledger.status = 'completed'; ledger.desired = 'preserve';
     }
-    const repairReady = evidence.state === 'confirmed_missing' && claim.inspection.policy.repairReady && !ledger.actual?.completed;
+    const repairReady = evidence.state === 'confirmed_missing'
+      && canRepairMissingArtifacts(claim.inspection.policy, evidence.missingKeys) && !ledger.actual?.completed;
     if (repairReady && evidence.repairTimes.length >= 2) {
       evidence.state = 'deferred'; evidence.nextCheckAtMs = evidence.repairTimes[0] + VERIFICATION_DAY_MS;
     } else if (repairReady) {

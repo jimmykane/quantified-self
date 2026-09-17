@@ -165,7 +165,7 @@ describe('Suunto Guide lifecycle — synthetic transport', () => {
     expect(await transport.inspection.inspect(request, guard)).toMatchObject({ artifacts: [{ state: 'present' }] });
     server.guides.delete(artifact.ids.guide);
     expect(await transport.inspection.inspect(request, guard)).toMatchObject({ artifacts: [{ state: 'unknown', authoritative: false }] });
-    expect(transport.inspection.policy.repairReady).toBe(false);
+    expect(transport.inspection.policy.repairReadyKeys).toEqual([]);
   });
   it('does not overwrite or withdraw an externally moved Guide', async () => {
     const artifact = (await execute())!; server.guides.get(artifact.ids.guide)!.guide.localDate = '2026-12-31'; next({ title: 'Edit' });

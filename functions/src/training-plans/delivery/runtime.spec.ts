@@ -73,7 +73,7 @@ describe('Production Training delivery rollout', () => {
     vi.stubGlobal('fetch', fetcher);
     const transport = runtime.transport('suunto', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
     expect(transport).toMatchObject({ horizonDays: 6, withdrawOutsideHorizon: true });
-    expect(transport?.inspection?.policy).toMatchObject({ authoritativeAbsence: false, repairReady: false });
+    expect(transport?.inspection?.policy).toMatchObject({ authoritativeAbsenceKeys: [], repairReadyKeys: [] });
     expect(runtime.transport('suunto', 'other')).toBeNull();
     expect(authorizeSuuntoGuideRequest).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();

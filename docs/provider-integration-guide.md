@@ -56,7 +56,7 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 
 | Provider | Inspection foundation | Repair gate |
 | --- | --- | --- |
-| Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. | Negative classification and repair disabled until actual missing-ID semantics and replacement recovery are established in #647/#703; contract questions #645. |
+| Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. A controlled deletion proved that removing a calendar entry leaves its Workout present and makes the exact retained Schedule ID return 404. | Schedule-only negative classification and repair are enabled after two unchanged observations at least 15 minutes apart. Missing Workout remains inconclusive and cannot trigger recreation; its semantics/replacement recovery remain in #703/#645. |
 | COROS | Unavailable; no documented planned-resource read established. | #648 must establish evidence, not activity polling or blind republishing. |
 | Wahoo | Contract supports independent Plan/Workout/association observations; no live transport here. | #649 must prove external-ID lookup, full inventory coverage and uncertain POST recovery; workout_token is not assumed idempotency. |
 | Suunto | Private #650 adapter supports positive owned Guide reads and resumable inventory. | 404/unstable inventory cannot prove deletion; safe absence/repair tracked by #710. Unpinning/watch eviction never causes cloud recreation. |
@@ -73,6 +73,8 @@ The per-delivery deadline also survives new manual checks. Interrupted repair wi
 replacement identities, including a surviving association before any replacement is accepted. A proven partial
 acceptance may continue under the latest authored intent and current readiness; it never permits repeating an
 uncertain root create. Adapters must cover interrupted cleanup and superseding edits as well as uninterrupted repair.
+Inspection and repair capabilities are declared per artifact. Proof for a provider's schedule/association resource must
+never authorize classifying or recreating its workout/content resource.
 
 Training planning uses a stricter launch boundary than activity or route delivery. Manual plan and standalone-workout
 authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
