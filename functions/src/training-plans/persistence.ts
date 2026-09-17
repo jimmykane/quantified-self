@@ -281,7 +281,8 @@ export function buildTrainingScheduleRevisionWrites(
         + applied.changedWorkoutIds.length
         + applied.changedWorkoutIds.filter(id => applied.before.workouts.get(id)?.planId !== applied.after.workouts.get(id)?.planId
             || applied.after.workouts.get(id)?.lifecycle === 'deleted').length
-        + applied.permanentlyDeletedWorkoutIds.length * 2
+        // Tombstone, workout root, and owner-visible completion projection.
+        + applied.permanentlyDeletedWorkoutIds.length * 3
         + standaloneWorkoutRevisions.size
         + [...planRevisionChunks.values()].reduce((total, chunks) => total + chunks.length, 0);
     if (estimatedWriteCount > FIRESTORE_TRANSACTION_WRITE_BUDGET) {
