@@ -499,7 +499,9 @@ marker removed without recurring scans. The pre-existing large manual-operation 
 
 `onTrainingDeliveryQueued` dispatches due jobs, `processTrainingDeliveryTask` processes one bounded page or delivery,
 and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
-and queue-depth helpers. Reservation precedes enqueue, so lost acknowledgements and crashes are recoverable. A finished
+and queue-depth helpers. Each priority class scans bounded pages of 25, with a hard 100-row bound, so coalesced COROS
+siblings do not consume dispatch capacity or hide another due destination/provider. Reservation precedes enqueue, so
+lost acknowledgements and crashes are recoverable. A finished
 scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
 changes. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
 `onTrainingDeliveryQueued` each use 512 MiB for their bounded Firestore and queue work; this adds process headroom

@@ -16,6 +16,8 @@ import { processTrainingDelivery } from './worker';
 import { processTrainingVerification } from './verification-worker';
 
 const region = FUNCTIONS_MANIFEST.processTrainingDeliveryTask.region;
+const RECOVERY_DISPATCH_PAGE_SIZE = 25;
+const MAX_RECOVERY_SCAN_PER_PRIORITY = 100;
 
 export async function dispatchTrainingDeliveryJob(runtime: DeliveryRuntime, id: string,
   enqueue = enqueueTrainingDeliveryTask): Promise<boolean> {
@@ -72,6 +74,10 @@ export const dispatchTrainingDelivery = onSchedule({ schedule: '* * * * *', regi
   const pending = await getCloudTaskQueueDepthForQueue(config.cloudtasks.trainingDeliveryQueue, true);
   if (pending >= MAX_PENDING_TASKS) return;
   const capacity = Math.min(25, MAX_PENDING_TASKS - pending);
+  const scanLimitPerPriority = Math.min(
+    MAX_RECOVERY_SCAN_PER_PRIORITY,
+    Math.max(RECOVERY_DISPATCH_PAGE_SIZE, capacity * 4),
+  );
   const queries = [
     runtime.db.collection(DELIVERY_QUEUE).where('kind', 'in', ['delivery', 'reconcile']),
     runtime.db.collection(DELIVERY_QUEUE).where('kind', '==', 'verification').where('priority', '==', 'manual'),
@@ -81,18 +87,32 @@ export const dispatchTrainingDelivery = onSchedule({ schedule: '* * * * *', regi
   let inspected = 0;
   const corosGroups = new Set<string>();
   for (const query of queries) {
-    if (inspected >= capacity) break;
-    const page = await query.where('dueAtMs', '<=', runtime.now()).orderBy('dueAtMs').limit(capacity - inspected).get();
-    inspected += page.size;
-    for (const job of page.docs) {
-      const data = typeof job.data === 'function' ? job.data() : {};
-      if (data.kind === 'delivery' && data.provider === 'coros') {
-        const group = JSON.stringify([data.uid, data.destinationKey, data.operationKind]);
-        if (corosGroups.has(group)) continue;
-        corosGroups.add(group);
+    if (dispatched >= capacity) break;
+    const due = query.where('dueAtMs', '<=', runtime.now()).orderBy('dueAtMs');
+    let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+    let priorityInspected = 0;
+    while (dispatched < capacity && priorityInspected < scanLimitPerPriority) {
+      const pageSize = Math.min(
+        RECOVERY_DISPATCH_PAGE_SIZE,
+        scanLimitPerPriority - priorityInspected,
+      );
+      const page = await (cursor ? due.startAfter(cursor) : due).limit(pageSize).get();
+      inspected += page.size;
+      priorityInspected += page.size;
+      for (const job of page.docs) {
+        if (dispatched >= capacity) break;
+        const data = typeof job.data === 'function' ? job.data() : {};
+        if (data.kind === 'delivery' && data.provider === 'coros') {
+          const group = JSON.stringify([data.uid, data.destinationKey, data.operationKind]);
+          if (corosGroups.has(group)) continue;
+          corosGroups.add(group);
+        }
+        try { if (await dispatchTrainingDeliveryJob(runtime, job.id)) dispatched++; }
+        catch { logger.warn('[TrainingDelivery]', { event: 'dispatch_failure' }); }
       }
-      try { if (await dispatchTrainingDeliveryJob(runtime, job.id)) dispatched++; }
-      catch { logger.warn('[TrainingDelivery]', { event: 'dispatch_failure' }); }
+      if (page.size < pageSize) break;
+      cursor = page.docs[page.docs.length - 1] ?? null;
+      if (!cursor) break;
     }
   }
   logger.info('[TrainingDelivery]', { event: 'recovery_dispatch', inspected, dispatched });

@@ -28,7 +28,8 @@ vi.mock('./verification-worker', () => ({ processTrainingVerification: vi.fn() }
 
 import { dispatchTrainingDelivery, onTrainingDeliveryQueued } from './tasks';
 import { productionDeliveryRuntime } from './runtime';
-import { getCloudTaskQueueDepthForQueue } from '../../shared/cloud-tasks';
+import { enqueueTrainingDeliveryTask, getCloudTaskQueueDepthForQueue } from '../../shared/cloud-tasks';
+import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 
 describe('Training delivery queue trigger', () => {
   beforeEach(() => { vi.clearAllMocks(); });
@@ -52,7 +53,7 @@ describe('Training delivery queue trigger', () => {
     }) } } });
     expect(productionDeliveryRuntime).not.toHaveBeenCalled();
   });
-  it.each([0, 92, 100])('bounds scans by queue capacity and prioritizes writes, manual then ordinary at depth %s', async depth => {
+  it.each([0, 92, 100])('bounds recovery dispatch and prioritizes writes, manual then ordinary at depth %s', async depth => {
     const scans: { filters: unknown[][]; limit: number }[] = [];
     const collection = () => {
       const filters: unknown[][] = []; let count = 0;
@@ -72,12 +73,58 @@ describe('Training delivery queue trigger', () => {
       db: { collection, runTransaction: vi.fn().mockResolvedValue(false) },
     } as unknown as ReturnType<typeof productionDeliveryRuntime>);
     await (dispatchTrainingDelivery as unknown as () => Promise<void>)();
-    expect(scans.map(scan => scan.limit)).toEqual(depth === 100 ? [] : depth === 92 ? [8, 3] : [25, 20, 15]);
+    expect(scans.map(scan => scan.limit)).toEqual(depth === 100 ? [] : [25, 25, 25]);
     if (depth < 100) {
       expect(scans[0].filters[0]).toEqual(['kind', 'in', ['delivery', 'reconcile']]);
       expect(scans[1].filters[1]).toEqual(['priority', '==', 'manual']);
       expect(scans.every(scan => scan.filters.some(filter => filter[0] === 'dueAtMs'))).toBe(true);
     }
     if (depth === 0) expect(scans[2].filters[1]).toEqual(['priority', '==', 'ordinary']);
+  });
+
+  it('continues a bounded scan after coalescing a dense COROS group', async () => {
+    let collectionCount = 0;
+    const collection = () => {
+      const current = collectionCount++;
+      if (current >= 3) return { doc: (id: string) => ({ id }) };
+      let page = 0;
+      const query = {
+        where: () => query,
+        orderBy: () => query,
+        startAfter: () => query,
+        limit: () => query,
+        get: async () => {
+          if (current !== 0) return { size: 0, docs: [] };
+          if (page++ === 0) {
+            const docs = Array.from({ length: 25 }, (_, index) => ({
+              id: `coros-${index}`,
+              data: () => ({ kind: 'delivery', provider: 'coros', uid: 'user',
+                destinationKey: 'destination', operationKind: 'upsert' }),
+            }));
+            return { size: docs.length, docs };
+          }
+          const docs = [{ id: 'garmin', data: () => ({ kind: 'delivery', provider: 'garmin', uid: 'user' }) }];
+          return { size: docs.length, docs };
+        },
+      };
+      return query;
+    };
+    vi.mocked(getCloudTaskQueueDepthForQueue).mockResolvedValue(0);
+    vi.mocked(getUserDeletionGuardStateInTransaction).mockResolvedValue({ shouldSkip: false } as never);
+    vi.mocked(productionDeliveryRuntime).mockReturnValue({ now: () => 100,
+      db: {
+        collection,
+        runTransaction: vi.fn(async callback => callback({
+          get: vi.fn(async () => ({ exists: true, data: () => ({ uid: 'user', dueAtMs: 0 }) })),
+          set: vi.fn(),
+          delete: vi.fn(),
+        })),
+      },
+    } as unknown as ReturnType<typeof productionDeliveryRuntime>);
+
+    await (dispatchTrainingDelivery as unknown as () => Promise<void>)();
+
+    expect(vi.mocked(enqueueTrainingDeliveryTask).mock.calls.map(call => call[0]))
+      .toEqual(['coros-0', 'garmin']);
   });
 });

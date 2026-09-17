@@ -158,9 +158,10 @@ Connecting COROS alone never opts in, and implementation does not authorize a pr
 The adapter sends form-encoded requests only to `POST /coros/tp/list/push` and
 `POST /coros/tp/workout/deleteById`, using the existing COROS OAuth client ID/secret and canonical pinned account.
 The existing dispatcher groups due work for the same destination and operation, while the shared worker keeps one ledger,
-lease, consent and status per workout. It claims at most 30 workouts and journals batch start plus per-item acceptance
-below the existing private delivery state. A timeout, malformed acknowledgement, incomplete accepted range or conflicting
-delete result is uncertain and is not resent blindly.
+lease, consent and status per workout. Its bounded recovery scan pages past same-group leaves instead of letting them
+consume task capacity or hide another due provider/destination. It claims at most 30 workouts and journals batch start
+plus per-item acceptance below the existing private delivery state. A timeout, malformed acknowledgement, incomplete
+accepted range or conflicting delete result is uncertain and is not resent blindly.
 
 One collision-checked positive partner AthleteId is bound to the QS user and never derived from `openId`. Each
 destination/workout receives a separate stable positive ID that survives edits, reschedules and plan transfers. The
