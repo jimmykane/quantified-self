@@ -681,7 +681,9 @@ Connected-provider summaries and account-deletion confirmation explain that loca
 of provider-held copies, and direct planning-enabled users to Stop sync before revoking access.
 
 Verification: `npm run test:training-delivery` runs unit and real loopback Firestore transaction fixtures without provider
-HTTP calls, including changes during inspection and failed withdrawals after source deletion. CI runs this command in
+HTTP calls, including changes during inspection and failed withdrawals after source deletion. The command serializes
+test files so unrelated emulator fixtures cannot starve each other's Firestore transaction locks; intentional concurrent
+workers inside each fixture remain concurrent. CI runs this command in
 addition to the Functions unit suite. Use `npm run test:rules` for owner/cross-user/write/internal-record denial. Frontend coverage includes
 `training-delivery-dialog.component.spec.ts`, `training-delivery.service.spec.ts` and the existing Plans/calendar suites.
 Build Functions and run `npm --prefix functions run secrets:check`; Suunto's reused API credentials are described below.
@@ -1102,7 +1104,8 @@ No provider responses, IDs, credentials, titles or user data belong in diagnosti
 Verification uses `npm run test:training-delivery` with a demo Firestore project and test-only transports, Rules suites,
 focused frontend tests, both builds and secret/registration checks. If the emulator CLI's npm child fails, invoke
 `node functions/node_modules/vitest/vitest.mjs run --config functions/vitest.config.ts src/training-plans/delivery`
-inside `firebase emulators:exec --project demo-training-delivery --only firestore`. Rules tests use their configured
+with `--maxWorkers=1 --fileParallelism=false` inside
+`firebase emulators:exec --project demo-training-delivery --only firestore`. Rules tests use their configured
 8081/9199 ports. Never run bulk/destructive tests against a Functions-only emulator connected to live Firestore.
 Deploying this change, if separately approved, requires Rules/indexes and the delivery callables, worker and dispatchers
 before the frontend. It neither authorizes a deployment nor changes any public provider switch. Provider/device proof
