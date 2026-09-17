@@ -24,12 +24,13 @@ describe('TrainingDeliveryService boundary', () => {
     expect(service.isReady('garmin')).toBe(true);
     expect(service.isReady('coros')).toBe(true);
     expect(service.isReady('suunto')).toBe(true);
-    expect(service.isReady('wahoo')).toBe(false);
+    expect(service.isReady('wahoo')).toBe(true);
     user.set({ uid: 'another-user' });
     expect(service.anyReady()).toBe(false);
     expect(service.isReady('garmin')).toBe(false);
     expect(service.isReady('coros')).toBe(false);
     expect(service.isReady('suunto')).toBe(false);
+    expect(service.isReady('wahoo')).toBe(false);
     user.set({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' });
     user.set(null);
     expect(service.anyReady()).toBe(false);
