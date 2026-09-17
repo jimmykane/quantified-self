@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
   EventImporterFIT,
@@ -30,6 +31,8 @@ import {
   getActiveWahooTokenSnapshot,
 } from './account';
 import { isWahooReconnectRequiredError } from './refresh-recovery';
+import { fitActivityReferencesFromEvent } from '../suunto/guide-completion';
+import { retainWahooTrainingCompletion } from './training-completion';
 import {
   claimWahooWorkoutQueueRevision,
   completeWahooWorkoutQueueRevision,
@@ -208,6 +211,19 @@ export async function processWahooWorkoutQueueItem(
         },
       },
     );
+    if (queueItem.planID && queueItem.workoutToken) {
+      await retainWahooTrainingCompletion(
+        admin.firestore(),
+        userID,
+        eventID,
+        accountGuard,
+        queueItem.workoutID,
+        queueItem.planID,
+        queueItem.workoutToken,
+        queueItem.workoutSummaryID,
+        fitActivityReferencesFromEvent(event),
+      );
+    }
     const skippedAfterDeletionStarted = await enqueueActivitySyncAfterEventPersistence({
       userID,
       eventID,

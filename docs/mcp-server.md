@@ -78,6 +78,13 @@ claimed native plan object. The exact provider marker can update the existing pr
 completion link through MCP remains the focused #651 deferral. No new MCP scope, tool, provider action, schema,
 Assistant route or plugin metadata is introduced.
 
+Wahoo exact completion correlation follows the same no-wire-change boundary. An imported activity can move its existing
+sanitized delivery status to `completed` only after the private Workout ID, Plan ID and deterministic `workout_token`
+resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse
+link remain private and are rejected from MCP projections. The separate safe **Activity linked** projection is still not
+part of MCP; #651 retains the bounded fallback/manual-link and linked/unlinked read review. No tool, scope, schema,
+Assistant route, provider action or bundled-plugin change is introduced.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the

@@ -1007,8 +1007,15 @@ Each QS workout owns its own app-created Plan plus dated Workout, even for copie
 `external_id` and `workout_token` remain stable through edits/rescheduling. Private ledger IDs retain the Plan,
 Workout, and confirmed association independently. Journal each request boundary and checkpoint each accepted resource
 before continuing. Updates keep IDs; removal checks ownership, observed date and absence of a workout summary, then
-deletes the Workout before the Plan. A provider summary protects the copy but does not create an activity-completion
-link (#651). Provider-side moves, changed associations, past dates or ambiguous ownership block destructive writes.
+deletes the Workout before the Plan. A provider summary protects the copy even before its recorded activity is imported.
+When Wahoo returns that activity, QS links it only when the inbound Workout ID, Plan ID and deterministic
+`workout_token` identify one exact delivery under the same current account authority. The normal safe
+`trainingWorkoutCompletions/{workoutId}` projection then shows **Activity linked**, while the raw identifiers, account
+digest and reverse evidence remain private. Repeated imports are idempotent; missing identifiers, collisions, changed
+accounts, active delivery writes and conflicting existing links fail closed without date/title matching. Deleting the
+source event removes only its matching link/evidence, clears that marker-derived completion protection and queues
+delivery reconciliation; an independently observed provider summary remains protective. Provider-side moves, changed
+associations, past dates or ambiguous ownership block destructive writes. Bounded fallback/manual matching remains #651.
 
 Neither identifier is a POST idempotency guarantee. An uncertain Plan create is recovered through a unique exact
 app-owned external-ID lookup, then a guarded in-place PUT if needed. An uncertain Workout create with a lost ID uses
@@ -1035,8 +1042,9 @@ request/response bounds. Existing Wahoo production counters apply to delivery/re
 excluded as documented. Both Retry-After and X-RateLimit-Reset survive retries. Diagnostics contain only safe categories,
 status and phase, never provider bodies, tokens, file URLs or private artifact IDs.
 
-MCP impact: existing `training-plans:read` projections already represent Wahoo and all used outcomes. Same-PR positive
-and negative fixtures cover status reads and reject Plan IDs, workout tokens and journals. This change needs no new
+MCP impact: existing `training-plans:read` projections already represent Wahoo and the `completed` outcome. Same-PR positive
+and negative fixtures cover status reads and reject Plan IDs, workout tokens, completion evidence and journals. The
+separate safe **Activity linked** projection remains outside MCP, as it does for other exact provider links. This change needs no new
 public schema, scope, write tool, plugin artifact or registered-client refresh. The retained artifact zone is private
 recovery metadata, not an extra MCP field; the existing public time zone remains the user's sync setting.
 No Rules/index changes are required: all private evidence stays in the existing server-only ledger, with unchanged

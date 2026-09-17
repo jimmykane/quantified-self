@@ -116,6 +116,7 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
         transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/fit`));
         transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/suunto`));
         transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/coros`));
+        transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/wahoo`));
         const linkedDocuments = [
             ...(completionsSnapshot.docs || []),
             ...(reverseLinksSnapshot.docs || []),

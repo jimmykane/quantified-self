@@ -242,8 +242,8 @@ describe('cleanupEventFile', () => {
             filters: [{ field: 'eventID', operator: '==', value: 'testEvent' }],
         });
 
-        // Two activities and the FIT/Suunto/COROS fixed private evidence leaves.
-        expect(mocks.transactionDelete).toHaveBeenCalledTimes(5);
+        // Two activities and the FIT/Suunto/COROS/Wahoo fixed private evidence leaves.
+        expect(mocks.transactionDelete).toHaveBeenCalledTimes(6);
         expect(mocks.transactionDelete).toHaveBeenCalledWith('docRef1');
         expect(mocks.transactionDelete).toHaveBeenCalledWith('docRef2');
 
@@ -402,6 +402,7 @@ describe('cleanupEventFile', () => {
         expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/fit' }));
         expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/suunto' }));
         expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/coros' }));
+        expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/wahoo' }));
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.fileDelete).not.toHaveBeenCalled();
     });
@@ -433,7 +434,7 @@ describe('cleanupEventFile', () => {
         await wrapped(event);
 
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
-        expect(mocks.transactionDelete).toHaveBeenCalledTimes(5);
+        expect(mocks.transactionDelete).toHaveBeenCalledTimes(6);
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef1');
         expect(mocks.transactionDelete).toHaveBeenCalledWith('metadataRef2');
     });
@@ -599,6 +600,7 @@ describe('cleanupEventFile', () => {
         expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/fit' }));
         expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/suunto' }));
         expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/coros' }));
+        expect(mocks.transactionDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/testUser/events/testEvent/trainingCompletionEvidence/wahoo' }));
         expect(mocks.recursiveDelete).not.toHaveBeenCalled();
         expect(mocks.deleteFiles).not.toHaveBeenCalled();
         expect(mocks.fileDelete).not.toHaveBeenCalled();

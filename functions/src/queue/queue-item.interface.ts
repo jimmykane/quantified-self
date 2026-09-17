@@ -59,6 +59,9 @@ export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface {
 export interface WahooAPIWorkoutQueueItemInterface extends QueueItemInterface {
   wahooUserID: string;
   workoutID: string;
+  /** Exact app-supplied identifiers retained for Training completion correlation. */
+  workoutToken?: string;
+  planID?: string;
   workoutSummaryID: string;
   summaryUpdatedAt: string;
   FITFileURI: string;

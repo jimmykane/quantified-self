@@ -246,6 +246,29 @@ describe('upsertWahooWorkoutQueueItem', () => {
     expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
   });
 
+  it('enriches a pending duplicate with exact Training identifiers', async () => {
+    mocks.transactionGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...input,
+        processed: false,
+        dateCreated: 123,
+      }),
+    });
+
+    await expect(upsertWahooWorkoutQueueItem({
+      ...input,
+      workoutToken: 'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
+      planID: '77123',
+    }, 'immediate')).resolves.toEqual({ ref: mocks.ref, queued: false });
+
+    expect(mocks.transactionUpdate).toHaveBeenCalledWith(mocks.ref, {
+      workoutToken: 'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
+      planID: '77123',
+    });
+    expect(mocks.enqueueWorkoutTaskWithDispatchRecovery).not.toHaveBeenCalled();
+  });
+
   it('does not create queue state once account deletion has started', async () => {
     mocks.deletionGuard.mockResolvedValue({ userExists: true, deletionInProgress: true, shouldSkip: true });
 

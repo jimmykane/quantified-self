@@ -233,7 +233,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Device-visible scheduling is documented as the current day plus six days.',
       'Private delivery requires time-based steps throughout; distance endings cannot supply the required Workout duration without an estimate.',
     ],
-    completionCorrelation: 'workout_token identifies the app workout, but third-party-origin completions are not shared.',
+    completionCorrelation: 'Exact Workout, Plan and app-supplied workout_token identifiers can link a Wahoo-recorded activity; third-party-origin activities remain excluded.',
     unresolvedGates: [
       'Confirm existing production-app scope access, same-app ownership, and saved-timezone starts behavior in the private pilot.',
       'Complete production-account CRUD, reconnect, duplicate, and current-day-plus-six device tests; public delivery remains disabled.',
