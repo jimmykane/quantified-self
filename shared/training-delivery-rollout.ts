@@ -5,6 +5,7 @@ import { isPlannedWorkoutProviderDeliveryEnabled, type PlannedWorkoutProviderId 
 const GARMIN_TRAINING_DELIVERY_PILOT_UIDS: readonly string[] = ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'];
 const COROS_TRAINING_DELIVERY_PILOT_UIDS: readonly string[] = ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'];
 const SUUNTO_TRAINING_DELIVERY_PRIVATE_UIDS: readonly string[] = ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'];
+const WAHOO_TRAINING_DELIVERY_PRIVATE_UIDS: readonly string[] = ['xcsAolLDDTWTgtRN9eYF3lW2YKL2'];
 
 /** Backend callers must pass authenticated or server-owned job identity, never request data. */
 export function isTrainingProviderDeliveryEnabled(provider: PlannedWorkoutProviderId, uid: string | null | undefined): boolean {
@@ -12,5 +13,6 @@ export function isTrainingProviderDeliveryEnabled(provider: PlannedWorkoutProvid
   return isPlannedWorkoutProviderDeliveryEnabled(provider)
     || (provider === 'garmin' && GARMIN_TRAINING_DELIVERY_PILOT_UIDS.includes(uid))
     || (provider === 'coros' && COROS_TRAINING_DELIVERY_PILOT_UIDS.includes(uid))
-    || (provider === 'suunto' && SUUNTO_TRAINING_DELIVERY_PRIVATE_UIDS.includes(uid));
+    || (provider === 'suunto' && SUUNTO_TRAINING_DELIVERY_PRIVATE_UIDS.includes(uid))
+    || (provider === 'wahoo' && WAHOO_TRAINING_DELIVERY_PRIVATE_UIDS.includes(uid));
 }

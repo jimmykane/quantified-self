@@ -213,7 +213,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   wahoo: {
     id: 'wahoo',
     label: 'Wahoo',
-    implementationState: 'fixture-only',
+    implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'plan-library-plus-dated-workout',
     requiredScopes: ['plans_read', 'plans_write', 'workouts_read', 'workouts_write'],
@@ -231,11 +231,13 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
       'Device-visible scheduling is documented as the current day plus six days.',
+      'Private delivery requires time-based steps throughout; distance endings cannot supply the required Workout duration without an estimate.',
     ],
     completionCorrelation: 'workout_token identifies the app workout, but third-party-origin completions are not shared.',
     unresolvedGates: [
-      'Confirm Plans entitlement, scopes, same-app ownership, and date-only starts/day_code behavior.',
-      'Pass sandbox CRUD, reconnect, duplicate, and current-day-plus-six device tests.',
+      'Confirm existing production-app scope access, same-app ownership, and saved-timezone starts behavior in the private pilot.',
+      'Complete production-account CRUD, reconnect, duplicate, and current-day-plus-six device tests; public delivery remains disabled.',
+      'Absence and repair remain unavailable until owned inventory and negative-response semantics are proved.',
     ],
     evidence: [
       'https://cloud-api.wahooligan.com/',

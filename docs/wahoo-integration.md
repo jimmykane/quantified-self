@@ -1,12 +1,12 @@
 # Wahoo Integration
 
-Wahoo is a Pro-only activity integration. Quantified Self receives completed workout summaries through Wahoo webhooks, can request a user-selected range of workout history, can send retained Wahoo FIT activities to Suunto or COROS, can deliver FIT activities plus user-selected GPX or FIT courses/routes to Wahoo, and can opt in to send saved Suunto routes to Wahoo. GPX and saved Suunto routes are converted in memory to the FIT course Wahoo accepts. It does not send plans, sleep, or other non-activity data between providers.
+Wahoo is a Pro-only integration. Quantified Self receives completed workout summaries through Wahoo webhooks, can request a user-selected range of workout history, can send retained Wahoo FIT activities to Suunto or COROS, can deliver FIT activities plus user-selected GPX or FIT courses/routes to Wahoo, and can opt in to send saved Suunto routes to Wahoo. GPX and saved Suunto routes are converted in memory to the FIT course Wahoo accepts. Private-rollout Training delivery sends QS-authored workouts as app-owned Plans and dated Workouts; it does not import Wahoo's plan library or forward plans/sleep between providers.
 
 This is the Wahoo-specific architecture and release record. For the reusable implementation process, lifecycle requirements, operational checklist, and provider-wide pitfalls, see the [provider integration implementation guide](provider-integration-guide.md).
 
 ## Supported scope
 
-- OAuth 2.0 authorization with `user_read`, `workouts_read`, `workouts_write`, `routes_read`, `routes_write`, and `offline_data`.
+- OAuth 2.0 authorization with `user_read`, `workouts_read`, `workouts_write`, `routes_read`, `routes_write`, `plans_read`, `plans_write`, and `offline_data`. Existing users need explicit reconnect for the new Training grants; ordinary imports/routes do not require them.
 - Connection identity from `GET /v1/user`, stored on the server-only token document and resolved for webhooks through the shared token index.
 - New and updated completed workouts from `workout_summary` webhooks.
 - Manual history import from the descending, paginated `GET /v1/workouts` endpoint.
@@ -21,6 +21,13 @@ This is the Wahoo-specific architecture and release record. For the reusable imp
 Workouts without an available FIT file are skipped. Wahoo records identified as originating from a third-party fitness application are also skipped. Existing imported events and their retained original files are not deleted when the connection is removed or Pro access expires.
 
 ## Data flow
+
+Training delivery uses the shared queue and exact-UID private pilot, not the activity uploader or a new queue. Its
+single detailed implementation and operational contract is [Wahoo Training delivery](training-workspace.md#wahoo-plan-and-dated-workout-delivery-649):
+time-based Running/Cycling, saved-zone seven-day window, separate Plan/Workout/association receipts, duplicate-safe
+recovery, positive-only cloud checks, scope migration, lifecycle fences and pending production-account/device checks.
+The existing production app/account is the pilot target. Do not interpret the historical activity launch checklist
+below as a requirement to create a sandbox or apply for Wahoo-owned Plan-library entitlement.
 
 1. The Pro user starts OAuth from **Services**. Callable Functions enforce authentication, App Check, and Pro access.
 2. The backend exchanges the code, reads the stable Wahoo user ID, and stores rotating credentials in `wahooAPIAccessTokens/{firebaseUid}/tokens/{wahooUserId}`. Starting authorization assigns a server-owned OAuth-flow generation; the callback claims that flow and may persist its token only while the generation still matches. A newer authorization attempt or explicit disconnect invalidates the generation before cleanup, so a delayed provider exchange cannot recreate a disconnected credential. Each successful OAuth write also assigns a server-side credential generation. A reconnect-required connection retains and pins exactly one Wahoo user ID; OAuth through another Wahoo account is rejected until the retained connection is explicitly disconnected. Activity uploads, route delivery, history, inbound webhooks, and workout processing all resolve that same pinned token. The shared OAuth lifecycle queries the composite token index and removes stale tokens for the same external account from other Quantified Self users, matching the other provider adapters.

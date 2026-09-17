@@ -131,6 +131,8 @@ export interface DeliveryRuntime {
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
 }
 export interface DeliveryLedgerV1 {
+  /** Definite application-access rejection; distinct from temporarily paused transport/inspection readiness. */
+  providerAccessBlocked?: boolean;
   verification?: VerificationEvidence;
   repair?: DeliveryRepair | null;
   /** Private reverse-link identity when `actual.completed` came from an imported

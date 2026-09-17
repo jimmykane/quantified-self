@@ -6,7 +6,7 @@ import { readTrainingDeliveryAuthority } from './connection';
 import { GarminTrainingTransport } from './garmin/transport';
 import { createGarminTrainingClient } from './garmin/http';
 import { authorizeGarminTrainingRequest } from './garmin/authorization';
-import { GARMIN_PRODUCTION_WINDOWS, productionRequestCapacity } from './request-capacity';
+import { GARMIN_PRODUCTION_WINDOWS, WAHOO_PRODUCTION_WINDOWS, productionRequestCapacity } from './request-capacity';
 import { config } from '../../config';
 import { SuuntoGuideTransport } from './suunto/transport';
 import { createSuuntoGuideClient } from './suunto/http';
@@ -16,6 +16,9 @@ import { CorosTrainingTransport } from './coros/transport';
 import { createCorosTrainingClient } from './coros/http';
 import { authorizeCorosTrainingRequest } from './coros/authorization';
 import { reserveCorosIntegerIdentities } from './coros/identities';
+import { WahooTrainingTransport } from './wahoo/transport';
+import { createWahooTrainingClient } from './wahoo/http';
+import { authorizeWahooTrainingRequest } from './wahoo/authorization';
 export { DELIVERY_SERVICES } from './connection';
 
 function garminTransport(db: admin.firestore.Firestore, uid: string): TrainingDeliveryTransport {
@@ -65,16 +68,32 @@ function corosTransport(db: admin.firestore.Firestore, uid: string): TrainingDel
     },
   };
 }
+function wahooTransport(db: admin.firestore.Firestore, uid: string): TrainingDeliveryTransport {
+  const bound = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new WahooTrainingTransport(
+    createWahooTrainingClient(() => authorizeWahooTrainingRequest(db, uid, operation), fetch, Date.now,
+      productionRequestCapacity(db, uid, 'wahoo', operation.destinationKey, WAHOO_PRODUCTION_WINDOWS)));
+  const policy = new WahooTrainingTransport(async () => { throw new Error('Unbound transport'); });
+  return {
+    mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays, withdrawOutsideHorizon: true,
+    inspection: { policy: policy.inspection.policy, inspect: (request, guard) => bound(request).inspection.inspect(request, guard) },
+    assess: (workout, destination, zone) => policy.assess(workout, destination, zone),
+    canRemove: (artifact, today) => policy.canRemove(artifact, today),
+    execute: (operation, checkpoint, guard) => bound(operation).execute(operation, checkpoint, guard),
+    recover: (operation, checkpoint, guard) => bound(operation).recover(operation, checkpoint, guard),
+  };
+}
 /** No environment/browser-selectable fake. Public delivery remains disabled. */
 export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRuntime {
   return {
     db, now: Date.now, hasPro: hasProAccess,
     requestNotBefore: (tx, uid, provider, destination) => provider === 'garmin'
-      ? productionRequestCapacity(db, uid, provider, destination, GARMIN_PRODUCTION_WINDOWS).notBefore(tx) : Promise.resolve(0),
+      ? productionRequestCapacity(db, uid, provider, destination, GARMIN_PRODUCTION_WINDOWS).notBefore(tx)
+      : provider === 'wahoo' ? productionRequestCapacity(db, uid, provider, destination, WAHOO_PRODUCTION_WINDOWS).notBefore(tx) : Promise.resolve(0),
     transport: (provider, uid) => {
       if (!isTrainingProviderDeliveryEnabled(provider, uid)) return null;
       if (provider === 'garmin') return garminTransport(db, uid);
       if (provider === 'coros') return corosTransport(db, uid);
+      if (provider === 'wahoo') return wahooTransport(db, uid);
       if (provider === 'suunto') {
         let owner: string;
         try { owner = validateGuideOwner(config.suuntoapp.application_name); } catch { return null; }

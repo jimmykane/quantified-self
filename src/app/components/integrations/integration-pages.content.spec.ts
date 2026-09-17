@@ -38,6 +38,10 @@ describe('integration-pages.content', () => {
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.syncFlows.some(flow => flow.title === 'Wahoo to Suunto sync')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.some(item => item.question === 'Can I sync Wahoo activities to Suunto automatically?')).toBe(true);
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.some(item => item.question === 'Can I send a route to Wahoo?')).toBe(true);
+    const training = PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question === 'Can I send planned Training workouts to Wahoo?');
+    expect(training?.answer).toContain('not generally available');
+    expect(training?.answer).toContain('time-based running and cycling');
+    expect(training?.answer).toContain('does not confirm ELEMNT or watch receipt');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question === 'Can I send a route to Wahoo?')?.answer)
       .toContain('saved Suunto routes to Wahoo automatically');
     expect(PROVIDER_INTEGRATION_PAGES.wahoo.faqItems.find(item => item.question.includes('disconnecting'))?.answer)
