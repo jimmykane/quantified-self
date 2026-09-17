@@ -130,15 +130,20 @@ export async function retainCOROSTrainingCompletion(
             outcome = 'conflict';
           }
           const reverse = reverseDocument.data() as {
+            schemaVersion?: unknown;
+            deliveryId?: unknown;
             workoutId?: unknown;
             eventId?: unknown;
             sourceSessionIndex?: unknown;
             provider?: unknown;
           } | undefined;
-          const sameCompletion = existingCompletion?.eventId === eventId
+          const sameCompletion = existingCompletion?.workoutId === workout.id
+            && existingCompletion.eventId === eventId
             && existingCompletion.provider === 'coros'
+            && existingCompletion.matchMethod === 'provider_marker'
             && existingCompletion.sourceSessionIndex === null;
-          const sameReverse = reverse?.workoutId === workout.id && reverse.eventId === eventId
+          const sameReverse = reverse?.schemaVersion === 1 && reverse.deliveryId === candidate.id
+            && reverse.workoutId === workout.id && reverse.eventId === eventId
             && reverse.sourceSessionIndex === null && reverse.provider === 'coros';
           if (outcome !== 'conflict' && ((completionDocument.exists && !sameCompletion)
             || (reverseDocument.exists && !sameReverse))) outcome = 'conflict';

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Firestore } from 'firebase-admin/firestore';
 import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -182,6 +182,52 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
       expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
         .toMatchObject({ provider: 'coros', eventId: 'event' });
+    });
+
+    it('rejects existing manual completions and reverse links owned by another delivery', async () => {
+      const completion = {
+        schemaVersion: 1,
+        workoutId: 'workout',
+        planId: 'plan',
+        provider: 'coros',
+        matchMethod: 'manual_confirmation',
+        eventId: 'event',
+        activityId: 'activity',
+        sourceSessionIndex: null,
+        activityStartAtMs: Date.parse('2026-09-17T07:00:00Z'),
+        scheduledLocalDate: '2026-09-17',
+        workoutRevisionAtLink: 2,
+        timing: 'on_date',
+        linkedAtMs: 1,
+        updatedAtMs: 1,
+      };
+      await user().collection('trainingWorkoutCompletions').doc('workout').set(completion);
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('coros').get()).data())
+        .toMatchObject({ outcome: 'conflict' });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toEqual(completion);
+
+      await user().collection('trainingWorkoutCompletions').doc('workout').delete();
+      const reverseId = createHash('sha256').update(JSON.stringify([uid, 'event', 'coros'])).digest('hex');
+      await user().collection('trainingActivityCompletionLinks').doc(reverseId).set({
+        schemaVersion: 1,
+        deliveryId: 'another-delivery',
+        workoutId: 'workout',
+        eventId: 'event',
+        activityId: 'activity',
+        sourceSessionIndex: null,
+        provider: 'coros',
+        linkedAtMs: 1,
+      });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('coros').get()).data())
+        .toMatchObject({ outcome: 'conflict' });
+      expect((await user().collection('trainingActivityCompletionLinks').doc(reverseId).get()).data())
+        .toMatchObject({ deliveryId: 'another-delivery' });
+      const retainedLedger = (await user().collection(DELIVERY_LEDGER).doc('delivery').get()).data();
+      expect(retainedLedger).toMatchObject({ status: 'delivered' });
+      expect(retainedLedger).not.toHaveProperty('completionLinkId');
     });
 
     it('defers while delivery is changing and fences deleted events and users', async () => {
