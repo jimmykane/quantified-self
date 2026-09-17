@@ -740,9 +740,9 @@ The separate certification/evaluation ticket #698 is retired; it is not an enabl
 ### Provider proof status
 
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four public delivery switches remain
-false. Garmin, COROS and Suunto have exact-UID private production pilots backed by offline-tested transports. Offline
+false. Garmin, COROS, Suunto and Wahoo have exact-UID private production pilots backed by offline-tested transports. Offline
 verification does not constitute a real provider request or device result. The UID-restricted runtime admits only the
-owner for each implemented adapter. Wahoo remains fixture-only without a production transport binding. The
+owner for each implemented adapter. Wahoo's production-account/device evidence remains pending in #649. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -984,14 +984,86 @@ consent and evidence; use Stop while access is valid first if eligible provider 
 neither creates consent nor sends a workout. Ordinary integration checks remain #647/#703 and public rollout remains
 #655; #651 completion matching and #654 Sports Lib extraction are unchanged.
 
+### Wahoo Plan and dated Workout delivery (#649)
+
+Wahoo uses the same plan settings, standalone Send, Stop, Retry, approval, reconciliation, lease and private-UID
+rollout as the other providers. The editor and `WorkoutStructureV1` are unchanged. Delivery initially accepts the
+documented Running/Cycling baseline with time endings throughout. Required Workout `minutes` is the exact sum of
+step seconds times total repeat passes divided by 60, including fractional minutes. Distance endings cannot supply
+that value without an estimate and are unsupported for delivery. The broader fixture serializer's distance/kilojoule
+capabilities do not add editor features or imply delivery eligibility. Existing target/degradation approvals still apply.
+
+The saved delivery zone determines today through today + 6, inclusive. Later workouts wait; moving an owned future
+copy outside the window withdraws it and preserves consent for later re-entry. QS represents its date-only schedule
+with `starts` at noon in the saved zone, including DST/year boundaries. Optional `day_code` is omitted because Wahoo's
+public epoch statement and examples disagree. Verify the resulting calendar date and current-day/+6 device behavior
+with the existing production app/account; there is no assumed sandbox or device-receipt claim.
+The private artifact retains its own delivery zone separately from mutable sync settings. A later zone edit checks
+the old provider instant in that retained zone, then adopts the new zone only when readback matches the intended
+`starts` instant. Past-copy protection also uses the retained zone, including date-line changes; unknown legacy zones
+are never guessed across mismatched dates.
+
+Each QS workout owns its own app-created Plan plus dated Workout, even for copied recipes. Destination-bound hashed
+`external_id` and `workout_token` remain stable through edits/rescheduling. Private ledger IDs retain the Plan,
+Workout, and confirmed association independently. Journal each request boundary and checkpoint each accepted resource
+before continuing. Updates keep IDs; removal checks ownership, observed date and absence of a workout summary, then
+deletes the Workout before the Plan. A provider summary protects the copy but does not create an activity-completion
+link (#651). Provider-side moves, changed associations, past dates or ambiguous ownership block destructive writes.
+
+Neither identifier is a POST idempotency guarantee. An uncertain Plan create is recovered through a unique exact
+app-owned external-ID lookup, then a guarded in-place PUT if needed. An uncertain Workout create with a lost ID uses
+two matching complete inventory enumerations (100 rows/page, at most 500 rows), requiring one exact token candidate,
+retained-ID readback, expected title/type/duration/date, live Plan and association. The bounded scans authorize only
+positive adoption, never absence. Larger, partial, unstable, duplicate or empty inventories require attention without
+another POST. A pre-existing Plan found without local receipts also requires Workout discovery, not a blind create.
+An uncertain PUT resumes against owned retained IDs; missing resources never authorize replacement POSTs. A lost
+DELETE acknowledgement remains ambiguous and cannot trigger speculative Plan cleanup.
+If recovery positively identifies a copy that is now past or provider-completed, retain that protective evidence and
+retire the superseded attempt without another write or a false delivery-success claim. The normal public status then
+becomes Past or Completed; a lost response must not leave such a protected copy stuck in an uncertainty retry loop.
+
+New/reconnected OAuth requests retain existing scopes and add `plans_read plans_write`; existing credentials are not
+assumed to have those grants. Missing Training permissions expose targeted reconnect copy/action without breaking
+activity/history/route use. Account selection, generation-fenced refresh, opaque-refresh cooldown, final credential
+guard, explicit disconnect, Pro policy and deletion fences reuse Wahoo's existing lifecycle. A generic API 403 with
+known grants is application access failure, not an endless reconnect prompt. Explicit Retry can retry a known rejection;
+periodic reconciliation does not clear it. Plan-library entitlement for Wahoo-owned plans is not required for QS-owned
+Plan CRUD. The existing Wahoo client secrets are bound to `processTrainingDeliveryTask`; no new secrets or Functions.
+
+HTTP calls use the exact API host and allowlisted paths, no redirects/local retries, 10-second deadlines and 2 MiB
+request/response bounds. Existing Wahoo production counters apply to delivery/recovery/inspection; token refresh is
+excluded as documented. Both Retry-After and X-RateLimit-Reset survive retries. Diagnostics contain only safe categories,
+status and phase, never provider bodies, tokens, file URLs or private artifact IDs.
+
+MCP impact: existing `training-plans:read` projections already represent Wahoo and all used outcomes. Same-PR positive
+and negative fixtures cover status reads and reject Plan IDs, workout tokens and journals. This change needs no new
+public schema, scope, write tool, plugin artifact or registered-client refresh. The retained artifact zone is private
+recovery metadata, not an extra MCP field; the existing public time zone remains the user's sync setting.
+No Rules/index changes are required: all private evidence stays in the existing server-only ledger, with unchanged
+safe owner-visible status projections and cleanup.
+
+Release gate: public `deliveryEnabled` stays false and the exact pilot UID is checked on frontend and backend. Prepare
+Functions `getWahooAPIAuthRequestTokenRedirectURI`, `requestAndSetWahooAPIAccessToken`, `previewTrainingProviderDelivery`,
+`mutateTrainingProviderDelivery`, `processTrainingDeliveryTask` and the production frontend for separately approved
+deployment. Do not redeploy unrelated infrastructure. #649 remains open until the user verifies reconnect, create,
+edit, reschedule, copy, Stop, target warnings and seven-day device behavior. Turning the pilot off blocks withdrawals
+too; use Stop while access is valid when cleanup is intended.
+
+Local release verification (2026-09-17): backend TypeScript and the normal frontend build pass. Production bundling
+hits the same existing initial-bundle budget failure on this branch and unchanged `develop` (`53a7c52cd`): 1.73 MB
+against the 1.44 MB limit, 292.45 kB over. The budget is unchanged. This blocks the production build; no deployment,
+live provider write or device acceptance test has been performed. Synthetic dialog QA covers desktop/320px widths,
+light/dark themes and the shared thin scroll owner; physical haptics and device delivery still require real-device checks.
+
 ### Remote verification and repair (#703)
 
 Remote verification extends the existing delivery pipeline, not the authored workout schema or revision history.
 QS remains authoritative for consent and authored dates. Inspection checks cloud artifacts and required associations;
 it does not import provider-side edits, compare/rewrite recipe content routinely, or confirm watch downloads.
 Garmin's retained workout and schedule IDs are inspected separately. Suunto supports positive owned-Guide inspection
-as described above. COROS has a delivery transport but no documented planned-workout read/list endpoint; Wahoo has no
-transport binding. Delivery readiness alone never grants inspection or repair readiness.
+as described above. Wahoo independently inspects its app-owned Plan, dated Workout and required association, with
+positive-only evidence. COROS has a delivery transport but no documented planned-workout read/list endpoint.
+Delivery readiness alone never grants inspection or repair readiness.
 
 `verification-contracts.ts` declares adapter-owned, per-artifact inspection and repair capabilities plus normalized observations. The shared evidence
 reducer binds observations to the exact destination, connection generation/epoch, IDs, saved zone, settings/association
@@ -1002,7 +1074,7 @@ unproved workout/content resource. Invalid or contradictory capability declarati
 coverage; a partial or changing offset listing cannot prove deletion. COROS verification remains unsupported because
 its documented contract has no planned-resource inspection mechanism; recorded-activity polling and blind schedule
 republishing are not substitutes.
-Wahoo #649 must model Plan/Workout/association separately and prove external-ID and uncertain-create recovery;
+Wahoo #649 models Plan/Workout/association separately with conservative external-ID and uncertain-create recovery;
 `workout_token` is not a documented POST idempotency guarantee. Suunto #650 implements owned reads and exact externalId
 conflict recovery; negative classification/repair is tracked by #710. Unpinning or device eviction is not cloud deletion.
 
@@ -1028,7 +1100,8 @@ burst through it. Admission occurs before the transport start journal; quota exh
 POST or failed attempt. Retry-After updates shared not-before state. The application aggregates contain no account/user
 IDs; account counters live below `users/{uid}/trainingProviderCapacity`. Other Garmin consumers using the same provider
 application are not counted by this implementation; it does not claim to account for unrelated Health/Course/OAuth
-callers. Wahoo's documented application windows remain recorded for its future adapter. No assumed Suunto quota,
+callers. Wahoo's adapter uses its existing application windows (200/5 minutes, 1000/hour, 5000/day), excluding OAuth;
+these Training counters do not claim to include unrelated Wahoo consumers. No assumed Suunto quota,
 evaluation budget or additional quota-proof prerequisite is introduced.
 
 A failure persisting shared quota deferral must not erase a received HTTP 429 rejection: retain the rejected-operation

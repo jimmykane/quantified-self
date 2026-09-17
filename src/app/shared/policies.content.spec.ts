@@ -90,6 +90,9 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('Garmin, COROS, or Suunto activities');
     expect(content).toContain('does not create or retain a Quantified Self activity');
     expect(content).toContain('Wahoo-to-Suunto or Wahoo-to-COROS activity sync');
+    expect(content).toContain('authored workout recipe, title and scheduled date');
+    expect(content).toContain('Provider identifiers and operation receipts are retained server-side');
+    expect(content).toContain('does not import Wahoo-owned plans or grant assistants permission to send workouts');
   });
 });
 

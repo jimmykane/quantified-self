@@ -90,7 +90,7 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
       const ledger = ledgerDoc.data() as DeliveryLedgerV1;
       if (ledger.provider !== provider || ledger.destinationKey !== destinationKey
         || ledger.retryAtMs > now || (ledger.lease && ledger.lease.expiresAtMs > now)
-        || ['failed', 'needs_attention'].includes(ledger.status)) continue;
+        || ledger.providerAccessBlocked || ['failed', 'needs_attention'].includes(ledger.status)) continue;
       if (ledger.attempt) {
         if (ledger.attempt.batchId && ledger.attempt.progress === null) {
           // `progress: null` is the durable proof that no provider request began.
@@ -391,6 +391,7 @@ async function rejectBatch(runtime: DeliveryRuntime, uid: string, claim: BatchCl
           ledger.issues = [`Reconnect ${providerLabel} before sending workouts.`];
         } else if (failure.kind === 'provider_access' || failure.kind === 'permission') {
           ledger.status = 'provider_unavailable';
+          ledger.providerAccessBlocked = true;
           ledger.issues = [`${providerLabel} workout delivery is not enabled for Quantified Self.`];
         } else if (failure.kind === 'terminal' || ledger.retries >= MAX_RETRY_COUNT) {
           ledger.status = 'failed'; ledger.issues = [`${providerLabel} rejected this workout batch.`];

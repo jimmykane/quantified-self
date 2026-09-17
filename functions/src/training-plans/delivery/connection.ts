@@ -9,6 +9,8 @@ import { doesSuuntoHealthWebhookBindingMatch, getSuuntoHealthWebhookAccountBindi
   parseSuuntoHealthWebhookAccountBinding } from '../../suunto/health-webhook-binding';
 import { doesOAuthCredentialGenerationAuthorizeToken } from '../../token-refresh-coordinator';
 import { normalizeCOROSOpenId, selectActiveCOROSTokenSnapshot } from '../../coros/account';
+import { normalizeWahooUserID, selectActiveWahooTokenSnapshot } from '../../wahoo/account';
+import { hasWahooTrainingScopes, WAHOO_TRAINING_PERMISSION_ISSUE } from '../../../../shared/wahoo-training';
 
 export const GARMIN_TRAINING_PERMISSION_ISSUE = 'Garmin Training permission is required. Reconnect Garmin and allow training workouts.';
 export const DELIVERY_SERVICES = {
@@ -43,6 +45,24 @@ export async function readTrainingDeliveryAuthority(db: Firestore, tx: Transacti
     token: null, account: '', credentialGeneration };
   if (!rootDoc.exists || meta.connectionState !== 'connected' || root.disconnectOperationGeneration
     || isServiceDisconnectPendingData(root) || tokens.empty) return unavailable;
+  if (provider === 'wahoo') {
+    const repair = { ...unavailable, connection: { ...unavailable.connection, state: 'connection_repair' as const } };
+    const pinned = normalizeWahooUserID(meta.providerUserId);
+    const hasPin = meta.providerUserId !== undefined && meta.providerUserId !== null && meta.providerUserId !== '';
+    if (tokens.size > 32 || (hasPin && !pinned)) return repair;
+    // Use the same pin/latest-token ordering as all other Wahoo consumers. Never
+    // skip a malformed selected token and silently choose another retained account.
+    const token = pinned ? tokens.docs.find(doc => doc.id === pinned) : selectActiveWahooTokenSnapshot(tokens.docs);
+    const account = normalizeWahooUserID(token?.data().wahooUserID);
+    if (!token || !account || token.id !== account
+      || !doesOAuthCredentialGenerationAuthorizeToken(root, token.data().tokenCredentialGeneration)) return repair;
+    const connection: DeliveryConnection = { state: 'connected', epoch,
+      generation: `${generation}:${token.data().tokenCredentialGeneration ?? ''}`,
+      destinationKey: deliveryIdentity(uid, provider, account, 'account') };
+    if (!hasWahooTrainingScopes(token.data().scope)) return { ...repair, account,
+      connection: { ...connection, state: 'connection_repair', issues: [WAHOO_TRAINING_PERMISSION_ISSUE] } };
+    return { account, token, credentialGeneration, connection };
+  }
   if (provider === 'suunto') {
     const repair = { ...unavailable, connection: { ...unavailable.connection, state: 'connection_repair' as const } };
     if (!credentialGeneration || typeof meta.connectionStateGeneration !== 'string' || !meta.connectionStateGeneration

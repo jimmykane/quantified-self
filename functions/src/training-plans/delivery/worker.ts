@@ -48,7 +48,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     if (!doc.exists) return null;
     const ledger = doc.data() as DeliveryLedgerV1;
     if (ledger.lease && ledger.lease.expiresAtMs > runtime.now()) return null;
-    if (ledger.retryAtMs > runtime.now() || ['failed', 'needs_attention'].includes(ledger.status)) return null;
+    if (ledger.retryAtMs > runtime.now() || ledger.providerAccessBlocked || ['failed', 'needs_attention'].includes(ledger.status)) return null;
     const [workoutDoc, locks] = await Promise.all([
       tx.get(user.collection('scheduledWorkouts').doc(ledger.workoutId)),
       tx.get(user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').limit(1)),
@@ -316,10 +316,13 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (failure.kind !== 'deferred') ledger.retries += 1;
       retryCount = ledger.retries;
       ledger.status = failure.kind === 'deferred' ? 'retrying' : failure.kind === 'auth' ? 'reconnect_required' : failure.kind === 'permission' ? 'connection_repair'
+        : failure.kind === 'provider_access' ? 'provider_unavailable'
         : failure.kind === 'uncertain' ? inspectionUncertain || ledger.retries >= MAX_RETRY_COUNT ? 'needs_attention' : 'retrying'
           : failure.kind === 'terminal' || ledger.retries >= MAX_RETRY_COUNT ? 'failed' : 'retrying';
       ledger.blockedConnectionGeneration = ['auth', 'permission'].includes(failure.kind) ? operation.connectionGeneration : null;
+      ledger.providerAccessBlocked = failure.kind === 'provider_access';
       if (failure.kind === 'permission') ledger.issues = ['Workout delivery permission is missing. Reconnect the provider and allow workout delivery.'];
+      if (failure.kind === 'provider_access') ledger.issues = ['The provider has not allowed this application to deliver workouts. Reconnecting may not resolve this.'];
       ledger.providerNotBeforeMs = Math.max(ledger.providerNotBeforeMs ?? 0,
         failure.retryAfterMs > 0 ? runtime.now() + failure.retryAfterMs : 0);
       ledger.retryAtMs = Math.max(runtime.now() + getCloudTaskRetryBackoffSeconds(ledger.retries) * 1000, ledger.providerNotBeforeMs);

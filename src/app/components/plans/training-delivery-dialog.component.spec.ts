@@ -20,6 +20,8 @@ import { ServiceSourceIconComponent } from '../event-summary/service-source-icon
 import { AppEventService } from '../../services/app.event.service';
 import { TrainingDeliveryButtonComponent } from './training-delivery-button.component';
 import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
+import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
+import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 
 describe('Training provider delivery controls', () => {
   const user = signal<{ uid: string } | null>({ uid: 'owner' });
@@ -94,6 +96,34 @@ describe('Training provider delivery controls', () => {
     // Multiple controls belong below the status, not in the compact heading's
     // single-action slot, where they squeeze the provider name at phone widths.
     expect(fixture.nativeElement.querySelector('[compactRowAction]')).toBeNull();
+  });
+  it('offers targeted Wahoo reconnect without mutating sync settings and preserves account guards', async () => {
+    const open = vi.fn();
+    TestBed.overrideComponent(TrainingDeliveryDialogComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
+    service.isReady.mockImplementation(provider => provider === 'wahoo');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'wahoo', status: 'connection_repair', issues: [WAHOO_TRAINING_PERMISSION_ISSUE] }] }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button')).find((item: HTMLButtonElement) => item.textContent.includes('Reconnect Wahoo')) as HTMLButtonElement;
+    expect(button).toBeTruthy(); button.click();
+    expect(open).toHaveBeenCalledWith(WahooRouteAccessReconnectDialogComponent, expect.objectContaining({ data: { purpose: 'training' } }));
+    expect(haptics.selection).toHaveBeenCalledTimes(1); expect(service.mutate).not.toHaveBeenCalled();
+    user.set({ uid: 'other' }); user$.next(user()); fixture.detectChanges();
+    fixture.componentInstance.reconnectWahooTraining(); expect(haptics.selection).toHaveBeenCalledTimes(1);
+  });
+  it('shows Wahoo scope repair directly in preview and explains duration and device limits', async () => {
+    const open = vi.fn();
+    TestBed.overrideComponent(TrainingDeliveryDialogComponent, { add: { providers: [{ provide: MatDialog, useValue: { open } }] } });
+    service.isReady.mockImplementation(provider => provider === 'wahoo');
+    service.preview.mockResolvedValue({ schemaVersion: 1, available: true, connection: 'connection_repair', hasPro: true,
+      timeZone: 'Europe/Helsinki', effect: 'enable', settingsRevision: 0, eligibleCount: 0, warningCount: 0, issues: [WAHOO_TRAINING_PERMISSION_ISSUE], approvalDigest: null });
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Distance-based steps are not sent');
+    expect(fixture.nativeElement.textContent).toContain('Automatic restoration is unavailable');
+    await fixture.componentInstance.begin('wahoo', 'send'); fixture.detectChanges();
+    expect(fixture.componentInstance.canConfirm()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Reconnect Wahoo');
+    fixture.componentInstance.reconnectWahooTraining();
+    expect(open).toHaveBeenCalledTimes(1); expect(service.mutate).not.toHaveBeenCalled();
   });
   it.each([false, true])('makes review primary and keeps plan exclusion in a secondary menu, even when paused: %s', async paused => {
     service.isReady.mockImplementation(provider => provider === 'suunto' && !paused);
@@ -984,6 +1014,19 @@ describe('Training provider delivery controls', () => {
     (document.querySelector('[role="menuitem"]') as HTMLButtonElement).click();
     await TestBed.inject(ApplicationRef).whenStable(); render('suunto-exclude'); render('suunto-exclude-dark');
     expect(ref.componentInstance.draft()?.action).toBe('stop');
+    ref.close();
+    service.isReady.mockImplementation(provider => provider === 'wahoo');
+    service.watchScope.mockReturnValue(of({ settings: [], statuses: [{ ...status, provider: 'wahoo', planId: 'p',
+      status: 'connection_repair', issues: [WAHOO_TRAINING_PERMISSION_ISSUE] }] }));
+    ref = TestBed.inject(MatDialog).open(TrainingDeliveryDialogComponent, {
+      data: { scope: 'workout', id: 'w', title: 'Time-based running workout with a long name' }, width: '640px', maxWidth: '95vw',
+    });
+    await TestBed.inject(ApplicationRef).whenStable();
+    ref.componentInstance.guidanceExpanded.set(true);
+    render('wahoo-training'); render('wahoo-training-dark');
+    expect(document.body.textContent).toContain('Reconnect Wahoo');
+    expect(document.body.textContent).toContain('Distance-based steps are not sent');
+    expect(document.body.textContent).toContain('Automatic restoration is unavailable');
     ref.close();
   });
 });

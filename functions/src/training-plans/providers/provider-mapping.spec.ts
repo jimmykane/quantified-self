@@ -56,7 +56,7 @@ describe('planned-workout provider proof fixtures', () => {
         expect(isPlannedWorkoutProviderDeliveryEnabled('coros')).toBe(false);
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.implementationState).toBe('private-rollout');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.implementationState).toBe('private-rollout');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('fixture-only');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('private-rollout');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('private-rollout');
         expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
             .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);

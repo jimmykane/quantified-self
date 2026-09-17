@@ -77,6 +77,7 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   const changed = !previous || previous.desiredDigest !== intent.digest || previous.desired !== intent.desired;
   const retried = settingRevision !== previous?.settingsRevision;
   const record: DeliveryLedgerV1 = { ...(previous?.verification ? { verification: previous.verification } : {}),
+    ...(previous?.providerAccessBlocked && !changed && !retried ? { providerAccessBlocked: true } : {}),
     ...(previous?.repair ? { repair: previous.repair } : {}),
     ...(previous?.completionLinkId ? { completionLinkId: previous.completionLinkId } : {}),
     schemaVersion: 1, id, workoutId, planId: context.workout ? context.workout.planId : previous?.planId ?? null,
@@ -106,6 +107,11 @@ function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid
   if (previous?.status === 'needs_attention' && previous.attempt && !retried) record.status = 'needs_attention';
   if (previous?.status === 'needs_attention' && previous.verification && !previous.attempt && !changed) record.status = 'needs_attention';
   if (previous?.status === 'failed' && !changed && !retried) record.status = 'failed';
+  // Application access rejection is not repaired by periodic reconciliation or
+  // user OAuth refresh. Keep its safe explanation until an edit or explicit Retry.
+  if (record.providerAccessBlocked) {
+    record.status = 'provider_unavailable'; record.issues = previous!.issues;
+  }
   if (previous?.status === 'retrying' && !changed && !retried && previous.retryAtMs > runtime.now()) record.status = 'retrying';
   if ((record.providerNotBeforeMs ?? 0) > runtime.now() && ['pending', 'stopped', 'paused_plan'].includes(record.status)
     && (record.attempt || (record.desired === 'present' && record.acceptedDigest !== record.desiredDigest)
@@ -169,7 +175,7 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
     }
     for (const { record, context, requestedAtMs } of records) {
       const operationKind = queuedDeliveryOperation(record);
-      if (operationKind && !['failed', 'needs_attention'].includes(record.status)
+      if (operationKind && !record.providerAccessBlocked && !['failed', 'needs_attention'].includes(record.status)
         && !(record.verification?.missing && !record.repair)) {
         tx.set(db.collection(DELIVERY_QUEUE).doc(record.id), { uid, kind: 'delivery', deliveryId: record.id,
           provider: record.provider, destinationKey: record.destinationKey, operationKind,

@@ -16,6 +16,8 @@ import { trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeli
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
 import { trainingVerificationCommandError, trainingVerificationLabel } from '../../helpers/training-verification-display.helper';
 import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
+import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
+import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
 
 const PROVIDER_PRESENTATIONS = {
   garmin: buildDestinationProviderPresentation(ServiceNames.GarminAPI),
@@ -180,12 +182,16 @@ export class TrainingDeliveryDialogComponent {
       canStop: !!setting?.enabled || (this.planBound() && !suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
       approvalDigest: suppressed ? null : statuses.find(item => item.status === 'approval_required' && item.approvalDigest)?.approvalDigest ?? null,
-      canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying'].includes(item.status)),
+      canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying', 'provider_unavailable'].includes(item.status)),
+      wahooReconnect: provider === 'wahoo' && statuses.some(item => item.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE)),
       reconnect: statuses.some(item => ['reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)),
     };
   }).filter(row => row.visible));
   readonly showsSuuntoGuidance = computed(() => this.rows().some(row => row.provider === 'suunto'));
   readonly showsCorosGuidance = computed(() => this.rows().some(row => row.provider === 'coros'));
+  readonly showsWahooGuidance = computed(() => this.rows().some(row => row.provider === 'wahoo'));
+  readonly wahooPreviewReconnect = computed(() => this.preview()?.command.provider === 'wahoo'
+    && this.preview()?.result.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE));
   readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
   readonly canConfirm = computed(() => {
     const preview = this.preview();
@@ -216,6 +222,12 @@ export class TrainingDeliveryDialogComponent {
         void this.begin(provider, this.data.scope === 'plan' ? 'configure' : 'send');
       }
     });
+  }
+  reconnectWahooTraining(): void {
+    if (this.busy() || !this.sameAccount() || (!this.wahooPreviewReconnect() && !this.rows().some(row => row.wahooReconnect))) return;
+    this.haptics.selection();
+    this.dialogRef.close();
+    this.dialog.open(WahooRouteAccessReconnectDialogComponent, { data: { purpose: 'training' }, width: '440px', maxWidth: 'calc(100vw - 32px)' });
   }
   async begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string, renewConsent = false): Promise<void> {
     if (this.busy() || !this.sameAccount() || !this.canReview() || this.data.scope === 'history'

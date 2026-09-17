@@ -8,22 +8,22 @@ describe('Training authority extraction compatibility', () => {
   it('uses the Garmin-facing Training permission name in the repair message', () => {
     expect(GARMIN_TRAINING_PERMISSION_ISSUE).toBe('Garmin Training permission is required. Reconnect Garmin and allow training workouts.');
   });
-  it('keeps existing scalar account normalization for wahoo', async () => {
+  it('uses canonical string account identity and explicit Training grants for Wahoo', async () => {
     const provider = 'wahoo' as const;
     const service = DELIVERY_SERVICES[provider];
     const ref = { collection: () => ref, doc: () => ref, limit: () => ref };
-    const data = { [service.account]: 123, tokenCredentialGeneration: 'credential' };
+    const data = { [service.account]: '123', tokenCredentialGeneration: 'credential', scope: 'user_read plans_read plans_write workouts_read workouts_write' };
     const values = [
-      { data: () => ({ connectionState: 'connected', connectionStateGeneration: 'connection', providerUserId: 123 }) },
+      { data: () => ({ connectionState: 'connected', connectionStateGeneration: 'connection', providerUserId: '123' }) },
       { exists: true, data: () => ({ activeOAuthCredentialGeneration: 'credential' }) },
-      { empty: false, size: 1, docs: [{ data: () => data }] },
+      { empty: false, size: 1, docs: [{ id: '123', data: () => data }] },
       { data: () => ({ connectionEpochs: { [provider]: 2 } }) },
     ];
     const db = { collection: () => ref } as unknown as Firestore;
     const tx = { get: async () => values.shift() } as unknown as Transaction;
     const authority = await readTrainingDeliveryAuthority(db, tx, 'fixture', provider);
     expect(authority.connection).toEqual({ state: 'connected', destinationKey: deliveryIdentity('fixture', provider, '123', 'account'),
-      generation: 'connection:credential', epoch: 2 });
+      generation: 'connection:credential:credential', epoch: 2 });
   });
   it.each([
     ['absent-generation', undefined, undefined, true],

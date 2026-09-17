@@ -132,8 +132,7 @@ describe('Production Training delivery rollout', () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
     for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
       const transport = runtime.transport(provider, 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
-      if (provider === 'garmin' || provider === 'coros' || provider === 'suunto') expect(transport?.mappingVersion).toBeTruthy();
-      else expect(transport).toBeNull();
+      expect(transport?.mappingVersion).toBeTruthy();
     }
   });
 
@@ -142,6 +141,12 @@ describe('Production Training delivery rollout', () => {
     expect(transport).toMatchObject({ horizonDays: 365, batch: { maxSize: 30 } });
     expect(transport?.inspection).toBeUndefined();
     expect(runtime.transport('coros', 'other')).toBeNull();
+  });
+  it('binds Wahoo with the seven-day horizon and independent positive-only inspection', () => {
+    const transport = runtime.transport('wahoo', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
+    expect(transport).toMatchObject({ horizonDays: 6, withdrawOutsideHorizon: true });
+    expect(transport?.inspection?.policy).toMatchObject({ required: ['plan', 'workout', 'association'], authoritativeAbsenceKeys: [], repairReadyKeys: [] });
+    expect(runtime.transport('wahoo', 'other')).toBeNull();
   });
 
   it.each(['', 'another-user', ' xcsAolLDDTWTgtRN9eYF3lW2YKL2', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2 '])(

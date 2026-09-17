@@ -627,6 +627,10 @@ export const PROVIDER_INTEGRATION_PAGES: Record<IntegrationProviderKey, Provider
         answer: 'Quantified Self imports completed workouts exposed by Wahoo with a downloadable FIT file. Wahoo does not expose completed workouts originating from third-party applications through this API.',
       },
       {
+        question: 'Can I send planned Training workouts to Wahoo?',
+        answer: 'Wahoo Training delivery is not generally available. A limited rollout supports time-based running and cycling workouts for today and the next six days, with explicit sync consent and plan/workout permissions. Cloud delivery does not confirm ELEMNT or watch receipt. Your workout editor is unchanged.',
+      },
+      {
         question: 'Does disconnecting Wahoo delete imported activities?',
         answer: 'No. Disconnecting revokes future Wahoo access and stops new imports, while previously imported activities remain in your Quantified Self account until you delete them or delete the account.',
       },

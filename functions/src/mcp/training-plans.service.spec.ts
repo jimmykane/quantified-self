@@ -40,6 +40,25 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
+  it.each(['delivered', 'unsupported', 'outside_horizon', 'needs_attention', 'connection_repair', 'provider_unavailable', 'completed'])(
+    'projects Wahoo %s without private Plan/Workout identities or device claims', async status => {
+      const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+      f.collections.trainingDeliverySettings.wahoo = { scope: 'plan', scopeId: 'p1', provider: 'wahoo', enabled: true,
+        suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-wahoo-account', associationPlanId: null, updatedAtMs: 1 };
+      const id = await trainingDeliverySummaryIdentity('owner', 'wahoo', 'private-wahoo-account', 'w1');
+      f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: 'p1', provider: 'wahoo', status,
+        differsFromQS: status === 'needs_attention', hasRemoteCopy: status === 'delivered', timeZone: 'Europe/Helsinki',
+        lastAttemptAtMs: 1, lastAcceptedAtMs: status === 'delivered' ? 1 : null, updatedAtMs: 1 };
+      const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+      const args = { scope: 'plan', reference: plans.plans[0].planRef };
+      const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
+      expect(result.services).toEqual([expect.objectContaining({ provider: 'wahoo', outcomes: [{ status, count: 1 }] })]);
+      expect(JSON.stringify(result)).not.toMatch(/private-wahoo|externalId|workout_token|plan_id|journal|device|ELEMNT/);
+      Object.assign(f.collections.trainingDeliveryStatuses[id], { externalId: 'private-plan', workout_token: 'private-workout',
+        plan_id: '123', providerAccessBlocked: true, providerJournal: { step: 'plan-create', state: 'started' },
+        artifact: { timeZone: 'Pacific/Pago_Pago' } });
+      await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
+    });
   it.each(['delivered', 'approval_required', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {
     const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
     f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
