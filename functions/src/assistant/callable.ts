@@ -46,6 +46,7 @@ import {
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 import { applyTrainingChanges } from '../mcp/training-plans-write.service';
 import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
+import { McpDataError } from '../mcp/data.service';
 
 interface AssistantCallableContext {
   auth?: {
@@ -788,8 +789,8 @@ export async function runApplyAssistantTrainingProposal(
     };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
-    throw new HttpsError('failed-precondition', error instanceof Error
-      ? error.message : 'The Training proposal could not be applied safely.');
+    if (error instanceof McpDataError) throw new HttpsError('failed-precondition', error.message);
+    throw new HttpsError('internal', 'The Training proposal could not be applied safely.');
   }
 }
 

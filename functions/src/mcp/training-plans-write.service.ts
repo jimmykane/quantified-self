@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
+import { HttpsError } from 'firebase-functions/v2/https';
 import { z } from 'zod';
 import {
   parseMutateTrainingScheduleRequestV1,
@@ -15,11 +16,12 @@ import {
 } from '../../../shared/training-plans';
 import { parseWorkoutStructureV1 } from '../../../shared/planned-workout';
 import { PLANNED_WORKOUT_PROVIDER_IDS, type PlannedWorkoutProviderId } from '../../../shared/planned-workout-providers';
-import { deliverySettingsId, normalizeDeliveryTimeZone, trainingDeliveryLocalDate,
+import { deliverySettingsId, normalizeDeliveryTimeZone, trainingDeliveryLocalDate, TrainingDeliveryContractError,
   type TrainingDeliveryAction, type TrainingDeliveryPreviewV1 } from '../../../shared/training-provider-delivery';
 import { getUserDeletionGuardStateInTransaction } from '../shared/user-deletion-guard';
 import { assertNoTrainingPlanDeletionInProgress } from '../training-plans/deletion-lock';
-import { applyTrainingScheduleMutation, createEmptyTrainingPlanState, type TrainingScheduleSnapshotV1 } from '../training-plans/mutation';
+import { applyTrainingScheduleMutation, createEmptyTrainingPlanState, TrainingScheduleMutationError,
+  type TrainingScheduleSnapshotV1 } from '../training-plans/mutation';
 import { mutateTrainingScheduleForUser } from '../training-plans/persistence';
 import { trainingDeliveryCommand } from '../training-plans/delivery/commands';
 import { productionDeliveryRuntime } from '../training-plans/delivery/runtime';
@@ -118,6 +120,14 @@ function unavailable(message = 'Training changes cannot be prepared safely. Try 
   throw new McpDataError('temporarily_unavailable', message);
 }
 
+function publicErrorMessage(error: unknown): string | null {
+  if (error instanceof McpDataError || error instanceof TrainingScheduleMutationError
+    || error instanceof TrainingDeliveryContractError || error instanceof HttpsError) {
+    return error.message.slice(0, 500);
+  }
+  return null;
+}
+
 function assertBytes(value: unknown): void {
   if (Buffer.byteLength(JSON.stringify(value), 'utf8') > MAX_INPUT_BYTES) {
     throw new McpDataError('query_too_large', 'The Training proposal exceeds the 256 KiB input limit. Split it into smaller changes.');
@@ -163,6 +173,7 @@ async function assertAuthorityInTransaction(
   connectionId: string,
   required: readonly string[],
   expectedGeneration?: string,
+  expectedAssistantProposalRef?: string,
 ): Promise<string> {
   const user = deps.db.collection('users').doc(uid);
   if ((await getUserDeletionGuardStateInTransaction(deps.db, tx, uid, deps.now())).shouldSkip) {
@@ -181,6 +192,10 @@ async function assertAuthorityInTransaction(
       && (!required.includes(TRAINING_PLANS_WRITE_SCOPE) || data.trainingPlanChangesEnabled === true)
       && (!required.includes(TRAINING_DELIVERY_WRITE_SCOPE) || data.trainingDeliveryEnabled === true);
     if (!authorized) invalid('The Assistant Training permissions changed. Review the proposal again.');
+    if (expectedAssistantProposalRef
+      && data.pendingTrainingProposal?.proposalRef !== expectedAssistantProposalRef) {
+      invalid('This Assistant Training proposal is no longer current. Review the latest proposal.');
+    }
     const generation = JSON.stringify([conversationId, data.trainingPlanChangesEnabled === true,
       data.trainingDeliveryEnabled === true]);
     if (expectedGeneration !== undefined && generation !== expectedGeneration) {
@@ -442,8 +457,9 @@ async function previewProviderOperation(
   try {
     preview = await trainingDeliveryCommand(deps.runtime, uid, command, true) as TrainingDeliveryPreviewV1;
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Provider delivery preview failed.';
-    invalid(message);
+    const message = publicErrorMessage(error);
+    if (message) invalid(message);
+    unavailable('Provider delivery cannot be previewed safely right now. Try again later.');
   }
   return { preview: preview!, publicPreview: { index: operation.index, provider: operation.provider,
     targetType: operation.targetType, action: operation.action, availability: deliveryAvailability(preview!),
@@ -562,7 +578,7 @@ export async function previewTrainingChanges(
       expectedRevisions: expectedRevisions(simulated, operation), operation });
     const before = simulated;
     try { simulated = applyTrainingScheduleMutation(simulated, request, deps.now() + index).after; }
-    catch (error) { invalid(error instanceof Error ? error.message : `Training change ${index + 1} is invalid.`); }
+    catch (error) { invalid(publicErrorMessage(error) ?? `Training change ${index + 1} is invalid.`); }
     scheduleRequests.push({ index, request });
     publicChanges.push({ index, kind: operation.kind, summary: describeScheduleEffects(operation, before, simulated) });
   });
@@ -610,7 +626,14 @@ export async function previewTrainingChanges(
       // Preview changed/new targets against the simulated authored result, never stale Firestore content.
       if (!originalTarget || JSON.stringify(originalTarget) !== JSON.stringify(simulatedTarget)
         || operation.action === 'check') {
-        const assessed = await previewSimulatedProviderAvailability(deps, input.uid, operation, simulated);
+        let assessed: Awaited<ReturnType<typeof previewSimulatedProviderAvailability>>;
+        try {
+          assessed = await previewSimulatedProviderAvailability(deps, input.uid, operation, simulated);
+        } catch (error) {
+          const message = publicErrorMessage(error);
+          if (message) invalid(message);
+          unavailable('Provider delivery cannot be previewed safely right now. Try again later.');
+        }
         providerPreviews.push(assessed.publicPreview);
         if (operation.action === 'approve' && !assessed.approvalDigest) {
           invalid('The current workout mapping no longer needs or permits approval.');
@@ -647,7 +670,7 @@ export async function previewTrainingChanges(
   const ref = proposalRef(proposalId, createdAtMs, input.uid, input.connectionId);
   const preview: PreviewResult = { proposalRef: ref, expiresAtMs, permissionMode: permissionMode(required),
     scheduleRevision: loaded.snapshot.state.revision,
-    summary: `${publicChanges.length} confirmed Training change${publicChanges.length === 1 ? '' : 's'} will be applied in order. Provider results are independent.`,
+    summary: `${publicChanges.length} proposed Training change${publicChanges.length === 1 ? '' : 's'} will be applied in order after confirmation. Provider results are independent.`,
     requiresConfirmation: true, changes: publicChanges, providerPreviews };
   TRAINING_WRITE_OUTPUTS.preview_training_changes.parse(preview);
   const stored: StoredProposal = { schemaVersion: 1, uid: input.uid, connectionId: input.connectionId,
@@ -699,6 +722,10 @@ export async function getTrainingProposalConfirmation(
 async function currentDeliveryCommand(
   deps: TrainingWriteDependencies,
   uid: string,
+  connectionId: string,
+  requiredScopes: readonly string[],
+  expectedAccessGeneration: string,
+  assistantProposalRef: string,
   operation: StoredProviderOperation,
   mutationId: string,
 ): Promise<Record<string, unknown>> {
@@ -709,10 +736,16 @@ async function currentDeliveryCommand(
     ...(operation.timeZone ? { timeZone: operation.timeZone } : {}),
     ...(operation.approvalDigest ? { approvalDigest: operation.approvalDigest } : {}) };
   if (action === 'check') {
-    return await trainingDeliveryCommand(deps.runtime, uid, base, false) as unknown as Record<string, unknown>;
+    return await trainingDeliveryCommand(deps.runtime, uid, base, false,
+      tx => assertAuthorityInTransaction(deps, tx, uid, connectionId, requiredScopes, expectedAccessGeneration,
+        connectionId.startsWith('first-party-assistant-v1:') ? assistantProposalRef : undefined)
+        .then(() => undefined)) as unknown as Record<string, unknown>;
   }
   if (action === 'approve' && !operation.approvalDigest) invalid('The confirmed compatibility approval is unavailable. Prepare it again.');
-  return await trainingDeliveryCommand(deps.runtime, uid, base, false) as unknown as Record<string, unknown>;
+  return await trainingDeliveryCommand(deps.runtime, uid, base, false,
+    tx => assertAuthorityInTransaction(deps, tx, uid, connectionId, requiredScopes, expectedAccessGeneration,
+      connectionId.startsWith('first-party-assistant-v1:') ? assistantProposalRef : undefined)
+      .then(() => undefined)) as unknown as Record<string, unknown>;
 }
 
 export async function applyTrainingChanges(
@@ -725,7 +758,8 @@ export async function applyTrainingChanges(
   const proposalRefDoc = deps.db.collection('users').doc(input.uid).collection(PROPOSALS).doc(current.id);
   let proposal = await deps.db.runTransaction(async tx => {
     await assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId, current.proposal.requiredScopes,
-      current.proposal.accessGeneration);
+      current.proposal.accessGeneration,
+      input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined);
     const snapshot = await tx.get(proposalRefDoc);
     const value = snapshot.data() as StoredProposal | undefined;
     if (!value || value.createdAtMs !== current.proposal.createdAtMs) invalid('This Training proposal is unavailable.');
@@ -745,15 +779,22 @@ export async function applyTrainingChanges(
     const request = storedOperation.request;
     try {
       await deps.db.runTransaction(tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
-        proposal.requiredScopes, proposal.accessGeneration), { readOnly: true });
-      await mutateTrainingScheduleForUser(input.uid, request, { db: deps.db, nowMs: proposal.createdAtMs + index });
+        proposal.requiredScopes, proposal.accessGeneration,
+        input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined), { readOnly: true });
+      await mutateTrainingScheduleForUser(input.uid, request, {
+        db: deps.db,
+        nowMs: proposal.createdAtMs + index,
+        transactionPrecondition: tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
+          proposal.requiredScopes, proposal.accessGeneration,
+          input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined).then(() => undefined),
+      });
       changeResults.push({ index: storedOperation.index,
         kind: request.operation.kind, status: 'applied', message: describeOperation(request.operation) });
       await proposalRefDoc.update({ nextScheduleOperation: index + 1, changeResults,
         leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     } catch (error) {
       changeResults.push({ index: storedOperation.index, kind: request.operation.kind, status: 'failed',
-        message: error instanceof Error ? error.message.slice(0, 500) : 'The schedule change failed.' });
+        message: publicErrorMessage(error) ?? 'The schedule change could not be applied safely. Read the latest schedule and prepare it again.' });
       break;
     }
   }
@@ -765,14 +806,16 @@ export async function applyTrainingChanges(
       const operation = proposal.providerOperations[index];
       try {
         await deps.db.runTransaction(tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
-          proposal.requiredScopes, proposal.accessGeneration), { readOnly: true });
-        await currentDeliveryCommand(deps, input.uid, operation, `mcp-${current.id}-${index}`.slice(0, 128));
+          proposal.requiredScopes, proposal.accessGeneration,
+          input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined), { readOnly: true });
+        await currentDeliveryCommand(deps, input.uid, input.connectionId, proposal.requiredScopes,
+          proposal.accessGeneration, current.ref, operation, `mcp-${current.id}-${index}`.slice(0, 128));
         providerResults.push({ index: operation.index, provider: operation.provider,
           status: operation.action === 'check' ? 'queued' : 'applied',
           message: operation.action === 'check' ? 'Remote-copy verification was queued.' : 'Delivery preferences were updated and reconciliation was queued.' });
       } catch (error) {
         providerResults.push({ index: operation.index, provider: operation.provider, status: 'blocked',
-          message: (error instanceof Error ? error.message : 'Provider delivery is currently unavailable.').slice(0, 500) });
+          message: publicErrorMessage(error) ?? 'Provider delivery is currently unavailable. Review its connection and try again.' });
       }
       await proposalRefDoc.update({ providerResults, leaseUntilMs: deps.now() + APPLY_LEASE_MS });
     }
@@ -797,6 +840,7 @@ export async function applyTrainingChanges(
   await proposalRefDoc.set({ status: proposal.status, result, changeResults, providerResults, leaseUntilMs: null,
     expireAt: proposal.expireAt }, { merge: true });
   await deps.db.runTransaction(tx => assertAuthorityInTransaction(deps, tx, input.uid, input.connectionId,
-    proposal.requiredScopes, proposal.accessGeneration), { readOnly: true });
+    proposal.requiredScopes, proposal.accessGeneration,
+    input.connectionId.startsWith('first-party-assistant-v1:') ? current.ref : undefined), { readOnly: true });
   return result;
 }

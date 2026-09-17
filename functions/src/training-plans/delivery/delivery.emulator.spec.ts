@@ -116,6 +116,15 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     }
     await db.terminate();
   }, 120_000);
+  it('checks caller authority inside the delivery mutation transaction', async () => {
+    const transactionPrecondition = vi.fn().mockRejectedValue(new Error('grant revoked'));
+
+    await expect(trainingDeliveryCommand(runtime, uid, command(), false, transactionPrecondition))
+      .rejects.toThrow('grant revoked');
+
+    expect(transactionPrecondition).toHaveBeenCalledTimes(1);
+    expect((await db.collection('users').doc(uid).collection('trainingDeliverySettings').get()).empty).toBe(true);
+  });
   it('queues/coalesces manual checks without changing settings and replays the typed receipt', async () => {
     inspection(); const ledger = await delivered();
     const user = db.collection('users').doc(uid);

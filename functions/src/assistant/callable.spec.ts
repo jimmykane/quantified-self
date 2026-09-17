@@ -166,6 +166,27 @@ describe('Assistant callable', () => {
     expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef);
   });
 
+  it('does not expose unexpected apply failures through the Assistant callable', async () => {
+    const { store } = createDependencies();
+    const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'schedule' as const,
+      expiresAtMs: Date.now() + 60_000, scheduleRevision: 7,
+      summary: 'Create a workout.', requiresConfirmation: true as const,
+      changes: [{ index: 0, kind: 'create-workout', summary: 'Create it.' }], providerPreviews: [] };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation: { version: 1, conversationId: 'conversation-1', messages: [],
+        expiresAt: '2026-08-10T12:00:00.000Z' }, pendingRequestId: null, locationAccess: 'coordinate_free',
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false,
+      pendingTrainingProposal: proposal,
+    });
+    const applyProposal = vi.fn().mockRejectedValue(new Error('private-provider-account-token'));
+
+    const response = runApplyAssistantTrainingProposal({ proposalRef: proposal.proposalRef,
+      permissionMode: proposal.permissionMode, conversationId: 'conversation-1', confirm: true }, context, store, applyProposal);
+    await expect(response).rejects.toMatchObject({ code: 'internal',
+      message: 'The Training proposal could not be applied safely.' });
+    await expect(response).rejects.not.toThrow('private-provider-account-token');
+  });
+
   it('returns Assistant quota status using Firestore role resolution in hosted mode', async () => {
     const getQuotaStatus = vi.fn().mockResolvedValue(quota);
 

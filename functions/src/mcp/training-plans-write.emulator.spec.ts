@@ -91,6 +91,24 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     expect((await db.collection('users').doc(uid).collection('scheduledWorkouts').get()).size).toBe(1);
   });
 
+  it('does not expose unexpected provider errors in previews or apply results', async () => {
+    const secret = 'private-provider-account-token';
+    deps.runtime.hasPro = async () => { throw new Error(secret); };
+    await expect(previewCreateAndSend()).rejects.toThrow('cannot be previewed safely');
+    await expect(previewCreateAndSend()).rejects.not.toThrow(secret);
+
+    deps.runtime.hasPro = async () => true;
+    const preview = await previewCreateAndSend();
+    deps.runtime.hasPro = async () => { throw new Error(secret); };
+    const result = await applyTrainingChanges({ uid, connectionId: 'connection', scopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'combined' } }, deps);
+    expect(result.status).toBe('partially_applied');
+    expect(result.providers).toEqual([expect.objectContaining({
+      status: 'blocked', message: 'Provider delivery is currently unavailable. Review its connection and try again.',
+    })]);
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
   it('rejects misleading provider ordering and missing or invalid initial time zones', async () => {
     const base = { expectedScheduleRevision: 1, changes: [
       { kind: 'provider-delivery', targetType: 'workout', target: { localKey: 'run' },
@@ -176,5 +194,28 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training MCP write propos
     await user.collection('assistantConversations').doc('active').update({ conversationId: 'chat-2', trainingPlanChangesEnabled: false });
     await expect(applyTrainingChanges({ uid, connectionId: 'first-party-assistant-v1:chat-1', scopes: assistantScopes,
       arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' } }, deps)).rejects.toThrow('permissions changed');
+  });
+
+  it('binds Assistant writes to the exact proposal currently awaiting confirmation', async () => {
+    const user = db.collection('users').doc(uid);
+    await user.collection('assistantConversations').doc('active').set({ conversationId: 'chat-1',
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: false });
+    const assistantScopes = [TRAINING_PLANS_SCOPE, TRAINING_PLANS_WRITE_SCOPE];
+    const preview = await previewTrainingChanges({ uid, connectionId: 'first-party-assistant-v1:chat-1', scopes: assistantScopes,
+      arguments: { expectedScheduleRevision: 1, changes: [
+        { kind: 'create-workout', localKey: 'run', plan: null, localDate: '2026-09-18', title: 'Assistant run', structure },
+      ] } }, deps);
+    const input = { uid, connectionId: 'first-party-assistant-v1:chat-1', scopes: assistantScopes,
+      arguments: { proposalRef: preview.proposalRef, permissionMode: 'schedule' as const } };
+
+    await user.collection('assistantConversations').doc('active').update({
+      pendingTrainingProposal: { ...preview, proposalRef: 'newer-proposal' },
+    });
+    await expect(applyTrainingChanges(input, deps)).rejects.toThrow('no longer current');
+    expect((await user.collection('scheduledWorkouts').get()).empty).toBe(true);
+
+    await user.collection('assistantConversations').doc('active').update({ pendingTrainingProposal: preview });
+    await expect(applyTrainingChanges(input, deps)).resolves.toMatchObject({ status: 'applied' });
+    expect((await user.collection('scheduledWorkouts').get()).size).toBe(1);
   });
 });

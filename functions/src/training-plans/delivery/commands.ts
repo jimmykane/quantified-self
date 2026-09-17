@@ -20,7 +20,9 @@ import type { TrainingVerificationReceiptV1 } from '../../../../shared/training-
 import { VERIFICATION_COALESCE_MS } from './verification-contracts';
 
 export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: string, raw: unknown,
-  previewOnly: boolean): Promise<TrainingDeliveryPreviewV1 | TrainingDeliverySettingsV1 | TrainingVerificationReceiptV1> {
+  previewOnly: boolean,
+  transactionPrecondition?: (tx: FirebaseFirestore.Transaction) => Promise<void>,
+): Promise<TrainingDeliveryPreviewV1 | TrainingDeliverySettingsV1 | TrainingVerificationReceiptV1> {
   const command: TrainingDeliveryCommandV1 = parseTrainingDeliveryCommandV1(raw);
   const user = runtime.db.collection('users').doc(uid);
   const privateState = user.collection(DELIVERY_STATE).doc('current');
@@ -31,6 +33,9 @@ export async function trainingDeliveryCommand(runtime: DeliveryRuntime, uid: str
     if ((await getUserDeletionGuardStateInTransaction(runtime.db, tx, uid)).shouldSkip) {
       throw new HttpsError('failed-precondition', 'This account is unavailable or being deleted.');
     }
+    // Keep any caller-specific authority check in the same transaction as the
+    // delivery settings write so a concurrent revocation aborts the commit.
+    await transactionPrecondition?.(tx);
     if (!previewOnly) {
       const receipt = await tx.get(receiptRef);
       if (receipt.exists) {
