@@ -108,9 +108,10 @@ const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSk
     };
 });
 
-const { mockFitActivityReferencesFromEvent, mockRetainSuuntoGuideCompletions } = vi.hoisted(() => ({
+const { mockFitActivityReferencesFromEvent, mockRetainSuuntoGuideCompletions, mockRetainCOROSTrainingCompletion } = vi.hoisted(() => ({
     mockFitActivityReferencesFromEvent: vi.fn().mockReturnValue([]),
     mockRetainSuuntoGuideCompletions: vi.fn().mockResolvedValue({ retained: false, linkedWorkoutIds: [] }),
+    mockRetainCOROSTrainingCompletion: vi.fn().mockResolvedValue({ retained: false, linkedWorkoutIds: [] }),
 }));
 
 // Mock firebase-admin before importing modules that use it
@@ -321,6 +322,10 @@ vi.mock('./suunto/guide-completion', () => ({
     retainSuuntoGuideCompletions: mockRetainSuuntoGuideCompletions,
 }));
 
+vi.mock('./coros/training-completion', () => ({
+    retainCOROSTrainingCompletion: mockRetainCOROSTrainingCompletion,
+}));
+
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     const original: any = await importOriginal();
     return {
@@ -418,6 +423,8 @@ describe('queue', () => {
         mockFitActivityReferencesFromEvent.mockReturnValue([]);
         mockRetainSuuntoGuideCompletions.mockReset();
         mockRetainSuuntoGuideCompletions.mockResolvedValue({ retained: false, linkedWorkoutIds: [] });
+        mockRetainCOROSTrainingCompletion.mockReset();
+        mockRetainCOROSTrainingCompletion.mockResolvedValue({ retained: false, linkedWorkoutIds: [] });
         mockGetUserDeletionGuardState.mockResolvedValue({
             userExists: true,
             deletionInProgress: false,
@@ -3209,6 +3216,8 @@ describe('queue', () => {
                 openId: 'corosOpenId',
                 workoutID: 'cw1',
                 FITFileURI: 'https://coros.com/fit',
+                planWorkoutId: '123456789',
+                componentKey: 'root',
                 retryCount: 0,
                 processed: false,
                 dateCreated,
@@ -3243,14 +3252,30 @@ describe('queue', () => {
                 undefined,
                 undefined
             );
+            expect(mockRetainCOROSTrainingCompletion).toHaveBeenCalledWith(
+                expect.anything(),
+                'mock-user-id',
+                'standardized-event-id',
+                'corosOpenId',
+                'mock-doc-id',
+                null,
+                '123456789',
+                'root',
+                [],
+            );
             expect(vi.mocked(resolveProviderImportEventID)).toHaveBeenCalledWith({
                 userID: 'mock-user-id',
                 startDate: new Date('2026-01-14T10:00:00.000Z'),
                 serviceName: ServiceNames.COROSAPI,
                 providerEventID: 'cw1',
                 providerEventIDField: 'serviceWorkoutID',
-                providerEventSecondaryID: 'https://coros.com/fit',
-                providerEventSecondaryIDField: 'serviceFITFileURI',
+                providerEventSecondaryID: 'root',
+                providerEventSecondaryIDField: 'serviceWorkoutComponentKey',
+                legacyProviderEventSecondaryIdentities: [{
+                    field: 'serviceFITFileURI',
+                    value: 'https://coros.com/fit',
+                }],
+                allowLegacySecondaryFieldPresenceMatch: true,
             });
         });
 

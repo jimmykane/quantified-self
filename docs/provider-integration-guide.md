@@ -57,7 +57,7 @@ for the full policy, request accounting, privacy, diagnostics and rollout contra
 | Provider | Inspection foundation | Repair gate |
 | --- | --- | --- |
 | Garmin | Separate retained Workout/Schedule GETs, exact account/owner/date association checks. A controlled deletion proved that removing a calendar entry leaves its Workout present and makes the exact retained Schedule ID return 404. | Schedule-only negative classification and repair are enabled after two unchanged observations at least 15 minutes apart. Missing Workout remains inconclusive and cannot trigger recreation; its semantics/replacement recovery remain in #703/#645. |
-| COROS | Unavailable; no documented planned-resource read established. | #648 must establish evidence, not activity polling or blind republishing. |
+| COROS | Unavailable; no documented planned-resource read established. | Delivery support does not enable checking; do not substitute activity polling or blind republishing. |
 | Wahoo | Contract supports independent Plan/Workout/association observations; no live transport here. | #649 must prove external-ID lookup, full inventory coverage and uncertain POST recovery; workout_token is not assumed idempotency. |
 | Suunto | Private #650 adapter supports positive owned Guide reads and resumable inventory. | 404/unstable inventory cannot prove deletion; safe absence/repair tracked by #710. Unpinning/watch eviction never causes cloud recreation. |
 
@@ -124,7 +124,7 @@ preflight and rollback. This is a controlled production pilot, not public rollou
 | Provider | Proof state | Truthful model and current gate |
 | --- | --- | --- |
 | Garmin | `private-rollout` | Training API V2 mapping plus an offline-tested HTTP adapter cover separate Workout/Workout Schedule CRUD, retained Long IDs, partial recovery, and `WORKOUT_IMPORT` repair. The authored running/cycling profiles are supported, but the API receives only its broad `RUNNING` or `CYCLING` sport because the contract has no sub-sport field. Real delivery is restricted to the explicit private pilot. Synthetic fixtures and real Firestore transactions are not device evidence. Exact-profile device behavior remains unproven; completion correlation is #651. |
-| COROS | `fixture-only` | The local ignored February 2026 partner reference proves dated batches of at most 30 workouts, a today-through-one-year horizon, structured Run/Bike steps, stable partner workout IDs, eligible deletion, and `planWorkoutId` completion correlation. Entitlement, repeat-ID replacement, overlapping-window behavior, and sandbox CRUD still require provider confirmation. |
+| COROS | `private-rollout` | The exact-UID runtime batches at most 30 dated workouts through the production-only Training transport, retains stable partner IDs, applies per-item deletion outcomes, and links the exact returned `planWorkoutId`. Public delivery and remote checking remain disabled. Entitlement, repeated-ID replacement, overlapping-window behavior, reschedule/delete, callback/history correlation, and app/watch behavior still require separately authorized live evidence. |
 | Wahoo | `fixture-only` | Public `plan.json` 1.0.0 maps Running/Cycling steps, time/distance/kJ endings, repeats, absolute targets, and supported relative targets. Delivery is a separate app-owned Plan plus dated Workout lifecycle requiring `plans_read`, `plans_write`, `workouts_read`, and `workouts_write`. The device-visible horizon, same-app ownership, and date-only `starts`/`day_code` behavior need sandbox proof. |
 | Suunto | `private-rollout` | One workout maps to a dated SuuntoPlus Guide, not a native plan. The Guide recommends the exact canonical running/cycling profile selected in QS, including Trail Running, Treadmill, Mountain Biking, Indoor Cycling, E-Biking/E-MTB, and Hand Cycle where the documented Suunto activity catalog provides an ID. ZIP/icon CRUD and exact external-ID recovery reuse existing OAuth and the existing Suunto API subscription key with Guides access; today through today + 6 is a QS product window. Synthetic HTTP/FIT and real Firestore tests cover lifecycle and private completion evidence. Actual app/watch operations remain ordinary #650 integration tests, not claimed from fixtures. Safe absence/repair remains #710. |
 
@@ -143,9 +143,9 @@ Suunto is the first adapter to support the editor's exact running/cycling profil
 array receives provider IDs only at serialization time: Running `1`, Trail Running `22`, Treadmill `53`, Cycling `2`,
 Mountain Biking `10`, Indoor Cycling `52`, E-Biking `105` and E-MTB `106`, and Hand Cycle `109`. Generic Cycling does
 not automatically include Mountain Biking. Garmin independently supports the same authored QS profiles by folding them
-to its broad `RUNNING`/`CYCLING` API values with an explicit degradation warning. COROS and Wahoo remain limited to
-their proved Running/Cycling baseline; an exact subtype is unsupported there until that provider's own contract and
-device behavior establish a truthful mapping.
+to its broad `RUNNING`/`CYCLING` API values with an explicit degradation warning. COROS accepts native Running, Trail
+Running and Cycling; Treadmill and the remaining cycling profiles fold to COROS Run/Bike only with explicit approval.
+Wahoo remains limited to its proved Running/Cycling baseline.
 
 COROS mapping follows the local ignored COROS API Reference V2.0.6 (February 2026); the confidential PDF is likewise
 kept out of Git. Partner athlete/workout IDs in fixtures are redacted or deterministic opaque safe integers. The mapper
@@ -193,8 +193,9 @@ budgets, new project or setup wizard are added.
 Fixture compatibility is not delivery readiness. Ordinary adapter tests cover create, update, reschedule, delete,
 exact duplicate, ambiguous retry, reconnect and provider-specific horizon behavior. Record actual live results only
 when separately authorized; do not introduce a separate certification process. The
-shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved only with an excluded
-test transport. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
+shared delivery ledger, reconciliation queue and gated UI are implemented in #646 and proved with an excluded test
+transport. COROS #648 adds a production-only batched boundary under the exact private UID without changing that common
+model. [Training delivery foundation](training-workspace.md#provider-delivery-foundation-646) is the detailed
 source of truth for its contracts, operations, evidence and maintenance. Garmin's #647 adapter additionally runs through
 synthetic HTTP fixtures and real Firestore transactions; real transport remains unavailable outside the private allowlists.
 The [Garmin adapter boundary](training-workspace.md#garmin-workoutcalendar-adapter-647) documents the per-request authority

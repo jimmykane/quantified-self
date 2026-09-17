@@ -132,9 +132,16 @@ describe('Production Training delivery rollout', () => {
     vi.stubEnv('SUUNTOAPP_GUIDE_OWNER', 'Fixture application');
     for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
       const transport = runtime.transport(provider, 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
-      if (provider === 'garmin' || provider === 'suunto') expect(transport?.mappingVersion).toBeTruthy();
+      if (provider === 'garmin' || provider === 'coros' || provider === 'suunto') expect(transport?.mappingVersion).toBeTruthy();
       else expect(transport).toBeNull();
     }
+  });
+
+  it('binds COROS only to the batch path and keeps remote checking unavailable', () => {
+    const transport = runtime.transport('coros', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2');
+    expect(transport).toMatchObject({ horizonDays: 365, batch: { maxSize: 30 } });
+    expect(transport?.inspection).toBeUndefined();
+    expect(runtime.transport('coros', 'other')).toBeNull();
   });
 
   it.each(['', 'another-user', ' xcsAolLDDTWTgtRN9eYF3lW2YKL2', 'xcsAolLDDTWTgtRN9eYF3lW2YKL2 '])(

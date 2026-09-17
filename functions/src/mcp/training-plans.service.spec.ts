@@ -55,6 +55,25 @@ describe('Training plan MCP reads', () => {
     Object.assign(f.collections.trainingDeliveryStatuses[id], { privateEvidence: 'must-not-leak', externalId: 'private-guide', subscriptionKey: 'private-key' });
     await expect(f.run('get_training_sync_status', { scope: 'plan', reference: plans.plans[0].planRef })).rejects.toThrow();
   });
+  it('projects COROS completion through the existing enum and rejects private batch or partner identities', async () => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+    f.collections.trainingDeliverySettings.coros = { scope: 'plan', scopeId: 'p1', provider: 'coros', enabled: true,
+      suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-coros-account', associationPlanId: null, updatedAtMs: 1 };
+    const id = await trainingDeliverySummaryIdentity('owner', 'coros', 'private-coros-account', 'w1');
+    f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: 'p1', provider: 'coros', status: 'completed',
+      differsFromQS: false, hasRemoteCopy: true, timeZone: 'Europe/Helsinki', lastAttemptAtMs: 1,
+      lastAcceptedAtMs: 1, updatedAtMs: 2 };
+    const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+    const args = { scope: 'plan', reference: plans.plans[0].planRef };
+    const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
+    expect(result.services).toEqual([expect.objectContaining({ provider: 'coros',
+      outcomes: [{ status: 'completed', count: 1 }] })]);
+    expect(JSON.stringify(result)).not.toMatch(/private-coros-account|planWorkoutId|athleteId|batchJournal/);
+    Object.assign(f.collections.trainingDeliveryStatuses[id], {
+      planWorkoutId: '123456789', athleteId: '987654321', batchJournal: 'private',
+    });
+    await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
+  });
   it('requires independent permission at the data boundary before reading', async () => {
     const f = fixture();
     await expect(f.run('list_training_plans', {}, ['metrics:read', 'timeline-notes:read'])).rejects.toThrow('permission');

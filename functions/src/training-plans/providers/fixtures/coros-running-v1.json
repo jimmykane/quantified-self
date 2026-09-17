@@ -9,7 +9,7 @@
       "Title": "Fixture intervals",
       "Id": 1191908854,
       "WorkoutDay": "2026-09-03",
-      "WorkoutType": "run",
+      "WorkoutType": "Run",
       "Structure": [
         {
           "Type": "Step",

@@ -1,0 +1,184 @@
+import { randomUUID } from 'node:crypto';
+import { Firestore } from 'firebase-admin/firestore';
+import { ActivityTypes, ServiceNames } from '@sports-alliance/sports-lib';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { DELIVERY_LEDGER, type DeliveryLedgerV1 } from '../training-plans/delivery/contracts';
+import { deliveryIdentity } from '../training-plans/delivery/intent';
+import { retainCOROSTrainingCompletion } from './training-completion';
+
+describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
+  'COROS exact Training completion correlation with real Firestore',
+  { timeout: 30_000 },
+  () => {
+    const host = process.env.FIRESTORE_EMULATOR_HOST;
+    if (host && !/^(127\.0\.0\.1|localhost):\d+$/.test(host)) throw new Error('Loopback required');
+    const db = new Firestore({ projectId: 'demo-training-coros-completion' });
+    const users: string[] = [];
+    let uid: string;
+    let destinationKey: string;
+    const account = 'coros-account';
+    const marker = '123456789';
+    const user = () => db.collection('users').doc(uid);
+    const retain = (overrides: Partial<{
+      account: string;
+      tokenDocumentId: string;
+      tokenCredentialGeneration: string | null;
+      marker: string;
+      componentKey: string;
+    }> = {}) => retainCOROSTrainingCompletion(
+      db,
+      uid,
+      'event',
+      overrides.account ?? account,
+      overrides.tokenDocumentId ?? account,
+      overrides.tokenCredentialGeneration ?? null,
+      overrides.marker ?? marker,
+      overrides.componentKey ?? 'root',
+      [{ id: 'activity', startTimeMs: Date.parse('2026-09-17T07:00:00Z') }],
+      Date.parse('2026-09-17T08:00:00Z'),
+    );
+
+    async function seedLedger(id = 'delivery', workoutId = 'workout'): Promise<void> {
+      const ledger: DeliveryLedgerV1 = {
+        schemaVersion: 1,
+        id,
+        workoutId,
+        planId: 'plan',
+        provider: 'coros',
+        destinationKey,
+        desiredGeneration: 1,
+        connectionEpoch: 0,
+        settingsRevision: 1,
+        desiredDigest: 'desired',
+        desired: 'present',
+        status: 'delivered',
+        timeZone: 'Europe/Helsinki',
+        issues: [],
+        approvalDigest: null,
+        actual: { ids: { workout: marker, athlete: '987654321' }, localDate: '2026-09-17', completed: false },
+        acceptedDigest: 'desired',
+        contentDigest: 'content',
+        acceptedContentDigest: 'content',
+        attempt: null,
+        lease: null,
+        retries: 0,
+        retryAtMs: 0,
+        blockedConnectionGeneration: null,
+        lastAttemptAtMs: 1,
+        lastAcceptedAtMs: 1,
+        updatedAtMs: 1,
+      };
+      await user().collection(DELIVERY_LEDGER).doc(id).set(ledger);
+    }
+
+    beforeEach(async () => {
+      uid = `coros-completion-${randomUUID()}`;
+      users.push(uid);
+      destinationKey = deliveryIdentity(uid, 'coros', account, 'account');
+      await user().set({ test: true });
+      await user().collection('meta').doc(ServiceNames.COROSAPI).set({
+        connectionState: 'connected',
+        connectionStateGeneration: 'connection',
+        providerUserId: account,
+      });
+      const root = db.collection('COROSAPIAccessTokens').doc(uid);
+      await root.set({ connected: true });
+      await root.collection('tokens').doc(account).set({
+        serviceName: ServiceNames.COROSAPI,
+        openId: account,
+        accessToken: 'fixture-token',
+      });
+      await user().collection('events').doc('event').set({ test: true });
+      await user().collection('scheduledWorkouts').doc('workout').set({
+        schemaVersion: 1,
+        id: 'workout',
+        planId: 'plan',
+        title: 'COROS run',
+        localDate: '2026-09-17',
+        revision: 2,
+        lifecycle: 'planned',
+        createdAtMs: 1,
+        updatedAtMs: 2,
+        structure: {
+          version: 1,
+          sport: ActivityTypes.Running,
+          nodes: [{ kind: 'step', id: 'step', purpose: 'work', ending: { kind: 'time', seconds: 600 }, targets: [] }],
+        },
+      });
+      await seedLedger();
+    });
+
+    afterAll(async () => {
+      for (const id of users) {
+        await db.recursiveDelete(db.collection('users').doc(id));
+        await db.recursiveDelete(db.collection('COROSAPIAccessTokens').doc(id));
+        await db.recursiveDelete(db.collection('userDeletionTombstones').doc(id));
+      }
+      await db.terminate();
+    });
+
+    it('links the exact marker under absent generation metadata and is idempotent', async () => {
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data()).toMatchObject({
+        provider: 'coros',
+        matchMethod: 'provider_marker',
+        eventId: 'event',
+        activityId: 'activity',
+        sourceSessionIndex: null,
+        workoutRevisionAtLink: 2,
+      });
+      expect((await user().collection(DELIVERY_LEDGER).doc('delivery').get()).data()).toMatchObject({
+        status: 'completed',
+        desired: 'preserve',
+        completionLinkId: expect.any(String),
+        actual: { completed: true },
+      });
+      expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('coros').get()).data())
+        .toMatchObject({ sourceProvider: 'coros', planWorkoutId: marker, componentKey: 'root', outcome: 'already_linked' });
+    });
+
+    it('accepts matching generation metadata and rejects stale authority', async () => {
+      const root = db.collection('COROSAPIAccessTokens').doc(uid);
+      await root.update({ activeOAuthCredentialGeneration: 'generation' });
+      await root.collection('tokens').doc(account).update({ tokenCredentialGeneration: 'generation' });
+      expect(await retain({ tokenCredentialGeneration: 'generation' })).toMatchObject({ linkedWorkoutIds: ['workout'] });
+
+      await user().collection('trainingWorkoutCompletions').doc('workout').delete();
+      await user().collection('trainingActivityCompletionLinks').get().then(snapshot =>
+        Promise.all(snapshot.docs.map(document => document.ref.delete())));
+      await root.collection('tokens').doc(account).update({ tokenCredentialGeneration: 'changed' });
+      expect(await retain({ tokenCredentialGeneration: 'generation' })).toEqual({ retained: false, linkedWorkoutIds: [] });
+    });
+
+    it('rejects cross-account, non-root and invalid provider markers without evidence', async () => {
+      expect(await retain({ account: 'another-account' })).toEqual({ retained: false, linkedWorkoutIds: [] });
+      expect(await retain({ componentKey: 'component-1' })).toEqual({ retained: false, linkedWorkoutIds: [] });
+      expect(await retain({ marker: '9223372036854775807' })).toEqual({ retained: false, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').get()).empty).toBe(true);
+    });
+
+    it('does not choose between collided ledger identities', async () => {
+      await user().collection('scheduledWorkouts').doc('other-workout').set({
+        ...(await user().collection('scheduledWorkouts').doc('workout').get()).data(),
+        id: 'other-workout',
+      });
+      await seedLedger('other-delivery', 'other-workout');
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event').collection('trainingCompletionEvidence').doc('coros').get()).data())
+        .toMatchObject({ outcome: 'conflict' });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
+    it('defers while delivery is changing and fences deleted events and users', async () => {
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({ attempt: { id: 'operation' } });
+      await expect(retain()).rejects.toThrow('delivery is changing');
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({ attempt: null });
+      await user().collection('events').doc('event').delete();
+      expect(await retain()).toEqual({ retained: false, linkedWorkoutIds: [] });
+      await user().collection('events').doc('event').set({ test: true });
+      await db.collection('userDeletionTombstones').doc(uid).set({ deleting: true });
+      expect(await retain()).toEqual({ retained: false, linkedWorkoutIds: [] });
+    });
+  },
+);

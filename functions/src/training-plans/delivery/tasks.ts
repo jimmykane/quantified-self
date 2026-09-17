@@ -61,6 +61,9 @@ export const onTrainingDeliveryQueued = onDocumentWritten({
   if (!event.data?.after.exists || event.data.after.data()?.dueAtMs > Date.now()) return;
   // Verification is dispatched by the prioritized recovery scan, never ahead of writes.
   if (event.data.after.data()?.kind === 'verification') return;
+  // COROS delivery leaves are coalesced by the existing minute dispatcher so
+  // one task can lease and send up to 30 compatible workouts.
+  if (event.data.after.data()?.kind === 'delivery' && event.data.after.data()?.provider === 'coros') return;
   await dispatchTrainingDeliveryJob(productionDeliveryRuntime(), event.params.jobId);
 });
 
@@ -76,11 +79,18 @@ export const dispatchTrainingDelivery = onSchedule({ schedule: '* * * * *', regi
   ];
   let dispatched = 0;
   let inspected = 0;
+  const corosGroups = new Set<string>();
   for (const query of queries) {
     if (inspected >= capacity) break;
     const page = await query.where('dueAtMs', '<=', runtime.now()).orderBy('dueAtMs').limit(capacity - inspected).get();
     inspected += page.size;
     for (const job of page.docs) {
+      const data = typeof job.data === 'function' ? job.data() : {};
+      if (data.kind === 'delivery' && data.provider === 'coros') {
+        const group = JSON.stringify([data.uid, data.destinationKey, data.operationKind]);
+        if (corosGroups.has(group)) continue;
+        corosGroups.add(group);
+      }
       try { if (await dispatchTrainingDeliveryJob(runtime, job.id)) dispatched++; }
       catch { logger.warn('[TrainingDelivery]', { event: 'dispatch_failure' }); }
     }

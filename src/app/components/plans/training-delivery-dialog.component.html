@@ -102,6 +102,9 @@
             <p class="delivery-caption">Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
             <p class="delivery-caption">Sent means available in the Suunto app, not confirmed on your watch. Sync your compatible watch with the app, then select the Guide for your exercise. Pinning stays under your control.</p>
           }
+          @if (row.provider === 'coros' && data.scope !== 'workout') {
+            <p class="delivery-caption">Upcoming workouts are sent individually to your COROS training calendar. Sent does not confirm that a watch received them.</p>
+          }
           @if (data.scope !== 'history') {
             @if (data.scope === 'workout' && row.statuses.length === 1) {
               <p class="delivery-status-label">{{ row.statuses[0].label }}</p>
@@ -209,6 +212,10 @@
       @if (data.scope === 'workout' && showsSuuntoGuidance()) {
         <p>Workouts for today and the next six days are sent as SuuntoPlus Guides. Later workouts are sent automatically as their dates approach.</p>
         <p>Sent means available in the Suunto app, not confirmed on your watch. Sync your compatible watch with the app, then select the Guide for your exercise. Pinning stays under your control.</p>
+      }
+      @if (showsCorosGuidance()) {
+        <p>QS sends each upcoming workout to your COROS training calendar. The COROS app manages watch synchronization; Sent does not confirm that your watch received it.</p>
+        <p>COROS documents a two-week watch window and one training plan synced to a watch at a time. QS does not claim or replace a native plan object, and remote checking is unavailable.</p>
       }
       <p>Sync requires Pro and starts only when you enable it. Manual planning is free.</p>
       <p>Stop sync turns off updates and asks the connected app to remove upcoming synced workouts. Your plans and workouts stay in Quantified Self. Your provider account stays connected.</p>

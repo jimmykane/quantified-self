@@ -185,6 +185,7 @@ export class TrainingDeliveryDialogComponent {
     };
   }).filter(row => row.visible));
   readonly showsSuuntoGuidance = computed(() => this.rows().some(row => row.provider === 'suunto'));
+  readonly showsCorosGuidance = computed(() => this.rows().some(row => row.provider === 'coros'));
   readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
   readonly canConfirm = computed(() => {
     const preview = this.preview();

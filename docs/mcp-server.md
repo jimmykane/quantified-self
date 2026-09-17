@@ -70,6 +70,14 @@ already stops a confirmed missing copy from counting as synced and represents re
 Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live
 provider check or repair and gains no tool, field, scope, consent or write authority.
 
+COROS Training delivery (#648) is likewise an additive no-wire-change. The existing sync-status enum can report the
+same delivered, approval, retry, attention and completed states for COROS. Partner athlete/workout IDs, destination
+identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
+rejected from browser/MCP projections. Plan totals continue to derive from individual workout statuses rather than a
+claimed native plan object. The exact provider marker can update the existing private completion link, but exposing a
+completion link through MCP remains the focused #651 deferral. No new MCP scope, tool, provider action, schema,
+Assistant route or plugin metadata is introduced.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the

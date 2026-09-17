@@ -29,6 +29,7 @@ import {
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME } from '../suunto/health-webhook-binding';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
+import { COROS_INTEGER_CLAIMS } from '../training-plans/delivery/coros/identities';
 import {
     WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
     WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -912,6 +913,7 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
 
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'training delivery queue', DELIVERY_QUEUE, 'uid', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'COROS Training integer claim', COROS_INTEGER_CLAIMS, 'uid', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);

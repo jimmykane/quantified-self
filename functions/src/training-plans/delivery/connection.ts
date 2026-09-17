@@ -7,6 +7,8 @@ import { deliveryIdentity } from './intent';
 import { DELIVERY_STATE, type DeliveryConnection } from './contracts';
 import { doesSuuntoHealthWebhookBindingMatch, getSuuntoHealthWebhookAccountBindingRef,
   parseSuuntoHealthWebhookAccountBinding } from '../../suunto/health-webhook-binding';
+import { doesOAuthCredentialGenerationAuthorizeToken } from '../../token-refresh-coordinator';
+import { normalizeCOROSOpenId, selectActiveCOROSTokenSnapshot } from '../../coros/account';
 
 export const GARMIN_TRAINING_PERMISSION_ISSUE = 'Garmin Training permission is required. Reconnect Garmin and allow training workouts.';
 export const DELIVERY_SERVICES = {
@@ -68,23 +70,58 @@ export async function readTrainingDeliveryAuthority(db: Firestore, tx: Transacti
       generation: `${generation}:${token.data().tokenCredentialGeneration}`,
       destinationKey: deliveryIdentity(uid, provider, account, 'account') } };
   }
-  const active = credentialGeneration ? tokens.docs.filter(doc => doc.data().tokenCredentialGeneration === credentialGeneration) : [];
+  const active = provider === 'coros'
+    ? tokens.docs.filter(doc => doesOAuthCredentialGenerationAuthorizeToken(root, doc.data().tokenCredentialGeneration))
+    : credentialGeneration ? tokens.docs.filter(doc => doc.data().tokenCredentialGeneration === credentialGeneration) : [];
   // Garmin adds strict identity validation; do not change another provider's existing
   // scalar normalization while extracting the common authority reader for this adapter.
-  const identity = (value: unknown) => provider === 'garmin' ? typeof value === 'string' ? value.trim() : '' : String(value ?? '').trim();
-  const identities = new Set(active.map(doc => {
-    const value = identity(doc.data()[service.account]);
+  const identity = (value: unknown) => provider === 'garmin' ? typeof value === 'string' ? value.trim() : ''
+    : provider === 'coros' ? normalizeCOROSOpenId(value) ?? '' : String(value ?? '').trim();
+  const wellFormedActive = active.filter(doc => {
+    if (provider !== 'coros') return true;
+    const data = doc.data();
+    const account = identity(data[service.account] ?? doc.id);
+    return !!account && doc.id === account && data.serviceName === service.name
+      && (data[service.account] === undefined || identity(data[service.account]) === account);
+  });
+  const identities = new Set(wellFormedActive.map(doc => {
+    const value = identity(doc.data()[service.account] ?? (provider === 'coros' ? doc.id : undefined));
     return value.length <= 512 ? value : '';
   }).filter(Boolean));
   const pinned = identity(meta.providerUserId);
-  const account = pinned && identities.has(pinned) ? pinned : !pinned && identities.size === 1 ? [...identities][0] : '';
-  if (!account || identities.size !== 1 || tokens.size > 32 || (provider === 'garmin'
+  const invalidCorosPin = provider === 'coros'
+    && meta.providerUserId !== undefined && meta.providerUserId !== null && meta.providerUserId !== '' && !pinned;
+  // Match the canonical COROS account selector: an explicit pin wins; otherwise
+  // use its deterministic latest-token ordering. Do not silently fall through
+  // from a malformed selected token to another retained account.
+  const selectedCorosToken = provider === 'coros'
+    ? pinned
+      ? active.find(doc => doc.id === pinned) ?? null
+      : selectActiveCOROSTokenSnapshot(active)
+    : null;
+  const selectedCorosAccount = selectedCorosToken
+    ? identity(selectedCorosToken.data()[service.account] ?? selectedCorosToken.id)
+    : '';
+  const account = provider === 'coros'
+    ? selectedCorosAccount
+    : pinned && identities.has(pinned) ? pinned : !pinned && identities.size === 1 ? [...identities][0] : '';
+  const selectedCandidates = account
+    ? wellFormedActive.filter(doc => identity(doc.data()[service.account] ?? (provider === 'coros' ? doc.id : undefined)) === account)
+    : [];
+  const corosAuthorityIsUnambiguous = provider !== 'coros'
+    || (selectedCandidates.length === 1 && selectedCandidates[0].id === selectedCorosToken?.id);
+  if (!account || tokens.size > 32 || invalidCorosPin || !corosAuthorityIsUnambiguous
+    || (provider !== 'coros' && identities.size !== 1) || (provider === 'garmin'
     && (active.length !== 1 || active[0].data().serviceName !== service.name || !meta.connectionStateGeneration))) {
     return { ...unavailable, connection: { ...unavailable.connection, state: 'connection_repair' } };
   }
-  const connection: DeliveryConnection = { state: 'connected', destinationKey: deliveryIdentity(uid, provider, account, 'account'), generation, epoch };
+  const selected = selectedCandidates[0] ?? null;
+  const selectedTokenGeneration = typeof selected?.data().tokenCredentialGeneration === 'string'
+    ? selected.data().tokenCredentialGeneration : '';
+  const connection: DeliveryConnection = { state: 'connected', destinationKey: deliveryIdentity(uid, provider, account, 'account'),
+    generation: provider === 'coros' ? `${generation}:${selectedTokenGeneration}` : generation, epoch };
   if (provider === 'garmin' && getMissingGarminPermissionsForTokenLike(active[0].data(), ['WORKOUT_IMPORT']).length) {
     return { ...unavailable, account, connection: { ...connection, state: 'connection_repair', issues: [GARMIN_TRAINING_PERMISSION_ISSUE] } };
   }
-  return { connection, token: active.length === 1 ? active[0] : null, account, credentialGeneration };
+  return { connection, token: selected, account, credentialGeneration };
 }

@@ -75,6 +75,39 @@ export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [
   ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
 ] as const;
 
+export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Running,
+  ActivityTypes.TrailRunning,
+] as const;
+
+export const COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 = [ActivityTypes.Treadmill] as const;
+
+export const COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1 = [ActivityTypes.Cycling] as const;
+
+export const COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.MountainBiking,
+  ActivityTypes.IndoorCycling,
+  ActivityTypes.EBiking,
+  ActivityTypes.Handcycle,
+] as const;
+
+export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
+  ...COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1,
+  ...COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1,
+  ...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1,
+  ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
+] as const;
+
+export type CorosWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
+
+export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSportFamilyV1 | null {
+  if (([...COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1, ...COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1] as readonly ActivityTypes[])
+    .includes(sport)) return 'RUNNING';
+  if (([...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1, ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1] as readonly ActivityTypes[])
+    .includes(sport)) return 'CYCLING';
+  return null;
+}
+
 export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
 
 export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
@@ -107,8 +140,9 @@ export interface PlannedWorkoutProviderMappingAssessmentV1 {
 }
 
 /**
- * Versioned provider research snapshot. Delivery remains disabled until each
- * provider's fixture and sandbox CRUD/idempotency evidence is recorded.
+ * Versioned provider research snapshot. Public delivery remains disabled until
+ * each provider's documented contract and separately authorized live evidence
+ * support the claimed lifecycle.
  */
 export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   Record<PlannedWorkoutProviderId, PlannedWorkoutProviderCapabilityV1>
@@ -154,12 +188,12 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   coros: {
     id: 'coros',
     label: 'COROS',
-    implementationState: 'fixture-only',
+    implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'native-plan-workout-batches',
     requiredScopes: ['training-plan partner entitlement'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      sports: COROS_PLANNED_WORKOUT_SPORTS_V1,
       endingKinds: ['time', 'distance', 'manual'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -172,7 +206,7 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     unresolvedGates: [
       'Confirm Training Plan entitlement; provider code 30009 means access is unavailable.',
       'Confirm repeated-ID replacement and overlapping-window semantics with COROS.',
-      'Pass sandbox create, update, reschedule, eligible-delete, and duplicate tests.',
+      'Record authorized create, repeated-ID update, overlapping-window preservation, reschedule, eligible-delete, completion-correlation, and app/watch evidence before broader rollout.',
     ],
     evidence: ['COROS API Reference V2.0.6 (partner document, February 2026)'],
   },
@@ -306,19 +340,20 @@ export function assessPlannedWorkoutProviderMappingV1(
       path: '$.sport',
       message: `${structure.sport} cannot be represented by the ${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} fixture mapper.`,
     });
-  } else if (
-    provider === 'garmin'
+  } else if ((provider === 'garmin' || provider === 'coros')
     && structure.sport !== ActivityTypes.Running
     && structure.sport !== ActivityTypes.Cycling
-  ) {
-    const family = garminWorkoutSportFamilyV1(structure.sport);
+    && !(provider === 'coros' && structure.sport === ActivityTypes.TrailRunning)) {
+    const family = provider === 'garmin'
+      ? garminWorkoutSportFamilyV1(structure.sport)
+      : corosWorkoutSportFamilyV1(structure.sport);
     if (family) {
       const familyLabel = family === 'RUNNING' ? 'Running' : 'Cycling';
       issues.push({
         severity: 'degraded',
         code: 'sport_profile_degraded',
         path: '$.sport',
-        message: `Garmin receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
+        message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
       });
     }
   }
@@ -396,7 +431,7 @@ export function assessPlannedWorkoutProviderMappingV1(
 
     if (
       provider === 'coros'
-      && structure.sport === ActivityTypes.Cycling
+      && corosWorkoutSportFamilyV1(structure.sport) === 'CYCLING'
       && step.targets.some(target => target.kind === 'cadence')
     ) {
       issues.push({

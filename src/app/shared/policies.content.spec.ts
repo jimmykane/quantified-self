@@ -111,6 +111,10 @@ describe('COROS connected-service policy', () => {
     expect(content).toContain('Disconnecting COROS stops future daily Health and sleep imports');
     expect(content).toContain('Deleting your Quantified Self account recursively removes');
     expect(content).toContain('active COROS connection');
+    expect(content).toContain('collision-checked partner workout identities');
+    expect(content).toContain('exact returned COROS planWorkoutId');
+    expect(content).toContain('COROS training calendar');
+    expect(content).toContain('not a watch receipt');
     expect(content).toContain('automatically send new Garmin/Suunto/Wahoo FIT activities');
     expect(content).toContain('Eligible connected Pro users can also send');
     expect(content).toContain('selected GPX/FIT route');

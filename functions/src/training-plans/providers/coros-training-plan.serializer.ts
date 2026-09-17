@@ -9,13 +9,17 @@ import {
 } from '../../../../shared/planned-workout';
 import { normalizeTrainingLocalDate } from '../../../../shared/training-plans';
 import {
+    COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
+    COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1,
+} from '../../../../shared/planned-workout-providers';
+import {
     createStableProviderIntegerId,
     resolveProviderSerializationIssuesV1,
     type ProviderSerializationIssueV1,
     type ProviderSerializationResultV1,
 } from './provider-mapping';
 
-export type CorosWorkoutTypeV1 = 'run' | 'bike';
+export type CorosWorkoutTypeV1 = 'Run' | 'Bike' | 'trailRun';
 export type CorosIntensityClassV1 = 'WarmUp' | 'CoolDown' | 'Active' | 'Rest';
 export type CorosIntensityTargetUnitV1 =
     | 'PercentOfFtp'
@@ -71,12 +75,13 @@ export interface CorosTrainingPlanPushDataV1 {
     AthleteId: number;
     StartDate: string;
     EndDate: string;
-    Workouts: [CorosTrainingWorkoutV1];
+    Workouts: CorosTrainingWorkoutV1[];
 }
 
 export interface SerializeCorosTrainingPlanOptionsV1 {
     athleteId: number;
-    sourceWorkoutId: string;
+    sourceWorkoutId?: string;
+    workoutId?: number;
     title: string;
     description?: string;
     localDate: string;
@@ -114,8 +119,11 @@ function normalizeCorosLocalDateTime(value: string): string {
 }
 
 function sportToCoros(sport: ActivityTypes): CorosWorkoutTypeV1 {
-    if (sport === ActivityTypes.Running) return 'run';
-    if (sport === ActivityTypes.Cycling) return 'bike';
+    if (sport === ActivityTypes.Running) return 'Run';
+    if (sport === ActivityTypes.TrailRunning) return 'trailRun';
+    if ((COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'Run';
+    if (sport === ActivityTypes.Cycling) return 'Bike';
+    if ((COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'Bike';
     throw new Error(`Unsupported COROS sport reached after compatibility validation: ${sport}.`);
 }
 
@@ -371,11 +379,14 @@ export function serializeCorosTrainingPlanV1(
         additionalIssues,
         allowDegraded: options.allowDegraded,
     });
+    const workoutId = options.workoutId !== undefined
+        ? positiveCorosInteger(options.workoutId, 'COROS workout ID')
+        : createStableProviderIntegerId('coros', requiredText(options.sourceWorkoutId ?? '', 'COROS source workout ID'));
     const workout: CorosTrainingWorkoutV1 = {
         ...(description ? { Description: description } : {}),
         LastModifiedDate: lastModifiedDate,
         Title: title,
-        Id: createStableProviderIntegerId('coros', options.sourceWorkoutId),
+        Id: workoutId,
         WorkoutDay: localDate,
         WorkoutType: sportToCoros(structure.sport),
         Structure: structureToCorosNodes(structure),

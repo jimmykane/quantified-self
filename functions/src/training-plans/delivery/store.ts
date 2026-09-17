@@ -58,6 +58,13 @@ export function writeDelivery(runtime: DeliveryRuntime, tx: Transaction, uid: st
   });
 }
 
+export function queuedDeliveryOperation(record: DeliveryLedgerV1): 'upsert' | 'remove' | null {
+  if (record.attempt) return record.attempt.kind;
+  if (record.desired === 'present' && record.acceptedDigest !== record.desiredDigest) return 'upsert';
+  if (record.desired === 'absent' && (record.actual || record.repair)) return 'remove';
+  return null;
+}
+
 function reconcileRecord(runtime: DeliveryRuntime, context: DeliveryContext, uid: string, provider: PlannedWorkoutProviderId,
   workoutId: string, previous: DeliveryLedgerV1 | null): DeliveryLedgerV1 | null {
   const setting = context.setting;
@@ -161,9 +168,11 @@ export async function reconcileTrainingDeliveryPage(runtime: DeliveryRuntime, ui
       }
     }
     for (const { record, context, requestedAtMs } of records) {
-      if ((record.attempt || (record.desired === 'present' && record.status !== 'delivered' && !(record.verification?.missing && !record.repair))
-        || (record.desired === 'absent' && (record.actual || record.repair))) && !['failed', 'needs_attention'].includes(record.status)) {
+      const operationKind = queuedDeliveryOperation(record);
+      if (operationKind && !['failed', 'needs_attention'].includes(record.status)
+        && !(record.verification?.missing && !record.repair)) {
         tx.set(db.collection(DELIVERY_QUEUE).doc(record.id), { uid, kind: 'delivery', deliveryId: record.id,
+          provider: record.provider, destinationKey: record.destinationKey, operationKind,
           dueAtMs: Math.max(record.retryAtMs, record.lease?.expiresAtMs ?? 0), dispatchToken: randomUUID() });
       } else stageVerification(runtime, tx, uid, record, context, requestedAtMs);
       writeDelivery(runtime, tx, uid, record);

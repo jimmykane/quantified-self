@@ -45,6 +45,13 @@ describe('Training delivery queue trigger', () => {
     await trigger.handler({ data: { after: { exists: true, data: () => ({ kind: 'verification', dueAtMs: 0 }) } } });
     expect(productionDeliveryRuntime).not.toHaveBeenCalled();
   });
+  it('leaves due COROS delivery leaves to the batch-coalescing dispatcher', async () => {
+    const trigger = onTrainingDeliveryQueued as unknown as { handler: (event: unknown) => Promise<void> };
+    await trigger.handler({ data: { after: { exists: true, data: () => ({
+      kind: 'delivery', provider: 'coros', dueAtMs: 0,
+    }) } } });
+    expect(productionDeliveryRuntime).not.toHaveBeenCalled();
+  });
   it.each([0, 92, 100])('bounds scans by queue capacity and prioritizes writes, manual then ordinary at depth %s', async depth => {
     const scans: { filters: unknown[][]; limit: number }[] = [];
     const collection = () => {

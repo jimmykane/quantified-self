@@ -527,6 +527,7 @@ service cloud.firestore {
       allow write: if false;
     }
     match /trainingDeliveryQueue/{document=**} { allow read, write: if false; }
+    match /trainingDeliveryCorosIntegerClaims/{document=**} { allow read, write: if false; }
     match /trainingProviderCapacity/{document=**} { allow read, write: if false; }
 
     match /sleepSyncQueue/{queueItemID} {

@@ -994,6 +994,7 @@ describe('cleanupUserAccounts', () => {
         expect(firestoreMock().collection).toHaveBeenCalledWith('garminAPIActivityQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('suuntoAppWorkoutQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('COROSAPIWorkoutQueue');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('trainingDeliveryCorosIntegerClaims');
         expect(firestoreMock().collection).toHaveBeenCalledWith('sportsLibReparseJobs');
         expect(firestoreMock().collection).toHaveBeenCalledWith('sportsLibRouteReparseJobs');
         expect(firestoreMock().collection).toHaveBeenCalledWith('failed_jobs');
