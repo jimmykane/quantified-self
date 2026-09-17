@@ -18,7 +18,11 @@ import {
     getTimestampMillis,
 } from '../stripe/subscription-state';
 
-export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 hours', region: 'europe-west2' }, async () => {
+export const checkSubscriptionNotifications = onSchedule({
+    schedule: 'every 24 hours',
+    region: 'europe-west2',
+    memory: '512MiB',
+}, async () => {
     const db = admin.firestore();
     const now = new Date();
 

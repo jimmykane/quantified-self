@@ -56,7 +56,10 @@ function accountBoundMutationData(value: unknown, authenticatedUID: string): Rec
     return mutation;
 }
 
-export const saveManualHealthMeasurementCallable = onCall(callableOptions, async (
+export const saveManualHealthMeasurementCallable = onCall({
+    ...callableOptions,
+    memory: '512MiB',
+}, async (
     request,
 ): Promise<SaveManualHealthMeasurementResponse> => {
     if (!request.auth?.uid) {

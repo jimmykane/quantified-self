@@ -473,7 +473,8 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
 export const linkExistingStripeCustomer = onCall({
     region: FUNCTIONS_MANIFEST.linkExistingStripeCustomer.region,
     secrets: FUNCTION_SECRET_BINDINGS.linkExistingStripeCustomer,
-    cors: ALLOWED_CORS_ORIGINS
+    cors: ALLOWED_CORS_ORIGINS,
+    memory: '512MiB',
 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
