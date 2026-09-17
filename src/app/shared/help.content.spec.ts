@@ -30,8 +30,16 @@ describe('help.content', () => {
   });
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
-    expect(content).toContain('not enabled yet');
-    expect(content).toContain('private production pilot, not a public launch');
+    expect(content).toContain('Garmin, COROS, Suunto and Wahoo workout delivery are restricted to the private rollout, not a public launch');
+    expect(content).toContain('Distance-based steps are not sent because Wahoo needs a total duration');
+    expect(content).toContain('Checks confirm the Plan, Workout and association; automatic restoration is unavailable');
+    expect(content).toContain('COROS training calendar');
+    expect(content).toContain('two-week watch window');
+    expect(content).toContain('remote checking and automatic missing-copy restoration are unavailable');
+    expect(content).toContain('These cosmetic adjustments happen automatically');
+    expect(content).toContain('**Not sent · Needs review**');
+    expect(content).toContain('**Exclude from plan sync**');
+    expect(content).toContain('Opening Review never sends or approves anything by itself');
     expect(content).toContain('Older connections may need this even when activity imports work');
     expect(content).toContain('Stopping workout sync keeps your provider account connected');
     expect(content).toContain('If you separately choose to disconnect a provider or delete your Quantified Self account');
@@ -186,7 +194,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('**Read Heart rate charts by their time period.**');
     expect(healthSection?.content).toContain('unweighted arithmetic average');
     expect(healthSection?.content).toContain('**not the day\'s true heart-rate extremes**');
-    expect(healthSection?.content).toContain('names the omitted source even when other providers have visible charts');
+    expect(healthSection?.content).toContain('names the omitted source, returns an older saved 1-year selection to 90 days');
     expect(healthSection?.content).toContain('**Calculated by QS**');
     expect(healthSection?.content).toContain('metrics found anywhere in your imported history');
     expect(healthSection?.content).toContain('Weight and VO₂ max also remain available');
@@ -223,7 +231,8 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('equivalent typed Sleep reference is already present');
     expect(healthSection?.content).toContain('Health and Sleep availability are checked independently');
     expect(healthSection?.content).toContain('only that domain stays unfiltered');
-    expect(healthSection?.content).toContain('**1d**, **14d**, **30d**, **90d**, or **1y**');
+    expect(healthSection?.content).toContain('Use **1d**, **14d**, **30d**, or **90d** for detailed sample readings');
+    expect(healthSection?.content).toContain('**1y** remains available for readings with daily summaries');
     expect(healthSection?.content).toContain('identifies **Today**, **Yesterday**, or the inspected date');
     expect(healthSection?.content).toContain('selected metric and range are saved to your account without adding URL query parameters');
     expect(healthSection?.content).toContain('older/newer position and provider filters remain local');
@@ -236,7 +245,7 @@ describe('help.content', () => {
     expect(healthSection?.content).toContain('without overwriting your saved choice');
     expect(healthSection?.content).not.toContain('or saves a preferred source');
     expect(healthSection?.content).toContain('local labels such as **Garmin account 1**');
-    expect(healthSection?.content).toContain('Detailed sample charts are available for 1d, 14-day, and 30-day windows');
+    expect(healthSection?.content).toContain('Detailed sample charts are available for 1d, 14-day, 30-day, and 90-day windows');
     expect(healthSection?.content).toContain('does not imply that every metric is continuous');
     expect(healthSection?.content).toContain('normalized Sleep model');
     expect(healthSection?.content).toContain('Expand **Source observations**');
@@ -316,6 +325,12 @@ describe('help.content', () => {
     expect(dataAndPrivacySection?.content).toContain('same live UTC-day Readiness used by Dashboard Today');
     expect(dataAndPrivacySection?.content).toContain('seven-day HRV average and same-source 60-day personal range');
     expect(dataAndPrivacySection?.content).toContain('processing-bounded all-history scan');
+    expect(dataAndPrivacySection?.content).toContain('parent event tags');
+    expect(dataAndPrivacySection?.content).toContain('exact case-insensitive tag matches');
+    expect(dataAndPrivacySection?.content).toContain('personal, health, or location context');
+    expect(dataAndPrivacySection?.content).toContain('untrusted labels');
+    expect(dataAndPrivacySection?.content).toContain('existing clients do not reauthorize');
+    expect(dataAndPrivacySection?.content).toContain('The built-in Assistant is not expanded');
     expect(dataAndPrivacySection?.content).toContain('Oversized rankings fail');
     expect(dataAndPrivacySection?.content).toContain('jump count is not treated as jump quality');
     expect(dataAndPrivacySection?.content).toContain('missing or insufficient-history states');
@@ -527,8 +542,12 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Garmin workout delivery is available only to the private production pilot');
-    expect(planningSection?.content).toContain('COROS, Wahoo and Suunto delivery are not enabled yet');
+    expect(planningSection?.content).toContain('Garmin, COROS, Suunto and Wahoo workout delivery are restricted to the private rollout');
+    expect(planningSection?.content).toContain('Wahoo initially supports time-based running and cycling workouts');
+    expect(planningSection?.content).toContain('Scheduled for later');
+    expect(planningSection?.content).toContain('Sent is not a watch receipt');
+    expect(planningSection?.content).toContain('Garmin supports the same choices');
+    expect(planningSection?.content).toContain('only the broad Running or Cycling family');
     expect(planningSection?.content).toContain('only one can be active');
     expect(planningSection?.content).toContain('Move a workout between plans or between a plan and **Standalone**');
     expect(planningSection?.content).toContain('Ordinary deletion is recoverable from history');

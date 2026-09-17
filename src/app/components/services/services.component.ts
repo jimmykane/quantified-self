@@ -236,11 +236,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
-        title: 'Sleep history',
-        description: 'Backfill Suunto sleep data for recovery and sleep insights.',
-        detail: 'Historical sleep backfill · 7-day cooldown',
+        title: 'Sleep & 24/7 Health history',
+        description: 'Backfill Suunto sleep and available 24/7 Health metrics.',
+        detail: 'Historical Sleep and 24/7 Health backfill · 7-day cooldown',
         icon: 'bedtime',
-        actionLabel: 'Import sleep history',
+        actionLabel: 'Import history',
         tool: 'history',
       },
       {
@@ -271,10 +271,18 @@ export class ServicesComponent implements OnInit, OnDestroy {
     coros: [
       {
         title: 'Activity sync',
-        description: 'New COROS activities import automatically while connected.',
-        detail: 'History import',
+        description: 'New COROS activities import automatically while connected. Backfill earlier activities from History import.',
+        detail: 'Automatic sync and activity backfill',
         icon: 'sync',
-        actionLabel: 'History import',
+        actionLabel: 'Backfill activities',
+        tool: 'history',
+      },
+      {
+        title: 'Sleep & daily Health history',
+        description: 'Backfill COROS sleep and available daily Health metrics.',
+        detail: 'Historical Sleep and daily Health backfill · 7-day cooldown',
+        icon: 'bedtime',
+        actionLabel: 'Import history',
         tool: 'history',
       },
       {

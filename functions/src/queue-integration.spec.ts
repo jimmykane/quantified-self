@@ -72,6 +72,9 @@ const {
 
 vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
+    TokenRefreshInProgressError: class TokenRefreshInProgressError extends Error {
+        readonly name = 'TokenRefreshInProgressError';
+    },
     TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
         readonly name = 'TokenRefreshSkippedForDeletedUserError';
     },
@@ -102,7 +105,8 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
         EventImporterFIT: {
             getFromArrayBuffer: vi.fn(() => ({
                 startDate: new Date(),
-                getID: () => 'event-123'
+                getID: () => 'event-123',
+                getActivities: () => [],
             }))
         }
     };

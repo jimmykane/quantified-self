@@ -124,6 +124,11 @@ describe('PublicSeoPageComponent', () => {
     expect(text).toContain('Saved routes and optional locations');
     expect(text).toContain('Workout details and charts');
     expect(text).toContain('Find recent activities');
+    expect(text).toContain('exact event tag');
+    expect(text).toContain('Can an MCP client find workouts by tag?');
+    expect(text).toContain('exact case-insensitive tag matches');
+    expect(text).toContain('personal, health, or location context');
+    expect(text).toContain('untrusted labels');
     expect(text).toContain('plan your next workout');
     expect(text).toContain('No settings or data writes');
     expect(text).toContain('External clients have their own privacy and retention practices');

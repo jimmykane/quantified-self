@@ -7,6 +7,7 @@ import { isGarminHealthSyncEnabled } from './health-flags';
 export const getGarminHealthSyncAvailability = onCall({
   region: FUNCTIONS_MANIFEST.getGarminHealthSyncAvailability.region,
   cors: ALLOWED_CORS_ORIGINS,
+  memory: '512MiB',
 }, async (request): Promise<GarminHealthSyncAvailabilityResponse> => {
   enforceAppCheck(request);
   if (!request.auth) {

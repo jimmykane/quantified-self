@@ -1,3 +1,4 @@
+import { getDateTimeFormatter } from './date-time-format.helper';
 import {
   HEALTH_COVERAGE_STATUSES,
   HEALTH_METRIC_CATALOG,
@@ -52,6 +53,8 @@ import {
 import {
   APP_HEALTH_WORKSPACE_METRICS,
   APP_HEALTH_WORKSPACE_RANGES,
+  APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
+  APP_HEALTH_WORKSPACE_SAMPLE_RANGE,
   AppHealthWorkspaceMetric,
   AppHealthWorkspaceRange,
 } from '../models/app-user.interface';
@@ -81,6 +84,8 @@ export type HealthWorkspaceSleepSession = SleepSession & { healthAccountKey?: st
 
 export const HEALTH_WORKSPACE_DEFAULT_METRIC = HEALTH_METRIC_IDS.RestingHeartRate;
 export const HEALTH_WORKSPACE_DEFAULT_RANGE: HealthWorkspaceRange = '30d';
+export const HEALTH_WORKSPACE_SAMPLE_RANGE = APP_HEALTH_WORKSPACE_SAMPLE_RANGE;
+export const HEALTH_WORKSPACE_SAMPLE_MAX_DAYS = APP_HEALTH_WORKSPACE_SAMPLE_MAX_DAYS;
 const HEALTH_WORKSPACE_METRICS = new Set<HealthWorkspaceMetricSelection>([
   ...APP_HEALTH_WORKSPACE_METRICS,
 ].filter(metric => metric !== HEALTH_METRIC_IDS.Distance
@@ -138,6 +143,7 @@ export interface HealthWorkspaceSeries {
   nativeOnly: boolean;
   valueType: HealthValueType;
   chartKind: HealthWorkspaceChartKind;
+  sampleBased: boolean;
   points: HealthWorkspaceSeriesPoint[];
   deviceLabel: string | null;
   coverageText: string;
@@ -390,7 +396,7 @@ export function resolveHealthWorkspaceWindow(
     startTimeMs,
     endTimeMs,
     dayCount,
-    includeSamples: dayCount <= 30,
+    includeSamples: dayCount <= HEALTH_WORKSPACE_SAMPLE_MAX_DAYS,
     canNavigateNewer: endDate < todayDate,
     label: oneDayLabel || explicitWindowLabel,
   };
@@ -508,7 +514,9 @@ export function buildHealthMetricWorkspaceView(
   const grouped = new Map<string, MetricDatum[]>();
   for (const datum of datums) {
     const key = metricDatumSeriesIdentity(datum);
-    grouped.set(key, [...(grouped.get(key) || []), datum]);
+    const items = grouped.get(key);
+    if (items) items.push(datum);
+    else grouped.set(key, [datum]);
   }
 
   const projectionNowMs = resolveProjectionNowMs(result);
@@ -548,6 +556,7 @@ export function buildHealthMetricWorkspaceView(
       nativeOnly: first.nativeOnly,
       valueType: first.valueType,
       chartKind: resolveChartKind(first, points.length),
+      sampleBased: items.every(item => item.rowKind === 'chunk'),
       points,
       deviceLabel: deviceLabels.length === 1 ? deviceLabels[0] : deviceLabels.length > 1 ? 'Multiple devices' : null,
       coverageText,
@@ -570,8 +579,9 @@ export function buildHealthMetricWorkspaceView(
   const allRows = [...latestByRow.values()]
     .sort((left, right) => right.timestampMs - left.timestampMs
       || compareText(left.provider, right.provider)
-      || compareText(left.rowId, right.rowId))
-    .map((datum): HealthObservationTableRow => {
+      || compareText(left.rowId, right.rowId));
+  // Only format the bounded table page. All readings remain available to charts.
+  const rows = allRows.slice(0, TABLE_ROW_LIMIT).map((datum): HealthObservationTableRow => {
     const sourceLabel = accountLabels.get(accountIdentity(datum.provider, datum.accountKey)) || providerLabel(datum.provider);
     return {
       id: datum.rowId,
@@ -598,7 +608,7 @@ export function buildHealthMetricWorkspaceView(
 
   return {
     series,
-    rows: allRows.slice(0, TABLE_ROW_LIMIT),
+    rows,
     totalRowCount: allRows.length,
     hasCanonicalSeries: series.some(item => !item.nativeOnly),
     hasNativeOnlySeries: series.some(item => item.nativeOnly),
@@ -1699,7 +1709,7 @@ function humanize(value: string): string {
 }
 
 function formatWindowLabel(startMs: number, endMs: number): string {
-  const rangeFormatter = new Intl.DateTimeFormat(undefined, {
+  const rangeFormatter = getDateTimeFormatter(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -1710,7 +1720,7 @@ function formatWindowLabel(startMs: number, endMs: number): string {
   if (startLabel !== endLabel) {
     return `${startLabel} – ${endLabel}`;
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
@@ -1720,7 +1730,7 @@ function formatWindowLabel(startMs: number, endMs: number): string {
 }
 
 function formatRelativeDayDate(timestampMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
@@ -1731,7 +1741,7 @@ function formatCalendarDate(calendarDate: string): string {
   const timestampMs = parseCalendarDate(calendarDate);
   return timestampMs === null
     ? 'Unknown date'
-    : new Intl.DateTimeFormat(undefined, {
+    : getDateTimeFormatter(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1740,7 +1750,7 @@ function formatCalendarDate(calendarDate: string): string {
 }
 
 function formatDateTime(timestampMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return getDateTimeFormatter(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

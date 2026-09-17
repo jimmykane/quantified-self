@@ -36,7 +36,7 @@
           <span class="calendar-day-number">{{ day.dayNumber }}</span>
           @if (day.inRange && day.entries.length) {
             <span class="calendar-day-count" aria-hidden="true">
-              <mat-icon>event_note</mat-icon>{{ day.entries.length }}
+              <mat-icon>{{ allActivitiesLinked(day.entries) ? 'task_alt' : 'event_note' }}</mat-icon>{{ day.entries.length }}
             </span>
           }
         </button>
@@ -46,10 +46,10 @@
             @for (workout of day.visibleEntries; track workout.id) {
               <button mat-button type="button" class="calendar-workout" [disabled]="disabled()"
                 [class.calendar-workout--skipped]="workout.lifecycle === 'skipped'"
-                [attr.aria-label]="'Edit ' + workout.title + (workout.lifecycle === 'skipped' ? ', skipped' : '')"
-                [matTooltip]="workout.title + (workout.lifecycle === 'skipped' ? ' · Skipped' : '')"
+                [attr.aria-label]="'Edit ' + workout.title + (workout.lifecycle === 'skipped' ? ', skipped' : '') + (isActivityLinked(workout.id) ? ', activity linked' : '')"
+                [matTooltip]="workout.title + (workout.lifecycle === 'skipped' ? ' · Skipped' : '') + (isActivityLinked(workout.id) ? ' · Activity linked' : '')"
                 (click)="editWorkout(workout)">
-                <span class="calendar-workout-title">{{ workout.lifecycle === 'skipped' ? 'Skipped · ' : '' }}{{ workout.title }}</span>
+                <span class="calendar-workout-title">{{ workout.lifecycle === 'skipped' ? 'Skipped · ' : '' }}{{ isActivityLinked(workout.id) ? 'Linked · ' : '' }}{{ workout.title }}</span>
               </button>
             }
             @if (day.overflowCount) {

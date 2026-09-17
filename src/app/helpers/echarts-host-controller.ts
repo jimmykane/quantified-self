@@ -54,6 +54,17 @@ export class EChartsHostController {
   public setTimelineNotes(context: TimelineNoteChartContext | null, hints: TimelineNoteAxisHints = {}): void {
     this.timelineNotes.set(context, hints);
   }
+  /** A note-only input change must not rebuild or resize the underlying chart. */
+  public updateTimelineNotes(context: TimelineNoteChartContext | null): void {
+    this.timelineNotes.set(context);
+    if (!this.chart || this.chart.isDisposed()) return;
+    const option = this.timelineNotes.update(this.chart, this.currentTheme === 'dark');
+    if (!option) return;
+    // Click-triggered tooltips stay open across setOption. Dismiss stale note content,
+    // including edits, visibility changes and an owner switch, before updating overlays.
+    this.hideTooltip();
+    this.config.eChartsLoader.setOption(this.chart, option, { notMerge: false, lazyUpdate: false });
+  }
   private chart: EChartsType | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private resizeFrameId: number | null = null;

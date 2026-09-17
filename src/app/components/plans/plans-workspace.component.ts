@@ -20,7 +20,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import {
+  MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
+  MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
+} from '@shared/planned-workout';
 import dayjs, { type Dayjs } from 'dayjs';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import type { AppUserInterface } from '../../models/app-user.interface';
@@ -73,6 +76,7 @@ import {
   type TrainingScheduleHistoryEntryV1,
   type TrainingScheduleRevisionScope,
 } from '@shared/training-plans';
+import type { TrainingWorkoutCompletionV1 } from '@shared/training-workout-completion';
 
 type PlansView = 'plans' | 'standalone';
 
@@ -92,6 +96,7 @@ interface WorkoutEditorSession {
 
 interface WorkoutRow {
   workout: ScheduledWorkoutV1;
+  completion: TrainingWorkoutCompletionV1 | null;
   summary: string[];
   actionBusy: boolean;
   historyScope: TrainingScheduleRevisionScope;
@@ -161,10 +166,18 @@ export class PlansWorkspaceComponent {
   private historyRequestSequence = 0;
   private nodeSequence = 1;
 
-  readonly activityTypes = ActivityTypes;
-  readonly sportOptions: ReadonlyArray<{ value: ManualWorkoutSport; label: string }> = [
-    { value: ActivityTypes.Running, label: 'Running' },
-    { value: ActivityTypes.Cycling, label: 'Cycling' },
+  readonly sportOptionGroups: ReadonlyArray<{
+    label: string;
+    options: ReadonlyArray<{ value: ManualWorkoutSport; label: string }>;
+  }> = [
+    {
+      label: 'Running',
+      options: MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
+    {
+      label: 'Cycling',
+      options: MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1.map(value => ({ value, label: value })),
+    },
   ];
   readonly purposeOptions = ['warmup', 'work', 'recovery', 'cooldown', 'rest', 'other'] as const;
   readonly endingOptions: ReadonlyArray<{ value: ManualWorkoutEnding; label: string }> = [
@@ -194,6 +207,12 @@ export class PlansWorkspaceComponent {
       : of({ status: 'ready', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState)),
   ), { initialValue: { status: 'loading', schedule: EMPTY_SCHEDULE, message: null } as ScheduleLoadState });
   readonly schedule = computed(() => this.scheduleState().schedule);
+  readonly completions = toSignal(this.userService.user$.pipe(
+    switchMap(user => isTrainingPlanningUIAllowed(user?.uid)
+      ? this.plansService.watchWorkoutCompletions(user.uid).pipe(catchError(() => of([])))
+      : of([])),
+  ), { initialValue: [] as TrainingWorkoutCompletionV1[] });
+  readonly completedWorkoutIds = computed(() => this.completions().map(completion => completion.workoutId));
   readonly view = signal<PlansView>('plans');
   readonly selectedPlanId = signal<string | null>(null);
   readonly today = signal(todayLocalDate());
@@ -263,6 +282,7 @@ export class PlansWorkspaceComponent {
         : workout.planId === selectedPlanId)
       .map(workout => ({
         workout,
+        completion: this.completions().find(completion => completion.workoutId === workout.id) ?? null,
         summary: formatManualWorkoutStructure(
           workout.structure,
           this.currentUser()?.settings?.unitSettings ?? null,

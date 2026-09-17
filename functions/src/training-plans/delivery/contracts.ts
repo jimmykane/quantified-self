@@ -27,6 +27,8 @@ export interface DeliveryArtifact {
   ids: Record<string, string>;
   localDate: string;
   completed: boolean;
+  /** Private zone of the retained provider copy, independent from later settings edits. */
+  timeZone?: string;
 }
 export interface DeliveryOperation {
   id: string;
@@ -47,6 +49,10 @@ export interface DeliveryOperation {
    * Retry must not execute from a journal that may have been overtaken by another lease. */
   recoveryBlocked?: boolean;
   repair?: DeliveryRepair;
+  /** Stable provider-owned integer namespace reserved before a batch request.
+   * Private and independent from authored workout JSON and remote acceptance. */
+  providerIdentity?: Readonly<Record<string, string | number>>;
+  batchId?: string;
 }
 export interface DeliveryTransportProgress {
   version: 1;
@@ -62,13 +68,30 @@ export type DeliveryRequestGuard = (mutating: boolean) => Promise<void>;
 export type DeliveryRecovery = { kind: 'accepted'; artifact: DeliveryArtifact | null }
   | { kind: 'not-accepted' } | { kind: 'resume' } | { kind: 'uncertain' };
 
+export interface DeliveryBatchOutcome {
+  operationId: string;
+  state: 'accepted' | 'rejected' | 'unresolved';
+  artifact: DeliveryArtifact | null;
+}
+
+export interface TrainingDeliveryBatchTransport {
+  maxSize: number;
+  reserveIdentities(db: Firestore, tx: Transaction, uid: string, destinationKey: string,
+    workoutIds: readonly string[]): Promise<ReadonlyMap<string, Readonly<Record<string, string | number>>>>;
+  execute(operations: readonly DeliveryOperation[], beforeSend: () => Promise<void>,
+    guard: DeliveryRequestGuard): Promise<readonly DeliveryBatchOutcome[]>;
+}
+
 /** Adapters must checkpoint every accepted artifact (e.g. workout, then schedule).
  * Final upsert acceptance requires a nonempty artifact identity; final removal requires null.
  * Recovery must inspect or prove the SAME operation id idempotent before repeating it. */
 export interface TrainingDeliveryTransport {
+  batch?: TrainingDeliveryBatchTransport;
   inspection?: RemoteInspection;
   mappingVersion: string;
   horizonDays: number;
+  /** Provider/product policy: withdraw an existing upcoming copy when moved beyond its window. */
+  withdrawOutsideHorizon?: boolean;
   assess(workout: ScheduledWorkoutV1, destinationKey: string, timeZone: string): DeliveryAssessment;
   canRemove(artifact: DeliveryArtifact, today: string): boolean;
   execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null>;
@@ -76,7 +99,7 @@ export interface TrainingDeliveryTransport {
 }
 export class TrainingDeliveryTransportError extends Error {
   readonly diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' };
-  constructor(public readonly kind: 'retryable' | 'auth' | 'permission' | 'terminal' | 'uncertain' | 'deferred',
+  constructor(public readonly kind: 'retryable' | 'auth' | 'permission' | 'provider_access' | 'terminal' | 'uncertain' | 'deferred',
     public readonly retryAfterMs = 0,
     diagnostics: { httpStatus?: number; failurePhase?: 'request' | 'response' | 'decode' | 'contract' } = {}) {
     super(kind);
@@ -89,6 +112,17 @@ export class TrainingDeliveryTransportError extends Error {
     };
   }
 }
+/** Batch transports expose whether a request was definitely rejected before
+ * provider acceptance. Anything else is treated as uncertain and never resent. */
+export class TrainingDeliveryBatchError extends TrainingDeliveryTransportError {
+  constructor(kind: TrainingDeliveryTransportError['kind'], public readonly rejected: boolean,
+    retryAfterMs = 0, diagnostics: TrainingDeliveryTransportError['diagnostics'] = {}) {
+    super(kind, retryAfterMs, diagnostics);
+  }
+}
+export class TrainingDeliveryBatchAdmissionChangedError extends TrainingDeliveryBatchError {
+  constructor() { super('deferred', true); }
+}
 export interface DeliveryRuntime {
   requestNotBefore?(tx: Transaction, uid: string, provider: PlannedWorkoutProviderId, destination: string): Promise<number>;
   db: Firestore;
@@ -99,8 +133,13 @@ export interface DeliveryRuntime {
   transport(provider: PlannedWorkoutProviderId, uid: string): TrainingDeliveryTransport | null;
 }
 export interface DeliveryLedgerV1 {
+  /** Definite application-access rejection; distinct from temporarily paused transport/inspection readiness. */
+  providerAccessBlocked?: boolean;
   verification?: VerificationEvidence;
   repair?: DeliveryRepair | null;
+  /** Private reverse-link identity when `actual.completed` came from an imported
+   * activity marker. Remote provider completion observations leave this unset. */
+  completionLinkId?: string | null;
   schemaVersion: 1;
   id: string;
   workoutId: string;

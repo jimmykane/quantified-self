@@ -13,6 +13,7 @@ const {
     mockCollectionGroup,
     mockRequestGet,
     mockDeferQueueItemForPendingDisconnect,
+    mockDeferWorkoutQueueItemForTokenRefreshContention,
     mockIncreaseRetryCountForQueueItem,
     mockMarkQueueItemSkipped,
     mockMoveToDeadLetterQueue,
@@ -25,7 +26,9 @@ const {
     mockResolveProviderImportEventID,
     MockTerminalServiceAuthError,
     MockTokenRefreshSkippedForDeletedUserError,
+    MockTokenRefreshInProgressError,
     mockShouldSkipQueueWorkForDeletedUser,
+    mockRetainGarminFITWorkoutReferences,
 } = vi.hoisted(() => {
     class MockTerminalServiceAuthError extends Error {
         readonly name = 'TerminalServiceAuthError';
@@ -36,6 +39,9 @@ const {
     class MockTokenRefreshSkippedForDeletedUserError extends Error {
         readonly name = 'TokenRefreshSkippedForDeletedUserError';
     }
+    class MockTokenRefreshInProgressError extends Error {
+        readonly name = 'TokenRefreshInProgressError';
+    }
 
     return {
         mockSetEvent: vi.fn(),
@@ -45,6 +51,7 @@ const {
         mockCollectionGroup: vi.fn(),
         mockRequestGet: vi.fn(),
         mockDeferQueueItemForPendingDisconnect: vi.fn(),
+        mockDeferWorkoutQueueItemForTokenRefreshContention: vi.fn(),
         mockIncreaseRetryCountForQueueItem: vi.fn(),
         mockMarkQueueItemSkipped: vi.fn(),
         mockMoveToDeadLetterQueue: vi.fn(),
@@ -57,7 +64,9 @@ const {
         mockResolveProviderImportEventID: vi.fn(),
         MockTerminalServiceAuthError,
         MockTokenRefreshSkippedForDeletedUserError,
+        MockTokenRefreshInProgressError,
         mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
+        mockRetainGarminFITWorkoutReferences: vi.fn().mockResolvedValue(true),
     };
 });
 
@@ -65,6 +74,11 @@ vi.mock('../tokens', () => ({
     getTokenData: mockGetTokenData,
     TerminalServiceAuthError: MockTerminalServiceAuthError,
     TokenRefreshSkippedForDeletedUserError: MockTokenRefreshSkippedForDeletedUserError,
+    TokenRefreshInProgressError: MockTokenRefreshInProgressError,
+}));
+
+vi.mock('../queue/token-refresh-contention', () => ({
+    deferWorkoutQueueItemForTokenRefreshContention: mockDeferWorkoutQueueItemForTokenRefreshContention,
 }));
 
 vi.mock('../queue/user-deletion-skip', () => ({
@@ -132,6 +146,10 @@ vi.mock('../queue/provider-event-id', () => ({
     resolveProviderImportEventID: mockResolveProviderImportEventID,
 }));
 
+vi.mock('../training-plans/completion/fit-workout-evidence', () => ({
+    retainGarminFITWorkoutReferences: mockRetainGarminFITWorkoutReferences,
+}));
+
 // Mock queue utilities
 vi.mock('../queue-utils', () => ({
     deferQueueItemForPendingDisconnect: mockDeferQueueItemForPendingDisconnect,
@@ -146,6 +164,7 @@ vi.mock('../queue-utils', () => ({
         Processed: 'PROCESSED',
         Skipped: 'SKIPPED',
         Deferred: 'DEFERRED',
+        TokenRefreshDeferred: 'TOKEN_REFRESH_DEFERRED',
         MovedToDLQ: 'MOVED_TO_DLQ',
         RetryIncremented: 'RETRY_INCREMENTED',
         Failed: 'FAILED',
@@ -182,7 +201,7 @@ vi.mock('firebase-admin', () => ({
 // Import SUT
 import { processGarminAPIActivityQueueItem, insertGarminAPIActivityFileToQueue } from './queue';
 import { addToQueueForGarmin } from '../queue';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshInProgressError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { updateToProcessed } from '../queue-utils';
 import { EventWriteSkippedForDeletedUserError } from '../utils';
 
@@ -490,10 +509,30 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 savedOriginalFiles: [{ path: 'users/firebase-user-id/events/saved-event-id/original.fit' }],
             });
             mockDeferQueueItemForPendingDisconnect.mockResolvedValue('DEFERRED');
+            mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue('TOKEN_REFRESH_DEFERRED');
             mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
             mockMarkQueueItemSkipped.mockResolvedValue('PROCESSED');
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
             vi.mocked(updateToProcessed).mockResolvedValue('PROCESSED' as any);
+        });
+
+        it('should schedule recovery without consuming retry budget when token refresh is already in progress', async () => {
+            vi.mocked(getTokenData).mockRejectedValue(new TokenRefreshInProgressError(
+                ServiceNames.GarminAPI,
+                'garmin-user-id',
+            ));
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('TOKEN_REFRESH_DEFERRED');
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.GarminAPI,
+                queueItem,
+                userID: firebaseUserID,
+            }));
+            expect(mockRequestGet).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
         });
 
         it('should successfully process a FIT file and use the correct Firebase User ID', async () => {
@@ -530,6 +569,9 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 sourceServiceName: ServiceNames.GarminAPI,
                 sourceActivityID: queueItem.activityFileID,
             }));
+            expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledWith(
+                expect.anything(), firebaseUserID, 'event-id', 'garmin-user-id', '', expect.any(Buffer),
+            );
             expect(updateToProcessed).toHaveBeenCalledWith(queueItem, undefined);
         });
 
@@ -597,6 +639,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             // Second download attempt
             expect(mockRequestGet).toHaveBeenCalledTimes(2);
             expect(mockCreateParsingOptions).toHaveBeenCalledTimes(2);
+            expect(mockRetainGarminFITWorkoutReferences).toHaveBeenCalledOnce();
         });
 
         it('should successfully process a TCX file', async () => {
@@ -613,6 +656,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(result).toBe('PROCESSED');
             expect(EventImporterTCX.getFromXML).toHaveBeenCalled();
             expect(mockCreateParsingOptions).toHaveBeenCalledTimes(1);
+            expect(mockRetainGarminFITWorkoutReferences).not.toHaveBeenCalled();
         });
 
         it('should move to DLQ if no token is found', async () => {

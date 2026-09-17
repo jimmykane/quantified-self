@@ -71,6 +71,10 @@ export class TrainingBodyWeightTrendChartComponent implements AfterViewInit, OnC
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (this.viewInitialized && (changes.points || changes.darkTheme || changes.unitSettings || changes.timelineNotes)) {
       void this.refresh();
     }

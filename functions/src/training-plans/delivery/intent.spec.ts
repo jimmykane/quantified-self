@@ -15,6 +15,14 @@ const base: DeliveryContext = {
   connection: { state: 'connected', destinationKey: 'account-a', epoch: 0, generation: 'g1' }, transport: new FakeTrainingTransport(),
 };
 describe('delivery intent', () => {
+  it('withdraws a moved upcoming Suunto copy, retains consent and delivers when the date enters its window', () => {
+    const transport = new FakeTrainingTransport(); transport.horizonDays = 6;
+    const policy = Object.assign(transport, { withdrawOutsideHorizon: true });
+    const context = { ...base, transport: policy, workout: { ...base.workout!, localDate: '2026-09-17' } };
+    expect(resolveDeliveryIntent(context)).toMatchObject({ desired: 'absent', status: 'outside_horizon' });
+    expect(resolveDeliveryIntent({ ...context, nowMs: Date.parse('2026-09-11T10:00:00Z') })).toMatchObject({ desired: 'present' });
+    expect(resolveDeliveryIntent({ ...context, hasPro: false })).toMatchObject({ desired: 'preserve', status: 'paused_pro' });
+  });
   it('isolates identities by owner, account and provider, not revision', () => {
     expect(new Set([deliveryIdentity('u', 'garmin', 'a', 'w'), deliveryIdentity('v', 'garmin', 'a', 'w'),
       deliveryIdentity('u', 'garmin', 'b', 'w'), deliveryIdentity('u', 'coros', 'a', 'w')]).size).toBe(4);
@@ -57,6 +65,14 @@ describe('delivery intent', () => {
     expect(resolveDeliveryIntent(base, ledger).status).toBe('past');
     ledger.actual!.completed = true;
     expect(resolveDeliveryIntent(base, ledger).status).toBe('completed');
+  });
+  it('protects the retained copy using its original zone after a settings edit', () => {
+    const context = { ...base, setting: { ...base.setting!, timeZone: 'Pacific/Pago_Pago' },
+      nowMs: Date.parse('2026-09-10T10:30:00Z') };
+    const ledger = { actual: { ids: { workout: 'id' }, localDate: '2026-09-10', completed: false,
+      timeZone: 'Pacific/Kiritimati' } } as DeliveryLedgerV1;
+    // The old copy is already September 11's past, even though new settings say September 9.
+    expect(resolveDeliveryIntent(context, ledger).status).toBe('past');
   });
   it('protects original artifacts retained during a repair even when no replacement was accepted', () => {
     const ledger = { actual: null, repair: { original: { ids: { workout: 'old', schedule: 'original' },

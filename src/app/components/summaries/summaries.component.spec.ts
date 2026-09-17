@@ -83,6 +83,11 @@ describe('SummariesComponent', () => {
   let buildDashboardTileViewModelsSpy: ReturnType<typeof vi.spyOn>;
   let originalMatchMedia: typeof window.matchMedia | undefined;
 
+  const flushDashboardFrame = async () => {
+    if (vi.isFakeTimers()) vi.advanceTimersToNextFrame();
+    else await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  };
+
   const expectDashboardSettingsWrite = (user: any, dashboardSettingsPatch: Record<string, unknown>): void => {
     expect(mockUserService.updateUserProperties).toHaveBeenCalledWith(user, {
       settings: {
@@ -214,6 +219,55 @@ describe('SummariesComponent', () => {
     });
   });
 
+  it('batches mixed metric, Sleep, activity and route updates, and cancels obsolete renders', async () => {
+    vi.useFakeTimers();
+    const metrics = new Subject<DashboardDerivedMetricsState>();
+    const sleep = new Subject<SleepSession[]>();
+    const events = new Subject<never[]>();
+    const routes = new Subject<never[]>();
+    mockDashboardDerivedMetricsService.watch.mockReturnValue(metrics);
+    mockSleepService.watchForDashboard.mockReturnValue(sleep);
+    mockEventService.getEventsBy.mockReturnValue(events);
+    mockRouteService.watchRecentRoutePreviews.mockReturnValue(routes);
+    buildDashboardTileViewModelsSpy.mockReturnValue([]);
+    component.user = { uid: 'batch-owner', settings: { dashboardSettings: { tiles: [
+      { type: TileTypes.Chart, order: 0, chartType: ChartTypes.ColumnsVertical,
+        dataType: DataDuration.type, dataCategoryType: ChartDataCategoryTypes.ActivityType,
+        dataValueType: ChartDataValueTypes.Total, timeInterval: TimeIntervals.Weekly, size: { columns: 1, rows: 1 } },
+      { type: TileTypes.Map, order: 1, mapSource: 'routes', size: { columns: 1, rows: 1 } },
+    ] } } } as SummariesComponent['user'];
+    await component['unsubscribeAndCreateCharts']();
+    expect(metrics.observed && sleep.observed && events.observed && routes.observed).toBe(true);
+    buildDashboardTileViewModelsSpy.mockClear();
+    const refreshToday = vi.spyOn(component as any, 'refreshDashboardTodaySignals');
+
+    metrics.next({ ...createDashboardDerivedMetricsMissingState(), formPoints: [], formStatus: 'ready' });
+    sleep.next([]); events.next([]); routes.next([]);
+    expect(refreshToday).not.toHaveBeenCalled();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
+    vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledOnce();
+    expect(refreshToday).toHaveBeenCalledOnce();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      previewMetricStatuses: expect.objectContaining({ form: 'ready' }),
+      sleepSessions: [], tileEventsByOrder: { 0: [] }, routePreviews: [],
+    }));
+
+    // An immediate settings/layout update absorbs the queued background work.
+    buildDashboardTileViewModelsSpy.mockClear();
+    events.next([]);
+    await component['rebuildTilesFromCurrentState']();
+    vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledOnce();
+
+    // Nothing can render after leaving the dashboard.
+    buildDashboardTileViewModelsSpy.mockClear();
+    events.next([]); routes.error(new Error('offline'));
+    fixture.destroy(); vi.advanceTimersToNextFrame();
+    expect(buildDashboardTileViewModelsSpy).not.toHaveBeenCalled();
+    expect(metrics.observed || sleep.observed || events.observed || routes.observed).toBe(false);
+  });
+
   it('shows an Undo conflict after moving or adding a chart without hiding the saved layout', async () => {
     component.user = { uid: 'owner-user', settings: { dashboardSettings: { tiles: [] } } } as SummariesComponent['user'];
     component.eventUser = component.user;
@@ -266,7 +320,7 @@ describe('SummariesComponent', () => {
     expect(TestBed.inject(AppHapticsService).success).toHaveBeenCalledTimes(1);
   });
 
-  it('cancels obsolete HRV windows and clears prior account data before loading another owner', () => {
+  it('cancels obsolete HRV windows and clears prior account data before loading another owner', async () => {
     const first = new Subject<DashboardHrvContext>();
     const second = new Subject<DashboardHrvContext>();
     const service = TestBed.inject(DashboardHrvService);
@@ -288,6 +342,7 @@ describe('SummariesComponent', () => {
     expect(component['hrvTrend']).toMatchObject({ charts: [], loading: false, error: true });
     component['unsubscribeHrv']();
     expect(component['hrvTrend']).toBeNull();
+    await flushDashboardFrame();
     expect(rebuild).toHaveBeenCalled();
   });
 
@@ -478,6 +533,8 @@ describe('SummariesComponent', () => {
     fixture.detectChanges();
 
     expect(component.isOwnerDashboard).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.pie')?.getAttribute('data-chart-preload'))
+      .toBe('background');
     expect((fixture.nativeElement as HTMLElement).querySelector('.dashboard-today-greeting')?.textContent?.trim())
       .toBe('Good morning, Dimitrios');
   });
@@ -558,16 +615,19 @@ describe('SummariesComponent', () => {
     ] as const) {
       updates$.next({ ...createDashboardDerivedMetricsMissingState(), formStatus, formNowStatus: 'ready', rampRateStatus: 'ready' });
       fixture.detectChanges();
+      const effectiveBanner = banner?.type === 'pending' && showToday && !component.dashboardTodayReadiness.loading
+        ? null
+        : banner;
       expect(host.querySelector('.dashboard-summary-header')).toBe(header);
       expect(host.querySelector('.dashboard-summary-status')).toBe(status);
       expect(host.querySelector('.qs-page-header__subtitle')?.textContent).toBe(date);
-      expect(status?.getAttribute('role')).toBe(banner?.type === 'warning' ? 'alert' : 'status');
-      expect(!!status?.querySelector('mat-spinner')).toBe(banner?.type === 'pending');
+      expect(status?.getAttribute('role')).toBe(effectiveBanner?.type === 'warning' ? 'alert' : 'status');
+      expect(!!status?.querySelector('mat-spinner')).toBe(effectiveBanner?.type === 'pending');
       if (showToday) {
         expect(host.querySelector('#dashboard-today-title')?.textContent).toBe('Today');
         expect(host.querySelector(`[aria-label="Open this month's activity calendar"]`)).toBe(calendar);
       }
-      if (banner) expect(status?.textContent).toContain(banner.title);
+      if (effectiveBanner) expect(status?.textContent).toContain(effectiveBanner.title);
       if (banner?.type === 'pending' && showToday) (calendar as HTMLButtonElement).click();
       if (banner?.showRetry) host.querySelector<HTMLButtonElement>('[aria-label="Retry dashboard update"]')!.click();
     }
@@ -750,9 +810,12 @@ describe('SummariesComponent', () => {
       uid: 'user-1',
       settings: { dashboardSettings: { tiles: [] } },
     } as any;
+    component.eventUser = { uid: 'shared-user' } as any;
     component.showActions = false;
     fixture.detectChanges();
 
+    expect(component.isOwnerDashboard).toBe(false);
+    expect((fixture.nativeElement as HTMLElement).querySelector('.pie')?.hasAttribute('data-chart-preload')).toBe(false);
     expect((fixture.nativeElement as HTMLElement).querySelector('app-dashboard-chart-library')).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label="Dashboard options"]')).toBeNull();
   });
@@ -1380,13 +1443,22 @@ describe('SummariesComponent', () => {
     expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
       .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('7-day average');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Within range · rising');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('60-day range');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night 55 ms');
-    expect(nativeElement.querySelector('.dashboard-readiness-hrv app-metric-indicator')).toBeNull();
+    const hrvRange = nativeElement.querySelector('.dashboard-readiness-hrv .metric-indicator-range');
+    expect(hrvRange?.getAttribute('aria-label')).toBe('HRV: 50.8 ms; 60-day range 49.1–51.5 ms');
+    expect(hrvRange?.querySelector('.metric-indicator-range-band')).not.toBeNull();
+    expect(hrvRange?.querySelector('.metric-indicator-range-marker')?.getAttribute('data-tone')).toBe('positive');
     const overnightHeartRate = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Overnight HR');
     expect(overnightHeartRate?.querySelector('dd')?.getAttribute('data-tone')).toBe('positive');
     expect(overnightHeartRate?.querySelector('dd')?.textContent).toContain('-8');
+    expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars')?.getAttribute('aria-label'))
+      .toBe('Overnight heart rate for the latest 7 eligible nights');
+    expect(overnightHeartRate?.querySelectorAll('.dashboard-today-history-bars > span')).toHaveLength(7);
+    expect(overnightHeartRate?.querySelector('.dashboard-today-history-bars > span.current')?.getAttribute('data-tone'))
+      .toBe('positive');
     const sleep = [...nativeElement.querySelectorAll('.dashboard-current-state-row dl > div')]
       .find(element => element.querySelector('dt')?.textContent?.trim() === 'Sleep');
     expect(sleep?.querySelector('small')?.textContent?.trim()).toBe('Today');
@@ -1471,6 +1543,7 @@ describe('SummariesComponent', () => {
     it.each(['load', 'sleep'])('waits for both reads when %s arrives first', (first) => {
       if (first === 'load') load$.next(loadState);
       else sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
 
       expect(component.dashboardTodayReadiness.loading).toBe(true);
       expect(component.dashboardTodayReadiness.score).toBeNull();
@@ -1482,6 +1555,7 @@ describe('SummariesComponent', () => {
 
       if (first === 'load') sleep$.next(nights);
       else load$.next(loadState);
+      vi.advanceTimersToNextFrame();
 
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
       expect(render().querySelector('.dashboard-readiness-primary-value')?.textContent).toContain('67/100');
@@ -1492,24 +1566,89 @@ describe('SummariesComponent', () => {
 
     it('shows load-only readiness after an empty first sleep result', () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.next([]);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, warningText: '' });
       expect(render().querySelector('.dashboard-current-state-row')?.textContent).toContain('No eligible night');
       // Newly imported sleep continues updating the open dashboard.
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness.score).toBe(67);
+    });
+
+    it('keeps the Today layout reservations and score slot through hydration, recovery expiry and errors', () => {
+      const host = render();
+      // The unit runner does not attach external component CSS. Check its stable
+      // sizing contract here; real viewport geometry is verified in the browser.
+      const stylesheet = document.createElement('style');
+      stylesheet.textContent = readFileSync(resolve(process.cwd(), 'src/app/components/summaries/summaries.component.css'), 'utf8');
+      host.appendChild(stylesheet);
+      const readiness = host.querySelector<HTMLElement>('.dashboard-readiness-primary')!;
+      const scoreSlot = readiness.querySelector('.dashboard-readiness-score')!;
+      const training = host.querySelector<HTMLElement>('.dashboard-training-state-primary')!;
+      const drivers = [...host.querySelectorAll<HTMLElement>('.dashboard-current-state-row dl > div')];
+      const reservedTopAndRecoveryHeight = () => {
+        const top = host.querySelector<HTMLElement>('.dashboard-current-state-top')!;
+        const recovery = host.querySelector<HTMLElement>('.dashboard-readiness-recovery-band');
+        return parseFloat(getComputedStyle(top).minBlockSize)
+          + (recovery ? parseFloat(getComputedStyle(recovery).minBlockSize) : 0);
+      };
+      const reservations = () => [training, readiness, ...drivers].map(element => ({
+        minimum: getComputedStyle(element).minBlockSize,
+        sizing: getComputedStyle(element).boxSizing,
+      }));
+      const pendingLayout = reservations();
+      const pendingTopAndRecoveryHeight = reservedTopAndRecoveryHeight();
+      expect(pendingLayout.every(({ minimum, sizing }) => parseFloat(minimum) > 0 && sizing === 'border-box')).toBe(true);
+      expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).not.toBeNull();
+      expect(getComputedStyle(host.querySelector<HTMLElement>('.dashboard-readiness-recovery-band')!).boxSizing).toBe('border-box');
+      expect(getComputedStyle(readiness).alignContent).toBe('start');
+      expect(scoreSlot.querySelector('[aria-label="Loading readiness"]')).not.toBeNull();
+
+      load$.next({ ...loadState, recoveryNow: { totalSeconds: 7_200, endTimeMs: nowMs }, recoveryNowStatus: 'ready' });
+      sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(readiness.getAttribute('aria-busy')).toBe('false');
+      expect(readiness.querySelector('.dashboard-readiness-score')).toBe(scoreSlot);
+      expect(scoreSlot.querySelector('[label="Readiness"]')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
+      expect(host.querySelector('.dashboard-readiness-recovery-placeholder')).toBeNull();
+      expect(host.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night');
+      expect(reservations()).toEqual(pendingLayout);
+      expect(reservedTopAndRecoveryHeight()).toBe(pendingTopAndRecoveryHeight);
+
+      sleep$.error(new Error('refresh failed'));
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(readiness.querySelector('.dashboard-readiness-method[role="status"]')?.textContent).toContain('Sleep could not be refreshed');
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).not.toBeNull();
+      expect(reservations()).toEqual(pendingLayout);
+
+      load$.next(loadState);
+      vi.advanceTimersToNextFrame();
+      render();
+      expect(host.querySelector('.dashboard-readiness-recovery-indicator')).toBeNull();
+      expect(reservations()).toEqual(pendingLayout);
+      expect(readiness.querySelector('.dashboard-readiness-score')).toBe(scoreSlot);
+      expect(TestBed.inject(AppHapticsService).selection).not.toHaveBeenCalled();
     });
 
     it('settles an unchanged missing load result instead of remaining on loading', () => {
       sleep$.next([]);
+      vi.advanceTimersToNextFrame();
       load$.next(createDashboardDerivedMetricsMissingState());
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: null, label: 'Awaiting data' });
       expect(render().querySelector('[aria-label="Loading readiness"]')).toBeNull();
     });
 
     it('settles a failed first sleep read with explicit unavailable copy and available load', () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.error(new Error('read failed'));
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, sleepContextText: 'Sleep unavailable' });
       expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be loaded');
       expect(fixture.nativeElement.textContent).not.toContain('No eligible night');
@@ -1517,17 +1656,23 @@ describe('SummariesComponent', () => {
 
     it('keeps eligible sleep after a refresh failure, then expires it normally', async () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       sleep$.error(new Error('refresh failed'));
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 67, availableSignalCount: 3 });
       expect(render().querySelector('.dashboard-current-state-primary [role="status"]')?.textContent).toContain('Sleep could not be refreshed');
       await vi.advanceTimersByTimeAsync(DASHBOARD_READINESS_SLEEP_MAX_AGE_MS + 1);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1, sleepContextText: 'Sleep unavailable' });
     });
 
     it('clears prior evidence when Today is reopened and ignores the old listener', () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       component.showTodaySummary = false;
       component['syncReadinessSleepSubscription']();
       expect(sleep$.observed).toBe(false);
@@ -1537,14 +1682,18 @@ describe('SummariesComponent', () => {
       component['syncReadinessSleepSubscription']();
       component['refreshDashboardTodaySignals']();
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
       reopened$.next([]);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75 });
     });
 
     it('does not combine a new owner’s load with the previous owner’s sleep', () => {
       load$.next(loadState);
+      vi.advanceTimersToNextFrame();
       sleep$.next(nights);
+      vi.advanceTimersToNextFrame();
       const nextLoad$ = new Subject<DashboardDerivedMetricsState>();
       const nextSleep$ = new Subject<SleepSession[]>();
       mockDashboardDerivedMetricsService.watch.mockReturnValue(nextLoad$);
@@ -1552,10 +1701,12 @@ describe('SummariesComponent', () => {
       component.user = { ...component.user, uid: 'next-owner' };
       component['syncDerivedMetricsSubscription']();
       nextLoad$.next(loadState);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: true, score: null });
       component['syncReadinessSleepSubscription']();
       expect(sleep$.observed).toBe(false);
       nextSleep$.next([]);
+      vi.advanceTimersToNextFrame();
       expect(component.dashboardTodayReadiness).toMatchObject({ loading: false, score: 75, availableSignalCount: 1 });
     });
   });
@@ -1590,6 +1741,11 @@ describe('SummariesComponent', () => {
     expect(state.textContent).toContain('TSS only');
     expect(state.querySelector('strong')?.textContent?.trim()).toBe('Fatigued');
     expect(state.querySelector('app-metric-indicator')).toBeNull();
+    expect(state.querySelector('.dashboard-training-state-scale')?.getAttribute('aria-label'))
+      .toBe('Training state: Fatigued');
+    expect(state.querySelectorAll('.dashboard-training-state-scale > span')).toHaveLength(6);
+    expect(state.querySelector('.dashboard-training-state-scale > span.active')?.getAttribute('data-tone'))
+      .toBe('negative');
   });
 
   it('uses the same current-day Form series as dashboard load KPIs for Today readiness', () => {
@@ -1912,7 +2068,7 @@ describe('SummariesComponent', () => {
     expect(component.tileEventLoadingByOrder[1]).toBe(true);
 
     customEventsSubject.next([customEvent, mergedEvent]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.tileEventLoadingByOrder[0]).toBe(false);
     expect(component.tileEventLoadingByOrder[1]).toBe(true);
@@ -1923,7 +2079,7 @@ describe('SummariesComponent', () => {
     }));
 
     mapEventsSubject.next([mapEvent]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.tileEventLoadingByOrder[1]).toBe(false);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -1998,7 +2154,7 @@ describe('SummariesComponent', () => {
     } as any)).toBe(true);
 
     routePreviewsSubject.next([previewRoute]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(component.routePreviewLoading).toBe(false);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -2576,7 +2732,7 @@ describe('SummariesComponent', () => {
 
     component.onSleepTrendNavigate('older');
     sleepStreams[2].next([]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledTimes(1);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenCalledWith(expect.objectContaining({
@@ -2639,7 +2795,7 @@ describe('SummariesComponent', () => {
     component.onSleepTrendNavigate('older');
     const historicalStream = sleepStreams.at(-1);
     historicalStream?.stream.next([{ id: 'historical-sleep' }]);
-    await Promise.resolve();
+    await flushDashboardFrame();
 
     expect(mockSleepService.watchForDashboard).toHaveBeenCalledTimes(3);
     expect(buildDashboardTileViewModelsSpy).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -2950,6 +3106,39 @@ describe('SummariesComponent', () => {
 
     expect(component.derivedMetricsBanner?.type).toBe('pending');
     expect(component.derivedMetricsBanner?.title).toBe('Preparing your dashboard…');
+  });
+
+  it('leaves unfinished chart loading on the tile once Today is ready', () => {
+    component.user = {
+      settings: {
+        dashboardSettings: {
+          tiles: [{
+            type: TileTypes.Chart,
+            order: 0,
+            chartType: 'Form',
+            dataType: 'Training Stress Score',
+            dataValueType: ChartDataValueTypes.Total,
+            dataCategoryType: ChartDataCategoryTypes.DateType,
+            size: { columns: 1, rows: 1 },
+          }],
+          showTodaySummary: true,
+        },
+      },
+    } as any;
+    component.showTodaySummary = true;
+    component.dashboardTodayReadiness = {
+      ...component.dashboardTodayReadiness,
+      loading: false,
+      label: 'Ready',
+      scoreText: '75/100',
+    };
+    (component as any).derivedFormStatus = 'stale';
+    (component as any).derivedFormNowStatus = 'ready';
+    (component as any).derivedRampRateStatus = 'ready';
+
+    (component as any).refreshDerivedMetricsBannerState();
+
+    expect(component.derivedMetricsBanner).toBeNull();
   });
 
   it('ignores the optional recovery status unless Today is showing an active estimate', () => {

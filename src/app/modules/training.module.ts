@@ -1,3 +1,5 @@
+import { TrainingBuildMetricsComponent } from '../components/shared/training-summary/training-build-metrics.component';
+import { TrainingMixDetailsComponent } from '../components/shared/training-summary/training-mix-details.component';
 import { TimelineNotesWorkspaceComponent } from '../components/timeline-notes/timeline-notes-workspace.component';
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
@@ -25,6 +27,12 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
 @NgModule({
   imports: [
     CommonModule,
+    TrainingBuildMetricsComponent,
+    TrainingMixDetailsComponent,
+    TrainingReadinessTrendChartComponent,
+    TrainingPowerSystemsTrendChartComponent,
+    TrainingDurabilityTrajectoryChartComponent,
+    TrainingMetricTextComponent,
     TimelineNotesWorkspaceComponent,
     SharedModule,
     MaterialModule,
@@ -39,10 +47,6 @@ import { AppUserSettingsQueryService } from '../services/app.user-settings-query
     TrainingBuildBenchmarkDialogComponent,
     TrainingSportVisibilityDialogComponent,
     TrainingSwimPerformanceChartComponent,
-    TrainingDurabilityTrajectoryChartComponent,
-    TrainingMetricTextComponent,
-    TrainingPowerSystemsTrendChartComponent,
-    TrainingReadinessTrendChartComponent,
     TrainingBodyWeightTrendChartComponent,
   ],
   providers: [

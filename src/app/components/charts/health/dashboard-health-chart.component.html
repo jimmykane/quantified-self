@@ -14,7 +14,7 @@
       <div class="health-range-controls">
         <button mat-icon-button aria-label="Show older period" [disabled]="disabled()" (click)="navigate('older')"><mat-icon>chevron_left</mat-icon></button>
         <mat-select class="health-range" [aria-label]="title() + ' date range'" [value]="settings().range" [disabled]="disabled()" (selectionChange)="selectRange($event.value)">
-          @for (range of ranges; track range.value) { <mat-option [value]="range.value">{{ range.label }}</mat-option> }
+          @for (range of ranges; track range.value) { <mat-option [value]="range.value" [disabled]="isRangeDisabled(range.value)">{{ range.label }}</mat-option> }
         </mat-select>
         <button mat-icon-button aria-label="Show newer period" [disabled]="disabled() || !window().canNavigateNewer" (click)="navigate('newer')"><mat-icon>chevron_right</mat-icon></button>
       </div>
@@ -26,7 +26,7 @@
           [chartTitle]="title()" [disabled]="disabled()" (selected)="selectSource($event)" /></div>
       }
       @if (loading() && !preview()) { <p class="health-notice" role="status">Updating readings. Previous chart shown.</p> }
-      @if (showingExample() && view.sampleOnly) { <button mat-button (click)="selectRange('30d')">Show 30 days</button> }
+      @if (showingExample() && view.sampleOnly) { <button mat-button (click)="selectRange('90d')">Show 90 days</button> }
       @for (notice of view.notices; track notice) { <p class="health-notice" role="status">{{ notice }}</p> }
       @if (view.failedSources) { <button mat-button [disabled]="loading()" (click)="reload()">Retry unavailable sources</button> }
     }
@@ -54,7 +54,7 @@
       @if (thumbnail()) { <app-dashboard-chart-thumbnail [preview]="sleepThumbnail()" [darkTheme]="darkTheme()" /> }
       @else { <app-sleep-trend-chart [hideTitle]="true" [sleepTrend]="view.sleep" [sleepRange]="settings().range === 'today' ? '14d' : $any(settings().range)" [sleepWindowLabel]="view.window.label" [darkTheme]="darkTheme()" [unitSettings]="user().settings.unitSettings" [timelineNotes]="showingExample() ? null : timelineNotes()" /> }
     } @else if (!thumbnail()) {
-      <div class="health-tile-empty" role="status"><p>{{ view.availability.reason }}</p>@if (view.sampleOnly) { <button mat-button (click)="selectRange('30d')">Show 30 days</button> }</div>
+      <div class="health-tile-empty" role="status"><p>{{ view.availability.reason }}</p>@if (view.sampleOnly) { <button mat-button (click)="selectRange('90d')">Show 90 days</button> }</div>
     } @else { <span class="health-thumbnail-empty">—</span> }
   } @else { <div class="health-tile-empty" role="status">{{ thumbnail() ? '…' : loading() ? 'Loading readings…' : error() ? 'Readings unavailable' : 'Chart loads when visible' }}</div> }
 </section>

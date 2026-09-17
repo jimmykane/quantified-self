@@ -17,6 +17,8 @@ import { trainingPlanAppearance } from '../../helpers/training-plan-appearance.h
 export class PlanScheduleCalendarComponent {
   readonly plan = input.required<TrainingPlanV1>();
   readonly workouts = input.required<readonly ScheduledWorkoutV1[]>();
+  readonly completedWorkoutIds = input<readonly string[]>([]);
+  readonly completedWorkoutIdSet = computed(() => new Set(this.completedWorkoutIds()));
   readonly selectedDate = input.required<string>();
   readonly today = input.required<string>();
   readonly startOfWeek = input<number | null>(null);
@@ -51,6 +53,14 @@ export class PlanScheduleCalendarComponent {
     if (this.disabled()) return;
     this.haptics.selection();
     this.workoutSelected.emit(workout);
+  }
+
+  isActivityLinked(workoutId: string): boolean {
+    return this.completedWorkoutIdSet().has(workoutId);
+  }
+
+  allActivitiesLinked(workouts: readonly ScheduledWorkoutV1[]): boolean {
+    return workouts.length > 0 && workouts.every(workout => this.isActivityLinked(workout.id));
   }
 
   onDayKeydown(event: KeyboardEvent, date: string): void {

@@ -115,7 +115,15 @@ function normalizeMetricIds(value: unknown): HealthMetricId[] {
   return [...new Set(metricIds as HealthMetricId[])];
 }
 
-export function normalizeHealthRangeQuery(value: HealthRangeQuery | unknown): NormalizedHealthRangeQuery {
+export interface HealthRangeQueryNormalizationOptions {
+  /** Internal callers may page a larger sample window; public reads keep the shared 31-day default. */
+  maximumSampleRangeDays?: number;
+}
+
+export function normalizeHealthRangeQuery(
+  value: HealthRangeQuery | unknown,
+  options: HealthRangeQueryNormalizationOptions = {},
+): NormalizedHealthRangeQuery {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new HealthQueryValidationError('Health range query must be an object.');
   }
@@ -127,7 +135,13 @@ export function normalizeHealthRangeQuery(value: HealthRangeQuery | unknown): No
   }
   const requestedDays = Math.floor((endMs - startMs) / DAY_MS) + 1;
   const includeSamples = query.includeSamples === true;
-  const maximumDays = includeSamples ? HEALTH_MAX_SAMPLE_RANGE_DAYS : HEALTH_MAX_SUMMARY_RANGE_DAYS;
+  const requestedSampleMaximum = options.maximumSampleRangeDays ?? HEALTH_MAX_SAMPLE_RANGE_DAYS;
+  const maximumSampleRangeDays = Number.isInteger(requestedSampleMaximum)
+    && requestedSampleMaximum >= 1
+    && requestedSampleMaximum <= HEALTH_MAX_SUMMARY_RANGE_DAYS
+    ? requestedSampleMaximum
+    : HEALTH_MAX_SAMPLE_RANGE_DAYS;
+  const maximumDays = includeSamples ? maximumSampleRangeDays : HEALTH_MAX_SUMMARY_RANGE_DAYS;
   if (requestedDays > maximumDays) {
     throw new HealthQueryValidationError(`Requested range exceeds the ${maximumDays}-day limit.`);
   }
@@ -496,6 +510,8 @@ export interface LoadedHealthRangeProjectionOptions {
   samplesComplete: boolean;
   sourceRecordCursor?: HealthQueryCursor | null;
   chunkCursor?: HealthQueryCursor | null;
+  /** App-only aggregate limit after samples have been fetched in shared-contract-sized pages. */
+  maximumSampleRangeDays?: number;
 }
 
 /**
@@ -517,7 +533,7 @@ export function projectLoadedHealthRange(
     samplesComplete: options.samplesComplete,
     sourceRecordCursor: options.sourceRecordCursor ?? null,
     chunkCursor: options.chunkCursor ?? null,
-  });
+  }, options.maximumSampleRangeDays);
 }
 
 interface HealthRangeProjectionMode {
@@ -534,8 +550,9 @@ function projectHealthRangeInternal(
   queryValue: HealthRangeQuery | NormalizedHealthRangeQuery,
   nowMs: number,
   mode: HealthRangeProjectionMode,
+  maximumSampleRangeDays?: number,
 ): HealthRangeResult {
-  const query = normalizeHealthRangeQuery(queryValue);
+  const query = normalizeHealthRangeQuery(queryValue, { maximumSampleRangeDays });
   const decodedSourceRecords = sourceRecords.map(decodeHealthSourceRecordSportsLibData);
   const matchingSourceRecords = decodedSourceRecords
     .filter(sourceRecord => sourceRecord.calendarDate >= query.startDate && sourceRecord.calendarDate <= query.endDate)

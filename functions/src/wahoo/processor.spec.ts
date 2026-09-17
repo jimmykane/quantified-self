@@ -27,8 +27,13 @@ const mocks = vi.hoisted(() => {
     failRevision: vi.fn().mockResolvedValue('retry'),
     enqueueActivitySyncAfterEventPersistence: vi.fn(),
     isActivitySyncOutboundEcho: vi.fn(),
+    retainWahooTrainingCompletion: vi.fn(),
+    fitActivityReferencesFromEvent: vi.fn(),
+    firestore: { kind: 'firestore' },
   };
 });
+
+vi.mock('firebase-admin', () => ({ firestore: () => mocks.firestore }));
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
@@ -50,6 +55,12 @@ vi.mock('../activity-sync/enqueue-after-event-persistence', () => ({
 }));
 vi.mock('../activity-sync/outbound-fingerprint', () => ({
   isActivitySyncOutboundEcho: mocks.isActivitySyncOutboundEcho,
+}));
+vi.mock('../suunto/guide-completion', () => ({
+  fitActivityReferencesFromEvent: mocks.fitActivityReferencesFromEvent,
+}));
+vi.mock('./training-completion', () => ({
+  retainWahooTrainingCompletion: mocks.retainWahooTrainingCompletion,
 }));
 vi.mock('../queue-utils', () => ({
   markQueueItemSkipped: mocks.markSkipped,
@@ -125,11 +136,37 @@ describe('processWahooWorkoutQueueItem', () => {
     });
     mocks.enqueueActivitySyncAfterEventPersistence.mockResolvedValue(false);
     mocks.isActivitySyncOutboundEcho.mockResolvedValue(false);
+    mocks.fitActivityReferencesFromEvent.mockReturnValue([{ id: 'activity-1', startTimeMs: Date.parse('2026-07-18T09:00:00.000Z') }]);
+    mocks.retainWahooTrainingCompletion.mockResolvedValue({ retained: true, linkedWorkoutIds: ['planned-workout'] });
     mocks.hasProAccess.mockResolvedValue(true);
     mocks.claimRevision.mockResolvedValue('claimed');
     mocks.claimedRevisionCurrent.mockResolvedValue(true);
     mocks.completeRevision.mockResolvedValue('processed');
     mocks.failRevision.mockResolvedValue('retry');
+  });
+
+  it('retains an exact Wahoo Training completion before activity fan-out', async () => {
+    const trainingQueueItem = {
+      ...queueItem,
+      workoutToken: 'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
+      planID: '77123',
+    };
+
+    await expect(processWahooWorkoutQueueItem(trainingQueueItem)).resolves.toBe('processed');
+
+    expect(mocks.retainWahooTrainingCompletion).toHaveBeenCalledWith(
+      mocks.firestore,
+      'firebase-1',
+      'event-1',
+      expect.objectContaining({ providerUserId: 'wahoo-1' }),
+      'workout-1',
+      '77123',
+      'qs-workout-abcdefghijklmnopqrstuvwxyzABCDEFGH123456789',
+      'summary-1',
+      [{ id: 'activity-1', startTimeMs: Date.parse('2026-07-18T09:00:00.000Z') }],
+    );
+    expect(mocks.retainWahooTrainingCompletion.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.enqueueActivitySyncAfterEventPersistence.mock.invocationCallOrder[0]);
   });
 
   it('downloads, parses, rechecks its lease, writes through setEvent, and marks processed', async () => {

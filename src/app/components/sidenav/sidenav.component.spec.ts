@@ -287,8 +287,8 @@ describe('SideNavComponent', () => {
 
         expect(healthItem).toBeTruthy();
         expect(healthItem?.nativeElement.getAttribute('routerlink')).toBe('/health');
-        expect(healthItem?.nativeElement.textContent).toContain('BETA');
-        expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeTruthy();
+        expect(healthItem?.nativeElement.textContent).not.toContain('BETA');
+        expect(healthItem?.nativeElement.querySelector('.pro-badge')).toBeNull();
         expect(navigationItems.slice(0, 7).map(item => item.nativeElement.getAttribute('routerlink')))
             .toEqual(['/dashboard', '/calendar', '/training', '/health', '/routes', '/mytracks', '/tools/compare']);
         healthItem!.triggerEventHandler('click', new MouseEvent('click'));

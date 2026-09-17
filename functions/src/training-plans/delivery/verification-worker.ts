@@ -5,10 +5,10 @@ import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deleti
 import { DELIVERY_LEDGER, DELIVERY_LEASE_MS, DELIVERY_QUEUE, TrainingDeliveryTransportError,
   type DeliveryLedgerV1, type DeliveryRuntime } from './contracts';
 import { resolveDeliveryIntent } from './intent';
-import { readDeliveryContext, writeDelivery } from './store';
+import { queuedDeliveryOperation, readDeliveryContext, writeDelivery } from './store';
 import { inspectionBinding, observeInspection } from './verification-evidence';
 import { emptyVerification } from './verification-queue';
-import { VERIFICATION_DAY_MS, type InspectionObservation } from './verification-contracts';
+import { canRepairMissingArtifacts, VERIFICATION_DAY_MS, type InspectionObservation } from './verification-contracts';
 import { stageTrainingDeliveryReconciliation } from './marker';
 
 /** Shares the delivery lease. No HTTP is performed inside a transaction. */
@@ -129,7 +129,8 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
       ledger.actual = { ...ledger.actual!, completed: true };
       ledger.status = 'completed'; ledger.desired = 'preserve';
     }
-    const repairReady = evidence.state === 'confirmed_missing' && claim.inspection.policy.repairReady && !ledger.actual?.completed;
+    const repairReady = evidence.state === 'confirmed_missing'
+      && canRepairMissingArtifacts(claim.inspection.policy, evidence.missingKeys) && !ledger.actual?.completed;
     if (repairReady && evidence.repairTimes.length >= 2) {
       evidence.state = 'deferred'; evidence.nextCheckAtMs = evidence.repairTimes[0] + VERIFICATION_DAY_MS;
     } else if (repairReady) {
@@ -147,7 +148,10 @@ export async function processTrainingVerification(runtime: DeliveryRuntime, uid:
       } : null });
     writeDelivery(runtime, tx, uid, ledger);
     if (ledger.repair && evidence.state === 'restoring') {
-      tx.set(job, { uid, kind: 'delivery', deliveryId: id, dueAtMs: 0, dispatchToken: randomUUID() });
+      const operationKind = queuedDeliveryOperation(ledger);
+      if (!operationKind) throw new TrainingDeliveryTransportError('terminal');
+      tx.set(job, { uid, kind: 'delivery', deliveryId: id, provider: ledger.provider,
+        destinationKey: ledger.destinationKey, operationKind, dueAtMs: 0, dispatchToken: randomUUID() });
     } else if (['needs_attention', 'completed', 'reconnect_required', 'connection_repair'].includes(ledger.status)) tx.delete(job);
     else tx.set(job, { uid, kind: 'verification', priority: evidence.manualPending ? 'manual' : 'ordinary', deliveryId: id,
       dueAtMs: evidence.nextCheckAtMs, dispatchToken: randomUUID() });

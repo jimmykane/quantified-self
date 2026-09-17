@@ -689,12 +689,14 @@ export const getAssistantQuotaStatus = onCall({
   region: FUNCTIONS_MANIFEST.getAssistantQuotaStatus.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
+  memory: '512MiB',
 }, request => runGetAssistantQuotaStatus(request));
 
 export const getAssistantConversation = onCall({
   region: FUNCTIONS_MANIFEST.getAssistantConversation.region,
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
+  memory: '512MiB',
 }, request => runGetAssistantConversation(request));
 
 export const resetAssistantConversation = onCall({

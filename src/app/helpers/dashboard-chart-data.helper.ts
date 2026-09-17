@@ -1,3 +1,4 @@
+import { getDateTimeFormatter } from './date-time-format.helper';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -105,7 +106,7 @@ function getZonedCalendarDate(date: Date, timeZone?: string): Date {
     return date;
   }
 
-  const parts = new Intl.DateTimeFormat('en-CA', {
+  const parts = getDateTimeFormatter('en-CA', {
     timeZone,
     year: 'numeric',
     month: '2-digit',

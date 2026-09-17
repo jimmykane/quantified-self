@@ -27,6 +27,7 @@ import {
 } from './mutation';
 import { assertNoTrainingPlanDeletionInProgress } from './deletion-lock';
 import { invalidateTrainingWorkoutConsent, stageTrainingDeliveryReconciliation } from './delivery/marker';
+import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 
 const MUTATION_RECEIPT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const FIRESTORE_TRANSACTION_WRITE_BUDGET = 490;
@@ -280,7 +281,8 @@ export function buildTrainingScheduleRevisionWrites(
         + applied.changedWorkoutIds.length
         + applied.changedWorkoutIds.filter(id => applied.before.workouts.get(id)?.planId !== applied.after.workouts.get(id)?.planId
             || applied.after.workouts.get(id)?.lifecycle === 'deleted').length
-        + applied.permanentlyDeletedWorkoutIds.length * 2
+        // Tombstone, workout root, and owner-visible completion projection.
+        + applied.permanentlyDeletedWorkoutIds.length * 3
         + standaloneWorkoutRevisions.size
         + [...planRevisionChunks.values()].reduce((total, chunks) => total + chunks.length, 0);
     if (estimatedWriteCount > FIRESTORE_TRANSACTION_WRITE_BUDGET) {
@@ -509,6 +511,7 @@ export async function mutateTrainingScheduleForUser(
             );
             transaction.create(deletionTombstonesRef.doc(tombstone.entityIdHash), tombstone);
             transaction.delete(userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID).doc(workoutId));
+            transaction.delete(userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(workoutId));
         }
 
         const receipt: StoredMutationReceiptV1 = {

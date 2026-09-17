@@ -597,6 +597,8 @@ describe('cleanupUserAccounts', () => {
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingPlanState' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingPlans' }));
         expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/scheduledWorkouts' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingWorkoutCompletions' }));
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: 'subcollection/trainingActivityCompletionLinks' }));
         for (const collection of ['trainingDeliveryLedger', 'trainingDeliveryState', 'trainingDeliveryScopes',
             'trainingDeliverySettings', 'trainingDeliveryStatuses', 'trainingDeliveryVerifications', 'trainingProviderCapacity']) {
             expect(recursiveDeleteMock).toHaveBeenCalledWith(expect.objectContaining({ path: `subcollection/${collection}` }));
@@ -992,6 +994,7 @@ describe('cleanupUserAccounts', () => {
         expect(firestoreMock().collection).toHaveBeenCalledWith('garminAPIActivityQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('suuntoAppWorkoutQueue');
         expect(firestoreMock().collection).toHaveBeenCalledWith('COROSAPIWorkoutQueue');
+        expect(firestoreMock().collection).toHaveBeenCalledWith('trainingDeliveryCorosIntegerClaims');
         expect(firestoreMock().collection).toHaveBeenCalledWith('sportsLibReparseJobs');
         expect(firestoreMock().collection).toHaveBeenCalledWith('sportsLibRouteReparseJobs');
         expect(firestoreMock().collection).toHaveBeenCalledWith('failed_jobs');

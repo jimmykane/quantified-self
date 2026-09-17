@@ -3,7 +3,7 @@ import { DashboardChartThumbnailComponent } from '../../summaries/dashboard-char
 import { buildDashboardManagerPresetTile } from '../../../helpers/dashboard-manager-presets.helper';
 import type { DashboardChartPreview } from '../../../helpers/dashboard-chart-preview.helper';
 import { ChartSourcePickerComponent } from '../../shared/chart-source-picker/chart-source-picker.component';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
@@ -12,12 +12,13 @@ import type { HealthProvider } from '@shared/health';
 import { HEALTH_METRIC_CATALOG } from '@shared/health';
 import type { AppDashboardHealthMetricSettings, AppHealthWorkspaceRange, AppUserInterface } from '../../../models/app-user.interface';
 import type { TimelineNoteChartContext } from '../../../helpers/timeline-notes-chart.helper';
-import { buildDashboardHealthContext, DashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
-import { localCalendarDate, navigateHealthWorkspaceWindow, resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
+import { buildDashboardHealthContext, DashboardHealthContext, DashboardHealthEvidence } from '../../../helpers/dashboard-health-context.helper';
+import { HEALTH_WORKSPACE_SAMPLE_RANGE, localCalendarDate, navigateHealthWorkspaceWindow, resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
 import { DashboardHealthService } from '../../../services/dashboard-health.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { HealthMetricSeriesChartComponent } from '../../health/health-metric-series-chart.component';
 import { ChartsSleepTrendComponent } from '../sleep-trend/charts.sleep-trend.component';
+import { chartViewportObserverOptions, shouldPreloadChartInBackground } from '../../../helpers/chart-viewport-queue';
 /** Same projection, source identity and chart renderer as Health; navigation belongs to this tile. */
 @Component({ selector: 'app-dashboard-health-chart', standalone: true,
     imports: [DashboardChartThumbnailComponent, ChartSourcePickerComponent, MatButtonModule, MatIconModule, MatSelectModule, MatProgressBarModule, HealthMetricSeriesChartComponent, ChartsSleepTrendComponent],
@@ -55,6 +56,9 @@ export class DashboardHealthChartComponent {
     private readonly destroy = inject(DestroyRef);
     private version = 0;
     private identity = '';
+    private evidence: DashboardHealthEvidence | null = null;
+    private projectionKey: string | null = null;
+    private sampleRangeCorrectionPending = false;
     readonly sleepThumbnail = computed(() => ({
         tile: { ...buildDashboardManagerPresetTile({ presetId: 'curated-sleep', order: 0, size: { columns: 1, rows: 1 } }), sleepTrend: this.displayContext()?.sleep },
         source: 'user', loading: false, note: '', calendarEvents: [], anchorMs: Date.now(),
@@ -87,34 +91,38 @@ export class DashboardHealthChartComponent {
         value: AppHealthWorkspaceRange;
         label: string;
     }[] = [{ value: 'today', label: '1d' }, { value: '14d', label: '14d' }, { value: '30d', label: '30d' }, { value: '90d', label: '90d' }, { value: '1y', label: '1y' }];
-    private readonly requestKey = computed(() => JSON.stringify([this.user().uid, this.user().settings.unitSettings,
+    isRangeDisabled(range: AppHealthWorkspaceRange): boolean {
+        return range === '1y' && this.context()?.sampleRangeLimited === true;
+    }
+    // Source and formatting changes select from the same bounded evidence.
+    private readonly viewKey = computed(() => JSON.stringify([this.user().settings.unitSettings,
         this.user().settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability,
-        this.data.isOwner(this.user().uid), this.settings(), this.endDate(), this.visible(), this.priority(), this.providerFilter(), this.retry()]));
+        this.effectiveSettings().sourceKey, this.providerFilter()]));
+    private readonly requestKey = computed(() => JSON.stringify([this.user().uid, this.data.isOwner(this.user().uid),
+        this.settings().metric, this.settings().range, this.endDate(), this.visible(), this.priority(), this.retry()]));
     constructor() {
-        if (typeof IntersectionObserver === 'undefined')
-            this.visible.set(true);
-        else {
-            const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) {
-                this.visible.set(true);
-                observer.disconnect();
-            } }, { rootMargin: '160px' });
-            observer.observe(this.element.nativeElement);
-            this.destroy.onDestroy(() => observer.disconnect());
-        }
+        // Embedded views are detached during construction. Resolve their dashboard
+        // scope and scroll root only after Angular has attached the completed view.
+        afterNextRender(() => this.startLoading());
         effect(onCleanup => {
             this.requestKey();
             untracked(() => {
                 const user = this.user(), settings = this.settings(), endDate = this.endDate();
+                if (settings.range !== '1y') this.sampleRangeCorrectionPending = false;
                 const identity = `${user.uid}:${settings.metric}`;
                 const visible = this.visible(), priority = this.priority();
                 if (identity !== this.identity) {
                     this.identity = identity;
                     this.context.set(null);
                     this.initialSource.set(null);
+                    this.evidence = null;
+                    this.sampleRangeCorrectionPending = false;
                 }
                 const version = ++this.version;
                 if (!visible || !this.data.isOwner(user.uid)) {
                     this.context.set(null);
+                    this.evidence = null;
+                    this.sampleRangeCorrectionPending = false;
                     this.loading.set(false);
                     return;
                 }
@@ -129,16 +137,9 @@ export class DashboardHealthChartComponent {
                     next: evidence => {
                         if (version !== this.version)
                             return;
-                        const preferred = user.settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability;
-                        let context = buildDashboardHealthContext(evidence, this.effectiveSettings(), user.settings.unitSettings, preferred, this.providerFilter());
-                        if (!settings.sourceKey && !this.initialSource() && context.selectedKey) {
-                            this.initialSource.set(context.selectedKey);
-                            this.settingsChange.emit({ settings: { ...settings, sourceKey: context.selectedKey }, initial: true });
-                            context = buildDashboardHealthContext(evidence, this.effectiveSettings(), user.settings.unitSettings, preferred, this.providerFilter());
-                        }
-                        this.context.set(context);
+                        this.evidence = evidence;
+                        this.updateContext(true);
                         this.loading.set(false);
-                        this.contextChange.emit(context);
                     }, error: () => { if (version === this.version) {
                         this.error.set(true);
                         this.loading.set(false);
@@ -147,7 +148,47 @@ export class DashboardHealthChartComponent {
                 onCleanup(() => subscription.unsubscribe());
             });
         });
+        effect(() => {
+            this.viewKey();
+            untracked(() => this.updateContext());
+        });
         this.destroy.onDestroy(() => this.version++);
+    }
+    private startLoading(): void {
+        if (typeof IntersectionObserver === 'undefined' || shouldPreloadChartInBackground(this.element.nativeElement)) {
+            this.visible.set(true);
+            return;
+        }
+        const observer = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting)) {
+            this.visible.set(true);
+            observer.disconnect();
+        } }, chartViewportObserverOptions(this.element.nativeElement));
+        observer.observe(this.element.nativeElement);
+        this.destroy.onDestroy(() => observer.disconnect());
+    }
+    private updateContext(newEvidence = false): void {
+        if (!this.evidence || !this.data.isOwner(this.user().uid)
+            || !newEvidence && this.projectionKey === this.viewKey()) return;
+        const user = this.user(), settings = this.settings();
+        const preferred = user.settings.appSettings?.healthWorkspace?.highlightSources?.heart_rate_variability;
+        const context = buildDashboardHealthContext(this.evidence, this.effectiveSettings(), user.settings.unitSettings, preferred, this.providerFilter());
+        if (!settings.sourceKey && !this.initialSource() && context.selectedKey) {
+            this.initialSource.set(context.selectedKey);
+            this.settingsChange.emit({ settings: { ...settings, sourceKey: context.selectedKey }, initial: true });
+        }
+        // Persisting the automatically chosen source must not rebuild or redraw it.
+        this.projectionKey = this.viewKey();
+        this.context.set(context);
+        this.contextChange.emit(context);
+        if (settings.range === '1y' && context.sampleRangeLimited) {
+            if (!this.sampleRangeCorrectionPending) {
+                this.sampleRangeCorrectionPending = true;
+                this.endDate.set(localCalendarDate());
+                this.settingsChange.emit({ settings: { ...this.effectiveSettings(), range: HEALTH_WORKSPACE_SAMPLE_RANGE }, initial: false });
+            }
+        } else {
+            this.sampleRangeCorrectionPending = false;
+        }
     }
     selectSource(sourceKey: string): void {
         if (this.disabled() || sourceKey === this.effectiveSettings().sourceKey || !this.context()?.sources.some(source => source.key === sourceKey))
@@ -156,7 +197,7 @@ export class DashboardHealthChartComponent {
         this.settingsChange.emit({ settings: { ...this.settings(), sourceKey }, initial: false });
     }
     selectRange(range: AppHealthWorkspaceRange): void {
-        if (this.disabled() || range === this.settings().range)
+        if (this.disabled() || this.isRangeDisabled(range) || range === this.settings().range)
             return;
         this.haptics.selection();
         this.endDate.set(localCalendarDate());

@@ -1508,7 +1508,8 @@ describe('Firestore Security Rules', () => {
             it('allows only owner reads of delivery projections and denies internal delivery state even to owners', async () => {
                 const owner = testEnv.authenticatedContext(userId).firestore();
                 const other = testEnv.authenticatedContext(otherId).firestore();
-                for (const collection of ['trainingDeliverySettings', 'trainingDeliveryStatuses', 'trainingDeliveryVerifications']) {
+                for (const collection of ['trainingDeliverySettings', 'trainingDeliveryStatuses', 'trainingDeliveryVerifications',
+                    'trainingWorkoutCompletions']) {
                     const path = `users/${userId}/${collection}/example`;
                     await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(path).set({ schemaVersion: 1 }));
                     await assertSucceeds(owner.doc(path).get());
@@ -1519,17 +1520,28 @@ describe('Firestore Security Rules', () => {
                     await assertFails(owner.doc(path).delete());
                     await assertFails(owner.doc(`${path}/internal/value`).get());
                 }
-                for (const path of [`users/${userId}/trainingDeliveryLedger/id`,
+                for (const path of [`users/${userId}/events/event/trainingCompletionEvidence/fit`,
+                    `users/${userId}/trainingActivityCompletionLinks/id`,
+                    `users/${userId}/trainingDeliveryLedger/id`,
                     `users/${userId}/trainingDeliveryLedger/id/attempts/attempt`,
                     `users/${userId}/trainingDeliveryState/current`,
                     `users/${userId}/trainingDeliveryState/current/receipts/mutation`,
                     `users/${userId}/trainingDeliveryScopes/workout`, 'trainingDeliveryQueue/job', 'trainingProviderCapacity/garmin_app',
+                    'trainingDeliveryCorosIntegerClaims/12345',
                     `users/${userId}/trainingProviderCapacity/garmin_account`,
                     `users/${userId}/trainingDeliveryLedger/id/inspections/read`,
                     `users/${userId}/trainingDeliveryLedger/id/attempts/attempt/acceptances/checkpoint`,
                     `users/${userId}/trainingDeliveryState/current/checks/workout_w_garmin`]) {
                     await assertFails(owner.doc(path).get());
                     await assertFails(owner.doc(path).set({ forged: true }));
+                }
+                const evidence = `users/${userId}/events/event/trainingCompletionEvidence/fit`;
+                await testEnv.withSecurityRulesDisabled(context => context.firestore().doc(evidence).set({ schemaVersion: 1 }));
+                for (const client of [owner, other, testEnv.unauthenticatedContext().firestore()]) {
+                    await assertFails(client.doc(evidence).get());
+                    await assertFails(client.doc(evidence).update({ forged: true }));
+                    await assertFails(client.doc(evidence).delete());
+                    await assertFails(client.collection(`users/${userId}/events/event/trainingCompletionEvidence`).get());
                 }
             });
             const seedCurrentTrainingData = async () => {

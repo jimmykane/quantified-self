@@ -37,6 +37,15 @@ and its calendar action remain mounted through preparation, refresh, failure, an
 shows pending work; failures keep the accessible Retry action. The status row keeps its height when it clears, including
 when Today or the owner greeting is hidden. Do not replace the page title with changing loading messages.
 
+Today's summary also reserves space for the completed readiness/confidence/recovery content and the HRV personal-range
+details before the initial reads settle. Its primary cells align content to the top, and the loading progress bar and
+completed score share one slot. Load warnings replace the explanation in its existing slot, retaining an accessible
+status rather than adding a row. Keep these minimum block sizes independent of loading, missing-data and recovery states;
+removing a reservation when a read finishes reintroduces scroll jumps. Small phones reserve extra wrapped-text space,
+and tablets place the four drivers below the primary summaries instead of squeezing them into narrow columns. These are
+minimums, not clipped or fixed heights: enlarged text and longer messages may still expand. Check loading-to-complete
+geometry around responsive breakpoints as well as ordinary desktop/phone screenshots when changing Today copy or layout.
+
 ## Workspace Shells
 
 Authenticated product workspaces, except Settings, use the shared `qs-workspace-page` shell from `src/styles.scss`. It
@@ -130,6 +139,11 @@ rounded container, shadow, or nested content padding. `showDivider` controls the
 Training Plans uses the same compact stacked rows for workouts, editable step/repeat blocks, and its history section;
 workflow state and unit-aware workout summaries remain owned by Plans.
 
+Optional `[compactRowTitlePrefix]` content appears beside the title inside its semantic heading, separately from
+the body and action slot. Training sync uses this for the shared provider logo with its visible provider name;
+decorative logos are hidden from assistive technology and do not become controls. The title can wrap while the
+prefix retains its compact size. Existing rows without a prefix retain their layout and heading levels.
+
 Compact **column** lists (currently Garmin permission grants) center icon, heading, description, and trailing status,
 with 24px icons and tighter row padding. At narrow widths, the status stays beside the heading and the description
 wraps underneath; grant labels reserve an equal width so changing status cannot shift the description column.
@@ -147,8 +161,20 @@ swimming-performance, and durability plots opt into `EChartsHostController.defer
 preload margin and admits one plot per animation frame after the shared ECharts library is ready, so a cold
 import cannot release multiple queued plots into the same render frame. Non-scrolling tab bodies and horizontal-only
 wrappers are skipped when choosing that root, so their offscreen charts still wait for the page viewport.
+The owner dashboard marks its chart surface for background preloading: all saved plots join the same one-per-frame queue
+after the dashboard mounts, and Health tile reads use the existing three-request limit. This prepares lower tiles
+before scrolling without turning chart creation or Health reads into one main-thread/network burst. Other workspaces
+remain viewport-aware. The shared observer options also gate Health tile evidence, avoiding a second, shorter preload
+threshold before ECharts can start.
+Scope and scroll-root detection must run after view attachment: Health tiles use `afterNextRender`, and the shared
+plot queue defers registration of detached hosts until the current render completes. Checking ancestry in a child
+constructor or static view query can otherwise leave dashboard charts waiting for scrolling. Cancellation before
+attachment must remove the queued request without registering an observer or loading ECharts.
 Only plot initialization is deferred: Angular titles,
 values, accessible descriptions, and controls remain present. Initialized plots stay mounted when scrolled away.
+Dashboard map tiles similarly defer their renderer with Angular's viewport trigger. Their fixed-height body keeps
+a placeholder until visible; titles, filters, drag handles and menus remain available. Once created, the map stays
+mounted during scrolling and receives the latest inputs, avoiding WebGL/map-worker startup on the first screen.
 Destroyed or replaced plot hosts cancel their pending work, including waits for a previous theme. A chart that
 leaves the preload area while the library loads stays deferred until it returns. When data changes before first visibility, only the latest waiting
 refresh may apply its data. Browsers without viewport observation use ordinary immediate initialization.
@@ -158,6 +184,28 @@ callback; Recovery and generic pies rebuild their legend and center typography a
 the ECharts instance. The host remains reusable and resizable without `ResizeObserver` through the shared viewport
 fallback. Dashboard section layout is recalculated only when its column count
 or row-height mode changes, so browser toolbar height changes do not rebuild an unchanged layout.
+
+Background dashboard evidence (derived metrics, Sleep/readiness, legacy HRV, activities and routes) updates its
+current state immediately and requests one `CoalescedFrameTask` tile rebuild before the next paint. The callback
+reads the latest state, so a burst across sources is combined without dropping values. Initial rendering and explicit
+layout/range changes still rebuild immediately and cancel a queued background rebuild. Destroying the dashboard
+cancels the frame and subscriptions. Owner Health metric tiles retain their existing independent shared adapter;
+this scheduling neither adds reads nor changes metric calculations.
+
+Notes-only input changes use `EChartsHostController.updateTimelineNotes`. Its shared binding retains the last base
+option and axis hints, projects marker/shading series, then merges only those stable IDs. Removed overlays receive
+empty markLine/markArea data; metric series, zoom and legend state are not resent. Before applying an overlay patch,
+the host dismisses the active tooltip through ECharts: mobile click-triggered tooltips otherwise retain outdated
+private text after an edit, hide/remove or owner change. No chart recreation or resize is required. Full data/theme/range changes
+continue through ordinary rendering. Range registrations remain deduplicated, and disposal releases the retained
+option and registration. Explicit time bounds avoid traversing samples during overlay projection. Health, Sleep,
+Form, Forecast and the five Training trend adapters share this path, without chart-local fetches or haptics.
+
+`date-time-format.helper.ts` reuses at most 64 Intl date formatters for explicit timezone/locale/option combinations,
+with least-recently-used eviction. Health chart labels and workspace dates, Training readiness/body-weight dates,
+and dashboard calendar grouping use it. Formatted readings are never cached. Calls that omit a timezone remain
+uncached so a device timezone change does not retain an old local-time formatter. Recorded offsets, locale options,
+canonical metric value/unit formatting and range semantics are unchanged.
 
 An open chart picker keeps its original Material shell when the viewport crosses a breakpoint. Its mobile sheet
 can widen to accommodate the desktop list and preview, while a desktop dialog retains content insets when narrowed.
@@ -169,6 +217,9 @@ their existing Sports Lib formatting, data loading, accessible chart description
 
 Health's explorer, Sleep chart, and loading/empty states are not wrapped in additional card surfaces. Sleep-stage
 legend columns wrap to the available card width, including the narrow columns in tablet Highlights.
+The shared Health ECharts option renders Stress state as colored horizontal time blocks on named category lanes.
+The Health explorer, dashboard tiles, chart-library previews and thumbnails all use that same projection, while
+other categorical Health metrics retain their stepped series. Unknown provider states stay neutral and readable.
 Highlight **Open** actions scroll to and focus the explorer heading, including when that metric is already selected.
 They preserve the selected date range and source filters; opening the current metric does not save preferences again.
 
@@ -379,6 +430,10 @@ Physical haptics require a supported device; browser emulation only verifies int
 The Health lane follows Training State and uses Health's existing catalog groups and hidden-metric exclusions. Generic `HealthMetric` presets identify one `healthMetric.metric`; source and range are independent tile settings. Duplicate matching uses metric identity across all sections. Sleep/HRV keep their old renderer IDs and introduction revision; the 33 new presets use revision 2. Legacy tiles without `healthSection` stay in Training State; new Sleep/HRV presets set Health. Move changes only placement, preserves configuration, uses the transaction boundary, and supports guarded Undo. Starter and empty layouts are unchanged.
 
 `DashboardHealthChartComponent` adapts the shared Health projection to one chosen source/reading. List thumbnails, selected previews, and owner tiles use the same model and colors. Full-series opaque IDs preserve provider accounts, aggregation, semantic variants and reading methods; an explicit missing ID remains selected. Source defaults are deterministic, with the HRV Highlight preference used only as an initial account hint. Date length persists independently, while older/newer anchors are local. A thumbnail is inert; its row owns activation feedback. Preview initialization and hydration are silent.
+
+Health tile reads depend on owner, metric and window, independently of source selection and unit formatting.
+Changing those display choices reprojects retained evidence without resubscribing or resetting loading state.
+Persisting an automatically selected source preserves the existing chart model instead of building it twice.
 
 The loading bar sits at the date toolbar's lower edge without reserving an extra flex row. The latest-value/source row follows its content height, retaining Material button touch targets when a selector is present. Embedded Sleep (`hideTitle`) removes its own top padding because the dashboard wrapper already supplies that spacing; standalone Sleep keeps its existing layout.
 

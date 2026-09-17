@@ -90,6 +90,9 @@ describe('Wahoo connected-service policy', () => {
     expect(content).toContain('Garmin, COROS, or Suunto activities');
     expect(content).toContain('does not create or retain a Quantified Self activity');
     expect(content).toContain('Wahoo-to-Suunto or Wahoo-to-COROS activity sync');
+    expect(content).toContain('authored workout recipe, title and scheduled date');
+    expect(content).toContain('Provider identifiers and operation receipts are retained server-side');
+    expect(content).toContain('does not import Wahoo-owned plans or grant assistants permission to send workouts');
   });
 });
 
@@ -111,6 +114,10 @@ describe('COROS connected-service policy', () => {
     expect(content).toContain('Disconnecting COROS stops future daily Health and sleep imports');
     expect(content).toContain('Deleting your Quantified Self account recursively removes');
     expect(content).toContain('active COROS connection');
+    expect(content).toContain('collision-checked partner workout identities');
+    expect(content).toContain('exact returned COROS planWorkoutId');
+    expect(content).toContain('COROS training calendar');
+    expect(content).toContain('not a watch receipt');
     expect(content).toContain('automatically send new Garmin/Suunto/Wahoo FIT activities');
     expect(content).toContain('Eligible connected Pro users can also send');
     expect(content).toContain('selected GPX/FIT route');
@@ -149,6 +156,15 @@ describe('MCP client access policy', () => {
     expect(content).toContain('exact source measurement timestamps');
     expect(content).toContain('provider/device metadata');
     expect(content).toContain('bounded chart-ready streams');
+    expect(content).toContain('parent event tags');
+    expect(content).toContain('1–10 exact case-insensitive tags');
+    expect(content).toContain('Activities from the same event share tags');
+    expect(content).toContain('personal, health, or location context');
+    expect(content).toContain('untrusted labels');
+    expect(content).toContain('Tag reads select only the event tag fields');
+    expect(content).toContain('separate internal ID fields');
+    expect(content).toContain('signed-in application link retains its normal event route');
+    expect(content).toContain('built-in Assistant is not expanded');
     expect(content).toContain('discover canonical Sports Lib activity types');
     expect(content).toContain('filter bounded newest-first scans');
     expect(content).toContain('explicit IANA timezone');

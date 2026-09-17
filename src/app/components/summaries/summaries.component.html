@@ -1,5 +1,5 @@
 @if (tiles.length || showActions || showTodaySummary || derivedMetricsBanner) {
-<section class="pie">
+<section class="pie" [attr.data-chart-preload]="isOwnerDashboard ? 'background' : null">
   @if (showTodaySummary || showActions || derivedMetricsBanner) {
   <div class="dashboard-summary-heading">
   <app-page-header
@@ -63,53 +63,115 @@
   </div>
   }
   @if (showTodaySummary) {
-  <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals">
-    <div class="dashboard-current-state-primary dashboard-training-state-primary">
-      <span>Training state</span>
-      <strong>{{ dashboardTodayTrainingState.label }}</strong>
-      <small class="dashboard-training-state-caption">{{ dashboardTodayTrainingState.caption }} · TSS only</small>
-    </div>
-    <div class="dashboard-current-state-primary" [attr.aria-busy]="dashboardTodayReadiness.loading">
-      <span>Readiness</span>
-      <div class="dashboard-readiness-primary-value">
-        <strong>{{ dashboardTodayReadiness.label }}</strong>
-        <b>{{ dashboardTodayReadiness.scoreText }}</b>
+  <section class="dashboard-current-state-row" aria-label="Current training state and readiness signals"
+    [class.has-recovery]="dashboardTodayReadiness.loading || (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null)">
+    <div class="dashboard-current-state-top">
+      <div class="dashboard-current-state-primary dashboard-training-state-primary">
+        <span>Training state</span>
+        <strong>{{ dashboardTodayTrainingState.label }}</strong>
+        <small class="dashboard-training-state-caption">{{ dashboardTodayTrainingState.caption }} · TSS only</small>
+        <div class="dashboard-training-state-scale" role="img"
+          [attr.aria-label]="'Training state: ' + dashboardTodayTrainingState.label">
+          @for (segment of dashboardTodayTrainingStateScaleSegments; track segment) {
+            <span aria-hidden="true"
+              [class.reached]="dashboardTodayTrainingState.scalePosition !== null && segment < dashboardTodayTrainingState.scalePosition"
+              [class.active]="segment === dashboardTodayTrainingState.scalePosition"
+              [attr.data-tone]="segment === dashboardTodayTrainingState.scalePosition ? dashboardTodayTrainingState.scaleTone : null"></span>
+          }
+        </div>
+        <div class="dashboard-training-state-scale-labels" aria-hidden="true">
+          <small>Lower load</small><small>Stable</small><small>High strain</small>
+        </div>
       </div>
-      @if (dashboardTodayReadiness.loading) {
-      <mat-progress-bar mode="indeterminate" aria-label="Loading readiness"></mat-progress-bar>
-      <small>Waiting for load and sleep data</small>
-      } @else {
-      <app-metric-indicator class="dashboard-readiness-score-indicator" label="Readiness"
-        [value]="dashboardTodayReadiness.score" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"
-        [showThresholds]="true"></app-metric-indicator>
-      <small class="dashboard-readiness-method">Load + sleep signals · Freshness stays TSS-only</small>
-      <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
-      <app-metric-indicator variant="segments" label="Available readiness signals"
-        [value]="dashboardTodayReadiness.availableSignalCount"
-        [total]="4" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"></app-metric-indicator>
-      }
-      @if (dashboardTodayReadiness.warningText) {
-      <small role="status">{{ dashboardTodayReadiness.warningText }}</small>
-      }
-      @if (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null) {
-      <small class="dashboard-readiness-imported-recovery">Recovery left · {{ dashboardTodayReadiness.recoveryText }} remaining · until {{ dashboardTodayReadiness.recoveryFinishTimeMs | date:'shortTime' }} · separate from score</small>
+      <div class="dashboard-current-state-primary dashboard-readiness-primary" [attr.aria-busy]="dashboardTodayReadiness.loading">
+        <span>Readiness</span>
+        <div class="dashboard-readiness-primary-value">
+          <strong>{{ dashboardTodayReadiness.label }}</strong>
+          <b>{{ dashboardTodayReadiness.scoreText }}</b>
+        </div>
+        <div class="dashboard-readiness-score">
+          @if (dashboardTodayReadiness.loading) {
+          <mat-progress-bar mode="indeterminate" aria-label="Loading readiness"></mat-progress-bar>
+          } @else {
+          <app-metric-indicator class="dashboard-readiness-score-indicator" label="Readiness"
+            [value]="dashboardTodayReadiness.score" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"
+            [showThresholds]="true"></app-metric-indicator>
+          }
+        </div>
+        @if (dashboardTodayReadiness.loading) {
+        <small>Waiting for load and sleep data</small>
+        } @else {
+        <small class="dashboard-readiness-method" [attr.role]="dashboardTodayReadiness.warningText ? 'status' : null">{{ dashboardTodayReadiness.warningText || 'Load + sleep signals · Freshness stays TSS-only' }}</small>
+        <small>{{ dashboardTodayReadiness.confidenceText }} · {{ dashboardTodayReadiness.evidenceText }}</small>
+        <app-metric-indicator variant="segments" label="Available readiness signals"
+          [value]="dashboardTodayReadiness.availableSignalCount"
+          [total]="4" [tone]="$any(dashboardTodayReadiness.label.toLowerCase())"></app-metric-indicator>
+        }
+      </div>
+    </div>
+    @if (dashboardTodayReadiness.recoveryText !== '--' && dashboardTodayReadiness.recoveryFinishTimeMs !== null) {
+    <div class="dashboard-readiness-recovery-band">
+      <small class="dashboard-readiness-imported-recovery">Recovery left · <strong>{{ dashboardTodayReadiness.recoveryText }}</strong> remaining · until {{ dashboardTodayReadiness.recoveryFinishTimeMs | date:'shortTime' }} · separate from score</small>
       <app-metric-indicator class="dashboard-readiness-recovery-indicator" label="Recovery remaining"
         [value]="dashboardTodayReadiness.recoveryRemainingPercent" [max]="100" tone="recover" [compact]="true"></app-metric-indicator>
-      }
     </div>
+    } @else if (dashboardTodayReadiness.loading) {
+    <div class="dashboard-readiness-recovery-band dashboard-readiness-recovery-placeholder" aria-hidden="true">
+      <span></span><span></span>
+    </div>
+    }
     <dl>
-      <div><dt>Load</dt><dd>{{ dashboardTodayReadiness.loadText }}</dd><small>Form / ramp</small></div>
-      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
+      <div>
+        <dt>Load</dt><dd>{{ dashboardTodayReadiness.loadText }}</dd>
+        <div class="dashboard-today-history-slot">
+        @if (dashboardTodayReadiness.loadBars.length) {
+          <!-- A static seven-day summary stays semantic HTML so Today paints with its data;
+               two ECharts hosts would add delayed canvases and pointer handlers for seven noninteractive values. -->
+          <div class="dashboard-today-history-bars" role="img"
+            [attr.aria-label]="'Daily training load for the latest ' + dashboardTodayReadiness.loadBars.length + ' days'">
+            @for (bar of dashboardTodayReadiness.loadBars; track bar.key) {
+              <span aria-hidden="true" [class.current]="bar.current" [class.zero]="bar.zero" [attr.data-tone]="bar.tone"
+                [style.height.%]="bar.heightPercent"></span>
+            }
+          </div>
+        }
+        </div>
+        <small>Form / ramp</small>
+      </div>
+      <div><dt>Sleep</dt><dd>{{ dashboardTodayReadiness.sleepText }}</dd><div class="dashboard-today-history-slot"><app-metric-indicator label="Sleep score" [value]="dashboardTodayReadiness.sleepScore" [compact]="true"></app-metric-indicator></div><small>{{ dashboardTodayReadiness.sleepContextText }}</small></div>
       <div class="dashboard-readiness-hrv">
         <dt>HRV · 7-day average</dt>
         <dd [attr.data-tone]="dashboardTodayReadiness.hrvTone">{{ dashboardTodayReadiness.hrvText }}</dd>
         <small>{{ dashboardTodayReadiness.hrvStatusText }}</small>
+        @if (dashboardTodayReadiness.hrvRangeIndicator; as indicator) {
+          <app-metric-indicator variant="range" label="HRV" [value]="indicator.value"
+            [min]="indicator.min" [max]="indicator.max"
+            [rangeMin]="indicator.rangeMin" [rangeMax]="indicator.rangeMax"
+            [valueText]="dashboardTodayReadiness.hrvText" [rangeText]="dashboardTodayReadiness.hrvRangeText"
+            [tone]="dashboardTodayReadiness.hrvTone" [compact]="true"></app-metric-indicator>
+        }
         <small>{{ dashboardTodayReadiness.hrvRangeText }}</small>
         @if (dashboardTodayReadiness.hrvLatestText) {
           <small>{{ dashboardTodayReadiness.hrvLatestText }}</small>
         }
       </div>
-      <div><dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd><app-metric-indicator variant="deviation" label="Overnight heart rate" [value]="dashboardTodayReadiness.overnightHeartRateDeviationPercent" [tone]="dashboardTodayReadiness.overnightHeartRateTone" [compact]="true"></app-metric-indicator><small>vs baseline · lower supports</small></div>
+      <div>
+        <dt>Overnight HR</dt><dd [attr.data-tone]="dashboardTodayReadiness.overnightHeartRateTone">{{ dashboardTodayReadiness.overnightHeartRateText }}</dd>
+        <div class="dashboard-today-history-slot">
+        @if (dashboardTodayReadiness.overnightHeartRateBars.length) {
+          <div class="dashboard-today-history-bars" role="img"
+            [attr.aria-label]="'Overnight heart rate for the latest ' + dashboardTodayReadiness.overnightHeartRateBars.length + ' eligible nights'">
+            @for (bar of dashboardTodayReadiness.overnightHeartRateBars; track bar.key) {
+              <span aria-hidden="true" [class.current]="bar.current" [class.zero]="bar.zero" [attr.data-tone]="bar.tone"
+                [style.height.%]="bar.heightPercent"></span>
+            }
+          </div>
+        } @else {
+          <app-metric-indicator variant="deviation" label="Overnight heart rate" [value]="dashboardTodayReadiness.overnightHeartRateDeviationPercent" [tone]="dashboardTodayReadiness.overnightHeartRateTone" [compact]="true"></app-metric-indicator>
+        }
+        </div>
+        <small>vs baseline · lower supports</small>
+      </div>
     </dl>
   </section>
   }

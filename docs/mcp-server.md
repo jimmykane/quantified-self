@@ -50,6 +50,41 @@ Every future planning feature must review MCP impact in the same PR: explicit pr
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
 reads never authorizes provider actions, write tools, wider consent or deployment.
 
+Suunto Guide delivery (#650) uses these existing local sync projections without changing any registered tool or wire
+schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
+counts, and strict rejection of private evidence injected into a public status. No Guide/account IDs, FIT completion
+evidence, watch receipts, live checks or write actions are exposed; consent and bundled skill routing remain unchanged.
+The manual editor's additional canonical running/cycling profiles also require no MCP contract change: the existing
+recipe schema already accepts the complete Sports Lib activity-type enum, and focused coverage proves an exact Mountain
+Biking sport survives the read projection. Suunto numeric activity recommendations and Garmin's broad
+`RUNNING`/`CYCLING` payload fold remain private adapter behavior; the MCP recipe keeps the authored exact sport.
+
+Sports Lib 21.2.1 FIT workout-reference adoption and the first exact Suunto activity link add no MCP metric, scope,
+provider action or registered wire field. Private FIT references, account digests and reverse-link records are excluded.
+Existing sync status may truthfully become `completed` after an account-bound Guide marker is accepted, using the status
+already present in the frozen delivery schema. The separate safe **Activity linked** projection is not exposed through MCP
+in this slice; #651 remains open for the bounded fallback/manual-link workflow and its planned linked/unlinked read review.
+
+Garmin schedule-only remote repair also preserves the registered MCP contract. The existing sanitized delivery status
+already stops a confirmed missing copy from counting as synced and represents restoration as a non-success outcome.
+Artifact-specific inspection authority, retained provider IDs and repair evidence remain private; MCP performs no live
+provider check or repair and gains no tool, field, scope, consent or write authority.
+
+COROS Training delivery (#648) is likewise an additive no-wire-change. The existing sync-status enum can report the
+same delivered, approval, retry, attention and completed states for COROS. Partner athlete/workout IDs, destination
+identity, batch journals, request outcomes, token authority and exact `planWorkoutId` evidence remain private and are
+rejected from browser/MCP projections. Plan totals continue to derive from individual workout statuses rather than a
+claimed native plan object. The exact provider marker can update the existing private completion link, but exposing a
+completion link through MCP remains the focused #651 deferral. No new MCP scope, tool, provider action, schema,
+Assistant route or plugin metadata is introduced.
+
+Wahoo exact completion correlation follows the same no-wire-change boundary. An imported activity can move its existing
+sanitized delivery status to `completed` only after the private Workout ID, Plan ID and deterministic `workout_token`
+resolve one current account-bound delivery. Those identifiers, the account digest, workout-summary evidence and reverse
+link remain private and are rejected from MCP projections. The separate safe **Activity linked** projection is still not
+part of MCP; #651 retains the bounded fallback/manual-link and linked/unlinked read review. No tool, scope, schema,
+Assistant route, provider action or bundled-plugin change is introduced.
+
 ## Purpose and boundary
 
 Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
@@ -330,8 +365,8 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
 - `sleep:read` for redacted sleep sessions and sleep summaries;
 - `training-plans:read` for current authored plans/workouts, complete instructions and existing sanitized service sync summaries;
 - `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
-- `activity-details:read` for bounded non-location activity summaries, laps, swim lengths, MTB jump measurements,
-  selected metrics, and on-demand chart series;
+- `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
+  lengths, MTB jump measurements, selected metrics, and on-demand chart series;
 - `activity-descriptions:read`, dependent on `activity-details:read`, for the full private parent event description shown in the QS.io event editor;
 - `activity-location:read`, dependent on `activity-details:read`, for exact activity start/end and jump coordinates,
   nearby activity search, and chart breadcrumbs;
@@ -567,6 +602,7 @@ The analytics and map entries follow the
 | `query_timeline_notes` | `timeline-notes:read` | Full private user-reported context overlapping inclusive calendar dates, including chart-hidden notes; bounded full-text continuation |
 | `list_activities` | `activity-details:read`; locations add `activity-location:read` | Frozen compatibility tool for bounded newest-first activity scans |
 | `query_activities` | `activity-details:read`; locations add `activity-location:read` | Preferred bounded activity query with structurally exclusive explicit, relative, and unbounded date modes |
+| `query_activities_with_tags` | `activity-details:read` | Coordinate-free activity summaries with their parent event tags and optional exact case-insensitive `any`/`all` tag filtering |
 | `find_activities_near_location` | `activity-details:read` + `activity-location:read` | Frozen compatibility tool for nearby activity scans |
 | `search_activities_near_location` | `activity-details:read` + `activity-location:read` | Preferred closed-world nearby activity search with structurally paired optional dates |
 | `list_activity_laps` | `activity-details:read` | Paginated allowlisted lap timing and performance fields |
@@ -963,10 +999,30 @@ on runtime validation. A relative-period cursor retains the first page's resolve
 midnight between pages cannot move the query window. `search_activities_near_location` similarly advertises an explicit
 paired range or an unbounded mode.
 
-One filtered call scans at most 100 selected activity documents and can return fewer matches than requested.
+`query_activities_with_tags` is an additive coordinate-free tool because the existing activity-query input and output
+schemas are frozen. It reads only `tags` and the legacy `benchmarkReviewTags` field from the exact owned parent event
+documents referenced by the bounded activity scan, then normalizes them through the shared event-tag rules. Tags belong
+to an event, so sibling activities from that event return the same tags. An existing event with no tag fields returns
+an empty tag list; an activity whose parent event is unavailable is skipped rather than misreported as untagged. A
+caller may read tags without a filter or request 1–10 tags of at most 32 characters each. Matching is exact after
+whitespace normalization and is
+case-insensitive, with explicit `any` or `all` semantics. Tag filters, match mode, activity types, date mode, resolved
+range, UID, and connection are bound into the encrypted continuation cursor. The tool always returns
+`locationRedacted: true`; event names, descriptions, standalone event/activity ID fields, creator/source metadata, and
+coordinates remain excluded. The existing authenticated app link still uses the normal signed-in event route.
+Tag text is untrusted user- or provider-assigned label data, never instructions, verified facts, diagnoses, or authority
+to act, and it can itself contain personal, health, or location context.
+Its complete MCP result, including structured content and the JSON-text copy, is limited to 256 KiB.
+This uses the existing `activity-details:read` grant, adds no Firestore index, write path, migration, or backfill, and
+does not expand the built-in Assistant allowlist. Existing external clients may need to refresh their tool catalog after
+the MCP release and registered-app rescan; no reauthorization is required.
+
+One filtered call, including a tag-filtered call, scans at most 100 selected activity documents and can return fewer
+matches than requested.
 `scannedActivityCount`, `skippedActivityCount`, `nextCursor`, and `scanComplete` distinguish a completed no-match result
 from a partial scan. Clients repeat the original activity types and date-selection inputs with `nextCursor` until a
-match is found or `scanComplete` is true. The encrypted cursor is bound to the connection, canonical activity-type set,
+match is found or `scanComplete` is true; tag-aware calls also repeat the original tags and match mode. The encrypted
+cursor is bound to the connection, canonical activity-type set,
 relative-period/timezone mode, and resolved or explicit date range; the type set is represented by a fixed SHA-256
 digest so the cursor remains within 512 characters even at the 20-filter maximum. Aggregate event metrics and Training
 snapshots are not evidence that an individual activity is unavailable.

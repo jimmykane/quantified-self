@@ -9,8 +9,10 @@ import { readDeliveryContext, writeDelivery } from './store';
 import { deliveryContentDigest, resolveDeliveryIntent } from './intent';
 import { stageTrainingDeliveryReconciliation } from './marker';
 import { inspectionBinding } from './verification-evidence';
-import { VERIFICATION_DAY_MS } from './verification-contracts';
+import { canRepairMissingArtifacts, VERIFICATION_DAY_MS } from './verification-contracts';
 import { emptyVerification } from './verification-queue';
+import { observeDeliveryCheckpoint } from './diagnostics';
+import { processTrainingDeliveryBatch } from './batch-worker';
 
 function validateArtifact(value: DeliveryArtifact | null): void {
   if (value === null) return;
@@ -28,6 +30,15 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
   const user = db.collection('users').doc(uid);
   const ledgerRef = user.collection(DELIVERY_LEDGER).doc(id);
   const jobRef = db.collection(DELIVERY_QUEUE).doc(id);
+  const seedLedger = await ledgerRef.get();
+  if (seedLedger.exists) {
+    const seed = seedLedger.data() as DeliveryLedgerV1;
+    const seedTransport = runtime.transport(seed.provider, uid);
+    if (seedTransport?.batch) {
+      await processTrainingDeliveryBatch(runtime, uid, id, seed.provider, seedTransport);
+      return;
+    }
+  }
   const leaseId = randomUUID();
   const startedAt = runtime.now();
   const pro = await runtime.hasPro(uid);
@@ -37,7 +48,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
     if (!doc.exists) return null;
     const ledger = doc.data() as DeliveryLedgerV1;
     if (ledger.lease && ledger.lease.expiresAtMs > runtime.now()) return null;
-    if (ledger.retryAtMs > runtime.now() || ['failed', 'needs_attention'].includes(ledger.status)) return null;
+    if (ledger.retryAtMs > runtime.now() || ledger.providerAccessBlocked || ['failed', 'needs_attention'].includes(ledger.status)) return null;
     const [workoutDoc, locks] = await Promise.all([
       tx.get(user.collection('scheduledWorkouts').doc(ledger.workoutId)),
       tx.get(user.collection('trainingPlanState').doc('current').collection('planDeletionLocks').limit(1)),
@@ -72,7 +83,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (!kind) { writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null; }
       if (kind === 'upsert' && ledger.repair?.continuation) {
         const policy = transport.inspection?.policy;
-        if (!ledger.actual || !policy?.repairReady || !policy.authoritativeAbsence || policy.mode === 'unavailable') {
+        if (!ledger.actual || !policy || !canRepairMissingArtifacts(policy, ledger.repair.missing)) {
           ledger.status = 'provider_unavailable';
           writeDelivery(runtime, tx, uid, ledger); tx.delete(jobRef); return null;
         }
@@ -81,12 +92,14 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         ledger.repair = { ...ledger.repair, policyVersion: policy.version,
           binding: inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, policy) };
       }
-      if (kind === 'upsert' && ledger.verification?.missing && (!ledger.repair || !transport.inspection?.policy.repairReady
+      if (kind === 'upsert' && ledger.verification?.missing && (!ledger.repair || !transport.inspection?.policy
+        || !canRepairMissingArtifacts(transport.inspection.policy, ledger.repair.missing)
         || inspectionBinding({ ...ledger, actual: ledger.repair.original }, context, transport.inspection.policy) !== ledger.repair.binding)) {
         // An edit/transfer/reconnect invalidates confirmation, not the stable remote identity.
         // Re-inspect current intent before another repair; never fall through to ordinary upsert.
         ledger.repair = null;
-        ledger.verification = { ...ledger.verification, binding: '', state: 'pending', suspectedAtMs: null, nextCheckAtMs: runtime.now() };
+        ledger.verification = { ...ledger.verification, binding: '', state: 'pending', missing: false, missingKeys: [],
+          suspectedAtMs: null, checkedAtMs: null, cursor: null, nextCheckAtMs: runtime.now() };
         writeDelivery(runtime, tx, uid, ledger);
         tx.set(jobRef, { uid, kind: 'verification', priority: 'ordinary', deliveryId: id, dueAtMs: 0, dispatchToken: randomUUID() });
         return null;
@@ -129,7 +142,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       // Preserve the journal and inspect inconsistent acknowledgements rather than claiming success.
       throw new TrainingDeliveryTransportError('uncertain');
     }
-    const recorded = await db.runTransaction(async tx => {
+    const recorded = await observeDeliveryCheckpoint(claim.provider, complete, progress, () => db.runTransaction(async tx => {
       if ((await getUserDeletionGuardStateInTransaction(db, tx, uid)).shouldSkip) return false;
       const doc = await tx.get(ledgerRef);
       if (!doc.exists) return false;
@@ -202,7 +215,7 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         stageTrainingDeliveryReconciliation(tx, db, uid);
       }
       return true;
-    });
+    }));
     if (!recorded) throw new TrainingDeliveryTransportError('retryable');
     operation.artifact = artifact;
     if (progress !== undefined) operation.progress = progress;
@@ -249,7 +262,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         || context.connection.generation !== operation.connectionGeneration
         || ledger.blockedConnectionGeneration === context.connection.generation) return 'blocked';
       const intent = resolveDeliveryIntent(context, ledger);
-      if (operation.kind === 'upsert' && operation.repair && (!context.transport?.inspection?.policy.repairReady
+      if (operation.kind === 'upsert' && operation.repair && (!context.transport?.inspection?.policy
+        || !canRepairMissingArtifacts(context.transport.inspection.policy, operation.repair.missing)
         || inspectionBinding({ ...ledger, actual: operation.repair.original, desiredDigest: operation.digest },
           context, context.transport.inspection.policy) !== operation.repair.binding)) return 'recover-only';
       return (operation.kind === 'upsert' && intent.desired === 'present' && intent.digest === operation.digest)
@@ -302,17 +316,22 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       if (failure.kind !== 'deferred') ledger.retries += 1;
       retryCount = ledger.retries;
       ledger.status = failure.kind === 'deferred' ? 'retrying' : failure.kind === 'auth' ? 'reconnect_required' : failure.kind === 'permission' ? 'connection_repair'
+        : failure.kind === 'provider_access' ? 'provider_unavailable'
         : failure.kind === 'uncertain' ? inspectionUncertain || ledger.retries >= MAX_RETRY_COUNT ? 'needs_attention' : 'retrying'
           : failure.kind === 'terminal' || ledger.retries >= MAX_RETRY_COUNT ? 'failed' : 'retrying';
       ledger.blockedConnectionGeneration = ['auth', 'permission'].includes(failure.kind) ? operation.connectionGeneration : null;
+      ledger.providerAccessBlocked = failure.kind === 'provider_access';
       if (failure.kind === 'permission') ledger.issues = ['Workout delivery permission is missing. Reconnect the provider and allow workout delivery.'];
+      if (failure.kind === 'provider_access') ledger.issues = ['The provider has not allowed this application to deliver workouts. Reconnecting may not resolve this.'];
       ledger.providerNotBeforeMs = Math.max(ledger.providerNotBeforeMs ?? 0,
         failure.retryAfterMs > 0 ? runtime.now() + failure.retryAfterMs : 0);
       ledger.retryAtMs = Math.max(runtime.now() + getCloudTaskRetryBackoffSeconds(ledger.retries) * 1000, ledger.providerNotBeforeMs);
       ledger.updatedAtMs = runtime.now();
       if (operation.repair && ledger.verification) ledger.verification.state = failure.kind === 'deferred' ? 'deferred' : 'confirmed_missing';
       writeDelivery(runtime, tx, uid, ledger);
-      if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id, dueAtMs: ledger.retryAtMs, dispatchToken: randomUUID() });
+      if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id,
+        provider: ledger.provider, destinationKey: ledger.destinationKey, operationKind: operation.kind,
+        dueAtMs: ledger.retryAtMs, dispatchToken: randomUUID() });
       else tx.delete(jobRef);
     });
     logger.warn('[TrainingDelivery]', { event: 'failure', provider: claim.provider, category: failure.kind, ...failure.diagnostics,

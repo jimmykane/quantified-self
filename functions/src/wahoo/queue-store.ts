@@ -160,8 +160,12 @@ export async function upsertWahooWorkoutQueueItem(
     const existingSnapshot = await transaction.get(ref);
     const existing = existingSnapshot.exists ? existingSnapshot.data() as Partial<WahooAPIWorkoutQueueItemInterface> : null;
     if (existing && !isNewerRevision(existing, input)) {
-      if ((existing as Record<string, unknown>).processed !== true && existing.FITFileURI !== input.FITFileURI) {
-        transaction.update(ref, { FITFileURI: input.FITFileURI });
+      if ((existing as Record<string, unknown>).processed !== true) {
+        const refreshed: Partial<WahooAPIWorkoutQueueItemInterface> = {};
+        if (existing.FITFileURI !== input.FITFileURI) refreshed.FITFileURI = input.FITFileURI;
+        if (input.workoutToken && existing.workoutToken !== input.workoutToken) refreshed.workoutToken = input.workoutToken;
+        if (input.planID && existing.planID !== input.planID) refreshed.planID = input.planID;
+        if (Object.keys(refreshed).length) transaction.update(ref, refreshed);
       }
       return { queued: false, dateCreated: Number(existing.dateCreated || now) };
     }

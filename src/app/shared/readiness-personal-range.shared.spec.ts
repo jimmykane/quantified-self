@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildReadinessSignals, buildReadinessHrvPersonalRange, readinessHrvObservations, resolveReadinessHrvScore,
+import { buildReadinessSignals, buildReadinessHrvPersonalRange, readinessHrvObservations,
+  resolveReadinessHrvRecentTrend, resolveReadinessHrvScore,
   type ReadinessSleepEvidencePoint } from '@shared/readiness';
 import { calculatePersonalMetricRange, HRV_PERSONAL_RANGE_OPTIONS } from '@shared/personal-metric-range';
 import { normalizeDerivedTrainingReadinessMetricPayload } from '@shared/training-readiness-metric';
@@ -121,6 +122,22 @@ describe('readiness shared HRV personal range', () => {
     expect(resolveReadinessHrvScore(null)).toBeNull();
   });
 
+  it('describes a material recent same-source direction without changing the personal-range result', () => {
+    const falling = nights([...Array(53).fill(40), 46, 44, 42, 40, 38, 36, 34]);
+    const stable = nights([...Array(53).fill(40), 40, 40.4, 39.7, 40.2, 39.8, 40.1, 40]);
+    const rising = nights([...Array(53).fill(40), 34, 36, 38, 40, 42, 44, 46]);
+
+    expect(buildReadinessHrvPersonalRange(falling, now)?.reason).toBe('within_range');
+    expect(resolveReadinessHrvRecentTrend(falling, now)).toBe('falling');
+    expect(resolveReadinessHrvRecentTrend(stable, now)).toBe('stable');
+    expect(resolveReadinessHrvRecentTrend(rising, now)).toBe('rising');
+    expect(resolveReadinessHrvRecentTrend(falling.slice(-3), now)).toBeNull();
+    expect(resolveReadinessHrvRecentTrend([
+      ...falling.slice(0, -1),
+      { ...falling.at(-1)!, sourceKey: 'account-b' },
+    ], now)).toBeNull();
+  });
+
   it('shows the weekly value, actual range and latest night without a misleading percent comparison', () => {
     const view = buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(history(), now));
     expect(view.valueText).toBe('31.1 ms');
@@ -131,6 +148,8 @@ describe('readiness shared HRV personal range', () => {
     expect(buildReadinessHrvDisplay(null)).toMatchObject({ valueText: '—', statusText: 'No recent HRV', latestText: '' });
     expect(buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(nights(Array(5).fill(40)), now)))
       .toMatchObject({ valueText: '—', statusText: 'Building range · 5/14 nights' });
+    expect(buildReadinessHrvDisplay(buildReadinessHrvPersonalRange(history(), now), null, 'falling').statusText)
+      .toBe('Below range · falling');
   });
 
   it('validates current history and rejects stale formulas, inconsistent scores, missing ranges and future evidence', () => {

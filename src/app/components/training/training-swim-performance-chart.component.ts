@@ -81,6 +81,10 @@ export class TrainingSwimPerformanceChartComponent implements AfterViewInit, OnC
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (changes.performance || changes.status || changes.darkTheme || changes.unitSettings || changes.timelineNotes) {
       void this.refresh();
     }

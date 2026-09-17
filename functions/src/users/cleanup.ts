@@ -16,6 +16,10 @@ import { ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME } from '../route-delivery-syn
 import { DELIVERY_LEDGER, DELIVERY_QUEUE, DELIVERY_SCOPES, DELIVERY_STATE } from '../training-plans/delivery/contracts';
 import { TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES } from '../../../shared/training-provider-delivery';
 import { TRAINING_DELIVERY_VERIFICATIONS } from '../../../shared/training-provider-verification';
+import {
+    TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID,
+    TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID,
+} from '../../../shared/training-workout-completion';
 import { TRAINING_PROVIDER_CAPACITY } from '../training-plans/delivery/request-capacity';
 import { ROUTE_SYNC_QUEUE_COLLECTION_NAME } from '../routes/route-sync.constants';
 import {
@@ -25,6 +29,7 @@ import {
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { SUUNTO_HEALTH_WEBHOOK_ACCOUNT_BINDINGS_COLLECTION_NAME } from '../suunto/health-webhook-binding';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
+import { COROS_INTEGER_CLAIMS } from '../training-plans/delivery/coros/identities';
 import {
     WAHOO_API_ACCESS_TOKENS_COLLECTION_NAME,
     WAHOO_API_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -325,6 +330,8 @@ async function cleanupUserScopedGeneratedState(uid: string): Promise<void> {
         { label: 'training plan state', ref: userRef.collection(TRAINING_PLAN_STATE_COLLECTION_ID) },
         { label: 'training plans', ref: userRef.collection(TRAINING_PLANS_COLLECTION_ID) },
         { label: 'scheduled workouts', ref: userRef.collection(SCHEDULED_WORKOUTS_COLLECTION_ID) },
+        { label: 'training workout completions', ref: userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID) },
+        { label: 'training activity completion links', ref: userRef.collection(TRAINING_ACTIVITY_COMPLETION_LINKS_COLLECTION_ID) },
         ...[DELIVERY_LEDGER, DELIVERY_STATE, DELIVERY_SCOPES, TRAINING_DELIVERY_SETTINGS, TRAINING_DELIVERY_STATUSES,
             TRAINING_DELIVERY_VERIFICATIONS, TRAINING_PROVIDER_CAPACITY]
             .map(id => ({ label: id, ref: userRef.collection(id) })),
@@ -906,6 +913,7 @@ async function cleanupTopLevelQueueState(uid: string, identifiers: UserProviderI
 
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'training delivery queue', DELIVERY_QUEUE, 'uid', firebaseUIDValues, deletedRefKeys);
+    await recursiveDeleteQueryResults(db, uid, 'COROS Training integer claim', COROS_INTEGER_CLAIMS, 'uid', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'activity sync queue', ACTIVITY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'userID', firebaseUIDValues, deletedRefKeys);
     await recursiveDeleteQueryResults(db, uid, 'route delivery sync queue', ROUTE_DELIVERY_SYNC_QUEUE_COLLECTION_NAME, 'firebaseUserID', firebaseUIDValues, deletedRefKeys);

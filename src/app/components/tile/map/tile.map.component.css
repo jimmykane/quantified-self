@@ -56,6 +56,15 @@
   min-height: 0;
 }
 
+.tile-map-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 @media (max-width: 640px) {
   .tile-map-header {
     gap: 6px;

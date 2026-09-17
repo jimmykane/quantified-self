@@ -364,8 +364,16 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
         preview: 'training-snapshot',
       },
       {
+        eyebrow: 'Readiness History',
+        title: 'Follow readiness beyond a single day',
+        copy: 'Explore fourteen days of readiness alongside recorded load and recovery evidence. Each point keeps its score, signal coverage, and confidence; this is context, not a workout prescription.',
+        items: [],
+        preview: 'training-readiness',
+      },
+      {
         eyebrow: 'Discipline Evidence',
         title: 'Keep sport-specific evidence in the right context',
+        preview: 'training-explorer',
         copy: 'Open a focused view for running, cycling, swimming, rowing, walking and hiking, Nordic skiing, strength, paddling, or recorded fitness and other training. Multisport legs stay attributed to their recorded disciplines.',
         items: [
           {
@@ -579,7 +587,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           {
             icon: 'directions_run',
             title: 'Workout details and charts',
-            copy: 'Find recent activities, compare recorded metrics, and inspect workout summaries, laps, swim lengths, MTB jumps, chart-ready data, and paginated detailed activity samples.',
+            copy: 'Find recent activities by sport or exact event tag, read their tags, compare recorded metrics, and inspect workout summaries, laps, swim lengths, MTB jumps, chart-ready data, and paginated detailed activity samples.',
           },
           {
             icon: 'bedtime',
@@ -634,6 +642,10 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       {
         question: 'Can I analyze detailed workout samples instead of the 400-point chart?',
         answer: 'Yes. A separate read-only tool returns all available elapsed-second samples for selected supported metrics in bounded pages, including gaps. It uses your existing Individual activity details permission; no new permission or provider reconnection is required. Your client may need to refresh its available tools. It can request a particular interval and follow the continuation to complete it. Charts remain compact overviews, and original-file availability and processing limits still apply.',
+      },
+      {
+        question: 'Can an MCP client find workouts by tag?',
+        answer: 'Yes. Individual activity details access can read parent event tags and filter bounded newest-first workout scans by exact case-insensitive tag matches using any or all semantics. Activities from the same event share tags. Tags can contain personal, health, or location context and clients must treat them as untrusted labels, not instructions or verified facts. This adds no new permission, exposes no coordinates, and does not expand the built-in Assistant; a client may need to refresh its available tools.',
       },
       {
         question: 'Can an MCP client read my activity descriptions?',

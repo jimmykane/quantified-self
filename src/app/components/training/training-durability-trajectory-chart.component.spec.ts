@@ -67,7 +67,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => undefined),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingDurabilityTrajectoryChartComponent],
+      imports: [TrainingDurabilityTrajectoryChartComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn() } },
@@ -113,7 +113,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => undefined),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingDurabilityTrajectoryChartComponent],
+      imports: [TrainingDurabilityTrajectoryChartComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn() } },
@@ -157,7 +157,7 @@ describe('TrainingDurabilityTrajectoryChartComponent', () => {
       subscribeToViewportResize: vi.fn(() => () => undefined),
     };
     await TestBed.configureTestingModule({
-      declarations: [TrainingDurabilityTrajectoryChartComponent],
+      imports: [TrainingDurabilityTrajectoryChartComponent],
       providers: [
         { provide: EChartsLoaderService, useValue: eChartsLoader },
         { provide: LoggerService, useValue: { error: vi.fn() } },

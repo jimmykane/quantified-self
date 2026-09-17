@@ -258,6 +258,17 @@ describe('timeline chart overlays', () => {
     expect(overlay.markArea.data).toHaveLength(1);
     expect(result.option.series[0]).toBe(source.series[0]);
   });
+  it('uses explicit axis bounds without walking metric samples on note updates', () => {
+    const data = new Proxy([], { get: () => { throw new Error('Metric samples should not be read'); } });
+    const binding = new TimelineNotesChartBinding();
+    const chart = { getWidth: () => 320 };
+    binding.set({ notes: [], select: vi.fn(), reportRange: vi.fn() }, { offsetSeconds: () => 10_800 });
+    binding.apply(chart as never, { ...option, series: [{ type: 'line', data }] });
+    binding.set({ notes: [note], select: vi.fn(), reportRange: vi.fn() });
+    expect(binding.update(chart as never)!.series[0].markLine.data[0].xAxis)
+      .toBe(date('2026-09-02') - 10_800_000);
+    binding.dispose();
+  });
   it('does nothing for empty, unannotated and non-date charts', () => {
     expect(addTimelineNotesToChart(option, []).option).toBe(option);
     expect(addTimelineNotesToChart({ series: [] }, [note]).range).toBeNull();

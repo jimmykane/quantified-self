@@ -17,4 +17,12 @@ describe('Training delivery mapping and production boundary', () => {
     const result = assessTrainingDeliveryMapping('suunto', { ...workout, title: 'Run 🏃🏽' }, 'destination', 'UTC');
     expect(result.level).toBe('degraded'); expect(result.issues.length).toBeGreaterThan(0);
   });
+  it('keeps the exact authored sport while reporting Garmin family folding', () => {
+    const result = assessTrainingDeliveryMapping('garmin', {
+      ...workout,
+      structure: { ...workout.structure, sport: ActivityTypes.MountainBiking },
+    }, 'destination', 'UTC');
+    expect(result.level).toBe('degraded');
+    expect(result.issues).toContain('Garmin receives Mountain Biking as a Cycling workout because its Training API has no exact Mountain Biking profile.');
+  });
 });

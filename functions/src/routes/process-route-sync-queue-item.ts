@@ -29,6 +29,7 @@ import { OriginalRouteFile } from '../shared/route-writer';
 import {
     createSuuntoRouteUploadContext,
     exportSuuntoRouteAsGPX,
+    listSuuntoRoutes,
     SuuntoRouteUploadContext,
 } from '../suunto/routes';
 import {
@@ -139,8 +140,38 @@ function getStatusCode(error: unknown): number | undefined {
         return directStatusCode;
     }
 
+    const directCode = (error as { code?: unknown } | null)?.code;
+    if (typeof directCode === 'number') {
+        return directCode;
+    }
+
     const responseStatusCode = (error as { response?: { statusCode?: unknown } } | null)?.response?.statusCode;
     return typeof responseStatusCode === 'number' ? responseStatusCode : undefined;
+}
+
+async function isWebhookRouteCurrentlyListed(params: {
+    userID: string;
+    context: SuuntoRouteUploadContext;
+    queueItem: RouteSyncQueueItemInterface;
+}): Promise<boolean> {
+    if (params.queueItem.manual) {
+        // Manual catch-up work is created from this same authenticated route
+        // listing, so repeating the provider request in the worker adds no
+        // ownership evidence.
+        return true;
+    }
+
+    const routeListResult = await listSuuntoRoutes(params.userID, params.context);
+    const targetAccountWasListed = routeListResult.successfulProviderUserIds
+        .includes(params.queueItem.providerUserId);
+    if (!targetAccountWasListed) {
+        throw new Error('Could not confirm the Suunto route against the current connected-account route listing.');
+    }
+
+    return routeListResult.routes.some(route => (
+        route.providerUserId === params.queueItem.providerUserId
+        && route.id === params.queueItem.providerRouteId
+    ));
 }
 
 function getSourceSummary(routeDocument: FirestoreRouteJSON | null | undefined): Record<string, unknown> | null {
@@ -354,6 +385,67 @@ function shouldSkipUnchangedProviderRoute(
     return !incomingProviderRouteName || incomingProviderRouteName === existingProviderRouteName;
 }
 
+function getExistingOriginalRouteFile(
+    existingRouteDocument: FirestoreRouteJSON | null,
+): { path: string; bucket?: string } | null {
+    const candidates = Array.isArray(existingRouteDocument?.originalFiles)
+        && existingRouteDocument.originalFiles.length > 0
+        ? existingRouteDocument.originalFiles
+        : [existingRouteDocument?.originalFile];
+    const originalFile = candidates.find(file => normalizeNonEmptyString(file?.path));
+    const path = normalizeNonEmptyString(originalFile?.path);
+    if (!path) {
+        return null;
+    }
+
+    const bucket = normalizeNonEmptyString(originalFile?.bucket);
+    return {
+        path,
+        ...(bucket ? { bucket } : {}),
+    };
+}
+
+async function hasByteIdenticalStoredProviderRoute(params: {
+    userID: string;
+    routeID: string;
+    existingRouteDocument: FirestoreRouteJSON | null;
+    queueItem: RouteSyncQueueItemInterface;
+    incomingContent: Buffer;
+}): Promise<boolean> {
+    if (!hasMatchingProviderSource(params.existingRouteDocument, params.queueItem)) {
+        return false;
+    }
+
+    const incomingProviderRouteName = normalizeNonEmptyString(params.queueItem.providerRouteName);
+    const existingProviderRouteName = normalizeNonEmptyString(
+        getSourceSummary(params.existingRouteDocument)?.providerRouteName,
+    );
+    if (incomingProviderRouteName && incomingProviderRouteName !== existingProviderRouteName) {
+        return false;
+    }
+
+    const originalFile = getExistingOriginalRouteFile(params.existingRouteDocument);
+    const expectedPathPrefix = `users/${params.userID}/routes/${params.routeID}/`;
+    if (!originalFile || !originalFile.path.startsWith(expectedPathPrefix)) {
+        return false;
+    }
+
+    try {
+        const bucket = originalFile.bucket
+            ? admin.storage().bucket(originalFile.bucket)
+            : admin.storage().bucket();
+        const [storedContent] = await bucket.file(originalFile.path).download();
+        return storedContent.equals(params.incomingContent);
+    } catch (error) {
+        if (getStatusCode(error) === 404) {
+            // A missing legacy original cannot prove equality. Continue with
+            // the normal guarded replacement so the route can self-repair.
+            return false;
+        }
+        throw error;
+    }
+}
+
 function resolveImportedAt(
     existingRouteDocument: FirestoreRouteJSON | null,
     fallbackImportedAt: Date,
@@ -392,6 +484,17 @@ export async function processRouteSyncQueueItem(
         const sourceAuthorization = await requireActiveSuuntoRouteSource(userID, queueItem.providerUserId);
         const routeID = await buildSourceRouteID(queueItem.sourceServiceName, queueItem.providerRouteId);
         const existingRouteDocument = await getExistingRouteDocument(userID, routeID);
+        if (!(await isWebhookRouteCurrentlyListed({
+            userID,
+            context: sourceAuthorization.context,
+            queueItem,
+        }))) {
+            return markQueueItemSkipped(queueItem, undefined, 'provider_route_not_listed', {
+                resultStatus: 'skipped',
+                sourceRouteModifiedAt: queueItem.providerRouteModifiedAt || null,
+                ...(existingRouteDocument ? { resultRouteId: routeID } : {}),
+            });
+        }
         if (shouldSkipUnchangedProviderRoute(existingRouteDocument, queueItem)) {
             await enqueueRouteDeliveryForSavedSuuntoRoute({
                 userID,
@@ -416,12 +519,33 @@ export async function processRouteSyncQueueItem(
         assignRouteSegmentIDs(routeFile, routeID);
 
         const importedAt = new Date();
+        const originalContent = Buffer.from(gpxContent, 'utf8');
         const originalFile: OriginalRouteFile = {
-            data: Buffer.from(gpxContent, 'utf8'),
+            data: originalContent,
             extension: 'gpx',
             startDate: routeFile.createdAt || new Date(queueItem.providerRouteCreatedAt || Date.now()),
             originalFilename: buildProviderOriginalFilename(queueItem),
         };
+
+        if (await hasByteIdenticalStoredProviderRoute({
+            userID,
+            routeID,
+            existingRouteDocument,
+            queueItem,
+            incomingContent: originalContent,
+        })) {
+            await enqueueRouteDeliveryForSavedSuuntoRoute({
+                userID,
+                routeID,
+                queueItem,
+                existingRouteDocument,
+            });
+            return markQueueItemSkipped(queueItem, undefined, 'provider_route_content_unchanged', {
+                resultRouteId: routeID,
+                resultStatus: 'skipped',
+                sourceRouteModifiedAt: queueItem.providerRouteModifiedAt || null,
+            });
+        }
 
         const sourceMetadata = buildServiceRouteSourceMetadata({
             sourceServiceName: queueItem.sourceServiceName,

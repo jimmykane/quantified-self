@@ -16,13 +16,15 @@ import { readFileSync } from 'node:fs';
       icon="query_stats"
       iconTone="secondary"
       [showDivider]="false"
+      [headingLevel]="headingLevel"
     >
+      <span compactRowTitlePrefix aria-hidden="true" class="projected-title-prefix"></span>
       <div class="projected-content">Projected content</div>
       <a compactRowAction href="/details">View details</a>
     </app-compact-row>
   `,
 })
-class TestHostComponent {}
+class TestHostComponent { headingLevel: 2 | 3 | 4 = 3; }
 
 describe('CompactRowComponent', () => {
   let fixture: ComponentFixture<TestHostComponent>;
@@ -72,6 +74,16 @@ describe('CompactRowComponent', () => {
     expect(
       action.querySelector('[compactRowAction]').textContent.trim(),
     ).toBe('View details');
+  });
+
+  it.each([2, 3, 4] as const)('keeps an optional title prefix inside the level-%s heading, outside body and actions', level => {
+    fixture.componentInstance.headingLevel = level;
+    fixture.detectChanges();
+    const prefix = fixture.nativeElement.querySelector('[compactRowTitlePrefix]');
+    expect(prefix.closest(`h${level}`)).not.toBeNull();
+    expect(prefix.closest('.compact-row__body, .compact-row__action')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('[compactRowTitlePrefix]')).toHaveLength(1);
+    expect(prefix.parentElement.textContent.trim()).toBe('Shared row');
   });
 
   it('defaults to the existing public column layout and comfortable density', () => {

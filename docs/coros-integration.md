@@ -8,7 +8,7 @@ This is the COROS-specific architecture and release record. For shared provider 
 
 - OAuth 2.0 connection and refresh using the COROS `openId` as the stable provider identity.
 - Server-side binding-state verification when a connected account is shown in the Services connection grid.
-- One active COROS account per Quantified Self user. New OAuth connects pin the account in safe service metadata. Legacy multi-token roots select the most recently refreshed token deterministically and pin it on first server use; a missing pinned token fails closed and requires reconnect.
+- One active COROS account per Quantified Self user. New OAuth connects pin the account in safe service metadata. Older unpinned multi-token roots select the most recently refreshed token deterministically and pin it on first server use; a missing pinned token fails closed and requires reconnect.
 - Recent COROS activity-history import within the provider's rolling three-month limit.
 - Daily Health and sleep polling plus a user-requested three-month replay in 30-day windows, subject to the existing cooldown. It stores steps, the native COROS calorie value, resting/sleep heart rate, overnight HRV, and bounded detailed HRV/interval-heart-rate samples when supplied. COROS does not supply sleep stages through this integration.
 - Direct FIT activity delivery with asynchronous provider status polling.
@@ -20,12 +20,14 @@ This is the COROS-specific architecture and release record. For shared provider 
 
 Every automatic activity and saved-route direction is off by default. Empty rollout allowlists make the corresponding routes available to all eligible Pro users; a user must still connect the required services and explicitly enable each direction. COROS direct/saved route upload and Suunto-to-COROS route delivery reuse the same empty production allowlist in `shared/coros-rollout.ts`; populating it provides a narrow emergency rollback. A date-range or saved-route backfill does not turn on future delivery.
 
+The Connections overview exposes the daily replay as a dedicated **Sleep & daily Health history** card with an **Import history** action, separate from the COROS activity-history card. Both cards open the shared History import tool, where activity ranges and the three-month Sleep/Health replay remain distinct controls.
+
 ## Account identity
 
 All COROS imports and deliveries resolve the same active token through `functions/src/coros/account.ts`.
 
 1. If `users/{uid}/meta/COROS API.providerUserId` exists, only that exact `openId` token is accepted.
-2. If legacy metadata is not pinned, tokens are ordered by `dateRefreshed`, then `dateCreated`, then document ID, all descending.
+2. If existing metadata is not pinned, tokens are ordered by `dateRefreshed`, then `dateCreated`, then document ID, all descending.
 3. The selected `openId` is persisted through the deletion-safe service-metadata writer before it is used.
 4. Once pinned, a missing or mismatched token never falls back to another COROS account.
 
@@ -148,28 +150,54 @@ The provider route ID is a deterministic digest of the Quantified Self user, act
 
 HTTP 408, 429, 5xx, and transient transport failures are retryable. Authentication failures require reconnect, and HTTP 403 or provider code `30009` is a permission-required failure. Invalid parameters, missing required distance, invalid provider responses, and rejected content are terminal and sanitized before reaching the browser or DLQ.
 
-## Training-planning proof boundary
+## Training delivery private rollout
 
 The ignored local COROS API Reference V2.0.6 (February 2026) is available for development but is never committed. The
-versioned capability matrix and pure serializer under `functions/src/training-plans/providers/` produce a redacted,
-dated Run/Bike Training Plan fixture with deterministic opaque partner workout IDs. The mapping covers fixed repeats,
-time/distance/manual steps, absolute targets, and native FTP, threshold-heart-rate, and threshold-speed percentage
-targets while retaining their canonical reference snapshots.
+versioned capability matrix, serializer and transport live under `functions/src/training-plans/`. Public COROS Training
+delivery remains disabled; the exact private UID is admitted independently by frontend readiness and the backend runtime.
+Connecting COROS alone never opts in, and implementation does not authorize a provider call or deployment.
 
-All COROS planned-workout delivery remains disabled. A second target, recovery-to-rest mapping, fractional lengths or
-percentages, maximum-heart-rate/critical-power/relative-cadence freezing, and other lossy mappings require explicit
-approval; cycling cadence is unsupported by the current contract. Training Plan entitlement, repeated-ID replacement,
-overlapping-window behavior, sandbox CRUD/idempotency, and production certification remain in issues #645 and #648.
-The existing inbound `planWorkoutId` preservation is only a correlation prerequisite; completion reconciliation remains
-tracked separately in issue #651. This proof does not authorize a provider call or deployment.
+The adapter sends form-encoded requests only to `POST /coros/tp/list/push` and
+`POST /coros/tp/workout/deleteById`, using the existing COROS OAuth client ID/secret and canonical pinned account.
+The existing dispatcher groups due work for the same destination and operation, while the shared worker keeps one ledger,
+lease, consent and status per workout. Its bounded recovery scan pages past same-group leaves instead of letting them
+consume task capacity or hide another due provider/destination. It claims at most 30 workouts and journals batch start
+plus per-item acceptance below the existing private delivery state. A timeout, malformed acknowledgement, incomplete
+accepted range or conflicting delete result is uncertain and is not resent blindly.
+
+One collision-checked positive partner AthleteId is bound to the QS user and never derived from `openId`. Each
+destination/workout receives a separate stable positive ID that survives edits, reschedules and plan transfers. The
+mapping remains available after workout deletion for withdrawal/completion correlation and is recursively deleted with
+the account. Today-through-365-day scheduling uses the saved delivery time zone and deterministic LastModifiedDate.
+Running, Trail Running and Cycling use the native wire values `run`, `trailRun` and `bike`; Treadmill and cycling subtypes fold to broad `run`/`bike` only after
+explicit approval. A second target, recovery-to-rest mapping, fractional values and frozen relative references retain
+the normal degradation approval, while cycling cadence is unsupported.
+
+Push acceptance requires a returned date range covering the submitted batch. Delete success/failure lists are applied
+per workout. Result `30009` reports unavailable COROS Training access without asking for reconnect; `5006` requires
+reconnect. Actual retry delays are honored only when COROS returns them; the Training adapter adds no speculative quota
+or throttling layer. Existing connections with both credential-generation fields absent remain valid, as do equal
+present generations; one-sided or conflicting generations fail closed.
+
+Inbound webhook and history queue items preserve `planWorkoutId`. When it equals exactly one stable ID under the same
+active account and credential authority, the root imported event writes the existing safe completion projection and a
+private reverse link, then marks that artifact completed/protected. Duplicates are idempotent; multisport components,
+collisions, account changes and conflicting links remain unlinked. Event deletion removes its own link/evidence and
+requeues reconciliation. Fallback/manual matching and MCP completion-link exposure remain #651.
+
+COROS documents no planned-workout read/list endpoint. There is no Check COROS action, deletion inference or automatic
+recreation. Separately authorized live evidence is still required for Training entitlement, repeated-ID update,
+overlapping-window preservation, reschedule, eligible delete, callback/history correlation and app/watch behavior before
+broader rollout; those findings remain in #645/#648. The user-facing watch behavior follows
+[COROS's Training Plan guidance](https://support.coros.com/hc/en-us/articles/360048955151-Creating-and-Using-Training-Plans).
 
 ## Security and lifecycle controls
 
 - Access/refresh tokens remain in the existing `COROSAPIAccessTokens` tree. The production projection backfill completed and converged in September 2026. The frontend reads the bounded owner-readable connection-account projection exclusively, containing the account identity and connection time needed by existing connection and route UX; an explicit empty projection remains authoritative. OAuth exchange, refresh, disconnect, and projection writes use the Admin SDK. Firestore Rules deny every browser read and write against the COROS token root and descendants. The delivery callables and workers do not return credentials; their browser responses contain only bounded upload/status identifiers and messages.
 - User-triggered import and delivery callables require authentication, App Check, and Pro access. Binding verification requires authentication and App Check but intentionally remains available after entitlement ends, as does disconnect.
-- Activity and route providers are called only after account-deletion and disconnect-pending checks; the checks repeat immediately before the provider request.
+- Activity, route and Training providers are called only after account-deletion and disconnect-pending checks; Training additionally rechecks current consent, entitlement, exact destination and per-workout leases immediately before the provider request.
 - Token refresh extends the same COROS access token for 30 days from successful refresh completion and stores an expiry five minutes early as an operational buffer. The refresh token is retained because COROS documents it as non-expiring. A provider operation retries refresh once after a terminal COROS authentication signal; a changed or missing active account fails closed.
-- Activity initialization/status and route-push requests have a 30-second provider deadline; timeout outcomes retain the operation's safe restart/resume policy.
+- Activity initialization/status and route-push requests have a 30-second provider deadline. Training requests have a 10-second deadline and treat a request with unknown acceptance as attention-required rather than safe to repeat.
 - Multipart values remove CR/LF characters, names are bounded, source/generated files and provider payloads are never logged, and provider errors are reduced to allowlisted messages and typed dispositions.
 - Activity fingerprints, queue state, service metadata, and provider tokens live under existing recursive account-deletion ownership. Browser Rules explicitly deny fingerprint access.
 
@@ -177,7 +205,7 @@ tracked separately in issue #651. This proof does not authorize a provider call 
 
 The implementation adds no new COROS credential secret. It reuses `COROSAPI_CLIENT_ID` and `COROSAPI_CLIENT_SECRET`.
 
-`activitySyncOutboundFingerprints.expireAt` requires the Firestore TTL field override in `firestore.indexes.json`; the collection's hash/routing fields have automatic indexes disabled. Deploy indexes and Rules before Functions and Hosting so receipt writes and browser denial are active before users can start delivery.
+`activitySyncOutboundFingerprints.expireAt` requires the Firestore TTL field override in `firestore.indexes.json`; the collection's hash/routing fields have automatic indexes disabled. COROS Training batching adds the delivery-queue composite index over kind, uid, provider, destination, operation and due time. Deploy indexes and Rules before Functions and Hosting so receipt writes, bounded grouping and browser denial are active before users can start delivery.
 
 The affected callable exports are:
 
@@ -187,6 +215,11 @@ The affected callable exports are:
 - `importRouteToCOROSAPI`.
 
 The inbound COROS webhook (`insertCOROSAPIWorkoutDataToQueue`), activity-history callable (`addCOROSAPIHistoryToQueue`), activity worker (`parseCOROSAPIWorkoutQueue`), COROS sleep polling/backfill paths, token refresh scheduler, and existing shared activity-sync/route-delivery functions also contain changed behavior. Include those affected exports in the normal Functions deployment rather than deploying only the callable names above.
+
+Training delivery also affects `previewTrainingProviderDelivery`, `mutateTrainingProviderDelivery`,
+`processTrainingDeliveryTask`, `onTrainingDeliveryQueued`, and `dispatchTrainingDelivery`. Only the task worker binds the
+existing COROS OAuth secrets. `parseCOROSAPIWorkoutQueue` owns exact completion correlation for both webhook and history
+imports. Deployment remains a separate explicitly approved operation.
 
 ## Release checklist
 

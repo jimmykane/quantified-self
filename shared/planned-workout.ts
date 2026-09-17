@@ -245,8 +245,31 @@ export interface WorkoutCompatibilityResultV1 {
   issues: WorkoutCompatibilityIssueV1[];
 }
 
+/**
+ * Provider-neutral sports exposed by the current manual editor. Keep these as
+ * canonical Sports Lib activity types; provider activity/profile identifiers
+ * belong in their adapters.
+ */
+export const MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1 = [
+  ActivityTypes.Running,
+  ActivityTypes.TrailRunning,
+  ActivityTypes.Treadmill,
+] as const;
+export const MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1 = [
+  ActivityTypes.Cycling,
+  ActivityTypes.MountainBiking,
+  ActivityTypes.IndoorCycling,
+  ActivityTypes.EBiking,
+  ActivityTypes.Handcycle,
+] as const;
+export const MANUAL_WORKOUT_EDITOR_SPORTS_V1 = [
+  ...MANUAL_WORKOUT_EDITOR_RUNNING_SPORTS_V1,
+  ...MANUAL_WORKOUT_EDITOR_CYCLING_SPORTS_V1,
+] as const;
+export type ManualWorkoutEditorSportV1 = typeof MANUAL_WORKOUT_EDITOR_SPORTS_V1[number];
+
 export const INITIAL_MANUAL_WORKOUT_EDITOR_PROFILE_V1: WorkoutCompatibilityProfileV1 = {
-  sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+  sports: MANUAL_WORKOUT_EDITOR_SPORTS_V1,
   endingKinds: ['time', 'distance'],
   targetKinds: ['heart-rate', 'power', 'speed'],
   supportsRepeats: true,

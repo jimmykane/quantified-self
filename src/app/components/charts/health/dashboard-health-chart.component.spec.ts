@@ -6,13 +6,14 @@ import { HealthMetricSeriesChartComponent } from '../../health/health-metric-ser
 import { ChartsSleepTrendComponent } from '../sleep-trend/charts.sleep-trend.component';
 import { buildDashboardHealthContext } from '../../../helpers/dashboard-health-context.helper';
 import { TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Subject } from 'rxjs';
 import { DashboardHealthChartComponent } from './dashboard-health-chart.component';
 import { DashboardHealthService } from '../../../services/dashboard-health.service';
 import { AppHapticsService } from '../../../services/app.haptics.service';
 import { resolveHealthWorkspaceWindow } from '../../../helpers/health-workspace.helper';
 import { DashboardHealthEvidence } from '../../../helpers/dashboard-health-context.helper';
+import { projectLoadedHealthRange } from '@shared/health-query';
 
 describe('independent dashboard Health views',()=>{
   const owner=signal(true), watch=vi.fn(), haptics={selection:vi.fn()};
@@ -25,15 +26,61 @@ describe('independent dashboard Health views',()=>{
       {provide:AppHapticsService,useValue:haptics},
     ]}).overrideComponent(DashboardHealthChartComponent,{set:{template:'',imports:[]}}).compileComponents();
   });
-  function create(metric='steps') {
+  afterEach(() => vi.unstubAllGlobals());
+  function create(metric='steps', range: '30d' | '1y' = '30d') {
     const fixture=TestBed.createComponent(DashboardHealthChartComponent);
     fixture.componentRef.setInput('user',{uid:'owner',settings:{unitSettings:{},appSettings:{}}});
-    fixture.componentRef.setInput('settings',{metric,range:'30d'});
+    fixture.componentRef.setInput('settings',{metric,range});
     fixture.componentInstance['visible'].set(true);fixture.detectChanges();return fixture;
   }
   function result(metric='steps',endDate='2026-09-15'):DashboardHealthEvidence {
     return {window:resolveHealthWorkspaceWindow({metric:metric as never,range:'30d',endDate},endDate),health:null,history:null,activities:null,sessions:[],errors:[]};
   }
+  it('starts a saved dashboard chart after its host is attached, without waiting for scrolling', () => {
+    const observer = { observe: vi.fn(), disconnect: vi.fn() };
+    vi.stubGlobal('IntersectionObserver', vi.fn(function () { return observer; }));
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent);
+    const dashboard = document.createElement('section');
+    dashboard.dataset['chartPreload'] = 'background';
+    document.body.append(dashboard);
+    // Angular constructs embedded children before attaching their containing view.
+    dashboard.append(fixture.nativeElement);
+    fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {}, appSettings: {} } });
+    fixture.componentRef.setInput('settings', { metric: 'steps', range: '30d' });
+    fixture.detectChanges();
+    fixture.detectChanges();
+    expect(watch).toHaveBeenCalledOnce();
+    expect(observer.observe).not.toHaveBeenCalled();
+    streams[0].next(result());
+    fixture.detectChanges();
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(watch).toHaveBeenCalledOnce();
+    fixture.destroy();
+    expect(streams[0].observed).toBe(false);
+    dashboard.remove();
+  });
+  it('uses the shared chart preload window before starting an offscreen read', () => {
+    let callback!: IntersectionObserverCallback;
+    const observer = { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn() };
+    vi.stubGlobal('IntersectionObserver', vi.fn(function (handler: IntersectionObserverCallback) {
+      callback = handler; return observer;
+    }));
+    const fixture = TestBed.createComponent(DashboardHealthChartComponent);
+    fixture.componentRef.setInput('user',{uid:'owner',settings:{unitSettings:{},appSettings:{}}});
+    fixture.componentRef.setInput('settings',{metric:'steps',range:'30d'});
+    fixture.detectChanges();
+
+    expect(IntersectionObserver).toHaveBeenCalledWith(expect.any(Function), { root: null, rootMargin: '600px 0px' });
+    expect(observer.observe).toHaveBeenCalledWith(fixture.nativeElement);
+    expect(watch).not.toHaveBeenCalled();
+
+    callback([{ target: fixture.nativeElement, isIntersecting: true } as IntersectionObserverEntry], observer as never);
+    fixture.detectChanges();
+
+    expect(watch).toHaveBeenCalledOnce();
+    expect(observer.disconnect).toHaveBeenCalledOnce();
+    fixture.destroy();
+  });
   it('does not restart reads for structurally identical row inputs',()=>{
     const fixture=create();expect(watch).toHaveBeenCalledTimes(1);
     fixture.componentRef.setInput('settings',{metric:'steps',range:'30d'});fixture.detectChanges();
@@ -158,6 +205,25 @@ describe('independent dashboard Health views',()=>{
     expect(changed).not.toHaveBeenCalled(); expect(haptics.selection).not.toHaveBeenCalled();
   });
 
+  it('normalizes an existing sample-only year to 90 days and disables selecting it again', () => {
+    const fixture = create('stress_state', '1y');
+    const component = fixture.componentInstance;
+    const changed = vi.fn(); component.settingsChange.subscribe(changed);
+    const window = resolveHealthWorkspaceWindow({ metric: 'stress_state', range: '1y', endDate: '2026-09-15' }, '2026-09-15');
+    const result = projectLoadedHealthRange([], [], {
+      startDate: window.startDate, endDate: window.endDate, metricIds: ['stress_state'], includeSamples: false,
+    }, { sourceRecordsComplete: true, samplesComplete: true });
+    const evidence = { window, health: { result, limitReached: null, sourceRecordCount: 1, sampleChunkCount: 0,
+      samplePointCount: 0, serializedBytes: 0, hasMatchingSourceRecords: true, hasSampleBackedMetric: true,
+      providers: ['SuuntoApp'], sampleBackedProviders: ['SuuntoApp'] }, history: null, activities: null, sessions: [], errors: [] } as DashboardHealthEvidence;
+    streams[0].next(evidence);
+    fixture.detectChanges();
+    expect(component.isRangeDisabled('1y')).toBe(true);
+    expect(changed).toHaveBeenCalledWith({ settings: { metric: 'stress_state', range: '90d' }, initial: false });
+    streams[0].next(evidence);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
 });
 
 
@@ -172,20 +238,20 @@ describe('Health library preview states', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(DashboardHealthChartComponent);
     fixture.componentRef.setInput('user', { uid: 'owner', settings: { unitSettings: {} } });
-    fixture.componentRef.setInput('settings', { metric: 'heart_rate', range: '90d' });
+    fixture.componentRef.setInput('settings', { metric: 'stress_state', range: '1y' });
     fixture.componentRef.setInput('preview', true);
     fixture.detectChanges();
     const component = fixture.componentInstance;
     const context = buildDashboardHealthContext({ window: component.window(), health: null, history: null, activities: null, sessions: [], errors: [] }, component.settings());
-    component.context.set({ ...context, sampleOnly: true, availability: { ...context.availability, reason: 'Detailed readings are available without a daily summary. Choose 30 days or less.' } });
+    component.context.set({ ...context, sampleOnly: true, sampleRangeLimited: true, availability: { ...context.availability, reason: 'Detailed readings are available without a daily summary. Choose 90 days or less.' } });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Example data');
-    expect(fixture.nativeElement.textContent).toContain('Choose 30 days or less');
+    expect(fixture.nativeElement.textContent).toContain('Choose 90 days or less');
     expect(fixture.nativeElement.querySelector('app-health-metric-series-chart')).toBeTruthy();
     const changed = vi.fn(); component.settingsChange.subscribe(changed);
-    const button = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(item => item.textContent?.includes('Show 30 days'))!;
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(item => item.textContent?.includes('Show 90 days'))!;
     button.click();
-    expect(changed).toHaveBeenCalledWith({ settings: { metric: 'heart_rate', range: '30d' }, initial: false });
+    expect(changed).toHaveBeenCalledWith({ settings: { metric: 'stress_state', range: '90d' }, initial: false });
     fixture.destroy();
   });
 });
@@ -247,5 +313,32 @@ describe('dashboard chart source interactions', () => {
     expect(missing.componentInstance.context()?.hasData).toBe(false);
     expect(haptics.selection).not.toHaveBeenCalled();
     missing.destroy();
+  });
+  it('reuses loaded evidence after source persistence, source changes and unit updates', () => {
+    const fixture = create(), component = fixture.componentInstance;
+    const initial = component.context()!;
+    fixture.componentRef.setInput('settings', { ...component.settings(), sourceKey: initial.selectedKey });
+    fixture.detectChanges();
+    expect(component.context()).toBe(initial);
+    const secondKey = initial.sources[1].key;
+    fixture.componentRef.setInput('settings', { ...component.settings(), sourceKey: secondKey });
+    fixture.detectChanges();
+    expect(component.context()?.selectedKey).toBe(secondKey);
+    expect(component.context()?.hasData).toBe(true);
+    fixture.componentRef.setInput('user', { ...component.user(), settings: {
+      ...component.user().settings, unitSettings: { distanceUnits: ['Miles'] },
+    } });
+    fixture.detectChanges();
+    expect(component.context()?.selectedKey).toBe(secondKey);
+    expect(watch).toHaveBeenCalledTimes(1);
+    expect(component.loading()).toBe(false);
+    expect(haptics.selection).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('settings', { ...component.settings(), sourceKey: 'missing-account' });
+    fixture.detectChanges();
+    expect(component.context()?.missingSource).toBe(true);
+    expect(component.context()?.hasData).toBe(false);
+    expect(watch).toHaveBeenCalledTimes(1);
+    fixture.destroy();
+    expect(readings.observed).toBe(false);
   });
 });

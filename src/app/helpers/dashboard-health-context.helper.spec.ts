@@ -16,7 +16,7 @@ function evidence(metric:HealthMetricId, accounts=['first'], range:AppDashboardH
     source:{provider:'GarminAPI',accountKey,sourceRecordType:'daily',sourceRecordKey:accountKey,revision:{order:1,token:'1',digest:'1'},receivedAtMs:Date.parse('2026-09-15')},
     metricIds:[metric],metrics:[{kind:'value',metricId:metric,valueType:definition.valueType,aggregation:'average',semanticVariant:'recorded',origin:'provider_summary',recordingMethod:'provider_calculated',quality:{status:'valid'},normalizationStatus:'canonical',native:{metric,value,unit:definition.canonicalUnit},canonical:{value,unit:definition.canonicalUnit}}],
     coverage:{status:'complete'},sampleChunkIds:[],createdAtMs:0,updatedAtMs:0}));
-  const result=projectLoadedHealthRange(records,[],{startDate:window.startDate,endDate:window.endDate,metricIds:[metric],includeSamples:window.includeSamples},{sourceRecordsComplete:true,samplesComplete:true});
+  const result=projectLoadedHealthRange(records,[],{startDate:window.startDate,endDate:window.endDate,metricIds:[metric],includeSamples:window.includeSamples},{sourceRecordsComplete:true,samplesComplete:true,maximumSampleRangeDays:90});
   return {window,health:{result,limitReached:null,sourceRecordCount:records.length,sampleChunkCount:0,samplePointCount:0,serializedBytes:0,hasMatchingSourceRecords:!!records.length,hasSampleBackedMetric:false,providers:['GarminAPI'],sampleBackedProviders:[]},history:null,activities:null,sessions:[],errors:[]};
 }
 describe('dashboard Health semantics',()=>{
@@ -117,7 +117,7 @@ describe('dashboard Health semantics',()=>{
     const data=evidence('heart_rate',[],'1y'); const settings={metric:'heart_rate' as const,range:'1y' as const};
     expect(buildDashboardHealthContext(data,settings).availability.state).toBe('no-data');
     data.health!.hasSampleBackedMetric=true;
-    expect(buildDashboardHealthContext(data,settings).sampleOnly).toBe(true);
+    expect(buildDashboardHealthContext(data,settings)).toMatchObject({ sampleOnly: true, sampleRangeLimited: true });
     data.errors=['Health readings'];
     expect(buildDashboardHealthContext(data,settings).availability.state).toBe('error');
     const partial=evidence('heart_rate'); partial.errors=['Sleep readings'];

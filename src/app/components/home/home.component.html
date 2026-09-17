@@ -125,6 +125,7 @@
           class="training-preview-data"
           previewKey="training-snapshot"
         ></app-public-feature-preview>
+        <app-public-feature-preview previewKey="training-readiness"></app-public-feature-preview>
       </app-compact-row>
     </div>
 
@@ -139,7 +140,14 @@
         <app-public-feature-preview previewKey="training-signals"></app-public-feature-preview>
       </app-compact-row>
 
-      <!-- Feature 3: Dashboard Manager -->
+      <!-- Sport-specific Training views -->
+      <app-compact-row class="feature-card animate-on-scroll" icon="compare_arrows"
+        title="See How Your Training Evolves"
+        summary="Explore your sport's training mix, compare matching builds, and follow power capacity and long-session durability with the evidence behind each result.">
+        <app-public-feature-preview previewKey="training-explorer"></app-public-feature-preview>
+      </app-compact-row>
+
+      <!-- Dashboard Manager -->
       <app-compact-row
         class="feature-card animate-on-scroll"
         icon="dashboard_customize"

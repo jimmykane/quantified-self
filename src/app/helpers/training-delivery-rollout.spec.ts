@@ -1,13 +1,13 @@
 import { PLANNED_WORKOUT_PROVIDER_IDS, isPlannedWorkoutProviderDeliveryEnabled } from '@shared/planned-workout-providers';
 import { isTrainingProviderDeliveryEnabled } from '@shared/training-delivery-rollout';
 
-describe('Training delivery evaluation rollout', () => {
+describe('Training delivery private rollout', () => {
   const pilotUid = 'xcsAolLDDTWTgtRN9eYF3lW2YKL2';
 
-  it('enables only Garmin for the exact pilot identity without enabling public delivery', () => {
+  it('permits Garmin, COROS, Suunto and Wahoo only for the exact owner identity without enabling public delivery', () => {
     for (const provider of PLANNED_WORKOUT_PROVIDER_IDS) {
       expect(isPlannedWorkoutProviderDeliveryEnabled(provider)).toBe(false);
-      expect(isTrainingProviderDeliveryEnabled(provider, pilotUid)).toBe(provider === 'garmin');
+      expect(isTrainingProviderDeliveryEnabled(provider, pilotUid)).toBe(true);
     }
   });
 

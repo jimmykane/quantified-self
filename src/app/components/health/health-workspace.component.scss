@@ -214,6 +214,11 @@
   gap: 0.4rem;
 }
 
+.health-dashboard-action {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .health-detail-heading {
   align-items: center;
   display: flex;
@@ -437,7 +442,10 @@
   }
 
   .health-detail-header {
-    gap: 0.1rem 0.25rem;
+    // The metric name gets its own row; actions must not squeeze it into a
+    // narrow column or split their labels when the range controls are visible.
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
   }
 
   .health-detail-header h2 {
@@ -445,16 +453,19 @@
     font-weight: 600;
   }
 
-  .health-detail-heading {
-    flex: 1;
-  }
-
   .health-detail-controls {
-    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.25rem;
   }
 
+  .health-dashboard-action,
   .health-add-measurement {
     --mat-button-text-container-height: 44px;
+  }
+
+  .health-dashboard-action {
+    padding-inline: 0.5rem;
   }
 
   .health-add-measurement-label {
@@ -471,6 +482,7 @@
 
   .health-window-navigation {
     display: flex;
+    margin-inline-start: auto;
   }
 
   .health-window-navigation > .health-window-older,

@@ -1,0 +1,24 @@
+:host {
+  display: block;
+  min-width: 0;
+  --training-inter-body-font-size: 14px;
+  --training-inter-caption-font-size: 13px;
+  --training-inter-micro-font-size: 12px;
+  --training-card-stat-font-size: 20px;
+  --training-durability-border: 0;
+  --training-durability-padding: 0;
+}
+.training-explorer { min-width: 0; color: var(--mat-sys-on-surface); }
+header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; }
+h4, h5 { margin: 0; font: var(--mat-sys-title-small); }
+p { margin: 8px 0 12px; font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+small, header span, .range { font: var(--mat-sys-body-small); color: var(--mat-sys-on-surface-variant); }
+.range { display: flex; justify-content: space-between; margin-top: 4px; }
+.example-panel { padding-block: 18px 4px; min-width: 0; }
+.example-panel > mat-button-toggle-group { max-width: 100%; margin-bottom: 18px; }
+.power-trends { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 24px; margin-block: 20px; }
+.power-trends > section { min-width: 0; }
+.example-panel > small { display: block; margin-top: 12px; }
+@media (max-width: 400px) {
+  mat-button-toggle-group { --mat-standard-button-toggle-label-text-size: 12px; }
+}

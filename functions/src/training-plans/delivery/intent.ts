@@ -24,7 +24,8 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   const today = trainingDeliveryLocalDate(nowMs, timeZone);
   const retained = [ledger?.actual, ledger?.repair?.original].filter(artifact => !!artifact);
   if (retained.some(artifact => artifact.completed)) return result('preserve', 'completed');
-  if (retained.some(artifact => artifact.localDate < today) || (workout && workout.localDate < today)) return result('preserve', 'past');
+  if (retained.some(artifact => artifact.localDate < (artifact.timeZone
+    ? trainingDeliveryLocalDate(nowMs, artifact.timeZone) : today)) || (workout && workout.localDate < today)) return result('preserve', 'past');
   // Explicit disconnect ends consent, but must NOT withdraw provider copies.
   if (setting && setting.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
   if (!setting && ledger && ledger.connectionEpoch !== connection.epoch) return result('preserve', 'fresh_consent_required');
@@ -42,7 +43,7 @@ export function resolveDeliveryIntent(context: DeliveryContext, ledger?: Deliver
   if (!context.hasPro) return result('preserve', 'paused_pro');
   if (!transport) return result('preserve', 'provider_unavailable');
   const days = (Date.parse(`${workout!.localDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000;
-  if (days > transport.horizonDays) return result('preserve', 'outside_horizon');
+  if (days > transport.horizonDays) return result(transport.withdrawOutsideHorizon ? 'absent' : 'preserve', 'outside_horizon');
   const assessment = transport.assess(workout!, connection.destinationKey, timeZone);
   if (assessment.level === 'unsupported') return result('preserve', 'unsupported', assessment.digest, assessment.issues);
   const approval = override?.approvedDigest ?? setting?.approvedDigest;

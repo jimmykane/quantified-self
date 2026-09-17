@@ -1,3 +1,5 @@
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { TrainingMetricTextComponent } from './training-metric-text.component';
 import type { TimelineNoteChartContext } from '../../helpers/timeline-notes-chart.helper';
 import {
   AfterViewInit,
@@ -47,7 +49,8 @@ interface TrajectoryTooltipParam {
   templateUrl: './training-durability-trajectory-chart.component.html',
   styleUrls: ['./training-durability-trajectory-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
+  imports: [MatProgressSpinnerModule, TrainingMetricTextComponent],
 })
 export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() trajectory: TrainingDurabilityTrajectoryViewModel | null = null;
@@ -95,6 +98,10 @@ export class TrainingDurabilityTrajectoryChartComponent implements AfterViewInit
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (changes.trajectory || changes.status || changes.darkTheme || changes.timelineNotes) {
       void this.refresh();
     }

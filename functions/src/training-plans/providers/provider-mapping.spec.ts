@@ -1,11 +1,16 @@
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import {
+    GARMIN_PLANNED_WORKOUT_SPORTS_V1,
+    COROS_PLANNED_WORKOUT_SPORTS_V1,
     PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1,
     assessPlannedWorkoutProviderMappingV1,
     isPlannedWorkoutProviderDeliveryEnabled,
 } from '../../../../shared/planned-workout-providers';
-import type { WorkoutStructureV1 } from '../../../../shared/planned-workout';
+import {
+    MANUAL_WORKOUT_EDITOR_SPORTS_V1,
+    type WorkoutStructureV1,
+} from '../../../../shared/planned-workout';
 import canonicalRunningFixture from './fixtures/canonical-running-v1.json';
 import expectedCorosFixture from './fixtures/coros-running-v1.json';
 import expectedGarminFixture from './fixtures/garmin-running-v1.json';
@@ -42,17 +47,24 @@ function oneStepStructure(overrides: Partial<WorkoutStructureV1['nodes'][number]
 }
 
 describe('planned-workout provider proof fixtures', () => {
-    it('keeps every provider delivery path disabled before sandbox evidence exists', () => {
+    it('keeps public provider delivery disabled while private rollout evidence is gathered', () => {
         expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1)).toHaveLength(4);
         expect(Object.values(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1).every(capability => (
             capability.deliveryEnabled === false
         ))).toBe(true);
         expect(isPlannedWorkoutProviderDeliveryEnabled('garmin')).toBe(false);
         expect(isPlannedWorkoutProviderDeliveryEnabled('coros')).toBe(false);
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.implementationState).toBe('fixture-only');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.implementationState).toBe('fixture-only');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('fixture-only');
-        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('fixture-only');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.implementationState).toBe('private-rollout');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.implementationState).toBe('private-rollout');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.wahoo.implementationState).toBe('private-rollout');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.implementationState).toBe('private-rollout');
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.suunto.profile?.sports)
+            .toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
+        expect(GARMIN_PLANNED_WORKOUT_SPORTS_V1).toEqual(MANUAL_WORKOUT_EDITOR_SPORTS_V1);
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.garmin.profile?.sports)
+            .toBe(GARMIN_PLANNED_WORKOUT_SPORTS_V1);
+        expect(PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1.coros.profile?.sports)
+            .toBe(COROS_PLANNED_WORKOUT_SPORTS_V1);
     });
 
     it('matches the redacted Garmin workout and separate schedule contracts exactly', () => {
@@ -126,6 +138,112 @@ describe('planned-workout provider proof fixtures', () => {
         expect(result.level).toBe('exact');
         expect(result.issues).toEqual([]);
         expect(result.artifact).toEqual(expectedSuuntoFixture);
+    });
+
+    it.each([
+        [ActivityTypes.Running, [1]],
+        [ActivityTypes.TrailRunning, [22]],
+        [ActivityTypes.Treadmill, [53]],
+        [ActivityTypes.Cycling, [2]],
+        [ActivityTypes.MountainBiking, [10]],
+        [ActivityTypes.IndoorCycling, [52]],
+        [ActivityTypes.EBiking, [105, 106]],
+        [ActivityTypes.Handcycle, [109]],
+    ] as const)('maps canonical %s to Suunto activity recommendations', (sport, activities) => {
+        const result = serializeSuuntoGuideJsonV1({ ...oneStepStructure(), sport }, {
+            name: `${sport} workout`,
+            owner: 'Quantified Self',
+            url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03',
+            sourceWorkoutId: `suunto-${sport}`,
+            allowDegraded: false,
+        });
+
+        expect(result.level).toBe('exact');
+        expect(result.artifact.activities).toEqual(activities);
+    });
+
+    it.each([
+        [ActivityTypes.Running, 'RUNNING', 'exact'],
+        [ActivityTypes.TrailRunning, 'RUNNING', 'degraded'],
+        [ActivityTypes.Treadmill, 'RUNNING', 'degraded'],
+        [ActivityTypes.Cycling, 'CYCLING', 'exact'],
+        [ActivityTypes.MountainBiking, 'CYCLING', 'degraded'],
+        [ActivityTypes.IndoorCycling, 'CYCLING', 'degraded'],
+        [ActivityTypes.EBiking, 'CYCLING', 'degraded'],
+        [ActivityTypes.Handcycle, 'CYCLING', 'degraded'],
+    ] as const)('maps canonical %s to Garmin %s with truthful fidelity', (sport, garminSport, level) => {
+        const structure = { ...oneStepStructure(), sport };
+        const result = serializeGarminWorkoutV1(structure, {
+            name: `${sport} workout`,
+            allowDegraded: true,
+        });
+
+        expect(result.level).toBe(level);
+        expect(result.artifact.sport).toBe(garminSport);
+        expect(result.artifact.segments[0].sport).toBe(garminSport);
+        expect(result.issues.some(issue => issue.code === 'sport_profile_degraded')).toBe(level === 'degraded');
+    });
+
+    it('requires approval for a Garmin family fold while keeping other unproved mappings unsupported', () => {
+        const mountainBike = { ...oneStepStructure(), sport: ActivityTypes.MountainBiking };
+        expect(assessPlannedWorkoutProviderMappingV1('suunto', mountainBike).level).toBe('exact');
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', mountainBike)).toMatchObject({
+            level: 'degraded',
+            issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
+        });
+        expect(() => serializeGarminWorkoutV1(mountainBike, {
+            name: 'MTB workout',
+            allowDegraded: false,
+        })).toThrow(expect.objectContaining({ code: 'degradation-confirmation-required' }));
+        expect(assessPlannedWorkoutProviderMappingV1('coros', mountainBike)).toMatchObject({
+            level: 'degraded',
+            issues: [expect.objectContaining({ code: 'sport_profile_degraded' })],
+        });
+        expect(assessPlannedWorkoutProviderMappingV1('wahoo', mountainBike)).toMatchObject({
+            level: 'unsupported',
+            issues: [expect.objectContaining({ code: 'unsupported_sport' })],
+        });
+    });
+
+    it.each([
+        [ActivityTypes.Running, 'run', 'exact'],
+        [ActivityTypes.TrailRunning, 'trailRun', 'exact'],
+        [ActivityTypes.Treadmill, 'run', 'degraded'],
+        [ActivityTypes.Cycling, 'bike', 'exact'],
+        [ActivityTypes.MountainBiking, 'bike', 'degraded'],
+        [ActivityTypes.IndoorCycling, 'bike', 'degraded'],
+        [ActivityTypes.EBiking, 'bike', 'degraded'],
+        [ActivityTypes.Handcycle, 'bike', 'degraded'],
+    ] as const)('maps canonical %s to COROS %s with truthful fidelity', (sport, workoutType, level) => {
+        const result = serializeCorosTrainingPlanV1({ ...oneStepStructure(), sport }, {
+            athleteId: 24680,
+            workoutId: 13579,
+            title: `${sport} workout`,
+            localDate: '2026-09-03',
+            lastModifiedDate: '2026-09-02T12:00:00',
+            allowDegraded: true,
+        });
+        expect(result.level).toBe(level);
+        expect(result.artifact.Workouts[0].WorkoutType).toBe(workoutType);
+        expect(result.artifact.Workouts[0].Id).toBe(13579);
+        expect(result.issues.some(issue => issue.code === 'sport_profile_degraded')).toBe(level === 'degraded');
+    });
+
+    it('rejects cadence targets for every COROS cycling-family profile', () => {
+        for (const sport of [ActivityTypes.Cycling, ActivityTypes.MountainBiking, ActivityTypes.IndoorCycling,
+            ActivityTypes.EBiking, ActivityTypes.Handcycle]) {
+            const assessment = assessPlannedWorkoutProviderMappingV1('coros', {
+                ...oneStepStructure({
+                    targets: [{ kind: 'cadence', mode: 'absolute', minimumRpm: 80, maximumRpm: 90 }],
+                }),
+                sport,
+            });
+            expect(assessment).toMatchObject({
+                level: 'unsupported',
+                issues: expect.arrayContaining([expect.objectContaining({ code: 'unsupported_target' })]),
+            });
+        }
     });
 
     it('maps Wahoo native relative FTP targets through the header', () => {
@@ -384,6 +502,16 @@ describe('planned-workout provider proof fixtures', () => {
             level: 'unsupported',
             issues: [expect.objectContaining({ code: 'unsupported_target' })],
         });
+        expect(assessPlannedWorkoutProviderMappingV1('garmin', {
+            ...runningWithTwoTargets,
+            sport: ActivityTypes.MountainBiking,
+        })).toMatchObject({
+            level: 'degraded',
+            issues: expect.arrayContaining([
+                expect.objectContaining({ code: 'sport_profile_degraded' }),
+                expect.objectContaining({ code: 'multiple_targets_degraded' }),
+            ]),
+        });
         expect(assessPlannedWorkoutProviderMappingV1('coros', cyclingCadence)).toMatchObject({
             level: 'unsupported',
             issues: [expect.objectContaining({ code: 'unsupported_target' })],
@@ -428,6 +556,53 @@ describe('planned-workout provider proof fixtures', () => {
             fields: [{ type: 'targetCadence', min: 1.35, max: 1.65 }],
             transitions: [{ condition: { type: 'manualLap' } }],
         });
+    });
+
+    it.each(['Tempo — steady run', 'Sample — interval session'])('adapts cosmetic watch text without approval: %s', name => {
+        const structure = oneStepStructure({ kind: 'step', id: 'work', purpose: 'work',
+            ending: { kind: 'time', seconds: 600 }, targets: [], note: '“Steady” — don’t rush…' });
+        const before = JSON.stringify(structure);
+        const result = serializeSuuntoGuideJsonV1(structure, {
+            name, owner: 'Quantified Self', url: 'https://quantified-self.io/training/plans',
+            localDate: '2026-09-03', sourceWorkoutId: 'cosmetic-workout', allowDegraded: false,
+        });
+        expect(result.level).toBe('exact'); expect(result.issues).toEqual([]);
+        expect(result.artifact.name).toBe(name.replace('—', '-'));
+        expect(result.artifact.description).toBe(name);
+        expect(Array.from(result.artifact.shortDescription).length).toBeLessThanOrEqual(23);
+        expect(result.artifact.steps[0]).toMatchObject({ fields: expect.arrayContaining([
+            { type: 'text', value: '"Steady" - don\'t rush...' },
+        ]) });
+        expect(JSON.stringify(structure)).toBe(before);
+    });
+
+    it('keeps genuine Suunto instruction, title and explicit-subtitle losses behind approval', () => {
+        const structure = oneStepStructure({ kind: 'step', id: 'work', purpose: 'work',
+            ending: { kind: 'time', seconds: 600 }, targets: [], note: 'x'.repeat(39) + '…' });
+        const result = serializeSuuntoGuideJsonV1(structure, {
+            name: 'x'.repeat(61), shortDescription: 'Explicit subtitle that is too long', owner: 'Quantified Self',
+            url: 'https://quantified-self.io/training/plans', localDate: '2026-09-03',
+            sourceWorkoutId: 'long-workout', allowDegraded: true,
+        });
+        expect(result.level).toBe('degraded');
+        expect(result.issues.map(issue => [issue.code, issue.path])).toEqual(expect.arrayContaining([
+            ['text_truncated', '$.name'], ['text_truncated', '$.shortDescription'],
+            ['text_truncated_for_metrics', '$.nodes[0].note'],
+        ]));
+    });
+
+    it('preserves Unicode and exact ownership rather than guessing, and does not repeat derived-text warnings', () => {
+        const structure = oneStepStructure({ kind: 'step', id: 'work', purpose: 'work',
+            ending: { kind: 'time', seconds: 600 }, targets: [] });
+        const result = serializeSuuntoGuideJsonV1(structure, {
+            name: 'Café 🚴', description: 'App-only description — Ελληνικά', owner: 'Coach — App',
+            url: 'https://quantified-self.io/training/plans', localDate: '2026-09-03',
+            sourceWorkoutId: 'unicode-title', allowDegraded: true,
+        });
+        expect(result.artifact.owner).toBe('Coach — App');
+        expect(result.artifact.name).toBe('Café 🚴');
+        expect(result.artifact.description).toBe('App-only description — Ελληνικά');
+        expect(result.issues.map(issue => issue.path)).toEqual(['$.name', '$.owner']);
     });
 
     it('does not claim exact Suunto rendering outside the guaranteed watch character set', () => {

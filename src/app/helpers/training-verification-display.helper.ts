@@ -10,9 +10,14 @@ export function trainingVerificationCommandError(error: unknown): string {
 }
 
 export function trainingVerificationLabel(status: TrainingDeliveryStatusV1, verification?: TrainingVerificationV1): string {
+  if (status.status === 'approval_required') {
+    if (status.hasRemoteCopy || status.lastAcceptedAtMs != null) return 'Update needs review';
+    // An interrupted attempt may have been accepted before QS could save the ID.
+    return status.lastAttemptAtMs == null ? 'Not sent · Needs review' : 'Needs review';
+  }
   if (['removed', 'stopped', 'paused_plan', 'paused_pro', 'past', 'completed', 'fresh_consent_required',
     'reconnect_required', 'connection_repair', 'provider_unavailable', 'failed', 'needs_attention', 'unsupported',
-    'approval_required', 'outside_horizon'].includes(status.status)) return TRAINING_DELIVERY_STATUS_LABELS[status.status];
+    'outside_horizon'].includes(status.status)) return TRAINING_DELIVERY_STATUS_LABELS[status.status];
   if (verification?.state === 'restoring') return 'Restoring missing workout…';
   if (verification?.state === 'deferred') return verification.missing ? 'Restoration paused · will try later' : 'Check queued · waiting for provider capacity';
   if (verification?.state === 'checking') return 'Checking workout…';

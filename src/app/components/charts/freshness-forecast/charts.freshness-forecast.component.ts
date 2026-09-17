@@ -92,6 +92,10 @@ export class ChartsFreshnessForecastComponent implements AfterViewInit, OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (!this.chartDiv?.nativeElement) {
       this.updateHeaderAndErrorState();
       return;

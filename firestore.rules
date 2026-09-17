@@ -203,6 +203,9 @@ service cloud.firestore {
 
 
             // Restoring metaData inside events
+            match /trainingCompletionEvidence/{document=**} {
+              allow read, write: if false;
+            }
             match /metaData/processing {
               allow read: if request.auth.uid == userID;
               // Processing metadata is server-owned (Cloud Functions/Admin SDK only).
@@ -326,6 +329,16 @@ service cloud.firestore {
           match /{document=**} {
             allow read, write: if false;
           }
+        }
+
+        // Safe activity-link projections are owner-readable. Source identifiers,
+        // account bindings, evidence and reverse uniqueness records stay private.
+        match /trainingWorkoutCompletions/{workoutID} {
+          allow read: if isOwner();
+          allow write: if false;
+        }
+        match /trainingActivityCompletionLinks/{document=**} {
+          allow read, write: if false;
         }
 
         // Owner-visible delivery projections only; consent and all writes require the focused callables.
@@ -514,6 +527,7 @@ service cloud.firestore {
       allow write: if false;
     }
     match /trainingDeliveryQueue/{document=**} { allow read, write: if false; }
+    match /trainingDeliveryCorosIntegerClaims/{document=**} { allow read, write: if false; }
     match /trainingProviderCapacity/{document=**} { allow read, write: if false; }
 
     match /sleepSyncQueue/{queueItemID} {

@@ -41,7 +41,7 @@ interface TrendTooltipParam {
   templateUrl: './training-readiness-trend-chart.component.html',
   styleUrls: ['./training-readiness-trend-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
 })
 export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input() points: readonly TrainingReadinessTrendPointViewModel[] = [];
@@ -68,6 +68,10 @@ export class TrainingReadinessTrendChartComponent implements AfterViewInit, OnCh
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (this.viewInitialized && (changes.points || changes.darkTheme || changes.timelineNotes)) {
       void this.refresh();
     }

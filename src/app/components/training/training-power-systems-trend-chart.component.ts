@@ -44,7 +44,7 @@ interface TrendTooltipParam {
   templateUrl: './training-power-systems-trend-chart.component.html',
   styleUrls: ['./training-power-systems-trend-chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false,
+  standalone: true,
 })
 export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   @Input()
@@ -54,14 +54,18 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
     this.hasReadyValues = readyPoints.length > 0;
     if (!value) {
       this.chartAriaLabel = 'Twelve-week power-system capacity history';
+      this.rangeStartLabel = '';
+      this.rangeEndLabel = '';
       return;
     }
+    this.rangeStartLabel = formatTrendDate(value.rangeStartDayMs);
+    this.rangeEndLabel = formatTrendDate(value.rangeEndDayMs);
     const currentPoint = value.points.find(point => point.isCurrent) || null;
     const readyPointText = `${readyPoints.length} ready ${readyPoints.length === 1 ? 'value' : 'values'}`;
     const currentText = currentPoint?.value === null || !currentPoint
       ? 'current value unavailable'
       : `current value ${formatTrendValue(currentPoint.value, value.unit)} ${value.unit}`;
-    this.chartAriaLabel = `${value.label} over the latest 12 weeks; ${
+    this.chartAriaLabel = `${value.label} from ${this.rangeStartLabel} to ${this.rangeEndLabel}; ${
       this.hasReadyValues ? readyPointText : '0 ready values'
     }; ${currentText}`;
   }
@@ -74,6 +78,8 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
 
   public hasReadyValues = false;
   public chartAriaLabel = 'Twelve-week power-system capacity history';
+  public rangeStartLabel = '';
+  public rangeEndLabel = '';
 
   private readonly chartHost: EChartsHostController;
   private trendValue: TrainingPowerSystemsTrendViewModel | null = null;
@@ -94,6 +100,10 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes.timelineNotes && Object.keys(changes).length === 1) {
+      this.chartHost.updateTimelineNotes(this.timelineNotes);
+      return;
+    }
     if (this.viewInitialized && (changes.trend || changes.darkTheme || changes.timelineNotes)) {
       void this.refresh();
     }
@@ -135,6 +145,7 @@ export class TrainingPowerSystemsTrendChartComponent implements AfterViewInit, O
     const dateFormatter = new Intl.DateTimeFormat(undefined, {
       month: 'short',
       day: 'numeric',
+      year: 'numeric',
       timeZone: 'UTC',
     });
     return {
@@ -227,4 +238,10 @@ function formatTrendValue(value: number, unit: TrainingPowerSystemsTrendViewMode
   return new Intl.NumberFormat(undefined, {
     maximumFractionDigits: unit === 'kJ' ? 1 : 0,
   }).format(value);
+}
+
+function formatTrendDate(dayMs: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(dayMs));
 }

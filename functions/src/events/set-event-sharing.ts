@@ -148,6 +148,7 @@ function buildSharePath(prefix: string, userID: string, eventID: string): string
 export const setEventSharing = onCall({
   region: FUNCTIONS_MANIFEST.setEventSharing.region,
   cors: ALLOWED_CORS_ORIGINS,
+  memory: '512MiB',
 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');

@@ -76,6 +76,17 @@ assertNoHomeStartupSource(
   /^src\/app\/services\/admin\.service\.ts$/,
 );
 assertNoStartupSource('Mapbox', /(?:^|\/)(?:mapbox-gl|mapbox-loader)(?:[./]|$)/);
+assertNoStartupSource(
+  'deferred Training examples and charts',
+  /^src\/app\/components\/(?:public-seo\/training-explorer-preview\.(?:component|data)|training\/training-(?:readiness-trend|power-systems-trend|durability-trajectory)-chart\.component)\.ts$/,
+);
+const trainingPreviewAssets = findAssetsContainingSource(/^src\/app\/components\/public-seo\/training-explorer-preview\.component\.ts$/);
+assertNoSourceRecords(
+  'authenticated Training data loading',
+  uniqueSourceRecords(collectStaticDependencyGraph(trainingPreviewAssets).flatMap(readSourceRecords)),
+  /^src\/app\/(?:components\/training\/training-workspace\.component|modules\/training\.module|services\/dashboard-derived-metrics\.service)\.ts$/,
+  'deferred public Training preview graph',
+);
 assertNoStartupSource('dashboard upload UI', /\/components\/(?:dashboard\/dashboard-header-upload|upload\/upload-activities)\//);
 assertNoStartupSource(
   'broad shared or Material module',
@@ -282,6 +293,9 @@ function assertPrerenderedDocuments() {
       if (!preview.querySelector(':scope > div[data-nosnippet]')) {
         throw new Error(`Prerendered route ${route} is missing a native snippet exclusion around a public preview.`);
       }
+    }
+    if (documentRef.querySelector('app-training-explorer-preview')) {
+      throw new Error(`Prerendered route ${route} eagerly rendered the interactive Training examples.`);
     }
 
     const jsonLdScripts = [...documentRef.querySelectorAll('script[type="application/ld+json"]')];

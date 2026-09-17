@@ -23,6 +23,7 @@ describe('config.ts', () => {
             SUUNTOAPP_CLIENT_ID: 'suunto-id',
             SUUNTOAPP_CLIENT_SECRET: 'suunto-secret',
             SUUNTOAPP_SUBSCRIPTION_KEY: 'suunto-sub',
+            SUUNTOAPP_GUIDE_OWNER: 'fixture-application',
             COROSAPI_CLIENT_ID: 'coros-id',
             COROSAPI_CLIENT_SECRET: 'coros-secret',
             GARMINAPI_CLIENT_ID: 'garmin-id',
@@ -74,13 +75,27 @@ describe('config.ts', () => {
         expect(() => config.wahooapi.client_id).toThrow(/Missing required environment variable: WAHOOAPI_CLIENT_ID/);
     });
 
+    it('uses one existing Suunto OAuth and API credential configuration', async () => {
+        const { config } = await import('./config');
+        expect(config.suuntoapp).toEqual({
+            application_name: 'fixture-application',
+            client_id: 'suunto-id',
+            client_secret: 'suunto-secret',
+            subscription_key: 'suunto-sub',
+        });
+    });
+
     it('reads only the requested provider credential', async () => {
         delete process.env.SUUNTOAPP_SUBSCRIPTION_KEY;
+        delete process.env.SUUNTOAPP_GUIDE_OWNER;
         delete process.env.WAHOOAPI_WEBHOOK_TOKEN;
         const { config } = await import('./config');
 
         expect(config.suuntoapp.client_id).toBe('suunto-id');
         expect(config.suuntoapp.client_secret).toBe('suunto-secret');
+        expect(() => config.suuntoapp.application_name).toThrow(
+            /Missing required environment variable: SUUNTOAPP_GUIDE_OWNER/,
+        );
         expect(config.wahooapi.client_id).toBe('wahoo-id');
         expect(config.wahooapi.client_secret).toBe('wahoo-secret');
         expect(() => config.suuntoapp.subscription_key).toThrow(

@@ -13,6 +13,7 @@ export type PlannedWorkoutProviderId = typeof PLANNED_WORKOUT_PROVIDER_IDS[numbe
 export type PlannedWorkoutProviderImplementationState =
   | 'blocked-contract'
   | 'fixture-only'
+  | 'private-rollout'
   | 'sandbox-verified'
   | 'enabled';
 
@@ -39,11 +40,88 @@ export interface PlannedWorkoutProviderCapabilityV1 {
 
 export type PlannedWorkoutProviderMappingLevel = 'exact' | 'degraded' | 'unsupported';
 
+/** Suunto Guide sport support proved against the provider activity catalog. */
+export const SUUNTO_PLANNED_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Running,
+  ActivityTypes.TrailRunning,
+  ActivityTypes.Treadmill,
+  ActivityTypes.Cycling,
+  ActivityTypes.MountainBiking,
+  ActivityTypes.IndoorCycling,
+  ActivityTypes.EBiking,
+  ActivityTypes.Handcycle,
+] as const;
+
+/**
+ * Garmin Training API V2 accepts only broad RUNNING/CYCLING workout sports.
+ * Keep the exact authored QS sport, then fold these profiles at serialization.
+ */
+export const GARMIN_RUNNING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Running,
+  ActivityTypes.TrailRunning,
+  ActivityTypes.Treadmill,
+] as const;
+
+export const GARMIN_CYCLING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Cycling,
+  ActivityTypes.MountainBiking,
+  ActivityTypes.IndoorCycling,
+  ActivityTypes.EBiking,
+  ActivityTypes.Handcycle,
+] as const;
+
+export const GARMIN_PLANNED_WORKOUT_SPORTS_V1 = [
+  ...GARMIN_RUNNING_WORKOUT_SPORTS_V1,
+  ...GARMIN_CYCLING_WORKOUT_SPORTS_V1,
+] as const;
+
+export const COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.Running,
+  ActivityTypes.TrailRunning,
+] as const;
+
+export const COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 = [ActivityTypes.Treadmill] as const;
+
+export const COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1 = [ActivityTypes.Cycling] as const;
+
+export const COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1 = [
+  ActivityTypes.MountainBiking,
+  ActivityTypes.IndoorCycling,
+  ActivityTypes.EBiking,
+  ActivityTypes.Handcycle,
+] as const;
+
+export const COROS_PLANNED_WORKOUT_SPORTS_V1 = [
+  ...COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1,
+  ...COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1,
+  ...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1,
+  ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1,
+] as const;
+
+export type CorosWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
+
+export function corosWorkoutSportFamilyV1(sport: ActivityTypes): CorosWorkoutSportFamilyV1 | null {
+  if (([...COROS_NATIVE_RUNNING_WORKOUT_SPORTS_V1, ...COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1] as readonly ActivityTypes[])
+    .includes(sport)) return 'RUNNING';
+  if (([...COROS_NATIVE_CYCLING_WORKOUT_SPORTS_V1, ...COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1] as readonly ActivityTypes[])
+    .includes(sport)) return 'CYCLING';
+  return null;
+}
+
+export type GarminWorkoutSportFamilyV1 = 'RUNNING' | 'CYCLING';
+
+export function garminWorkoutSportFamilyV1(sport: ActivityTypes): GarminWorkoutSportFamilyV1 | null {
+  if ((GARMIN_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'RUNNING';
+  if ((GARMIN_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'CYCLING';
+  return null;
+}
+
 export interface PlannedWorkoutProviderMappingIssueV1 {
   severity: Exclude<PlannedWorkoutProviderMappingLevel, 'exact'>;
   code:
     | 'provider_contract_unavailable'
     | 'unsupported_sport'
+    | 'sport_profile_degraded'
     | 'unsupported_ending'
     | 'unsupported_target'
     | 'purpose_degraded'
@@ -62,8 +140,9 @@ export interface PlannedWorkoutProviderMappingAssessmentV1 {
 }
 
 /**
- * Versioned provider research snapshot. Delivery remains disabled until each
- * provider's fixture and sandbox CRUD/idempotency evidence is recorded.
+ * Versioned provider research snapshot. Public delivery remains disabled until
+ * each provider's documented contract and separately authorized live evidence
+ * support the claimed lifecycle.
  */
 export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   Record<PlannedWorkoutProviderId, PlannedWorkoutProviderCapabilityV1>
@@ -71,12 +150,12 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   garmin: {
     id: 'garmin',
     label: 'Garmin',
-    implementationState: 'fixture-only',
+    implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'native-workout-and-schedule',
     requiredScopes: ['WORKOUT_IMPORT'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      sports: GARMIN_PLANNED_WORKOUT_SPORTS_V1,
       endingKinds: ['time', 'distance', 'manual'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -89,14 +168,16 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     limits: [
       'Single-sport workouts allow at most 100 total steps.',
       'Descriptions allow 1024 characters per workout and 512 characters per step.',
+      'Training API V2 accepts RUNNING or CYCLING but has no sub-sport field; exact QS profiles are delivered through their broad family.',
       'A secondary target is documented only for cycling and depends on device support.',
       'Production limits: 3000 application requests per rolling minute including OAuth; 1000 per account per rolling day excluding OAuth.',
     ],
     completionCorrelation: 'Training API V2 does not document a completed-activity workout identifier.',
     unresolvedGates: [
       'Prove retained-ID missing/ownership response semantics and representative device behavior with the designated production account.',
+      'Verify broad-family workouts from each authored subtype on representative compatible activity profiles before claiming profile-level device support.',
       'Confirm completion-correlation behavior outside the Training API contract.',
-      'Pass sandbox create, update, reschedule, delete, reconnect, and duplicate tests.',
+      'Complete bounded production-account create, update, reschedule, delete, reconnect, and duplicate evidence before broader rollout.',
     ],
     evidence: [
       'Garmin Connect Developer Program Training API V2, version 1.0 (private partner document, May 2025)',
@@ -107,12 +188,12 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   coros: {
     id: 'coros',
     label: 'COROS',
-    implementationState: 'fixture-only',
+    implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'native-plan-workout-batches',
     requiredScopes: ['training-plan partner entitlement'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      sports: COROS_PLANNED_WORKOUT_SPORTS_V1,
       endingKinds: ['time', 'distance', 'manual'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -125,14 +206,14 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     unresolvedGates: [
       'Confirm Training Plan entitlement; provider code 30009 means access is unavailable.',
       'Confirm repeated-ID replacement and overlapping-window semantics with COROS.',
-      'Pass sandbox create, update, reschedule, eligible-delete, and duplicate tests.',
+      'Record authorized create, repeated-ID update, overlapping-window preservation, reschedule, eligible-delete, completion-correlation, and app/watch evidence before broader rollout.',
     ],
     evidence: ['COROS API Reference V2.0.6 (partner document, February 2026)'],
   },
   wahoo: {
     id: 'wahoo',
     label: 'Wahoo',
-    implementationState: 'fixture-only',
+    implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'plan-library-plus-dated-workout',
     requiredScopes: ['plans_read', 'plans_write', 'workouts_read', 'workouts_write'],
@@ -150,11 +231,13 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
       'Bike computers use only the first target in an interval.',
       'Relative heart-rate and threshold-speed targets are documented for treadmill workouts in the Wahoo app, not ELEMNT computers or RIVAL.',
       'Device-visible scheduling is documented as the current day plus six days.',
+      'Private delivery requires time-based steps throughout; distance endings cannot supply the required Workout duration without an estimate.',
     ],
-    completionCorrelation: 'workout_token identifies the app workout, but third-party-origin completions are not shared.',
+    completionCorrelation: 'Exact Workout, Plan and app-supplied workout_token identifiers can link a Wahoo-recorded activity; third-party-origin activities remain excluded.',
     unresolvedGates: [
-      'Confirm Plans entitlement, scopes, same-app ownership, and date-only starts/day_code behavior.',
-      'Pass sandbox CRUD, reconnect, duplicate, and current-day-plus-six device tests.',
+      'Confirm existing production-app scope access, same-app ownership, and saved-timezone starts behavior in the private pilot.',
+      'Complete production-account CRUD, reconnect, duplicate, and current-day-plus-six device tests; public delivery remains disabled.',
+      'Absence and repair remain unavailable until owned inventory and negative-response semantics are proved.',
     ],
     evidence: [
       'https://cloud-api.wahooligan.com/',
@@ -164,12 +247,12 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
   suunto: {
     id: 'suunto',
     label: 'Suunto',
-    implementationState: 'fixture-only',
+    implementationState: 'private-rollout',
     deliveryEnabled: false,
     deliveryModel: 'dated-guide',
-    requiredScopes: ['SuuntoPlus Guides entitlement', 'Suunto subscription key'],
+    requiredScopes: ['SuuntoPlus Guides entitlement', 'Existing Suunto API subscription key with Guides access', 'Existing Suunto OAuth authorization'],
     profile: {
-      sports: [ActivityTypes.Running, ActivityTypes.Cycling],
+      sports: SUUNTO_PLANNED_WORKOUT_SPORTS_V1,
       endingKinds: ['time', 'distance', 'manual'],
       targetKinds: ['heart-rate', 'power', 'speed', 'cadence'],
       supportsRepeats: true,
@@ -186,8 +269,9 @@ export const PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1: Readonly<
     ],
     completionCorrelation: 'The Guide externalId can be recovered from matching SuuntoPlus FIT session arrays.',
     unresolvedGates: [
-      'Confirm Guides entitlement, supported-watch workflow, storage, and pin/select behavior.',
-      'Pass sandbox create, update, reschedule, delete, duplicate, and FIT-correlation tests.',
+      'Verify app/watch selection and pin behavior through separately approved live use.',
+      'Authoritative missing-Guide detection is unavailable: ownership-related 404s and offset listings do not prove deletion.',
+      'Public rollout requires separate approval; today through today + 6 is QS scheduling policy.',
     ],
     evidence: [
       'https://apizone.suunto.com/how-to-use-suuntoplus-guides-api',
@@ -242,14 +326,38 @@ export function assessPlannedWorkoutProviderMappingV1(
 ): PlannedWorkoutProviderMappingAssessmentV1 {
   const structure = parseWorkoutStructureV1(value);
   const issues: PlannedWorkoutProviderMappingIssueV1[] = [];
+  const profile = PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].profile;
 
-  if (![ActivityTypes.Running, ActivityTypes.Cycling].includes(structure.sport)) {
+  if (!profile) {
+    issues.push({
+      severity: 'unsupported',
+      code: 'provider_contract_unavailable',
+      path: '$',
+      message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} does not have a workout mapping contract.`,
+    });
+  } else if (profile.sports && !profile.sports.includes(structure.sport)) {
     issues.push({
       severity: 'unsupported',
       code: 'unsupported_sport',
       path: '$.sport',
       message: `${structure.sport} cannot be represented by the ${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} fixture mapper.`,
     });
+  } else if ((provider === 'garmin' || provider === 'coros')
+    && structure.sport !== ActivityTypes.Running
+    && structure.sport !== ActivityTypes.Cycling
+    && !(provider === 'coros' && structure.sport === ActivityTypes.TrailRunning)) {
+    const family = provider === 'garmin'
+      ? garminWorkoutSportFamilyV1(structure.sport)
+      : corosWorkoutSportFamilyV1(structure.sport);
+    if (family) {
+      const familyLabel = family === 'RUNNING' ? 'Running' : 'Cycling';
+      issues.push({
+        severity: 'degraded',
+        code: 'sport_profile_degraded',
+        path: '$.sport',
+        message: `${PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label} receives ${structure.sport} as a ${familyLabel} workout because its Training API has no exact ${structure.sport} profile.`,
+      });
+    }
   }
 
   const referenceSnapshots = new Map<string, number>();
@@ -299,7 +407,7 @@ export function assessPlannedWorkoutProviderMappingV1(
     }
 
     if (provider === 'garmin' && step.targets.length > 1) {
-      if (structure.sport !== ActivityTypes.Cycling) {
+      if (garminWorkoutSportFamilyV1(structure.sport) !== 'CYCLING') {
         issues.push({
           severity: 'unsupported',
           code: 'unsupported_target',
@@ -325,7 +433,7 @@ export function assessPlannedWorkoutProviderMappingV1(
 
     if (
       provider === 'coros'
-      && structure.sport === ActivityTypes.Cycling
+      && corosWorkoutSportFamilyV1(structure.sport) === 'CYCLING'
       && step.targets.some(target => target.kind === 'cadence')
     ) {
       issues.push({

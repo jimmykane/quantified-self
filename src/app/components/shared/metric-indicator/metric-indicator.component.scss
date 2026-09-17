@@ -23,6 +23,13 @@
 .metric-indicator-segments > span.active { background: var(--mat-sys-primary); }
 .metric-indicator-segments > span.active[data-tone='mixed'] { background: var(--mat-sys-secondary); }
 .metric-indicator-segments > span.active[data-tone='recover'], .metric-indicator-segments > span.active[data-tone='negative'] { background: var(--mat-sys-error); }
+.metric-indicator-range { position: relative; display: block; width: 100%; height: 8px; border-radius: 999px; background: var(--mat-sys-surface-container-highest); }
+.metric-indicator-range.compact { height: 6px; }
+.metric-indicator-range-band { position: absolute; inset-block: 1px; border-radius: inherit; background: var(--mat-sys-primary-container); }
+.metric-indicator-range-marker { position: absolute; top: 50%; width: 10px; height: 10px; border: 2px solid var(--mat-sys-surface-container-low); border-radius: 50%; background: var(--mat-sys-outline); transform: translate(-50%, -50%); }
+.metric-indicator-range.compact .metric-indicator-range-marker { width: 8px; height: 8px; }
+.metric-indicator-range-marker[data-tone='positive'] { background: var(--mat-sys-primary); }
+.metric-indicator-range-marker[data-tone='negative'] { background: var(--mat-sys-error); }
 .metric-indicator-status { display: inline-flex; align-items: center; min-height: 24px; width: fit-content; padding: 0 9px; border-radius: 999px; color: var(--mat-sys-on-surface-variant); background: var(--mat-sys-surface-container-high); font: var(--mat-sys-label-medium); }
 .metric-indicator-status[data-tone='ready'], .metric-indicator-status[data-tone='positive'] { color: var(--mat-sys-on-primary-container); background: var(--mat-sys-primary-container); }
 .metric-indicator-status[data-tone='mixed'] { color: var(--mat-sys-on-secondary-container); background: var(--mat-sys-secondary-container); }

@@ -40,6 +40,60 @@ function fixture() {
 }
 
 describe('Training plan MCP reads', () => {
+  it.each(['delivered', 'unsupported', 'outside_horizon', 'needs_attention', 'connection_repair', 'provider_unavailable', 'completed'])(
+    'projects Wahoo %s without private Plan/Workout identities or device claims', async status => {
+      const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+      f.collections.trainingDeliverySettings.wahoo = { scope: 'plan', scopeId: 'p1', provider: 'wahoo', enabled: true,
+        suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-wahoo-account', associationPlanId: null, updatedAtMs: 1 };
+      const id = await trainingDeliverySummaryIdentity('owner', 'wahoo', 'private-wahoo-account', 'w1');
+      f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: 'p1', provider: 'wahoo', status,
+        differsFromQS: status === 'needs_attention', hasRemoteCopy: status === 'delivered', timeZone: 'Europe/Helsinki',
+        lastAttemptAtMs: 1, lastAcceptedAtMs: status === 'delivered' ? 1 : null, updatedAtMs: 1 };
+      const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+      const args = { scope: 'plan', reference: plans.plans[0].planRef };
+      const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
+      expect(result.services).toEqual([expect.objectContaining({ provider: 'wahoo', outcomes: [{ status, count: 1 }] })]);
+      expect(JSON.stringify(result)).not.toMatch(/private-wahoo|externalId|workout_token|plan_id|journal|device|ELEMNT/);
+      Object.assign(f.collections.trainingDeliveryStatuses[id], { externalId: 'private-plan', workout_token: 'private-workout',
+        plan_id: '123', completionLinkId: 'private-reverse-link', completionEvidence: 'private-summary',
+        providerAccessBlocked: true, providerJournal: { step: 'plan-create', state: 'started' },
+        artifact: { timeZone: 'Pacific/Pago_Pago' } });
+      await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
+    });
+  it.each(['delivered', 'approval_required', 'outside_horizon', 'needs_attention', 'failed', 'connection_repair'])('projects Suunto %s without internal evidence or watch claims', async status => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+    f.collections.trainingDeliverySettings.suunto = { scope: 'plan', scopeId: 'p1', provider: 'suunto', enabled: true,
+      suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-account', associationPlanId: null, updatedAtMs: 1 };
+    const id = await trainingDeliverySummaryIdentity('owner', 'suunto', 'private-account', 'w1');
+    f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: 'p1', provider: 'suunto', status,
+      differsFromQS: status === 'needs_attention', hasRemoteCopy: status === 'delivered', timeZone: 'Europe/Helsinki',
+      lastAttemptAtMs: 1, lastAcceptedAtMs: status === 'delivered' ? 1 : null, updatedAtMs: 1 };
+    const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+    const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', { scope: 'plan', reference: plans.plans[0].planRef }));
+    expect(result.services[0].syncedWorkouts).toBe(status === 'delivered' ? 1 : 0);
+    expect(JSON.stringify(result)).not.toMatch(/private-account|private-guide|private-key|must-not-leak|watch/);
+    Object.assign(f.collections.trainingDeliveryStatuses[id], { privateEvidence: 'must-not-leak', externalId: 'private-guide', subscriptionKey: 'private-key' });
+    await expect(f.run('get_training_sync_status', { scope: 'plan', reference: plans.plans[0].planRef })).rejects.toThrow();
+  });
+  it('projects COROS completion through the existing enum and rejects private batch or partner identities', async () => {
+    const f = fixture(); f.collections.scheduledWorkouts = { w1: workout('p1') };
+    f.collections.trainingDeliverySettings.coros = { scope: 'plan', scopeId: 'p1', provider: 'coros', enabled: true,
+      suppressed: false, timeZone: 'Europe/Helsinki', destinationKey: 'private-coros-account', associationPlanId: null, updatedAtMs: 1 };
+    const id = await trainingDeliverySummaryIdentity('owner', 'coros', 'private-coros-account', 'w1');
+    f.collections.trainingDeliveryStatuses[id] = { workoutId: 'w1', planId: 'p1', provider: 'coros', status: 'completed',
+      differsFromQS: false, hasRemoteCopy: true, timeZone: 'Europe/Helsinki', lastAttemptAtMs: 1,
+      lastAcceptedAtMs: 1, updatedAtMs: 2 };
+    const plans = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans'));
+    const args = { scope: 'plan', reference: plans.plans[0].planRef };
+    const result = TRAINING_READ_OUTPUTS.get_training_sync_status.parse(await f.run('get_training_sync_status', args));
+    expect(result.services).toEqual([expect.objectContaining({ provider: 'coros',
+      outcomes: [{ status: 'completed', count: 1 }] })]);
+    expect(JSON.stringify(result)).not.toMatch(/private-coros-account|planWorkoutId|athleteId|batchJournal/);
+    Object.assign(f.collections.trainingDeliveryStatuses[id], {
+      planWorkoutId: '123456789', athleteId: '987654321', batchJournal: 'private',
+    });
+    await expect(f.run('get_training_sync_status', args)).rejects.toThrow();
+  });
   it('requires independent permission at the data boundary before reading', async () => {
     const f = fixture();
     await expect(f.run('list_training_plans', {}, ['metrics:read', 'timeline-notes:read'])).rejects.toThrow('permission');
@@ -67,6 +121,27 @@ describe('Training plan MCP reads', () => {
     expect(result.workout.displaySteps[0].text).toContain('mi');
     expect(JSON.stringify(result)).not.toContain('estimated');
     expect(TRAINING_RECIPE_SCHEMA.safeParse({ ...structure, providerId: 'private' }).success).toBe(false);
+  });
+  it('preserves an exact mountain-biking sport through the existing planned-workout read contract', async () => {
+    const f = fixture();
+    const list = TRAINING_READ_OUTPUTS.query_planned_workouts.parse(await f.run('query_planned_workouts', {
+      startDate: '2026-09-01', endDate: '2027-01-01',
+    }));
+    const original = f.reads.snapshot;
+    f.reads.snapshot = (uid, read) => original(uid, view => read({ ...view,
+      get: async (collection, id, detail) => {
+        const doc = await view.get(collection, id, detail);
+        return doc && detail ? {
+          ...doc,
+          data: { ...doc.data, structure: { ...structure, sport: ActivityTypes.MountainBiking } },
+        } : doc;
+      },
+    }));
+
+    const result = TRAINING_READ_OUTPUTS.get_planned_workout.parse(await f.run('get_planned_workout', {
+      workoutRef: list.workouts[0].workoutRef,
+    }));
+    expect(result.workout.structure.sport).toBe(ActivityTypes.MountainBiking);
   });
   it('binds continuations to filters and revisions and does not skip matching records', async () => {
     const f = fixture(); const first = TRAINING_READ_OUTPUTS.list_training_plans.parse(await f.run('list_training_plans', { limit: 1 }));

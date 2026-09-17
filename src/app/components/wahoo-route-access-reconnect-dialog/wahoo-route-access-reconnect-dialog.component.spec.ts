@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { MatDialogRef, MatDialogState } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogRef, MatDialogState } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,6 +16,7 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
 
   const windowRef = { location: { href: '' } };
   const userServiceMock = {
+    user: vi.fn(() => ({ uid: 'fixture-owner' })),
     getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
   };
   const analyticsServiceMock = { logEvent: vi.fn() };
@@ -26,6 +27,7 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    userServiceMock.user.mockReturnValue({ uid: 'fixture-owner' });
     windowRef.location.href = '';
     dialogRefMock.getState.mockReturnValue(MatDialogState.OPEN);
     userServiceMock.getCurrentUserServiceTokenAndRedirectURI.mockResolvedValue({
@@ -60,6 +62,32 @@ describe('WahooRouteAccessReconnectDialogComponent', () => {
     expect(windowRef.location.href).toBe('https://wahoo.example/authorize');
     expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
     expect(hapticsMock.success).not.toHaveBeenCalled();
+  });
+  it('uses Training copy and analytics without dropping route behavior', async () => {
+    fixture.destroy();
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({ imports: [WahooRouteAccessReconnectDialogComponent], providers: [
+      { provide: MAT_DIALOG_DATA, useValue: { purpose: 'training' } }, { provide: MatDialogRef, useValue: dialogRefMock },
+      { provide: AppHapticsService, useValue: hapticsMock }, { provide: AppUserService, useValue: userServiceMock },
+      { provide: AppWindowService, useValue: { windowRef } }, { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+      { provide: MatSnackBar, useValue: snackBarMock }, { provide: LoggerService, useValue: loggerMock },
+    ] }).compileComponents();
+    fixture = TestBed.createComponent(WahooRouteAccessReconnectDialogComponent); component = fixture.componentInstance; fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Reconnect Wahoo to send workouts');
+    expect(fixture.nativeElement.textContent).toContain('Existing activity and route permissions');
+    expect(fixture.nativeElement.textContent).toContain('does not automatically enable plan sync');
+    await component.reconnect();
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('service_reconnect_start', expect.objectContaining({ source: 'training_access_dialog' }));
+    expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
+  });
+  it('does not redirect after the signed-in account changes', async () => {
+    let finish!: (value: { redirect_uri: string }) => void;
+    userServiceMock.getCurrentUserServiceTokenAndRedirectURI.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const pending = component.reconnect();
+    userServiceMock.user.mockReturnValue({ uid: 'different-owner' });
+    finish({ redirect_uri: 'https://wahoo.example/authorize' }); await pending;
+    expect(windowRef.location.href).toBe('');
+    await component.reconnect(); expect(hapticsMock.selection).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the dialog usable when starting reconnect fails', async () => {

@@ -6,6 +6,17 @@
       <span [class.active]="active" [attr.data-tone]="tone" aria-hidden="true"></span>
     }
   </span>
+} @else if (variant === 'range') {
+  <span class="metric-indicator-range" [class.compact]="compact" role="img" [attr.aria-label]="accessibleValueText">
+    @if (hasRange) {
+      <span class="metric-indicator-range-band" [style.left.%]="rangeStartPercent"
+        [style.width.%]="rangeWidthPercent" aria-hidden="true"></span>
+    }
+    @if (hasFiniteValue) {
+      <span class="metric-indicator-range-marker" [attr.data-tone]="tone"
+        [style.left.%]="rangeMarkerPercent" aria-hidden="true"></span>
+    }
+  </span>
 } @else {
   <span
     class="metric-indicator-track"

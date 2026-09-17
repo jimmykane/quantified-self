@@ -542,6 +542,43 @@ describe('AppHealthService', () => {
         expect(getDocs).toHaveBeenCalledTimes(1);
     });
 
+    it('loads a 90-day app sample window through shared 31-day Firestore pages', async () => {
+        const record = healthSourceRecord();
+        record.metrics = [];
+        record.metricIds = [HEALTH_METRIC_IDS.StressState];
+        record.sampleChunkIds = ['chunk-0'];
+        const chunk = {
+            ...healthSampleChunk('chunk-0', 3),
+            metricId: HEALTH_METRIC_IDS.StressState,
+            valueType: HEALTH_VALUE_TYPES.Category,
+            canonicalUnit: HEALTH_UNITS.Category,
+            nativeUnit: HEALTH_UNITS.Category,
+            nativeValues: ['relaxing', 'active', 'stressful'],
+            canonicalValues: ['relaxing', 'active', 'stressful'],
+        } as HealthSampleChunk;
+        mockPagedReads([record], [chunk]);
+
+        const loaded = await service.loadMetricRange('user-1', {
+            startDate: '2026-01-01', endDate: '2026-03-31',
+            metricId: HEALTH_METRIC_IDS.StressState, includeSamples: true,
+        });
+
+        expect(loaded.result.query).toMatchObject({
+            startDate: '2026-01-01', endDate: '2026-03-31', includeSamples: true,
+        });
+        expect(loaded.result.sampleChunks).toHaveLength(1);
+        const chunkCalls = vi.mocked(getDocs).mock.calls.map(([target]) => target as unknown as {
+            collectionRef: { path: string[] };
+            constraints: Array<{ field?: string; operator?: string; value: unknown }>;
+        }).filter(target => target.collectionRef.path.at(-1) === 'healthSampleChunks');
+        expect(chunkCalls).toHaveLength(3);
+        for (const call of chunkCalls) {
+            const start = call.constraints.find(c => c.field === 'calendarDate' && c.operator === '>=')!.value;
+            const end = call.constraints.find(c => c.field === 'calendarDate' && c.operator === '<=')!.value;
+            expect(Date.parse(String(end)) - Date.parse(String(start))).toBeLessThanOrEqual(30 * 86_400_000);
+        }
+    });
+
     it('keeps sample chunks whole at the aggregate point cap', async () => {
         const record = {
             ...healthSourceRecord(),

@@ -77,7 +77,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await currentCommand({ scope: 'plan', scopeId: id, action: 'configure' }), false);
   const inspection = (before?: () => Promise<void>) => {
     transport.inspection = { policy: { version: 'synthetic-proof', mode: 'retained-ids', required: ['workout', 'schedule'],
-      confirmationDelayMs: 900_000, authoritativeAbsence: true, repairReady: true },
+      confirmationDelayMs: 900_000, authoritativeAbsenceKeys: ['workout', 'schedule'], repairReadyKeys: ['workout', 'schedule'] },
       inspect: vi.fn(async (request, guard): Promise<InspectionObservation> => {
         await guard(false); await before?.();
         return { conflict: false, artifacts: ['workout', 'schedule'].map(key => ({ key, authoritative: true,
@@ -168,7 +168,9 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
           localDate: workout().localDate, title: 'Updated', structure: workout().structure, confirmPlanRangeExtension: false });
         if (change === 'lease') now += 180_001;
         if (change === 'inspection-disabled') transport.inspection = { ...transport.inspection!, policy: { ...transport.inspection!.policy, mode: 'unavailable' } };
-        if (change === 'policy-changed') transport.inspection = { ...transport.inspection!, policy: { ...transport.inspection!.policy, authoritativeAbsence: false } };
+        if (change === 'policy-changed') transport.inspection = { ...transport.inspection!, policy: {
+          ...transport.inspection!.policy, authoritativeAbsenceKeys: [], repairReadyKeys: [],
+        } };
       });
       const ledger = await delivered(); transport.artifacts.clear();
       await processTrainingVerification(runtime, uid, ledger.id);
@@ -275,6 +277,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
     expect(transport.calls).toHaveLength(1);
     expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).data()?.kind).toBe('verification');
+    expect((await ledgers())[0].verification).toMatchObject({ state: 'pending', missing: false,
+      missingKeys: [], checkedAtMs: null, cursor: null });
     await processTrainingVerification(runtime, uid, ledger.id); now += 900_000;
     await processTrainingVerification(runtime, uid, ledger.id);
     await processTrainingDelivery(runtime, uid, ledger.id);

@@ -16,6 +16,7 @@ import { GarminTrainingHttpError } from './http';
 import { authorizeGarminTrainingRequest } from './authorization';
 import { GARMIN_INSPECTION_POLICY } from './inspection';
 import { processTrainingVerification } from '../verification-worker';
+import * as logger from 'firebase-functions/logger';
 
 // Real Firestore authority and worker transactions; shared OAuth refresh is replaced
 // with its persisted result, and every provider request stays in the synthetic server.
@@ -58,9 +59,12 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     await mark(); await drain();
   };
   beforeEach(async () => {
+    vi.mocked(logger.warn).mockClear();
     uid = `garmin-delivery-test-${randomUUID()}`; users.push(uid);
     now = Date.parse('2026-09-14T10:00:00Z'); pro = true; proveRepair = false; server = new GarminHttpFixture();
-    const inspectionPolicy = () => ({ ...GARMIN_INSPECTION_POLICY, authoritativeAbsence: proveRepair, repairReady: proveRepair });
+    const inspectionPolicy = () => proveRepair ? { ...GARMIN_INSPECTION_POLICY,
+      authoritativeAbsenceKeys: ['workout', 'schedule'], repairReadyKeys: ['workout', 'schedule'] }
+      : GARMIN_INSPECTION_POLICY;
     const bind = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new GarminTrainingTransport(async (request, beforeSend) => {
       await authorizeGarminTrainingRequest(db, uid, operation);
       return server.request(request, beforeSend);
@@ -69,7 +73,7 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     runtime = { ...productionDeliveryRuntime(db), now: () => now, hasPro: async () => pro,
       transport: provider => provider !== 'garmin' ? null : {
         mappingVersion: policy.mappingVersion, horizonDays: policy.horizonDays,
-        ...(proveRepair ? { inspection: { policy: inspectionPolicy(), inspect: (request, guard) => bind(request).inspection.inspect(request, guard) } } : {}),
+        inspection: { policy: inspectionPolicy(), inspect: (request, guard) => bind(request).inspection.inspect(request, guard) },
         assess: (...args) => policy.assess(...args), canRemove: (...args) => policy.canRemove(...args),
         execute: (operation, checkpoint, guard) => bind(operation).execute(operation, checkpoint, guard),
         recover: (operation, checkpoint, guard) => bind(operation).recover(operation, checkpoint, guard),
@@ -97,6 +101,34 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     }
     await db.terminate();
   }, 120_000);
+
+  it('confirms and repairs only a deleted Garmin schedule with the production policy', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.schedules.delete(original.ids.schedule);
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'suspected_missing', missing: false, missingKeys: ['schedule'] });
+    now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'restoring', missing: true, missingKeys: ['schedule'] });
+    await processTrainingDelivery(runtime, uid, id); await drain();
+    const repaired = (await ledger()).actual!;
+    expect(repaired.ids.workout).toBe(original.ids.workout);
+    expect(repaired.ids.schedule).not.toBe(original.ids.schedule);
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    expect((await ledger()).status).toBe('delivered');
+  });
+
+  it('keeps a deleted Garmin workout inconclusive under the production policy', async () => {
+    const id = await send(); await processTrainingDelivery(runtime, uid, id); await drain();
+    const original = (await ledger()).actual!;
+    server.workouts.delete(original.ids.workout);
+    await processTrainingVerification(runtime, uid, id); now += 900_000;
+    await processTrainingVerification(runtime, uid, id);
+    expect((await ledger()).verification).toMatchObject({ state: 'unknown', missing: false, missingKeys: [] });
+    expect((await ledger()).repair).toBeFalsy();
+    expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
+  });
 
   it('serializes duplicate workers, updates retained Long IDs, and deletes both artifacts after Stop without Pro', async () => {
     const id = await send();
@@ -166,11 +198,14 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(2);
   });
 
-  it('confirms an empty successful schedule create in one worker attempt, retaining one identity under duplicate dispatch', async () => {
+  it.each(['empty', 'numeric', 'long'] as const)('confirms a %s successful schedule create in one worker attempt, retaining one identity under duplicate dispatch', async response => {
+    if (response === 'numeric') server.nextId = 1000n;
     const request = server.request;
     server.request = async (...args) => {
       const result = await request(...args);
-      return args[0].method === 'POST' && args[0].path === '/training-api/schedule/' ? { status: 204, body: null } : result;
+      if (args[0].method !== 'POST' || args[0].path !== '/training-api/schedule/') return result;
+      const id = (result.body as { scheduleId: string }).scheduleId;
+      return response === 'empty' ? { status: 204, body: null } : { status: 200, body: response === 'numeric' ? Number(id) : id };
     };
     const id = await send();
     await Promise.all([processTrainingDelivery(runtime, uid, id), processTrainingDelivery(runtime, uid, id)]);
@@ -206,6 +241,42 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
     expect(server.calls.filter(request => request.method === 'POST' && request.path.includes('workout'))).toHaveLength(1);
   }, 30_000);
 
+  it.each(['lookup', 'checkpoint', 'edit', 'stop'] as const)('retains scalar schedule acceptance across a %s interruption without duplicate creates', async fault => {
+    const request = server.request;
+    let persistence: ReturnType<typeof vi.spyOn> | undefined;
+    server.request = async (...args) => {
+      const result = await request(...args);
+      if (args[0].method !== 'POST' || args[0].path !== '/training-api/schedule/') return result;
+      if (fault === 'checkpoint') persistence = vi.spyOn(db, 'runTransaction').mockRejectedValueOnce(new Error('Synthetic persistence failure'));
+      if (fault === 'edit') await edit();
+      if (fault === 'stop') { await command('stop'); await drain(); }
+      if (fault === 'lookup') server.beforeHandle = async candidate => {
+        if (candidate.method === 'GET' && candidate.path.includes('/schedule/')) throw new GarminTrainingHttpError('retryable', false);
+      };
+      return { status: 200, body: (result.body as { scheduleId: string }).scheduleId };
+    };
+    const id = await send();
+    await processTrainingDelivery(runtime, uid, id); persistence?.mockRestore();
+    const interrupted = await ledger();
+    expect(interrupted.status).not.toBe('delivered');
+    if (fault === 'lookup' || fault === 'checkpoint') {
+      expect(interrupted.attempt?.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    } else {
+      // The already accepted old version can finish its read-only confirmation;
+      // current intent stays pending and must be applied before claiming delivery.
+      expect(interrupted.attempt).toBeNull(); expect(interrupted.status).toBe('pending');
+    }
+    expect(interrupted.actual?.ids.schedule).toBe(fault === 'checkpoint' ? undefined : [...server.schedules.keys()][0]);
+    server.beforeHandle = null;
+    for (let pass = 0; pass < 4; pass++) { await retry(id); await drain(); }
+    expect((await ledger()).status).toBe(fault === 'stop' ? 'removed' : 'delivered');
+    expect(server.workouts.size).toBe(fault === 'stop' ? 0 : 1);
+    expect(server.schedules.size).toBe(fault === 'stop' ? 0 : 1);
+    expect(server.calls.filter(candidate => candidate.method === 'POST')).toHaveLength(2);
+    if (fault === 'lookup') expect(server.calls.some(candidate => candidate.path.includes('?'))).toBe(false);
+    if (fault === 'edit') expect([...server.schedules.values()][0].date).toBe('2026-09-21');
+  });
+
   it.each(['lost-response', 'lost-checkpoint'] as const)('never repeats an ambiguous first POST after %s, even on explicit Retry', async fault => {
     const id = await send(); let persistence: ReturnType<typeof vi.spyOn> | undefined;
     server.afterHandle = async request => {
@@ -215,6 +286,10 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Garmin delivery / real Fi
       persistence = vi.spyOn(db, 'runTransaction').mockRejectedValueOnce(new Error('Synthetic persistence failure'));
     };
     await processTrainingDelivery(runtime, uid, id); persistence?.mockRestore();
+    if (fault === 'lost-checkpoint') expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', {
+      event: 'checkpoint_failed', provider: 'garmin', complete: false, checkpointState: 'accepted', persistenceCode: 'unknown',
+    });
+    else expect(logger.warn).not.toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'checkpoint_failed' }));
     expect((await ledger()).attempt?.progress).toMatchObject({ step: 'workout-create', state: 'started' });
     await retry(id); expect((await ledger()).status).toBe('needs_attention');
     await command('retry'); await drain(); await retry(id);

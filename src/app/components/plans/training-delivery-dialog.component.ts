@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, injec
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { PLANNED_WORKOUT_PROVIDER_IDS, PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1, type PlannedWorkoutProviderId } from '@shared/planned-workout-providers';
 import { normalizeDeliveryTimeZone, TRAINING_DELIVERY_PAGE_SIZE, type TrainingDeliveryAction, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliveryStatusV1 } from '@shared/training-provider-delivery';
@@ -14,6 +15,16 @@ import { CompactRowComponent } from '../shared/compact-row/compact-row.component
 import { trainingDeliveryCommandError, trainingDeliveryCopyMessage, trainingDeliveryLatestEvent } from '../../helpers/training-delivery-display.helper';
 import { trainingPlansWorkoutRoute } from '../../helpers/training-plans-navigation.helper';
 import { trainingVerificationCommandError, trainingVerificationLabel } from '../../helpers/training-verification-display.helper';
+import { buildDestinationProviderPresentation } from '../../helpers/provider-presentation.helper';
+import { WAHOO_TRAINING_PERMISSION_ISSUE } from '@shared/wahoo-training';
+import { WahooRouteAccessReconnectDialogComponent } from '../wahoo-route-access-reconnect-dialog/wahoo-route-access-reconnect-dialog.component';
+
+const PROVIDER_PRESENTATIONS = {
+  garmin: buildDestinationProviderPresentation(ServiceNames.GarminAPI),
+  coros: buildDestinationProviderPresentation(ServiceNames.COROSAPI),
+  wahoo: buildDestinationProviderPresentation(ServiceNames.WahooAPI),
+  suunto: buildDestinationProviderPresentation(ServiceNames.SuuntoApp),
+} satisfies Record<PlannedWorkoutProviderId, ReturnType<typeof buildDestinationProviderPresentation>>;
 
 export interface TrainingDeliveryDialogData {
   scope: TrainingDeliveryViewScope; id: string; title: string;
@@ -81,7 +92,8 @@ export class TrainingDeliveryDialogComponent {
     ? this.schedule()?.plans.find(plan => plan.id === this.data.id)?.name ?? this.data.title
     : this.workout()?.title ?? this.data.title);
   readonly workoutRoute = computed(() => this.workout() && this.workout()?.lifecycle !== 'deleted' ? trainingPlansWorkoutRoute(this.data.id) : null);
-  readonly stopLabel = computed(() => this.data.scope === 'plan' ? 'Stop plan sync' : 'Stop workout sync');
+  readonly stopLabel = computed(() => this.data.scope === 'plan' ? 'Stop plan sync'
+    : this.planBound() && this.canSend() ? 'Exclude from plan sync' : 'Stop workout sync');
   readonly planBound = computed(() => this.schedule()?.workouts.find(workout => workout.id === this.data.id)?.planId != null && this.data.scope === 'workout');
   readonly canSend = computed(() => !!this.scopeRecord() && this.scopeRecord()!.lifecycle !== 'deleted');
   readonly canReview = computed(() => this.view().loaded && !this.view().error && !!this.schedule() && this.data.scope !== 'history'
@@ -156,23 +168,30 @@ export class TrainingDeliveryDialogComponent {
       };
     }).sort((a, b) => (a.localDate ?? '9999-99-99').localeCompare(b.localDate ?? '9999-99-99') || a.id.localeCompare(b.id));
     const ready = this.delivery.isReady(provider);
-    return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label, ready, setting, statuses,
+    return { provider, label: PLANNED_WORKOUT_PROVIDER_CAPABILITIES_V1[provider].label,
+      presentation: PROVIDER_PRESENTATIONS[provider], ready, setting, statuses,
       canCheck: statuses.some(status => status.verification?.canCheck),
       needsFreshConsent: statuses.some(status => status.status === 'fresh_consent_required'),
       // Current settings precede the asynchronously reconciled status after Resume.
       canResume: suppressed || (!inheritedSetting && statuses.some(status => status.status === 'stopped'
         && (!this.planBound() || status.planId === currentPlanId))),
-      settingLabel: this.planBound() ? suppressed ? 'Stopped for this workout' : 'Follows plan sync settings'
+      settingLabel: this.planBound() ? suppressed ? 'Excluded from plan sync' : 'Follows plan sync settings'
         : this.data.scope === 'plan' ? setting?.enabled ? 'Plan sync enabled' : 'Plan sync off'
           : setting?.enabled ? 'Workout sync enabled' : 'Workout sync off',
       visible: (ready && this.canSend()) || !!setting || statuses.length > 0,
       canStop: !!setting?.enabled || (this.planBound() && !suppressed)
         || statuses.some(item => item.hasRemoteCopy || !['stopped', 'removed', 'past', 'completed'].includes(item.status)),
-      approvalDigest: statuses.find(item => item.approvalDigest)?.approvalDigest ?? null,
-      canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying'].includes(item.status)),
+      approvalDigest: suppressed ? null : statuses.find(item => item.status === 'approval_required' && item.approvalDigest)?.approvalDigest ?? null,
+      canRetry: statuses.some(item => ['failed', 'needs_attention', 'retrying', 'provider_unavailable'].includes(item.status)),
+      wahooReconnect: provider === 'wahoo' && statuses.some(item => item.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE)),
       reconnect: statuses.some(item => ['reconnect_required', 'connection_repair', 'fresh_consent_required'].includes(item.status)),
     };
   }).filter(row => row.visible));
+  readonly showsSuuntoGuidance = computed(() => this.rows().some(row => row.provider === 'suunto'));
+  readonly showsCorosGuidance = computed(() => this.rows().some(row => row.provider === 'coros'));
+  readonly showsWahooGuidance = computed(() => this.rows().some(row => row.provider === 'wahoo'));
+  readonly wahooPreviewReconnect = computed(() => this.preview()?.command.provider === 'wahoo'
+    && this.preview()?.result.issues.includes(WAHOO_TRAINING_PERMISSION_ISSUE));
   readonly canLoadMore = computed(() => this.view().loaded && this.statuses().length === this.statusLimit());
   readonly canConfirm = computed(() => {
     const preview = this.preview();
@@ -203,6 +222,12 @@ export class TrainingDeliveryDialogComponent {
         void this.begin(provider, this.data.scope === 'plan' ? 'configure' : 'send');
       }
     });
+  }
+  reconnectWahooTraining(): void {
+    if (this.busy() || !this.sameAccount() || (!this.wahooPreviewReconnect() && !this.rows().some(row => row.wahooReconnect))) return;
+    this.haptics.selection();
+    this.dialogRef.close();
+    this.dialog.open(WahooRouteAccessReconnectDialogComponent, { data: { purpose: 'training' }, width: '440px', maxWidth: 'calc(100vw - 32px)' });
   }
   async begin(provider: PlannedWorkoutProviderId, action: TrainingDeliveryAction, approvalDigest?: string, renewConsent = false): Promise<void> {
     if (this.busy() || !this.sameAccount() || !this.canReview() || this.data.scope === 'history'

@@ -6,6 +6,7 @@ import { deliverySettingsId, parseTrainingDeliveryCommandV1, TrainingDeliveryCon
   TRAINING_DELIVERY_SETTINGS, trainingDeliveryLocalDate, type TrainingDeliveryCommandV1,
   type TrainingDeliveryPreviewV1, type TrainingDeliverySettingsV1 } from '../../../../shared/training-provider-delivery';
 import { enforceAppCheck } from '../../utils';
+import { FUNCTION_SECRET_BINDINGS } from '../../secrets';
 import { getUserDeletionGuardStateInTransaction } from '../../shared/user-deletion-guard';
 import { hashTrainingScheduleRequestPayload } from '../persistence';
 import { assertNoTrainingPlanDeletionInProgress } from '../deletion-lock';
@@ -166,5 +167,11 @@ const handle = (previewOnly: boolean) => async (request: CallableRequest<unknown
     throw new HttpsError('internal', 'Unable to update provider delivery.');
   }
 };
-export const previewTrainingProviderDelivery = onCall({ region: FUNCTIONS_MANIFEST.previewTrainingProviderDelivery.region }, handle(true));
-export const mutateTrainingProviderDelivery = onCall({ region: FUNCTIONS_MANIFEST.mutateTrainingProviderDelivery.region }, handle(false));
+export const previewTrainingProviderDelivery = onCall({
+  region: FUNCTIONS_MANIFEST.previewTrainingProviderDelivery.region,
+  secrets: FUNCTION_SECRET_BINDINGS.previewTrainingProviderDelivery,
+}, handle(true));
+export const mutateTrainingProviderDelivery = onCall({
+  region: FUNCTIONS_MANIFEST.mutateTrainingProviderDelivery.region,
+  secrets: FUNCTION_SECRET_BINDINGS.mutateTrainingProviderDelivery,
+}, handle(false));

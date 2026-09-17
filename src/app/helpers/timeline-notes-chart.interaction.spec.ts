@@ -1,17 +1,110 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { init, use, type EChartsType } from 'echarts/core';
 import { LineChart } from 'echarts/charts';
-import { GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
+import { DataZoomComponent, LegendComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { SVGRenderer } from 'echarts/renderers';
 import type { TimelineNote } from '@shared/timeline-notes';
 import { TimelineNotesChartBinding } from './timeline-notes-chart.helper';
+import { EChartsHostController, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS } from './echarts-host-controller';
 
-use([LineChart, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
+use([LineChart, DataZoomComponent, LegendComponent, GridComponent, MarkAreaComponent, MarkLineComponent, TooltipComponent, SVGRenderer]);
 
 describe('Timeline note tooltips with the real ECharts renderer', () => {
   let chart: EChartsType | undefined;
   let host: HTMLDivElement | undefined;
   afterEach(() => { chart?.dispose(); host?.remove(); vi.restoreAllMocks(); });
+
+  it('merges note edits and removals without resetting readings, zoom or legend selection', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      measureText: (text: string) => ({ width: text.length * 6 }),
+    } as never);
+    host = document.createElement('div'); document.body.append(host);
+    chart = init(host, null, { renderer: 'svg', width: 400, height: 300 });
+    const binding = new TimelineNotesChartBinding();
+    const reportRange = vi.fn();
+    const note: TimelineNote = { id: 'sample', category: 'travel', title: 'Trip', startDate: '2026-09-02',
+      endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    const context = { notes: [note], select: vi.fn(), reportRange };
+    const data = [1, 2, 3, 4, 5, 6].map(day => [Date.UTC(2026, 8, day), day * 10]);
+    const option = { animation: false, xAxis: { type: 'time', min: data[0][0], max: data.at(-1)![0] }, yAxis: {},
+      legend: { data: ['HRV', 'Other'] }, dataZoom: [{ type: 'inside' }],
+      series: [{ type: 'line', name: 'HRV', data }, { type: 'line', name: 'Other', data }] };
+    // First notes can arrive after the readings, including metric series without explicit IDs.
+    chart.setOption(binding.apply(chart, option));
+    chart.dispatchAction({ type: 'dataZoom', start: 10, end: 90 });
+    chart.dispatchAction({ type: 'legendUnSelect', name: 'Other' });
+    const before = chart.getOption() as any;
+    const update = (next: typeof context | null) => {
+      binding.set(next);
+      const patch = binding.update(chart!);
+      if (patch) chart!.setOption(patch, { notMerge: false, lazyUpdate: false });
+      const current = chart!.getOption() as any;
+      expect(current.series.slice(0, 2)).toEqual(before.series);
+      expect(current.dataZoom).toEqual(before.dataZoom);
+      expect(current.legend).toEqual(before.legend);
+      expect(current.xAxis).toEqual(before.xAxis);
+      expect(current.yAxis).toEqual(before.yAxis);
+      return current.series.find((series: any) => series.id === 'timeline-note-overlay-0');
+    };
+    expect(update(context).markArea.data).toHaveLength(1);
+    expect(update({ ...context, notes: [{ ...note, title: 'Updated', endDate: note.startDate }] }).markArea.data).toEqual([]);
+    expect(update({ ...context, notes: [] }).markLine.data).toEqual([]);
+    expect(update(context).markLine.data).toHaveLength(2);
+    expect(reportRange).toHaveBeenCalledOnce();
+    const hidden = update(null);
+    expect(hidden.markLine.data).toEqual([]);
+    expect(hidden.markArea.data).toEqual([]);
+    expect(reportRange).toHaveBeenLastCalledWith(binding, null);
+    expect(update(context).markArea.data).toHaveLength(1);
+    // A subsequent data refresh replaces the metric window and removes overlays outside it.
+    chart.setOption(binding.apply(chart, { ...option, xAxis: { type: 'time', min: Date.UTC(2026, 9, 1), max: Date.UTC(2026, 9, 10) } }), ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+    expect((chart.getOption() as any).series).toHaveLength(2);
+    binding.dispose();
+    expect(binding.update(chart)).toBeNull();
+  });
+
+  it.each(['edit', 'remove', 'owner change'])('dismisses a visible mobile note tooltip after %s', async change => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      measureText: (text: string) => ({ width: text.length * 6 }),
+    } as never);
+    host = document.createElement('div'); document.body.append(host);
+    chart = init(host, null, { renderer: 'svg', width: 400, height: 300 });
+    const controller = new EChartsHostController({ eChartsLoader: {
+      init: async () => chart,
+      setOption: (target, option, settings) => target.setOption(option, settings),
+      dispose: () => {}, subscribeToViewportResize: () => () => {}, attachMobileSeriesTapFeedback: () => () => {},
+    } as never });
+    await controller.init(host);
+    const note: TimelineNote = { id: 'sample', category: 'travel', title: 'Private trip', startDate: '2026-09-02',
+      endDate: '2026-09-04', timeZone: 'UTC', revision: 1, createdAtMs: 1, updatedAtMs: 1 };
+    const context = { ownerUid: 'first-owner', notes: [note], select: vi.fn(), reportRange: vi.fn() };
+    controller.setTimelineNotes(context);
+    controller.setOption({ animation: false,
+      grid: { left: 40, right: 40, top: 40, bottom: 40 },
+      xAxis: { type: 'time', min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 10) }, yAxis: { min: 0, max: 100 },
+      tooltip: { trigger: 'axis', triggerOn: 'click', renderMode: 'html', transitionDuration: 0, hideDelay: 0,
+        formatter: () => 'Metric reading' },
+      series: [{ type: 'line', data: [[Date.UTC(2026, 8, 1), 50], [Date.UTC(2026, 8, 10), 50]] }],
+    }, ECHARTS_CARTESIAN_IMMEDIATE_UPDATE_SETTINGS);
+    const [x, y] = chart.convertToPixel({ gridIndex: 0 }, [Date.UTC(2026, 8, 2), 25]);
+    chart.getZr().trigger('click', { offsetX: x, offsetY: y, target: chart.getZr().findHover(x, y).target,
+      event: new MouseEvent('click') });
+    const tooltip = host.querySelector('.qs-dashboard-echarts-tooltip-card')!.parentElement!;
+    expect(tooltip.textContent).toContain('Private trip');
+    expect(tooltip.style.display).not.toBe('none');
+    controller.updateTimelineNotes({ ...context,
+      ownerUid: change === 'owner change' ? 'second-owner' : context.ownerUid,
+      notes: change === 'edit' ? [{ ...note, title: 'Changed trip', revision: 2 }] : [],
+    });
+    try {
+      await vi.waitFor(() => expect(tooltip.style.display).toBe('none'), { timeout: 100 });
+      chart.getZr().trigger('click', { offsetX: x, offsetY: y, target: chart.getZr().findHover(x, y).target,
+        event: new MouseEvent('click') });
+      expect(tooltip.style.display).not.toBe('none');
+      expect(tooltip.textContent).toContain(change === 'edit' ? 'Changed trip' : 'Metric reading');
+      expect(tooltip.textContent).not.toContain('Private trip');
+    } finally { controller.dispose(); }
+  });
 
   it.each(['mousemove', 'click'])('keeps metric tooltips inside note ranges and note tooltips on boundaries (%s)', trigger => {
     // SVG renders the real markers; JSDOM only needs a deterministic text measurement shim.

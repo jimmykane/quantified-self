@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { retireTrainingPlanDeliverySettings, stageTrainingDeliveryReconciliation } from './delivery/marker';
+import { TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID } from '../../../shared/training-workout-completion';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
     SCHEDULED_WORKOUTS_COLLECTION_ID,
@@ -650,6 +651,13 @@ async function cleanupDeletedPlanData(
         response.state.updatedAtMs,
         nowMs,
     );
+    const completionRefs = [...workoutRefs.keys()].map(id => (
+        userRef.collection(TRAINING_WORKOUT_COMPLETIONS_COLLECTION_ID).doc(id)
+    ));
+    // Keep projection cleanup outside the finalization transaction: a 400-workout
+    // plan already needs one write per workout there. Delete projections first so
+    // an interrupted cleanup can still rediscover residual workout roots safely.
+    await recursivelyDeleteInChunks(db, completionRefs);
     await recursivelyDeleteInChunks(db, [...workoutRefs.values()]);
 
     const stateRef = userRef.collection('trainingPlanState').doc('current');

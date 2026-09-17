@@ -7,6 +7,20 @@ Target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
+### Sports Lib 21.2.1 FIT workout-reference sidecars
+
+Sports Lib 21.2.1 adds nonnumeric FIT training-file, embedded-workout and SuuntoPlus Guide reference classes plus
+`readFITWorkoutReferences(...)`. New Garmin/Suunto FIT imports read these references separately from normal Event/Activity
+parsing. QS stores only bounded, account-authorized private sidecars; the classes do not enter activity JSON, streams,
+numeric metrics or Training-derived snapshots.
+
+Do not enable either automatic scanner or start a global reparse solely for these sidecars. The existing generic event
+reparse writer does not persist completion evidence and therefore cannot be used to backfill it by assumption. A future
+targeted backfill must explicitly reuse the same provider-account/generation guards, deletion fence, private sidecar
+writer and idempotent completion-link rules as live ingestion before it is authorized. Garmin message 72 is candidate
+evidence only; never reinterpret its unsigned serial as a Training API workout or schedule ID. Reparse failures or
+malformed optional reference metadata must leave the previously imported activity and metrics unchanged.
+
 ### Sports Lib 20.4.0 canonical running-dynamics transition
 
 Sports Lib 20.4.0 adds canonical Ground Contact Time Percentage, Running Flight Time, and Contact Time to Flight Time

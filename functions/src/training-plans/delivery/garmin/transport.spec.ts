@@ -6,6 +6,8 @@ import { GarminTrainingHttpError } from './http';
 import { GarminHttpFixture } from '../test-support/garmin-http-fixture';
 import type { DeliveryArtifact, DeliveryCheckpoint, DeliveryOperation, DeliveryTransportProgress } from '../contracts';
 import { GARMIN_INSPECTION_POLICY } from './inspection';
+import * as logger from 'firebase-functions/logger';
+import { observeDeliveryCheckpoint } from '../diagnostics';
 
 describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   let server: GarminHttpFixture;
@@ -31,6 +33,7 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
       digest: transport.assess(workout, 'opaque-account', 'Europe/Helsinki').digest };
     checkpoint = async (artifact, progress) => { journal.push(structuredClone({ artifact, progress })); };
     guard.mockClear();
+    vi.mocked(logger.info).mockClear(); vi.mocked(logger.warn).mockClear();
   });
   const execute = () => transport.execute(operation, checkpoint, guard);
   const recover = () => transport.recover(operation, checkpoint, guard);
@@ -38,7 +41,8 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   const repair = async (missing: string[]) => {
     const original = structuredClone(operation.artifact!);
     transport = new GarminTrainingTransport(server.request, () => now,
-      { ...GARMIN_INSPECTION_POLICY, authoritativeAbsence: true, repairReady: true });
+      { ...GARMIN_INSPECTION_POLICY, authoritativeAbsenceKeys: ['workout', 'schedule'],
+        repairReadyKeys: ['workout', 'schedule'] });
     operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
       binding: 'synthetic-authority', missing, original } };
   };
@@ -102,9 +106,62 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     const original = (await execute())!;
     server.workouts.get(original.ids.workout)!.workoutName = 'Edited in Garmin';
     server.schedules.delete(original.ids.schedule);
-    await repair(['schedule']); await execute();
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'production-schedule-authority', missing: ['schedule'], original: structuredClone(original) } };
+    await execute();
     expect(writes().filter(request => request.method === 'PUT' && request.path.includes('workout'))).toHaveLength(0);
     expect(server.workouts.get(original.ids.workout)!.workoutName).toBe('Edited in Garmin');
+  });
+  it('adopts an independently recreated matching schedule instead of creating a duplicate', async () => {
+    const original = (await execute())!;
+    server.schedules.delete(original.ids.schedule);
+    const replacementId = '1234';
+    server.schedules.set(replacementId, { scheduleId: replacementId, workoutId: original.ids.workout, date: original.localDate });
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'production-schedule-authority', missing: ['schedule'], original: structuredClone(original) } };
+    const before = writes().length;
+    expect((await execute())?.ids.schedule).toBe(replacementId);
+    expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted', repairApplied: false });
+    expect(writes()).toHaveLength(before);
+    expect(server.schedules.size).toBe(1);
+  });
+  it('does not adopt a matching replacement after current intent loses admission', async () => {
+    const original = (await execute())!;
+    server.schedules.delete(original.ids.schedule);
+    server.schedules.set('1234', { scheduleId: '1234', workoutId: original.ids.workout, date: original.localDate });
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'production-schedule-authority', missing: ['schedule'], original: structuredClone(original) } };
+    server.afterHandle = async request => {
+      if (!request.path.startsWith('/training-api/schedule?')) return;
+      server.afterHandle = null;
+      guard.mockRejectedValueOnce(new Error('stale intent'));
+    };
+    const before = writes().length;
+    await expect(execute()).rejects.toThrow('stale intent');
+    expect(operation.artifact?.ids.schedule).toBeUndefined();
+    expect(writes()).toHaveLength(before);
+  });
+  it('does not create another schedule when more than one matching association exists', async () => {
+    const original = (await execute())!;
+    server.schedules.delete(original.ids.schedule);
+    for (const id of ['1234', '1235']) {
+      server.schedules.set(id, { scheduleId: id, workoutId: original.ids.workout, date: original.localDate });
+    }
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'production-schedule-authority', missing: ['schedule'], original: structuredClone(original) } };
+    const before = writes().length;
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes()).toHaveLength(before);
+    expect(server.schedules.size).toBe(2);
+  });
+  it('refuses a missing-workout repair under the production policy before another POST', async () => {
+    const original = (await execute())!;
+    server.workouts.delete(original.ids.workout);
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'unproved-workout-authority', missing: ['workout'], original: structuredClone(original) } };
+    const before = writes().length;
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes()).toHaveLength(before);
   });
   it('blocks unknown replacement POST acceptance, including explicit repeated recovery', async () => {
     const original = (await execute())!; server.workouts.delete(original.ids.workout);
@@ -135,7 +192,7 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(await execute()).toEqual(original); expect(writes()).toHaveLength(before);
     expect(server.workouts.size).toBe(1);
   });
-  it('keeps unproved production 404s non-authoritative and reports ownership conflicts separately', async () => {
+  it('authorizes only a production Schedule 404 and reports ownership conflicts separately', async () => {
     const artifact = (await execute())!;
     const inspect = () => transport.inspection.inspect({ artifact, destinationKey: 'opaque-account',
       connectionGeneration: 'connection-1', timeZone: 'Europe/Helsinki', cursor: null }, guard);
@@ -143,11 +200,15 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     const noOwner = { ...artifact, ids: { workout: artifact.ids.workout, schedule: artifact.ids.schedule } };
     expect((await transport.inspection.inspect({ artifact: noOwner, destinationKey: 'opaque-account',
       connectionGeneration: 'connection-1', timeZone: 'Europe/Helsinki', cursor: null }, guard)).conflict).toBe(false);
+    const originalWorkout = structuredClone(server.workouts.get(artifact.ids.workout)!);
     server.schedules.delete(artifact.ids.schedule);
-    expect((await inspect()).artifacts.find(item => item.key === 'schedule')).toEqual({ key: 'schedule', state: 'absent', authoritative: false });
+    expect((await inspect()).artifacts.find(item => item.key === 'schedule')).toEqual({ key: 'schedule', state: 'absent', authoritative: true });
+    server.workouts.delete(artifact.ids.workout);
+    expect((await inspect()).artifacts.find(item => item.key === 'workout')).toEqual({ key: 'workout', state: 'absent', authoritative: false });
+    server.workouts.set(artifact.ids.workout, originalWorkout);
     server.workouts.get(artifact.ids.workout)!.ownerId = '1234';
     expect((await inspect()).conflict).toBe(true);
-    expect(transport.inspection.policy.repairReady).toBe(false);
+    expect(transport.inspection.policy.repairReadyKeys).toEqual(['schedule']);
   });
   it('reuses a reappearing original schedule after a rejected replacement POST', async () => {
     const original = (await execute())!;
@@ -186,6 +247,22 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(server.workouts.size + server.schedules.size).toBe(0);
     expect(await recover()).toEqual({ kind: 'accepted', artifact: null });
   });
+  it('delivers an approved mountain-bike recipe through Garmin cycling without rewriting the authored sport', async () => {
+    operation = nextOperation(operation, {
+      structure: { ...operation.workout!.structure, sport: ActivityTypes.MountainBiking },
+    });
+    expect(transport.assess(operation.workout!, operation.destinationKey, operation.timeZone)).toMatchObject({
+      level: 'degraded',
+      issues: [expect.stringContaining('receives Mountain Biking as a Cycling workout')],
+    });
+
+    const artifact = (await execute())!;
+    expect(operation.workout!.structure.sport).toBe(ActivityTypes.MountainBiking);
+    expect(server.workouts.get(artifact.ids.workout)).toMatchObject({
+      sport: 'CYCLING',
+      segments: [{ sport: 'CYCLING' }],
+    });
+  });
   it('reschedules without rewriting unchanged content; duplicate completion has no duplicate POST', async () => {
     await execute();
     operation = nextOperation(operation, { localDate: '2026-10-25' });
@@ -204,13 +281,15 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
   });
   it('never continues after provider acceptance when its artifact checkpoint fails', async () => {
     const original = checkpoint;
-    checkpoint = async (artifact, progress) => {
+    checkpoint = (artifact, progress) => observeDeliveryCheckpoint('garmin', false, progress, async () => {
       if (progress?.step === 'workout-create' && progress.state === 'accepted') throw new Error('persistence unavailable');
       return original(artifact, progress);
-    };
+    });
     await expect(execute()).rejects.toThrow('persistence unavailable');
     expect(operation.artifact).toBeNull(); expect(await recover()).toEqual({ kind: 'uncertain' });
     expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(0);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'garmin_response', resource: 'workout', httpStatus: 200 }));
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'checkpoint_failed', checkpointState: 'accepted', complete: false }));
   });
   it('recovers an accepted schedule by exact workout ID and local date without repeating either POST', async () => {
     server.afterHandle = async request => { if (request.method === 'POST' && request.path.includes('schedule')) throw new GarminTrainingHttpError('uncertain', false); };
@@ -232,6 +311,105 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(writes()).toHaveLength(2);
     expect(server.calls.at(-1)?.path).toBe('/training-api/schedule?startDate=2026-09-15&endDate=2026-09-15');
     expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted' });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'garmin_response', resource: 'schedule', httpStatus: 204, responseShape: 'null' }));
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_lookup', provider: 'garmin', outcome: 'matched' });
+  });
+  const scalarScheduleResponses = (numeric = false) => {
+    if (numeric) server.nextId = 1000n;
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      const result = await server.request(request, beforeSend);
+      if (request.path.startsWith('/training-api/schedule/') && ['POST', 'PUT'].includes(request.method)) {
+        const id = request.method === 'POST' ? (result.body as { scheduleId: string }).scheduleId : request.path.split('/').pop()!;
+        return { status: 200, body: numeric ? Number(id) : id };
+      }
+      return result;
+    }, () => now);
+  };
+  it.each([true, false])('confirms scalar schedule acknowledgements on create and update (numeric=%s)', async numeric => {
+    scalarScheduleResponses(numeric);
+    const first = (await execute())!;
+    expect(server.calls.at(-1)?.path).toBe(`/training-api/schedule/${first.ids.schedule}`);
+    expect(journal.some(entry => entry.artifact?.ids.schedule === first.ids.schedule && entry.progress === undefined)).toBe(true);
+    expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted' });
+    operation = nextOperation(operation, { localDate: '2026-10-25' });
+    expect(await execute()).toEqual({ ...first, localDate: '2026-10-25' });
+    expect(writes().map(call => call.method)).toEqual(['POST', 'POST', 'PUT']);
+    expect(server.workouts.size).toBe(1); expect(server.schedules.size).toBe(1);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_confirmation', provider: 'garmin', phase: 'id_retained' });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_confirmation', provider: 'garmin', phase: 'verified' });
+  });
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '01', '9223372036854775808', 'private-invalid-id'])(
+    'rejects an invalid scalar schedule acknowledgement (%s)', async body => {
+      transport = new GarminTrainingTransport(async (request, beforeSend) => {
+        const result = await server.request(request, beforeSend);
+        return request.path === '/training-api/schedule/' ? { status: 200, body } : result;
+      }, () => now);
+      await expect(execute()).rejects.toMatchObject({ kind: 'uncertain', diagnostics: { failurePhase: 'contract' } });
+      expect(operation.artifact?.ids.schedule).toBeUndefined();
+      expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+      expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private');
+      expect(writes()).toHaveLength(2);
+    });
+  it.each(['missing', 'workout', 'date', 'identity'] as const)('never confirms or replaces a retained scalar ID when inspection has a %s conflict', async fault => {
+    scalarScheduleResponses();
+    server.afterHandle = async request => {
+      if (request.method !== 'POST' || request.path !== '/training-api/schedule/') return;
+      const [id, row] = [...server.schedules.entries()][0];
+      if (fault === 'missing') server.schedules.delete(id);
+      if (fault === 'workout') row.workoutId = '42';
+      if (fault === 'date') row.date = '2026-09-16';
+      if (fault === 'identity') row.scheduleId = '42';
+      // A different inventory match must not supersede the acknowledged identity.
+      server.schedules.set('777', { scheduleId: '777', workoutId: operation.artifact!.ids.workout, date: operation.workout!.localDate });
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    const retained = operation.artifact!.ids.schedule;
+    expect(retained).toBeDefined(); expect(retained).not.toBe('777');
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    await expect(recover()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.artifact!.ids.schedule).toBe(retained);
+    expect(server.calls.some(request => request.path.includes('?'))).toBe(false);
+    expect(writes()).toHaveLength(2);
+  });
+  it('recovers a retained scalar ID after confirmation is interrupted without repeating either POST', async () => {
+    scalarScheduleResponses();
+    server.beforeHandle = async request => {
+      if (request.method === 'GET' && request.path.includes('/schedule/')) throw new GarminTrainingHttpError('retryable', false);
+    };
+    await expect(execute()).rejects.toMatchObject({ kind: 'retryable' });
+    const retained = operation.artifact!.ids.schedule;
+    expect(retained).toBeDefined();
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    server.beforeHandle = null;
+    expect(await recover()).toEqual({ kind: 'resume' });
+    expect((await execute())!.ids.schedule).toBe(retained);
+    expect(writes()).toHaveLength(2);
+  });
+  it('does not inspect or advance when the scalar ID checkpoint fails; recovery uses the existing exact-date lookup', async () => {
+    scalarScheduleResponses();
+    const persist = checkpoint;
+    checkpoint = async (artifact, progress) => {
+      if (artifact?.ids.schedule && progress === undefined) throw new Error('persistence unavailable');
+      await persist(artifact, progress);
+    };
+    await expect(execute()).rejects.toThrow('persistence unavailable');
+    expect(operation.artifact!.ids.schedule).toBeUndefined();
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    expect(server.calls.at(-1)?.method).toBe('POST');
+    checkpoint = persist;
+    expect(await recover()).toEqual({ kind: 'resume' }); await execute();
+    expect(writes()).toHaveLength(2);
+  });
+  it('does not switch a retained ID when a schedule update returns another scalar ID', async () => {
+    await execute(); operation = nextOperation(operation, { localDate: '2026-10-25' });
+    const id = operation.artifact!.ids.schedule;
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      const result = await server.request(request, beforeSend);
+      return request.method === 'PUT' ? { status: 200, body: 42 } : result;
+    }, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(operation.artifact!.ids.schedule).toBe(id);
+    expect(operation.progress).toMatchObject({ step: 'schedule-update', state: 'started' });
   });
   it.each(['empty', 'duplicate'] as const)('retains an empty-success POST journal when immediate inspection is %s, never repeating create', async mode => {
     transport = new GarminTrainingTransport(async (request, beforeSend) => {
@@ -247,6 +425,7 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
     expect(await recover()).toEqual({ kind: 'uncertain' });
     expect(writes()).toHaveLength(2);
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_schedule_lookup', provider: 'garmin', outcome: mode === 'empty' ? 'no_match' : 'multiple_matches' });
   });
   it.each(['empty', 'duplicate'] as const)('does not infer schedule POST nonacceptance from an %s lookup', async mode => {
     server.afterHandle = async request => { if (request.path === '/training-api/schedule/') throw new GarminTrainingHttpError('uncertain', false); };
@@ -314,6 +493,23 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
     expect(operation.artifact).toEqual(artifact);
     expect(operation.progress).toMatchObject({ step: 'schedule-update', state: 'started' });
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_contract_failure', provider: 'garmin', reason: 'expected_object' });
+    expect(logger.info).toHaveBeenCalledWith('[TrainingDelivery]', expect.objectContaining({ event: 'garmin_response', method: 'PUT', resource: 'schedule', httpStatus: 200, responseShape: 'null' }));
+  });
+  it.each(['invalid', 'mismatched'] as const)('diagnoses a %s schedule response while retaining the started journal', async mode => {
+    transport = new GarminTrainingTransport(async (request, beforeSend) => {
+      const response = await server.request(request, beforeSend);
+      return request.path === '/training-api/schedule/' ? { status: 200, body: mode === 'invalid'
+        ? { scheduleId: 'private-invalid-id', workoutId: operation.artifact!.ids.workout, date: operation.workout!.localDate }
+        : { scheduleId: '1', workoutId: '2', date: operation.workout!.localDate } } : response;
+    }, () => now);
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain', diagnostics: { failurePhase: 'contract' } });
+    expect(operation.progress).toMatchObject({ step: 'schedule-create', state: 'started' });
+    expect(logger.warn).toHaveBeenCalledWith('[TrainingDelivery]', { event: 'garmin_contract_failure', provider: 'garmin',
+      reason: mode === 'invalid' ? 'invalid_schedule' : 'schedule_identity_mismatch' });
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('private');
+    expect(await recover()).toEqual({ kind: 'resume' });
+    await execute(); expect(writes()).toHaveLength(2);
   });
   it('treats legacy operations without a transport journal as uncertain', async () => {
     delete operation.progress;

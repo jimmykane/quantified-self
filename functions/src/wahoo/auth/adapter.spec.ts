@@ -30,9 +30,9 @@ describe('WahooAuthAdapter', () => {
     adapter = new WahooAuthAdapter();
   });
 
-  it('requests activity, route, and offline scopes needed for Wahoo imports and delivery', () => {
+  it('requests activity, route, plan, and offline scopes needed for Wahoo imports and delivery', () => {
     expect(adapter.serviceName).toBe(ServiceNames.WahooAPI);
-    expect(adapter.oAuthScopes).toBe('user_read workouts_read workouts_write routes_read routes_write offline_data');
+    expect(adapter.oAuthScopes).toBe('user_read workouts_read workouts_write routes_read routes_write plans_read plans_write offline_data');
   });
 
   it('resolves and stores the Wahoo user id', async () => {

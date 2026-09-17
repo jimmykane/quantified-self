@@ -118,6 +118,7 @@ describe('setEventSharing', () => {
     expect(hoisted.getOnCallOptions()).toMatchObject({
       region: 'europe-west2',
       cors: ['https://example.com'],
+      memory: '512MiB',
     });
   });
 

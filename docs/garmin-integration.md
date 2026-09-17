@@ -117,15 +117,21 @@ unsent work when the account or view changes instead of letting a delayed retry 
 
 The ignored local Garmin Training API V2 version 1.0 partner contract is available for development, but it is never
 committed. `shared/planned-workout-providers.ts` and the pure serializer under
-`functions/src/training-plans/providers/` record a redacted Running/Cycling fixture for the portable v1 workout model.
+`functions/src/training-plans/providers/` record redacted Running/Cycling payload fixtures for the portable v1 workout model.
 Workout content and date-only Workout Schedule payloads are deliberately separate because Garmin assigns and manages
 their lifecycles independently. The proof covers fixed repeats, time/distance/manual steps, and absolute
 heart-rate/power/speed/pace/cadence ranges.
 
-Public Garmin planned-workout delivery remains disabled. A separate backend-enforced exact-UID evaluation pilot can
-use the existing app's explicit Send/plan consent flow; see the [pilot boundary](training-workspace.md#private-garmin-evaluation-pilot).
+Training API V2 accepts only broad `RUNNING` and `CYCLING` values for this editor's workouts and does not define a
+sub-sport field. The adapter keeps the authored QS sport unchanged and maps Trail Running and Treadmill to `RUNNING`,
+then Mountain Biking, Indoor Cycling, E-Biking and Hand Cycle to `CYCLING`. Running and Cycling remain exact; every
+subtype fold is a visible degradation that requires approval because Garmin does not receive the exact profile.
+Cycling-family folds retain the existing cycling-only secondary-target rule and device-support warning.
+
+Public Garmin planned-workout rollout remains disabled. A separate backend-enforced exact-UID private production pilot can
+use the existing app's explicit Send/plan consent flow; see the [pilot boundary](training-workspace.md#private-garmin-production-pilot).
 The pilot does not bypass Pro, current connection generations or `WORKOUT_IMPORT`; older connections must reconnect.
-It is independent of the Training UI allowlist and does not constitute completed sandbox/device certification.
+It is independent of the Training UI allowlist and does not prove behavior on every compatible device or activity profile.
 Relative targets require explicit degradation approval because
 the provider percentage fields do not transmit Quantified Self's stored reference snapshot. Secondary targets are
 rejected outside cycling and remain device-dependent for cycling. The #647 adapter now has synthetic HTTP and real
@@ -137,11 +143,10 @@ first-create endpoint has no idempotency key or external-ID lookup, so an unknow
 attention rather than being posted again. Provider responses and credentials never enter browser status or diagnostics.
 Past/completed copies remain protected, and provider-held copies may remain after disconnect/account deletion.
 
-The detailed implementation and certification checklist live in the
-[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Actual evaluation credential authority,
-request/response and schedule-list/404 behavior, device rendering, sandbox CRUD/reconnect evidence and production review
-remain outstanding in #645/#647/#698/#655; #698 tracks the focused sandbox/device evidence and operator recovery
-procedure. Completed-activity correlation remains #651. No new completion hook is implemented.
+The detailed implementation and production-verification checklist lives in the
+[Training source of truth](training-workspace.md#garmin-workoutcalendar-adapter-647). Remaining request/response and
+schedule-list/404 behavior, representative device rendering and broader rollout work stay tracked in #645/#647/#655.
+The retired #698 issue is not a launch gate. Completed-activity correlation remains #651. No new completion hook is implemented.
 Neither the adapter nor the offline proof authorizes a provider call, deployment, or production enablement.
 
 ## Production configuration
