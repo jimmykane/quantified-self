@@ -902,7 +902,10 @@ describe('ServicesComponent', () => {
         const manageButtons = activePanel.querySelectorAll('.service-overview-card button') as NodeListOf<HTMLButtonElement>;
 
         expect(manageButtons).toHaveLength(5);
-        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import sleep history for Suunto');
+        expect(activePanel.textContent).toContain('Sleep & 24/7 Health history');
+        expect(activePanel.textContent).toContain('Backfill Suunto sleep and available 24/7 Health metrics.');
+        expect(activePanel.textContent).toContain('Historical Sleep and 24/7 Health backfill · 7-day cooldown');
+        expect(manageButtons[1].getAttribute('aria-label')).toBe('Import history for Suunto');
         expect(manageButtons[2].getAttribute('aria-label')).toBe('Route sync settings for Suunto');
         expect(manageButtons[3].getAttribute('aria-label')).toBe('Upload files for Suunto');
         expect(manageButtons[4].getAttribute('aria-label')).toBe('Activity sync settings for Suunto');
@@ -910,7 +913,7 @@ describe('ServicesComponent', () => {
         manageButtons[1].click();
         expect(component.managedService).toBe('suunto');
         expect(component.managedTool).toBe('history');
-        expect(component.managedToolTitle).toBe('Sleep history');
+        expect(component.managedToolTitle).toBe('Sleep & 24/7 Health history');
 
         dialogClosed$.next();
         manageButtons[2].click();

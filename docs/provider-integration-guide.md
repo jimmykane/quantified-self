@@ -667,6 +667,10 @@ replace Auth/App Check or server connection fencing; an already dispatched reque
 - Add/update `/integrations/<provider>` when it has product/search value. Update route metadata, server prerender routes, sitemap/robots, internal links, the integrations hub, public Help, policies, and tests together.
 - State supported and unsupported workflows plainly. Do not imply that a connected provider supports routes, sleep, uploads, or provider-to-provider sync when it does not.
 
+Provider overview cards must name combined history imports consistently with their focused tools. Suunto uses
+**Sleep & 24/7 Health history** and **Import history** because the production path queues both datasets; its focused
+history dialog remains availability-aware and falls back to Sleep-only wording when the independent Health switch is off.
+
 Use `app-service-source-icon` and the shared presentation helpers. Imported activity surfaces use source attribution; connection and destination surfaces use destination branding. See [connected-provider attribution audit](connected-provider-attribution-audit.md).
 
 ## 10. Admin and operational coverage

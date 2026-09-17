@@ -236,11 +236,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
         tool: 'history',
       },
       {
-        title: 'Sleep history',
-        description: 'Backfill Suunto sleep data for recovery and sleep insights.',
-        detail: 'Historical sleep backfill · 7-day cooldown',
+        title: 'Sleep & 24/7 Health history',
+        description: 'Backfill Suunto sleep and available 24/7 Health metrics.',
+        detail: 'Historical Sleep and 24/7 Health backfill · 7-day cooldown',
         icon: 'bedtime',
-        actionLabel: 'Import sleep history',
+        actionLabel: 'Import history',
         tool: 'history',
       },
       {
