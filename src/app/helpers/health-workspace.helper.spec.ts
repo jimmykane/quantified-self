@@ -1117,6 +1117,17 @@ describe('Health workspace helpers', () => {
     ]));
     expect(view.series.filter(series => series.semanticVariant.startsWith('workout_imported_')))
       .toHaveLength(2);
+    const garminSeries = view.series.filter(series => series.provider === HEALTH_PROVIDERS.GarminAPI);
+    expect(garminSeries.find(series => series.semanticVariant === 'user_metrics_vo2_max')?.sourceLabel)
+      .toBe('Garmin Health summary');
+    expect(garminSeries.filter(series => series.semanticVariant.startsWith('workout_imported_'))
+      .map(series => series.sourceLabel)).toEqual(['Garmin workout VO₂', 'Garmin workout VO₂']);
+    expect(new Set(garminSeries.map(series => series.sourceSelectionKey)).size).toBe(2);
+    expect(new Set(view.rows.map(row => row.sourceLabel))).toEqual(new Set([
+      'Garmin Health summary',
+      'Garmin workout VO₂',
+      'Manual',
+    ]));
   });
 
   it.each([

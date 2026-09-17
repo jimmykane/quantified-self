@@ -510,6 +510,7 @@ export function buildHealthMetricWorkspaceView(
     accountKey: item.accountKey,
     timestampMs: item.timestampMs,
   })));
+  const mixedVo2SourceLabels = buildMixedVo2SourceLabels(datums);
   const conflictingObservationIds = new Set(result.conflicts.flatMap(conflict => conflict.observationIds));
   const grouped = new Map<string, MetricDatum[]>();
   for (const datum of datums) {
@@ -523,7 +524,9 @@ export function buildHealthMetricWorkspaceView(
   const freshnessStatusByRowId = new Map<string, string>();
   const series = [...grouped.entries()].map(([seriesIdentity, items]): HealthWorkspaceSeries => {
     const first = items[0];
-    const sourceLabel = accountLabels.get(accountIdentity(first.provider, first.accountKey)) || providerLabel(first.provider);
+    const sourceLabel = mixedVo2SourceLabels.get(mixedVo2SourceIdentity(first))
+      || accountLabels.get(accountIdentity(first.provider, first.accountKey))
+      || providerLabel(first.provider);
     const deviceLabels = [...new Set(items.map(item => item.deviceLabel).filter((item): item is string => !!item))];
     const coverageText = exactSeriesCoverageText(items, result.query.startDate, result.query.endDate);
     const freshness = exactSeriesFreshness(items, projectionNowMs);
@@ -582,7 +585,9 @@ export function buildHealthMetricWorkspaceView(
       || compareText(left.rowId, right.rowId));
   // Only format the bounded table page. All readings remain available to charts.
   const rows = allRows.slice(0, TABLE_ROW_LIMIT).map((datum): HealthObservationTableRow => {
-    const sourceLabel = accountLabels.get(accountIdentity(datum.provider, datum.accountKey)) || providerLabel(datum.provider);
+    const sourceLabel = mixedVo2SourceLabels.get(mixedVo2SourceIdentity(datum))
+      || accountLabels.get(accountIdentity(datum.provider, datum.accountKey))
+      || providerLabel(datum.provider);
     return {
       id: datum.rowId,
       dateText: formatCalendarDate(datum.calendarDate),
@@ -1564,6 +1569,63 @@ function buildAccountLabels(
 
 function accountIdentity(provider: HealthProvider, accountKey: string): string {
   return JSON.stringify([provider, accountKey]);
+}
+
+function mixedVo2SourceIdentity(datum: Pick<MetricDatum, 'provider' | 'accountKey' | 'rowKind'>): string {
+  return JSON.stringify([
+    datum.provider,
+    datum.accountKey,
+    datum.rowKind === 'activity' ? 'workout' : 'health',
+  ]);
+}
+
+/**
+ * Workout VO2 and provider Health VO2 use intentionally different source keys.
+ * When both exist, describe their provenance instead of implying that the user
+ * connected two provider accounts. Genuine multiple accounts remain numbered
+ * within their own Health or workout evidence group.
+ */
+function buildMixedVo2SourceLabels(datums: readonly MetricDatum[]): Map<string, string> {
+  const sources = new Map<string, {
+    provider: HealthProvider;
+    accountKey: string;
+    kind: 'health' | 'workout';
+    firstMs: number;
+  }>();
+  for (const datum of datums) {
+    if (datum.metricId !== HEALTH_METRIC_IDS.Vo2Max) continue;
+    const kind = datum.rowKind === 'activity' ? 'workout' : 'health';
+    const key = mixedVo2SourceIdentity(datum);
+    const current = sources.get(key);
+    if (!current || datum.timestampMs < current.firstMs) {
+      sources.set(key, {
+        provider: datum.provider,
+        accountKey: datum.accountKey,
+        kind,
+        firstMs: datum.timestampMs,
+      });
+    }
+  }
+
+  const labels = new Map<string, string>();
+  for (const provider of [...new Set([...sources.values()].map(source => source.provider))]) {
+    const providerSources = [...sources.values()].filter(source => source.provider === provider);
+    const kinds = new Set(providerSources.map(source => source.kind));
+    if (!kinds.has('health') || !kinds.has('workout')) continue;
+    for (const kind of ['health', 'workout'] as const) {
+      const matching = providerSources
+        .filter(source => source.kind === kind)
+        .sort((left, right) => left.firstMs - right.firstMs || compareText(left.accountKey, right.accountKey));
+      const baseLabel = `${providerLabel(provider)} ${kind === 'health' ? 'Health summary' : 'workout VO₂'}`;
+      matching.forEach((source, index) => {
+        labels.set(
+          JSON.stringify([source.provider, source.accountKey, source.kind]),
+          matching.length > 1 ? `${baseLabel} · account ${index + 1}` : baseLabel,
+        );
+      });
+    }
+  }
+  return labels;
 }
 
 function metricDatumSeriesIdentity(datum: MetricDatum): string {
