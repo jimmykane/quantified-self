@@ -1443,6 +1443,7 @@ describe('SummariesComponent', () => {
     expect([...nativeElement.querySelectorAll('.dashboard-current-state-primary small')]
       .some(element => element.textContent?.includes('High confidence · 4/4 signals'))).toBe(true);
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('7-day average');
+    expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Within range · rising');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('60-day range');
     expect(nativeElement.querySelector('.dashboard-readiness-hrv')?.textContent).toContain('Latest night 55 ms');
     const hrvRange = nativeElement.querySelector('.dashboard-readiness-hrv .metric-indicator-range');

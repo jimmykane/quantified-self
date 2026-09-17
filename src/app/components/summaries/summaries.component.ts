@@ -144,6 +144,7 @@ import {
   type CalendarMonthPickerBottomSheetData,
 } from '../calendar/calendar-month-picker-bottom-sheet/calendar-month-picker-bottom-sheet.component';
 import type { SleepSession } from '@shared/sleep';
+import { resolveReadinessHrvRecentTrend } from '@shared/readiness';
 import {
   DERIVED_METRIC_KINDS,
   type DerivedMetricKind,
@@ -1977,7 +1978,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         loadBars,
       };
     }
-    const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, this.user?.settings?.unitSettings);
+    const hrv = buildReadinessHrvDisplay(
+      context.hrvPersonalRange,
+      this.user?.settings?.unitSettings,
+      resolveReadinessHrvRecentTrend(sleepTrend.points, nowMs),
+    );
     const overnightHeartRateTone = this.resolveDashboardTodayRatioTone(context.overnightHeartRateRatio, true);
     return {
       loading: false,

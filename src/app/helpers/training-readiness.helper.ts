@@ -3,6 +3,7 @@ import type { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { buildReadinessHrvDisplay } from './readiness-hrv-display.helper';
 import type { DerivedTrainingReadinessMetricPayload } from '@shared/derived-metrics';
 import type { DashboardReadinessSignalsContext } from './dashboard-training-insights.helper';
+import type { ReadinessHrvRecentTrend } from '@shared/readiness';
 
 export type TrainingReadinessViewState = 'preparing' | 'empty' | 'ready' | 'unavailable';
 export type TrainingReadinessHistoryState = 'preparing' | 'updating' | 'empty' | 'ready' | 'unavailable';
@@ -63,6 +64,7 @@ export function buildTrainingReadinessViewModel(
     loadEvidenceFailed?: boolean;
     history?: DerivedTrainingReadinessMetricPayload | null;
     historyStatus?: string | null;
+    hrvRecentTrend?: ReadinessHrvRecentTrend | null;
   } = {},
 ): TrainingReadinessViewModel {
   const sourceText = 'The current score and backend-derived 14-day history use the same readiness formula. '
@@ -105,7 +107,7 @@ export function buildTrainingReadinessViewModel(
   }
 
   const locale = options.locale;
-  const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, options.unitSettings);
+  const hrv = buildReadinessHrvDisplay(context.hrvPersonalRange, options.unitSettings, options.hrvRecentTrend);
   const loadParts = [
     context.form === null ? null : `Form ${formatSignedNumber(context.form, locale, 1)}`,
     context.rampRate === null ? null : `Ramp ${formatSignedNumber(context.rampRate, locale, 1)}`,

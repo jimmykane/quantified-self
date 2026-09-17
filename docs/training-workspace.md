@@ -1389,7 +1389,10 @@ Training state and Readiness are fixed inside the optional Today summary:
   `training_readiness` snapshot containing 14 UTC-aligned daily cutoffs. Each historical day uses the Form state for that
   day, its seven-day CTL change, and only sleep evidence that had ended by that cutoff. Sleep and Overnight HR require
   a latest night no older than 48 hours. HRV compares a seven-day average with the same rolling 60-day personal range
-  used by Health and the Dashboard HRV chart, with at least 14 baseline days and three current days. Average-heart-rate
+  used by Health and the Dashboard HRV chart, with at least 14 baseline days and three current days. Dashboard Today
+  and Training add a compact rising, stable, or falling suffix when at least four same-source nights are available in
+  the recent window. The suffix uses a least-squares direction with a small noise threshold; it is display context and
+  does not change the personal-range classification, score, formula version, or persisted evidence. Average-heart-rate
   and minimum-heart-rate baselines retain up to 14 prior nights from the same provider and account within 30 days
   and require at least three prior values for the matching measure. Average and minimum HR are not independent score
   drivers: their ratios are bounded to `0.8..1.2`, then combined into one Overnight HR ratio at 70% average and 30%
@@ -1786,7 +1789,7 @@ Formula 4 retains the HRV component's neutral score of 50 and its 20% weight whe
 Outside either bound, its component is `max(0, 50 - 100 × distanceOutsideRange / baselineMean)`. An unusually high value
 earns no automatic bonus. This is the QS scoring policy, not a reproduction of a provider's proprietary algorithm.
 The unchanged weighted score renormalizes around unavailable drivers. The UI shows the weekly average, numeric range,
-direction and latest nightly reading separately, instead of a percentage against a different short median. Weekly HRV
+range status, recent direction and latest nightly reading separately, instead of a percentage against a different short median. Weekly HRV
 can remain available without a night in the last 48 hours while at least three recent days remain.
 
 The formula version invalidates only `training_readiness`; the normal ensure lifecycle rebuilds its 14-day series from

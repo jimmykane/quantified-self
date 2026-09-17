@@ -85,6 +85,7 @@ import {
   buildTrainingReadinessViewModel,
   type TrainingReadinessViewModel,
 } from '../../helpers/training-readiness.helper';
+import { resolveReadinessHrvRecentTrend } from '@shared/readiness';
 import {
   buildTrainingBodyWeightViewModel,
   type TrainingBodyWeightViewModel,
@@ -1863,10 +1864,11 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
       || loadStatuses
         .some(status => isDerivedMetricPendingStatus(status));
     // An unresolved listener is not missing evidence: wait before showing a partial score.
+    const sleepTrend = buildDashboardSleepTrendContext(this.readinessSleepSessions);
     const context = isInitialLoading ? null : buildDashboardReadinessSignalsContext({
       formNow,
       rampRate,
-      sleepTrend: buildDashboardSleepTrendContext(this.readinessSleepSessions),
+      sleepTrend,
       nowMs,
     });
     this.trainingReadiness = buildTrainingReadinessViewModel(context, {
@@ -1879,6 +1881,7 @@ export class TrainingWorkspaceComponent implements OnInit, OnDestroy {
         .some(status => status === 'failed'),
       history: this.derivedState.trainingReadiness,
       historyStatus: this.derivedState.trainingReadinessStatus,
+      hrvRecentTrend: context ? resolveReadinessHrvRecentTrend(sleepTrend.points, nowMs) : null,
     });
   }
 

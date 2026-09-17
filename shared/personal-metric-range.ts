@@ -99,7 +99,7 @@ export function calculatePersonalMetricRange(
   const currentWindowDays = positiveInteger(options.currentWindowDays);
   const currentMinimumObservationDays = positiveInteger(options.currentMinimumObservationDays);
   const baselineStartTimeMs = endTimeMs - (baselineWindowDays * DAY_MS) + 1;
-  const dailyValues = collapseByCalendarDate(observations.filter(observation =>
+  const dailyValues = collapsePersonalMetricObservationsByCalendarDate(observations.filter(observation =>
     observation.timestampMs >= baselineStartTimeMs && observation.timestampMs <= endTimeMs));
   const observationDayCount = dailyValues.length;
   const baseResult = {
@@ -160,7 +160,7 @@ export function calculatePersonalMetricPointRange(
   const baselineWindowDays = positiveInteger(options.baselineWindowDays);
   const requiredObservationDayCount = positiveInteger(options.baselineMinimumObservationDays);
   const baselineStartTimeMs = point.timestampMs - (baselineWindowDays * DAY_MS) + 1;
-  const dailyValues = collapseByCalendarDate(observations.filter(observation =>
+  const dailyValues = collapsePersonalMetricObservationsByCalendarDate(observations.filter(observation =>
     observation.timestampMs >= baselineStartTimeMs && observation.timestampMs <= point.timestampMs));
   const pointValue = dailyValues.find(item => item.calendarDate === point.calendarDate)?.value ?? null;
   if (dailyValues.length < requiredObservationDayCount || pointValue === null) {
@@ -190,7 +190,7 @@ export function calculatePersonalMetricPointRange(
   };
 }
 
-function collapseByCalendarDate(
+export function collapsePersonalMetricObservationsByCalendarDate(
   observations: readonly PersonalMetricRangeObservation[],
 ): PersonalMetricRangeObservation[] {
   const valuesByDate = new Map<string, PersonalMetricRangeObservation[]>();

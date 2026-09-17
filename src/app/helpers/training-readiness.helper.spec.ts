@@ -45,6 +45,43 @@ describe('training-readiness.helper', () => {
     expect(view.sourceText).toContain('browser does not load workout history');
   });
 
+  it('adds the recent HRV direction to the existing status line without changing its value', () => {
+    const view = buildTrainingReadinessViewModel({
+      score: 70,
+      label: 'Mixed',
+      confidence: 'medium',
+      availableSignalCount: 1,
+      baselineEvidenceCount: 14,
+      totalSignalCount: 4,
+      form: null,
+      rampRate: null,
+      sleepScore: null,
+      latestSleepAtMs: Date.UTC(2026, 8, 17, 6),
+      hrvRatio: 1,
+      hrvPersonalRange: {
+        tone: 'positive',
+        reason: 'within_range',
+        observationDayCount: 30,
+        requiredObservationDayCount: 14,
+        currentObservationDayCount: 7,
+        requiredCurrentObservationDayCount: 3,
+        baselineAverage: 40,
+        currentAverage: 40,
+        normalRange: { min: 35, max: 45 },
+        latestMs: 36,
+        latestAtMs: Date.UTC(2026, 8, 17, 6),
+      },
+      averageHeartRateRatio: null,
+      minimumHeartRateRatio: null,
+      overnightHeartRateRatio: null,
+      trend: [],
+    }, { hrvRecentTrend: 'falling' });
+
+    const hrv = view.metricRows.find(row => row.label === 'HRV · 7-day average');
+    expect(hrv?.valueText).toBe('40 ms');
+    expect(hrv?.detailText).toContain('Within range · falling');
+  });
+
   it('keeps unavailable evidence explicit while the shared inputs prepare', () => {
     const view = buildTrainingReadinessViewModel(null, { isPreparing: true });
 

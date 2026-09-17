@@ -8,7 +8,8 @@ import {
   type ReadinessSleepEvidencePoint, type ReadinessScoreContext,
 } from './readiness-legacy';
 import {
-  calculatePersonalMetricRange, HRV_PERSONAL_RANGE_OPTIONS, type PersonalMetricRangeResult,
+  calculatePersonalMetricRange, collapsePersonalMetricObservationsByCalendarDate,
+  HRV_PERSONAL_RANGE_OPTIONS, type PersonalMetricRangeObservation, type PersonalMetricRangeResult,
 } from './personal-metric-range';
 
 export {
@@ -21,6 +22,11 @@ export {
 export const READINESS_FORMULA_VERSION = 4 as const;
 export const READINESS_EVIDENCE_VERSION = 1 as const;
 export const READINESS_SLEEP_LOOKBACK_MS = HRV_PERSONAL_RANGE_OPTIONS.baselineWindowDays * 86400000;
+const READINESS_HRV_TREND_MINIMUM_DAYS = 4;
+const READINESS_HRV_TREND_MINIMUM_CHANGE_MS = 1;
+const READINESS_HRV_TREND_MINIMUM_CHANGE_RATIO = 0.03;
+
+export type ReadinessHrvRecentTrend = 'rising' | 'stable' | 'falling';
 
 /** Identity-free evidence using the same daily observations and range as the HRV charts. */
 export type ReadinessHrvPersonalRange = PersonalMetricRangeResult & {
@@ -90,6 +96,52 @@ export function buildReadinessEvaluation(input: ReadinessInput): ReadinessEvalua
 export function buildReadinessHrvPersonalRange(
   points: readonly ReadinessSleepEvidencePoint[], nowMs: number,
 ): ReadinessHrvPersonalRange | null {
+  const observations = readinessHrvObservationSeries(points, nowMs);
+  const latest = observations[observations.length - 1];
+  if (!latest) return null;
+  return {
+    ...calculatePersonalMetricRange(observations, nowMs, HRV_PERSONAL_RANGE_OPTIONS),
+    latestMs: latest.value,
+    latestAtMs: latest.timestampMs,
+  };
+}
+
+/**
+ * Describes the direction of the same source-separated nightly HRV series used
+ * by Readiness. This is display context only: it never changes the score or
+ * personal-range classification.
+ */
+export function resolveReadinessHrvRecentTrend(
+  points: readonly ReadinessSleepEvidencePoint[], nowMs: number,
+): ReadinessHrvRecentTrend | null {
+  const currentStartTimeMs = nowMs - HRV_PERSONAL_RANGE_OPTIONS.currentWindowDays * 86400000 + 1;
+  const dailyValues = collapsePersonalMetricObservationsByCalendarDate(
+    readinessHrvObservationSeries(points, nowMs)
+      .filter(observation => observation.timestampMs >= currentStartTimeMs),
+  );
+  if (dailyValues.length < READINESS_HRV_TREND_MINIMUM_DAYS) return null;
+
+  const firstTimeMs = dailyValues[0].timestampMs;
+  const xValues = dailyValues.map(point => (point.timestampMs - firstTimeMs) / 86400000);
+  const xAverage = average(xValues);
+  const valueAverage = average(dailyValues.map(point => point.value));
+  const denominator = xValues.reduce((total, value) => total + (value - xAverage) ** 2, 0);
+  if (denominator === 0) return 'stable';
+  const slope = dailyValues.reduce((total, point, index) =>
+    total + (xValues[index] - xAverage) * (point.value - valueAverage), 0) / denominator;
+  const projectedChange = slope * (xValues[xValues.length - 1] - xValues[0]);
+  const meaningfulChange = Math.max(
+    READINESS_HRV_TREND_MINIMUM_CHANGE_MS,
+    valueAverage * READINESS_HRV_TREND_MINIMUM_CHANGE_RATIO,
+  );
+  return Math.abs(projectedChange) < meaningfulChange
+    ? 'stable'
+    : projectedChange > 0 ? 'rising' : 'falling';
+}
+
+function readinessHrvObservationSeries(
+  points: readonly ReadinessSleepEvidencePoint[], nowMs: number,
+): PersonalMetricRangeObservation[] {
   const inWindow = (time: number) => time > nowMs - READINESS_SLEEP_LOOKBACK_MS && time <= nowMs;
   const eligible = points.flatMap(point => {
     if (normalizeSleepProvider(point.provider) === null || !/^\d{4}-\d{2}-\d{2}$/.test(point.sleepDate)) return [];
@@ -102,19 +154,15 @@ export function buildReadinessHrvPersonalRange(
     return inWindow(selectedAtMs) ? [{ point, observations, selectedAtMs }] : [];
   }).sort((a, b) => a.selectedAtMs - b.selectedAtMs || a.point.id.localeCompare(b.point.id));
   const latestSleep = eligible[eligible.length - 1];
-  if (!latestSleep) return null;
+  if (!latestSleep) return [];
   const observations = eligible.filter(({ point }) => point.provider === latestSleep.point.provider
     && (point.sourceKey ?? null) === (latestSleep.point.sourceKey ?? null))
     .flatMap(entry => entry.observations)
     .sort((a, b) => a.timestampMs - b.timestampMs || (a.sourceKey ?? '').localeCompare(b.sourceKey ?? ''));
   const latest = observations[observations.length - 1];
-  if (!latest) return null;
-  return {
-    ...calculatePersonalMetricRange(observations.filter(point => (point.sourceKey ?? null) === (latest.sourceKey ?? null)),
-      nowMs, HRV_PERSONAL_RANGE_OPTIONS),
-    latestMs: latest.value,
-    latestAtMs: latest.timestampMs,
-  };
+  return latest
+    ? observations.filter(point => (point.sourceKey ?? null) === (latest.sourceKey ?? null))
+    : [];
 }
 
 /** Keep original per-day readings; averaging fragments first would change the chart's daily median. */
@@ -123,6 +171,10 @@ export function readinessHrvObservations(point: Pick<ReadinessSleepEvidencePoint
   return point.hrvObservations ?? (typeof point.averageHrvMs === 'number' && point.averageHrvMs > 0
     ? [{ timestampMs: point.endTimeMs ?? point.startTimeMs ?? 0, calendarDate: point.sleepDate,
       value: point.averageHrvMs, ...(point.hrvSourceKey ? { sourceKey: point.hrvSourceKey } : {}) }] : []);
+}
+
+function average(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0) / values.length;
 }
 
 /**

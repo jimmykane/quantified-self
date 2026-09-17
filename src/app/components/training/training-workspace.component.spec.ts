@@ -759,6 +759,7 @@ describe('TrainingWorkspaceComponent', () => {
       expect(panel.textContent).toContain('90/100');
       expect(panel.textContent).toContain('HRV · 7-day average');
       expect(panel.textContent).toContain('50.7 ms');
+      expect(panel.textContent).toContain('Within range · rising');
       expect(panel.textContent).toContain('60-day range');
       expect(panel.textContent).toContain('-4%');
       expect(panel.textContent).toContain('14-day trend');
