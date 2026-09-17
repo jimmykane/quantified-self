@@ -116,6 +116,23 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     expect(JSON.parse(client.mock.calls[0][0].data).Workouts).toHaveLength(2);
   });
 
+  it('keeps different saved time zones in separate provider batches', async () => {
+    const ids = await seed(2);
+    const user = db.collection('users').doc(uid);
+    await user.collection('trainingDeliverySettings').doc('workout_w1_coros').update({
+      timeZone: 'America/New_York', revision: 2, updatedAtMs: now + 1,
+    });
+    await user.collection(DELIVERY_LEDGER).doc(ids[1]).update({ timeZone: 'America/New_York' });
+    await processTrainingDelivery(runtime, uid, ids[0]);
+    expect(client).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(client.mock.calls[0][0].data).Workouts).toHaveLength(1);
+    expect((await user.collection(DELIVERY_LEDGER).doc(ids[1]).get()).data()).toMatchObject({ status: 'pending' });
+    expect((await db.collection(DELIVERY_QUEUE).doc(ids[1]).get()).exists).toBe(true);
+    await processTrainingDelivery(runtime, uid, ids[1]);
+    expect(client).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(client.mock.calls[1][0].data).Workouts).toHaveLength(1);
+  });
+
   it('retains stable workout identities across an authored edit', async () => {
     const [id] = await seed(1);
     await processTrainingDelivery(runtime, uid, id);
@@ -211,6 +228,48 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     expect(client).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects malformed accepted batch artifacts before changing remote state projections', async () => {
+    const [id] = await seed(1);
+    const base = transport;
+    const malformed: TrainingDeliveryTransport = {
+      mappingVersion: base.mappingVersion,
+      horizonDays: base.horizonDays,
+      assess: base.assess.bind(base),
+      canRemove: base.canRemove.bind(base),
+      execute: base.execute.bind(base),
+      recover: base.recover.bind(base),
+      batch: { maxSize: 30, execute: async (operations, beforeSend) => {
+        await beforeSend();
+        return operations.map(operation => ({ operationId: operation.id, state: 'accepted' as const, artifact: null }));
+      }, reserveIdentities: reserveCorosIntegerIdentities },
+    };
+    runtime.transport = provider => provider === 'coros' ? malformed : null;
+    await processTrainingDelivery(runtime, uid, id);
+    expect((await db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(id).get()).data())
+      .toMatchObject({ status: 'needs_attention', actual: null, attempt: { progress: { state: 'started' } } });
+  });
+
+  it('reports a rejected upsert as an acceptance failure rather than a removal failure', async () => {
+    const [id] = await seed(1);
+    const base = transport;
+    const rejected: TrainingDeliveryTransport = {
+      mappingVersion: base.mappingVersion,
+      horizonDays: base.horizonDays,
+      assess: base.assess.bind(base),
+      canRemove: base.canRemove.bind(base),
+      execute: base.execute.bind(base),
+      recover: base.recover.bind(base),
+      batch: { maxSize: 30, execute: async (operations, beforeSend) => {
+        await beforeSend();
+        return operations.map(operation => ({ operationId: operation.id, state: 'rejected' as const, artifact: null }));
+      }, reserveIdentities: reserveCorosIntegerIdentities },
+    };
+    runtime.transport = provider => provider === 'coros' ? rejected : null;
+    await processTrainingDelivery(runtime, uid, id);
+    expect((await db.collection('users').doc(uid).collection(DELIVERY_LEDGER).doc(id).get()).data())
+      .toMatchObject({ status: 'failed', issues: ['COROS could not accept this workout.'] });
+  });
+
   it.each([
     ['30009', 'provider_unavailable', 'not enabled', false],
     ['5006', 'reconnect_required', 'Reconnect COROS', true],
@@ -277,7 +336,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     runtime.transport = provider => provider === 'coros' ? racing : null;
     await processTrainingDelivery(runtime, uid, id);
     expect((await user.collection(DELIVERY_LEDGER).doc(id).get()).data())
-      .toMatchObject({ status: 'needs_attention', actual: null });
+      .toMatchObject({ status: 'needs_attention', actual: null,
+        issues: ['COROS responded after delivery ownership changed. Review before retrying.'] });
   });
 
   it('does not let an older late response regress a newer operation artifact', async () => {
@@ -299,6 +359,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
           lease: { id: 'newer-lease', expiresAtMs: now + 60_000 },
           actual: newerArtifact,
           acceptedDigest: 'newer-digest',
+          status: 'retrying',
+          issues: ['Newer operation owns this delivery.'],
         });
         return operations.map(operation => ({ operationId: operation.id, state: 'accepted' as const,
           artifact: { ids: { workout: String(operation.providerIdentity!.workoutId), athlete: '55' },
@@ -308,11 +370,17 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('COROS Training batch Fire
     runtime.transport = provider => provider === 'coros' ? racing : null;
     await processTrainingDelivery(runtime, uid, id);
     expect((await user.collection(DELIVERY_LEDGER).doc(id).get()).data()).toMatchObject({
-      status: 'needs_attention',
+      status: 'retrying',
+      issues: ['Newer operation owns this delivery.'],
       actual: { ids: { workout: '987654' } },
       acceptedDigest: 'newer-digest',
       attempt: { id: 'newer-operation' },
+      lease: { id: 'newer-lease' },
     });
-    expect((await db.collection(DELIVERY_QUEUE).doc(id).get()).exists).toBe(false);
+    expect((await db.collection(DELIVERY_QUEUE).doc(id).get()).exists).toBe(true);
+    const late = await user.collection(DELIVERY_LEDGER).doc(id).collection('attempts')
+      .where('state', '==', 'started').limit(1).get();
+    expect(late.empty).toBe(false);
+    expect((await late.docs[0].ref.collection('lateAcceptances').get()).size).toBe(1);
   });
 });

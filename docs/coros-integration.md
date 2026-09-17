@@ -166,7 +166,7 @@ One collision-checked positive partner AthleteId is bound to the QS user and nev
 destination/workout receives a separate stable positive ID that survives edits, reschedules and plan transfers. The
 mapping remains available after workout deletion for withdrawal/completion correlation and is recursively deleted with
 the account. Today-through-365-day scheduling uses the saved delivery time zone and deterministic LastModifiedDate.
-Running, Trail Running and Cycling use native types; Treadmill and cycling subtypes fold to broad Run/Bike only after
+Running, Trail Running and Cycling use the native wire values `run`, `trailRun` and `bike`; Treadmill and cycling subtypes fold to broad `run`/`bike` only after
 explicit approval. A second target, recovery-to-rest mapping, fractional values and frozen relative references retain
 the normal degradation approval, while cycling cadence is unsupported.
 

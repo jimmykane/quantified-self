@@ -170,6 +170,20 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
     });
 
+    it('does not let unrelated provider artifact IDs mask the exact COROS marker', async () => {
+      const base = (await user().collection(DELIVERY_LEDGER).doc('delivery').get()).data() as DeliveryLedgerV1;
+      await Promise.all(['garmin-a', 'garmin-b'].map((id, index) => user().collection(DELIVERY_LEDGER).doc(id).set({
+        ...base,
+        id,
+        provider: 'garmin',
+        workoutId: `garmin-workout-${index}`,
+        destinationKey: `garmin-${index}`,
+      })));
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: ['workout'] });
+      expect((await user().collection('trainingWorkoutCompletions').doc('workout').get()).data())
+        .toMatchObject({ provider: 'coros', eventId: 'event' });
+    });
+
     it('defers while delivery is changing and fences deleted events and users', async () => {
       await user().collection(DELIVERY_LEDGER).doc('delivery').update({ attempt: { id: 'operation' } });
       await expect(retain()).rejects.toThrow('delivery is changing');

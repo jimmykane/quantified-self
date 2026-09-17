@@ -793,7 +793,7 @@ access is unavailable and never asks for reconnect; `5006` is authentication fai
 honoured when returned; this adapter adds no speculative quota or throttling layer.
 
 Upserts cover today through 365 days in the saved delivery time zone and carry deterministic LastModifiedDate values.
-Running, Cycling and Trail Running use native COROS workout types. Treadmill and cycling subtypes fold to Run/Bike only
+Running, Cycling and Trail Running use the native COROS wire values `run`, `bike` and `trailRun`. Treadmill and cycling subtypes fold to `run`/`bike` only
 after explicit approval. Cycling cadence remains unsupported. Rounding, recovery-to-rest, frozen relative references and
 first-target-only mapping keep the existing payload-bound approval rules. Push success requires an accepted date range
 covering the submitted batch; delete success/failure lists are resolved per workout. Past and completed artifacts remain
@@ -813,7 +813,7 @@ preservation, reschedule, eligible delete, completion callback/history correlati
 broader rollout. Implementation, tests or deployment do not constitute that evidence.
 
 MCP impact: no wire-contract change. `get_planned_workout` already returns the exact authored Sports Lib activity type,
-while `get_training_sync_status` exposes only the existing sanitized approval/status result and never the Garmin
+while `get_training_sync_status` exposes only the existing sanitized approval/status result and never the COROS
 payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope, tool, registered
 schema, Assistant route or plugin update is needed.
 

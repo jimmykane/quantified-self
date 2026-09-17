@@ -47,7 +47,7 @@ describe('COROS Training batch transport', () => {
     const payload = JSON.parse(client.mock.calls[0][0].data!);
     expect(payload.Workouts).toHaveLength(count);
     expect(payload.AthleteId).toBe(55);
-    expect(payload.Workouts.every((entry: { WorkoutType: string }) => entry.WorkoutType === 'Run')).toBe(true);
+    expect(payload.Workouts.every((entry: { WorkoutType: string }) => entry.WorkoutType === 'run')).toBe(true);
     expect(new Set(payload.Workouts.map((entry: { Id: number }) => entry.Id)).size).toBe(count);
     expect(payload.Workouts.map((entry: { WorkoutDay: string }) => entry.WorkoutDay)).toEqual(
       [...payload.Workouts].map((entry: { WorkoutDay: string }) => entry.WorkoutDay).sort());
@@ -71,6 +71,21 @@ describe('COROS Training batch transport', () => {
     const completed = operations(1, 'remove', transport);
     completed[0].artifact = { ...completed[0].artifact!, completed: true };
     await expect(transport.batch.execute(completed, async () => {}, async () => {}))
+      .rejects.toMatchObject({ kind: 'terminal', rejected: true });
+    expect(client).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when retained artifact IDs disagree with the stable identity mapping', async () => {
+    const client = vi.fn();
+    const transport = new CorosTrainingTransport(client, () => NOW);
+    const removal = operations(1, 'remove', transport);
+    removal[0].artifact = { ...removal[0].artifact!, ids: { workout: '9999', athlete: '55' } };
+    await expect(transport.batch.execute(removal, async () => {}, async () => {}))
+      .rejects.toMatchObject({ kind: 'terminal', rejected: true });
+    const update = operations(1, 'upsert', transport);
+    update[0].artifact = { ids: { workout: '9999', athlete: '55' },
+      localDate: update[0].workout!.localDate, completed: false };
+    await expect(transport.batch.execute(update, async () => {}, async () => {}))
       .rejects.toMatchObject({ kind: 'terminal', rejected: true });
     expect(client).not.toHaveBeenCalled();
   });

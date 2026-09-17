@@ -98,6 +98,7 @@ export async function retainCOROSTrainingCompletion(
     }
 
     const ledgerQuery = await tx.get(user.collection(DELIVERY_LEDGER)
+      .where('provider', '==', 'coros')
       .where('actual.ids.workout', '==', planWorkoutId).limit(2));
     const candidates = ledgerQuery.docs.flatMap(document => {
       const candidate = candidateLedger(document, authority.connection.destinationKey, planWorkoutId);

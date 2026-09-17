@@ -74,6 +74,7 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
     const jobDocs = [currentSeed, ...siblings.docs.filter(doc => doc.id !== seedId)].slice(0, batchTransport.maxSize);
     const prepared: Array<{ ledger: DeliveryLedgerV1; operation: Omit<DeliveryOperation, 'providerIdentity' | 'batchId'> }> = [];
     const deferredWrites: Array<() => void> = [];
+    let batchTimeZone: string | null = null;
 
     for (const job of jobDocs) {
       const jobData = job.data();
@@ -134,6 +135,11 @@ async function claimBatch(runtime: DeliveryRuntime, uid: string, seedId: string,
           dispatchToken: randomUUID() }, { merge: true }));
         continue;
       }
+      // A provider request has one scheduling calendar. Workouts with another
+      // saved zone remain queued for a later batch instead of invalidating all
+      // otherwise eligible members of this one.
+      if (batchTimeZone !== null && intent.timeZone !== batchTimeZone) continue;
+      batchTimeZone = intent.timeZone;
       prepared.push({ ledger, operation: { id: randomUUID(), kind, deliveryId: ledger.id,
         generation: ledger.desiredGeneration, connectionGeneration: context.connection.generation,
         destinationKey, timeZone: intent.timeZone, digest: intent.digest, contentDigest: ledger.contentDigest,
@@ -226,12 +232,30 @@ async function markBatchStarted(runtime: DeliveryRuntime, uid: string, claim: Ba
   if (!await batchAdmission(runtime, uid, claim)) throw new TrainingDeliveryBatchAdmissionChangedError();
 }
 
+function isValidArtifact(value: DeliveryBatchOutcome['artifact']): boolean {
+  return value !== null
+    && /^\d{4}-\d{2}-\d{2}$/.test(value.localDate)
+    && typeof value.completed === 'boolean'
+    && !!value.ids
+    && !Array.isArray(value.ids)
+    && Object.keys(value.ids).length >= 1
+    && Object.keys(value.ids).length <= 16
+    && Object.entries(value.ids).every(([key, id]) =>
+      /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(key) && typeof id === 'string' && id.length >= 1 && id.length <= 512);
+}
+
 function validateOutcomes(claim: BatchClaim, outcomes: readonly DeliveryBatchOutcome[]): Map<string, DeliveryBatchOutcome> {
   if (outcomes.length !== claim.operations.length) throw new TrainingDeliveryTransportError('uncertain');
   const byOperation = new Map<string, DeliveryBatchOutcome>();
   for (const outcome of outcomes) {
-    if (!claim.operations.some(operation => operation.id === outcome.operationId) || byOperation.has(outcome.operationId)
-      || !['accepted', 'rejected', 'unresolved'].includes(outcome.state)) throw new TrainingDeliveryTransportError('uncertain');
+    const operation = claim.operations.find(candidate => candidate.id === outcome.operationId);
+    if (!operation || byOperation.has(outcome.operationId)
+      || !['accepted', 'rejected', 'unresolved'].includes(outcome.state)
+      || (outcome.artifact !== null && !isValidArtifact(outcome.artifact))
+      || (outcome.state === 'accepted' && operation.kind === 'upsert' && !isValidArtifact(outcome.artifact))
+      || (outcome.state === 'accepted' && operation.kind === 'remove' && outcome.artifact !== null)) {
+      throw new TrainingDeliveryTransportError('uncertain');
+    }
     byOperation.set(outcome.operationId, outcome);
   }
   return byOperation;
@@ -260,13 +284,17 @@ async function acceptBatch(runtime: DeliveryRuntime, uid: string, claim: BatchCl
         tx.set(ref.collection('attempts').doc(operation.id).collection('lateAcceptances').doc(claim.batchId), {
           batchId: claim.batchId, outcome, acceptedAtMs: runtime.now(),
         });
-        // Retain every late outcome, but only update current artifact state when
-        // this is still the same operation under a replaced/expired lease. A
-        // newer accepted operation owns the current state and must not regress.
-        if (outcome.state === 'accepted' && stillSameAttempt) ledger.actual = outcome.artifact;
-        ledger.status = 'needs_attention'; ledger.updatedAtMs = runtime.now();
-        writeDelivery(runtime, tx, uid, ledger);
-        tx.delete(db.collection(DELIVERY_QUEUE).doc(operation.deliveryId));
+        // A newer attempt owns the ledger and queue. Preserve its state exactly;
+        // the immutable late evidence is sufficient for operator inspection.
+        // If only the lease changed, this is still the current attempt and its
+        // accepted artifact must be retained conservatively.
+        if (stillSameAttempt) {
+          if (outcome.state === 'accepted') ledger.actual = outcome.artifact;
+          ledger.status = 'needs_attention'; ledger.updatedAtMs = runtime.now();
+          ledger.issues = [`${providerLabel} responded after delivery ownership changed. Review before retrying.`];
+          writeDelivery(runtime, tx, uid, ledger);
+          tx.delete(db.collection(DELIVERY_QUEUE).doc(operation.deliveryId));
+        }
         unresolved.push(operation.deliveryId);
         continue;
       }
@@ -282,7 +310,9 @@ async function acceptBatch(runtime: DeliveryRuntime, uid: string, claim: BatchCl
         accepted.push(operation.deliveryId);
       } else if (outcome.state === 'rejected') {
         ledger.attempt = null; ledger.status = 'failed';
-        ledger.issues = [`${providerLabel} could not remove this future workout.`];
+        ledger.issues = [operation.kind === 'remove'
+          ? `${providerLabel} could not remove this future workout.`
+          : `${providerLabel} could not accept this workout.`];
         rejected.push(operation.deliveryId);
       } else {
         ledger.status = 'needs_attention';

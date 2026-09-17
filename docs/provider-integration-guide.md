@@ -144,12 +144,12 @@ array receives provider IDs only at serialization time: Running `1`, Trail Runni
 Mountain Biking `10`, Indoor Cycling `52`, E-Biking `105` and E-MTB `106`, and Hand Cycle `109`. Generic Cycling does
 not automatically include Mountain Biking. Garmin independently supports the same authored QS profiles by folding them
 to its broad `RUNNING`/`CYCLING` API values with an explicit degradation warning. COROS accepts native Running, Trail
-Running and Cycling; Treadmill and the remaining cycling profiles fold to COROS Run/Bike only with explicit approval.
+Running and Cycling; Treadmill and the remaining cycling profiles fold to COROS `run`/`bike` only with explicit approval.
 Wahoo remains limited to its proved Running/Cycling baseline.
 
 COROS mapping follows the local ignored COROS API Reference V2.0.6 (February 2026); the confidential PDF is likewise
 kept out of Git. Partner athlete/workout IDs in fixtures are redacted or deterministic opaque safe integers. The mapper
-supports dated Run/Bike time/distance/manual steps and fixed repeats. Native FTP, threshold-HR, and threshold-speed
+supports dated `run`/`bike` time/distance/manual steps and fixed repeats. Native FTP, threshold-HR, and threshold-speed
 percentage targets preserve their canonical reference snapshots. Maximum-HR, critical-power, and relative-cadence
 targets freeze to absolute ranges only after approval. COROS accepts one intensity target per step, exposes no distinct
 recovery intensity, documents cadence targets for running but not cycling, and requires integer lengths and percentages;

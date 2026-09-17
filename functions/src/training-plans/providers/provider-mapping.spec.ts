@@ -207,14 +207,14 @@ describe('planned-workout provider proof fixtures', () => {
     });
 
     it.each([
-        [ActivityTypes.Running, 'Run', 'exact'],
+        [ActivityTypes.Running, 'run', 'exact'],
         [ActivityTypes.TrailRunning, 'trailRun', 'exact'],
-        [ActivityTypes.Treadmill, 'Run', 'degraded'],
-        [ActivityTypes.Cycling, 'Bike', 'exact'],
-        [ActivityTypes.MountainBiking, 'Bike', 'degraded'],
-        [ActivityTypes.IndoorCycling, 'Bike', 'degraded'],
-        [ActivityTypes.EBiking, 'Bike', 'degraded'],
-        [ActivityTypes.Handcycle, 'Bike', 'degraded'],
+        [ActivityTypes.Treadmill, 'run', 'degraded'],
+        [ActivityTypes.Cycling, 'bike', 'exact'],
+        [ActivityTypes.MountainBiking, 'bike', 'degraded'],
+        [ActivityTypes.IndoorCycling, 'bike', 'degraded'],
+        [ActivityTypes.EBiking, 'bike', 'degraded'],
+        [ActivityTypes.Handcycle, 'bike', 'degraded'],
     ] as const)('maps canonical %s to COROS %s with truthful fidelity', (sport, workoutType, level) => {
         const result = serializeCorosTrainingPlanV1({ ...oneStepStructure(), sport }, {
             athleteId: 24680,

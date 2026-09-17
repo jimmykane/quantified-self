@@ -81,7 +81,7 @@ export async function readTrainingDeliveryAuthority(db: Firestore, tx: Transacti
     if (provider !== 'coros') return true;
     const data = doc.data();
     const account = identity(data[service.account] ?? doc.id);
-    return !!account && doc.id === account && data.serviceName === service.name
+    return !!account && doc.id === account
       && (data[service.account] === undefined || identity(data[service.account]) === account);
   });
   const identities = new Set(wellFormedActive.map(doc => {
@@ -96,8 +96,8 @@ export async function readTrainingDeliveryAuthority(db: Firestore, tx: Transacti
   // from a malformed selected token to another retained account.
   const selectedCorosToken = provider === 'coros'
     ? pinned
-      ? active.find(doc => doc.id === pinned) ?? null
-      : selectActiveCOROSTokenSnapshot(active)
+      ? tokens.docs.find(doc => doc.id === pinned) ?? null
+      : selectActiveCOROSTokenSnapshot(tokens.docs)
     : null;
   const selectedCorosAccount = selectedCorosToken
     ? identity(selectedCorosToken.data()[service.account] ?? selectedCorosToken.id)

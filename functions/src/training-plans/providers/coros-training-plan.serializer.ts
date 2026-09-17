@@ -19,7 +19,7 @@ import {
     type ProviderSerializationResultV1,
 } from './provider-mapping';
 
-export type CorosWorkoutTypeV1 = 'Run' | 'Bike' | 'trailRun';
+export type CorosWorkoutTypeV1 = 'run' | 'bike' | 'trailRun';
 export type CorosIntensityClassV1 = 'WarmUp' | 'CoolDown' | 'Active' | 'Rest';
 export type CorosIntensityTargetUnitV1 =
     | 'PercentOfFtp'
@@ -119,11 +119,11 @@ function normalizeCorosLocalDateTime(value: string): string {
 }
 
 function sportToCoros(sport: ActivityTypes): CorosWorkoutTypeV1 {
-    if (sport === ActivityTypes.Running) return 'Run';
+    if (sport === ActivityTypes.Running) return 'run';
     if (sport === ActivityTypes.TrailRunning) return 'trailRun';
-    if ((COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'Run';
-    if (sport === ActivityTypes.Cycling) return 'Bike';
-    if ((COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'Bike';
+    if ((COROS_FOLDED_RUNNING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'run';
+    if (sport === ActivityTypes.Cycling) return 'bike';
+    if ((COROS_FOLDED_CYCLING_WORKOUT_SPORTS_V1 as readonly ActivityTypes[]).includes(sport)) return 'bike';
     throw new Error(`Unsupported COROS sport reached after compatibility validation: ${sport}.`);
 }
 

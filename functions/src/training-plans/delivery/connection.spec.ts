@@ -55,6 +55,20 @@ describe('Training authority extraction compatibility', () => {
       });
     }
   });
+  it('accepts an existing COROS token without redundant serviceName metadata', async () => {
+    const ref = { collection: () => ref, doc: () => ref, limit: () => ref };
+    const token = { id: 'coros-account', data: () => ({ openId: 'coros-account' }) };
+    const values = [
+      { data: () => ({ connectionState: 'connected', providerUserId: 'coros-account' }) },
+      { exists: true, data: () => ({}) },
+      { empty: false, size: 1, docs: [token] },
+      { data: () => ({}) },
+    ];
+    const authority = await readTrainingDeliveryAuthority({ collection: () => ref } as unknown as Firestore,
+      { get: async () => values.shift() } as unknown as Transaction, 'fixture', 'coros');
+    expect(authority.connection.state).toBe('connected');
+    expect(authority.token).toBe(token);
+  });
   it('rejects a COROS token whose document identity conflicts with openId', async () => {
     const service = DELIVERY_SERVICES.coros;
     const ref = { collection: () => ref, doc: () => ref, limit: () => ref };
@@ -121,6 +135,26 @@ describe('Training authority extraction compatibility', () => {
     expect(authority.connection.state).toBe('connected');
     expect(authority.token).toBe(docs[1]);
     expect(authority.account).toBe('newer');
+  });
+  it('fails closed when the canonical latest COROS token is not authorized by the root generation', async () => {
+    const service = DELIVERY_SERVICES.coros;
+    const ref = { collection: () => ref, doc: () => ref, limit: () => ref };
+    const docs = [
+      { id: 'older', data: () => ({ openId: 'older', serviceName: service.name,
+        tokenCredentialGeneration: 'current', dateRefreshed: 1 }) },
+      { id: 'newer', data: () => ({ openId: 'newer', serviceName: service.name,
+        tokenCredentialGeneration: 'stale', dateRefreshed: 2 }) },
+    ];
+    const values = [
+      { data: () => ({ connectionState: 'connected' }) },
+      { exists: true, data: () => ({ activeOAuthCredentialGeneration: 'current' }) },
+      { empty: false, size: 2, docs },
+      { data: () => ({}) },
+    ];
+    const authority = await readTrainingDeliveryAuthority({ collection: () => ref } as unknown as Firestore,
+      { get: async () => values.shift() } as unknown as Transaction, 'fixture', 'coros');
+    expect(authority.connection.state).toBe('connection_repair');
+    expect(authority.token).toBeNull();
   });
   it.each(['retained', 'pinned', 'ambiguous', 'untrusted', 'numeric', 'wrong-id', 'malformed-pin',
     'malformed-other', 'pinned-malformed-other'])('resolves Suunto authority: %s', async scenario => {

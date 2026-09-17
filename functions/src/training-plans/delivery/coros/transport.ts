@@ -62,6 +62,17 @@ function corosIdentity(operation: DeliveryOperation): { athleteId: number; worko
   return { athleteId: Number(athleteId), workoutId: Number(workoutId) };
 }
 
+function assertRetainedIdentity(operation: DeliveryOperation, identity: { athleteId: number; workoutId: number }): void {
+  if (!operation.artifact) return;
+  const retainedWorkoutId = integerId(operation.artifact.ids.workout);
+  const retainedAthleteId = integerId(operation.artifact.ids.athlete);
+  if (retainedWorkoutId !== identity.workoutId || retainedAthleteId !== identity.athleteId) {
+    // Never update or withdraw a different provider object when retained
+    // acceptance evidence and the stable identity mapping disagree.
+    throw new TrainingDeliveryTransportError('terminal');
+  }
+}
+
 function artifact(operation: DeliveryOperation): DeliveryArtifact {
   if (!operation.workout) throw new TrainingDeliveryTransportError('terminal');
   const identity = corosIdentity(operation);
@@ -110,6 +121,7 @@ export class CorosTrainingTransport implements TrainingDeliveryTransport {
     if (operations.some(operation => operation.kind !== kind || operation.destinationKey !== destination
       || operation.connectionGeneration !== connection
       || corosIdentity(operation).athleteId !== athlete)) throw new TrainingDeliveryTransportError('terminal');
+    for (const operation of operations) assertRetainedIdentity(operation, corosIdentity(operation));
     if (new Set(operations.map(operation => corosIdentity(operation).workoutId)).size !== operations.length) {
       throw new TrainingDeliveryTransportError('terminal');
     }
