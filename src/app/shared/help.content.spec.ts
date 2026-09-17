@@ -31,8 +31,11 @@ describe('help.content', () => {
   it('distinguishes Training consent, expiry, disconnect and the private pilot boundary', () => {
     const content = HELP_SECTIONS.find(section => section.id === 'training-plans')!.content;
     expect(content).toContain('not enabled yet');
-    expect(content).toContain('Garmin and Suunto workout delivery are restricted to the private rollout, not a public launch');
-    expect(content).toContain('COROS and Wahoo delivery are not enabled yet');
+    expect(content).toContain('Garmin, COROS and Suunto workout delivery are restricted to the private rollout, not a public launch');
+    expect(content).toContain('Wahoo delivery is not enabled yet');
+    expect(content).toContain('COROS training calendar');
+    expect(content).toContain('two-week watch window');
+    expect(content).toContain('remote checking and automatic missing-copy restoration are unavailable');
     expect(content).toContain('These cosmetic adjustments happen automatically');
     expect(content).toContain('**Not sent · Needs review**');
     expect(content).toContain('**Exclude from plan sync**');
@@ -538,8 +541,8 @@ describe('help.content', () => {
     expect(planningSection?.content).toContain('restoring plan history also restores its saved color');
     expect(HELP_SECTIONS.find(section => section.id === 'activity-calendar')?.content)
       .toContain('Standalone workouts stay neutral');
-    expect(planningSection?.content).toContain('Garmin and Suunto workout delivery are restricted to the private rollout');
-    expect(planningSection?.content).toContain('COROS and Wahoo delivery are not enabled yet');
+    expect(planningSection?.content).toContain('Garmin, COROS and Suunto workout delivery are restricted to the private rollout');
+    expect(planningSection?.content).toContain('Wahoo delivery is not enabled yet');
     expect(planningSection?.content).toContain('Scheduled for later');
     expect(planningSection?.content).toContain('Sent is not a watch receipt');
     expect(planningSection?.content).toContain('Garmin supports the same choices');

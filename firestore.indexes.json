@@ -9,6 +9,17 @@
       "fields": [{ "fieldPath": "kind", "order": "ASCENDING" }, { "fieldPath": "priority", "order": "ASCENDING" }, { "fieldPath": "dueAtMs", "order": "ASCENDING" }]
     },
     {
+      "collectionGroup": "trainingDeliveryQueue", "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "kind", "order": "ASCENDING" },
+        { "fieldPath": "uid", "order": "ASCENDING" },
+        { "fieldPath": "provider", "order": "ASCENDING" },
+        { "fieldPath": "destinationKey", "order": "ASCENDING" },
+        { "fieldPath": "operationKind", "order": "ASCENDING" },
+        { "fieldPath": "dueAtMs", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "trainingDeliverySettings",
       "queryScope": "COLLECTION",
       "fields": [

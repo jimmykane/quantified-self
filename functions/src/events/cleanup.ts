@@ -115,6 +115,7 @@ async function deleteMetadataIfEventStillMissing(userId: string, eventId: string
         // event-existence transaction so a recreated deterministic ID is protected.
         transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/fit`));
         transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/suunto`));
+        transaction.delete(db.doc(`users/${userId}/events/${eventId}/trainingCompletionEvidence/coros`));
         const linkedDocuments = [
             ...(completionsSnapshot.docs || []),
             ...(reverseLinksSnapshot.docs || []),

@@ -12,6 +12,10 @@ import { SuuntoGuideTransport } from './suunto/transport';
 import { createSuuntoGuideClient } from './suunto/http';
 import { authorizeSuuntoGuideRequest } from './suunto/authorization';
 import { validateGuideOwner } from './suunto/mapping';
+import { CorosTrainingTransport } from './coros/transport';
+import { createCorosTrainingClient } from './coros/http';
+import { authorizeCorosTrainingRequest } from './coros/authorization';
+import { reserveCorosIntegerIdentities } from './coros/identities';
 export { DELIVERY_SERVICES } from './connection';
 
 function garminTransport(db: admin.firestore.Firestore, uid: string): TrainingDeliveryTransport {
@@ -42,6 +46,25 @@ function suuntoTransport(db: admin.firestore.Firestore, uid: string, owner: stri
     recover: (operation, checkpoint, guard) => bound(operation).recover(operation, checkpoint, guard),
   };
 }
+
+function corosTransport(db: admin.firestore.Firestore, uid: string): TrainingDeliveryTransport {
+  const bound = (operation: Pick<DeliveryOperation, 'destinationKey' | 'connectionGeneration'>) => new CorosTrainingTransport(
+    createCorosTrainingClient(() => authorizeCorosTrainingRequest(db, uid, operation)));
+  const policy = new CorosTrainingTransport(async () => { throw new Error('Unbound transport'); });
+  return {
+    mappingVersion: policy.mappingVersion,
+    horizonDays: policy.horizonDays,
+    assess: (workout, destination, zone) => policy.assess(workout, destination, zone),
+    canRemove: (artifact, today) => policy.canRemove(artifact, today),
+    execute: (operation, checkpoint, guard) => bound(operation).execute(operation, checkpoint, guard),
+    recover: operation => bound(operation).recover(operation),
+    batch: {
+      maxSize: policy.batch.maxSize,
+      reserveIdentities: reserveCorosIntegerIdentities,
+      execute: (operations, beforeSend, guard) => bound(operations[0]).batch.execute(operations, beforeSend, guard),
+    },
+  };
+}
 /** No environment/browser-selectable fake. Public delivery remains disabled. */
 export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRuntime {
   return {
@@ -51,6 +74,7 @@ export function productionDeliveryRuntime(db = admin.firestore()): DeliveryRunti
     transport: (provider, uid) => {
       if (!isTrainingProviderDeliveryEnabled(provider, uid)) return null;
       if (provider === 'garmin') return garminTransport(db, uid);
+      if (provider === 'coros') return corosTransport(db, uid);
       if (provider === 'suunto') {
         let owner: string;
         try { owner = validateGuideOwner(config.suuntoapp.application_name); } catch { return null; }

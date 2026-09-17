@@ -835,4 +835,19 @@ describe('firestore indexes', () => {
             },
         ]));
     });
+
+    it('supports bounded provider batch grouping on delivery queue leaves', () => {
+        expect(loadFirestoreIndexes().indexes).toContainEqual({
+            collectionGroup: 'trainingDeliveryQueue',
+            queryScope: 'COLLECTION',
+            fields: [
+                { fieldPath: 'kind', order: 'ASCENDING' },
+                { fieldPath: 'uid', order: 'ASCENDING' },
+                { fieldPath: 'provider', order: 'ASCENDING' },
+                { fieldPath: 'destinationKey', order: 'ASCENDING' },
+                { fieldPath: 'operationKind', order: 'ASCENDING' },
+                { fieldPath: 'dueAtMs', order: 'ASCENDING' },
+            ],
+        });
+    });
 });

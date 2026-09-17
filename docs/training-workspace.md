@@ -294,7 +294,7 @@ broader so saved v1 data does not need a redesign when later UI slices are enabl
 
 Do not add planned-workout `Data*` types, `DataStore` entries, FIT parser behavior, or MCP fields merely to share this
 recipe. Extract the neutral structure, codec, validator, and reusable analysis to Sports Lib only after Garmin and COROS
-pass sandbox create/update/reschedule/delete round trips, Wahoo and Suunto fixtures are complete, the provider adapters
+pass separately authorized create/update/reschedule/delete round trips, Wahoo and Suunto mapping fixtures are complete, the provider adapters
 have not contaminated the neutral model, and persisted Quantified Self fixtures round-trip unchanged through a locally
 packed Sports Lib package. That gate is tracked by GitHub issue #654 under epic #583.
 
@@ -499,7 +499,9 @@ marker removed without recurring scans. The pre-existing large manual-operation 
 
 `onTrainingDeliveryQueued` dispatches due jobs, `processTrainingDeliveryTask` processes one bounded page or delivery,
 and `dispatchTrainingDelivery` recovers at most 25 due reservations each minute using the existing Cloud Tasks enqueue
-and queue-depth helpers. Reservation precedes enqueue, so lost acknowledgements and crashes are recoverable. A finished
+and queue-depth helpers. Each priority class scans bounded pages of 25, with a hard 100-row bound, so coalesced COROS
+siblings do not consume dispatch capacity or hide another due destination/provider. Reservation precedes enqueue, so
+lost acknowledgements and crashes are recoverable. A finished
 scan becomes eligible again after 30 minutes to pick up saved-zone day boundaries, adapter horizons and entitlement
 changes. `onTrainingDeliveryConnectionChanged`, `onTrainingDeliveryEntitlementChanged`, and
 `onTrainingDeliveryQueued` each use 512 MiB for their bounded Firestore and queue work; this adds process headroom
@@ -736,10 +738,9 @@ The separate certification/evaluation ticket #698 is retired; it is not an enabl
 ### Provider proof status
 
 `shared/planned-workout-providers.ts` is the versioned capability/research snapshot. All four public delivery switches remain
-false. Garmin has an offline-tested HTTP adapter plus its private production pilot; Suunto is `private-rollout` with an
-offline-tested Guide transport. Offline verification does not constitute a real provider request or device result.
-The UID-restricted runtime admits only the owner for each implemented adapter. COROS and Wahoo remain fixture-only,
-without production transport bindings. The
+false. Garmin, COROS and Suunto have exact-UID private production pilots backed by offline-tested transports. Offline
+verification does not constitute a real provider request or device result. The UID-restricted runtime admits only the
+owner for each implemented adapter. Wahoo remains fixture-only without a production transport binding. The
 ignored local Garmin Training API V2 and COROS API Reference PDFs remain evidence only and are never committed.
 
 Every serializer returns `exact`, `degraded`, or `unsupported`. Degraded output requires explicit approval. Current
@@ -770,8 +771,51 @@ cycling-only secondary-target field subject to its existing device-support warni
 Unsupported sports still fail closed. Existing Running/Cycling payloads and retained remote identities do not change,
 and no authored recipe, schedule history, Sports Lib type or provider ID is rewritten.
 
+#### COROS Training delivery (#648)
+
+COROS reuses the shared ledger, reconciliation queue, consent, status and per-workout lease model. The existing minute
+dispatcher coalesces due COROS leaves for the same user, provider destination and operation kind; the worker leases at
+most 30 individual deliveries and writes a private batch journal below `trainingDeliveryState/current`. Garmin and
+Suunto remain on their single-workout transport path. Request-start and per-item acceptance are journalled across the
+whole claimed batch. A timeout, lost response, malformed range acknowledgement, duplicated delete outcome or missing
+per-item outcome becomes `needs_attention`; Retry never blindly repeats an uncertain batch.
+
+Collision-checked positive 32-bit partner IDs are private delivery metadata. One athlete ID is bound to the QS user and
+is never derived from COROS `openId`; one workout ID is bound to the exact destination/workout and survives edits,
+reschedules and plan transfers. Mappings and accepted artifact IDs outlive authored workout deletion so eligible removal
+and completion correlation can finish, while recursive account deletion removes them. Queue leaves add provider,
+destination and operation metadata solely for bounded grouping; browser and MCP projections expose none of it.
+
+The production client is form-encoded and admits only `POST /coros/tp/list/push` and
+`POST /coros/tp/workout/deleteById`. It reuses `COROSAPI_CLIENT_ID`/`COROSAPI_CLIENT_SECRET`, the canonical pinned
+account and coordinated token refresh. Existing connections remain valid when root and selected-token credential
+generations are both absent, or when both are present and equal; one-sided or conflicting metadata fails closed. No
+migration or reconnect is required only because both fields are absent. Provider result `30009` means COROS Training
+access is unavailable and never asks for reconnect; `5006` is authentication failure. Actual provider retry delays are
+honoured when returned; this adapter adds no speculative quota or throttling layer.
+
+Upserts cover today through 365 days in the saved delivery time zone and carry deterministic LastModifiedDate values.
+Running, Cycling and Trail Running use the native COROS wire values `run`, `bike` and `trailRun`. Treadmill and cycling subtypes fold to `run`/`bike` only
+after explicit approval. Cycling cadence remains unsupported. Rounding, recovery-to-rest, frozen relative references and
+first-target-only mapping keep the existing payload-bound approval rules. Push success requires an accepted date range
+covering the submitted batch; delete success/failure lists are resolved per workout. Past and completed artifacts remain
+protected.
+
+Inbound COROS `planWorkoutId` is matched only to the exact positive partner workout ID under the same active account and
+credential authority. Webhook and history imports use the same transaction: one unambiguous root workout can write the
+existing safe completion projection/private reverse link and mark its delivery completed. Duplicate imports are
+idempotent; component rows, collisions, account changes, missing workouts and conflicts remain unlinked. Event deletion
+removes only its matching link/evidence and requeues ordinary reconciliation. Fallback/manual matching and MCP exposure
+remain #651. COROS has no documented planned-workout read/list endpoint, so it exposes no Check action, missing-copy
+inference or automatic recreation.
+
+The exact pilot UID is enforced in both frontend readiness and the server runtime. Public delivery stays disabled.
+Ordinary authorized live evidence is still required for Training entitlement, repeated-ID update, overlapping-window
+preservation, reschedule, eligible delete, completion callback/history correlation and COROS app/watch behavior before
+broader rollout. Implementation, tests or deployment do not constitute that evidence.
+
 MCP impact: no wire-contract change. `get_planned_workout` already returns the exact authored Sports Lib activity type,
-while `get_training_sync_status` exposes only the existing sanitized approval/status result and never the Garmin
+while `get_training_sync_status` exposes only the existing sanitized approval/status result and never the COROS
 payload. The existing Mountain Biking read fixture covers exact recipe preservation. No new scope, tool, registered
 schema, Assistant route or plugin update is needed.
 
@@ -944,7 +988,8 @@ Remote verification extends the existing delivery pipeline, not the authored wor
 QS remains authoritative for consent and authored dates. Inspection checks cloud artifacts and required associations;
 it does not import provider-side edits, compare/rewrite recipe content routinely, or confirm watch downloads.
 Garmin's retained workout and schedule IDs are inspected separately. Suunto supports positive owned-Guide inspection
-as described above; COROS and Wahoo have no transport binding. Delivery readiness alone never grants repair readiness.
+as described above. COROS has a delivery transport but no documented planned-workout read/list endpoint; Wahoo has no
+transport binding. Delivery readiness alone never grants inspection or repair readiness.
 
 `verification-contracts.ts` declares adapter-owned, per-artifact inspection and repair capabilities plus normalized observations. The shared evidence
 reducer binds observations to the exact destination, connection generation/epoch, IDs, saved zone, settings/association
@@ -952,8 +997,9 @@ and policy version. A missing resource needs two authoritative observations at l
 positive or inconclusive observation resets confirmation. Unknown/malformed responses, ownership failures and duplicate
 identities never establish absence. A proved schedule/association absence cannot authorize classifying or repairing an
 unproved workout/content resource. Invalid or contradictory capability declarations fail closed. Inventory adapters provide bounded cursors and explicit complete/stable/unfiltered
-coverage; a partial or changing offset listing cannot prove deletion. COROS remains unsupported until #648 establishes
-a documented planned-resource inspection mechanism, not recorded-activity polling or blind schedule republishing.
+coverage; a partial or changing offset listing cannot prove deletion. COROS verification remains unsupported because
+its documented contract has no planned-resource inspection mechanism; recorded-activity polling and blind schedule
+republishing are not substitutes.
 Wahoo #649 must model Plan/Workout/association separately and prove external-ID and uncertain-create recovery;
 `workout_token` is not a documented POST idempotency guarantee. Suunto #650 implements owned reads and exact externalId
 conflict recovery; negative classification/repair is tracked by #710. Unpinning or device eviction is not cloud deletion.

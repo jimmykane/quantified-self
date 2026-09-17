@@ -22,11 +22,13 @@ describe('TrainingDeliveryService boundary', () => {
     user.set({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' });
     expect(service.anyReady()).toBe(true);
     expect(service.isReady('garmin')).toBe(true);
+    expect(service.isReady('coros')).toBe(true);
     expect(service.isReady('suunto')).toBe(true);
-    for (const provider of ['coros', 'wahoo'] as const) expect(service.isReady(provider)).toBe(false);
+    expect(service.isReady('wahoo')).toBe(false);
     user.set({ uid: 'another-user' });
     expect(service.anyReady()).toBe(false);
     expect(service.isReady('garmin')).toBe(false);
+    expect(service.isReady('coros')).toBe(false);
     expect(service.isReady('suunto')).toBe(false);
     user.set({ uid: 'xcsAolLDDTWTgtRN9eYF3lW2YKL2' });
     user.set(null);

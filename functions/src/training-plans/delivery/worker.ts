@@ -12,6 +12,7 @@ import { inspectionBinding } from './verification-evidence';
 import { canRepairMissingArtifacts, VERIFICATION_DAY_MS } from './verification-contracts';
 import { emptyVerification } from './verification-queue';
 import { observeDeliveryCheckpoint } from './diagnostics';
+import { processTrainingDeliveryBatch } from './batch-worker';
 
 function validateArtifact(value: DeliveryArtifact | null): void {
   if (value === null) return;
@@ -29,6 +30,15 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
   const user = db.collection('users').doc(uid);
   const ledgerRef = user.collection(DELIVERY_LEDGER).doc(id);
   const jobRef = db.collection(DELIVERY_QUEUE).doc(id);
+  const seedLedger = await ledgerRef.get();
+  if (seedLedger.exists) {
+    const seed = seedLedger.data() as DeliveryLedgerV1;
+    const seedTransport = runtime.transport(seed.provider, uid);
+    if (seedTransport?.batch) {
+      await processTrainingDeliveryBatch(runtime, uid, id, seed.provider, seedTransport);
+      return;
+    }
+  }
   const leaseId = randomUUID();
   const startedAt = runtime.now();
   const pro = await runtime.hasPro(uid);
@@ -316,7 +326,9 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
       ledger.updatedAtMs = runtime.now();
       if (operation.repair && ledger.verification) ledger.verification.state = failure.kind === 'deferred' ? 'deferred' : 'confirmed_missing';
       writeDelivery(runtime, tx, uid, ledger);
-      if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id, dueAtMs: ledger.retryAtMs, dispatchToken: randomUUID() });
+      if (ledger.status === 'retrying') tx.set(jobRef, { uid, kind: 'delivery', deliveryId: id,
+        provider: ledger.provider, destinationKey: ledger.destinationKey, operationKind: operation.kind,
+        dueAtMs: ledger.retryAtMs, dispatchToken: randomUUID() });
       else tx.delete(jobRef);
     });
     logger.warn('[TrainingDelivery]', { event: 'failure', provider: claim.provider, category: failure.kind, ...failure.diagnostics,

@@ -164,6 +164,25 @@ describe('Training provider delivery controls', () => {
     expect(service.preview).not.toHaveBeenCalled(); expect(service.mutate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Check queued');
   });
+  it('explains COROS calendar and watch behavior without offering unsupported remote checks', () => {
+    service.isReady.mockImplementation(provider => provider === 'coros');
+    service.watchScope.mockReturnValue(of({
+      settings: [],
+      statuses: [{ ...status, provider: 'coros', status: 'delivered', differsFromQS: false,
+        lastAcceptedAtMs: 1000, lastAttemptAtMs: 1000 }],
+      verifications: [{ id: status.id, canCheck: false, state: 'unsupported', lastCheckedAtMs: null, missing: false }],
+    }));
+    const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Sent · remote checking unavailable');
+    expect([...fixture.nativeElement.querySelectorAll('button')].some((button: HTMLButtonElement) =>
+      button.textContent?.trim() === 'Check COROS')).toBe(false);
+    const guidance: HTMLElement = fixture.nativeElement.querySelector('#delivery-guidance-details');
+    expect(guidance.textContent).toContain('COROS training calendar');
+    expect(guidance.textContent).toContain('two-week watch window');
+    expect(guidance.textContent).toContain('one training plan synced to a watch at a time');
+    expect(guidance.textContent).toContain('does not confirm that your watch received it');
+    expect(service.check).not.toHaveBeenCalled();
+  });
   it('shows the last attempt for partial delivery instead of an empty last-sent date', () => {
     const fixture = TestBed.createComponent(TrainingDeliveryDialogComponent); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.delivery-status > .delivery-caption').textContent).toContain('Last attempt');
