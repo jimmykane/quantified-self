@@ -13,6 +13,7 @@ const {
     mockCollectionGroup,
     mockRequestGet,
     mockDeferQueueItemForPendingDisconnect,
+    mockDeferWorkoutQueueItemForTokenRefreshContention,
     mockIncreaseRetryCountForQueueItem,
     mockMarkQueueItemSkipped,
     mockMoveToDeadLetterQueue,
@@ -25,6 +26,7 @@ const {
     mockResolveProviderImportEventID,
     MockTerminalServiceAuthError,
     MockTokenRefreshSkippedForDeletedUserError,
+    MockTokenRefreshInProgressError,
     mockShouldSkipQueueWorkForDeletedUser,
 } = vi.hoisted(() => {
     class MockTerminalServiceAuthError extends Error {
@@ -36,6 +38,9 @@ const {
     class MockTokenRefreshSkippedForDeletedUserError extends Error {
         readonly name = 'TokenRefreshSkippedForDeletedUserError';
     }
+    class MockTokenRefreshInProgressError extends Error {
+        readonly name = 'TokenRefreshInProgressError';
+    }
 
     return {
         mockSetEvent: vi.fn(),
@@ -45,6 +50,7 @@ const {
         mockCollectionGroup: vi.fn(),
         mockRequestGet: vi.fn(),
         mockDeferQueueItemForPendingDisconnect: vi.fn(),
+        mockDeferWorkoutQueueItemForTokenRefreshContention: vi.fn(),
         mockIncreaseRetryCountForQueueItem: vi.fn(),
         mockMarkQueueItemSkipped: vi.fn(),
         mockMoveToDeadLetterQueue: vi.fn(),
@@ -57,6 +63,7 @@ const {
         mockResolveProviderImportEventID: vi.fn(),
         MockTerminalServiceAuthError,
         MockTokenRefreshSkippedForDeletedUserError,
+        MockTokenRefreshInProgressError,
         mockShouldSkipQueueWorkForDeletedUser: vi.fn().mockResolvedValue(false),
     };
 });
@@ -65,6 +72,11 @@ vi.mock('../tokens', () => ({
     getTokenData: mockGetTokenData,
     TerminalServiceAuthError: MockTerminalServiceAuthError,
     TokenRefreshSkippedForDeletedUserError: MockTokenRefreshSkippedForDeletedUserError,
+    TokenRefreshInProgressError: MockTokenRefreshInProgressError,
+}));
+
+vi.mock('../queue/token-refresh-contention', () => ({
+    deferWorkoutQueueItemForTokenRefreshContention: mockDeferWorkoutQueueItemForTokenRefreshContention,
 }));
 
 vi.mock('../queue/user-deletion-skip', () => ({
@@ -182,7 +194,7 @@ vi.mock('firebase-admin', () => ({
 // Import SUT
 import { processGarminAPIActivityQueueItem, insertGarminAPIActivityFileToQueue } from './queue';
 import { addToQueueForGarmin } from '../queue';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshInProgressError, TokenRefreshSkippedForDeletedUserError } from '../tokens';
 import { updateToProcessed } from '../queue-utils';
 import { EventWriteSkippedForDeletedUserError } from '../utils';
 
@@ -490,10 +502,30 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
                 savedOriginalFiles: [{ path: 'users/firebase-user-id/events/saved-event-id/original.fit' }],
             });
             mockDeferQueueItemForPendingDisconnect.mockResolvedValue('DEFERRED');
+            mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue('DEFERRED');
             mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
             mockMarkQueueItemSkipped.mockResolvedValue('PROCESSED');
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
             vi.mocked(updateToProcessed).mockResolvedValue('PROCESSED' as any);
+        });
+
+        it('should schedule recovery without consuming retry budget when token refresh is already in progress', async () => {
+            vi.mocked(getTokenData).mockRejectedValue(new TokenRefreshInProgressError(
+                ServiceNames.GarminAPI,
+                'garmin-user-id',
+            ));
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('DEFERRED');
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.GarminAPI,
+                queueItem,
+                userID: firebaseUserID,
+            }));
+            expect(mockRequestGet).not.toHaveBeenCalled();
+            expect(mockIncreaseRetryCountForQueueItem).not.toHaveBeenCalled();
+            expect(mockMoveToDeadLetterQueue).not.toHaveBeenCalled();
         });
 
         it('should successfully process a FIT file and use the correct Firebase User ID', async () => {

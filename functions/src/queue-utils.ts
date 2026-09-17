@@ -531,6 +531,15 @@ export interface DeferQueueItemForReconnectRequiredIfCurrentUserActiveParams
     serviceName: ServiceNames;
 }
 
+export interface DeferQueueItemForTokenRefreshContentionIfCurrentUserActiveParams {
+    queueItem: QueueItemInterface;
+    userID: string;
+    phase: string;
+    logPrefix: string;
+    recoveryDispatchedAtMs: number;
+    isCurrent: (queueItem: Record<string, unknown>) => boolean;
+}
+
 const RECONNECT_REQUIRED_ALREADY_RESOLVED = 'reconnect_required_already_resolved';
 const PENDING_DISCONNECT_ALREADY_RESOLVED = 'pending_disconnect_already_resolved';
 
@@ -542,6 +551,47 @@ export async function deferQueueItemForPendingDisconnectIfCurrentUserActive(
     params: DeferQueueItemForPendingDisconnectIfCurrentUserActiveParams,
 ): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
     return deferQueueItemForServiceStateIfCurrentUserActive(params);
+}
+
+/**
+ * Records a confirmed delayed recovery task without charging the provider
+ * failure budget. Keeping a real dispatch timestamp prevents the scheduled
+ * dispatcher from creating a second task while that recovery is pending.
+ */
+export async function deferQueueItemForTokenRefreshContentionIfCurrentUserActive(
+    params: DeferQueueItemForTokenRefreshContentionIfCurrentUserActiveParams,
+): Promise<QueueResult.Deferred | QueueResult.Processed | QueueResult.Failed> {
+    try {
+        const transitionResult = await runQueueItemTransitionIfCurrentUserActive({
+            ...params,
+            actionDescription: 'token-refresh-contention deferral',
+        }, async transaction => {
+            transaction.update(params.queueItem.ref!, {
+                dispatchedToCloudTask: params.recoveryDispatchedAtMs,
+                providerOperationStartedAt: null,
+                ...clearRevisionProcessingLeaseUpdate(),
+            });
+        });
+
+        if (transitionResult === QueueItemUserGuardedUpdateResult.SkippedDeletedUser) {
+            logger.info(
+                `[${params.logPrefix}] Skipping token-refresh-contention deferral for queue item ${params.queueItem.id} because the owner is missing or deletion is in progress.`,
+            );
+            return QueueResult.Processed;
+        }
+        if (transitionResult === QueueItemUserGuardedUpdateResult.NotCurrent) {
+            logger.info(
+                `[${params.logPrefix}] Skipping stale token-refresh-contention deferral for queue item ${params.queueItem.id}; its live state has already advanced or been replaced.`,
+            );
+            return QueueResult.Processed;
+        }
+
+        logger.info(`[${params.logPrefix}] Deferred queue item ${params.queueItem.id} because a token refresh is already in progress.`);
+        return QueueResult.Deferred;
+    } catch (error) {
+        logger.error(new Error(`Could not defer queue item ${params.queueItem.id} after token refresh contention: ${error}`));
+        return QueueResult.Failed;
+    }
 }
 
 /**

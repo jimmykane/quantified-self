@@ -72,6 +72,9 @@ const {
 
 vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
+    TokenRefreshInProgressError: class TokenRefreshInProgressError extends Error {
+        readonly name = 'TokenRefreshInProgressError';
+    },
     TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
         readonly name = 'TokenRefreshSkippedForDeletedUserError';
     },

@@ -182,6 +182,31 @@ describe('Cloud Tasks Utils', () => {
             );
         });
 
+        it('enqueues a distinct delayed recovery task bound to a legacy queue incarnation', async () => {
+            const { enqueueWorkoutRecoveryTask } = await import('./cloud-tasks');
+
+            await expect(enqueueWorkoutRecoveryTask(
+                'suuntoApp' as ServiceNames,
+                'item-123',
+                1000,
+                95,
+                { recoveryTaskKey: 'attempt/1' },
+            )).resolves.toBe(true);
+
+            expect(hoisted.mockTaskQueue.enqueue).toHaveBeenCalledWith(
+                {
+                    queueItemId: 'item-123',
+                    serviceName: 'suuntoApp',
+                    queueDateCreated: 1000,
+                },
+                {
+                    id: 'suuntoApp-item-123-1000-token-refresh-attempt-1',
+                    scheduleDelaySeconds: 95,
+                },
+            );
+            expect(hoisted.mockCloudTasksClient.getTask).not.toHaveBeenCalled();
+        });
+
         it('preserves the workout recovery path for a stale production task-name reservation', async () => {
             const { enqueueWorkoutTask } = await import('./cloud-tasks');
             const duplicateError = Object.assign(new Error('Already exists'), {

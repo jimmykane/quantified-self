@@ -39,6 +39,11 @@ interface EnqueueWorkoutTaskOptions {
     queueRevision?: string;
 }
 
+export interface EnqueueWorkoutRecoveryTaskOptions {
+    recoveryTaskKey: number | string;
+    queueRevision?: string;
+}
+
 export interface WorkoutTaskDispatchItem {
     id: string;
     dateCreated: number;
@@ -338,6 +343,54 @@ export async function enqueueWorkoutTask(
     }
 
     logger.warn(`[Dispatcher] Recovery task name for ${serviceName}:${queueItemId} is reserved but no live recovery task was found; leaving dispatch marker unchanged.`);
+    return false;
+}
+
+/**
+ * Enqueues a distinct recovery task while the ordinary deterministic task is
+ * still running. Unlike enqueueWorkoutTask, this deliberately does not treat
+ * the live base task as evidence that the delayed follow-up exists.
+ */
+export async function enqueueWorkoutRecoveryTask(
+    serviceName: ServiceNames,
+    queueItemId: string,
+    dateCreated: number,
+    scheduleDelaySeconds: number,
+    options: EnqueueWorkoutRecoveryTaskOptions,
+): Promise<boolean> {
+    const { projectId, location, workoutQueue } = config.cloudtasks;
+    if (!projectId) throw new Error('Project ID is not defined in config');
+
+    const safeDateCreated = Number.isFinite(dateCreated) ? Math.max(0, Math.floor(dateCreated)) : 0;
+    const queueRevision = normalizeQueueRevision(options.queueRevision) || '';
+    const safeQueueRevision = queueRevision
+        ? sanitizeTaskNamePart(queueRevision).slice(0, 80)
+        : '';
+    const baseTaskId = `${sanitizeTaskNamePart(serviceName)}-${sanitizeTaskNamePart(`${queueItemId}`)}-${safeDateCreated}${safeQueueRevision ? `-revision-${safeQueueRevision}` : ''}`;
+    const recoveryTaskId = `${baseTaskId}-token-refresh-${sanitizeTaskNamePart(`${options.recoveryTaskKey}`)}`;
+    const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
+    const payload = {
+        queueItemId,
+        serviceName,
+        ...(queueRevision
+            ? { queueRevision }
+            : { queueDateCreated: safeDateCreated }),
+    };
+
+    const created = await enqueueTaskWithRetry({
+        projectId,
+        location,
+        functionName: workoutQueue,
+        taskId: recoveryTaskId,
+        payload,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[Dispatcher] Token-refresh recovery task already exists for ${serviceName}:${queueItemId}, skipping`,
+        failedLogPrefix: `[Dispatcher] Failed to enqueue token-refresh recovery task for ${serviceName}:${queueItemId}:`,
+    });
+    if (created) return true;
+    if (await cloudTaskExists(recoveryTaskName)) return true;
+
+    logger.warn(`[Dispatcher] Token-refresh recovery task name for ${serviceName}:${queueItemId} is reserved but no live task was found.`);
     return false;
 }
 

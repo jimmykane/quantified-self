@@ -62,8 +62,8 @@ export const processWorkoutTask = onTaskDispatched({
     const expectedQueueRevision = normalizeQueueRevision(queueRevision);
     const expectedQueueDateCreated = Number(queueDateCreated);
     const shouldCheckQueueRevision = expectedQueueRevision !== null
-        || (serviceName === ServiceNames.COROSAPI
-            && (currentQueueRevision !== null || Number.isFinite(expectedQueueDateCreated)));
+        || (serviceName === ServiceNames.COROSAPI && currentQueueRevision !== null)
+        || Number.isFinite(expectedQueueDateCreated);
     if (shouldCheckQueueRevision && !hasMatchingQueueRevision({
         currentQueueItem: queueItem || {},
         attemptedQueueItem: { queueRevision: expectedQueueRevision },
@@ -99,7 +99,7 @@ export const processWorkoutTask = onTaskDispatched({
                 }
                 break;
             case QueueResult.Deferred:
-                logger.warn(`[TaskWorker] Deferred ${serviceName} item ${queueItemId}; it remains queued for a future dispatcher run.`);
+                logger.info(`[TaskWorker] Deferred ${serviceName} item ${queueItemId}; it remains queued for a future dispatcher run.`);
                 break;
             case QueueResult.MovedToDLQ:
                 logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);

@@ -155,6 +155,23 @@ describe('processWorkoutTask', () => {
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 
+    it('skips a stale Garmin recovery task when its queue item was replaced', async () => {
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed: false, dateCreated: 200 }),
+        });
+
+        await expect((processWorkoutTask as any)({
+            data: {
+                queueItemId: 'stable-garmin-id',
+                serviceName: ServiceNames.GarminAPI,
+                queueDateCreated: 100,
+            },
+        })).resolves.toBeUndefined();
+
+        expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
+    });
+
     it('processes a legacy COROS task when its creation-time generation still matches', async () => {
         mockGet.mockResolvedValue({
             exists: true,
