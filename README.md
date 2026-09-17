@@ -170,7 +170,7 @@ Never commit environment files, service-account JSON, API tokens, private keys, 
 | Local plugin validation | `npm run plugin:validate` | Uses an isolated temporary Codex profile |
 | Local plugin refresh | `npm run plugin:sync` | Explicitly rebuilds and reinstalls; normal app builds never do this |
 
-The repository-local Quantified Self plugin bundles the registered read-only MCP app with seven discoverable workflows
+The repository-local Quantified Self plugin bundles the registered permission-scoped MCP app with seven discoverable workflows
 for cross-domain analysis, all-day Health, training, sleep, body measurements, activities, and saved routes. Configure its
 account-specific ChatGPT technical app ID once by setting `QS_CHATGPT_APP_ID` and running
 `npm run plugin:configure`, then run `npm run plugin:setup`. Generated app mappings and cache-busted manifests are
@@ -238,7 +238,7 @@ Unified health history under `users/{uid}/healthSourceRecords` and `healthSample
 - [Supported activities and metrics catalog](docs/supported-activities.md)
 - [MCP-backed built-in Assistant](docs/assistant.md)
 - [Activity Calendar architecture and maintenance](docs/activity-calendar.md)
-- [Read-only MCP server](docs/mcp-server.md)
+- [MCP server](docs/mcp-server.md)
 - [Firebase Function secret management](docs/function-secret-management.md)
 - [Queue processing architecture](docs/queue-processing.md)
 - [Sleep sync operations](docs/sleep-sync-operations.md)

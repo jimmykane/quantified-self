@@ -373,6 +373,7 @@ type ActivityDetailKind = 'laps' | 'jumps' | 'swim_lengths';
 type RouteDocumentKind = 'geometry' | 'source';
 type OpaqueValueKind =
   | 'training_read'
+  | 'training_proposal'
   | 'timeline_notes_cursor'
   | 'activity_ref'
   | 'route_ref'
@@ -1442,7 +1443,7 @@ function deriveOpaqueValueKey(
     .digest();
 }
 
-function encodeOpaqueValue(
+export function encodeOpaqueValue(
   kind: OpaqueValueKind,
   value: Record<string, unknown>,
   uid: string,
@@ -1466,7 +1467,7 @@ function encodeOpaqueValue(
   ]).toString('base64url');
 }
 
-function decodeOpaqueValue(
+export function decodeOpaqueValue(
   kind: OpaqueValueKind,
   encodedValue: string | undefined,
   uid: string,
@@ -6234,11 +6235,27 @@ export function createMcpDataService(
         return await readTrainingPlans(input, reads, {
           encode: (value, uid, connectionId) => encodeOpaqueValue('training_read', value, uid, connectionId),
           decode: (value, uid, connectionId) => decodeOpaqueValue('training_read', value, uid, connectionId, 'Training reference'),
+          encodeActivity: (value, uid, connectionId) => encodeOpaqueValue('activity_ref', value, uid, connectionId),
         }, dependencies.now());
       } catch (error) {
         if (error instanceof TrainingReadError) throw new McpDataError(error.code, error.message);
         throw new McpDataError('temporarily_unavailable', 'Training records could not be read safely. Try again later.');
       }
+    },
+
+    async previewTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { previewTrainingChanges } = await import('./training-plans-write.service');
+      return previewTrainingChanges(input);
+    },
+
+    async getTrainingProposalConfirmation(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { getTrainingProposalConfirmation } = await import('./training-plans-write.service');
+      return getTrainingProposalConfirmation(input);
+    },
+
+    async applyTrainingChanges(input: import('./training-plans-write.service').TrainingWriteInput) {
+      const { applyTrainingChanges } = await import('./training-plans-write.service');
+      return applyTrainingChanges(input);
     },
 
     async queryTimelineNotes(input: McpTimelineNotesInput) {

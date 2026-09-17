@@ -109,6 +109,14 @@ history. Waiting, paused, unsupported, approval and failure states stay visible.
 not claim complete success. Rendering these summaries performs owner-visible reads only, never provider calls or consent
 changes. See the Training workspace source of truth for identity matching, read bounds and tests.
 
+Separately authorized MCP Training delivery changes reuse `trainingDeliveryCommand` and its durable reconciliation
+marker; MCP does not implement an adapter or call provider HTTP directly. A strict proposal resolves only server-owned
+connection authority, compatibility and readiness, and a modern MCP input-required confirmation must precede apply.
+`all_connected` includes only providers that are connected and rollout-ready during preview. Explicit providers retain
+an independent blocked result rather than hiding the reason. Destination keys, credentials, artifact IDs, approval
+digests and attempt journals never enter MCP input or output. Provider delivery remains Pro-gated, and failure does not
+roll back an authored plan/workout mutation in the same confirmed proposal.
+
 Training planning currently has an explicit UID-based **frontend presentation** rollout across its routes, calendar
 actions/overlays, Help and planning-specific connection/deletion instructions. Other accounts retain normal provider
 controls and generic provider-copy retention warnings. This does not authorize transport work, alter disconnect or

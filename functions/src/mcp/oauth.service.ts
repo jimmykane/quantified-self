@@ -21,6 +21,8 @@ export const MCP_OAUTH_SCOPES = {
   HealthRead: 'health:read',
   TimelineNotesRead: 'timeline-notes:read',
   TrainingPlansRead: 'training-plans:read',
+  TrainingPlansWrite: 'training-plans:write',
+  TrainingDeliveryWrite: 'training-delivery:write',
   MeasurementsRead: 'measurements:read',
   SleepRead: 'sleep:read',
   ActivityDetailsRead: 'activity-details:read',
@@ -43,6 +45,10 @@ export function hasValidMcpScopeDependencies(
   ) && !(
     selected.has(MCP_OAUTH_SCOPES.RouteLocationRead)
     && !selected.has(MCP_OAUTH_SCOPES.RoutesRead)
+  ) && !(
+    (selected.has(MCP_OAUTH_SCOPES.TrainingPlansWrite)
+      || selected.has(MCP_OAUTH_SCOPES.TrainingDeliveryWrite))
+    && !selected.has(MCP_OAUTH_SCOPES.TrainingPlansRead)
   );
 }
 
@@ -2117,6 +2123,8 @@ export function createMcpOAuthService(
       const grantedScopes = normalizeOAuthScopes(input.grantedScopes
         ?? request.scopes.filter(scope => scope !== MCP_OAUTH_SCOPES.TimelineNotesRead
           && scope !== MCP_OAUTH_SCOPES.TrainingPlansRead
+          && scope !== MCP_OAUTH_SCOPES.TrainingPlansWrite
+          && scope !== MCP_OAUTH_SCOPES.TrainingDeliveryWrite
           && scope !== MCP_OAUTH_SCOPES.ActivityDescriptionsRead));
       if (grantedScopes.some(scope => !request.scopes.includes(scope))) {
         throw new McpOAuthError('invalid_scope', 'A scope was not included in the original request.');

@@ -159,6 +159,8 @@ export interface AssistantChatRequest {
   /** Missing on older clients means disabled. Enabling requires a fresh server-owned chat. */
   timelineNotesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
   requestId: string;
   message: string;
   timeZone: string;
@@ -166,9 +168,33 @@ export interface AssistantChatRequest {
   conversationId?: string;
 }
 
+export interface AssistantTrainingProposalPreview {
+  proposalRef: string;
+  permissionMode: 'schedule' | 'delivery' | 'combined';
+  expiresAtMs: number;
+  scheduleRevision: number;
+  summary: string;
+  requiresConfirmation: true;
+  changes: Array<{ index: number; kind: string; summary: string }>;
+  providerPreviews: Array<{
+    index: number;
+    provider: 'garmin' | 'coros' | 'wahoo' | 'suunto';
+    targetType: 'plan' | 'workout';
+    action: 'enable' | 'send' | 'resume' | 'stop' | 'retry' | 'check' | 'approve';
+    availability: 'ready' | 'unavailable' | 'reconnect_required' | 'connection_repair' | 'pro_required';
+    timeZone: string | null;
+    eligibleCount: number;
+    warningCount: number;
+    summary: string;
+  }>;
+}
+
 export interface AssistantChatResponse {
   timelineNotesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
+  pendingTrainingProposal?: AssistantTrainingProposalPreview;
   conversation: AssistantConversation;
   quota: AssistantQuotaStatus;
   pendingRequestId: string | null;
@@ -179,6 +205,9 @@ export type GetAssistantConversationRequest = Record<string, never>;
 export interface GetAssistantConversationResponse {
   timelineNotesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
+  pendingTrainingProposal?: AssistantTrainingProposalPreview;
   conversation: AssistantConversation | null;
   pendingRequestId: string | null;
   locationAccess: AssistantLocationAccess;
@@ -189,11 +218,29 @@ export interface ResetAssistantConversationRequest {
   conversationId?: string | null;
   timelineNotesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
   locationAccess: AssistantLocationAccess;
 }
 
 export interface ResetAssistantConversationResponse {
   timelineNotesEnabled?: boolean;
   trainingPlansEnabled?: boolean;
+  trainingPlanChangesEnabled?: boolean;
+  trainingDeliveryEnabled?: boolean;
   conversation: AssistantConversation;
+}
+
+export interface ApplyAssistantTrainingProposalRequest {
+  proposalRef: string;
+  permissionMode: 'schedule' | 'delivery' | 'combined';
+  conversationId: string;
+  confirm: boolean;
+}
+
+export interface ApplyAssistantTrainingProposalResponse {
+  status: 'applied' | 'partially_applied' | 'dismissed';
+  scheduleRevision: number;
+  changes: Array<{ index: number; kind: string; status: 'applied' | 'already_applied' | 'failed'; message: string }>;
+  providers: Array<{ index: number; provider: 'garmin' | 'coros' | 'wahoo' | 'suunto'; status: 'queued' | 'applied' | 'already_applied' | 'blocked' | 'failed'; message: string }>;
 }

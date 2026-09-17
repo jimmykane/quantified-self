@@ -11,6 +11,7 @@ import {
   assertAssistantLegalAccess,
   resolveAssistantAppBaseUrl,
   runAssistantChat,
+  runApplyAssistantTrainingProposal,
   runGetAssistantConversation,
   runGetAssistantQuotaStatus,
   runResetAssistantConversation,
@@ -68,6 +69,7 @@ function createDependencies() {
       locationAccess: 'coordinate_free',
     }),
     completeTurn: vi.fn().mockResolvedValue(conversation),
+    clearTrainingProposal: vi.fn().mockResolvedValue(undefined),
     releaseTurn: vi.fn().mockResolvedValue(undefined),
     resetConversation: vi.fn().mockResolvedValue(conversation),
   };
@@ -118,6 +120,52 @@ const context = {
 };
 
 describe('Assistant callable', () => {
+  it('dismisses only the current server-owned Training proposal without applying it', async () => {
+    const { store } = createDependencies();
+    const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'combined' as const,
+      expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 7,
+      summary: 'Create and send a workout.', requiresConfirmation: true as const,
+      changes: [{ index: 0, kind: 'create-workout', summary: 'Create it.' }], providerPreviews: [] };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation: { version: 1, conversationId: 'conversation-1', messages: [],
+        expiresAt: '2026-08-10T12:00:00.000Z' }, pendingRequestId: null, locationAccess: 'coordinate_free',
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      pendingTrainingProposal: proposal,
+    });
+    await expect(runApplyAssistantTrainingProposal({ proposalRef: proposal.proposalRef,
+      permissionMode: proposal.permissionMode, conversationId: 'conversation-1', confirm: false }, context, store))
+      .resolves.toEqual({ status: 'dismissed', scheduleRevision: 7, changes: [], providers: [] });
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef);
+  });
+
+  it('applies the current proposal with the exact Assistant conversation authority and then clears it', async () => {
+    const { store } = createDependencies();
+    const proposal = { proposalRef: 'opaque-proposal', permissionMode: 'combined' as const,
+      expiresAtMs: Date.parse('2026-08-03T12:15:00Z'), scheduleRevision: 7,
+      summary: 'Create and send a workout.', requiresConfirmation: true as const,
+      changes: [{ index: 0, kind: 'create-workout', summary: 'Create it.' }], providerPreviews: [] };
+    vi.mocked(store.getActiveConversationState).mockResolvedValue({
+      conversation: { version: 1, conversationId: 'conversation-1', messages: [],
+        expiresAt: '2026-08-10T12:00:00.000Z' }, pendingRequestId: null, locationAccess: 'coordinate_free',
+      trainingPlansEnabled: true, trainingPlanChangesEnabled: true, trainingDeliveryEnabled: true,
+      pendingTrainingProposal: proposal,
+    });
+    const applyProposal = vi.fn().mockResolvedValue({ proposalRef: proposal.proposalRef, status: 'applied' as const,
+      scheduleRevision: 8, changes: [{ index: 0, kind: 'create-workout', status: 'applied' as const,
+        message: 'Created the workout.' }], providers: [{ index: 1, provider: 'garmin' as const,
+        status: 'applied' as const, message: 'Delivery was queued.' }], createdReferences: [] });
+
+    await expect(runApplyAssistantTrainingProposal({ proposalRef: proposal.proposalRef,
+      permissionMode: proposal.permissionMode, conversationId: 'conversation-1', confirm: true }, context, store, applyProposal))
+      .resolves.toMatchObject({ status: 'applied', scheduleRevision: 8 });
+    expect(applyProposal).toHaveBeenCalledWith(expect.objectContaining({
+      uid: 'user-1', connectionId: 'first-party-assistant-v1:conversation-1',
+      scopes: ['training-plans:read', 'training-plans:write', 'training-delivery:write'],
+      arguments: { proposalRef: proposal.proposalRef, permissionMode: 'combined' },
+    }));
+    expect(store.clearTrainingProposal).toHaveBeenCalledWith('user-1', 'conversation-1', proposal.proposalRef);
+  });
+
   it('returns Assistant quota status using Firestore role resolution in hosted mode', async () => {
     const getQuotaStatus = vi.fn().mockResolvedValue(quota);
 
@@ -231,7 +279,7 @@ describe('Assistant callable', () => {
       REQUEST_ID,
       createAssistantRequestFingerprint(REQUEST_ID, 'How am I today?'),
       'coordinate_free',
-      false, false);
+      false, false, false, false);
     expect(dependencies.finalizeQuota).toHaveBeenCalledWith(reservation);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       uid: 'user-1',
@@ -251,6 +299,7 @@ describe('Assistant callable', () => {
         text: 'How am I today?',
       }),
       expect.objectContaining({ role: 'assistant', text: 'Your readiness is 72 today.' }),
+      undefined,
     );
   });
 
@@ -282,7 +331,7 @@ describe('Assistant callable', () => {
         'precise_activity',
       ),
       'precise_activity',
-      false, false);
+      false, false, false, false);
     expect(dependencies.answer).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Where was my biggest jump?',
       locationAccess: 'precise_activity',
@@ -305,7 +354,7 @@ describe('Assistant callable', () => {
       locationAccess: 'coordinate_free', timelineNotesEnabled: true, conversationId: 'conversation-1' };
     expect(await runAssistantChat(request, context, dependencies)).toMatchObject({ timelineNotesEnabled: true });
     expect(store.beginTurn).toHaveBeenCalledWith('user-1', 'conversation-1', REQUEST_ID,
-      createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true, false);
+      createAssistantRequestFingerprint(REQUEST_ID, request.message, 'coordinate_free', true), 'coordinate_free', true, false, false, false);
     vi.mocked(store.getActiveConversationState).mockResolvedValue({ conversation: { ...conversation, conversationId: 'new-chat' },
       pendingRequestId: null, locationAccess: 'coordinate_free', timelineNotesEnabled: false });
     await expect(runAssistantChat(request, context, dependencies)).rejects.toMatchObject({ code: 'aborted' });
@@ -323,7 +372,7 @@ describe('Assistant callable', () => {
     expect(dependencies.reserveQuota).not.toHaveBeenCalled();
     await expect(runResetAssistantConversation({ locationAccess: 'precise_activity', timelineNotesEnabled: true, conversationId: null }, context, store))
       .resolves.toMatchObject({ timelineNotesEnabled: true });
-    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null, false);
+    expect(store.resetConversation).toHaveBeenLastCalledWith('user-1', 'precise_activity', true, null, false, false, false);
   });
 
   it.each([undefined, '', ' ', 42, 'x'.repeat(121)])('rejects an unbound or malformed notes reset generation: %j', async conversationId => {
@@ -338,7 +387,7 @@ describe('Assistant callable', () => {
     vi.mocked(store.resetConversation).mockRejectedValue(new AssistantConversationStoreError('conversation_changed', 'Changed'));
     await expect(runResetAssistantConversation({ timelineNotesEnabled: true, conversationId: 'old-chat' }, context, store))
       .rejects.toMatchObject({ code: 'aborted' });
-    expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat', false);
+    expect(store.resetConversation).toHaveBeenCalledWith('user-1', 'coordinate_free', true, 'old-chat', false, false, false);
   });
 
   it('persists bounded server-owned visuals with the assistant message', async () => {
@@ -381,6 +430,7 @@ describe('Assistant callable', () => {
       expect.objectContaining({
         visuals: [expect.objectContaining({ kind: 'chart' })],
       }),
+      undefined,
     );
   });
 
@@ -989,7 +1039,7 @@ describe('Assistant callable', () => {
       'user-1',
       'precise_activity',
       false,
-      undefined, false);
+      undefined, false, false, false);
   });
 
   it('rejects an unknown reset location boundary without replacing the conversation', async () => {

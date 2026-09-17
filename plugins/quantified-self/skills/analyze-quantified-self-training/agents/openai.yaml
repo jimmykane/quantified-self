@@ -6,7 +6,7 @@ dependencies:
   tools:
     - type: "mcp"
       value: "quantified-self"
-      description: "Read-only Quantified Self planned workouts, activity metrics and Training snapshots"
+      description: "Permission-scoped Quantified Self Training reads and explicitly confirmed planning changes"
       transport: "streamable_http"
       url: "https://quantified-self.io/mcp"
 policy:

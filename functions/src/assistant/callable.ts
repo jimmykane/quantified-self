@@ -11,6 +11,8 @@ import {
   type AssistantLocationAccess,
   type AssistantMessage,
   type AssistantQuotaStatusResponse,
+  type ApplyAssistantTrainingProposalRequest,
+  type ApplyAssistantTrainingProposalResponse,
   type GetAssistantConversationResponse,
   type ResetAssistantConversationRequest,
   type ResetAssistantConversationResponse,
@@ -42,6 +44,8 @@ import {
   type AssistantRuntimeResult,
 } from './runtime';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
+import { applyTrainingChanges } from '../mcp/training-plans-write.service';
+import { MCP_OAUTH_SCOPES } from '../mcp/oauth.service';
 
 interface AssistantCallableContext {
   auth?: {
@@ -76,7 +80,11 @@ export interface AssistantCallableDependencies {
     locationAccess: AssistantLocationAccess;
     timelineNotesEnabled?: boolean;
     trainingPlansEnabled?: boolean;
+    trainingPlanChangesEnabled?: boolean;
+    trainingDeliveryEnabled?: boolean;
+    conversationId?: string;
     assertTrainingPlansAccess?: () => Promise<void>;
+    assertTrainingWriteAccess?: () => Promise<void>;
     assertTimelineNotesAccess?: () => Promise<void>;
     history: AssistantMessage[];
     onBillableAttempt: () => Promise<void>;
@@ -263,13 +271,21 @@ function parseAssistantChatRequest(value: unknown): AssistantChatRequest {
       'conversationId must contain 1 to 120 characters.',
     );
   }
+  const trainingPlansEnabled = parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled');
+  const trainingPlanChangesEnabled = parseOptionalDataAccess(data.trainingPlanChangesEnabled, 'trainingPlanChangesEnabled');
+  const trainingDeliveryEnabled = parseOptionalDataAccess(data.trainingDeliveryEnabled, 'trainingDeliveryEnabled');
+  if ((trainingPlanChangesEnabled || trainingDeliveryEnabled) && !trainingPlansEnabled) {
+    throw new HttpsError('invalid-argument', 'Training plans read access is required before enabling Training changes.');
+  }
   return {
     requestId: data.requestId,
     message,
     timeZone,
     locationAccess: parseAssistantLocationAccess(data.locationAccess),
     timelineNotesEnabled: parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled'),
-    trainingPlansEnabled: parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled'),
+    trainingPlansEnabled,
+    trainingPlanChangesEnabled,
+    trainingDeliveryEnabled,
     ...(conversationId
       ? { conversationId }
       : {}),
@@ -316,6 +332,8 @@ function assertRequestFingerprintMatchesInput(
     input.locationAccess,
     input.timelineNotesEnabled,
     input.trainingPlansEnabled,
+    input.trainingPlanChangesEnabled,
+    input.trainingDeliveryEnabled,
   )) {
     throw new HttpsError(
       'invalid-argument',
@@ -398,6 +416,11 @@ async function buildExistingRequestResponse(
     conversation: requestState.conversation,
     ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
     ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+    ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+    ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+    ...(requestState.pendingTrainingProposal
+      ? { pendingTrainingProposal: requestState.pendingTrainingProposal }
+      : {}),
     quota,
     pendingRequestId: requestState.kind === 'pending'
       ? input.requestId
@@ -443,6 +466,8 @@ export async function runAssistantChat(
       input.locationAccess,
       input.timelineNotesEnabled,
       input.trainingPlansEnabled,
+      input.trainingPlanChangesEnabled,
+      input.trainingDeliveryEnabled,
     );
     const existingRequest = await dependencies.conversationStore.findRequestState(
       uid,
@@ -493,6 +518,8 @@ export async function runAssistantChat(
       input.locationAccess,
       input.timelineNotesEnabled,
       input.trainingPlansEnabled,
+      input.trainingPlanChangesEnabled,
+      input.trainingDeliveryEnabled,
     );
     if (turnStart.kind === 'replayed') {
       assertRequestFingerprintMatchesInput(turnStart, input);
@@ -502,6 +529,11 @@ export async function runAssistantChat(
         conversation: turnStart.conversation,
         ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+        ...(turnStart.pendingTrainingProposal
+          ? { pendingTrainingProposal: turnStart.pendingTrainingProposal }
+          : {}),
         quota,
         pendingRequestId: null,
       };
@@ -514,6 +546,11 @@ export async function runAssistantChat(
         conversation: turnStart.conversation,
         ...(input.timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
         ...(input.trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+        ...(input.trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+        ...(input.trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+        ...(turnStart.pendingTrainingProposal
+          ? { pendingTrainingProposal: turnStart.pendingTrainingProposal }
+          : {}),
         quota,
         pendingRequestId: input.requestId,
       };
@@ -522,10 +559,16 @@ export async function runAssistantChat(
     const notesConversationId = begunTurn.conversationId;
     const timelineNotesEnabled = begunTurn.timelineNotesEnabled === true;
     const trainingPlansEnabled = begunTurn.trainingPlansEnabled === true;
+    const trainingPlanChangesEnabled = begunTurn.trainingPlanChangesEnabled === true;
+    const trainingDeliveryEnabled = begunTurn.trainingDeliveryEnabled === true;
     if (trainingPlansEnabled !== (input.trainingPlansEnabled === true)) {
       throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
     }
     if (timelineNotesEnabled !== (input.timelineNotesEnabled === true)) {
+      throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+    }
+    if (trainingPlanChangesEnabled !== (input.trainingPlanChangesEnabled === true)
+      || trainingDeliveryEnabled !== (input.trainingDeliveryEnabled === true)) {
       throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
     }
     const result = await answerWithGroundedRetry(dependencies.answer, {
@@ -536,9 +579,21 @@ export async function runAssistantChat(
       locationAccess: input.locationAccess,
       timelineNotesEnabled,
       trainingPlansEnabled,
+      trainingPlanChangesEnabled,
+      trainingDeliveryEnabled,
+      conversationId: notesConversationId,
       ...(trainingPlansEnabled ? { assertTrainingPlansAccess: async () => {
         const current = await dependencies.conversationStore.getActiveConversationState(uid);
         if (current.conversation?.conversationId !== notesConversationId || current.trainingPlansEnabled !== true) {
+          throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
+        }
+      } } : {}),
+      ...((trainingPlanChangesEnabled || trainingDeliveryEnabled) ? { assertTrainingWriteAccess: async () => {
+        const current = await dependencies.conversationStore.getActiveConversationState(uid);
+        if (current.conversation?.conversationId !== notesConversationId
+          || current.trainingPlansEnabled !== true
+          || current.trainingPlanChangesEnabled !== trainingPlanChangesEnabled
+          || current.trainingDeliveryEnabled !== trainingDeliveryEnabled) {
           throw new AssistantConversationStoreError('conversation_changed', 'The Assistant data-access setting changed.');
         }
       } } : {}),
@@ -578,6 +633,7 @@ export async function runAssistantChat(
       begunTurn,
       userMessage,
       assistantMessage,
+      result.pendingTrainingProposal,
     );
     begunTurn = null;
     return {
@@ -585,6 +641,9 @@ export async function runAssistantChat(
       quota: finalizedQuota,
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
       ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+      ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+      ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
+      ...(result.pendingTrainingProposal ? { pendingTrainingProposal: result.pendingTrainingProposal } : {}),
       pendingRequestId: null,
     };
   } catch (error) {
@@ -652,20 +711,85 @@ export async function runResetAssistantConversation(
   const locationAccess = parseAssistantLocationAccess(data.locationAccess);
   const timelineNotesEnabled = parseOptionalDataAccess(data.timelineNotesEnabled, 'timelineNotesEnabled');
   const trainingPlansEnabled = parseOptionalDataAccess(data.trainingPlansEnabled, 'trainingPlansEnabled');
+  const trainingPlanChangesEnabled = parseOptionalDataAccess(data.trainingPlanChangesEnabled, 'trainingPlanChangesEnabled');
+  const trainingDeliveryEnabled = parseOptionalDataAccess(data.trainingDeliveryEnabled, 'trainingDeliveryEnabled');
+  if ((trainingPlanChangesEnabled || trainingDeliveryEnabled) && !trainingPlansEnabled) {
+    throw new HttpsError('invalid-argument', 'Training plans read access is required before enabling Training changes.');
+  }
   const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : data.conversationId;
   if ((conversationId !== undefined && conversationId !== null
     && (typeof conversationId !== 'string' || !conversationId || conversationId.length > 120))
-    || ((timelineNotesEnabled || trainingPlansEnabled) && conversationId === undefined)) {
+    || ((timelineNotesEnabled || trainingPlansEnabled || trainingPlanChangesEnabled || trainingDeliveryEnabled) && conversationId === undefined)) {
     throw new HttpsError('invalid-argument', 'Provide the current conversationId or null before enabling optional data access.');
   }
   try {
     return {
-      conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled, conversationId, trainingPlansEnabled),
+      conversation: await conversationStore.resetConversation(uid, locationAccess, timelineNotesEnabled, conversationId,
+        trainingPlansEnabled, trainingPlanChangesEnabled, trainingDeliveryEnabled),
       ...(timelineNotesEnabled ? { timelineNotesEnabled: true } : {}),
       ...(trainingPlansEnabled ? { trainingPlansEnabled: true } : {}),
+      ...(trainingPlanChangesEnabled ? { trainingPlanChangesEnabled: true } : {}),
+      ...(trainingDeliveryEnabled ? { trainingDeliveryEnabled: true } : {}),
     };
   } catch (error) {
     throw mapAssistantError(error);
+  }
+}
+
+export async function runApplyAssistantTrainingProposal(
+  value: unknown,
+  context: AssistantCallableContext | undefined,
+  conversationStore: AssistantConversationStore = assistantConversationStore,
+  applyProposal: typeof applyTrainingChanges = applyTrainingChanges,
+): Promise<ApplyAssistantTrainingProposalResponse> {
+  const uid = requireAuthenticatedUid(context);
+  const data = asRecord(value) as Partial<ApplyAssistantTrainingProposalRequest>;
+  const proposalRef = typeof data.proposalRef === 'string' ? data.proposalRef.trim() : '';
+  const conversationId = typeof data.conversationId === 'string' ? data.conversationId.trim() : '';
+  const permissionMode = data.permissionMode;
+  const confirm = data.confirm;
+  if (!proposalRef || proposalRef.length > 2048 || !conversationId || conversationId.length > 120
+    || !['schedule', 'delivery', 'combined'].includes(`${permissionMode}`) || typeof confirm !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'A valid current Training proposal is required.');
+  }
+  const current = await conversationStore.getActiveConversationState(uid);
+  const needsSchedule = permissionMode === 'schedule' || permissionMode === 'combined';
+  const needsDelivery = permissionMode === 'delivery' || permissionMode === 'combined';
+  if (current.conversation?.conversationId !== conversationId
+    || current.pendingTrainingProposal?.proposalRef !== proposalRef
+    || current.pendingTrainingProposal?.permissionMode !== permissionMode
+    || current.trainingPlansEnabled !== true
+    || (needsSchedule && current.trainingPlanChangesEnabled !== true)
+    || (needsDelivery && current.trainingDeliveryEnabled !== true)) {
+    throw new HttpsError('aborted', 'The Assistant data-access setting changed. Review the proposal again.');
+  }
+  if (!confirm) {
+    await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef);
+    return { status: 'dismissed', scheduleRevision: current.pendingTrainingProposal.scheduleRevision,
+      changes: [], providers: [] };
+  }
+  try {
+    const result = await applyProposal({
+      uid,
+      connectionId: `first-party-assistant-v1:${conversationId}`,
+      scopes: [
+        MCP_OAUTH_SCOPES.TrainingPlansRead,
+        ...(needsSchedule ? [MCP_OAUTH_SCOPES.TrainingPlansWrite] : []),
+        ...(needsDelivery ? [MCP_OAUTH_SCOPES.TrainingDeliveryWrite] : []),
+      ],
+      arguments: { proposalRef, permissionMode },
+    });
+    await conversationStore.clearTrainingProposal(uid, conversationId, proposalRef);
+    return {
+      status: result.status,
+      scheduleRevision: result.scheduleRevision,
+      changes: result.changes,
+      providers: result.providers,
+    };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    throw new HttpsError('failed-precondition', error instanceof Error
+      ? error.message : 'The Training proposal could not be applied safely.');
   }
 }
 
@@ -704,3 +828,10 @@ export const resetAssistantConversation = onCall({
   cors: ALLOWED_CORS_ORIGINS,
   enforceAppCheck: true,
 }, request => runResetAssistantConversation(request.data, request));
+
+export const applyAssistantTrainingProposal = onCall({
+  region: FUNCTIONS_MANIFEST.applyAssistantTrainingProposal.region,
+  secrets: FUNCTION_SECRET_BINDINGS.applyAssistantTrainingProposal,
+  cors: ALLOWED_CORS_ORIGINS,
+  enforceAppCheck: true,
+}, request => runApplyAssistantTrainingProposal(request.data, request));

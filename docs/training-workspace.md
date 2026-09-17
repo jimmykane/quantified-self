@@ -1,19 +1,40 @@
 # Training Workspace Architecture and Maintenance Guide
 
-## Planning reads through MCP and the Assistant
+## Planning access through MCP and the Assistant
 
-The #690 read-only slice exposes current plans, standalone/associated workouts, complete v1 instructions and existing
-delivery summaries. It does not introduce new storage or modify `WorkoutStructureV1`. Five tools and their strict scope,
-projection and bounds are documented in [MCP server](mcp-server.md#training-plans-and-planned-workouts-690-read-only-slice).
-Source support is not a deployed or registered-client promise. No provider certification, #652 approval flow, sync
-enablement, deployment or plugin installation is implied. Writes remain tracked in #690 with #652.
+The #690 planning surface exposes current plans, standalone/associated workouts, complete v1 instructions, exact stored
+completion links, existing delivery summaries, and an explicitly confirmed proposal/apply workflow. It does not modify
+`WorkoutStructureV1`. The tools, strict scopes, projection and bounds are documented in
+[MCP server](mcp-server.md#training-plans-and-planned-workouts-690). Source support is not a deployed or
+registered-client promise. Provider certification, deployment, registered-contract promotion and plugin installation
+remain separate. The approval workflow implements the bounded #652 dependency; fallback/manual completion matching
+remains under #651.
 
 Independent `training-plans:read` consent is available without a UID or Pro gate; the planning UI pilot remains unchanged.
 The Assistant's default-off Training plans choice is conversation-owned, not a UI gate. Current calendar reads default to
 standalone plus active-plan workouts, include skipped, exclude deleted, and allow explicit inactive-plan/all scopes.
 Historical dates still read current records, not history. Calendar dates are not instants or delivery timezones.
 Full structures preserve canonical primitives, ordered node IDs, notes, repeat limits and Sports Lib owner-unit formatting.
-There are no new `Data*` classes, completed-event metrics, inferred duration estimates, provider calls or writes.
+There are no new `Data*` classes, completed-event metrics or inferred duration estimates. Completion reads return only
+an existing exact stored link; they never infer a match. The optional activity reference additionally requires
+`activity-details:read`.
+
+`training-plans:write` and `training-delivery:write` are independent child scopes of `training-plans:read`. The former
+allows only the safe authored lifecycle: create/edit/move/copy/skip/archive/activate/shift and recoverable workout
+deletion. It excludes permanent workout deletion, plan deletion and history restoration. The latter allows plan delivery
+enablement and workout send/resume/stop/retry/check/approval. Delivery remains Pro, provider-connection and rollout gated.
+External clients prepare one strict proposal of at most 25 changes, then `apply_training_changes` appears only on modern
+MCP transports that support the server's input-required confirmation. A decline is a no-op. Legacy clients remain
+preview/read-only. Proposals expire after 15 minutes, bind owner, OAuth connection/grant, schedule revision and entity
+creation time, and retain an idempotent terminal result for safe retries. Provider outcomes are independent: a failed
+send never rolls back a successfully authored standalone workout.
+
+The built-in Assistant has separate default-off **Training plans**, **Plan and workout changes**, and **Planned-workout
+sync changes** choices. Only the preview tool enters Gemini context. The model cannot apply changes; Quantified Self
+stores one bounded proposal under the current server-owned conversation and the user must apply or dismiss it in the app.
+Proposal references bind the exact conversation generation, so permission changes, New chat, stale tabs and account
+switches cannot reuse them. The dedicated App Check callable rechecks the conversation before applying and clears the
+pending proposal after either apply or dismiss.
 
 The shared delivery-summary helper provides UI wording and MCP machine outcomes from the same current evidence. Whole-plan
 counts include every current non-deleted workout, with no success claim for incomplete scans, empty plans, stale evidence
@@ -27,7 +48,8 @@ Every planning feature PR must assess MCP impact using the root instructions and
 explicit public schemas, formatters and tests in the same PR; presentation-only spacing can document no wire impact;
 private provider artifact metadata must remain excluded. Review safe projections, lifecycle semantics, scope isolation,
 pagination/bytes, unit formatting, Assistant evidence/routing and bundled skills together. A real deferral needs a focused
-#583 subissue in Project 2 before completion. Read coverage never authorizes wider consent, writes or deployment.
+#583 subissue in Project 2 before completion. Existing write scopes never implicitly authorize new lifecycle mutations,
+provider actions, wider consent or deployment.
 
 This document is the implementation guide for the authenticated `/training` workspace. It is intended for product
 engineers, data engineers, reviewers, and AI coding agents. Update it whenever the Training product contract, a derived
@@ -2849,7 +2871,7 @@ Do not read settings or sleep unconditionally in the worker. Source requirements
 
 ### Exposing Training snapshots through MCP
 
-The read-only MCP server does not recalculate Training metrics and does not scan activity history for a derived tool call.
+The MCP Training-metric read surface does not recalculate Training metrics and does not scan activity history for a derived tool call.
 `get_training_metric` accepts only a kind registered in `DERIVED_METRIC_KINDS` and reads the normal
 `users/{uid}/derivedMetrics/{metricKind}` snapshot. It returns only a `ready`, current-schema payload plus schema, update,
 and source-count metadata. Building, stale-schema, failed, and missing snapshots remain unavailable instead of being

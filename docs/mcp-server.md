@@ -1,6 +1,6 @@
-# Read-only MCP Server
+# MCP Server
 
-## Training plans and planned workouts (#690 read-only slice)
+## Training plans and planned workouts (#690)
 
 This is source implementation, not deployment, provider enablement, registered-client promotion or real-profile plugin
 installation. After a separately approved release, refresh the client catalog and explicitly reauthorize the independent
@@ -16,6 +16,7 @@ grant. HTTP prechecks, tool registration and data reads enforce it. Revocation c
 | `query_planned_workouts` | Inclusive dates; calendar-visible (default standalone + active plan), standalone, selected plan or all |
 | `get_planned_workout` | Complete validated v1 canonical recipe, notes and owner-unit display text |
 | `get_training_sync_status` | Existing local per-service evidence for a plan/workout; never a live provider check |
+| `get_planned_workout_completion` | Exact stored completion link only; never similarity inference |
 
 References bind owner, connection, entity and creation time. Structural node IDs are public recipe fields, not document
 IDs. No app links are returned while planning UI remains restricted. Lists use document-ID order (not date order), default
@@ -44,11 +45,30 @@ Valid sync-off settings may have an empty destination before any account has bee
 or delivery confirmation.
 Synced means confirmed provider-side workout delivery, not a native provider plan or watch receipt. Empty/missing/incomplete
 evidence is not success. Assistant consent/routing is described in [Assistant](assistant.md); planning semantics remain in
-[Training workspace](training-workspace.md). Approved writes stay in #690 with #652's approval dependency; this slice closes neither.
+[Training workspace](training-workspace.md).
+
+Two child scopes add mutations without broadening reads: `training-plans:write` covers the bounded safe plan/workout
+lifecycle and `training-delivery:write` covers provider delivery controls. Either requires `training-plans:read`; existing
+connections must reauthorize and refresh cannot add either scope. `preview_training_changes` accepts at most 25 strict
+ordered changes and creates no authored or provider state. `apply_training_changes` consumes the opaque proposal only
+after the MCP server receives an explicit input-required confirmation. Clients on the legacy transport never receive the
+apply tool. A proposal is owner-, connection-, grant-, revision- and expiry-bound; replay returns its persisted terminal
+result. Permanent workout deletion, plan deletion and history restoration are deliberately absent.
+
+Delivery actions resolve the destination account on the server and reuse the existing #646 command/reconciliation path.
+They never accept credentials or remote IDs. `all_connected` fans out only to connected, rollout-ready providers shown
+by preview; explicit providers return independent blocked/success results. Pro, compatibility approval, horizon,
+connection, completion and provider readiness checks remain authoritative. Provider failure never rolls back authored
+schedule changes, and MCP itself makes no direct provider HTTP request.
+
+The built-in Assistant exposes only preview to Gemini. One bounded proposal is stored with the current conversation and
+rendered in a compact review surface; a separate Auth + App Check callable applies or dismisses it after the user's click.
+The opaque reference and data-boundary authorization include the conversation generation and its three independent
+Training toggles. New chat and permission changes invalidate stale proposals.
 
 Every future planning feature must review MCP impact in the same PR: explicit projections, schemas, consent, bounds, units,
 Assistant/plugin guidance and tests. Record a no-impact rationale or a focused epic-linked Project 2 deferral. Maintaining
-reads never authorizes provider actions, write tools, wider consent or deployment.
+registered write actions never automatically expand when internal lifecycle or provider fields are added.
 
 Suunto Guide delivery (#650) uses these existing local sync projections without changing any registered tool or wire
 schema. Read tests cover delivered, scheduled-for-later and needs-attention Suunto states, truthful workout-derived plan
@@ -87,7 +107,7 @@ Assistant route, provider action or bundled-plugin change is introduced.
 
 ## Purpose and boundary
 
-Quantified Self exposes a hosted, read-only Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
+Quantified Self exposes a hosted, permission-scoped Model Context Protocol endpoint at `/mcp`. It lets an MCP client read the
 authenticated user's persisted numeric activity metrics, explicitly approved recorded Health metrics, first-class body-measurement history, ready Training-derived
 snapshots, normalized sleep summaries, explicitly authorized individual activity details, and saved-route previews
 without granting browser or Firestore access.
@@ -111,7 +131,7 @@ the reserved protocol/client envelope and use `server/discover`; malformed envel
 unsupported revisions are rejected, never silently downgraded. Both paths create fresh servers through the same factory
 after bearer validation and the existing scope prechecks. Client-supplied identity metadata never supplies authorization.
 
-Legacy responses remain stateless JSON. Modern read-only handlers also return JSON and advertise no tool-change
+Legacy responses remain stateless JSON. Modern read handlers also return JSON and advertise no tool-change
 subscription support; long-lived subscriptions are disabled. The Node adapter receives Firebase's already-parsed body
 explicitly. Neither transport changes OAuth client identity, permissions, grants, token rotation, or account data.
 
@@ -183,7 +203,7 @@ Hosting routes these paths to `mcpApi`:
 | `/oauth/authorize` | Starts an authorization-code request |
 | `/oauth/token` | Exchanges or refreshes an OAuth token |
 | `/oauth/revoke` | Revokes an access or refresh token and its connection grant |
-| `/mcp` | Read-only MCP Streamable HTTP endpoint |
+| `/mcp` | Permission-scoped MCP Streamable HTTP endpoint |
 
 `/mcp/authorize` is the authenticated Angular consent page. The **Connections > MCP** tab lists connections only after
 the client successfully exchanges its authorization code for credentials, and lets the user revoke one immediately.
@@ -252,7 +272,8 @@ The bundled skills divide ownership deliberately:
 | `analyze-quantified-self-activity` | Individual activities, subrecords, metrics, charts, optional descriptions and locations | `activity-details:read`; optional metric/description/location grants |
 | `explore-quantified-self-routes` | Saved-route summaries, geometry, waypoints, and nearby searches | `routes:read`; optional `route-location:read` |
 
-All seven skills allow implicit or explicit invocation and declare the same hosted read-only MCP dependency. Their trigger
+All seven skills allow implicit or explicit invocation and declare the same hosted permission-scoped MCP dependency. Most
+domain tools are read-only; the Training skill can additionally use separately authorized preview and confirmed-apply tools. Their trigger
 descriptions keep single-domain work out of the cross-domain skill. Each `agents/openai.yaml` owns one matching
 skill-level starter prompt; the plugin manifest retains only three representative interface prompts because that field
 is intentionally bounded. Skills discover the authenticated server's live tools and catalogs rather than copying tool
@@ -364,6 +385,8 @@ The server implements OAuth authorization code with PKCE S256 and refresh-token 
   additionally requires `measurements:read`, while Weight and normalized Sleep keep their existing contracts;
 - `sleep:read` for redacted sleep sessions and sleep summaries;
 - `training-plans:read` for current authored plans/workouts, complete instructions and existing sanitized service sync summaries;
+- `training-plans:write`, dependent on `training-plans:read`, for previewed and explicitly confirmed safe plan/workout lifecycle changes;
+- `training-delivery:write`, dependent on `training-plans:read`, for previewed and explicitly confirmed plan/workout provider delivery controls;
 - `timeline-notes:read` for full private Timeline note titles/details, category, fixed calendar dates and captured timezone;
 - `activity-details:read` for bounded non-location activity summaries, event tags and exact tag filtering, laps, swim
   lengths, MTB jump measurements, selected metrics, and on-demand chart series;
@@ -575,6 +598,9 @@ The analytics and map entries follow the
 | `query_planned_workouts` | `training-plans:read` | Bounded calendar-date summaries; standalone plus active plan by default |
 | `get_planned_workout` | `training-plans:read` | Complete validated canonical v1 instructions plus owner-unit display text |
 | `get_training_sync_status` | `training-plans:read` | Existing local delivery evidence, with whole-plan counts only for complete reads |
+| `get_planned_workout_completion` | `training-plans:read`; optional activity ref also requires `activity-details:read` | Exact current persisted completion link; no inferred matching |
+| `preview_training_changes` | `training-plans:read` plus the relevant Training write scope(s) | Strict bounded proposal with authored and per-provider effects; no authored mutation |
+| `apply_training_changes` | Same scopes bound into the proposal; modern confirmation-capable transport only | Idempotently applies a confirmed proposal and returns independent authored/provider outcomes |
 | `list_health_metrics` | `health:read` | Static allowlisted Health capabilities, Sports Lib types/units, range limits and additional body-composition permission requirements |
 | `query_health_metric` | `health:read`; also `measurements:read` for body composition | Source-separated stored scalars or bounded representative sample trends; identity-free calendar-day body composition |
 | `get_hrv_personal_range` | `health:read` + `sleep:read` | Shared rolling nightly HRV baseline, historical classifications and missing-day ranges, separated by source |
@@ -617,7 +643,9 @@ The analytics and map entries follow the
 | `get_route_geometry` | `routes:read` + `route-location:read` | Bounded persisted `polyline5` preview geometry with explicit segment endpoints |
 | `list_route_waypoints` | `routes:read` + `route-location:read` | Bounded allowlisted waypoint coordinates parsed from the saved FIT/GPX source |
 
-Every tool is annotated read-only, non-destructive, and idempotent. The preferred `search_*_near_location` tools are
+Every read tool is annotated read-only, non-destructive, and idempotent. Training preview is non-destructive; confirmed
+Training apply is explicitly write-capable and may be destructive only in the recoverable soft-delete/stop-sync sense.
+The preferred `search_*_near_location` tools are
 closed-world: a place-name input can make a bounded Mapbox geocoding read, but it cannot write to Mapbox or change
 publicly visible internet state. The already-registered `find_*_near_location` variants retain their frozen
 `openWorldHint: true` metadata for compatibility, while server instructions route new requests to the corrected

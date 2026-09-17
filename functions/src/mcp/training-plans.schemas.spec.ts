@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { TRAINING_RECIPE_SCHEMA } from './training-plans.schemas';
+import { TRAINING_CHANGE_SCHEMA, TRAINING_RECIPE_SCHEMA, TRAINING_WRITE_INPUTS } from './training-plans.schemas';
 
 const recipe = (ending: unknown, targets: unknown[] = []) => ({ version: 1, sport: ActivityTypes.Running,
   nodes: [{ kind: 'step', id: 'step-1', purpose: 'work', ending, targets, note: '夜の練習 🏃\nPrivate context' }] });
@@ -35,5 +35,28 @@ describe('Strict public Training recipe v1', () => {
       {...input,nodes:[{kind:'repeat',id:'repeat',count:2,steps:[{kind:'repeat',id:'nested',count:2,steps:[step]}]}]},
       {...input,nodes:Array.from({length:101},(_,i)=>({...step,id:`s${i}`}))},
     ]) expect(TRAINING_RECIPE_SCHEMA.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe('Strict Training write proposal contract', () => {
+  it('accepts only the bounded safe lifecycle and explicit provider actions', () => {
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'create-workout', localKey: 'run', plan: null,
+      localDate: '2026-09-18', title: 'Easy run', structure: recipe({ kind: 'time', seconds: 1800 }) }).success).toBe(true);
+    expect(TRAINING_CHANGE_SCHEMA.safeParse({ kind: 'provider-delivery', targetType: 'workout',
+      target: { localKey: 'run' }, providers: 'all_connected', action: 'send', timeZone: 'Europe/Helsinki' }).success).toBe(true);
+    for (const forbidden of [
+      { kind: 'permanently-delete-workout', workout: { ref: 'opaque' } },
+      { kind: 'delete-plan', plan: { ref: 'opaque' } },
+      { kind: 'restore-training-revision', revision: 1 },
+      { kind: 'provider-delivery', targetType: 'workout', target: { ref: 'opaque' }, providers: ['garmin'], action: 'send', remoteId: 'PRIVATE' },
+    ]) expect(TRAINING_CHANGE_SCHEMA.safeParse(forbidden).success).toBe(false);
+  });
+
+  it('caps one ordered proposal at 25 changes', () => {
+    const change = { kind: 'set-workout-lifecycle', workout: { ref: 'opaque' }, lifecycle: 'skipped' };
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
+      changes: Array.from({ length: 25 }, () => change) }).success).toBe(true);
+    expect(TRAINING_WRITE_INPUTS.preview_training_changes.safeParse({ expectedScheduleRevision: 1,
+      changes: Array.from({ length: 26 }, () => change) }).success).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "candidateSha256": "7989f9739d8318ce328076a8a11b6d38b5d8bcecd8825433f013e738fc2cf934",
+  "candidateSha256": "c1b6448bba7d8ead036fed3c6d3b4a7f73da51c296b7e81481944832c66cb17f",
   "lifecycleAction": "developer-refresh",
-  "summary": "Add Training plan/workout reads and sync summaries (#690). Retain pending formula-4 readiness/history (Health for history), rolling HRV; frozen formula-3; activity samples/reuse, descriptions, Timeline notes, Health semantics, daily reports, nearby activity/route search, multi-metric queries, Training discovery, activity overviews, ISO rankings, jump/sleep-vital routing, RS256 private_key_jwt, PKCE. Add coordinate-free event tags and exact any/all tag filters under Activity details.",
+  "summary": "Add Training plan/workout reads, exact completion links, sync summaries, independent write/delivery scopes, bounded preview and confirmed apply (#690; #652/#651). Retain pending formula-4 readiness/history and HRV; frozen formula-3; activity samples, descriptions and tags; Timeline notes; Health; reports; nearby activity/routes; multi-metric queries; Training discovery; activity overviews and rankings; jump/sleep-vital routing; RS256 private_key_jwt; and PKCE.",
   "rescanRequired": true
 }

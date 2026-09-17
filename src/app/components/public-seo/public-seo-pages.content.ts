@@ -169,7 +169,7 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
           },
           {
             icon: 'devices',
-            title: 'Read-only MCP access',
+            title: 'Permission-scoped MCP access',
             copy: 'Connect ChatGPT, Claude, or another compatible MCP client to analyze your training using only the data categories you approve.',
           },
           {
@@ -558,11 +558,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     key: 'mcpServer',
     path: PUBLIC_FEATURE_PATHS.mcpServer,
     eyebrow: 'MCP Server',
-    title: 'Read-only MCP Server for Training Data',
+    title: 'MCP Server for Training Data',
     description: 'Connect ChatGPT, Claude, or another MCP client to approved training, Health, sleep, measurements, routes, optional Timeline notes and activity descriptions.',
     h1: 'Connect ChatGPT or Claude to your training data',
-    intro: 'Use the read-only Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze your training, review your season, or plan your next workout using only the data categories you approve.',
-    chips: ['MCP server', 'ChatGPT', 'Claude', 'Read-only', 'Training', 'Sleep', 'Activities', 'Routes'],
+    intro: 'Use the Quantified Self MCP server to let ChatGPT, Claude, or another compatible client analyze approved data and help plan your next workout. You may separately grant bounded Training planning changes, each requiring a Quantified Self confirmation.',
+    chips: ['MCP server', 'ChatGPT', 'Claude', 'Explicit consent', 'Training', 'Sleep', 'Activities', 'Routes'],
     actions: [
       routeAction('Start Free', '/login', 'flat', 'arrow_forward'),
       routeAction('Set Up MCP', '/help', 'stroked', undefined, 'data-and-privacy'),
@@ -604,18 +604,18 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         eyebrow: 'Access Boundaries',
-        title: 'Read-only by design, with separate permissions',
-        copy: 'Choose which data categories an external client can read, then review or disconnect it from Connections at any time.',
+        title: 'Separate permissions and confirmed Training changes',
+        copy: 'Choose which data categories an external client can read and whether it may propose Training changes, then review or disconnect it from Connections at any time.',
         items: [
           {
             icon: 'fact_check',
             title: 'Separate optional scopes',
-            copy: 'Approve training metrics, Health metrics, measurements, workout details, activity descriptions, sleep, routes, Timeline notes, or locations separately. Activity locations and saved-route locations remain independent permissions.',
+            copy: 'Approve training metrics, Health metrics, measurements, workout details, activity descriptions, sleep, routes, Timeline notes, locations, or Training changes separately. Training writes require Training plan reads.',
           },
           {
             icon: 'lock',
-            title: 'No settings or data writes',
-            copy: 'MCP clients cannot create, edit, delete, or backfill Health measurements, activities, routes, sleep records, dashboard settings, or Training state. Revocation blocks future access.',
+            title: 'Training-only confirmed writes',
+            copy: 'MCP cannot write Health, activities, routes, sleep, measurements, or dashboard settings. Separately granted Training changes are previewed in a bounded proposal and require your confirmation before application.',
           },
           {
             icon: 'shield',
@@ -633,11 +633,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
     faqItems: [
       {
         question: 'What does the Quantified Self MCP server do?',
-        answer: 'It lets a compatible external AI client answer questions using the Quantified Self training metrics, body-weight history, workout details, sleep summaries, and saved routes you approve. Access remains read-only.',
+        answer: 'It lets a compatible external AI client answer questions using the Quantified Self data you approve. You can separately allow bounded plan, workout, and provider-delivery proposals; nothing changes until you explicitly confirm one.',
       },
       {
         question: 'Can I use the MCP server with ChatGPT or Claude?',
-        answer: 'Yes. Add https://quantified-self.io/mcp as a custom MCP connection in a compatible ChatGPT or Claude client, sign in to Quantified Self, and approve the read-only permissions you want to grant. External clients have their own privacy and retention practices.',
+        answer: 'Yes. Add https://quantified-self.io/mcp as a custom MCP connection in a compatible ChatGPT or Claude client, sign in to Quantified Self, and approve only the permissions you want to grant. External clients have their own privacy and retention practices.',
       },
       {
         question: 'Can I analyze detailed workout samples instead of the 400-point chart?',
@@ -657,11 +657,11 @@ export const PUBLIC_SEO_PAGES: Record<PublicSeoPageKey, PublicSeoPage> = {
       },
       {
         question: 'Can an MCP client read my Training plans and planned workouts?',
-        answer: 'With separately approved Training plans and planned workouts permission, supported clients can read current plans, standalone workouts, complete instructions, step notes and existing service sync summaries. This may include sensitive personal text. Existing clients must reauthorize and refresh their tool catalog after the supporting release. Metrics, activity and provider permissions do not grant this access. No edits, live provider checks or sync actions are allowed. Synced means provider-side workout delivery, not receipt on a watch. Revocation cannot erase copies already received.',
+        answer: 'With separately approved Training plans and planned workouts permission, supported clients can read current plans, standalone workouts, complete instructions, step notes, exact stored completion links, and existing service sync summaries. Separate child permissions allow bounded plan/workout or provider-delivery proposals. Each proposal requires confirmation, and provider delivery remains Pro and connection-gated. Synced means provider-side workout delivery, not receipt on a watch.',
       },
       {
         question: 'Can an MCP client rearrange my dashboard or change my data?',
-        answer: 'No. The MCP server is read-only. It cannot write dashboard settings, activities, routes, Training state, or sleep records.',
+        answer: 'It cannot change dashboard settings, activities, routes, Health, measurements, or sleep records. It can change Training plans, planned workouts, or their delivery only when you grant the matching child permission and explicitly confirm the bounded proposal.',
       },
       {
         question: 'Does MCP access expose my original activity or route files?',

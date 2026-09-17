@@ -86,6 +86,20 @@ describe('Assistant MCP session', () => {
     } finally { await session.close(); }
   });
 
+  it('adds preview only for Training changes and binds it to the current conversation generation', async () => {
+    let capturedAuth: AuthenticatedMcpRequest | null = null;
+    const session = await createAssistantMcpSession('ordinary-owner', 'https://quantified-self.io', {
+      createServer: auth => { capturedAuth = auth; return createTestServer(); },
+    }, 'coordinate_free', false, true, true, true, 'conversation-123');
+    try {
+      expect(session.tools.map(tool => tool.name)).toContain('preview_training_changes');
+      expect(session.tools.map(tool => tool.name)).not.toContain('apply_training_changes' as never);
+      expect(capturedAuth).toMatchObject({ connectionId: 'first-party-assistant-v1:conversation-123',
+        scopes: expect.arrayContaining([MCP_OAUTH_SCOPES.TrainingPlansRead, MCP_OAUTH_SCOPES.TrainingPlansWrite,
+          MCP_OAUTH_SCOPES.TrainingDeliveryWrite]) });
+    } finally { await session.close(); }
+  });
+
   it('resolves the complete curated boundary from the production MCP server', async () => {
     const session = await createAssistantMcpSession(
       'user-1',
@@ -197,7 +211,8 @@ describe('Assistant MCP session', () => {
     );
 
     try {
-      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes' && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));
+      expect(session.tools.map(tool => tool.name)).toEqual(ASSISTANT_MCP_TOOL_NAMES.filter(name => name !== 'query_timeline_notes'
+        && name !== 'preview_training_changes' && !(TRAINING_READ_TOOLS as readonly string[]).includes(name)));
       expect(session.tools.map(tool => tool.name)).toContain(
         'search_activities_near_location',
       );
