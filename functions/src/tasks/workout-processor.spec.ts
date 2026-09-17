@@ -8,6 +8,17 @@ vi.mock('firebase-functions/v2/tasks', () => ({
     onTaskDispatched: (opts: any, handler: any) => handler,
 }));
 
+const { mockLoggerInfo, mockLoggerWarn } = vi.hoisted(() => ({
+    mockLoggerInfo: vi.fn(),
+    mockLoggerWarn: vi.fn(),
+}));
+
+vi.mock('firebase-functions/logger', () => ({
+    info: mockLoggerInfo,
+    warn: mockLoggerWarn,
+    error: vi.fn(),
+}));
+
 // Hoisted mocks for admin
 const { mockCollection, mockDoc, mockGet } = vi.hoisted(() => {
     const mockGet = vi.fn();
@@ -59,7 +70,11 @@ describe('processWorkoutTask', () => {
     it('should process a valid queue item', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;
-        const queueData = { processed: false, some: 'data' };
+        const queueData = {
+            processed: false,
+            some: 'data',
+            dispatchRecoveryGeneration: 3,
+        };
 
         mockGet.mockResolvedValue({
             exists: true,
@@ -82,7 +97,66 @@ describe('processWorkoutTask', () => {
                 ref: mockDoc,
                 processed: false,
                 some: 'data',
+                dispatchRecoveryGeneration: 3,
             }),
+        );
+    });
+
+    it('passes the dispatch recovery generation to queue processing', async () => {
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed: false, dispatchRecoveryGeneration: 3 }),
+        });
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.TokenRefreshDeferred);
+
+        const invokeTask = processWorkoutTask as unknown as (
+            request: { data: Record<string, unknown> },
+        ) => Promise<void>;
+        await expect(invokeTask({
+            data: {
+                queueItemId: 'recovery-item',
+                serviceName: ServiceNames.SuuntoApp,
+                dispatchRecoveryGeneration: 3,
+            },
+        })).resolves.toBeUndefined();
+
+        expect(mockParseWorkoutQueueItemForServiceName).toHaveBeenCalledWith(
+            ServiceNames.SuuntoApp,
+            expect.objectContaining({ id: 'recovery-item' }),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            3,
+        );
+        expect(mockLoggerInfo).toHaveBeenCalledWith(
+            `[TaskWorker] Deferred ${ServiceNames.SuuntoApp} item recovery-item while another worker refreshes its token.`,
+        );
+        expect(mockLoggerWarn).not.toHaveBeenCalledWith(
+            expect.stringContaining('recovery-item'),
+        );
+    });
+
+    it('skips an older dispatch recovery generation before provider processing', async () => {
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ processed: false, dispatchRecoveryGeneration: 4 }),
+        });
+
+        const invokeTask = processWorkoutTask as unknown as (
+            request: { data: Record<string, unknown> },
+        ) => Promise<void>;
+        await expect(invokeTask({
+            data: {
+                queueItemId: 'stale-recovery-item',
+                serviceName: ServiceNames.SuuntoApp,
+                dispatchRecoveryGeneration: 3,
+            },
+        })).resolves.toBeUndefined();
+
+        expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
+        expect(mockLoggerInfo).toHaveBeenCalledWith(
+            `[TaskWorker] Skipping stale ${ServiceNames.SuuntoApp} task for item stale-recovery-item; the dispatch recovery generation has advanced.`,
         );
     });
 

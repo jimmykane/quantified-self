@@ -27,6 +27,7 @@ import {
 import {
   getTokenData,
   TerminalServiceAuthError,
+  TokenRefreshInProgressError,
   TokenRefreshSkippedForDeletedUserError,
 } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
@@ -51,6 +52,9 @@ import {
 } from './queue/cleanup-tombstone';
 import { resolveProviderImportEventID } from './queue/provider-event-id';
 import { processWahooWorkoutQueueItem } from './wahoo/processor';
+import {
+  deferWorkoutQueueItemForTokenRefreshContention,
+} from './queue/token-refresh-contention';
 import { getActiveCOROSTokenSnapshot } from './coros/account';
 import {
   downloadCOROSFITFile,
@@ -700,6 +704,7 @@ export async function parseWorkoutQueueItemForServiceName(
   tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>,
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
+  taskRecoveryGeneration?: number,
 ): Promise<QueueResult> {
   if (serviceName !== ServiceNames.COROSAPI) {
     return parseWorkoutQueueItemForServiceNameInternal(
@@ -709,6 +714,8 @@ export async function parseWorkoutQueueItemForServiceName(
       tokenCache,
       usageCache,
       pendingWrites,
+      undefined,
+      taskRecoveryGeneration,
     );
   }
 
@@ -746,6 +753,7 @@ export async function parseWorkoutQueueItemForServiceName(
       usageCache,
       pendingWrites,
       claimState,
+      taskRecoveryGeneration,
     );
   } finally {
     await releaseCOROSRevisionClaimIfHeld(corosQueueItem, claimState);
@@ -761,9 +769,17 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>,
   pendingWrites?: Map<string, number>,
   corosClaimState?: COROSQueueProcessingClaim,
+  taskRecoveryGeneration?: number,
 ): Promise<QueueResult> {
   if (serviceName === ServiceNames.GarminAPI) {
-    return processGarminAPIActivityQueueItem(queueItem as GarminAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
+    return processGarminAPIActivityQueueItem(
+      queueItem as GarminAPIActivityQueueItemInterface,
+      bulkWriter,
+      tokenCache,
+      usageCache,
+      pendingWrites,
+      taskRecoveryGeneration,
+    );
   }
   if (serviceName === ServiceNames.WahooAPI) {
     return processWahooWorkoutQueueItem(queueItem as WahooAPIWorkoutQueueItemInterface);
@@ -829,6 +845,7 @@ async function parseWorkoutQueueItemForServiceNameInternal(
   let sawUserDeletionSkip = false;
   let sawPendingDisconnectSkip = false;
   let pendingDisconnectFirebaseUserID: string | null = null;
+  let tokenRefreshContentionFirebaseUserID: string | null = null;
   let sawInactiveProviderAccount = false;
   let processedAdditionalData: Record<string, unknown> | undefined;
 
@@ -888,6 +905,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
+      if (e instanceof TokenRefreshInProgressError) {
+        tokenRefreshContentionFirebaseUserID ??= parentID;
+        continue;
+      }
       if (isTokenRefreshSkippedForDeletedUserError(e)) {
         sawUserDeletionSkip = true;
         logger.warn(`Skipping ${serviceName} queue item ${queueItem.id} for token ${tokenQueryDocumentSnapshot.id} because the owning user is missing or deletion is in progress.`);
@@ -997,6 +1018,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
             );
             result = normalizeDownloadedFitPayload(downloadedPayload).data;
           } catch (retryError: unknown) {
+            if (retryError instanceof TokenRefreshInProgressError) {
+              tokenRefreshContentionFirebaseUserID ??= parentID;
+              continue;
+            }
             if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
               sawPendingDisconnectSkip = true;
               pendingDisconnectFirebaseUserID = parentID;
@@ -1073,6 +1098,10 @@ async function parseWorkoutQueueItemForServiceNameInternal(
           }
           result = normalizedPayload.data;
         } catch (retryError: any) {
+          if (retryError instanceof TokenRefreshInProgressError) {
+            tokenRefreshContentionFirebaseUserID ??= parentID;
+            continue;
+          }
           if (isTokenUseSkippedForPendingDisconnectError(retryError)) {
             sawPendingDisconnectSkip = true;
             pendingDisconnectFirebaseUserID = parentID;
@@ -1375,6 +1404,27 @@ async function parseWorkoutQueueItemForServiceNameInternal(
     return updateToProcessed(queueItem, bulkWriter, processedAdditionalData);
   }
 
+  // Refresh-lease contention means a usable credential is being rotated by a
+  // different worker. It outranks terminal/inactive sibling tokens on legacy
+  // shared-provider rows, but not an unrelated retryable provider failure.
+  if (tokenRefreshContentionFirebaseUserID && !sawRetryableFailure) {
+    const contentionUserID = tokenRefreshContentionFirebaseUserID;
+    return deferWorkoutQueueItemForTokenRefreshContention({
+      serviceName,
+      queueItem,
+      userID: contentionUserID,
+      phase: `workout_queue_token_refresh_contention:${serviceName}`,
+      logPrefix: 'WorkoutQueue',
+      isCurrent: currentQueueItem => isCurrentWorkoutQueueItemForTokenRefreshContention(
+        queueItem,
+        serviceName,
+        contentionUserID,
+        currentQueueItem,
+      ),
+      taskRecoveryGeneration,
+    });
+  }
+
   if (sawPendingDisconnectSkip && !sawRetryableFailure) {
     logger.warn(`Deferring ${serviceName} queue item ${queueItem.id} because at least one matching token is pending disconnect and no token succeeded.`);
     return deferWorkoutQueueItemForPendingDisconnect(
@@ -1417,6 +1467,22 @@ async function parseWorkoutQueueItemForServiceNameInternal(
       ? SUUNTO_FIT_RETRY_EXHAUSTED_CONTEXT
       : undefined,
   );
+}
+
+function isCurrentWorkoutQueueItemForTokenRefreshContention(
+  queueItem: ProviderWorkoutQueueItem,
+  serviceName: ServiceNames,
+  firebaseUserID: string,
+  currentQueueItem: Record<string, unknown>,
+): boolean {
+  if (currentQueueItem.processed === true) return false;
+  if (typeof currentQueueItem.firebaseUserID === 'string'
+    && currentQueueItem.firebaseUserID !== firebaseUserID) return false;
+  if (currentQueueItem.dispatchedToCloudTask !== queueItem.dispatchedToCloudTask) return false;
+  if (serviceName === ServiceNames.COROSAPI) {
+    return workoutQueueGenerationMatches(queueItem, currentQueueItem);
+  }
+  return currentQueueItem.dateCreated === queueItem.dateCreated;
 }
 
 function isFirestoreAlreadyExistsError(error: unknown): boolean {

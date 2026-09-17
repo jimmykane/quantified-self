@@ -13,6 +13,12 @@ import {
 } from '../queue/revision-identity';
 import { FUNCTION_SECRET_BINDINGS } from '../secrets';
 
+function normalizeDispatchRecoveryGeneration(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+        ? value
+        : null;
+}
+
 /**
  * Task worker that processes a single workout queue item.
  * This is triggered via a Cloud Task.
@@ -25,11 +31,18 @@ export const processWorkoutTask = onTaskDispatched({
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
-    const { queueItemId, serviceName, queueRevision, queueDateCreated } = request.data as {
+    const {
+        queueItemId,
+        serviceName,
+        queueRevision,
+        queueDateCreated,
+        dispatchRecoveryGeneration,
+    } = request.data as {
         queueItemId: string;
         serviceName: ServiceNames;
         queueRevision?: string;
         queueDateCreated?: number;
+        dispatchRecoveryGeneration?: number;
     };
 
     const collectionName = getServiceWorkoutQueueName(serviceName);
@@ -61,9 +74,15 @@ export const processWorkoutTask = onTaskDispatched({
     const currentQueueRevision = normalizeQueueRevision(queueItem?.queueRevision);
     const expectedQueueRevision = normalizeQueueRevision(queueRevision);
     const expectedQueueDateCreated = Number(queueDateCreated);
+    const expectedDispatchRecoveryGeneration = normalizeDispatchRecoveryGeneration(
+        dispatchRecoveryGeneration,
+    );
+    const currentDispatchRecoveryGeneration = normalizeDispatchRecoveryGeneration(
+        queueItem?.dispatchRecoveryGeneration,
+    ) ?? 0;
     const shouldCheckQueueRevision = expectedQueueRevision !== null
-        || (serviceName === ServiceNames.COROSAPI
-            && (currentQueueRevision !== null || Number.isFinite(expectedQueueDateCreated)));
+        || (serviceName === ServiceNames.COROSAPI && currentQueueRevision !== null)
+        || Number.isFinite(expectedQueueDateCreated);
     if (shouldCheckQueueRevision && !hasMatchingQueueRevision({
         currentQueueItem: queueItem || {},
         attemptedQueueItem: { queueRevision: expectedQueueRevision },
@@ -71,6 +90,11 @@ export const processWorkoutTask = onTaskDispatched({
             && queueItem?.dateCreated === expectedQueueDateCreated,
     })) {
         logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the queue revision has advanced.`);
+        return;
+    }
+    if (expectedDispatchRecoveryGeneration !== null
+        && expectedDispatchRecoveryGeneration < currentDispatchRecoveryGeneration) {
+        logger.info(`[TaskWorker] Skipping stale ${serviceName} task for item ${queueItemId}; the dispatch recovery generation has advanced.`);
         return;
     }
     if (queueItem?.processed === true) {
@@ -86,7 +110,17 @@ export const processWorkoutTask = onTaskDispatched({
             id: queueItemId,
             ref: queueRef,
         }, queueItem) as any;
-        const result = await parseWorkoutQueueItemForServiceName(serviceName, queueItemForProcessing);
+        const result = expectedDispatchRecoveryGeneration !== null
+            ? await parseWorkoutQueueItemForServiceName(
+                serviceName,
+                queueItemForProcessing,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                expectedDispatchRecoveryGeneration,
+            )
+            : await parseWorkoutQueueItemForServiceName(serviceName, queueItemForProcessing);
 
         switch (result) {
             case QueueResult.Processed:
@@ -100,6 +134,9 @@ export const processWorkoutTask = onTaskDispatched({
                 break;
             case QueueResult.Deferred:
                 logger.warn(`[TaskWorker] Deferred ${serviceName} item ${queueItemId}; it remains queued for a future dispatcher run.`);
+                break;
+            case QueueResult.TokenRefreshDeferred:
+                logger.info(`[TaskWorker] Deferred ${serviceName} item ${queueItemId} while another worker refreshes its token.`);
                 break;
             case QueueResult.MovedToDLQ:
                 logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);

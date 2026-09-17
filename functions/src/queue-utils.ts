@@ -34,6 +34,7 @@ export enum QueueResult {
     Processed = 'PROCESSED',
     Skipped = 'SKIPPED',
     Deferred = 'DEFERRED',
+    TokenRefreshDeferred = 'TOKEN_REFRESH_DEFERRED',
     ProviderStatusPending = 'PROVIDER_STATUS_PENDING',
     MovedToDLQ = 'MOVED_TO_DLQ',
     RetryIncremented = 'RETRY_INCREMENTED',

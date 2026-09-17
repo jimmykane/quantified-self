@@ -16,6 +16,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   getTokenData,
   TerminalServiceAuthError,
+  TokenRefreshInProgressError,
   TokenRefreshSkippedForDeletedUserError,
 } from '../tokens';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
@@ -29,6 +30,9 @@ import { createParsingOptions } from '../../../shared/parsing-options';
 import { enqueueActivitySyncJobsForImportedEvent } from '../activity-sync/enqueue-imported-event';
 import { shouldSkipQueueWorkForDeletedUser } from '../queue/user-deletion-skip';
 import { resolveProviderImportEventID } from '../queue/provider-event-id';
+import {
+  deferWorkoutQueueItemForTokenRefreshContention,
+} from '../queue/token-refresh-contention';
 import { retainGarminFITWorkoutReferences } from '../training-plans/completion/fit-workout-evidence';
 
 interface RequestError extends Error {
@@ -211,7 +215,7 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
 
 
 
-export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>, taskRecoveryGeneration?: number): Promise<QueueResult> {
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
@@ -260,6 +264,21 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   try {
     serviceToken = await getTokenData(tokenQuerySnapshots.docs[0], ServiceNames.GarminAPI);
   } catch (e: any) {
+    if (e instanceof TokenRefreshInProgressError) {
+      return deferWorkoutQueueItemForTokenRefreshContention({
+        serviceName: ServiceNames.GarminAPI,
+        queueItem,
+        userID: firebaseUserID,
+        phase: 'garmin_workout_queue_token_refresh_contention',
+        logPrefix: 'GarminWorkoutQueue',
+        isCurrent: currentQueueItem => currentQueueItem.processed !== true
+          && currentQueueItem.dateCreated === queueItem.dateCreated
+          && currentQueueItem.dispatchedToCloudTask === queueItem.dispatchedToCloudTask
+          && (typeof currentQueueItem.firebaseUserID !== 'string'
+            || currentQueueItem.firebaseUserID === firebaseUserID),
+        taskRecoveryGeneration,
+      });
+    }
     if (isTokenRefreshSkippedForDeletedUserError(e)) {
       logger.warn(`Skipping Garmin queue item ${queueItem.id} because user ${firebaseUserID} is missing or deletion is in progress.`);
       return markGarminQueueItemSkippedForDeletedUser(queueItem, bulkWriter);

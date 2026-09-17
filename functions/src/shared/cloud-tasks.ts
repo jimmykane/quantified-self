@@ -37,6 +37,8 @@ interface EnqueueSportsLibReparseHeavyTaskOptions {
 interface EnqueueWorkoutTaskOptions {
     recoveryTaskKey?: number | string;
     queueRevision?: string;
+    dispatchRecoveryGeneration?: number;
+    recoveryTaskOnly?: boolean;
 }
 
 export interface WorkoutTaskDispatchItem {
@@ -289,35 +291,40 @@ export async function enqueueWorkoutTask(
     const payload = {
         queueItemId,
         serviceName,
+        dispatchRecoveryGeneration: typeof options.dispatchRecoveryGeneration === 'number'
+            ? options.dispatchRecoveryGeneration
+            : 0,
         ...(queueRevision ? { queueRevision } : {}),
-        ...(serviceName === ServiceNames.COROSAPI && !queueRevision
+        ...((serviceName === ServiceNames.COROSAPI || options.recoveryTaskOnly) && !queueRevision
             ? { queueDateCreated: safeDateCreated }
             : {}),
     };
 
-    const taskCreated = await enqueueTaskWithRetry({
-        projectId,
-        location,
-        functionName: workoutQueue,
-        taskId,
-        payload,
-        scheduleDelaySeconds,
-        alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
-        failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
-    });
-    if (taskCreated) {
-        return true;
-    }
+    if (!options.recoveryTaskOnly) {
+        const taskCreated = await enqueueTaskWithRetry({
+            projectId,
+            location,
+            functionName: workoutQueue,
+            taskId,
+            payload,
+            scheduleDelaySeconds,
+            alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
+            failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
+        });
+        if (taskCreated) return true;
 
-    if (await cloudTaskExists(taskName)) {
-        logger.info(`[Dispatcher] Existing task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
-        return true;
+        if (await cloudTaskExists(taskName)) {
+            logger.info(`[Dispatcher] Existing task is still live for ${serviceName}:${queueItemId}; treating workout queue item as dispatched.`);
+            return true;
+        }
     }
 
     const recoveryTaskKey = sanitizeTaskNamePart(`${options.recoveryTaskKey ?? 0}`);
     const recoveryTaskId = `${taskId}-dedupe-recovery-${recoveryTaskKey}`;
     const recoveryTaskName = getCloudTaskName(projectId, location, workoutQueue, recoveryTaskId);
-    logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
+    if (!options.recoveryTaskOnly) {
+        logger.warn(`[Dispatcher] Task name for ${serviceName}:${queueItemId} is reserved but no live task was found; enqueueing recovery task.`);
+    }
     const recoveryTaskCreated = await enqueueTaskWithRetry({
         projectId,
         location,
@@ -365,8 +372,10 @@ function workoutTaskRecoveryKey(queueItem: WorkoutTaskDispatchItem): number | st
 
 function workoutTaskEnqueueOptions(queueItem: WorkoutTaskDispatchItem): EnqueueWorkoutTaskOptions {
     const queueRevision = normalizeQueueRevision(queueItem.queueRevision) || '';
+    const dispatchRecoveryGeneration = workoutTaskDispatchRecoveryGeneration(queueItem);
     return {
         recoveryTaskKey: workoutTaskRecoveryKey(queueItem),
+        ...(dispatchRecoveryGeneration > 0 ? { dispatchRecoveryGeneration } : {}),
         ...(queueRevision ? { queueRevision } : {}),
     };
 }

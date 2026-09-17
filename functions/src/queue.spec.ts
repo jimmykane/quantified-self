@@ -29,7 +29,7 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup, mockIsActivitySyncOutboundEcho, mockGetActiveCOROSTokenSnapshot, mockDownloadCOROSFITFile, mockRecoverCOROSFITFileURL } = vi.hoisted(() => {
+const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSkipQueueWorkForDeletedUser, mockGetUserDeletionGuardState, mockGetUserDeletionGuardStateInTransaction, mockRunTransaction, mockMarkQueueItemDeletedForUserCleanup, mockIsActivitySyncOutboundEcho, mockGetActiveCOROSTokenSnapshot, mockDownloadCOROSFITFile, mockRecoverCOROSFITFileURL, mockDeferWorkoutQueueItemForTokenRefreshContention } = vi.hoisted(() => {
     const docRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
@@ -105,6 +105,7 @@ const { mockDocRef, mockBatch, mockCollection, mockRecursiveDelete, mockShouldSk
         mockGetActiveCOROSTokenSnapshot: vi.fn().mockResolvedValue({ id: 'corosOpenId' }),
         mockDownloadCOROSFITFile: vi.fn().mockResolvedValue(Buffer.from('test-fit-data')),
         mockRecoverCOROSFITFileURL: vi.fn().mockResolvedValue('https://oss.coros.com/fit/recovered.fit'),
+        mockDeferWorkoutQueueItemForTokenRefreshContention: vi.fn(),
     };
 });
 
@@ -218,6 +219,10 @@ vi.mock('./tokens', () => {
         }
     }
 
+    class MockTokenRefreshInProgressError extends Error {
+        readonly name = 'TokenRefreshInProgressError';
+    }
+
     return {
         getTokenData: vi.fn().mockResolvedValue({
             accessToken: 'mock-access-token',
@@ -225,11 +230,16 @@ vi.mock('./tokens', () => {
             openId: 'mock-openid'
         }),
         TerminalServiceAuthError: MockTerminalServiceAuthError,
+        TokenRefreshInProgressError: MockTokenRefreshInProgressError,
         TokenRefreshSkippedForDeletedUserError: class TokenRefreshSkippedForDeletedUserError extends Error {
             readonly name = 'TokenRefreshSkippedForDeletedUserError';
         },
     };
 });
+
+vi.mock('./queue/token-refresh-contention', () => ({
+    deferWorkoutQueueItemForTokenRefreshContention: mockDeferWorkoutQueueItemForTokenRefreshContention,
+}));
 
 vi.mock('./queue/user-deletion-skip', () => ({
     shouldSkipQueueWorkForDeletedUser: mockShouldSkipQueueWorkForDeletedUser,
@@ -357,7 +367,7 @@ import {
     ProviderQueueUserNotConnectedError,
 } from './queue';
 import { QueueItemInterface, SuuntoAppWorkoutQueueItemInterface, COROSAPIWorkoutQueueItemInterface } from './queue/queue-item.interface';
-import { getTokenData, TerminalServiceAuthError, TokenRefreshSkippedForDeletedUserError } from './tokens';
+import { getTokenData, TerminalServiceAuthError, TokenRefreshInProgressError, TokenRefreshSkippedForDeletedUserError } from './tokens';
 import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import { QUEUE_SKIPPED_REASONS, QueueResult, increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 import { PermanentCOROSFITDownloadError } from './coros/file-download';
@@ -390,6 +400,7 @@ function createBinaryResponse(body: Buffer, contentType = 'application/octet-str
 describe('queue', () => {
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockDeferWorkoutQueueItemForTokenRefreshContention.mockResolvedValue(QueueResult.TokenRefreshDeferred);
         mockDocRef.update.mockResolvedValue(undefined);
         mockDocRef.set.mockResolvedValue(undefined);
         mockDocRef.create.mockResolvedValue(undefined);
@@ -1256,7 +1267,7 @@ describe('queue', () => {
                 'stuck-doc',
                 dateCreated,
                 0,
-                { recoveryTaskKey: '0-1' },
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 },
             );
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -1322,7 +1333,7 @@ describe('queue', () => {
                 'stuck-doc',
                 dateCreated,
                 0,
-                { recoveryTaskKey: '0-1' },
+                { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 },
             );
             expect(update).not.toHaveBeenCalledWith({ dispatchRecoveryGeneration: 2 });
             expect(update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -1701,7 +1712,7 @@ describe('queue', () => {
 
             expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, 'u1-f1', expect.any(Number), undefined, { recoveryTaskKey: '0-1' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, 'u1-f1', expect.any(Number), undefined, { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
@@ -2116,7 +2127,7 @@ describe('queue', () => {
 
             expect(result.id).toBe('mock-doc-id');
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: 0 });
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: '0-1' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.SuuntoApp, 'user1-work1', 123456, undefined, { recoveryTaskKey: '0-1', dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchRecoveryGeneration: 1 });
             expect(mockDocRef.update).not.toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
@@ -2414,7 +2425,7 @@ describe('queue', () => {
                 dispatchedToCloudTask: null,
                 dispatchRecoveryGeneration: expect.any(Number),
             }));
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'u1-file123', 123456, undefined, { recoveryTaskKey: '7-2' });
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'u1-file123', 123456, undefined, { recoveryTaskKey: '7-2', dispatchRecoveryGeneration: 2 });
             expect(mockDocRef.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
         });
 
@@ -2844,6 +2855,27 @@ describe('queue', () => {
                 processed: true,
                 resultStatus: 'skipped',
                 skippedReason: QUEUE_SKIPPED_REASONS.UserDeletedOrDeleting,
+            }));
+            expect(mockBatch.set).not.toHaveBeenCalled();
+        });
+
+        it('should defer initial token-refresh contention without consuming the provider retry budget', async () => {
+            vi.mocked(getTokenData).mockRejectedValueOnce(new TokenRefreshInProgressError(
+                ServiceNames.SuuntoApp,
+                'token-1',
+            ));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.TokenRefreshDeferred);
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.SuuntoApp,
+                queueItem: suuntoQueueItem,
+                userID: 'mock-user-id',
+            }));
+            expect(getBinaryResponse).not.toHaveBeenCalled();
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
             }));
             expect(mockBatch.set).not.toHaveBeenCalled();
         });
@@ -3658,6 +3690,52 @@ describe('queue', () => {
             expect(mockDownloadCOROSFITFile).toHaveBeenCalledWith('https://oss.coros.com/fit/after-refresh.fit');
         });
 
+        it('defers COROS detail recovery when another worker owns the forced token refresh', async () => {
+            mockRef.parent.id = 'COROSAPIWorkoutQueue';
+            const dateCreated = Date.now();
+            mockRef.get.mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    processed: false,
+                    firebaseUserID: 'mock-user-id',
+                    dateCreated,
+                    openId: 'corosOpenId',
+                    workoutID: '418173315956375553',
+                    componentKey: 'root',
+                    dispatchedToCloudTask: 123,
+                }),
+            });
+            mockRecoverCOROSFITFileURL.mockRejectedValueOnce(new COROSFITDetailAuthError('5006'));
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({ accessToken: 'stale-token', openId: 'corosOpenId' } as any)
+                .mockRejectedValueOnce(new TokenRefreshInProgressError(ServiceNames.COROSAPI, 'token-1'));
+            const corosItem: COROSAPIWorkoutQueueItemInterface = {
+                id: 'detail-auth-contention',
+                ref: mockRef,
+                firebaseUserID: 'mock-user-id',
+                openId: 'corosOpenId',
+                workoutID: '418173315956375553',
+                mode: 8,
+                subMode: 1,
+                componentKey: 'root',
+                retryCount: 0,
+                processed: false,
+                dateCreated,
+                dispatchedToCloudTask: 123,
+            };
+
+            await expect(parseWorkoutQueueItemForServiceName(ServiceNames.COROSAPI, corosItem))
+                .resolves.toBe(QueueResult.TokenRefreshDeferred);
+
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.COROSAPI,
+                queueItem: corosItem,
+                userID: 'mock-user-id',
+            }));
+            expect(mockDownloadCOROSFITFile).not.toHaveBeenCalled();
+        });
+
         it('moves permanently invalid COROS detail responses to the DLQ', async () => {
             mockRef.parent.id = 'COROSAPIWorkoutQueue';
             mockRecoverCOROSFITFileURL.mockRejectedValueOnce(
@@ -3904,6 +3982,29 @@ describe('queue', () => {
             expect(getBinaryResponse).toHaveBeenCalledTimes(2);
             expect(result).toBe(QueueResult.Processed);
             expect(getTokenData).toHaveBeenCalledTimes(2); // Initial + Force Refresh
+        });
+
+        it('should defer a Suunto 401 retry when another worker owns the forced token refresh', async () => {
+            vi.mocked(getBinaryResponse).mockRejectedValueOnce({ statusCode: 401 });
+            vi.mocked(getTokenData)
+                .mockResolvedValueOnce({
+                    accessToken: 'stale-token',
+                    userName: 'suuntoUser',
+                } as any)
+                .mockRejectedValueOnce(new TokenRefreshInProgressError(ServiceNames.SuuntoApp, 'token-1'));
+
+            const result = await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, suuntoQueueItem);
+
+            expect(result).toBe(QueueResult.TokenRefreshDeferred);
+            expect(getTokenData).toHaveBeenCalledTimes(2);
+            expect(mockDeferWorkoutQueueItemForTokenRefreshContention).toHaveBeenCalledWith(expect.objectContaining({
+                serviceName: ServiceNames.SuuntoApp,
+                queueItem: suuntoQueueItem,
+                userID: 'mock-user-id',
+            }));
+            expect(mockRef.update).not.toHaveBeenCalledWith(expect.objectContaining({
+                retryCount: expect.any(Number),
+            }));
         });
 
         it('should move to DLQ when forced refresh after download 401 returns terminal invalid_grant', async () => {
