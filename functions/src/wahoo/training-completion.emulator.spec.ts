@@ -192,6 +192,39 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)(
       expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
     });
 
+    it('does not overwrite an existing completion or trust inconsistent internal identities', async () => {
+      await user().collection('trainingWorkoutCompletions').doc('workout').set({
+        schemaVersion: 1,
+        workoutId: 'workout',
+        planId: 'plan',
+        provider: 'wahoo',
+        matchMethod: 'manual_confirmation',
+        eventId: 'event',
+        activityId: 'activity',
+        sourceSessionIndex: null,
+        activityStartAtMs: Date.parse('2026-09-17T07:00:00Z'),
+        scheduledLocalDate: '2026-09-17',
+        workoutRevisionAtLink: 2,
+        timing: 'on_date',
+        linkedAtMs: 1,
+        updatedAtMs: 1,
+      });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event')
+        .collection('trainingCompletionEvidence').doc('wahoo').get()).data()).toMatchObject({ outcome: 'conflict' });
+
+      await user().collection('trainingWorkoutCompletions').doc('workout').delete();
+      await user().collection('scheduledWorkouts').doc('workout').update({ id: 'different-workout' });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('events').doc('event')
+        .collection('trainingCompletionEvidence').doc('wahoo').get()).data()).toMatchObject({ outcome: 'conflict' });
+
+      await user().collection('scheduledWorkouts').doc('workout').update({ id: 'workout' });
+      await user().collection(DELIVERY_LEDGER).doc('delivery').update({ id: 'different-delivery' });
+      expect(await retain()).toEqual({ retained: true, linkedWorkoutIds: [] });
+      expect((await user().collection('trainingWorkoutCompletions').get()).empty).toBe(true);
+    });
+
     it('defers during delivery changes and rejects stale account authority', async () => {
       await user().collection(DELIVERY_LEDGER).doc('delivery').update({ lease: { id: 'lease', expiresAtMs: Date.now() + 60_000 } });
       await expect(retain()).rejects.toThrow('delivery is changing');

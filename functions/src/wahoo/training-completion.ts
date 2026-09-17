@@ -51,8 +51,10 @@ function candidateLedger(
 ): WahooTrainingCompletionCandidate | null {
   const ledger = snapshot.data() as DeliveryLedgerV1;
   const artifact = ledger.actual;
-  if (ledger.schemaVersion !== 1 || ledger.provider !== 'wahoo' || ledger.destinationKey !== destinationKey
-    || !artifact || artifact.ids.workout !== workoutId || artifact.ids.plan !== planId
+  if (ledger.schemaVersion !== 1 || ledger.id !== snapshot.id || ledger.provider !== 'wahoo'
+    || ledger.destinationKey !== destinationKey || typeof ledger.workoutId !== 'string'
+    || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(ledger.workoutId)
+    || !artifact || !artifact.ids || artifact.ids.workout !== workoutId || artifact.ids.plan !== planId
     || artifact.ids.workoutToken !== workoutToken || artifact.ids.association !== `${workoutId}:${planId}`) {
     return null;
   }
@@ -157,9 +159,15 @@ export async function retainWahooTrainingCompletion(
       const [workoutDocument, completionDocument, reverseDocument] = related;
       if (!workoutDocument.exists) outcome = 'workout_unavailable';
       else {
-        const workout = parseScheduledWorkoutV1(workoutDocument.data());
-        if (workout.lifecycle === 'deleted') outcome = 'workout_unavailable';
-        else {
+        let workout: ReturnType<typeof parseScheduledWorkoutV1> | null = null;
+        try {
+          workout = parseScheduledWorkoutV1(workoutDocument.data());
+        } catch {
+          outcome = 'conflict';
+        }
+        if (workout && workout.id !== candidate.ledger.workoutId) outcome = 'conflict';
+        else if (workout?.lifecycle === 'deleted') outcome = 'workout_unavailable';
+        else if (workout) {
           let existingCompletion: TrainingWorkoutCompletionV1 | null = null;
           try {
             existingCompletion = completionDocument.exists
