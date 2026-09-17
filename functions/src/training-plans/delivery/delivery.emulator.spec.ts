@@ -277,6 +277,8 @@ describe.skipIf(!process.env.FIRESTORE_EMULATOR_HOST)('Training delivery real Fi
     await drain(); await processTrainingDelivery(runtime, uid, ledger.id);
     expect(transport.calls).toHaveLength(1);
     expect((await db.collection(DELIVERY_QUEUE).doc(ledger.id).get()).data()?.kind).toBe('verification');
+    expect((await ledgers())[0].verification).toMatchObject({ state: 'pending', missing: false,
+      missingKeys: [], checkedAtMs: null, cursor: null });
     await processTrainingVerification(runtime, uid, ledger.id); now += 900_000;
     await processTrainingVerification(runtime, uid, ledger.id);
     await processTrainingDelivery(runtime, uid, ledger.id);

@@ -88,7 +88,8 @@ export async function processTrainingDelivery(runtime: DeliveryRuntime, uid: str
         // An edit/transfer/reconnect invalidates confirmation, not the stable remote identity.
         // Re-inspect current intent before another repair; never fall through to ordinary upsert.
         ledger.repair = null;
-        ledger.verification = { ...ledger.verification, binding: '', state: 'pending', suspectedAtMs: null, nextCheckAtMs: runtime.now() };
+        ledger.verification = { ...ledger.verification, binding: '', state: 'pending', missing: false, missingKeys: [],
+          suspectedAtMs: null, checkedAtMs: null, cursor: null, nextCheckAtMs: runtime.now() };
         writeDelivery(runtime, tx, uid, ledger);
         tx.set(jobRef, { uid, kind: 'verification', priority: 'ordinary', deliveryId: id, dueAtMs: 0, dispatchToken: randomUUID() });
         return null;

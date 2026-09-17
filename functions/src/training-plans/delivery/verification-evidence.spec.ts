@@ -20,8 +20,13 @@ describe('provider-neutral inspection evidence', () => {
     const first = observeInspection(undefined, 'authority', policy, missing, 1000);
     expect(first.state).toBe('suspected_missing');
     expect(observeInspection(first, 'authority', policy, missing, 900_999).missing).toBe(false);
-    expect(observeInspection(first, 'authority', policy, missing, 901_000).state).toBe('confirmed_missing');
+    const confirmed = observeInspection(first, 'authority', policy, missing, 901_000);
+    expect(confirmed.state).toBe('confirmed_missing');
     expect(observeInspection(first, 'other-connection', policy, missing, 901_000).state).toBe('suspected_missing');
+    expect(observeInspection(confirmed, 'other-connection', policy, { conflict: false, artifacts: [
+      { key: 'workout', state: 'present', authoritative: true },
+      { key: 'schedule', state: 'unknown', authoritative: false },
+    ] }, 902_000)).toMatchObject({ state: 'unknown', missing: false, missingKeys: [] });
   });
   it('resets the confirmation chain on a positive or inconclusive observation', () => {
     const first = observeInspection(undefined, 'a', policy, missing, 1000);

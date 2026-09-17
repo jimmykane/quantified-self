@@ -13,11 +13,13 @@ const STEPS = ['repair-prepare', 'workout-create', 'workout-update', 'schedule-c
   'retired-schedule-delete', 'retired-workout-delete', 'finished'] as const;
 type Step = typeof STEPS[number];
 type ObjectValue = Record<string, unknown>;
+type ScheduleValue = { id: string; workoutId: string; date: string };
+type ScheduleLookup = { state: 'matched'; value: ScheduleValue } | { state: 'none' | 'inconclusive' };
 function object(value: unknown): ObjectValue {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw garminContractFailure('expected_object');
   return value as ObjectValue;
 }
-function schedule(value: unknown): { id: string; workoutId: string; date: string } {
+function schedule(value: unknown): ScheduleValue {
   const data = object(value);
   try { return { id: garminId(data.scheduleId), workoutId: garminId(data.workoutId), date: normalizeTrainingLocalDate(data.date) }; }
   catch { throw garminContractFailure('invalid_schedule'); }
@@ -153,6 +155,20 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     return found;
   }
 
+  private async lookupScheduleForWorkoutDate(operation: DeliveryOperation, guard: DeliveryRequestGuard): Promise<ScheduleLookup> {
+    if (!operation.workout || !operation.artifact) return { state: 'inconclusive' };
+    const date = normalizeTrainingLocalDate(operation.workout.localDate);
+    const rows = await this.read({ method: 'GET', path: `/training-api/schedule?startDate=${date}&endDate=${date}` }, guard);
+    if (!Array.isArray(rows) || rows.length > 1000) {
+      logGarminScheduleLookup(Array.isArray(rows) ? 'too_many_results' : 'invalid_response');
+      return { state: 'inconclusive' };
+    }
+    const candidates = rows.map(schedule).filter(row => row.workoutId === operation.artifact!.ids.workout && row.date === date);
+    const state = candidates.length === 1 ? 'matched' : candidates.length === 0 ? 'none' : 'inconclusive';
+    logGarminScheduleLookup(candidates.length === 1 ? 'matched' : candidates.length === 0 ? 'no_match' : 'multiple_matches');
+    return state === 'matched' ? { state, value: candidates[0] } : { state };
+  }
+
   async execute(operation: DeliveryOperation, checkpoint: DeliveryCheckpoint, guard: DeliveryRequestGuard): Promise<DeliveryArtifact | null> {
     this.validate(operation);
     this.assertFuture(operation);
@@ -172,6 +188,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
         timeZone: operation.timeZone, cursor: null }, guard);
       if (observation.conflict || observation.artifacts.some(item => item.state === 'unknown')) throw new TrainingDeliveryTransportError('uncertain');
       if (observation.artifacts.every(item => item.state === 'present')) {
+        await guard(true);
         await this.save(operation, checkpoint, original, 'finished', 'accepted', false);
         return original;
       }
@@ -225,6 +242,18 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
       const raw = await this.read({ method: 'GET', path: `/training-api/schedule/${garminId(previous.ids.schedule)}` }, guard);
       if (!raw) {
         if (!operation.repair.missing.includes('schedule')) throw new TrainingDeliveryTransportError('uncertain');
+        // The user may have recreated the same association in Garmin under a new
+        // Schedule ID. Positive discovery is safe to adopt and prevents a duplicate;
+        // an empty or ambiguous listing never proves anything about a prior POST.
+        const replacement = await this.lookupScheduleForWorkoutDate(operation, guard);
+        if (replacement.state === 'inconclusive') throw new TrainingDeliveryTransportError('uncertain');
+        if (replacement.state === 'matched') {
+          const relink = { ...operation.artifact!, ids: { ...operation.artifact!.ids, schedule: replacement.value.id },
+            localDate: replacement.value.date };
+          await guard(true);
+          await this.save(operation, checkpoint, relink, 'finished', 'accepted', false);
+          return relink;
+        }
       } else {
         const found = schedule(raw);
         if (found.id !== previous.ids.schedule || found.workoutId !== previous.ids.workout || found.date !== previous.localDate) {
@@ -274,6 +303,7 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
     }
     const repairApplied = operation.repair ? operation.artifact!.ids.workout !== operation.repair.original.ids.workout
       || operation.artifact!.ids.schedule !== operation.repair.original.ids.schedule : undefined;
+    if (repairApplied === false) await guard(true);
     await this.save(operation, checkpoint, operation.artifact, 'finished', 'accepted', repairApplied);
     return operation.artifact;
   }
@@ -288,17 +318,11 @@ export class GarminTrainingTransport implements TrainingDeliveryTransport {
       await this.save(operation, checkpoint, { ...operation.artifact, localDate: found.date }, 'schedule-create', 'accepted');
       return true;
     }
-    const date = normalizeTrainingLocalDate(operation.workout.localDate);
-    const rows = await this.read({ method: 'GET', path: `/training-api/schedule?startDate=${date}&endDate=${date}` }, guard);
-    if (!Array.isArray(rows) || rows.length > 1000) {
-      logGarminScheduleLookup(Array.isArray(rows) ? 'too_many_results' : 'invalid_response');
-      return false;
-    }
-    const candidates = rows.map(schedule).filter(row => row.workoutId === operation.artifact!.ids.workout && row.date === date);
+    const lookup = await this.lookupScheduleForWorkoutDate(operation, guard);
     // An empty eventually-consistent read is not proof a POST failed.
-    logGarminScheduleLookup(candidates.length === 1 ? 'matched' : candidates.length === 0 ? 'no_match' : 'multiple_matches');
-    if (candidates.length !== 1) return false;
-    await this.save(operation, checkpoint, { ...operation.artifact, ids: { ...operation.artifact.ids, schedule: candidates[0].id }, localDate: date }, 'schedule-create', 'accepted');
+    if (lookup.state !== 'matched') return false;
+    await this.save(operation, checkpoint, { ...operation.artifact,
+      ids: { ...operation.artifact.ids, schedule: lookup.value.id }, localDate: lookup.value.date }, 'schedule-create', 'accepted');
     return true;
   }
 

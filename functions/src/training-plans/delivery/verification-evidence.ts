@@ -13,7 +13,7 @@ export function observeInspection(previous: VerificationEvidence | undefined, bi
   policy: InspectionPolicy, observation: InspectionObservation, now: number): VerificationEvidence {
   const same = previous?.binding === binding;
   const result: VerificationEvidence = {
-    binding, state: 'unknown', missing: previous?.missing ?? false, missingKeys: same ? previous.missingKeys : [],
+    binding, state: 'unknown', missing: same ? previous?.missing ?? false : false, missingKeys: same ? previous.missingKeys : [],
     suspectedAtMs: null, checkedAtMs: now, nextCheckAtMs: now + VERIFICATION_DAY_MS,
     requestedAtMs: previous?.requestedAtMs ?? 0, manualPending: false, cursor: null,
     repairTimes: (previous?.repairTimes ?? []).filter(time => time > now - VERIFICATION_DAY_MS),

@@ -1003,7 +1003,10 @@ Garmin production policy enables only schedule absence and repair. A controlled 
 Workout present while the exact retained Schedule ID returned 404, establishing the independent schedule lifecycle.
 Two unchanged authoritative Schedule observations at least 15 minutes apart are still required before repair. The
 adapter then rechecks both retained IDs, keeps the original Workout and recreates only its dated Schedule. A reappearing
-unchanged Schedule is reused without a POST; changed dates/owners/associations require attention. A missing Workout is
+unchanged Schedule is reused without a POST. Before creating a replacement, a positive same-date listing match for the
+same retained Workout is adopted under its new Schedule ID; multiple matches remain inconclusive and cannot create
+another copy. Changed dates/owners/associations require attention. Evidence-binding changes clear confirmed absence
+before a new observation chain begins. A missing Workout is
 non-authoritative, remains `unknown`, does not reduce the copy to a confirmed missing state and cannot trigger recreation.
 The replacement-workout path remains fixture-gated pending #703/#645 proof. Repairs reuse the operation journal and
 stable QS identity; unknown replacement-POST acceptance remains blocked, including Retry. Stop, pause, transfers and

@@ -112,6 +112,48 @@ describe('Garmin workout/schedule lifecycle, synthetic HTTP only', () => {
     expect(writes().filter(request => request.method === 'PUT' && request.path.includes('workout'))).toHaveLength(0);
     expect(server.workouts.get(original.ids.workout)!.workoutName).toBe('Edited in Garmin');
   });
+  it('adopts an independently recreated matching schedule instead of creating a duplicate', async () => {
+    const original = (await execute())!;
+    server.schedules.delete(original.ids.schedule);
+    const replacementId = '1234';
+    server.schedules.set(replacementId, { scheduleId: replacementId, workoutId: original.ids.workout, date: original.localDate });
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'production-schedule-authority', missing: ['schedule'], original: structuredClone(original) } };
+    const before = writes().length;
+    expect((await execute())?.ids.schedule).toBe(replacementId);
+    expect(operation.progress).toMatchObject({ step: 'finished', state: 'accepted', repairApplied: false });
+    expect(writes()).toHaveLength(before);
+    expect(server.schedules.size).toBe(1);
+  });
+  it('does not adopt a matching replacement after current intent loses admission', async () => {
+    const original = (await execute())!;
+    server.schedules.delete(original.ids.schedule);
+    server.schedules.set('1234', { scheduleId: '1234', workoutId: original.ids.workout, date: original.localDate });
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'production-schedule-authority', missing: ['schedule'], original: structuredClone(original) } };
+    server.afterHandle = async request => {
+      if (!request.path.startsWith('/training-api/schedule?')) return;
+      server.afterHandle = null;
+      guard.mockRejectedValueOnce(new Error('stale intent'));
+    };
+    const before = writes().length;
+    await expect(execute()).rejects.toThrow('stale intent');
+    expect(operation.artifact?.ids.schedule).toBeUndefined();
+    expect(writes()).toHaveLength(before);
+  });
+  it('does not create another schedule when more than one matching association exists', async () => {
+    const original = (await execute())!;
+    server.schedules.delete(original.ids.schedule);
+    for (const id of ['1234', '1235']) {
+      server.schedules.set(id, { scheduleId: id, workoutId: original.ids.workout, date: original.localDate });
+    }
+    operation = { ...nextOperation(operation), repair: { policyVersion: GARMIN_INSPECTION_POLICY.version,
+      binding: 'production-schedule-authority', missing: ['schedule'], original: structuredClone(original) } };
+    const before = writes().length;
+    await expect(execute()).rejects.toMatchObject({ kind: 'uncertain' });
+    expect(writes()).toHaveLength(before);
+    expect(server.schedules.size).toBe(2);
+  });
   it('refuses a missing-workout repair under the production policy before another POST', async () => {
     const original = (await execute())!;
     server.workouts.delete(original.ids.workout);

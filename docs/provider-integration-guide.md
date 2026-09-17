@@ -75,6 +75,9 @@ acceptance may continue under the latest authored intent and current readiness; 
 uncertain root create. Adapters must cover interrupted cleanup and superseding edits as well as uninterrupted repair.
 Inspection and repair capabilities are declared per artifact. Proof for a provider's schedule/association resource must
 never authorize classifying or recreating its workout/content resource.
+Garmin schedule repair also adopts one positively discovered same-workout/same-date association under a replacement ID;
+an ambiguous listing blocks creation, while an empty listing adds no evidence and leaves the already-confirmed retained-ID
+repair path unchanged. Evidence-binding changes clear the old confirmed-absence projection before a new observation chain begins.
 
 Training planning uses a stricter launch boundary than activity or route delivery. Manual plan and standalone-workout
 authoring is free and independent of connected services. Any future provider synchronization is Pro, explicit, and
