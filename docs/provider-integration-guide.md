@@ -178,8 +178,11 @@ review and counts Unicode code points. Remaining watch characters outside Suunto
 approval because rendering is device-dependent; app-only description text is not subject to that watch-font check.
 See the [Training source of truth](training-workspace.md#suuntoplus-guide-delivery-650) for upgrade and recovery behavior.
 The #650 transport packages that JSON with a valid 300 × 300 PNG and preserves Guide identity
-and pin state through PUT. Incoming FIT metadata is now read through Sports Lib 21.2.1. QS revalidates the exact connected
-account, filters its OAuth client owner and deterministic Guide external ID, and links only one unambiguous session marker
+and pin state through PUT. Incoming FIT metadata is now read through Sports Lib 21.2.2 and FIT parser 5.2.1. The upgrade
+preserves Sports Lib's public workout-reference classes, return shapes and numeric values while using the parser's
+lossless selected-message output, so unrelated nonstandard vendor definitions do not poison usable correlation metadata.
+QS still revalidates the exact connected account, filters its OAuth client owner and deterministic Guide external ID,
+and links only one unambiguous session marker
 to the matching scheduled workout. The private IDs/evidence never enter Event/Activity JSON; the owner sees only
 **Activity linked**, which does not claim target or interval adherence. Garmin message 72 remains candidate-only because
 its serial-to-Training-API semantics are not documented. Bounded fallback/manual reconciliation remains in #651. The existing OAuth
